@@ -44,6 +44,11 @@
       var lastBookingServiceId = null;
       /** Up to 3 trainers with recent bookings each — multi «Снова к …» pills (bootstrap). */
       var rebookTargets = [];
+      /** Primary trainer accepts online booking — drives sticky «Записаться» FAB. */
+      var hubPrimaryTrainerCanBook = false;
+      /** Nearest upcoming booking on hub — rebook strip replaces bottom FAB. */
+      var hubHasUpcomingBooking = false;
+      var clientHubBookFabWired = false;
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -404,7 +409,7 @@
         return '&service_id=' + encodeURIComponent(String(n));
       }
 
-      /** Hub → booking: slot deeplink goes to catalog inline form; week picker stays on book. */
+      /** Hub → booking: slot chip → catalog form; repeat book → catalog slot pick (action=book). */
       function buildBookPathFromHubContext(trainerId, opts) {
         opts = opts || {};
         var slotRaw = opts.slotId;
@@ -424,27 +429,87 @@
           parts.push('from=hub');
           return parts.join('&');
         }
-        var path = 'book?trainer_id=' + encodeURIComponent(String(trainerId));
+        var parts = [
+          'catalog?trainer_id=' + encodeURIComponent(String(trainerId)),
+          'action=book',
+          'from=hub',
+        ];
         var svcRaw2 = opts.serviceId;
         if (svcRaw2 != null && String(svcRaw2).trim() !== '') {
-          path += '&service_id=' + encodeURIComponent(String(svcRaw2).trim());
+          parts.push('service_id=' + encodeURIComponent(String(svcRaw2).trim()));
         } else if (opts.fallbackServiceQuery) {
-          path += opts.fallbackServiceQuery;
+          parts.push(opts.fallbackServiceQuery.replace(/^&/, ''));
         }
         var arenaRaw2 = opts.arenaId;
         if (arenaRaw2 != null && String(arenaRaw2).trim() !== '') {
-          path += '&arena_id=' + encodeURIComponent(String(arenaRaw2).trim());
+          parts.push('arena_id=' + encodeURIComponent(String(arenaRaw2).trim()));
         }
-        path += '&from=hub';
-        return path;
+        return parts.join('&');
+      }
+
+      /** Prefer last booking service with this trainer; else hub primary catalog hint. */
+      function hubRepeatBookServiceId(trainerId) {
+        var tid = trainerId != null ? Number(trainerId) : NaN;
+        if (!isNaN(tid) && tid > 0 && lastBookingTrainerId != null) {
+          var lt = Number(lastBookingTrainerId);
+          if (!isNaN(lt) && lt === tid && lastBookingServiceId != null) {
+            var ls = Number(lastBookingServiceId);
+            if (!isNaN(ls) && ls > 0) return ls;
+          }
+        }
+        if (primaryCatalogServiceId == null || primaryCatalogServiceId === '') return null;
+        var pn = Number(primaryCatalogServiceId);
+        return !isNaN(pn) && pn > 0 ? pn : null;
       }
 
       /** Hub → book slots (or form) without catalog / trainer-card flash. */
       function navigateToBookAgain(trainerId, serviceId) {
+        var svc = serviceId != null && serviceId !== '' ? serviceId : hubRepeatBookServiceId(trainerId);
         navigateTo(buildBookPathFromHubContext(trainerId, {
-          serviceId: serviceId,
+          serviceId: svc,
           fallbackServiceQuery: catalogPrimaryServiceQuery(),
         }));
+      }
+
+      function navigateToPrimaryTrainerBook() {
+        if (selectedTrainerId == null || String(selectedTrainerId).trim() === '') return;
+        navigateToBookAgain(selectedTrainerId, hubRepeatBookServiceId(selectedTrainerId));
+      }
+
+      /** Same path as bottom FAB; fallback when primary trainer cannot book online. */
+      function navigateToHubBookLikePrimaryFab(nextBooking) {
+        if (hubPrimaryTrainerCanBook && selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
+          navigateToPrimaryTrainerBook();
+          return;
+        }
+        navigateToCatalogBookAgain(nextBooking);
+      }
+
+      /** Sticky FAB: primary trainer + online booking; hidden when «Записаться снова» strip is shown. */
+      function shouldShowClientHubBookFab() {
+        if (!initData) return false;
+        if (hubHasUpcomingBooking) return false;
+        if (selectedTrainerId == null || String(selectedTrainerId).trim() === '') return false;
+        return hubPrimaryTrainerCanBook === true;
+      }
+
+      function syncClientHubBookFab() {
+        var fab = document.getElementById('hubBookFab');
+        if (!fab) return;
+        var show = shouldShowClientHubBookFab();
+        if (show) fab.removeAttribute('hidden');
+        else fab.setAttribute('hidden', '');
+        try {
+          document.body.classList.toggle('hub-body--book-fab-visible', show);
+        } catch (eBody) { /* ignore */ }
+        if (clientHubBookFabWired) return;
+        clientHubBookFabWired = true;
+        fab.addEventListener('click', function() {
+          if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
+            window.ClientShell.hapticSelection();
+          }
+          navigateToPrimaryTrainerBook();
+        });
       }
 
       /**
@@ -533,6 +598,7 @@
             skel.setAttribute('aria-hidden', 'true');
             skel.removeAttribute('aria-busy');
           }
+          syncClientHubBookFab();
         }, wait);
       }
 
@@ -609,7 +675,7 @@
           : '';
 
         var subText = onlineBook
-          ? 'Выбрать время в каталоге'
+          ? 'Нажмите, чтобы выбрать время'
           : (hasDm ? 'Онлайн-запись недоступна — напишите тренеру' : 'Открыть профиль в каталоге');
 
         var contactRowHtml = '';
@@ -737,7 +803,7 @@
           label: 'Записаться снова',
           icon: 'repeat',
           primary: true,
-          action: function() { navigateToCatalogBookAgain(nextBooking); },
+          action: function() { navigateToHubBookLikePrimaryFab(nextBooking); },
         }];
       }
 
@@ -1410,8 +1476,15 @@
         }
 
         rebookTargets = Array.isArray(cs.rebook_targets) ? cs.rebook_targets : [];
+        hubPrimaryTrainerCanBook = cs.primary_trainer_can_book === true;
+
+        function finishHubApply(promise) {
+          syncClientHubBookFab();
+          return promise;
+        }
 
         var nextItem = findNextBooking(bookingDays);
+        hubHasUpcomingBooking = !!nextItem;
 
         /* ── Priority 1: Has upcoming booking ── */
         if (nextItem) {
@@ -1426,7 +1499,7 @@
             autoDebitNote: true,
             rowHead: 'Абонемент',
           });
-          return Promise.resolve();
+          return finishHubApply(Promise.resolve());
         }
 
         clearNextBookingBlock();
@@ -1443,7 +1516,9 @@
           var ptgId = cs.primary_trainer_telegram_id != null ? cs.primary_trainer_telegram_id : null;
           var pCanBook = cs.primary_trainer_can_book === true;
           renderMyTrainerCard(primaryTrainerId, pname || null, ptgUn, ptgId, pphoto, pCanBook);
-          return loadAndRenderPrimaryPanel(primaryTrainerId, cs.primary_history || null, hubBootstrapPasses(hubMeta));
+          return finishHubApply(
+            loadAndRenderPrimaryPanel(primaryTrainerId, cs.primary_history || null, hubBootstrapPasses(hubMeta))
+          );
         }
 
         /* ── Priority 3: Has saved trainers (no primary yet) ── */
@@ -1451,7 +1526,7 @@
           resetHubHeroLayout();
           setHeroText('Ваши любимые тренеры 💛', 'Выберите, с кем хотите позаниматься');
           renderSavedTrainersStrip(cs);
-          return renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' });
+          return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
         }
 
         /* ── Priority 4: Has past sessions (churned / dormant) ── */
@@ -1460,7 +1535,7 @@
           setHeroText('Возвращаемся на лёд! ⛸️', 'Ваши тренеры очень ждут вас');
           hideMyTrainerBlock();
           renderQuickStrip('has-past', null);
-          return renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' });
+          return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
         }
 
         /* ── Priority 5: Clean state — find trainer and book ── */
@@ -1468,7 +1543,7 @@
         setHeroText('Добро пожаловать!', 'Выберите, чем хотите заняться, а мы найдём лучшего тренера');
         renderAcquisitionHero();
         hideMyTrainerBlock();
-        return loadAndRenderDiscovery();
+        return finishHubApply(loadAndRenderDiscovery());
       }
 
       function hideMyTrainerBlock() {
@@ -1535,6 +1610,8 @@
             hideMyTrainerBlock();
             hideUpcomingSection();
             renderStreakRibbon(null);
+            hubPrimaryTrainerCanBook = false;
+            syncClientHubBookFab();
           })
           .then(finishHubInitialLoading, finishHubInitialLoading);
       }

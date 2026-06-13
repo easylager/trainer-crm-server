@@ -25,7 +25,6 @@ from src.application.subscription_tier_use_cases import (
     SUBSCRIPTION_TIER_ONLINE,
     SUBSCRIPTION_TIERS,
     default_modules_dict,
-    ensure_trainer_profile_group_classes_when_groups_module,
     get_module_period_pricing,
     get_tier_period_pricing,
     normalize_modules_dict,
@@ -181,9 +180,6 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
         },
     )
     row = r.fetchone()
-    await ensure_trainer_profile_group_classes_when_groups_module(
-        session, trainer_id, json.loads(_TRIAL_MODULES_JSON)
-    )
     await session.commit()
     return {
         "id": row[0],
@@ -224,9 +220,6 @@ async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -
             "s2": SUBSCRIPTION_STATUS_ACTIVE,
             "now": now,
         },
-    )
-    await ensure_trainer_profile_group_classes_when_groups_module(
-        session, trainer_id, json.loads(_TRIAL_MODULES_JSON)
     )
     await session.commit()
 
@@ -820,8 +813,6 @@ async def confirm_subscription_invoice_after_payment(
         if redeemed < bonus_days:
             await session.rollback()
             return False
-    if catalog_checkout and mods_for_insert is not None and bool(mods_for_insert.get("groups")):
-        await ensure_trainer_profile_group_classes_when_groups_module(session, int(tid), mods_for_insert)
     await session.commit()
     # Referral credit: grant to referrer if this is first paid subscription
     if is_first_paid:

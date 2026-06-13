@@ -255,6 +255,14 @@
         var commentEl = document.getElementById('bookingComment');
         if (commentEl) commentEl.value = '';
         refreshClientPhoneForBookingForm(function() {
+          if (
+            state.selectedTrainer &&
+            (isHubDirectBookEntry() ||
+              state.bookingContextServiceId != null ||
+              state.lastCreatedBookingServiceId != null)
+          ) {
+            applyCatalogRepeatBookingDefaults(state.selectedTrainer);
+          }
           prefillBookingPhoneField();
           updateBookingVenueHint();
           updateBookingFormServiceAndTiers();
@@ -285,9 +293,9 @@
         return !!(qp.get('trainer_id') && qp.get('slot_id'));
       }
 
-      function isCatalogTrainerDetailDeepLink(qp) {
+      function isCatalogBookActionDeepLink(qp) {
         if (!qp) qp = new URLSearchParams(window.location.search || '');
-        if (qp.get('tab') === 'catalog') return false;
+        if (qp.get('action') !== 'book') return false;
         if (isCatalogSlotBookingDeepLink(qp)) return false;
         var raw = qp.get('trainer_id');
         if (raw == null || raw === '') return false;
@@ -295,9 +303,37 @@
         return !isNaN(id) && id > 0;
       }
 
+      function isCatalogTrainerDetailDeepLink(qp) {
+        if (!qp) qp = new URLSearchParams(window.location.search || '');
+        if (qp.get('tab') === 'catalog') return false;
+        if (isCatalogSlotBookingDeepLink(qp)) return false;
+        if (isCatalogBookActionDeepLink(qp)) return false;
+        var raw = qp.get('trainer_id');
+        if (raw == null || raw === '') return false;
+        var id = parseInt(raw, 10);
+        return !isNaN(id) && id > 0;
+      }
+
+      function isHubDirectBookEntry() {
+        try {
+          var qp = new URLSearchParams(window.location.search || '');
+          return qp.get('from') === 'hub' && qp.get('action') === 'book';
+        } catch (eHub) {
+          return false;
+        }
+      }
+
       function clearCatalogDeepLinkShellClasses() {
-        document.documentElement.classList.remove('catalog-trainer-deeplink', 'catalog-booking-deeplink');
-        document.body.classList.remove('catalog-trainer-deeplink', 'catalog-booking-deeplink');
+        document.documentElement.classList.remove(
+          'catalog-trainer-deeplink',
+          'catalog-booking-deeplink',
+          'catalog-slotpick-deeplink'
+        );
+        document.body.classList.remove(
+          'catalog-trainer-deeplink',
+          'catalog-booking-deeplink',
+          'catalog-slotpick-deeplink'
+        );
       }
 
       function activateCatalogBookingDeepLinkShell() {
@@ -307,6 +343,24 @@
         var form = document.getElementById('screenBookingForm');
         if (form) form.classList.add('active');
         syncClientShellTabBarForScreen('screenBookingForm');
+      }
+
+      function activateCatalogSlotPickDeepLinkShell() {
+        clearCatalogDeepLinkShellClasses();
+        document.body.classList.add('catalog-slotpick-deeplink');
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var pick = document.getElementById('screenSlotPick');
+        if (pick) pick.classList.add('active');
+        var list = document.getElementById('slotPickList');
+        if (list) {
+          list.innerHTML =
+            '<div class="catalog-trainer-detail-skel catalog-trainer-detail-skel--compact" role="status" aria-busy="true" aria-label="Загрузка слотов">' +
+            '<div class="catalog-skel-shimmer catalog-skel-line"></div>' +
+            '<div class="catalog-skel-shimmer catalog-skel-line"></div>' +
+            '<div class="catalog-skel-shimmer catalog-skel-line"></div>' +
+            '</div>';
+        }
+        syncClientShellTabBarForScreen('screenSlotPick');
       }
 
       function activateCatalogTrainerDeepLinkShell() {
@@ -375,6 +429,49 @@
         if (rest) rest.innerHTML = '';
       }
 
+      /** Hub FAB / «Записаться снова»: skip marketing card, open slot picker directly. */
+      function openTrainerDeepLinkSlotPick(returnCtx, explicitTrainerArenaIdsFromUrl, onFail) {
+        loadTrainerById(returnCtx.trainer_id).then(function(t) {
+          if (!t) {
+            if (onFail) onFail();
+            return;
+          }
+          state.trainerId = t.id != null ? Number(t.id) : returnCtx.trainer_id;
+          state.selectedTrainer = t;
+          state.trainerName = trainerName(t);
+          var tid = t.id != null ? Number(t.id) : NaN;
+          var sessionReq =
+            !isNaN(tid) && tid > 0
+              ? getClientSession({ forTrainerId: tid }).then(function(sess) {
+                  applySessionToState(sess, { bookingFormRefresh: true });
+                })
+              : Promise.resolve();
+          sessionReq
+            .then(function() {
+              return reconcileCatalogServiceWithTrainerAsync(t);
+            })
+            .then(function() {
+              initTrainerSlotsArenaFilter(t, { explicitArenaIds: explicitTrainerArenaIdsFromUrl });
+              return loadTrainerDetailSlots(t);
+            })
+            .then(function(slots) {
+              state.slotsForTrainer = slots || [];
+              if (state.pendingDeepLinkSlotId && maybeOpenPendingDeepLinkSlotBooking(t, slots)) return;
+              clearCatalogDeepLinkShellClasses();
+              renderSlotPickList();
+              showScreen('screenSlotPick');
+            })
+            .catch(function() {
+              clearCatalogDeepLinkShellClasses();
+              state.slotsForTrainer = [];
+              renderSlotPickList();
+              showScreen('screenSlotPick');
+            });
+        }).catch(function() {
+          if (onFail) onFail();
+        });
+      }
+
       /** trainer_id deep link: skip trainer card flash when slot_id targets booking form. */
       function openTrainerDeepLinkTrainerCard(returnCtx, explicitTrainerArenaIdsFromUrl, onFail) {
         loadTrainerById(returnCtx.trainer_id).then(function(t) {
@@ -422,17 +519,67 @@
         }
       }
 
+      var catalogTrainerStickyObserver = null;
+
+      function teardownCatalogTrainerStickyObserver() {
+        if (catalogTrainerStickyObserver) {
+          catalogTrainerStickyObserver.disconnect();
+          catalogTrainerStickyObserver = null;
+        }
+      }
+
+      function catalogTrainerStickyEligible() {
+        return !!(
+          state.slotsForTrainer &&
+          state.slotsForTrainer.length > 0 &&
+          state.selectedTrainer &&
+          state.selectedTrainer.can_book === true
+        );
+      }
+
+      /** Show fixed bottom CTA only while inline «Записаться» is off-screen — never duplicate both. */
+      function installCatalogTrainerStickyObserver() {
+        teardownCatalogTrainerStickyObserver();
+        var bar = document.getElementById('catalogTrainerStickyCta');
+        var anchor = document.getElementById('btnBookFromDetail');
+        if (!bar || bar.hidden || !anchor) {
+          if (bar) bar.classList.remove('catalog-trainer-sticky-cta--visible');
+          return;
+        }
+        function setStickyVisible(show) {
+          if (!bar || bar.hidden) return;
+          if (show) bar.classList.add('catalog-trainer-sticky-cta--visible');
+          else bar.classList.remove('catalog-trainer-sticky-cta--visible');
+        }
+        if (typeof IntersectionObserver !== 'function') {
+          setStickyVisible(true);
+          return;
+        }
+        /* Tab bar + sticky dock — inline CTA counts as visible before it sits under the bar. */
+        catalogTrainerStickyObserver = new IntersectionObserver(
+          function(entries) {
+            var entry = entries[0];
+            if (!entry) return;
+            setStickyVisible(!entry.isIntersecting);
+          },
+          { root: null, threshold: 0, rootMargin: '0px 0px -140px 0px' }
+        );
+        catalogTrainerStickyObserver.observe(anchor);
+      }
+
       function syncCatalogTrainerStickyCta(visible) {
         var el = document.getElementById('catalogTrainerStickyCta');
         if (!el) return;
         if (!visible) {
           el.hidden = true;
           el.classList.remove('catalog-trainer-sticky-cta--visible');
+          teardownCatalogTrainerStickyObserver();
           return;
         }
         el.hidden = false;
-        requestAnimationFrame(function () {
-          el.classList.add('catalog-trainer-sticky-cta--visible');
+        el.classList.remove('catalog-trainer-sticky-cta--visible');
+        requestAnimationFrame(function() {
+          installCatalogTrainerStickyObserver();
         });
       }
 
@@ -534,7 +681,6 @@
         if (!state.selectedTrainer) return;
         var sid = Number(serviceId);
         if (isNaN(sid) || sid <= 0) return;
-        if (state.serviceId === sid) return;
         state.serviceId = sid;
         var services = state.selectedTrainer.services || [];
         var i;
@@ -552,6 +698,27 @@
         var tid = state.selectedTrainer && state.selectedTrainer.id != null ? state.selectedTrainer.id : null;
         if (tid != null && state.cityId && state.serviceId != null) persistTrainerSelection(tid);
         updateBookingFormServiceAndTiers();
+      }
+
+      /** Server hints from GET /client/session?for_trainer_id — last booking service + tier. */
+      function applyCatalogRepeatBookingDefaults(trainer) {
+        var services = (trainer && trainer.services) || [];
+        if (!services.length) return false;
+        var allowed = {};
+        services.forEach(function(s) {
+          var id = s.service_id != null ? Number(s.service_id) : NaN;
+          if (!isNaN(id) && id > 0) allowed[id] = s;
+        });
+        function pick(sid) {
+          var num = Number(sid);
+          if (isNaN(num) || !allowed[num]) return false;
+          state.serviceId = num;
+          state.serviceName = String(allowed[num].service_name || '').trim();
+          return true;
+        }
+        if (pick(state.bookingContextServiceId)) return true;
+        if (pick(state.lastCreatedBookingServiceId)) return true;
+        return false;
       }
 
       /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). Групповые слоты — без выбора тира. */
@@ -581,7 +748,7 @@
               svcSelect.innerHTML = '';
               svcSelect.style.display = 'none';
             }
-          } else if (isGroupSlot || services.length === 1) {
+          } else if (services.length === 1) {
             var lineNm = nm || String(services[0].service_name || '').trim();
             if (!lineNm) {
               svcBlock.style.display = 'none';
@@ -784,7 +951,24 @@
         var sid = active ? active.id : '';
         if (sid === 'screenBookingForm' || sid === 'screenSlotPick') {
           btn.hidden = false;
-          btn.onclick = function() { showScreen('screenTrainerDetail'); };
+          btn.onclick = function() {
+            if (sid === 'screenSlotPick' && isHubDirectBookEntry()) {
+              if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
+                window.BookingClient.navigateBookingReturn('hub');
+              } else if (typeof window.navigateClientHome === 'function') {
+                window.navigateClientHome();
+              } else if (canBrowserGoBack()) {
+                window.history.back();
+              }
+              return;
+            }
+            if (sid === 'screenBookingForm' && isHubDirectBookEntry()) {
+              renderSlotPickList();
+              showScreen('screenSlotPick');
+              return;
+            }
+            showScreen('screenTrainerDetail');
+          };
           return;
         }
         if (sid === 'screenRequestForm') {
@@ -859,13 +1043,7 @@
         }
         syncClientShellTabBarForScreen(id);
         syncCatalogHeaderBack();
-        syncCatalogTrainerStickyCta(
-          id === 'screenTrainerDetail' &&
-            state.slotsForTrainer &&
-            state.slotsForTrainer.length > 0 &&
-            state.selectedTrainer &&
-            state.selectedTrainer.can_book === true
-        );
+        syncCatalogTrainerStickyCta(id === 'screenTrainerDetail' && catalogTrainerStickyEligible());
       }
 
       window.addEventListener('popstate', syncCatalogHeaderBack);
@@ -1904,8 +2082,18 @@
           }
           var cur = state.serviceId != null ? Number(state.serviceId) : NaN;
           if (!isNaN(cur) && allowed[cur]) {
+            if (isHubDirectBookEntry() && applyCatalogRepeatBookingDefaults(trainer)) {
+              if (state.cityId && state.serviceId) persistCatalogFilters(trainer.id);
+              resolve();
+              return;
+            }
             state.serviceName = String(allowed[cur].service_name || state.serviceName || '').trim();
             if (state.cityId && state.serviceId) persistCatalogFilters(trainer.id);
+            resolve();
+            return;
+          }
+          if (applyCatalogRepeatBookingDefaults(trainer)) {
+            if (state.cityId && state.serviceId) persistTrainerSelection(trainer.id);
             resolve();
             return;
           }
@@ -4328,7 +4516,7 @@
             showScreen('screenSlotPick');
           };
         }
-        syncCatalogTrainerStickyCta(slots.length > 0);
+        syncCatalogTrainerStickyCta(slots.length > 0 && t.can_book === true);
         document.getElementById('trainerDetailSecondary').innerHTML = '';
       }
 
@@ -5036,13 +5224,16 @@
         var qp = new URLSearchParams(window.location.search || '');
         state.activeTab = qp.get('tab') === 'my_trainer' ? 'my_trainer' : 'catalog';
         var slotBookingDeepLink = isCatalogSlotBookingDeepLink(qp);
+        var bookActionDeepLink = isCatalogBookActionDeepLink(qp);
         var trainerDetailDeepLink = isCatalogTrainerDetailDeepLink(qp);
 
         var home = document.getElementById('catalogHome');
-        if (home && !slotBookingDeepLink && !trainerDetailDeepLink) home.classList.add('catalog-home--booting');
+        if (home && !slotBookingDeepLink && !trainerDetailDeepLink && !bookActionDeepLink) home.classList.add('catalog-home--booting');
 
         if (slotBookingDeepLink) {
           activateCatalogBookingDeepLinkShell();
+        } else if (bookActionDeepLink) {
+          activateCatalogSlotPickDeepLinkShell();
         } else if (trainerDetailDeepLink) {
           activateCatalogTrainerDeepLinkShell();
         } else {
@@ -5051,7 +5242,7 @@
           switchTab(state.activeTab);
         }
 
-        if (warm && !slotBookingDeepLink && !trainerDetailDeepLink) {
+        if (warm && !slotBookingDeepLink && !trainerDetailDeepLink && !bookActionDeepLink) {
           applyWarmCatalogServices(warm);
           if (warm.session) {
             applySessionToState(warm.session);
@@ -5153,8 +5344,16 @@
             }
             hydrateCatalogSummary();
           }
-          /* Deep link ?trainer_id= — открыть карточку напрямую (в т.ч. возврат из book.html) */
+          /* Deep link ?trainer_id= — карточка или сразу слоты (?action=book from hub) */
           if (returnCtx && returnCtx.trainer_id) {
+            var hubBookAction = qp.get('action') === 'book' && !returnCtx.slot_id;
+            if (hubBookAction) {
+              openTrainerDeepLinkSlotPick(returnCtx, explicitTrainerArenaIdsFromUrl, function() {
+                showToast('Не удалось загрузить слоты. Попробуйте ещё раз.');
+                showInitialScreen();
+              });
+              return;
+            }
             openTrainerDeepLinkTrainerCard(returnCtx, explicitTrainerArenaIdsFromUrl, function() {
               if (state.trainerId) {
                 state.openedFromMyTrainerTab = true;

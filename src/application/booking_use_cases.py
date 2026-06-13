@@ -21,6 +21,7 @@ from src.application.certificate_use_cases import redeem_certificate_balance_for
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import (
     PRICE_TIER_ADULT,
+    PRICE_TIER_CHILD,
     normalize_price_tier_kind,
     price_tier_label_ru,
     sql_order_case_tier_kind,
@@ -2583,23 +2584,95 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     return out
 
 
+def normalize_trainer_client_list_tier_filter(tier: str | None) -> str | None:
+    """``child`` | ``adult`` | ``pair`` for trainer clients list filter."""
+    if tier is None:
+        return None
+    t = str(tier).strip().lower()
+    if t in ("child", "adult", "pair"):
+        return t
+    return None
+
+
+def _trainer_client_list_tier_where_sql(tier: str | None) -> str:
+    if tier == PRICE_TIER_CHILD:
+        return " AND LOWER(TRIM(lbt.price_tier_kind)) = 'child' "
+    if tier == PRICE_TIER_ADULT:
+        return " AND LOWER(TRIM(lbt.price_tier_kind)) = 'adult' "
+    if tier == "pair":
+        return (
+            " AND LOWER(TRIM(lbt.price_tier_kind)) IN "
+            "('two_children', 'two_adults', 'adult_and_child') "
+        )
+    return ""
+
+
+def _trainer_client_list_filter_sql(
+    *,
+    recurring_only: bool,
+    in_bot: bool | None,
+    min_bookings: int | None,
+    has_active_pass: bool | None,
+    tier: str | None,
+) -> tuple[str, dict[str, object]]:
+    """Build WHERE fragments; omit unset filters (asyncpg cannot bind untyped NULL)."""
+    clauses = ["TRUE"]
+    params: dict[str, object] = {}
+    if recurring_only:
+        clauses.append("COALESCE(rc.n, 0) > 0")
+    if in_bot is not None:
+        clauses.append("(c.telegram_id IS NOT NULL) = :in_bot")
+        params["in_bot"] = bool(in_bot)
+    if min_bookings is not None:
+        clauses.append("COALESCE(bc.n, 0) >= :min_bookings")
+        params["min_bookings"] = int(min_bookings)
+    if has_active_pass is not None:
+        clauses.append("(ap.client_id IS NOT NULL) = :has_active_pass")
+        params["has_active_pass"] = bool(has_active_pass)
+    tier_sql = _trainer_client_list_tier_where_sql(tier)
+    if tier_sql.strip():
+        clauses.append(tier_sql.strip().removeprefix("AND").strip())
+    return "WHERE " + " AND ".join(clauses), params
+
+
 async def list_trainer_clients(
     session: AsyncSession,
     trainer_id: int,
     limit: int = 50,
     *,
     recurring_only: bool = False,
+    in_bot: bool | None = None,
+    min_bookings: int | None = None,
+    has_active_pass: bool | None = None,
+    tier: str | None = None,
 ) -> list[dict]:
     """
-    Distinct clients linked to this trainer: any non-cancelled booking, explicit CRM roster row, or training group.
+    Distinct clients linked to this trainer: any non-cancelled booking or explicit CRM roster row.
     Sorted by most recent non-cancelled slot when present; roster-only clients follow by add time.
     last_date/last_start = last *completed* session only; NULL if none yet.
     """
-    if recurring_only:
+    tier_norm = normalize_trainer_client_list_tier_filter(tier)
+    has_filters = any(
+        [
+            recurring_only,
+            in_bot is not None,
+            min_bookings is not None,
+            has_active_pass is not None,
+            tier_norm is not None,
+        ]
+    )
+    if has_filters or recurring_only:
         cap = max(50, int(limit))
         lim = min(cap, 500)
     else:
         lim = limit
+    filter_sql, filter_params = _trainer_client_list_filter_sql(
+        recurring_only=recurring_only,
+        in_bot=in_bot,
+        min_bookings=min_bookings,
+        has_active_pass=has_active_pass,
+        tier=tier_norm,
+    )
     r = await session.execute(
         text(
             """
@@ -2620,6 +2693,30 @@ async def list_trainer_clients(
                 FROM recurring_client_slots
                 WHERE trainer_id = :tid AND status = 'active'
                 GROUP BY client_id
+            ),
+            booking_counts AS (
+                SELECT b.client_id, COUNT(*)::int AS n
+                FROM bookings b
+                WHERE b.trainer_id = :tid
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                GROUP BY b.client_id
+            ),
+            last_booking_tier AS (
+                SELECT DISTINCT ON (b.client_id)
+                    b.client_id,
+                    b.price_tier_kind
+                FROM bookings b
+                WHERE b.trainer_id = :tid
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                ORDER BY b.client_id, b.created_at DESC NULLS LAST, b.id DESC
+            ),
+            active_pass_clients AS (
+                SELECT DISTINCT pi.client_id
+                FROM pass_instances pi
+                JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
+                WHERE tpp.trainer_id = :tid
+                  AND pi.status = 'active'
+                  AND pi.sessions_remaining > 0
             ),
             last_completed_per_client AS (
                 SELECT
@@ -2671,13 +2768,23 @@ async def list_trainer_clients(
                    AND b2.trainer_id = :tid
                    AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date,
                 c.is_sandbox,
-                COALESCE(rc.n, 0) AS recurring_slots_count
+                COALESCE(rc.n, 0) AS recurring_slots_count,
+                COALESCE(bc.n, 0) AS bookings_count,
+                (c.telegram_id IS NOT NULL) AS in_bot,
+                lbt.price_tier_kind AS last_price_tier_kind,
+                (ap.client_id IS NOT NULL) AS has_active_pass
             FROM eligible_clients e
             JOIN clients c ON c.id = e.client_id
             LEFT JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
             LEFT JOIN last_completed_per_client lc ON lc.client_id = c.id AND lc.rn = 1
             LEFT JOIN roster_touch ro ON ro.client_id = c.id
             LEFT JOIN recurring_counts rc ON rc.client_id = c.id
+            LEFT JOIN booking_counts bc ON bc.client_id = c.id
+            LEFT JOIN last_booking_tier lbt ON lbt.client_id = c.id
+            LEFT JOIN active_pass_clients ap ON ap.client_id = c.id
+            """
+            + filter_sql
+            + """
             ORDER BY c.is_sandbox ASC,
                      rb.sort_date DESC NULLS LAST,
                      rb.sort_start DESC NULLS LAST,
@@ -2686,10 +2793,10 @@ async def list_trainer_clients(
             LIMIT :lim
             """
         ),
-        {"tid": trainer_id, "lim": lim},
+        {"tid": trainer_id, "lim": lim, **filter_params},
     )
     rows = r.fetchall()
-    out = [
+    return [
         {
             "id": row[0],
             "telegram_id": row[1],
@@ -2703,13 +2810,13 @@ async def list_trainer_clients(
             "first_date": row[9],
             "is_sandbox": bool(row[10]),
             "recurring_slots_count": int(row[11] or 0),
+            "bookings_count": int(row[12] or 0),
+            "in_bot": bool(row[13]),
+            "last_price_tier_kind": normalize_price_tier_kind(row[14]),
+            "has_active_pass": bool(row[15]),
         }
         for row in rows
     ]
-    if recurring_only:
-        out = [c for c in out if c.get("recurring_slots_count", 0) > 0]
-        out = out[: max(1, min(int(limit), 100))]
-    return out
 
 
 def _last_meeting_phrase_ru(*, today: date, last_session_date: date) -> str:

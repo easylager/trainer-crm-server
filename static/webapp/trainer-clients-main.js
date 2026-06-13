@@ -108,8 +108,13 @@
         clientsListLoading: false,
         /** Deep link ?focus=invite_bot — list clients without telegram_id + banner (e.g. saved link). */
         focusInviteBot: false,
-        /** List API filter: only clients with active weekly recurring slots. */
+        /** List API segment filters (combined server-side). */
         filterRecurringOnly: false,
+        filterInBot: null,
+        filterMinBookings2: false,
+        filterHasPass: false,
+        filterTier: null,
+        clientsSearchDebounce: null,
         /** Incremented on each history fetch — stale responses after quick-book must not repaint UI. */
         clientHistoryLoadGen: 0,
         /** ``?client_id=&open_write=1`` → open relay/DM after card merge (trainer bot CRM write). */
@@ -1203,35 +1208,82 @@
           .replace(/'/g, '&#39;');
       }
 
-      function syncRecurringFilterChipUi() {
-        var btn = document.getElementById('tcFilterRecurring');
-        if (!btn) return;
-        btn.classList.toggle('is-active', !!state.filterRecurringOnly);
-        btn.setAttribute('aria-pressed', state.filterRecurringOnly ? 'true' : 'false');
+      var CLIENT_TIER_BADGE_LABELS = {
+        child: 'Детский',
+        adult: 'Взрослый',
+        two_children: '2 детей',
+        two_adults: '2 взрослых',
+        adult_and_child: 'Парное',
+      };
+
+      function hasActiveClientListFilters() {
+        return !!(
+          state.filterRecurringOnly ||
+          state.filterInBot !== null ||
+          state.filterMinBookings2 ||
+          state.filterHasPass ||
+          state.filterTier
+        );
+      }
+
+      function buildClientsListQueryString() {
+        var parts = [];
+        if (state.filterRecurringOnly) parts.push('recurring_only=true');
+        if (state.filterInBot === true) parts.push('in_bot=true');
+        if (state.filterInBot === false) parts.push('in_bot=false');
+        if (state.filterMinBookings2) parts.push('min_bookings=2');
+        if (state.filterHasPass) parts.push('has_pass=true');
+        if (state.filterTier) parts.push('tier=' + encodeURIComponent(state.filterTier));
+        var q = (document.getElementById('searchInput') && document.getElementById('searchInput').value || '').trim();
+        if (q) parts.push('q=' + encodeURIComponent(q));
+        return parts.join('&');
+      }
+
+      function syncClientFilterChipsUi() {
+        var root = document.getElementById('tcClientFilters');
+        if (!root) return;
+        root.querySelectorAll('.tc-chip-filter[data-filter]').forEach(function(btn) {
+          var kind = btn.getAttribute('data-filter');
+          var val = btn.getAttribute('data-value');
+          var active = false;
+          if (kind === 'in_bot') active = state.filterInBot === (val === 'true');
+          else if (kind === 'min_bookings') active = state.filterMinBookings2;
+          else if (kind === 'recurring') active = state.filterRecurringOnly;
+          else if (kind === 'has_pass') active = state.filterHasPass;
+          else if (kind === 'tier') active = state.filterTier === val;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+
+      function onClientFilterChipClick(btn) {
+        var kind = btn.getAttribute('data-filter');
+        var val = btn.getAttribute('data-value');
+        if (kind === 'in_bot') {
+          var want = val === 'true';
+          state.filterInBot = state.filterInBot === want ? null : want;
+        } else if (kind === 'min_bookings') {
+          state.filterMinBookings2 = !state.filterMinBookings2;
+        } else if (kind === 'recurring') {
+          state.filterRecurringOnly = !state.filterRecurringOnly;
+        } else if (kind === 'has_pass') {
+          state.filterHasPass = !state.filterHasPass;
+        } else if (kind === 'tier' && val) {
+          state.filterTier = state.filterTier === val ? null : val;
+        }
+        syncClientFilterChipsUi();
+        loadClientsInternal();
       }
 
       function applyFilter() {
-        var q = (document.getElementById('searchInput').value || '').trim();
-        var pool = state.allClients;
-        if (state.focusInviteBot) {
-          pool = state.allClients.filter(function(c) {
-            return c.telegram_id == null || c.telegram_id === '';
-          });
-        }
-        if (!q) {
-          state.filteredClients = pool.slice();
-        } else {
-          var qLower = q.toLowerCase();
-          var digits = q.replace(/\\D/g, '');
-          state.filteredClients = pool.filter(function(c) {
-            var name = trainerClientDisplayName(c).toLowerCase();
-            var phone = (c.phone || '').toLowerCase();
-            var phoneDigits = (c.phone || '').replace(/\\D/g, '');
-            return name.indexOf(qLower) !== -1
-              || phone.indexOf(qLower) !== -1
-              || (digits && phoneDigits.indexOf(digits) !== -1);
-          });
-        }
+        if (state.clientsSearchDebounce) clearTimeout(state.clientsSearchDebounce);
+        state.clientsSearchDebounce = setTimeout(function() {
+          loadClientsInternal();
+        }, 280);
+      }
+
+      function refreshClientListView() {
+        state.filteredClients = state.allClients.slice();
         renderList();
       }
 
@@ -1324,6 +1376,7 @@
           btnAll.dataset.wiredInviteFocus = '1';
           btnAll.onclick = function() {
             state.focusInviteBot = false;
+            state.filterInBot = null;
             hideInviteBotBanner();
             var ds = document.getElementById('detailSection');
             var onDetail = ds && ds.style.display !== 'none';
@@ -1334,7 +1387,8 @@
             }
             var si = document.getElementById('searchInput');
             if (si) si.value = '';
-            applyFilter();
+            syncClientFilterChipsUi();
+            loadClientsInternal();
           };
         }
         var btnCopy = document.getElementById('tcListFocusCopyInvite');
@@ -1391,31 +1445,29 @@
       }
 
       function applyInviteBotFocusAfterLoad() {
-        var noTg = state.allClients.filter(function(c) {
-          return c.telegram_id == null || c.telegram_id === '';
-        });
-        if (!noTg.length) {
+        if (!state.allClients.length) {
           state.focusInviteBot = false;
           hideInviteBotBanner();
           setInviteBotCompactListUi(false);
-          applyFilter();
+          refreshClientListView();
           showTcToast('Все клиенты уже в боте.');
           return;
         }
         setInviteBotCompactListUi(true);
-        showInviteBotBannerUi(noTg.length);
+        showInviteBotBannerUi(state.allClients.length);
         wireInviteBotBannerActions();
         prefetchTcWelcomeInviteLink();
-        applyFilter();
+        refreshClientListView();
       }
 
       function afterClientsLoaded() {
+        syncClientFilterChipsUi();
         if (state.focusInviteBot) {
           applyInviteBotFocusAfterLoad();
         } else {
           hideInviteBotBanner();
           setInviteBotCompactListUi(false);
-          applyFilter();
+          refreshClientListView();
         }
       }
 
@@ -1429,6 +1481,7 @@
           var f = (p.get('focus') || '').trim().toLowerCase();
           state.focusInviteBot = f === 'invite_bot';
           if (state.focusInviteBot) {
+            state.filterInBot = false;
             p.delete('focus');
             var qs = p.toString();
             history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
@@ -1481,19 +1534,111 @@
         return parts.join('');
       }
 
-      /** Placeholder layout for client card history block (replaced when GET /history returns). */
+      var TC_HISTORY_CHEVRON =
+        '<svg class="tc-history-summary__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+      /** Russian plural for booking count in history summary. */
+      function formatHistoryCountLabel(n) {
+        var abs = Math.abs(parseInt(String(n), 10) || 0);
+        var mod10 = abs % 10;
+        var mod100 = abs % 100;
+        if (mod10 === 1 && mod100 !== 11) return abs + ' занятие';
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return abs + ' занятия';
+        return abs + ' занятий';
+      }
+
+      /** One-line teaser for collapsed history accordion (count + latest visit). */
+      function buildHistorySummaryValue(total, items) {
+        if (!total) return 'Пока нет занятий';
+        var label = formatHistoryCountLabel(total);
+        var latest = items && items[0];
+        if (!latest) return label;
+        var dateStr = formatDate(latest.slot_date);
+        var timeStr = latest.start_time ? formatTime(latest.start_time) : '';
+        return label + ' · ' + dateStr + (timeStr ? ' ' + timeStr : '');
+      }
+
+      function buildHistoryDetailsShell(summaryValue, bodyHtml, opts) {
+        opts = opts || {};
+        var openAttr = opts.open ? ' open' : '';
+        var loadingCls = opts.loading ? ' tc-history-details--loading' : '';
+        var valueCls = 'tc-history-summary__value' + (opts.loading ? ' ma-skel-shimmer' : '');
+        var valueInner = opts.loading ? '' : escapeHtml(summaryValue || 'Загрузка…');
+        return (
+          '<details class="tc-history-details' + loadingCls + '" id="tcClientHistoryDetails"' + openAttr + '>' +
+          '<summary class="tc-history-summary">' +
+          '<span class="tc-history-summary__title">История занятий</span>' +
+          '<span class="' + valueCls + '" id="tcHistorySummaryValue">' +
+          valueInner +
+          '</span>' +
+          TC_HISTORY_CHEVRON +
+          '</summary>' +
+          (bodyHtml
+            ? '<div class="tc-history-body">' + bodyHtml + '</div>'
+            : '') +
+          '</details>'
+        );
+      }
+
+      /** Placeholder inside activity panel (replaced when GET /history returns). */
       function buildClientHistorySkeletonHtml() {
         var sk = 'ma-skel-shimmer';
-        return (
+        var body =
           '<div class="tc-history-wrap tc-history-wrap--skel" role="status" aria-busy="true" aria-label="Загрузка истории">' +
-          '<div class="history-section-title">История занятий</div>' +
           '<div class="tc-history-skel-lines">' +
           '<div class="tc-history-skel-line ' + sk + '" aria-hidden="true"></div>' +
           '<div class="tc-history-skel-line tc-history-skel-line--short ' + sk + '" aria-hidden="true"></div>' +
           '<div class="tc-history-skel-line ' + sk + '" aria-hidden="true"></div>' +
-          '<div class="tc-history-skel-line tc-history-skel-line--mid ' + sk + '" aria-hidden="true"></div>' +
-          '</div></div>'
-        );
+          '</div></div>';
+        return buildHistoryDetailsShell('', body, { loading: true });
+      }
+
+      /** Stats «Последнее» / «Всего» open the history accordion — same block, no extra chrome. */
+      function wireClientHistoryDiscoverability() {
+        var details = document.getElementById('tcClientHistoryDetails');
+        if (!details) return;
+        function openHistoryFromStats(ev) {
+          if (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          }
+          details.open = true;
+          details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          details.classList.remove('tc-history-details--pulse');
+          void details.offsetWidth;
+          details.classList.add('tc-history-details--pulse');
+          window.setTimeout(function() {
+            details.classList.remove('tc-history-details--pulse');
+          }, 900);
+        }
+        function bindStat(el, enabled) {
+          if (!el) return;
+          el.classList.toggle('tc-stat--history-link', !!enabled);
+          if (enabled) {
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('aria-label', 'Открыть историю занятий');
+            el.onclick = openHistoryFromStats;
+            el.onkeydown = function(e) {
+              if (e.key === 'Enter' || e.key === ' ') openHistoryFromStats(e);
+            };
+          } else {
+            el.removeAttribute('role');
+            el.removeAttribute('tabindex');
+            el.removeAttribute('aria-label');
+            el.onclick = null;
+            el.onkeydown = null;
+          }
+        }
+        var totalWrap = document.getElementById('clientTotalWrap');
+        var totalCount = document.getElementById('clientTotalCount');
+        var totalReady = !!(totalCount && !totalCount.classList.contains('is-loading'));
+        var totalNum = totalReady ? parseInt(String(totalCount.textContent || ''), 10) : NaN;
+        bindStat(totalWrap, totalReady && !isNaN(totalNum) && totalNum > 0);
+        var lastLabel = document.getElementById('clientLastLabel');
+        var lastStat = lastLabel ? lastLabel.closest('.tc-stat') : null;
+        var lastText = lastLabel ? String(lastLabel.textContent || '').trim() : '';
+        bindStat(lastStat, !!lastText && lastText !== '—');
       }
 
       /** Mirrors dossier stack height (tags + profile bar + notes) to avoid layout jump before GET /dossier. */
@@ -1539,11 +1684,19 @@
         }
         listEl.innerHTML = '';
           if (!state.filteredClients.length) {
+          var stateMsgEl = document.getElementById('stateMessage');
+          if (
+            stateMsgEl &&
+            stateMsgEl.style.display !== 'none' &&
+            stateMsgEl.classList.contains('error')
+          ) {
+            return;
+          }
           var qEmp = (document.getElementById('searchInput').value || '').trim();
-          if (!qEmp && state.filterRecurringOnly) {
+          if (hasActiveClientListFilters() || state.filterRecurringOnly) {
             listEl.innerHTML =
-              '<div class="empty"><div class="empty-inner"><div class="empty-title">Нет постоянных клиентов</div>' +
-              'У вас пока никто не закреплён на фиксированное время недели. Выключите фильтр «Постоянные» или закрепите слот в карточке клиента.</div></div>';
+              '<div class="empty"><div class="empty-inner"><div class="empty-title">Никого не нашли</div>' +
+              'С такими фильтрами клиентов нет. Снимите часть фильтров или измените поиск.</div></div>';
             return;
           }
           if (qEmp && state.allClients.length > 0) {
@@ -1575,6 +1728,16 @@
             !isSandbox && recCount > 0
               ? '<span class="client-badge client-badge--recurring">Постоянный</span>'
               : '';
+          var tierKind = (c.last_price_tier_kind || '').toLowerCase();
+          var tierLabel = CLIENT_TIER_BADGE_LABELS[tierKind] || '';
+          var tierPill =
+            !isSandbox && tierLabel
+              ? '<span class="client-badge client-badge--tier">' + escapeHtml(tierLabel) + '</span>'
+              : '';
+          var passPill =
+            !isSandbox && c.has_active_pass
+              ? '<span class="client-badge client-badge--pass">Абонемент</span>'
+              : '';
           // Sandbox pill replaces the «нет в боте» badge — for a demo identity that label is noise.
           var badge =
             isSandbox
@@ -1590,6 +1753,8 @@
                 '<div class=\"client-name-row\">' +
                   '<span class=\"client-name\">' + escapeHtml(name) + '</span>' +
                   recurringPill +
+                  tierPill +
+                  passPill +
                   badge +
                 '</div>' +
                 '<div class=\"client-meta\">' + escapeHtml(phone) + '</div>' +
@@ -1630,59 +1795,67 @@
             totalCount.textContent = String(total);
             totalCount.classList.remove('is-loading');
           }
-          var html = '';
-          html += '<div class="tc-history-wrap tc-reveal-once"><div class="history-section-title">История занятий' + (total > 0 ? ' (' + total + ')' : '') + '</div>';
+          var renderItem = function(it) {
+            var dateStr = formatDate(it.slot_date);
+            var timeStr = it.start_time ? formatTime(it.start_time) : '';
+            var place = it.arena_name ? it.arena_name : '—';
+            var status = (it.status || '').toLowerCase();
+            var statusLabel = status === 'completed' ? 'прошло' : status === 'pending' ? 'ожидает' : status === 'confirmed' ? 'подтверждено' : status || '—';
+            var serviceName = (it.service_name || '').trim() || '—';
+            var tierLab = (it.price_tier_label || '').trim();
+            var serviceHtml = escapeHtml(serviceName) + (tierLab ? ' · ' + escapeHtml(tierLab) : '');
+            var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
+            var recId = it.recurring_client_slot_id;
+            var recurringBadge =
+              recId != null && recId !== ''
+                ? '<span class="client-badge client-badge--history-recurring">Постоянная</span>'
+                : '';
+            return (
+              '<div class="history-item">' +
+              '<div class="history-item-top">' +
+              '<span class="history-item-line">' +
+              escapeHtml(line1) +
+              '</span>' +
+              recurringBadge +
+              '</div>' +
+              '<div class="history-item-service">' +
+              serviceHtml +
+              '</div></div>'
+            );
+          };
+          var bodyHtml = '';
           if (!items.length) {
-            html += '<div class="history-list">Пока нет занятий с этим клиентом.</div></div>';
+            bodyHtml = '<div class="history-list history-list--empty">Пока нет занятий с этим клиентом.</div>';
           } else {
             var first = items.slice(0, 5);
             var rest = items.slice(5);
-              var renderItem = function(it) {
-              var dateStr = formatDate(it.slot_date);
-              var timeStr = it.start_time ? formatTime(it.start_time) : '';
-              var place = it.arena_name ? it.arena_name : '—';
-              var status = (it.status || '').toLowerCase();
-              var statusLabel = status === 'completed' ? 'прошло' : status === 'pending' ? 'ожидает' : status === 'confirmed' ? 'подтверждено' : status || '—';
-              var serviceName = (it.service_name || '').trim() || '—';
-              var tierLab = (it.price_tier_label || '').trim();
-              var serviceHtml = escapeHtml(serviceName) + (tierLab ? ' · ' + escapeHtml(tierLab) : '');
-              var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
-              var recId = it.recurring_client_slot_id;
-              var recurringBadge =
-                recId != null && recId !== ''
-                  ? '<span class="client-badge client-badge--history-recurring">Постоянная</span>'
-                  : '';
-              return (
-                '<div class="history-item">' +
-                '<div class="history-item-top">' +
-                '<span class="history-item-line">' +
-                escapeHtml(line1) +
-                '</span>' +
-                recurringBadge +
-                '</div>' +
-                '<div class="history-item-service">' +
-                serviceHtml +
-                '</div></div>'
-              );
-            };
-            html += '<div class="history-list">';
-            first.forEach(function(it) { html += renderItem(it); });
+            bodyHtml += '<div class="history-list tc-reveal-once">';
+            first.forEach(function(it) { bodyHtml += renderItem(it); });
             if (rest.length) {
-              html += '<div id="historyMore" style="display:none;">';
-              rest.forEach(function(it) { html += renderItem(it); });
-              html += '</div>';
+              bodyHtml += '<div id="historyMore" style="display:none;">';
+              rest.forEach(function(it) { bodyHtml += renderItem(it); });
+              bodyHtml += '</div>';
             }
-            html += '</div>';
+            bodyHtml += '</div>';
             if (rest.length) {
-              html += '<div class="history-toggle"><button type="button" class="history-toggle-button" id="btnHistoryToggle">Показать все (' + items.length + ')</button></div>';
+              bodyHtml +=
+                '<div class="history-toggle"><button type="button" class="history-toggle-button" id="btnHistoryToggle">Показать все (' +
+                items.length +
+                ')</button></div>';
             }
-            html += '</div>';
           }
+          var summaryValue = buildHistorySummaryValue(total, items);
+          var keepOpen = false;
+          var prevDetails = document.getElementById('tcClientHistoryDetails');
+          if (prevDetails) keepOpen = !!prevDetails.open;
+          var defaultOpen = total > 0 && total <= 2;
+          var html = buildHistoryDetailsShell(summaryValue, bodyHtml, { open: keepOpen || defaultOpen });
           if (host) {
             host.innerHTML = html;
           } else {
             document.getElementById('clientDetail').insertAdjacentHTML('beforeend', html);
           }
+          wireClientHistoryDiscoverability();
           var toggle = document.getElementById('btnHistoryToggle');
           if (toggle) {
             toggle.onclick = function() {
@@ -1690,7 +1863,7 @@
               if (!more) return;
               var isHidden = more.style.display === 'none';
               more.style.display = isHidden ? 'block' : 'none';
-              toggle.textContent = isHidden ? 'Свернуть' : 'Показать все занятия';
+              toggle.textContent = isHidden ? 'Свернуть' : 'Показать все (' + items.length + ')';
             };
           }
         }).catch(function() {
@@ -1700,13 +1873,15 @@
             totalCount.textContent = '—';
             totalCount.classList.remove('is-loading');
           }
-          var errHtml =
-            '<div class="tc-history-wrap tc-reveal-once"><div class="detail-label">История занятий</div><div class="detail-value">Не удалось загрузить историю.</div></div>';
+          var errBody =
+            '<div class="history-list history-list--empty tc-reveal-once">Не удалось загрузить историю.</div>';
+          var errHtml = buildHistoryDetailsShell('—', errBody, { open: true });
           if (host) {
             host.innerHTML = errHtml;
           } else {
             document.getElementById('clientDetail').insertAdjacentHTML('beforeend', errHtml);
           }
+          wireClientHistoryDiscoverability();
         });
       }
 
@@ -1876,8 +2051,7 @@
           },
           { key: 'note', label: 'Общая заметка', placeholder: 'Любая другая информация о клиенте' },
         ];
-        var profileExpanded =
-          !!dossierState.editingField || !!dossierState.profileSectionExpanded;
+        var profileExpanded = !!dossierState.profileSectionExpanded;
         var html = '<div class="dossier-section' + (profileExpanded ? ' is-open' : '') + '" id="dossierProfileSection">';
         html += '<div class="dossier-section-header"><span class="dossier-section-title">Профиль клиента</span>' + ICO_CHEVRON + '</div>';
         html += '<div class="dossier-section-body" id="dossierProfileBody">';
@@ -1962,6 +2136,10 @@
         var profileHeader = document.querySelector('#dossierProfileSection .dossier-section-header');
         if (profileHeader) {
           profileHeader.onclick = function() {
+            if (dossierState.profileSectionExpanded) {
+              // Collapsing the accordion cancels in-progress field edit (same as «Отмена»).
+              dossierState.editingField = null;
+            }
             dossierState.profileSectionExpanded = !dossierState.profileSectionExpanded;
             renderDossier();
           };
@@ -2693,7 +2871,7 @@
         });
         if (ix >= 0) {
           Object.assign(state.allClients[ix], cardClient);
-          applyFilter();
+          refreshClientListView();
           return state.allClients[ix];
         }
         return cardClient;
@@ -2771,7 +2949,7 @@
               state.allClients = state.allClients.filter(function(c) {
                 return c.id !== clientId;
               });
-              applyFilter();
+              refreshClientListView();
               backToListFromDetail();
             })
             .catch(function(err) {
@@ -2962,10 +3140,15 @@
             '</div>' +
             heroActionsBar +
           '</div>' +
-          '<div class=\"tc-stats\">' +
-            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
-            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\" class=\"is-loading\"><span class=\"tc-stat-skel-block ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
-            '<span class=\"tc-stat\" id=\"clientTotalWrap\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\" class=\"is-loading\"><span class=\"tc-stat-skel-narrow ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
+          '<div class=\"tc-activity-panel\">' +
+            '<div class=\"tc-stats\">' +
+              '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
+              '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\" class=\"is-loading\"><span class=\"tc-stat-skel-block ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
+              '<span class=\"tc-stat\" id=\"clientTotalWrap\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\" class=\"is-loading\"><span class=\"tc-stat-skel-narrow ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
+            '</div>' +
+            (isSandbox
+              ? ''
+              : '<div id=\"clientHistoryHost\" class=\"tc-history-host\">' + buildClientHistorySkeletonHtml() + '</div>') +
           '</div>' +
           (isSandbox
             ? ''
@@ -3023,11 +3206,9 @@
             '<button type=\"button\" class=\"bd-btn bd-btn--danger tc-sandbox-delete-btn\" id=\"btnDeleteSandbox\">' +
             ICO_TRASH + ' Удалить пример</button>';
         }
-        detail +=
-          '</div>' +
-          (isSandbox ? '' : '<div id=\"clientHistoryHost\" class=\"tc-history-host\">' + buildClientHistorySkeletonHtml() + '</div>') +
-          '</div>';
+        detail += '</div></div>';
         document.getElementById('clientDetail').innerHTML = detail;
+        wireClientHistoryDiscoverability();
         document.getElementById('clientsSection').style.display = 'none';
         document.querySelector('.search-box').style.display = 'none';
         document.getElementById('detailSection').style.display = 'block';
@@ -3173,8 +3354,7 @@
               })
               .then(function() {
                 state.allClients = state.allClients.filter(function(x) { return x.id !== id; });
-                applyFilter();
-                renderList();
+                refreshClientListView();
                 document.getElementById('detailSection').style.display = 'none';
                 document.getElementById('clientsSection').style.display = '';
                 var sb = document.querySelector('.search-box');
@@ -3219,7 +3399,7 @@
             state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
             state.allClients.unshift(c);
             if (state.focusInviteBot) {
-              applyFilter();
+              refreshClientListView();
             } else {
               state.filteredClients = state.allClients.slice();
             }
@@ -3233,16 +3413,7 @@
 
       function mergeFullClientList(data) {
         state.allClients = data.clients || [];
-        if (state.filterRecurringOnly) {
-          state.allClients = state.allClients.filter(function(c) {
-            return (Number(c.recurring_slots_count) || 0) > 0;
-          });
-        }
-        if (state.focusInviteBot) {
-          applyInviteBotFocusAfterLoad();
-        } else {
-          applyFilter();
-        }
+        refreshClientListView();
       }
 
       function loadClientsInternal() {
@@ -3250,11 +3421,9 @@
         state.clientsListLoading = true;
         setStateMessage('');
         renderList();
-        var base = '/api/webapp/trainer/clients';
-        var url = withInit(base);
-        if (state.filterRecurringOnly) {
-          url += (url.indexOf('?') >= 0 ? '&' : '?') + 'recurring_only=true';
-        }
+        var url = withInit('/api/webapp/trainer/clients');
+        var qs = buildClientsListQueryString();
+        if (qs) url += (url.indexOf('?') >= 0 ? '&' : '?') + qs;
         fetch(url, { headers: {} })
           .then(function(r) {
             return r.json().then(function(data) {
@@ -3313,15 +3482,17 @@
                 state.allClients.unshift(c);
                 state.clientsListLoading = false;
                 if (state.focusInviteBot) {
-                  applyFilter();
+                  refreshClientListView();
                 } else {
                   state.filteredClients = state.allClients.slice();
                 }
                 renderList();
                 openClientDetail(idFromUrl);
                 setStateMessage('');
-                var base = '/api/webapp/trainer/clients';
-                fetch(withInit(base), { headers: {} })
+                var listUrl = withInit('/api/webapp/trainer/clients');
+                var listQs = buildClientsListQueryString();
+                if (listQs) listUrl += (listUrl.indexOf('?') >= 0 ? '&' : '?') + listQs;
+                fetch(listUrl, { headers: {} })
                   .then(function(r2) {
                     return r2.json().then(function(d2) {
                       if (!r2.ok) throw new Error(d2.detail || r2.statusText);
@@ -3353,15 +3524,18 @@
         applyFilter();
       });
 
-      var filterRecurringBtn = document.getElementById('tcFilterRecurring');
-      if (filterRecurringBtn) {
-        filterRecurringBtn.addEventListener('click', function() {
-          state.filterRecurringOnly = !state.filterRecurringOnly;
-          syncRecurringFilterChipUi();
-          loadClientsInternal();
+      var clientFiltersEl = document.getElementById('tcClientFilters');
+      if (clientFiltersEl) {
+        clientFiltersEl.addEventListener('click', function(ev) {
+          var btn = ev.target && ev.target.closest && ev.target.closest('.tc-chip-filter[data-filter]');
+          if (!btn) return;
+          if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.HapticFeedback.selectionChanged === 'function') {
+            window.Telegram.WebApp.HapticFeedback.selectionChanged();
+          }
+          onClientFilterChipClick(btn);
         });
       }
-      syncRecurringFilterChipUi();
+      syncClientFilterChipsUi();
 
       // Tap outside "Заметка тренера" → blur and dismiss keyboard (important in Telegram WebView)
       var detailSectionEl = document.getElementById('detailSection');
@@ -3447,7 +3621,7 @@
               closeAddClientModal();
               state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
               state.allClients.unshift(c);
-              if (state.focusInviteBot) applyFilter();
+              if (state.focusInviteBot) refreshClientListView();
               else state.filteredClients = state.allClients.slice();
               renderList();
               openClientDetail(c.id);

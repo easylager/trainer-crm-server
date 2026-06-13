@@ -13,6 +13,7 @@
     'from',
     'city_id',
     'force_service_choice',
+    'action',
     'init_data',
   ];
 
@@ -29,6 +30,7 @@
       from: qp.get('from') || '',
       cityId: qp.get('city_id') || null,
       forceServiceChoice: qp.get('force_service_choice') === '1',
+      action: qp.get('action') || '',
       initData: qp.get('init_data') || '',
       host: (global.location.pathname || '').indexOf('catalog') >= 0 ? 'catalog' : 'book',
     };
@@ -45,6 +47,8 @@
     if (state.from) parts.push('from=' + encodeURIComponent(String(state.from)));
     if (state.cityId) parts.push('city_id=' + encodeURIComponent(String(state.cityId)));
     if (extra.tab) parts.push('tab=' + encodeURIComponent(String(extra.tab)));
+    if (extra.action) parts.push('action=' + encodeURIComponent(String(extra.action)));
+    if (state.action && !extra.action) parts.push('action=' + encodeURIComponent(String(state.action)));
     var initData = state.initData;
     if (!initData && global.Telegram && global.Telegram.WebApp && global.Telegram.WebApp.initData) {
       initData = global.Telegram.WebApp.initData;
@@ -88,8 +92,10 @@
     }
     if (!shouldRedirect) return false;
 
+    var extra = {};
+    if (state.from === 'hub' && !state.slotId) extra.action = 'book';
     var base = path.replace(/[^/]+$/, '');
-    var target = base + buildCatalogPathFromState(state);
+    var target = base + buildCatalogPathFromState(state, extra);
     global.location.replace(target);
     return true;
   }
@@ -105,10 +111,7 @@
       initData: '',
     };
     if (state.slotId) return buildCatalogPathFromState(state);
-    var parts = ['trainer_id=' + encodeURIComponent(String(trainerId)), 'from=hub'];
-    if (state.serviceId) parts.push('service_id=' + encodeURIComponent(String(state.serviceId)));
-    if (state.arenaId) parts.push('arena_id=' + encodeURIComponent(String(state.arenaId)));
-    return 'book?' + parts.join('&');
+    return buildCatalogPathFromState(state, { action: 'book' });
   }
 
   global.BookingDeeplink = {

@@ -38,9 +38,9 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=20260624" as="script" />
+  <link rel="preload" href="trainer-clients-main.js?v=20260628" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202606155" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605206" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260628" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606155" />
   <script>
@@ -77,8 +77,17 @@
   <div class="search-box">
     <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
   </div>
-  <div class="tc-recurring-filter" role="toolbar" aria-label="Фильтр клиентов">
-    <button type="button" class="tc-chip-filter" id="tcFilterRecurring" aria-pressed="false">Постоянные</button>
+  <div class="tc-client-filters" id="tcClientFilters" role="toolbar" aria-label="Фильтры клиентов">
+    <div class="tc-client-filters__scroll">
+      <button type="button" class="tc-chip-filter" data-filter="in_bot" data-value="true" aria-pressed="false">В боте</button>
+      <button type="button" class="tc-chip-filter" data-filter="in_bot" data-value="false" aria-pressed="false">Нет в боте</button>
+      <button type="button" class="tc-chip-filter" data-filter="min_bookings" data-value="2" aria-pressed="false">2+ занятия</button>
+      <button type="button" class="tc-chip-filter" data-filter="recurring" aria-pressed="false">Постоянные</button>
+      <button type="button" class="tc-chip-filter" data-filter="has_pass" aria-pressed="false">С абонементом</button>
+      <button type="button" class="tc-chip-filter" data-filter="tier" data-value="child" aria-pressed="false">Детский</button>
+      <button type="button" class="tc-chip-filter" data-filter="tier" data-value="adult" aria-pressed="false">Взрослый</button>
+      <button type="button" class="tc-chip-filter" data-filter="tier" data-value="pair" aria-pressed="false">Парное</button>
+    </div>
   </div>
   <div class="tc-add-client-bar">
     <button type="button" class="btn-tc-add-client" id="btnOpenAddClient" aria-haspopup="dialog">
@@ -280,7 +289,7 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="trainer-clients-main.js?v=20260624"></script>
+  <script defer src="trainer-clients-main.js?v=20260628"></script>
   <script defer src="mini-app-trainer-home.js"></script>
   <script src="mini-app-trainer-shell.js?v=202606155"></script>
 </body>

@@ -190,38 +190,58 @@
     }
     .client-name-row {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: 6px 8px;
       min-width: 0;
     }
     .client-name-row .client-name {
-      flex: 1;
+      flex: 1 1 auto;
       min-width: 0;
     }
-    .client-badge--no-tg {
+    /* List-card status pills — shared capsule shape (matches «Нет в боте» / dossier chips). */
+    .client-badge {
       flex-shrink: 0;
-      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-family: var(--app-font-sans);
-      letter-spacing: 0.01em;
-      background: rgba(245, 166, 35, 0.22);
-      color: var(--tg-theme-text-color);
-    }
-    /* Sandbox pill: muted (not amber) so a demo identity reads as «not for production» at a glance. */
-    .client-badge--sandbox {
-      flex-shrink: 0;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 8px;
+      line-height: 1.2;
+      padding: 3px 9px;
       border-radius: 999px;
       font-family: var(--app-font-sans);
       letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .client-badge--no-tg {
+      background: color-mix(in srgb, var(--app-cta-fill, #f5a623) 22%, transparent);
+      color: var(--tg-theme-text-color);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #f5a623) 38%, transparent);
+    }
+    /* Sandbox pill: muted (not amber) so a demo identity reads as «not for production» at a glance. */
+    .client-badge--sandbox {
+      letter-spacing: 0.04em;
       text-transform: uppercase;
       background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
       color: var(--tg-theme-hint-color);
       border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+    }
+    .client-badge--recurring {
+      background: color-mix(in srgb, var(--app-cta-fill, #f5a623) 16%, transparent);
+      color: var(--tg-theme-text-color);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #f5a623) 34%, transparent);
+    }
+    .client-badge--tier {
+      background: color-mix(in srgb, #5ac8fa 13%, transparent);
+      color: color-mix(in srgb, #5ac8fa 78%, var(--tg-theme-text-color));
+      border-color: color-mix(in srgb, #5ac8fa 30%, transparent);
+    }
+    .client-badge--pass {
+      background: color-mix(in srgb, #34c759 13%, transparent);
+      color: color-mix(in srgb, #34c759 72%, var(--tg-theme-text-color));
+      border-color: color-mix(in srgb, #34c759 30%, transparent);
     }
     .client-card--sandbox {
       border-style: dashed !important;
@@ -729,6 +749,41 @@
       flex-wrap: wrap;
       gap: 8px;
       margin-bottom: 16px;
+    }
+    /* Stats + history accordion — one surface under hero (history no longer buried at card bottom). */
+    .tc-activity-panel {
+      margin-bottom: 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+    }
+    .tc-activity-panel .tc-stats {
+      margin-bottom: 0;
+      padding: 12px 12px 8px;
+      gap: 6px;
+    }
+    .tc-activity-panel .tc-stat {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 8px 10px;
+    }
+    .tc-stat--history-link {
+      cursor: pointer;
+      border-radius: 12px;
+      transition: background 0.15s ease, transform 0.12s ease;
+    }
+    .tc-stat--history-link:active {
+      transform: scale(0.98);
+      background: color-mix(in srgb, var(--app-cta-fill, #f5a623) 10%, transparent);
+    }
+    .tc-stat--history-link .tc-stat-label::after {
+      content: " ↓";
+      font-weight: 700;
+      letter-spacing: 0;
+      opacity: 0.55;
     }
     .tc-stat {
       display: flex;
@@ -1483,18 +1538,87 @@
       opacity: 0.9;
     }
     .tc-history-wrap {
-      margin-top: 16px;
-      padding: 16px 18px;
-      border-radius: 16px;
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      background: var(--tg-theme-secondary-bg-color);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+      margin-top: 0;
+      padding: 0;
+      border-radius: 0;
+      border: none;
+      background: transparent;
+      box-shadow: none;
     }
     .tc-history-host {
-      margin-top: 16px;
+      margin-top: 0;
+      border-top: 1px solid rgba(128, 128, 128, 0.08);
     }
     .tc-history-host .tc-history-wrap {
       margin-top: 0;
+    }
+    .tc-history-details {
+      border: none;
+      border-radius: 0;
+      background: transparent;
+    }
+    .tc-history-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    .tc-history-details .tc-history-summary::-webkit-details-marker {
+      display: none;
+    }
+    .tc-history-summary__title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-history-summary__value {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+      line-height: 1.35;
+    }
+    .tc-history-summary__chevron {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+      transition: transform 0.2s ease;
+    }
+    .tc-history-details[open] .tc-history-summary__chevron {
+      transform: rotate(180deg);
+    }
+    .tc-history-body {
+      padding: 0 14px 14px;
+      border-top: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    .tc-history-details--loading .tc-history-summary__value {
+      display: inline-block;
+      min-width: 120px;
+      min-height: 1.1em;
+      border-radius: 6px;
+      color: transparent;
+    }
+    .tc-history-details--pulse .tc-history-summary {
+      animation: tc-history-summary-pulse 0.9s ease;
+    }
+    @keyframes tc-history-summary-pulse {
+      0%, 100% { background: transparent; }
+      45% { background: color-mix(in srgb, var(--app-cta-fill, #f5a623) 12%, transparent); }
+    }
+    .history-list--empty {
+      color: var(--tg-theme-hint-color);
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 4px 0 2px;
     }
     .tc-history-wrap--skel .tc-history-skel-lines {
       display: flex;
@@ -2374,16 +2498,31 @@
       line-height: 1.35;
     }
     .client-badge.client-badge--history-recurring {
-      flex-shrink: 0;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 8px;
-      background: rgba(245, 166, 35, 0.2);
+      background: color-mix(in srgb, var(--app-cta-fill, #f5a623) 16%, transparent);
       color: var(--tg-theme-text-color);
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #f5a623) 34%, transparent);
     }
 
+    .tc-client-filters {
+      margin: 0 0 10px;
+      overflow: hidden;
+    }
+    .tc-client-filters__scroll {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px 0 6px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tc-client-filters__scroll::-webkit-scrollbar {
+      display: none;
+    }
+    .tc-client-filters .tc-chip-filter {
+      flex-shrink: 0;
+      margin: 0;
+    }
     .tc-chip-filter {
       display: inline-flex;
       align-items: center;
@@ -2410,7 +2549,7 @@
       margin: 0 0 10px;
     }
     body.client-detail-mode .search-box,
-    body.client-detail-mode .tc-recurring-filter {
+    body.client-detail-mode .tc-client-filters {
       display: none !important;
     }
 

@@ -780,8 +780,84 @@
         });
       }
 
-      /** Week Pulse: 7 days starting today — booking dots per day, never an empty void. */
+      /** Week Pulse: 7 days starting today — relative load bar per day (distinct slots + minutes). */
       var HUB_WEEK_PULSE_WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+      function hubWeekPulseDayLoadFromBookings(bookings) {
+        var seen = Object.create(null);
+        var sessions = 0;
+        var minutes = 0;
+        (bookings || []).forEach(function(b) {
+          if (!b) return;
+          var slotKey =
+            b.slot_id != null && b.slot_id !== ''
+              ? 's:' + String(b.slot_id)
+              : 'b:' + String(b.id != null ? b.id : '');
+          if (!slotKey || slotKey === 'b:' || seen[slotKey]) return;
+          seen[slotKey] = true;
+          sessions += 1;
+          var sm = parseStartToMinutesHub(b.start_time);
+          var em = parseStartToMinutesHub(b.end_time);
+          minutes += em > sm ? em - sm : 45;
+        });
+        return {
+          sessions: sessions,
+          minutes: minutes,
+          score: minutes > 0 ? minutes : sessions,
+        };
+      }
+
+      function hubWeekPulseBuildLoadMap(days) {
+        var map = Object.create(null);
+        (days || []).forEach(function(day) {
+          if (!day || !day.date) return;
+          map[String(day.date).slice(0, 10)] = hubWeekPulseDayLoadFromBookings(day.bookings || []);
+        });
+        return map;
+      }
+
+      function hubWeekPulseFormatDurationRu(totalMinutes) {
+        var m = Math.max(0, Math.floor(totalMinutes || 0));
+        if (m <= 0) return '';
+        var h = Math.floor(m / 60);
+        var rem = m % 60;
+        if (h <= 0) return rem + ' мин';
+        if (rem <= 0) return h + ' ч';
+        return h + ' ч ' + rem + ' мин';
+      }
+
+      /** Absolute load tier from booked minutes; width stays relative within the 7-day strip. */
+      function hubWeekPulseLoadTier(minutes, sessions) {
+        if (!sessions) return 'free';
+        if (minutes <= 90) return 'light';
+        if (minutes <= 180) return 'medium';
+        if (minutes <= 270) return 'heavy';
+        return 'peak';
+      }
+
+      function hubWeekPulseLoadLevelRu(tier) {
+        if (tier === 'light') return 'лёгкая загрузка';
+        if (tier === 'medium') return 'средняя загрузка';
+        if (tier === 'heavy') return 'высокая загрузка';
+        if (tier === 'peak') return 'пиковая загрузка';
+        return 'свободно';
+      }
+
+      function hubWeekPulseAriaLabel(dayMeta, load, fillPct) {
+        var base =
+          HUB_WEEK_PULSE_WEEKDAYS[dayMeta.getDay()] + ' ' + dayMeta.getDate();
+        if (!load.sessions) return base + ', свободно';
+        var tier = hubWeekPulseLoadTier(load.minutes, load.sessions);
+        var parts = [
+          base,
+          load.sessions + ' ' + pluralRu(load.sessions, 'занятие', 'занятия', 'занятий'),
+        ];
+        var dur = hubWeekPulseFormatDurationRu(load.minutes);
+        if (dur) parts.push(dur);
+        parts.push(hubWeekPulseLoadLevelRu(tier));
+        if (fillPct >= 100 && load.score > 0) parts.push('самый плотный день недели');
+        return parts.join(', ');
+      }
 
       function hubLocalIsoDate(d) {
         var m = d.getMonth() + 1;
@@ -806,34 +882,40 @@
           return;
         }
 
-        var countByDate = Object.create(null);
-        (hubLastBookingsDays || []).forEach(function(day) {
-          if (!day || !day.date) return;
-          var key = String(day.date).slice(0, 10);
-          countByDate[key] = (day.bookings || []).length;
-        });
+        var loadMap = hubWeekPulseBuildLoadMap(hubLastBookingsDays);
+        var now = new Date();
+        var dayLoads = [];
+        for (var prep = 0; prep < 7; prep++) {
+          var dp = new Date(now.getFullYear(), now.getMonth(), now.getDate() + prep);
+          var isoPrep = hubLocalIsoDate(dp);
+          dayLoads.push(loadMap[isoPrep] || { sessions: 0, minutes: 0, score: 0 });
+        }
+        var maxScore = 1;
+        for (var ms = 0; ms < dayLoads.length; ms++) {
+          if (dayLoads[ms].score > maxScore) maxScore = dayLoads[ms].score;
+        }
 
         var parts = [];
-        var now = new Date();
         for (var i = 0; i < 7; i++) {
           var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
           var iso = hubLocalIsoDate(d);
-          var n = countByDate[iso] || 0;
-          var dots = '';
-          var shown = Math.min(n, 3);
-          for (var j = 0; j < shown; j++) dots += '<span class="hub-week-pulse__dot"></span>';
+          var load = dayLoads[i];
+          var fillPct = load.score > 0 ? Math.max(8, Math.round((load.score / maxScore) * 100)) : 0;
+          var tier = hubWeekPulseLoadTier(load.minutes, load.sessions);
           parts.push(
             '<button type="button" class="hub-week-pulse__day' +
               (i === 0 ? ' hub-week-pulse__day--today' : '') +
-              (n > 0 ? ' hub-week-pulse__day--has' : '') +
+              (load.sessions > 0 ? ' hub-week-pulse__day--has' : '') +
+              ' hub-week-pulse__day--load-' + tier +
               '" data-hub-pulse-date="' + iso + '"' +
-              ' aria-label="' + escapeHtml(
-                HUB_WEEK_PULSE_WEEKDAYS[d.getDay()] + ' ' + d.getDate() +
-                (n > 0 ? ', ' + n + ' ' + pluralRu(n, 'занятие', 'занятия', 'занятий') : ', свободно')
-              ) + '">' +
+              ' aria-label="' + escapeHtml(hubWeekPulseAriaLabel(d, load, fillPct)) + '">' +
               '<span class="hub-week-pulse__wd">' + HUB_WEEK_PULSE_WEEKDAYS[d.getDay()] + '</span>' +
               '<span class="hub-week-pulse__num">' + d.getDate() + '</span>' +
-              '<span class="hub-week-pulse__dots">' + (dots || '<span class="hub-week-pulse__dot hub-week-pulse__dot--free"></span>') + '</span>' +
+              '<span class="hub-week-pulse__load" aria-hidden="true">' +
+                '<span class="hub-week-pulse__load-track">' +
+                  '<span class="hub-week-pulse__load-fill" style="width:' + fillPct + '%"></span>' +
+                '</span>' +
+              '</span>' +
             '</button>'
           );
         }
@@ -7487,10 +7569,10 @@
 
       (function wireHubCommunitySheet() {
         var link = document.getElementById('hubCommunityLink');
+        var faqLink = document.getElementById('hubCommunityFaqLink');
         var welcomeCommunity = document.getElementById('hubOnboardingWelcomeCommunity');
         var overlay = document.getElementById('hubCommunitySheetOverlay');
         var sheet = document.getElementById('hubCommunitySheet');
-        var ta = document.getElementById('hubSupportMessage');
         if (!link || !overlay || !sheet) return;
 
         function openHubCommunitySheet() {
@@ -7502,13 +7584,16 @@
           if (wg && wg.HapticFeedback && wg.HapticFeedback.impactOccurred) {
             try { wg.HapticFeedback.impactOccurred('light'); } catch (eh) { /* noop */ }
           }
-          window.setTimeout(function() {
-            if (ta && typeof ta.focus === 'function') ta.focus();
-          }, 280);
         }
 
         link.addEventListener('click', openHubCommunitySheet);
         if (welcomeCommunity) welcomeCommunity.addEventListener('click', openHubCommunitySheet);
+        if (faqLink) {
+          faqLink.addEventListener('click', function() {
+            closeHubCommunitySheet();
+            navigateTo('trainer-faq');
+          });
+        }
         overlay.addEventListener('click', function(ev) {
           if (ev.target === overlay) closeHubCommunitySheet();
         });

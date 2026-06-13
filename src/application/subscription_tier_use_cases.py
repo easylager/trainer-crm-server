@@ -53,25 +53,6 @@ def default_modules_dict() -> dict[str, bool]:
     return {k: False for k in SUBSCRIPTION_MODULES}
 
 
-async def ensure_trainer_profile_group_classes_when_groups_module(
-    session: AsyncSession,
-    trainer_id: int,
-    modules: dict[str, bool] | None,
-) -> None:
-    """
-    When entitlements include the groups add-on, turn on profile group_classes_enabled.
-    Keeps UI/API aligned with paid modules (admin activation, checkout, mock payment, trial).
-    """
-    if not modules or not bool(modules.get(SUBSCRIPTION_MODULE_GROUPS)):
-        return
-    from src.infrastructure.repositories.trainer_repository import TrainerRepository
-
-    repo = TrainerRepository(session)
-    tid = int(trainer_id)
-    await repo.ensure_trainer_profile_row(tid)
-    await repo.update_profile(tid, group_classes_enabled=True)
-
-
 def format_subscription_label(
     modules: Any,
     *,
@@ -677,7 +658,6 @@ async def set_subscription_constructor_after_mock_payment(
         },
     )
     row = result.fetchone()
-    await ensure_trainer_profile_group_classes_when_groups_module(session, trainer_id, mods)
     await session.commit()
 
     return {

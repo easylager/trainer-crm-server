@@ -1664,6 +1664,18 @@
     body.catalog-booking-deeplink .catalog-hero {
       display: none !important;
     }
+    body.catalog-slotpick-deeplink [data-screen] {
+      display: none !important;
+    }
+    body.catalog-slotpick-deeplink #screenSlotPick[data-screen].active,
+    body.catalog-slotpick-deeplink #screenSlotPick[data-screen] {
+      display: block !important;
+    }
+    body.catalog-slotpick-deeplink .catalog-tabs,
+    body.catalog-slotpick-deeplink #catalogHome,
+    body.catalog-slotpick-deeplink .catalog-hero {
+      display: none !important;
+    }
     html.catalog-trainer-deeplink [data-screen],
     body.catalog-trainer-deeplink [data-screen] {
       display: none !important;

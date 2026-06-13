@@ -64,10 +64,10 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606159" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606170" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606155" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=202606160" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202606161" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202606155" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
@@ -353,15 +353,8 @@
       }());
     </script>
 
-    <!-- Ice Lane — brand signature: one deliberate gesture, premium-minimalist -->
-    <div class="ice-lane" aria-hidden="true">
-      <span class="ice-lane__line"></span>
-      <p class="ice-lane__wordmark">Кабинет тренера</p>
-      <span class="ice-lane__line"></span>
-    </div>
-
     <!--
-      Week Pulse — 7 days ahead with booking dots. Never an empty void:
+      Week Pulse — 7 days ahead with relative load bars. Never an empty void:
       even a free week shows the structure of the trainer's practice.
       Populated by syncHubWeekPulse(); tap → schedule on that day.
     -->
@@ -369,7 +362,7 @@
 
     <!--
       Rhythm hints — contextual coaching nudges.
-      First thing after the brand line: if something needs attention, trainer sees it immediately.
+      First thing after week pulse: if something needs attention, trainer sees it immediately.
       All hidden by default; JS activates at most one per session.
     -->
     <div
@@ -622,7 +615,7 @@
         </svg>
         <span class="hub-community-link__copy">
           <span class="hub-community-link__label">Наше комьюнити</span>
-          <span class="hub-community-link__hint">Идеи и отзывы</span>
+          <span class="hub-community-link__hint">Справка · идеи и отзывы</span>
         </span>
         <svg class="hub-community-link__arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M9 6l6 6-6 6"/>
@@ -645,6 +638,23 @@
       <p class="hub-community-sheet__lead">
         Мы создаём этот проект рука об руку с вашими тренерами, чтобы детям и родителям было по-настоящему уютно и удобно. Поделитесь, чего вам не хватает, или напишите нам доброе слово — мы читаем каждое сообщение! 💛
       </p>
+      <button type="button" id="hubCommunityFaqLink" class="hub-community-sheet__faq">
+        <span class="hub-community-sheet__faq-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <path d="M12 17h.01"/>
+          </svg>
+        </span>
+        <span class="hub-community-sheet__faq-copy">
+          <span class="hub-community-sheet__faq-label">Справка</span>
+          <span class="hub-community-sheet__faq-hint">Расписание, абонементы, группы</span>
+        </span>
+        <svg class="hub-community-sheet__faq-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 6l6 6-6 6"/>
+        </svg>
+      </button>
+      <p class="hub-community-sheet__form-kicker">Написать команде</p>
       <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
         <label for="hubSupportMessage" class="hub-support-label">Ваше сообщение</label>
         <textarea
@@ -661,7 +671,7 @@
         <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
       </form>
       <p class="hub-community-sheet__cta">
-        Если нужна системная помощь — загляните в <strong>/guide</strong> в боте.
+        Личный вопрос по тарифу или учёту — через <strong>/guide</strong> в боте.
       </p>
     </div>
   </div>
@@ -1013,7 +1023,7 @@
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=202606160"></script>
+  <script defer src="trainer-home-main.js?v=202606161"></script>
   <script defer src="mini-app-trainer-shell.js?v=202606155"></script>
 </body>
 </html>

@@ -98,6 +98,7 @@ from src.application.booking_use_cases import (
     list_trainer_clients,
     list_trainer_fill_slots_invite_candidates,
     list_trainer_client_history,
+    normalize_trainer_client_list_tier_filter,
     patch_trainer_client_identity_for_card,
     resolve_arena_for_client_self_booking,
     get_trainer_primary_arena_resolved,
@@ -5828,14 +5829,30 @@ async def get_trainer_my_services(
 async def get_trainer_clients(
     q: str | None = Query(None, description="Search by name or phone (optional)"),
     recurring_only: bool = Query(False, description="Only clients with at least one active recurring weekly slot"),
+    in_bot: bool | None = Query(None, description="True = linked to Telegram bot; false = not in bot"),
+    min_bookings: int | None = Query(None, ge=1, description="Minimum non-cancelled bookings with this trainer"),
+    has_pass: bool | None = Query(None, description="True = active pass with remaining sessions"),
+    tier: str | None = Query(None, description="Last booking tier: child | adult | pair"),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """List clients linked to this trainer (bookings, groups, or manual roster). Optional search by name/phone. Auth: trainer initData."""
+    """List clients linked to this trainer (bookings or manual roster). Optional search and segment filters. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    clients = await list_trainer_clients(session, trainer_id, limit=100, recurring_only=recurring_only)
+    tier_filter = normalize_trainer_client_list_tier_filter(tier)
+    if tier is not None and str(tier).strip() and tier_filter is None:
+        raise HTTPException(status_code=422, detail="tier must be child, adult, or pair")
+    clients = await list_trainer_clients(
+        session,
+        trainer_id,
+        limit=100,
+        recurring_only=recurring_only,
+        in_bot=in_bot,
+        min_bookings=min_bookings,
+        has_active_pass=has_pass,
+        tier=tier_filter,
+    )
     if q and (q := (q or "").strip()):
         q_lower = q.lower()
         digits = "".join(c for c in q if c.isdigit())
