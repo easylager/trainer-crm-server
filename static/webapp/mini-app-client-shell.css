@@ -17,6 +17,15 @@ body.client-shell-body.client-shell-tabs-hidden {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
+body.client-shell-body.client-shell-more-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.client-shell-body.client-shell-more-open .client-tab-bar {
+  z-index: 9200;
+}
+
 /* Tier A header (replaces ad-hoc .header on client pages with shell) */
 .client-app-header {
   display: flex;
@@ -184,12 +193,26 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-more-sheet__handle {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
   background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
-  margin: 6px auto 12px;
+  margin: 4px auto 10px;
   flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+  position: relative;
+}
+.client-more-sheet__handle::before {
+  content: '';
+  position: absolute;
+  left: -28px;
+  right: -28px;
+  top: -18px;
+  bottom: -14px;
+}
+.client-more-sheet__handle:active {
+  cursor: grabbing;
 }
 
 .client-more-sheet__title {
@@ -198,6 +221,10 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   letter-spacing: -0.02em;
   margin: 0 0 4px;
   padding: 0 4px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .client-more-sheet__subtitle {

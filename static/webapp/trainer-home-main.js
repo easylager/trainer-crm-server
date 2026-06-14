@@ -325,6 +325,7 @@
       var hubLastPendingInNearestStripCount = 0;
       /** Formatted revenue for hub «С 1-го числа» (MTD API), or null. */
       var hubMtdRevenueText = null;
+      var hubMtdRevenuePeriod = null;
       /** Client requests without trainer response (GET /trainer/requests/summary). */
       var hubLastNewRequestsCount = 0;
       var hubRequestsStatReady = false;
@@ -365,6 +366,12 @@
        * Stays false until then so two placeholder cards reserve space and reduce CLS.
        */
       var hubRhythmHintsReady = false;
+      /** Wave B: server-built inbox from bootstrap; cleared after local mutations. */
+      var hubServerActionInbox = null;
+      /** Unified inbox: compact banner (top 1) vs full expanded list. */
+      var hubActionInboxExpanded = false;
+      var hubActionInboxWired = false;
+      var HUB_INBOX_COLLAPSED_MAX = 1;
 
       function showHubRhythmHintsSkeleton() {
         if (!getInitData() || hubRhythmHintsReady) return;
@@ -399,6 +406,19 @@
         var raw = getInitData();
         if (raw) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
         return url;
+      }
+
+      function postJsonTrainer(path, body) {
+        return fetch(apiUrlWithQuery(path), {
+          method: 'POST',
+          headers: headersJson(),
+          body: body != null ? JSON.stringify(body) : null,
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+            return data;
+          });
+        });
       }
 
       /** GET with AbortSignal timeout — Telegram WebView sometimes leaves fetch hanging without failing. */
@@ -544,8 +564,7 @@
       /** During «Первые шаги» show welcome card instead of empty stat widgets. */
       function syncHubOnboardingWelcomeVisibility(data) {
         var welcome = document.getElementById('hubOnboardingWelcome');
-        var statsHead = document.getElementById('hubStatsHead');
-        var statsWrap = document.getElementById('hubStats');
+        var statusMarkers = document.getElementById('hubStatusMarkers');
         var footerAside = document.getElementById('hubFooterAside');
         var show = hubOnboardingStripVisible();
         var d = data || hubOnboardingData || null;
@@ -586,18 +605,13 @@
 
         document.body.classList.toggle('hub-onboarding-active', show);
 
-        if (statsHead) statsHead.hidden = show;
-        if (statsWrap) {
-          if (show) {
-            statsWrap.setAttribute('aria-hidden', 'true');
-            statsWrap.setAttribute('hidden', 'hidden');
-          } else {
-            statsWrap.removeAttribute('hidden');
-            statsWrap.removeAttribute('aria-hidden');
-          }
+        if (statusMarkers && show) {
+          statusMarkers.setAttribute('hidden', '');
+          statusMarkers.innerHTML = '';
         }
         if (footerAside) footerAside.hidden = show;
         syncHubDayCanvas();
+        if (!show) renderHubStatusMarkers();
       }
 
       /** Upcoming sessions only — totals include past completed slots on the calendar week. */
@@ -742,6 +756,202 @@
           chips.push({ text: 'С начала месяца · ' + hubMtdRevenueText, tone: 'ok' });
         }
         return chips;
+      }
+
+      /** Renders one compact status marker (chip) — shared by day canvas and footer strip. */
+      function hubStatusMarkerHtml(chip) {
+        if (!chip || !chip.text) return '';
+        var tone = chip.tone === 'warn' || chip.tone === 'urgent' ? chip.tone : 'ok';
+        var cls = 'hub-status-marker hub-status-marker--' + tone;
+        var action = chip.action ? String(chip.action).trim() : '';
+        if (action) {
+          return (
+            '<button type="button" class="' +
+            cls +
+            '" data-hub-marker-action="' +
+            escapeHtml(action) +
+            '"' +
+            (chip.title ? ' title="' + escapeHtml(chip.title) + '"' : '') +
+            '>' +
+            escapeHtml(chip.text) +
+            '</button>'
+          );
+        }
+        return (
+          '<span class="' +
+          cls +
+          '"' +
+          (chip.title ? ' title="' + escapeHtml(chip.title) + '"' : '') +
+          '>' +
+          escapeHtml(chip.text) +
+          '</span>'
+        );
+      }
+
+      /** Footer markers when hub has bookings / rhythm — not onboarding, not empty-day canvas. */
+      function collectHubFooterStatusMarkers() {
+        var chips = [];
+        var onb = hubOnboardingData;
+
+        if (hubLastPendingCount > 0) {
+          chips.push({
+            text: 'Подтвердить · ' + hubLastPendingCount,
+            tone: 'urgent',
+            action: 'pending_inbox',
+            title:
+              hubLastPendingCount +
+              ' ' +
+              pluralRu(hubLastPendingCount, 'запись', 'записи', 'записей') +
+              ' ждут подтверждения',
+          });
+        }
+        if (hubLastNewRequestsCount > 0 && hubRequestsStatReady) {
+          chips.push({
+            text: 'Заявки · ' + hubLastNewRequestsCount,
+            tone: 'urgent',
+            action: 'requests',
+            title:
+              hubLastNewRequestsCount +
+              ' ' +
+              pluralRu(hubLastNewRequestsCount, 'новая заявка', 'новые заявки', 'новых заявок') +
+              ' без ответа',
+          });
+        }
+
+        var todayTotal = hubLastTodayCount || 0;
+        var todayRem = hubLastTodayRemaining || 0;
+        if (todayTotal > 0) {
+          var todayText = 'Сегодня · ' + todayTotal;
+          if (todayRem > 0) todayText += ' · ' + todayRem + ' впереди';
+          chips.push({
+            text: todayText,
+            tone: todayRem > 0 ? 'ok' : 'warn',
+            action: 'schedule_today',
+            title:
+              'Всего занятий на сегодня (минское время). «Впереди» — слот ещё не начался; идущее занятие не считается.',
+          });
+        } else {
+          chips.push({
+            text: 'Сегодня · свободно',
+            tone: 'warn',
+            action: 'schedule_today',
+          });
+        }
+
+        var weekTotal = hubLastWeekCount || 0;
+        var weekRem = hubLastWeekRemaining || 0;
+        if (weekTotal > 0) {
+          var weekText = 'Неделя · ' + weekTotal;
+          if (weekRem > 0) weekText += ' · ' + weekRem + ' впереди';
+          chips.push({
+            text: weekText,
+            tone: weekRem > 0 ? 'ok' : 'warn',
+            action: 'schedule',
+            title:
+              'Календарная неделя с понедельника по воскресенье (Минск). «Впереди» — слот ещё не начался; идущее занятие не считается.',
+          });
+        }
+
+        var avail = parseNonNegativeInt(onb && onb.available_slots_this_week_count);
+        if (avail > 0) {
+          chips.push({ text: 'Слоты · ' + avail + ' свободно', tone: 'ok', action: 'schedule' });
+        } else if (onb && !onb.has_future_available_slots && !onb.has_future_slots) {
+          chips.push({ text: 'Слоты · добавьте в расписании', tone: 'warn', action: 'schedule' });
+        }
+
+        if (hubMtdRevenueText && hubMtdRevenueText !== '—' && hubMtdRevenueText !== '0 BYN') {
+          var revTitle = 'Начислено с начала месяца: занятия, абонементы, сертификаты';
+          if (hubMtdRevenuePeriod && hubMtdRevenuePeriod.start && hubMtdRevenuePeriod.end) {
+            revTitle =
+              'Начислено с ' +
+              String(hubMtdRevenuePeriod.start) +
+              ' по ' +
+              String(hubMtdRevenuePeriod.end) +
+              ': занятия, абонементы, сертификаты';
+          }
+          chips.push({
+            text: 'С 1-го · ' + hubMtdRevenueText,
+            tone: 'ok',
+            action: 'stats',
+            title: revTitle,
+          });
+        }
+
+        if (onb && (onb.is_active || hubDataSaysTrainerActive(onb)) && chips.length < 6) {
+          chips.push({ text: 'Каталог · активен', tone: 'ok' });
+        }
+
+        return chips;
+      }
+
+      function runHubStatusMarkerAction(action) {
+        var a = String(action || '').trim();
+        if (!a) return;
+        if (a === 'pending_inbox') {
+          openHubPendingConfirmSheet();
+          return;
+        }
+        if (a === 'requests') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-requests');
+          });
+          return;
+        }
+        if (a === 'schedule_today') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('schedule-editor?anchor_date=' + encodeURIComponent(hubTodayYmdMinsk()));
+          });
+          return;
+        }
+        if (a === 'schedule') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('schedule-editor');
+          });
+          return;
+        }
+        if (a === 'stats') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-stats');
+          });
+        }
+      }
+
+      var hubStatusMarkersWired = false;
+
+      function wireHubStatusMarkers() {
+        if (hubStatusMarkersWired) return;
+        var wrap = document.getElementById('hubStatusMarkers');
+        if (!wrap) return;
+        hubStatusMarkersWired = true;
+        wrap.addEventListener('click', function(ev) {
+          var btn = ev.target.closest('[data-hub-marker-action]');
+          if (!btn || !wrap.contains(btn)) return;
+          runHubStatusMarkerAction(btn.getAttribute('data-hub-marker-action'));
+        });
+      }
+
+      /** Bottom status strip — compact markers instead of legacy stat cards. */
+      function renderHubStatusMarkers() {
+        renderHubSummaryHints();
+        var wrap = document.getElementById('hubStatusMarkers');
+        if (!wrap) return;
+
+        if (!getInitData() || hubOnboardingStripVisible() || shouldShowHubDayCanvas()) {
+          wrap.setAttribute('hidden', '');
+          wrap.innerHTML = '';
+          return;
+        }
+
+        var chips = collectHubFooterStatusMarkers();
+        if (!chips.length) {
+          wrap.setAttribute('hidden', '');
+          wrap.innerHTML = '';
+          return;
+        }
+
+        wrap.removeAttribute('hidden');
+        wrap.innerHTML = chips.map(hubStatusMarkerHtml).join('');
+        wireHubStatusMarkers();
       }
 
       function runHubDayCanvasAction(action) {
@@ -950,6 +1160,7 @@
 
         if (!show) {
           canvas.setAttribute('hidden', 'hidden');
+          renderHubStatusMarkers();
           return;
         }
 
@@ -1008,21 +1219,12 @@
 
         if (statusEl) {
           var chips = buildHubDayCanvasStatusChips(onb);
-          statusEl.innerHTML = chips
-            .map(function(chip) {
-              return (
-                '<span class="hub-day-canvas__status-chip hub-day-canvas__status-chip--' +
-                escapeHtml(chip.tone) +
-                '">' +
-                escapeHtml(chip.text) +
-                '</span>'
-              );
-            })
-            .join('');
+          statusEl.innerHTML = chips.map(hubStatusMarkerHtml).join('');
         }
 
         canvas.removeAttribute('hidden');
         wireHubDayCanvasActions();
+        renderHubStatusMarkers();
       }
 
       function hubTrainerProfileNavAllowedDuringOnboarding(pathWithQuery) {
@@ -1994,72 +2196,547 @@
         }
       }
 
-      /** Renders up to two priority rhythm hints. */
-      function applyHubRhythmResolver() {
-        hubFillSlotsRhythmBoostActiveThisResolverPass = readTrainerHubFillSlotsRhythmBoostPending();
-        var candidates = buildHubRhythmCandidates();
-        candidates.sort(function(a, b) {
+      function hubInboxPlainTextFromHtml(html) {
+        if (!html) return '';
+        var el = document.createElement('div');
+        el.innerHTML = html;
+        return (el.textContent || '').trim();
+      }
+
+      /** Merges pending, requests, and rhythm hints into one prioritized queue (Wave A client / Wave B fallback). */
+      function mapServerInboxItem(raw) {
+        if (!raw || !raw.id) return null;
+        var item = {
+          id: raw.id,
+          kind: raw.kind,
+          priority: parseInt(String(raw.priority || 0), 10) || 0,
+          urgent: !!raw.urgent,
+          title: raw.title || '',
+          subtitle: raw.subtitle || '',
+          primaryLabel: raw.primary_label || raw.primaryLabel || 'Открыть',
+          secondaryLabel: raw.secondary_label || raw.secondaryLabel || null,
+          dismissible: !!raw.dismissible,
+          count: raw.count,
+          booking_ids: Array.isArray(raw.booking_ids) ? raw.booking_ids : null,
+          primary_action: raw.primary_action || null,
+          secondary_action: raw.secondary_action || null,
+        };
+        if (item.kind === 'rhythm') {
+          item.candidate = {
+            action: raw.primary_action || raw.action,
+            ctaLabel: item.primaryLabel,
+            cta2Action: raw.secondary_action || null,
+            cta2Label: item.secondaryLabel,
+          };
+        }
+        return item;
+      }
+
+      function invalidateHubServerActionInbox() {
+        hubServerActionInbox = null;
+      }
+
+      /** Drop cached server inbox when local pending/requests diverge from bootstrap snapshot. */
+      function maybeInvalidateHubServerActionInbox() {
+        if (!hubServerActionInbox || !Array.isArray(hubServerActionInbox.items)) return;
+        var serverPending = 0;
+        var serverRequests = 0;
+        hubServerActionInbox.items.forEach(function(it) {
+          if (it.id === 'pending_bookings') serverPending = parseInt(String(it.count || 0), 10) || 0;
+          if (it.id === 'unanswered_requests') serverRequests = parseInt(String(it.count || 0), 10) || 0;
+        });
+        if (serverPending !== hubLastPendingCount) invalidateHubServerActionInbox();
+        else if (hubRequestsStatReady && serverRequests !== hubLastNewRequestsCount) invalidateHubServerActionInbox();
+      }
+
+      function buildHubInboxItemsFromClient() {
+        var items = [];
+        if (!getInitData()) return items;
+
+        var canAct = canOpenTrainerSectionsSync();
+        var pendingCount = hubLastPendingCount > 0 ? hubLastPendingCount : 0;
+        if (canAct && pendingCount > 0) {
+          items.push({
+            id: 'pending_bookings',
+            priority: 100,
+            kind: 'pending',
+            urgent: true,
+            count: pendingCount,
+            title:
+              pendingCount +
+              ' ' +
+              pluralRu(
+                pendingCount,
+                'запись ждёт подтверждения',
+                'записи ждут подтверждения',
+                'записей ждут подтверждения'
+              ),
+            subtitle: 'До подтверждения клиент не увидит занятие как согласованное',
+            primaryLabel: pendingCount > 1 ? 'Подтвердить все' : 'Подтвердить',
+            dismissible: false,
+          });
+        }
+
+        if (canAct && hubRequestsStatReady && hubLastNewRequestsCount > 0) {
+          var reqN = hubLastNewRequestsCount;
+          items.push({
+            id: 'unanswered_requests',
+            priority: 90,
+            kind: 'requests',
+            urgent: true,
+            count: reqN,
+            title:
+              reqN +
+              ' ' +
+              pluralRu(reqN, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа'),
+            subtitle: 'Ответьте клиентам в разделе «Заявки»',
+            primaryLabel: 'Ответить',
+            dismissible: false,
+          });
+        }
+
+        var rhythmCands = buildHubRhythmCandidates().filter(function(c) {
+          return c.id !== 'open_loop_pending';
+        });
+        rhythmCands.forEach(function(cand) {
+          if (isRhythmHintDismissed(cand.id)) return;
+          var title = cand.textHtml ? hubInboxPlainTextFromHtml(cand.textHtml) : cand.text || '';
+          if (!title) return;
+          items.push({
+            id: cand.id,
+            priority: cand.priority,
+            kind: 'rhythm',
+            urgent: cand.priority >= 97,
+            title: title,
+            subtitle: '',
+            primaryLabel: cand.ctaLabel || 'Открыть',
+            secondaryLabel: cand.cta2Label || null,
+            candidate: cand,
+            dismissible: true,
+          });
+        });
+
+        items.sort(function(a, b) {
           return b.priority - a.priority;
         });
-        var picked = [];
-        for (var i = 0; i < candidates.length && picked.length < 2; i++) {
-          if (!isRhythmHintDismissed(candidates[i].id)) picked.push(candidates[i]);
-        }
-        hubActiveRhythmHintIds = picked.map(function(p) {
-          return p.id;
-        });
-        hubLastRhythmPicked = [picked[0] || null, picked[1] || null];
+        return items;
+      }
 
-        for (var s = 0; s < 2; s++) {
-          var container = document.getElementById('hubRhythmSlot' + s);
-          var cand = picked[s];
-          if (!container) continue;
-          if (!cand) {
-            container.setAttribute('hidden', 'hidden');
-            container.style.display = 'none';
-            container.dataset.hubRhythmHintId = '';
-            var actionsEmpty = container.querySelector('.hub-schedule-rhythm-hint__actions');
-            if (actionsEmpty) actionsEmpty.classList.remove('hub-rhythm-actions--secondary-first');
-            continue;
-          }
-          container.dataset.hubRhythmHintId = cand.id;
-          container.removeAttribute('hidden');
-          container.style.display = 'flex';
-          var txt = document.getElementById('hubRhythmSlot' + s + 'Text');
-          var cta = document.getElementById('hubRhythmSlot' + s + 'Cta');
-          var cta2 = document.getElementById('hubRhythmSlot' + s + 'Cta2');
-          if (txt) {
-            if (cand.textHtml) txt.innerHTML = cand.textHtml;
-            else txt.textContent = cand.text;
-          }
-          if (cta) {
-            cta.textContent = cand.ctaLabel;
-            cta.className = 'btn-sm btn-primary';
-          }
-          if (cta2) {
-            if (cand.cta2Label && cand.cta2Action) {
-              cta2.textContent = cand.cta2Label;
-              cta2.removeAttribute('hidden');
-              cta2.style.display = '';
-              cta2.className = 'btn-sm btn-secondary hub-rhythm-slot-cta2';
-            } else {
-              cta2.textContent = '';
-              cta2.setAttribute('hidden', 'hidden');
-              cta2.style.display = 'none';
+      function buildHubInboxItems() {
+        if (!getInitData()) return [];
+        if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items) && hubServerActionInbox.items.length) {
+          var mapped = hubServerActionInbox.items.map(mapServerInboxItem).filter(Boolean);
+          mapped = mapped.filter(function(it) {
+            return it.kind !== 'rhythm' || !isRhythmHintDismissed(it.id);
+          });
+          if (readTrainerHubFillSlotsRhythmBoostPending()) {
+            var clientExtra = buildHubInboxItemsFromClient().filter(function(it) {
+              return (
+                it.kind === 'rhythm' &&
+                !mapped.some(function(s) {
+                  return s.id === it.id;
+                })
+              );
+            });
+            if (clientExtra.length) {
+              mapped = mapped.concat(clientExtra);
+              mapped.sort(function(a, b) {
+                return b.priority - a.priority;
+              });
             }
           }
-          var actionsRow = container.querySelector('.hub-schedule-rhythm-hint__actions');
-          if (actionsRow) {
-            if (cand.secondaryCtaFirst && cand.cta2Label && cand.cta2Action) {
-              actionsRow.classList.add('hub-rhythm-actions--secondary-first');
-            } else {
-              actionsRow.classList.remove('hub-rhythm-actions--secondary-first');
-            }
+          return mapped;
+        }
+        return buildHubInboxItemsFromClient();
+      }
+
+      function collectHubPendingBookings() {
+        var items = buildHubInboxItems();
+        var pendingItem = null;
+        for (var pi = 0; pi < items.length; pi++) {
+          if (items[pi].kind === 'pending') {
+            pendingItem = items[pi];
+            break;
           }
         }
+        if (pendingItem && pendingItem.booking_ids && pendingItem.booking_ids.length) {
+          var idSet = {};
+          pendingItem.booking_ids.forEach(function(id) {
+            idSet[String(id)] = true;
+          });
+          var matched = [];
+          if (hubLastBookingsDays) {
+            hubLastBookingsDays.forEach(function(day) {
+              (day.bookings || []).forEach(function(b) {
+                if (b && idSet[String(b.id)]) {
+                  matched.push({ id: b.id, booking: b, day: day });
+                }
+              });
+            });
+          }
+          if (matched.length) return matched;
+          return pendingItem.booking_ids.map(function(id) {
+            return { id: id, booking: { id: id }, day: { date: '' } };
+          });
+        }
+        var out = [];
+        if (!hubLastBookingsDays) return out;
+        hubLastBookingsDays.forEach(function(day) {
+          (day.bookings || []).forEach(function(b) {
+            if (b && String(b.status || '').toLowerCase() === 'pending' && b.id != null && b.id !== '') {
+              out.push({ id: b.id, booking: b, day: day });
+            }
+          });
+        });
+        return out;
+      }
+
+      function syncHubInboxShellBadges() {
+        if (!window.TrainerShell || typeof TrainerShell.setInboxBadges !== 'function') return;
+        if (hubServerActionInbox && hubServerActionInbox.badges) {
+          TrainerShell.setInboxBadges(hubServerActionInbox.badges);
+          if (window.TrainerPendingInbox) TrainerPendingInbox.syncShellBadges(hubServerActionInbox.badges);
+          return;
+        }
+        var d = hubOnboardingData;
+        var scheduleBadge = hubLastPendingCount > 0 ? hubLastPendingCount : 0;
+        var moreBadge = hubRequestsStatReady && hubLastNewRequestsCount > 0 ? hubLastNewRequestsCount : 0;
+        if (d && !isRhythmHintDismissed('catalog_publication')) {
+          var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
+          var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
+          if (!inPublicCatalog && onboardingBookingStepDone(d)) {
+            moreBadge += 1;
+          }
+        }
+        var clientsBadge = d ? parseNonNegativeInt(d.open_loop_clients_no_telegram_count) : 0;
+        TrainerShell.setInboxBadges({
+          schedule: scheduleBadge,
+          more: moreBadge,
+          clients: clientsBadge > 0 ? clientsBadge : 0,
+        });
+        if (window.TrainerPendingInbox) {
+          TrainerPendingInbox.syncShellBadges({
+            schedule: scheduleBadge,
+            more: moreBadge,
+            clients: clientsBadge > 0 ? clientsBadge : 0,
+          });
+        }
+      }
+
+      function dismissHubInboxRhythmItem(hintId) {
+        if (!hintId) return;
+        var days =
+          hintId === 'share_link' ||
+          hintId === 'template' ||
+          hintId === 'client_notes' ||
+          hintId === 'catalog_publication' ||
+          hintId === 'subscription_lapsed' ||
+          hintId === 'referral_growth'
+            ? HUB_RHYTHM_DISMISS_DAYS_LONG
+            : HUB_RHYTHM_DISMISS_DAYS_SHORT;
+        setRhythmDismissUntilMs(hintId, Date.now() + days * 24 * 60 * 60 * 1000);
+        applyHubRhythmResolver();
+        renderHubSummaryHints();
+      }
+
+      function runHubInboxItemAction(item) {
+        if (!item) return;
+        if (item.kind === 'pending') {
+          openHubPendingConfirmSheet();
+          return;
+        }
+        if (item.kind === 'requests') {
+          navigateTo('trainer-requests');
+          return;
+        }
+        if (item.kind === 'rhythm') {
+          if (item.candidate) {
+            runRhythmCandidateAction(item.candidate);
+          } else if (item.primary_action) {
+            runRhythmCandidateAction({ action: item.primary_action, ctaLabel: item.primaryLabel });
+          }
+        }
+      }
+
+      function runHubInboxItemSecondaryAction(item) {
+        if (!item) return;
+        if (item.secondary_action) {
+          runRhythmCandidateAction({ action: item.secondary_action });
+          return;
+        }
+        if (!item.candidate || !item.candidate.cta2Action) return;
+        runRhythmCandidateAction({ action: item.candidate.cta2Action });
+      }
+
+      /** Shorter copy for collapsed inbox — readable without truncation; button carries the action. */
+      function hubInboxCompactTitle(item) {
+        if (!item) return '';
+        var n = parseInt(String(item.count != null ? item.count : ''), 10);
+        var hasN = !isNaN(n) && n > 0;
+        switch (item.id) {
+          case 'pending_bookings':
+            return hasN
+              ? n +
+                  ' ' +
+                  pluralRu(n, 'запись без подтверждения', 'записи без подтверждения', 'записей без подтверждения')
+              : 'Запись без подтверждения';
+          case 'unanswered_requests':
+            return hasN
+              ? n + ' ' + pluralRu(n, 'заявка без ответа', 'заявки без ответа', 'заявок без ответа')
+              : 'Заявка без ответа';
+          case 'slots_this_week':
+            return 'Нет слотов на этой неделе';
+          case 'slots_next_week':
+            return 'Нет слотов на следующей неделе';
+          case 'template':
+            return 'Создайте шаблон недели';
+          case 'client_notes':
+            return 'Заметки после записи';
+          case 'open_loop_no_telegram':
+            return hasN
+              ? n + ' ' + pluralRu(n, 'клиент без бота', 'клиента без бота', 'клиентов без бота')
+              : 'Клиенты без бота';
+          case 'open_loop_free_next':
+          case 'open_loop_free_next_growth':
+            return hasN
+              ? n +
+                  ' ' +
+                  pluralRu(n, 'свободный слот', 'свободных слота', 'свободных слотов') +
+                  ' на след. неделе'
+              : 'Свободные слоты на след. неделе';
+          case 'open_loop_no_next':
+            return 'Клиенты без следующей записи';
+          case 'catalog_publication':
+            return 'Профиль не в каталоге';
+          case 'referral_growth':
+            return 'Пригласите коллег в каталог';
+          case 'share_link':
+            return 'Поделитесь ссылкой на запись';
+          default:
+            break;
+        }
+        var full = String(item.title || '').trim();
+        var sentenceEnd = full.indexOf('. ');
+        if (sentenceEnd > 0 && sentenceEnd <= 80) return full.slice(0, sentenceEnd + 1);
+        if (full.length <= 80) return full;
+        var cut = full.slice(0, 80);
+        var sp = cut.lastIndexOf(' ');
+        return (sp > 48 ? cut.slice(0, sp) : cut) + '…';
+      }
+
+      function renderHubActionInbox() {
+        var host = document.getElementById('hubActionInbox');
+        if (!host) return;
+
+        if (hubOnboardingStripVisible() || !getInitData()) {
+          host.setAttribute('hidden', '');
+          host.innerHTML = '';
+          syncHubInboxShellBadges();
+          return;
+        }
+
+        var items = buildHubInboxItems();
+        hubActiveRhythmHintIds = items.filter(function(it) {
+          return it.kind === 'rhythm';
+        }).map(function(it) {
+          return it.id;
+        });
+
+        if (!items.length) {
+          host.setAttribute('hidden', '');
+          host.innerHTML = '';
+          syncHubInboxShellBadges();
+          return;
+        }
+
+        var isCompact = !hubActionInboxExpanded;
+        var visible = hubActionInboxExpanded ? items : items.slice(0, HUB_INBOX_COLLAPSED_MAX);
+        var hiddenCount = items.length - visible.length;
+        var rowsHtml = visible
+          .map(function(item, ix) {
+            var mod = item.urgent ? ' hub-action-inbox__item--urgent' : '';
+            var dismissBtn =
+              !isCompact && item.dismissible
+                ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--dismiss" data-inbox-dismiss="' +
+                  escapeHtml(item.id) +
+                  '" aria-label="Скрыть">×</button>'
+                : '';
+            var secondaryBtn =
+              !isCompact &&
+              item.secondaryLabel &&
+              (item.secondary_action || (item.candidate && item.candidate.cta2Action))
+                ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--ghost" data-inbox-secondary="' +
+                  ix +
+                  '">' +
+                  escapeHtml(item.secondaryLabel) +
+                  '</button>'
+                : '';
+            var expandInlineBtn =
+              isCompact && hiddenCount > 0 && ix === 0
+                ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--more" id="hubActionInboxExpand" aria-label="Показать ещё ' +
+                  hiddenCount +
+                  '">+' +
+                  hiddenCount +
+                  '</button>'
+                : '';
+            return (
+              '<li class="hub-action-inbox__item' +
+              mod +
+              '" data-inbox-index="' +
+              ix +
+              '">' +
+              '<span class="hub-action-inbox__dot" aria-hidden="true"></span>' +
+              '<div class="hub-action-inbox__body">' +
+              '<p class="hub-action-inbox__item-title"' +
+              (isCompact && item.title ? ' title="' + escapeHtml(item.title) + '"' : '') +
+              '>' +
+              escapeHtml(isCompact ? hubInboxCompactTitle(item) : item.title) +
+              '</p>' +
+              (!isCompact && item.subtitle
+                ? '<p class="hub-action-inbox__item-sub">' + escapeHtml(item.subtitle) + '</p>'
+                : '') +
+              '</div>' +
+              '<div class="hub-action-inbox__actions">' +
+              expandInlineBtn +
+              '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--primary" data-inbox-primary="' +
+              ix +
+              '">' +
+              escapeHtml(item.primaryLabel) +
+              '</button>' +
+              secondaryBtn +
+              dismissBtn +
+              '</div></li>'
+            );
+          })
+          .join('');
+
+        var footerHtml = '';
+        if (hubActionInboxExpanded && items.length > HUB_INBOX_COLLAPSED_MAX) {
+          footerHtml =
+            '<div class="hub-action-inbox__footer"><button type="button" class="hub-action-inbox__expand" id="hubActionInboxCollapse">Свернуть</button></div>';
+        }
+
+        var headHtml = isCompact
+          ? ''
+          : '<div class="hub-action-inbox__head">' +
+            '<h2 class="hub-action-inbox__title">Сейчас важно</h2>' +
+            '<span class="hub-action-inbox__count">' +
+            items.length +
+            '</span></div>';
+
+        host.innerHTML =
+          '<div class="hub-action-inbox__card' +
+          (isCompact ? ' hub-action-inbox__card--compact' : ' hub-action-inbox__card--expanded') +
+          '">' +
+          headHtml +
+          '<ul class="hub-action-inbox__list">' +
+          rowsHtml +
+          '</ul>' +
+          footerHtml +
+          '</div>';
+        host.removeAttribute('hidden');
+        host.dataset.inboxItemsJson = JSON.stringify(items.slice(0, visible.length));
+        wireHubActionInboxEvents(host, items.slice(0, visible.length));
+        if (window.TrainerPendingInbox) TrainerPendingInbox.trackInboxItemsShown(items);
+        syncHubInboxShellBadges();
+      }
+
+      function initTrainerPendingInboxModule() {
+        if (!window.TrainerPendingInbox || initTrainerPendingInboxModule._done) return;
+        initTrainerPendingInboxModule._done = true;
+        TrainerPendingInbox.init({
+          surface: 'hub',
+          getInitData: getInitData,
+          apiUrlWithQuery: apiUrlWithQuery,
+          headersJson: headersJson,
+          pluralRu: pluralRu,
+          escapeHtml: escapeHtml,
+          toast: hubToast,
+          postJsonTrainer: postJsonTrainer,
+          dayHeaderLine: dayHeaderLine,
+          getPendingRows: collectHubPendingBookings,
+          onAfterConfirm: function() {
+            invalidateHubServerActionInbox();
+            renderHubActionInbox();
+            loadBookings();
+            loadOnboardingChecklist();
+          },
+        });
+      }
+
+      function openHubPendingConfirmSheet() {
+        initTrainerPendingInboxModule();
+        if (window.TrainerPendingInbox) {
+          TrainerPendingInbox.openSheet().then(function() {
+            renderHubActionInbox();
+          });
+        }
+      }
+
+      function closeHubPendingConfirmSheet() {
+        if (window.TrainerPendingInbox) TrainerPendingInbox.closeSheet();
+      }
+
+      function batchConfirmPendingBookings() {
+        initTrainerPendingInboxModule();
+        if (window.TrainerPendingInbox) TrainerPendingInbox.batchConfirmAll();
+      }
+
+      function wireHubPendingSheet() {
+        initTrainerPendingInboxModule();
+      }
+
+      function wireHubActionInboxEvents(host, visibleItems) {
+        if (!host) return;
+        if (!hubActionInboxWired) {
+          hubActionInboxWired = true;
+          host.addEventListener('click', function(ev) {
+            var t = ev.target;
+            if (!t || !t.closest) return;
+            var dismissEl = t.closest('[data-inbox-dismiss]');
+            if (dismissEl) {
+              dismissHubInboxRhythmItem(dismissEl.getAttribute('data-inbox-dismiss'));
+              return;
+            }
+            var expandEl = t.closest('#hubActionInboxExpand');
+            if (expandEl) {
+              hubActionInboxExpanded = true;
+              renderHubActionInbox();
+              return;
+            }
+            var collapseEl = t.closest('#hubActionInboxCollapse');
+            if (collapseEl) {
+              hubActionInboxExpanded = false;
+              renderHubActionInbox();
+              return;
+            }
+            var primaryEl = t.closest('[data-inbox-primary]');
+            if (primaryEl) {
+              var pix = parseInt(primaryEl.getAttribute('data-inbox-primary'), 10);
+              var itemsNow = buildHubInboxItems();
+              var shown = hubActionInboxExpanded ? itemsNow : itemsNow.slice(0, HUB_INBOX_COLLAPSED_MAX);
+              runHubInboxItemAction(shown[pix]);
+              return;
+            }
+            var secondaryEl = t.closest('[data-inbox-secondary]');
+            if (secondaryEl) {
+              var six = parseInt(secondaryEl.getAttribute('data-inbox-secondary'), 10);
+              var itemsNow2 = buildHubInboxItems();
+              var shown2 = hubActionInboxExpanded ? itemsNow2 : itemsNow2.slice(0, HUB_INBOX_COLLAPSED_MAX);
+              runHubInboxItemSecondaryAction(shown2[six]);
+            }
+          });
+        }
+      }
+
+      /** Builds rhythm candidates and renders unified action inbox (replaces legacy rhythm slots). */
+      function applyHubRhythmResolver() {
+        hubFillSlotsRhythmBoostActiveThisResolverPass = readTrainerHubFillSlotsRhythmBoostPending();
+        buildHubRhythmCandidates();
         if (hubRhythmHintsReady) {
           hideHubRhythmHintsSkeleton();
         }
+        renderHubActionInbox();
       }
 
       function syncHubWeekRhythmPanel() {
@@ -2067,49 +2744,8 @@
       }
 
       function wireHubRhythmSlots() {
-        [0, 1].forEach(function(ix) {
-          var prefix = 'hubRhythmSlot' + ix;
-          var dismissBtn = document.getElementById(prefix + 'Dismiss');
-          var ctaBtn = document.getElementById(prefix + 'Cta');
-          if (dismissBtn && !dismissBtn.dataset.wiredRhythmSlot) {
-            dismissBtn.dataset.wiredRhythmSlot = '1';
-            dismissBtn.onclick = function() {
-              var container = document.getElementById(prefix);
-              var hid = container && container.dataset.hubRhythmHintId;
-              if (hid) {
-                var days =
-                  hid === 'share_link' ||
-                  hid === 'template' ||
-                  hid === 'client_notes' ||
-                  hid === 'catalog_publication' ||
-                  hid === 'subscription_lapsed' ||
-                  hid === 'referral_growth'
-                    ? HUB_RHYTHM_DISMISS_DAYS_LONG
-                    : HUB_RHYTHM_DISMISS_DAYS_SHORT;
-                setRhythmDismissUntilMs(hid, Date.now() + days * 24 * 60 * 60 * 1000);
-              }
-              applyHubRhythmResolver();
-              renderHubSummaryHints();
-            };
-          }
-          if (ctaBtn && !ctaBtn.dataset.wiredRhythmSlot) {
-            ctaBtn.dataset.wiredRhythmSlot = '1';
-            ctaBtn.onclick = function() {
-              var cand = hubLastRhythmPicked[ix];
-              runRhythmCandidateAction(cand);
-            };
-          }
-          var cta2Btn = document.getElementById(prefix + 'Cta2');
-          if (cta2Btn && !cta2Btn.dataset.wiredRhythmSlot) {
-            cta2Btn.dataset.wiredRhythmSlot = '1';
-            cta2Btn.onclick = function() {
-              var cand = hubLastRhythmPicked[ix];
-              if (cand && cand.cta2Action) {
-                runRhythmCandidateAction({ action: cand.cta2Action });
-              }
-            };
-          }
-        });
+        wireHubActionInboxEvents(document.getElementById('hubActionInbox'), []);
+        wireHubPendingSheet();
       }
 
       /** Same storage as «×» on growth strip — call after successful copy or dismiss. */
@@ -2598,6 +3234,7 @@
               var n = o.data && o.data.unanswered_count;
               hubLastNewRequestsCount = typeof n === 'number' && !isNaN(n) ? n : 0;
             }
+            maybeInvalidateHubServerActionInbox();
             renderHubSummaryHints();
           })
           .catch(function() {
@@ -2950,7 +3587,7 @@
         return numStr + ' BYN';
       }
 
-      /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and hero. */
+      /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and footer markers. */
       function fetchHubMtdRevenue() {
         if (!getInitData()) return;
         if (hubRevenueSkipFetchOnce) {
@@ -2964,150 +3601,39 @@
           !window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)
         ) {
           hubMtdRevenueText = null;
+          hubMtdRevenuePeriod = null;
           return;
         }
         fetch(apiUrlWithQuery('/trainer/hub/revenue-mtd'), { headers: headersJson() })
           .then(function(r) {
             if (!r.ok) {
               hubMtdRevenueText = null;
+              hubMtdRevenuePeriod = null;
               return null;
             }
             return r.json();
           })
           .then(function(d) {
-            var revCard = document.getElementById('statRevenue');
             if (!d || d.revenue_total_cents == null) {
               hubMtdRevenueText = null;
-              if (revCard) {
-                revCard.removeAttribute('title');
-              }
+              hubMtdRevenuePeriod = null;
             } else {
               hubMtdRevenueText = formatHubMoneyCents(d.revenue_total_cents);
-              if (
-                revCard &&
-                d.period_start &&
-                d.period_end
-              ) {
-                revCard.setAttribute(
-                  'title',
-                  'Начислено с ' + String(d.period_start) + ' по ' + String(d.period_end) + ': занятия, абонементы, сертификаты'
-                );
-              }
+              hubMtdRevenuePeriod =
+                d.period_start && d.period_end ? { start: d.period_start, end: d.period_end } : null;
             }
             syncHubStats();
           })
           .catch(function() {
             hubMtdRevenueText = null;
+            hubMtdRevenuePeriod = null;
             syncHubStats();
           });
       }
 
-      /**
-       * Hub summary tiles: «N всего» / «M осталось».
-       * When nothing has started yet, N === M is normal — still show both lines (users expect «осталось»).
-       */
-      function hubFillDualStatValue(el, cardEl, total, remaining, titleText) {
-        if (!el) return;
-        if (total <= 0) {
-          el.classList.remove('hub-stat-value--dual');
-          el.textContent = '0';
-          if (cardEl) cardEl.removeAttribute('title');
-          return;
-        }
-        var rem =
-          typeof remaining === 'number' && remaining >= 0 && !isNaN(remaining) ? remaining : 0;
-        el.classList.add('hub-stat-value--dual');
-        el.innerHTML =
-          '<span class="hub-stat-dual-line"><span class="hub-stat-dual-num">' +
-          String(total) +
-          '</span> всего</span>' +
-          '<span class="hub-stat-dual-line hub-stat-dual-line--sub"><span class="hub-stat-dual-num">' +
-          String(rem) +
-          '</span> осталось</span>';
-        if (cardEl && titleText) cardEl.setAttribute('title', titleText);
-      }
-
-      function setStats(todayTotal, weekTotal, todayRemaining, weekRemaining) {
-        var wrap = document.getElementById('hubStats');
-        var todayValue = document.getElementById('statTodayValue');
-        var weekValue = document.getElementById('statWeekValue');
-        var revenueValue = document.getElementById('statRevenueValue');
-
-        if (!wrap || !todayValue || !weekValue || !revenueValue) {
-          renderHubSummaryHints();
-          return;
-        }
-
-        if (!getInitData()) {
-          wrap.setAttribute('aria-hidden', 'true');
-          wrap.style.display = 'none';
-          renderHubSummaryHints();
-          return;
-        }
-
-        if (hubOnboardingStripVisible()) {
-          document.body.classList.add('hub-onboarding-active');
-          wrap.setAttribute('aria-hidden', 'true');
-          wrap.setAttribute('hidden', 'hidden');
-          renderHubSummaryHints();
-          return;
-        }
-
-        document.body.classList.remove('hub-onboarding-active');
-        wrap.removeAttribute('hidden');
-        wrap.setAttribute('aria-hidden', 'false');
-
-        var todayCard = document.getElementById('statToday');
-        var weekCard = document.getElementById('statWeek');
-        hubFillDualStatValue(
-          todayValue,
-          todayCard,
-          todayTotal,
-          todayRemaining,
-          'Всего занятий на сегодня (минское время). «Осталось» — слот ещё не начался; идущее занятие не считается.'
-        );
-        hubFillDualStatValue(
-          weekValue,
-          weekCard,
-          weekTotal,
-          weekRemaining,
-          'Календарная неделя с понедельника по воскресенье (Минск). «Осталось» — слот ещё не начался; идущее занятие не считается.'
-        );
-
-        revenueValue.textContent =
-          hubMtdRevenueText != null && hubMtdRevenueText !== '' ? hubMtdRevenueText : '—';
-
-        if (todayCard) {
-          if (todayTotal > 0) {
-            todayCard.classList.add('stat-highlight');
-          } else {
-            todayCard.classList.remove('stat-highlight');
-          }
-        }
-
-        if (weekCard) {
-          if (hubLastPendingCount > 0) {
-            weekCard.classList.add('stat-highlight');
-          } else {
-            weekCard.classList.remove('stat-highlight');
-          }
-        }
-
-        renderHubSummaryHints();
-      }
-
-      /** Stats strip only — hero banner removed; counts mirror backend today/week sessions. */
+      /** Hub footer markers mirror backend today/week session counts. */
       function syncHubStats() {
-        if (!getInitData()) {
-          setStats(0, 0, 0, 0);
-          return;
-        }
-        setStats(
-          hubLastTodayCount,
-          hubLastWeekCount || 0,
-          hubLastTodayCount > 0 ? hubLastTodayRemaining : 0,
-          hubLastWeekRemaining || 0
-        );
+        renderHubStatusMarkers();
       }
 
       function pluralRu(n, one, few, many) {
@@ -5883,6 +6409,7 @@
           });
         });
         hubLastPendingCount = pending;
+        maybeInvalidateHubServerActionInbox();
 
         var firstWhen = '';
         var flatFirst = null;
@@ -6979,52 +7506,11 @@
       // as ONE refined alert. The create action lives in the floating FAB, so
       // the home content (bookings) stays the hero with no inline CTA clutter.
       function renderHubQuickStrip() {
-        renderHubUrgentAlert();
         syncHubBookFab();
       }
 
       function renderHubUrgentAlert() {
-        var host = document.getElementById('hubTrainerQuickStrip');
-        if (!host) return;
-
-        var canAct = !!getInitData() && canOpenTrainerSectionsSync();
-        // Pending confirmations take priority over unanswered requests.
-        var pending = hubLastPendingCount > 0;
-        var newReq = !pending && hubRequestsStatReady && hubLastNewRequestsCount > 0;
-
-        if (!canAct || (!pending && !newReq)) {
-          host.setAttribute('hidden', '');
-          host.innerHTML = '';
-          return;
-        }
-
-        var count = pending ? hubLastPendingCount : hubLastNewRequestsCount;
-        var href = pending ? 'schedule-editor' : 'trainer-requests';
-        var title = pending
-          ? count + ' ' + pluralRu(count, 'запись ждёт подтверждения', 'записи ждут подтверждения', 'записей ждут подтверждения')
-          : count + ' ' + pluralRu(count, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа');
-        var sub = pending ? 'Откройте расписание, чтобы подтвердить' : 'Ответьте клиентам в разделе «Заявки»';
-        var iconSvg = pending
-          ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>'
-          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-
-        host.innerHTML =
-          '<button type="button" class="hub-urgent-alert__card" id="hubUrgentAlertCard">' +
-          '<span class="hub-urgent-alert__icon" aria-hidden="true">' + iconSvg + '</span>' +
-          '<span class="hub-urgent-alert__body">' +
-          '<span class="hub-urgent-alert__title">' + escapeHtml(title) + '</span>' +
-          '<span class="hub-urgent-alert__sub">' + escapeHtml(sub) + '</span>' +
-          '</span>' +
-          '<span class="hub-urgent-alert__chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>' +
-          '</button>';
-        host.removeAttribute('hidden');
-
-        var card = document.getElementById('hubUrgentAlertCard');
-        if (card) {
-          card.onclick = function() {
-            navigateTo(href);
-          };
-        }
+        /* Legacy urgent strip removed — unified inbox handles pending/requests. */
       }
 
       var hubBookFabWired = false;
@@ -7381,19 +7867,15 @@
           hubRequestsStatReady = true;
           hubLastNewRequestsCount = payload.requests_summary.unanswered_count;
         }
+        if (payload.action_inbox && typeof payload.action_inbox === 'object') {
+          hubServerActionInbox = payload.action_inbox;
+        }
         if (payload.revenue_mtd && payload.revenue_mtd.revenue_total_cents != null) {
           hubMtdRevenueText = formatHubMoneyCents(payload.revenue_mtd.revenue_total_cents);
-          var revCard = document.getElementById('statRevenue');
-          if (revCard && payload.revenue_mtd.period_start && payload.revenue_mtd.period_end) {
-            revCard.setAttribute(
-              'title',
-              'Начислено с ' +
-                String(payload.revenue_mtd.period_start) +
-                ' по ' +
-                String(payload.revenue_mtd.period_end) +
-                ': занятия, абонементы, сертификаты'
-            );
-          }
+          hubMtdRevenuePeriod =
+            payload.revenue_mtd.period_start && payload.revenue_mtd.period_end
+              ? { start: payload.revenue_mtd.period_start, end: payload.revenue_mtd.period_end }
+              : null;
           hubRevenueSkipFetchOnce = true;
         }
         renderHubSummaryHints();

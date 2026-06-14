@@ -25,11 +25,12 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202606153" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606155" as="script" />
+  <link rel="preload" href="schedule-editor-main.js?v=202606159" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606157" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
   <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606156" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606155" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606157" />
 </head>
 <body data-trainer-shell="tabs">
   <!-- Covers main UI until quick-book modal opens (flow=book) or booking detail loads (open_booking=) — avoids calendar flash -->
@@ -118,6 +119,11 @@
     </p>
     <button type="button" class="btn-block btn-primary se-crm-lock-banner__cta" id="seCrmLockBannerCta">Тарифы и оплата</button>
   </div>
+
+  <button type="button" class="se-pending-inbox-chip" id="sePendingInboxChip" hidden aria-live="polite">
+    <span class="se-pending-inbox-chip__label">Записи ждут подтверждения</span>
+    <span class="se-pending-inbox-chip__action">Подтвердить</span>
+  </button>
 
   <div id="tabCalendar" class="tab-content active">
     <div class="week-nav">
@@ -751,10 +757,30 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <div id="hubPendingSheetOverlay" class="hub-pending-sheet-overlay" hidden aria-hidden="true">
+    <div
+      id="hubPendingSheet"
+      class="hub-pending-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hubPendingSheetTitle"
+    >
+      <div class="hub-pending-sheet__handle" aria-hidden="true"></div>
+      <h2 id="hubPendingSheetTitle" class="hub-pending-sheet__title">Подтвердить записи</h2>
+      <p class="hub-pending-sheet__lead" id="hubPendingSheetLead"></p>
+      <ul class="hub-pending-sheet__list" id="hubPendingSheetList"></ul>
+      <div class="hub-pending-sheet__actions">
+        <button type="button" class="btn-block btn-primary" id="hubPendingConfirmAll">Подтвердить все</button>
+        <button type="button" class="btn-block btn-secondary" id="hubPendingSheetClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=202606153"></script>
-  <script src="mini-app-trainer-shell.js?v=202606155"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
+  <script defer src="schedule-editor-main.js?v=202606159"></script>
+  <script src="mini-app-trainer-shell.js?v=202606157"></script>
 </body>
 </html>

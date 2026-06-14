@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606155';
+  var SHELL_VERSION = '202606157';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
@@ -108,6 +108,7 @@
     forcedTab: null,
     onboardingData: null,
     onboardingLoaded: false,
+    inboxBadges: { schedule: 0, more: 0, clients: 0 },
   };
 
   /* ─── Telegram helpers ──────────────────────────────────────────────────── */
@@ -144,6 +145,28 @@
         tg.HapticFeedback.selectionChanged();
       }
     } catch (e) { /* */ }
+  }
+
+  /** While «Ещё» sheet is open, block Telegram’s swipe-to-minimize so the sheet can dismiss first. */
+  function setNativeVerticalSwipeEnabled(enabled) {
+    var tg = getTg();
+    if (!tg) return;
+    try {
+      if (enabled && typeof tg.enableVerticalSwipes === 'function') tg.enableVerticalSwipes();
+      else if (!enabled && typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
+    } catch (e) { /* */ }
+  }
+
+  function syncMoreSheetBodyLock() {
+    var body = document.body;
+    if (body) body.classList.toggle('trainer-shell-more-open', !!state.moreOpen);
+    setNativeVerticalSwipeEnabled(!state.moreOpen);
+  }
+
+  function resetMoreSheetDragTransform(sheet) {
+    if (!sheet) return;
+    sheet.style.transform = '';
+    sheet.style.transition = '';
   }
 
   /* ─── Route resolution ──────────────────────────────────────────────────── */
@@ -405,13 +428,14 @@
       btn.innerHTML =
         '<span class="trainer-tab-bar__icon-wrap">' +
         tab.icon +
+        '<span class="trainer-tab-bar__badge" hidden aria-hidden="true"></span>' +
         '</span><span>' +
         tab.label +
         '</span>';
       btn.addEventListener('click', function () {
         hapticSelection();
         if (tab.id === 'more') {
-          openMoreSheet();
+          toggleMoreSheet();
           return;
         }
         if (btn.classList.contains('trainer-tab-bar__btn--locked') && tab.path) {
@@ -491,7 +515,116 @@
 
     sheet.appendChild(list);
     overlay.appendChild(sheet);
+    wireMoreSheetGestures(sheet);
     return overlay;
+  }
+
+  /** Tap handle or swipe down — dismiss sheet without collapsing the whole Mini App. */
+  function wireMoreSheetGestures(sheet) {
+    if (!sheet || sheet.dataset.dismissWired === '1') return;
+    sheet.dataset.dismissWired = '1';
+    var handle = sheet.querySelector('.trainer-more-sheet__handle');
+    var title = sheet.querySelector('.trainer-more-sheet__title');
+    var dragEls = [handle, title].filter(Boolean);
+    if (!dragEls.length) return;
+
+    if (handle) {
+      handle.setAttribute('role', 'button');
+      handle.setAttribute('tabindex', '0');
+      handle.setAttribute('aria-label', 'Свернуть раздел «Ещё»');
+    }
+
+    var dragStartY = 0;
+    var dragDy = 0;
+    var dragging = false;
+    var dragMoved = false;
+    var activePointer = null;
+
+    function finishDrag() {
+      if (!dragging) return;
+      dragging = false;
+      activePointer = null;
+      sheet.style.transition = '';
+      if (dragDy > 72) {
+        resetMoreSheetDragTransform(sheet);
+        closeMoreSheet();
+        return;
+      }
+      resetMoreSheetDragTransform(sheet);
+    }
+
+    dragEls.forEach(function (el) {
+      el.addEventListener('pointerdown', function (ev) {
+        if (!state.moreOpen || (ev.button != null && ev.button !== 0)) return;
+        dragging = true;
+        dragMoved = false;
+        dragStartY = ev.clientY;
+        dragDy = 0;
+        activePointer = ev.pointerId;
+        sheet.style.transition = 'none';
+        if (el.setPointerCapture) {
+          try {
+            el.setPointerCapture(ev.pointerId);
+          } catch (e) { /* */ }
+        }
+      });
+
+      el.addEventListener('pointermove', function (ev) {
+        if (!dragging || ev.pointerId !== activePointer) return;
+        dragDy = Math.max(0, ev.clientY - dragStartY);
+        if (dragDy > 8) dragMoved = true;
+        sheet.style.transform = 'translateY(' + dragDy + 'px)';
+      });
+
+      el.addEventListener('pointerup', function (ev) {
+        if (ev.pointerId !== activePointer) return;
+        if (!dragMoved && dragDy <= 8) closeMoreSheet();
+        finishDrag();
+      });
+
+      el.addEventListener('pointercancel', function (ev) {
+        if (ev.pointerId !== activePointer) return;
+        finishDrag();
+      });
+
+      if (el === handle) {
+        el.addEventListener('keydown', function (ev) {
+          if ((ev.key === 'Enter' || ev.key === ' ') && state.moreOpen) {
+            ev.preventDefault();
+            closeMoreSheet();
+          }
+        });
+      }
+    });
+  }
+
+  function syncInboxBadges() {
+    var bar = document.getElementById('trainerTabBar');
+    if (!bar) return;
+    var badges = state.inboxBadges || {};
+    bar.querySelectorAll('.trainer-tab-bar__btn').forEach(function (btn) {
+      var id = btn.dataset.tabId;
+      var badgeEl = btn.querySelector('.trainer-tab-bar__badge');
+      if (!badgeEl) return;
+      var n = 0;
+      if (id === 'schedule') n = parseInt(String(badges.schedule || 0), 10) || 0;
+      else if (id === 'more') n = parseInt(String(badges.more || 0), 10) || 0;
+      else if (id === 'clients') n = parseInt(String(badges.clients || 0), 10) || 0;
+      if (n > 0) {
+        badgeEl.textContent = n > 9 ? '9+' : String(n);
+        badgeEl.removeAttribute('hidden');
+        badgeEl.setAttribute('aria-hidden', 'false');
+      } else {
+        badgeEl.setAttribute('hidden', 'hidden');
+        badgeEl.setAttribute('aria-hidden', 'true');
+        badgeEl.textContent = '';
+      }
+    });
+  }
+
+  function setInboxBadges(badges) {
+    state.inboxBadges = badges || { schedule: 0, more: 0, clients: 0 };
+    syncInboxBadges();
   }
 
   /* ─── Tab bar state sync ────────────────────────────────────────────────── */
@@ -532,7 +665,11 @@
     if (!overlay) return;
     overlay.classList.add('trainer-more-sheet-overlay--open');
     var sheet = document.getElementById('trainerMoreSheet');
-    if (sheet) sheet.classList.add('trainer-more-sheet--open');
+    if (sheet) {
+      resetMoreSheetDragTransform(sheet);
+      sheet.classList.add('trainer-more-sheet--open');
+    }
+    syncMoreSheetBodyLock();
     syncTabBarActive();
   }
 
@@ -542,8 +679,17 @@
     if (!overlay) return;
     overlay.classList.remove('trainer-more-sheet-overlay--open');
     var sheet = document.getElementById('trainerMoreSheet');
-    if (sheet) sheet.classList.remove('trainer-more-sheet--open');
+    if (sheet) {
+      sheet.classList.remove('trainer-more-sheet--open');
+      resetMoreSheetDragTransform(sheet);
+    }
+    syncMoreSheetBodyLock();
     syncTabBarActive();
+  }
+
+  function toggleMoreSheet() {
+    if (state.moreOpen) closeMoreSheet();
+    else openMoreSheet();
   }
 
   /* ─── Public API ────────────────────────────────────────────────────────── */
@@ -629,6 +775,7 @@
     setupDrilldownObserver();
     applyTabBarVisibility();
     syncTabBarActive();
+    syncInboxBadges();
     fetchOnboardingChecklist();
   }
 
@@ -656,7 +803,15 @@
     setForcedTab: setForcedTab,
     openMoreSheet: openMoreSheet,
     closeMoreSheet: closeMoreSheet,
+    toggleMoreSheet: toggleMoreSheet,
+    setInboxBadges: setInboxBadges,
     syncOnboarding: syncOnboarding,
     fetchOnboardingChecklist: fetchOnboardingChecklist,
+    disableVerticalSwipes: function () {
+      setNativeVerticalSwipeEnabled(false);
+    },
+    enableVerticalSwipes: function () {
+      setNativeVerticalSwipeEnabled(true);
+    },
   };
 })(window);

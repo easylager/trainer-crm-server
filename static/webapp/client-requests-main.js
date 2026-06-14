@@ -154,6 +154,17 @@
         return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
+      function ruYearsWord(n) {
+        if (n == null || !isFinite(Number(n))) return 'лет';
+        n = Math.floor(Math.abs(Number(n)));
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        if (mod100 >= 11 && mod100 <= 14) return 'лет';
+        if (mod10 === 1) return 'год';
+        if (mod10 >= 2 && mod10 <= 4) return 'года';
+        return 'лет';
+      }
+
       function formatResponderServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
@@ -507,8 +518,6 @@
         var name = (r.name || 'Тренер').trim() || 'Тренер';
         var tc = (r.trainer_comment || '').trim();
         var ratingStr = (r.rating_avg != null && (r.rating_count || 0) > 0) ? (r.rating_avg.toFixed(1) + ' ★ (' + r.rating_count + ')') : null;
-        var duration = r.session_duration_minutes != null ? r.session_duration_minutes : 45;
-        var expDisplay = (r.experience_years != null) ? (r.experience_years + ' лет опыта') : '—';
         var arenaIdsForLayout = Array.isArray(r.arena_ids) ? r.arena_ids : [];
         var arenaNamesForLayout = Array.isArray(r.arena_names) ? r.arena_names : [];
         var arenaStatClass = 'trainer-detail-stat';
@@ -536,20 +545,26 @@
         // Комментарий тренера к заявке (особенность карточки в откликах)
         if (tc) html += '<div class="tcf-comment">' + escapeHtml(tc) + '</div>';
         
-        html += '<div class="trainer-detail-stats">';
-        html += '<div class="trainer-detail-stat">';
-        html += '<div class="trainer-detail-stat-label">Опыт</div>';
-        html += '<div class="trainer-detail-stat-value">' + escapeHtml(expDisplay) + '</div>';
-        html += '</div>';
-        html += '<div class="trainer-detail-stat">';
-        html += '<div class="trainer-detail-stat-label">Занятие</div>';
-        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
-        html += '</div>';
-        html += '<div class="' + arenaStatClass + '">';
-        html += '<div class="trainer-detail-stat-label">Арены</div>';
-        html += buildResponderArenasBlock(r);
-        html += '</div>';
-        html += '</div>';
+        var statsParts = [];
+        if (r.experience_years != null) {
+          statsParts.push(
+            '<div class="trainer-detail-stat">' +
+              '<div class="trainer-detail-stat-label">Опыт</div>' +
+              '<div class="trainer-detail-stat-value">' +
+                escapeHtml(r.experience_years + ' ' + ruYearsWord(r.experience_years)) +
+              '</div>' +
+            '</div>'
+          );
+        }
+        statsParts.push(
+          '<div class="' + arenaStatClass + '">' +
+            '<div class="trainer-detail-stat-label">Арены</div>' +
+            buildResponderArenasBlock(r) +
+          '</div>'
+        );
+        if (statsParts.length) {
+          html += '<div class="trainer-detail-stats">' + statsParts.join('') + '</div>';
+        }
 
         var servicesList = Array.isArray(r.services) ? r.services : [];
         var requestServiceId = req.service_id != null ? Number(req.service_id) : NaN;

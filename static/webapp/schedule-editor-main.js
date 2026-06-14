@@ -514,6 +514,30 @@
         });
       }
 
+      function refreshScheduleEditorInboxCounts() {
+        if (window.TrainerPendingInbox) TrainerPendingInbox.refreshInboxCounts();
+      }
+
+      function initScheduleEditorPendingInbox() {
+        if (!window.TrainerPendingInbox || initScheduleEditorPendingInbox._done) return;
+        initScheduleEditorPendingInbox._done = true;
+        TrainerPendingInbox.init({
+          surface: 'schedule_editor',
+          getInitData: function() {
+            return tg && tg.initData;
+          },
+          apiUrlWithQuery: apiUrlWithQuery,
+          headersJson: headers,
+          escapeHtml: escapeHtml,
+          toast: showToast,
+          postJsonTrainer: postJsonTrainer,
+          chipEl: document.getElementById('sePendingInboxChip'),
+          onAfterConfirm: function() {
+            loadSlots();
+          },
+        });
+      }
+
       function patchJsonTrainer(path, body) {
         return fetch(apiUrlWithQuery(path), {
           method: 'PATCH',
@@ -1625,6 +1649,14 @@
       function confirmTrainerBooking(bookingId) {
         postJsonTrainer('/trainer/bookings/' + bookingId + '/confirm', null).then(function() {
           showToast('Запись подтверждена');
+          if (window.TrainerPendingInbox) {
+            TrainerPendingInbox.trackEvent('batch_confirm_success', {
+              confirmed_count: 1,
+              requested_count: 1,
+              item_id: 'single_booking_detail',
+            });
+            refreshScheduleEditorInboxCounts();
+          }
           leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       }
@@ -4595,6 +4627,7 @@
                   opts.onComplete();
                 } catch (eCb) { /* ignore */ }
               }
+              refreshScheduleEditorInboxCounts();
             });
           })
           .catch(function(err) {
@@ -7278,6 +7311,7 @@
       })();
 
       state.weekStart = getMonday(new Date());
+      initScheduleEditorPendingInbox();
 
       (function () {
         var bb = document.getElementById('btnBack');

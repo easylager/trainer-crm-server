@@ -4593,7 +4593,6 @@
         var p = t.profile || {};
         var name = trainerName(t);
         var ratingStr = (p.rating_avg != null && (p.rating_count || 0) > 0) ? (p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')') : '—';
-        var duration = p.session_duration_minutes || 45;
         var arenaIds = t.arena_ids || [];
         var arenaStatClass = 'trainer-detail-stat';
         var arenaInnerHtml;
@@ -4641,20 +4640,28 @@
         }
         html += '</div>';
         
-        html += '<div class="trainer-detail-stats">';
-        html += '<div class="trainer-detail-stat">';
-        html += '<div class="trainer-detail-stat-label">Опыт</div>';
-        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? (p.experience_years + ' ' + ruYearsWord(p.experience_years)) : '—') + '</div>';
-        html += '</div>';
-        html += '<div class="trainer-detail-stat">';
-        html += '<div class="trainer-detail-stat-label">Занятие</div>';
-        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
-        html += '</div>';
-        html += '<div class="' + arenaStatClass + '">';
-        html += '<div class="trainer-detail-stat-label">Арены</div>';
-        html += arenaInnerHtml;
-        html += '</div>';
-        html += '</div>';
+        var statsParts = [];
+        if (p.experience_years != null) {
+          statsParts.push(
+            '<div class="trainer-detail-stat">' +
+              '<div class="trainer-detail-stat-label">Опыт</div>' +
+              '<div class="trainer-detail-stat-value">' +
+                p.experience_years +
+                ' ' +
+                ruYearsWord(p.experience_years) +
+              '</div>' +
+            '</div>'
+          );
+        }
+        statsParts.push(
+          '<div class="' + arenaStatClass + '">' +
+            '<div class="trainer-detail-stat-label">Арены</div>' +
+            arenaInnerHtml +
+          '</div>'
+        );
+        if (statsParts.length) {
+          html += '<div class="trainer-detail-stats">' + statsParts.join('') + '</div>';
+        }
         
         if (services.length > 0) {
           var selectedServiceDescEscaped = '';

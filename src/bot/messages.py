@@ -89,14 +89,12 @@ CLIENT_CHOOSE_SERVICE = "Выберите услугу:"
 CLIENT_TRAINER_CARD = (
     "<b>{name}</b>\n"
     "Рейтинг: {rating}\n"
-    "Опыт: {experience}\n"
-    "Занятие: {duration} мин\n"
+    "{experience_block}"
     "Арены: {arenas}\n"
     "Услуги и цены: {services_prices}\n"
     "{description}"
 )
 CLIENT_TRAINER_CARD_NO_RATING = "—"
-CLIENT_TRAINER_CARD_NO_EXPERIENCE = "Опыт: не указан"
 CLIENT_BUTTON_SELECT_TRAINER = "Выбрать"
 CLIENT_TRAINER_SELECTED = "Выбран: <b>{name}</b>. Что дальше?"
 # Public invite link (t.me/...?start=client_...) — no «another trainer»; service from link.

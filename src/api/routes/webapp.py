@@ -44,6 +44,7 @@ from src.application.booking_problem_use_cases import (
     get_trainer_booking_problem_options,
     submit_trainer_booking_problem,
 )
+from src.application.booking_confirm_client_notify import notify_client_booking_confirmed_by_trainer
 from src.application.booking_client_no_show_notifications import (
     send_booking_client_no_show_telegram_notifications,
 )
@@ -61,6 +62,7 @@ from src.application.booking_use_cases import (
     client_upcoming_booking_primary_candidate,
     client_rebook_trainer_targets,
     confirm_booking,
+    confirm_bookings_batch,
     coerce_service_id_and_name_for_trainer_catalog,
     count_trainer_client_sessions,
     count_trainer_client_upcoming,
@@ -346,6 +348,7 @@ from src.application.client_notes_use_cases import (
 )
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
+from src.application.trainer_hub_action_inbox import build_trainer_hub_action_inbox
 from src.application.trainer_use_cases import (
     get_trainer,
     get_trainer_moderation_readiness,
@@ -3113,6 +3116,18 @@ async def get_trainer_hub_bootstrap(
                 else:
                     subscription_status = r_sub_ttv
 
+    action_inbox: dict[str, Any] | None = None
+    if trainer_id_linked:
+        req_n = 0
+        if requests_summary and isinstance(requests_summary.get("unanswered_count"), int):
+            req_n = int(requests_summary["unanswered_count"])
+        action_inbox = build_trainer_hub_action_inbox(
+            onboarding=onboarding_checklist or {},
+            requests_count=req_n,
+            bookings=bookings,
+            schedule_unlocked=schedule_unlocked,
+        )
+
     return {
         "access": access,
         "profile": profile,
@@ -3122,8 +3137,80 @@ async def get_trainer_hub_bootstrap(
         "bookings": bookings,
         "subscription_status": subscription_status,
         "lifecycle": lifecycle,
+        "action_inbox": action_inbox,
         "partial_errors": partial_errors or None,
     }
+
+
+@router.get("/trainer/hub/inbox-count")
+async def get_trainer_hub_inbox_count(
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Lightweight inbox badge sync for tab bar without full bootstrap."""
+    state, trainer_row = await get_trainer_access_state_from_principal(session, principal)
+    tid = int(trainer_row["id"]) if trainer_row and trainer_row.get("id") is not None else None
+    if not tid:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    norm_status = normalize_trainer_status_value(trainer_row.get("status") if trainer_row else None)
+    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
+    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
+    onboarding = await get_trainer_onboarding_checklist(session, tid)
+    requests_count = 0
+    if is_active:
+        requests_count = await count_unanswered_requests_for_trainer(session, tid)
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=requests_count,
+        bookings=None,
+        schedule_unlocked=schedule_unlocked,
+    )
+    return {
+        "total_actionable": inbox["total_actionable"],
+        "badges": inbox["badges"],
+    }
+
+
+class TrainerHubInboxEventBody(BaseModel):
+    event: str = Field(..., min_length=1, max_length=64)
+    surface: str | None = Field(None, max_length=32)
+    item_id: str | None = Field(None, max_length=64)
+    kind: str | None = Field(None, max_length=32)
+    count: int | None = Field(None, ge=0, le=9999)
+    confirmed_count: int | None = Field(None, ge=0, le=9999)
+    requested_count: int | None = Field(None, ge=0, le=9999)
+
+
+@router.post("/trainer/hub/inbox-event")
+async def post_trainer_hub_inbox_event(
+    body: TrainerHubInboxEventBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fire-and-forget product analytics for unified trainer inbox (Wave C)."""
+    from src.shared.audit import ACTOR_API, audit_log
+
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    allowed = {"inbox_item_shown", "batch_confirm_success"}
+    if body.event not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported inbox event")
+    audit_log(
+        f"trainer.hub.{body.event}",
+        ACTOR_API,
+        int(trainer_id),
+        {
+            "trainer_id": int(trainer_id),
+            "surface": (body.surface or "").strip() or None,
+            "item_id": (body.item_id or "").strip() or None,
+            "kind": (body.kind or "").strip() or None,
+            "count": body.count,
+            "confirmed_count": body.confirmed_count,
+            "requested_count": body.requested_count,
+        },
+    )
+    return {"ok": True}
 
 
 @router.get("/trainer/hub/fill-slots-invites")
@@ -5516,53 +5603,43 @@ async def post_trainer_booking_confirm(
     info = await confirm_booking(session, booking_id, trainer_id)
     if not info:
         raise HTTPException(status_code=400, detail="Booking not found or not pending")
-    # Notify client (same as in trainer_handlers)
-    client_tid = info.get("client_telegram_id")
-    if client_tid:
-        d = info["slot_date"]
-        date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
-        dow = TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
-        time_str = (info["start_time"].strftime("%H:%M") if hasattr(info["start_time"], "strftime") else str(info["start_time"])[:5])
-        trainer_obj = await get_trainer(session, trainer_id)
-        profile = (trainer_obj or {}).get("profile") or {}
-        trainer_name = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "Тренер"
-        settings = Settings()
-        client_bot = Bot(
-            token=settings.telegram_bot_token_client,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        expected_payment_class = await classify_booking_expected_payment_class(
-            session, booking_id, trainer_id
-        )
-        text_client = msg.format_client_booking_confirmed_by_trainer_text(
-            date=date_str,
-            day=dow,
-            time=time_str,
-            trainer_name=trainer_name,
-            service_name=info.get("service_name"),
-            booking_price_cents=info.get("booking_price_cents"),
-            price_tier_label=info.get("price_tier_label"),
-            arena_name=info.get("arena_name"),
-            arena_address=info.get("arena_address"),
-            trainer_first_booking_milestone=bool(info.get("first_booking_milestone")),
-            expected_payment_class=expected_payment_class,
-        )
-        reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
-            map_url=info.get("map_link"),
-            trainer_telegram_id=info.get("trainer_telegram_id"),
-        )
-        try:
-            await client_bot.send_message(
-                chat_id=client_tid,
-                text=text_client,
-                reply_markup=reply_markup,
-            )
-        finally:
-            await client_bot.session.close()
+    await notify_client_booking_confirmed_by_trainer(session, trainer_id, booking_id, info)
     return {
         "success": True,
         "first_booking_milestone": bool(info.get("first_booking_milestone")),
         "share_catalog_tip": bool(info.get("share_catalog_tip")),
+    }
+
+
+class TrainerBookingsConfirmBatchBody(BaseModel):
+    booking_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Pending booking ids to confirm in one action (max 20).",
+    )
+
+
+@router.post("/trainer/bookings/confirm-batch")
+async def post_trainer_bookings_confirm_batch(
+    body: TrainerBookingsConfirmBatchBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    batch = await confirm_bookings_batch(session, trainer_id, body.booking_ids)
+    for bid, info in zip(batch["confirmed"], batch["confirmed_infos"], strict=False):
+        await notify_client_booking_confirmed_by_trainer(session, trainer_id, int(bid), info)
+    return {
+        "success": batch["confirmed_count"] > 0,
+        "confirmed": batch["confirmed"],
+        "failed": batch["failed"],
+        "confirmed_count": batch["confirmed_count"],
+        "failed_count": batch["failed_count"],
+        "first_booking_milestone": batch["first_booking_milestone"],
+        "share_catalog_tip": batch["share_catalog_tip"],
     }
 
 

@@ -519,17 +519,15 @@ def _trainer_caption(trainer: dict) -> str:
     else:
         rating_str = msg.CLIENT_TRAINER_CARD_NO_RATING
     exp = profile.get("experience_years")
-    exp_str = f"{exp} лет" if exp is not None else msg.CLIENT_TRAINER_CARD_NO_EXPERIENCE
+    experience_block = f"Опыт: {exp} лет\n" if exp is not None else ""
     arena_names = trainer.get("arena_names") or []
     arenas_str = ", ".join(arena_names) if arena_names else "—"
     services_prices_str = _format_services_prices(trainer.get("services") or [])
     desc = (profile.get("description") or "").strip() or "—"
-    duration = profile.get("session_duration_minutes") or 45
     return msg.CLIENT_TRAINER_CARD.format(
         name=name,
         rating=rating_str,
-        experience=exp_str,
-        duration=duration,
+        experience_block=experience_block,
         arenas=arenas_str,
         services_prices=services_prices_str,
         description=desc,

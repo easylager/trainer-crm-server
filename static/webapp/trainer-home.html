@@ -64,11 +64,12 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606170" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606155" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606294" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606157" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=202606161" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606155" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
+  <link rel="preload" href="trainer-home-main.js?v=202606297" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606157" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -360,66 +361,14 @@
     -->
     <nav class="hub-week-pulse" id="hubWeekPulse" hidden aria-label="Ближайшие 7 дней"></nav>
 
-    <!--
-      Rhythm hints — contextual coaching nudges.
-      First thing after week pulse: if something needs attention, trainer sees it immediately.
-      All hidden by default; JS activates at most one per session.
-    -->
-    <div
-      id="hubRhythmHintsSkeleton"
-      class="hub-rhythm-hints-skeleton"
+    <!-- Unified action inbox: pending, заявки, rhythm — replaces legacy rhythm slots + urgent strip -->
+    <section
+      class="hub-action-inbox"
+      id="hubActionInbox"
       hidden
-      role="status"
-      aria-busy="true"
-      aria-label="Загрузка подсказок"
-    >
-      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
-          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
-        </div>
-        <div class="hub-rhythm-hints-skel-actions">
-          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
-        </div>
-      </div>
-      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
-          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
-        </div>
-        <div class="hub-rhythm-hints-skel-actions">
-          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="hubRhythmSlot0" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot0Text"></p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot0Cta" data-hub-rhythm-cta="1"></button>
-        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot0Cta2" data-hub-rhythm-cta2="1" hidden></button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot0Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-    <div id="hubRhythmSlot1" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot1Text"></p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot1Cta" data-hub-rhythm-cta="1"></button>
-        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot1Cta2" data-hub-rhythm-cta2="1" hidden></button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot1Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-
-    <!--
-      Urgent context alert — single refined card, rendered by renderHubQuickStrip().
-      Surfaces only when there are pending confirmations or unanswered requests.
-      Creation action lives in the floating «Записать» FAB, not here.
-    -->
-    <div class="hub-urgent-alert" id="hubTrainerQuickStrip" hidden role="status" aria-live="polite"></div>
+      aria-live="polite"
+      aria-label="Сейчас важно"
+    ></section>
 
     <!-- Onboarding welcome — premium identity, airy; sits above the action card during «Первые шаги» -->
     <section id="hubOnboardingWelcome" class="hub-onboarding-welcome" hidden aria-label="Добро пожаловать">
@@ -556,42 +505,7 @@
       <div class="hub-day-canvas__status" id="hubDayCanvasStatus" aria-label="Статус практики"></div>
     </section>
 
-    <div class="hub-section-head hub-section-head--stats" id="hubStatsHead">
-      <div class="hub-section-title">Метрики</div>
-    </div>
-
-    <div class="hub-stats" id="hubStats" aria-hidden="true">
-      <div class="hub-stat-card stat-highlight" id="statToday">
-        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="4" width="18" height="18" rx="2"/>
-          <path d="M16 2v4M8 2v4M3 10h18"/>
-        </svg>
-        <div class="hub-stat-value" id="statTodayValue">—</div>
-        <div class="hub-stat-label">Сегодня</div>
-        <div class="hub-stat-trend" id="statTodayTrend" style="display: none;">+2</div>
-      </div>
-      
-      <div class="hub-stat-card" id="statWeek">
-        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <div class="hub-stat-value" id="statWeekValue">—</div>
-        <div class="hub-stat-label">На неделе</div>
-      </div>
-      
-      <div class="hub-stat-card" id="statRevenue">
-        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 3v18h18"/>
-          <path d="M7 12l4-4 4 4 6-6"/>
-        </svg>
-        <div class="hub-stat-value" id="statRevenueValue">—</div>
-        <div class="hub-stat-label">С 1-го числа</div>
-        <div class="hub-stat-trend" id="statRevenueTrend" style="display: none;">+15%</div>
-      </div>
-    </div>
+    <nav class="hub-status-markers" id="hubStatusMarkers" aria-label="Сводка практики" hidden></nav>
     <div
       role="region"
       aria-label="Что сделать в первую очередь"
@@ -622,6 +536,26 @@
         </svg>
       </button>
     </aside>
+  </div>
+
+  <!-- Pending bookings batch confirm (Wave A inbox) -->
+  <div id="hubPendingSheetOverlay" class="hub-pending-sheet-overlay" hidden aria-hidden="true">
+    <div
+      id="hubPendingSheet"
+      class="hub-pending-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hubPendingSheetTitle"
+    >
+      <div class="hub-pending-sheet__handle" aria-hidden="true"></div>
+      <h2 id="hubPendingSheetTitle" class="hub-pending-sheet__title">Подтвердить записи</h2>
+      <p class="hub-pending-sheet__lead" id="hubPendingSheetLead"></p>
+      <ul class="hub-pending-sheet__list" id="hubPendingSheetList"></ul>
+      <div class="hub-pending-sheet__actions">
+        <button type="button" class="btn-block btn-primary" id="hubPendingConfirmAll">Подтвердить все</button>
+        <button type="button" class="btn-block btn-secondary" id="hubPendingSheetClose">Закрыть</button>
+      </div>
+    </div>
   </div>
 
   <!-- Community sheet — form lives here, not in scroll stack under FAB -->
@@ -1023,7 +957,8 @@
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=202606161"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202606155"></script>
+  <script defer src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
+  <script defer src="trainer-home-main.js?v=202606297"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202606157"></script>
 </body>
 </html>

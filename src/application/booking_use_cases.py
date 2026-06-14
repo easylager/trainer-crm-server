@@ -4358,6 +4358,57 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     }
 
 
+async def confirm_bookings_batch(
+    session: AsyncSession,
+    trainer_id: int,
+    booking_ids: list[int],
+    *,
+    max_batch: int = 20,
+) -> dict:
+    """
+    Confirm multiple pending bookings for one trainer.
+    Each id is processed independently (same preconditions as ``confirm_booking``).
+    """
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for raw in booking_ids:
+        bid = int(raw)
+        if bid in seen:
+            continue
+        seen.add(bid)
+        ordered.append(bid)
+        if len(ordered) >= max_batch:
+            break
+
+    confirmed: list[int] = []
+    confirmed_infos: list[dict] = []
+    failed: list[dict] = []
+    first_milestone = False
+    share_tip = False
+
+    for bid in ordered:
+        info = await confirm_booking(session, bid, trainer_id)
+        if info:
+            confirmed.append(bid)
+            confirmed_infos.append(info)
+            if info.get("first_booking_milestone"):
+                first_milestone = True
+            if info.get("share_catalog_tip"):
+                share_tip = True
+        else:
+            failed.append({"id": bid, "reason": "not_confirmable"})
+
+    return {
+        "confirmed": confirmed,
+        "confirmed_infos": confirmed_infos,
+        "failed": failed,
+        "confirmed_count": len(confirmed),
+        "failed_count": len(failed),
+        "first_booking_milestone": first_milestone,
+        "share_catalog_tip": share_tip,
+    }
+
+
 async def decline_booking(
     session: AsyncSession,
     booking_id: int,
