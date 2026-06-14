@@ -376,6 +376,11 @@
           /** Background fetch when opening «Записать» — same defaults as step 2 (latest booking by created_at). */
           bookingDefaultsPrefetch: null,
           bookingDefaultsPrefetchGen: 0,
+          bookContexts: null,
+          bookContextKind: 'personal_slot',
+          bookCollectiveSlug: null,
+          centerSession: null,
+          centerSessions: [],
         };
       
         function todayIsoLocal() {
@@ -687,6 +692,20 @@
           m.style.display = 'none';
           m.setAttribute('aria-hidden', 'true');
         }
+
+        function closeContextModal() {
+          var m = document.getElementById('tcModalQuickBookContext');
+          if (!m) return;
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+
+        function closeCenterModal() {
+          var m = document.getElementById('tcModalQuickBookCenter');
+          if (!m) return;
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
       
         function closeServiceModal() {
           var m = document.getElementById('tcModalQuickBookService');
@@ -706,11 +725,17 @@
         function closeAll() {
           closeConfirmModal();
           closeServiceModal();
+          closeCenterModal();
+          closeContextModal();
           closeDatetimeModal();
           qb.bookingDefaultsPrefetchGen += 1;
           qb.bookingDefaultsPrefetch = null;
           qb.lockedClientId = null;
           qb.clientDisplayName = '';
+          qb.bookContextKind = 'personal_slot';
+          qb.bookCollectiveSlug = null;
+          qb.centerSession = null;
+          qb.centerSessions = [];
         }
       
         function priceTierLabelRu(tier) {
@@ -952,6 +977,182 @@
           });
         }
       
+        function openDatetimeStep() {
+          var modal = document.getElementById('tcModalQuickBookDatetime');
+          var dateEl = document.getElementById('tcQuickBookDate');
+          var durEl = document.getElementById('tcQuickBookDuration');
+          if (!modal || !dateEl || !durEl) {
+            alert('Не удалось открыть форму записи. Обновите страницу.');
+            return;
+          }
+          closeContextModal();
+          closeCenterModal();
+          setTcQuickBookDatetimeLoading(true);
+          var today = todayIsoLocal();
+          dateEl.min = today;
+          if (!dateEl.value || dateEl.value < today) dateEl.value = today;
+          if (!durEl.value) durEl.value = '45';
+          syncTcQuickBookDurationFromGrid();
+          setHint('', false);
+          closeServiceModal();
+          closeConfirmModal();
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+          refreshTimeOptions(dateEl.value || today, { silentLoadingHint: true });
+        }
+
+        function renderTcQuickBookContextStep(payload) {
+          var wrap = document.getElementById('tcQuickBookContextActions');
+          if (!wrap) return;
+          var contexts = (payload && payload.contexts) || [];
+          wrap.innerHTML = contexts.map(function(ctx) {
+            return (
+              '<button type="button" class="btn-book-option" data-tc-book-kind="' + escapeHtml(ctx.kind) + '" data-collective-slug="' + escapeHtml(ctx.collective_slug || '') + '">' +
+                '<span class="btn-book-option-body"><span class="btn-book-option-text">' + escapeHtml(ctx.label) + '</span></span>' +
+                '<span class="btn-book-option-arrow" aria-hidden="true">›</span>' +
+              '</button>'
+            );
+          }).join('');
+          wrap.querySelectorAll('[data-tc-book-kind]').forEach(function(btn) {
+            btn.onclick = function() {
+              qb.bookContextKind = btn.getAttribute('data-tc-book-kind') || 'personal_slot';
+              qb.bookCollectiveSlug = btn.getAttribute('data-collective-slug') || null;
+              if (qb.bookContextKind === 'center_session') {
+                openCenterBookingStep();
+                return;
+              }
+              openDatetimeStep();
+            };
+          });
+        }
+
+        function openContextStep(payload) {
+          var modal = document.getElementById('tcModalQuickBookContext');
+          if (!modal) {
+            openDatetimeStep();
+            return;
+          }
+          renderTcQuickBookContextStep(payload);
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function renderTcCenterModePickers() {
+          var session = qb.centerSession;
+          var modeWrap = document.getElementById('tcQuickBookCenterModeWrap');
+          var coachWrap = document.getElementById('tcQuickBookCenterCoachWrap');
+          var modeSel = document.getElementById('tcQuickBookCenterMode');
+          var coachSel = document.getElementById('tcQuickBookCenterCoach');
+          var confirmBtn = document.getElementById('tcQuickBookCenterConfirm');
+          if (!session || !modeSel) return;
+          modeSel.innerHTML = ['lane_self', 'center_coach_individual'].map(function(m) {
+            return '<option value="' + m + '">' + (m === 'lane_self' ? 'Дорожка' : 'С тренером центра') + '</option>';
+          }).join('');
+          if (modeWrap) modeWrap.style.display = '';
+          if (coachWrap && coachSel) {
+            var coaches = session.coaches || [];
+            coachSel.innerHTML = coaches.map(function(c) {
+              return '<option value="' + c.trainer_id + '">' + escapeHtml(c.display_name || ('Тренер #' + c.trainer_id)) + '</option>';
+            }).join('');
+            coachWrap.style.display = modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+            modeSel.onchange = function() {
+              coachWrap.style.display = modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+            };
+          }
+          if (confirmBtn) confirmBtn.style.display = '';
+        }
+
+        function openCenterBookingStep() {
+          closeContextModal();
+          var modal = document.getElementById('tcModalQuickBookCenter');
+          var list = document.getElementById('tcQuickBookCenterSessions');
+          var lead = document.getElementById('tcQuickBookCenterLead');
+          var slug = qb.bookCollectiveSlug;
+          if (!modal || !slug) {
+            showTcToast('Не выбран контекст центра');
+            return;
+          }
+          if (lead) lead.textContent = (qb.clientDisplayName || 'Клиент') + ' — выберите окно центра';
+          if (list) list.innerHTML = '<p class="book-choice-lead">Загрузка окон…</p>';
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+          fetch(api('/trainer/collective/staff-booking-sessions?collective_slug=' + encodeURIComponent(slug)), {
+            headers: {},
+            cache: 'no-store',
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'Ошибка');
+                return d;
+              });
+            })
+            .then(function(data) {
+              qb.centerSessions = data.sessions || [];
+              if (!qb.centerSessions.length) {
+                if (list) list.innerHTML = '<p class="error">Нет доступных окон</p>';
+                return;
+              }
+              if (list) {
+                list.innerHTML = qb.centerSessions.map(function(s) {
+                  return (
+                    '<button type="button" class="client-row" data-session-id="' + s.id + '">' +
+                      escapeHtml((s.slot_date || '') + ' ' + (s.start_time || '') + '–' + (s.end_time || '')) +
+                    '</button>'
+                  );
+                }).join('');
+                list.querySelectorAll('[data-session-id]').forEach(function(row) {
+                  row.onclick = function() {
+                    var sid = parseInt(row.getAttribute('data-session-id'), 10);
+                    qb.centerSession = qb.centerSessions.filter(function(x) { return Number(x.id) === sid; })[0] || null;
+                    renderTcCenterModePickers();
+                  };
+                });
+              }
+            })
+            .catch(function(e) {
+              if (list) list.innerHTML = '<p class="error">' + escapeHtml(e.message || 'Ошибка') + '</p>';
+            });
+        }
+
+        function submitTcCenterStaffBooking() {
+          var clientId = qb.lockedClientId;
+          var session = qb.centerSession;
+          var modeSel = document.getElementById('tcQuickBookCenterMode');
+          var coachSel = document.getElementById('tcQuickBookCenterCoach');
+          if (!clientId || !session || !modeSel || !qb.bookCollectiveSlug) return;
+          var payload = {
+            collective_slug: qb.bookCollectiveSlug,
+            session_id: session.id,
+            client_id: clientId,
+            attendance_mode: modeSel.value,
+            guest_count: 0,
+          };
+          if (modeSel.value.indexOf('coach') >= 0 && coachSel && coachSel.value) {
+            payload.center_coach_id = parseInt(coachSel.value, 10);
+          }
+          fetch(api('/trainer/collective/staff-session-booking'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'Ошибка');
+                return d;
+              });
+            })
+            .then(function() {
+              closeAll();
+              showTcToast('Запись в центр создана');
+              if (typeof refreshClientCardBookingsUi === 'function') {
+                refreshClientCardBookingsUi(clientId);
+              }
+            })
+            .catch(function(e) {
+              showTcToast(e.message || 'Ошибка');
+            });
+        }
+
         var wired = false;
         function wireOnce() {
           if (wired) return;
@@ -963,6 +1164,21 @@
               closeAll();
             };
           }
+          var ctxCancel = document.getElementById('tcQuickBookContextCancel');
+          if (ctxCancel) ctxCancel.onclick = function() { closeAll(); };
+          var centerBack = document.getElementById('tcQuickBookCenterBack');
+          if (centerBack) {
+            centerBack.onclick = function() {
+              closeCenterModal();
+              if (qb.bookContexts && qb.bookContexts.needs_context_picker) {
+                openContextStep(qb.bookContexts);
+              } else {
+                closeAll();
+              }
+            };
+          }
+          var centerConfirm = document.getElementById('tcQuickBookCenterConfirm');
+          if (centerConfirm) centerConfirm.onclick = submitTcCenterStaffBooking;
           var qContinue = document.getElementById('tcQuickBookContinue');
           if (qContinue) {
             qContinue.onclick = function() {
@@ -1131,16 +1347,23 @@
           qb.bookingDefaultsPrefetchGen += 1;
           var prefetchSnap = qb.bookingDefaultsPrefetchGen;
           var prefetchCid = clientId;
+          qb.bookContextKind = 'personal_slot';
+          qb.bookCollectiveSlug = null;
+          qb.centerSession = null;
+          qb.centerSessions = [];
+          qb.bookContexts = null;
           Promise.all([
             fetch(api('/trainer/my-services'), { headers: {}, cache: 'no-store' }),
             fetch(api('/trainer/clients/' + encodeURIComponent(prefetchCid) + '/booking-defaults'), {
               headers: {},
               cache: 'no-store',
             }),
+            fetch(api('/trainer/booking-contexts'), { headers: {}, cache: 'no-store' }),
           ])
             .then(function(rs) {
               return Promise.all(
-                rs.map(function(r) {
+                rs.map(function(r, idx) {
+                  if (idx === 2 && !r.ok) return { contexts: [{ kind: 'personal_slot', label: 'Личное расписание' }], needs_context_picker: false };
                   return r.ok ? r.json() : Promise.reject(new Error('prefetch'));
                 })
               );
@@ -1153,30 +1376,28 @@
                 servicesPayload: results[0],
                 defaults: results[1],
               };
+              qb.bookContexts = results[2];
             })
             .catch(function() {
               /* Step 2 will fetch if prefetch fails or initData was late. */
             });
 
-          var modal = document.getElementById('tcModalQuickBookDatetime');
-          var dateEl = document.getElementById('tcQuickBookDate');
-          var durEl = document.getElementById('tcQuickBookDuration');
-          if (!modal || !dateEl || !durEl) {
-            alert('Не удалось открыть форму записи. Обновите страницу.');
-            return;
-          }
-          setTcQuickBookDatetimeLoading(true);
-          var today = todayIsoLocal();
-          dateEl.min = today;
-          if (!dateEl.value || dateEl.value < today) dateEl.value = today;
-          if (!durEl.value) durEl.value = '45';
-          syncTcQuickBookDurationFromGrid();
-          setHint('', false);
-          closeServiceModal();
-          closeConfirmModal();
-          modal.style.display = 'flex';
-          modal.setAttribute('aria-hidden', 'false');
-          refreshTimeOptions(dateEl.value || today, { silentLoadingHint: true });
+          fetch(api('/trainer/booking-contexts'), { headers: {}, cache: 'no-store' })
+            .then(function(r) {
+              return r.ok ? r.json() : { contexts: [{ kind: 'personal_slot', label: 'Личное расписание' }], needs_context_picker: false };
+            })
+            .then(function(ctxPayload) {
+              if (qb.lockedClientId !== clientId) return;
+              qb.bookContexts = ctxPayload;
+              if (ctxPayload && ctxPayload.needs_context_picker) {
+                openContextStep(ctxPayload);
+                return;
+              }
+              openDatetimeStep();
+            })
+            .catch(function() {
+              openDatetimeStep();
+            });
         }
       
         window.TcClientQuickBook = { open: open };

@@ -1982,6 +1982,13 @@
         /** Minutes from midnight for quick book (15 min grid, 06:00–23:00 default window). */
         quickBookStartMinutes: null,
         quickBookDurationMinutes: 45,
+        bookContexts: null,
+        bookContextKind: 'personal_slot',
+        bookCollectiveSlug: null,
+        bookCenterSession: null,
+        bookCenterSessions: null,
+        bookCenterClientId: null,
+        bookDelegateTargetId: null,
         /** From GET /schedule + /schedule/templates: arena-based grid (kind, hour window, optional :MM offset). */
         scheduleGridPreset: null,
         /** From GET /schedule: profile session_duration_minutes → default duration select when adding slots. */
@@ -2125,6 +2132,8 @@
 
       function trainerBookingPayload(clientId, serviceId) {
         var o = { slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId };
+        if (state.bookDelegateTargetId) o.target_trainer_id = state.bookDelegateTargetId;
+        if (state.bookCollectiveSlug) o.collective_slug = state.bookCollectiveSlug;
         if (!state.bookSlotIsGroup && state.bookPriceVariantId != null) {
           o.service_price_variant_id = state.bookPriceVariantId;
         }
@@ -2198,6 +2207,12 @@
         state.bookExistingServiceStepActive = false;
         state.bookServiceStepFromNewClient = false;
         state.bookModalClientSearchFirst = false;
+        state.bookContextKind = 'personal_slot';
+        state.bookCollectiveSlug = null;
+        state.bookDelegateTargetId = null;
+        state.bookCenterSession = null;
+        state.bookCenterClientId = null;
+        state.bookContexts = null;
         var bookFlowOv = document.getElementById('modalBookClient');
         if (bookFlowOv) bookFlowOv.classList.remove('book-flow-overlay--new-client');
       }
@@ -2224,12 +2239,192 @@
         state.bookExistingServiceStepActive = true;
       }
 
+      function showBookStep(stepId) {
+        document.querySelectorAll('.book-step').forEach(function(step) {
+          var on = step.id === stepId;
+          step.style.display = on ? 'block' : 'none';
+          step.classList.toggle('active', on);
+        });
+        state.bookModalStep = stepId.replace('bookStep', '').toLowerCase();
+        updateTelegramBack();
+      }
+
+      function fetchBookingContexts() {
+        return getJsonTrainer('/trainer/booking-contexts').catch(function() {
+          return { contexts: [{ kind: 'personal_slot', context_id: 'personal', label: 'Личное расписание' }], needs_context_picker: false };
+        });
+      }
+
+      function renderBookContextStep(payload) {
+        var wrap = document.getElementById('bookContextActions');
+        if (!wrap) return;
+        var contexts = (payload && payload.contexts) || [];
+        wrap.innerHTML = contexts.map(function(ctx) {
+          return (
+            '<button type="button" class="btn-book-option" data-book-context="' + escapeHtml(ctx.context_id) + '" data-book-kind="' + escapeHtml(ctx.kind) + '" data-collective-slug="' + escapeHtml(ctx.collective_slug || '') + '">' +
+              '<span class="btn-book-option-body"><span class="btn-book-option-text">' + escapeHtml(ctx.label) + '</span></span>' +
+              '<span class="btn-book-option-arrow" aria-hidden="true">›</span>' +
+            '</button>'
+          );
+        }).join('');
+        wrap.querySelectorAll('[data-book-context]').forEach(function(btn) {
+          btn.onclick = function() {
+            state.bookContextKind = btn.getAttribute('data-book-kind') || 'personal_slot';
+            state.bookCollectiveSlug = btn.getAttribute('data-collective-slug') || null;
+            state.bookDelegateTargetId = null;
+            if (state.bookContextKind === 'center_session') {
+              state.bookSlotId = null;
+              state.bookFlowQuick = false;
+              showBookStep('bookStepExisting');
+              setBookClientSearchSectionVisible(true);
+              loadBookClients('');
+              return;
+            }
+            showBookStep('bookStepExisting');
+            setBookClientSearchSectionVisible(true);
+            loadBookClients('');
+          };
+        });
+      }
+
+      function enterBookCenterFlowForClient(clientId, displayNameOrNull) {
+        state.bookCenterClientId = clientId;
+        var slug = state.bookCollectiveSlug;
+        if (!slug) {
+          alert('Не выбран контекст центра');
+          return;
+        }
+        showBookStep('bookStepCenter');
+        var lead = document.getElementById('bookCenterLead');
+        if (lead) lead.textContent = (displayNameOrNull || 'Клиент') + ' — выберите окно центра';
+        var list = document.getElementById('bookCenterSessionList');
+        if (list) list.innerHTML = '<p class="book-choice-lead">Загрузка окон…</p>';
+        getJsonTrainer('/trainer/collective/staff-booking-sessions?collective_slug=' + encodeURIComponent(slug))
+          .then(function(data) {
+            state.bookCenterSessions = data.sessions || [];
+            if (!state.bookCenterSessions.length) {
+              if (list) list.innerHTML = '<p class="error">Нет доступных окон</p>';
+              return;
+            }
+            if (list) {
+              list.innerHTML = state.bookCenterSessions.map(function(s) {
+                return (
+                  '<button type="button" class="client-row" data-session-id="' + s.id + '">' +
+                    escapeHtml((s.slot_date || '') + ' ' + (s.start_time || '') + '–' + (s.end_time || '')) +
+                  '</button>'
+                );
+              }).join('');
+              list.querySelectorAll('[data-session-id]').forEach(function(row) {
+                row.onclick = function() {
+                  var sid = parseInt(row.getAttribute('data-session-id'), 10);
+                  state.bookCenterSession = state.bookCenterSessions.filter(function(x) { return Number(x.id) === sid; })[0] || null;
+                  renderBookCenterModePickers();
+                };
+              });
+            }
+          })
+          .catch(function(e) {
+            if (list) list.innerHTML = '<p class="error">' + escapeHtml(e.message || 'Ошибка') + '</p>';
+          });
+      }
+
+      function syncBookDelegateCoachUi() {
+        var wrap = document.getElementById('bookDelegateCoachWrap');
+        var sel = document.getElementById('bookDelegateCoachSelect');
+        if (!wrap || !sel) return;
+        var delegate = state.bookContexts && state.bookContexts.delegate;
+        var coaches = (delegate && delegate.coaches) || [];
+        var show = !!(delegate && coaches.length && state.bookContextKind === 'personal_slot' && state.bookSlotId);
+        wrap.style.display = show ? '' : 'none';
+        if (!show) return;
+        if (!state.bookCollectiveSlug && delegate.collective_slug) {
+          state.bookCollectiveSlug = delegate.collective_slug;
+        }
+        sel.innerHTML = coaches.map(function(c) {
+          return (
+            '<option value="' + c.trainer_id + '">' +
+            escapeHtml(c.display_name || ('Тренер #' + c.trainer_id)) +
+            '</option>'
+          );
+        }).join('');
+        var preferred = state.bookDelegateTargetId || state.trainerId || coaches[0].trainer_id;
+        sel.value = String(preferred);
+        state.bookDelegateTargetId = parseInt(sel.value, 10) || null;
+        sel.onchange = function() {
+          state.bookDelegateTargetId = parseInt(sel.value, 10) || null;
+        };
+      }
+
+      function renderBookCenterModePickers() {
+        var modeWrap = document.getElementById('bookCenterModeWrap');
+        var coachWrap = document.getElementById('bookCenterCoachWrap');
+        var modeSel = document.getElementById('bookCenterModeSelect');
+        var coachSel = document.getElementById('bookCenterCoachSelect');
+        var confirmBtn = document.getElementById('btnBookCenterConfirm');
+        var session = state.bookCenterSession;
+        if (!session || !modeSel) return;
+        var modes = ['lane_self', 'center_coach_individual'];
+        modeSel.innerHTML = modes.map(function(m) {
+          return '<option value="' + m + '">' + (m === 'lane_self' ? 'Дорожка' : 'С тренером центра') + '</option>';
+        }).join('');
+        modeWrap.style.display = '';
+        if (coachWrap && coachSel) {
+          var coaches = session.coaches || [];
+          coachSel.innerHTML = coaches.map(function(c) {
+            return '<option value="' + c.trainer_id + '">' + escapeHtml(c.display_name || ('Тренер #' + c.trainer_id)) + '</option>';
+          }).join('');
+          coachWrap.style.display = modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+          modeSel.onchange = function() {
+            coachWrap.style.display = modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+          };
+        }
+        if (confirmBtn) confirmBtn.style.display = '';
+      }
+
+      function submitBookCenterStaffBooking() {
+        var clientId = state.bookCenterClientId;
+        var session = state.bookCenterSession;
+        var modeSel = document.getElementById('bookCenterModeSelect');
+        var coachSel = document.getElementById('bookCenterCoachSelect');
+        if (!clientId || !session || !modeSel || !state.bookCollectiveSlug) return;
+        var payload = {
+          collective_slug: state.bookCollectiveSlug,
+          session_id: session.id,
+          client_id: clientId,
+          attendance_mode: modeSel.value,
+          guest_count: 0,
+        };
+        if (modeSel.value.indexOf('coach') >= 0 && coachSel && coachSel.value) {
+          payload.center_coach_id = parseInt(coachSel.value, 10);
+        }
+        fetch(apiUrlWithQuery('/trainer/collective/staff-session-booking'), {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify(payload),
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'Ошибка');
+              document.getElementById('modalBookClient').style.display = 'none';
+              clearBookSlotModalState();
+              showToast('Запись в центр создана');
+              loadSlots();
+            });
+          })
+          .catch(function(e) { alert(e.message || 'Ошибка'); });
+      }
+
       /**
        * After client picked from roster: load per-client defaults (GET booking-defaults), then show service/tariff.
        * Slot booking: арена слота фиксируется в POST; UI площадки для «из списка» не показываем.
        */
       function enterBookExistingServiceStepFromClient(clientId, displayNameOrNull, options) {
         options = options || {};
+        if (state.bookContextKind === 'center_session') {
+          enterBookCenterFlowForClient(clientId, displayNameOrNull);
+          return;
+        }
+        syncBookDelegateCoachUi();
         if (options.fromNewClient !== true) state.bookServiceStepFromNewClient = false;
         state.bookSelectedExistingClientId = clientId;
         state.bookSelectedExistingClientName = (displayNameOrNull || '').trim() || '';
@@ -5305,10 +5500,12 @@
         document.getElementById('bookNewPhone').value = '';
         document.getElementById('bookNewFirstName').value = '';
         document.getElementById('bookNewLastName').value = '';
-        document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = ''; });
+        state.bookContextKind = 'personal_slot';
+        state.bookCollectiveSlug = null;
+        state.bookCenterSession = null;
+        state.bookCenterClientId = null;
+        document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = 'none'; });
         if (prefilledClient) {
-          document.getElementById('bookStepChoice').style.display = 'none';
-          document.getElementById('bookStepChoice').classList.remove('active');
           document.getElementById('bookStepExisting').style.display = 'block';
           document.getElementById('bookStepExisting').classList.add('active');
           document.getElementById('bookStepNew').style.display = 'none';
@@ -5317,6 +5514,7 @@
           showBookExistingClientStep();
           state.bookModalClientSearchFirst = false;
         } else {
+          document.getElementById('bookStepContext').style.display = 'none';
           scheduleBookModalShowClientSearchFirstLayout();
           document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
         }
@@ -5331,10 +5529,17 @@
           fetch(apiUrlWithQuery('/trainer/clients'), { headers: headers() }).then(function(r) {
             return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
           }),
+          fetchBookingContexts(),
         ])
           .then(function(results) {
             var data = results[0];
             var clientsPayload = results[1];
+            var ctxPayload = results[2];
+            state.bookContexts = ctxPayload;
+            if (!prefilledClient && ctxPayload && ctxPayload.needs_context_picker) {
+              renderBookContextStep(ctxPayload);
+              showBookStep('bookStepContext');
+            }
             var hasClients = !!(clientsPayload.clients && clientsPayload.clients.length);
             state.trainerHasBookClients = hasClients;
             setBookOptExistingVisible(hasClients);
@@ -6169,6 +6374,12 @@
           updateTelegramBack();
           return;
         }
+        if (state.bookContexts && state.bookContexts.needs_context_picker) {
+          state.bookSelectedExistingClientId = null;
+          state.bookSelectedExistingClientName = '';
+          showBookStep('bookStepContext');
+          return;
+        }
         state.bookSelectedExistingClientId = null;
         state.bookSelectedExistingClientName = '';
         showBookExistingClientStep();
@@ -6177,6 +6388,19 @@
         document.getElementById('bookStepChoice').style.display = 'block';
         document.getElementById('bookStepChoice').classList.add('active');
       };
+      var bookBackFromCenterEl = document.getElementById('bookBackFromCenter');
+      if (bookBackFromCenterEl) {
+        bookBackFromCenterEl.onclick = function() {
+          state.bookCenterSession = null;
+          state.bookCenterClientId = null;
+          showBookExistingClientStep();
+          showBookStep('bookStepExisting');
+        };
+      }
+      var btnBookCenterConfirmEl = document.getElementById('btnBookCenterConfirm');
+      if (btnBookCenterConfirmEl) {
+        btnBookCenterConfirmEl.onclick = submitBookCenterStaffBooking;
+      }
       document.getElementById('bookBackFromNew').onclick = function() {
         scheduleReturnFromNewClientToQuickSearch();
       };

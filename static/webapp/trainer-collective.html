@@ -85,6 +85,27 @@
       font-size: 12px;
       color: var(--tg-theme-hint-color);
     }
+    .col-studio-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .col-studio-switch {
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .col-studio-switch.is-active {
+      background: rgba(247, 166, 0, 0.18);
+      border-color: var(--col-accent, #F7A600);
+      color: var(--tg-theme-text-color);
+    }
     .col-card {
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
@@ -222,6 +243,7 @@
       white-space: nowrap;
     }
     .col-badge--owner { background: rgba(52, 199, 89, 0.15); color: #248a3d; }
+    .col-badge--admin { background: rgba(0, 122, 255, 0.12); color: #007aff; }
     .col-hint { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0 0 10px; }
     .col-loading, .col-error { text-align: center; padding: 48px 16px; color: var(--tg-theme-hint-color); }
     .col-issue-btn {
@@ -546,6 +568,7 @@
     <div id="colError" class="col-error" style="display:none;"></div>
     <div id="colContent" style="display:none;">
       <header class="col-hero">
+        <div id="colStudioSwitcher" class="col-studio-switcher" hidden></div>
         <img id="colHeroLogo" class="col-hero__logo" alt="" hidden />
         <p class="col-hero__eyebrow" id="colRoleEyebrow">Студия</p>
         <h1 class="col-hero__title" id="colTitle">—</h1>
@@ -825,11 +848,87 @@
         rose: '#B85C72',
         ocean: '#2B6CB0',
       };
+      var activeCollectiveSlug = null;
+      var COL_SLUG_STORAGE_KEY = 'trainer_collective_slug';
+
+      function readCollectiveSlugFromUrl() {
+        try {
+          var qs = new URLSearchParams(window.location.search || '');
+          return (qs.get('collective') || qs.get('collective_slug') || '').trim() || null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function persistCollectiveSlug(slug) {
+        activeCollectiveSlug = slug || null;
+        try {
+          if (slug) sessionStorage.setItem(COL_SLUG_STORAGE_KEY, slug);
+          else sessionStorage.removeItem(COL_SLUG_STORAGE_KEY);
+        } catch (e) { /* noop */ }
+      }
+
+      function resolveCollectiveSlug() {
+        var fromUrl = readCollectiveSlugFromUrl();
+        if (fromUrl) {
+          persistCollectiveSlug(fromUrl);
+          return fromUrl;
+        }
+        if (activeCollectiveSlug) return activeCollectiveSlug;
+        try {
+          var stored = (sessionStorage.getItem(COL_SLUG_STORAGE_KEY) || '').trim();
+          return stored || null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      resolveCollectiveSlug();
 
       function apiUrl(path) {
         var url = path;
+        var slug = resolveCollectiveSlug();
+        if (slug) {
+          url += (url.indexOf('?') >= 0 ? '&' : '?') + 'collective_slug=' + encodeURIComponent(slug);
+        }
         if (initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
         return url;
+      }
+
+      function switchCollectiveStudio(slug) {
+        if (!slug || slug === resolveCollectiveSlug()) return;
+        persistCollectiveSlug(slug);
+        var base = window.location.pathname;
+        var params = [];
+        if (initData) params.push('init_data=' + encodeURIComponent(initData));
+        params.push('collective=' + encodeURIComponent(slug));
+        window.location.href = base + '?' + params.join('&');
+      }
+
+      function renderStudioSwitcher(data) {
+        var el = document.getElementById('colStudioSwitcher');
+        if (!el) return;
+        var memberships = (data && data.memberships) || [];
+        if (!data || !data.has_multiple_memberships || memberships.length < 2) {
+          el.hidden = true;
+          el.innerHTML = '';
+          return;
+        }
+        el.hidden = false;
+        var currentSlug = data.slug;
+        el.innerHTML = memberships.map(function(m) {
+          var active = m.slug === currentSlug ? ' is-active' : '';
+          return (
+            '<button type="button" class="col-studio-switch' + active + '" data-col-slug="' + escapeHtml(m.slug) + '">' +
+              escapeHtml(m.display_name || m.slug) +
+            '</button>'
+          );
+        }).join('');
+        el.querySelectorAll('[data-col-slug]').forEach(function(btn) {
+          btn.onclick = function() {
+            switchCollectiveStudio(btn.getAttribute('data-col-slug'));
+          };
+        });
       }
 
       function applyStudioAccent(data) {
@@ -1230,16 +1329,30 @@
         }
       }
 
+      function promoteCollectiveMemberToAdmin(trainerId) {
+        confirmStudioAction('Назначить администратором студии?', function() {
+          postCollectiveAction(
+            '/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/promote-admin'
+          );
+        });
+      }
+
       function renderMembersList(el, members, canManage) {
         if (!el) return;
+        var canPromote = !!(studioData && studioData.can_promote_admin);
         el.innerHTML = (members || []).map(function(m) {
-          var badge = m.role === 'owner' ? 'owner' : 'member';
-          var badgeClass = m.role === 'owner' ? 'col-badge col-badge--owner' : 'col-badge';
+          var badge = m.role === 'owner' ? 'owner' : (m.role === 'admin' ? 'admin' : 'member');
+          var badgeClass = m.role === 'owner'
+            ? 'col-badge col-badge--owner'
+            : (m.role === 'admin' ? 'col-badge col-badge--admin' : 'col-badge');
           var actions = '';
           if (canManage && m.role !== 'owner' && (m.status === 'active' || m.status === 'invited')) {
             actions = '<div class="col-member__actions">';
             if (m.status === 'active') {
               actions += '<button type="button" class="col-member-action col-member-action--accent" data-transfer="' + m.trainer_id + '">Передать</button>';
+            }
+            if (canPromote && m.role === 'member' && m.status === 'active') {
+              actions += '<button type="button" class="col-member-action" data-promote-admin="' + m.trainer_id + '">Админ</button>';
             }
             actions += '<button type="button" class="col-member-action col-member-action--danger" data-remove="' + m.trainer_id + '">Снять</button>';
             actions += '</div>';
@@ -1264,6 +1377,11 @@
           el.querySelectorAll('[data-transfer]').forEach(function(btn) {
             btn.onclick = function() {
               transferCollectiveOwnership(btn.getAttribute('data-transfer'));
+            };
+          });
+          el.querySelectorAll('[data-promote-admin]').forEach(function(btn) {
+            btn.onclick = function() {
+              promoteCollectiveMemberToAdmin(btn.getAttribute('data-promote-admin'));
             };
           });
         }
@@ -1428,6 +1546,8 @@
 
       function renderStudio(data) {
         studioData = data;
+        if (data && data.slug) persistCollectiveSlug(data.slug);
+        renderStudioSwitcher(data);
         loadingEl.style.display = 'none';
         errorEl.style.display = 'none';
         contentEl.style.display = 'block';
@@ -1444,7 +1564,9 @@
             heroLogo.hidden = true;
           }
         }
-        document.getElementById('colRoleEyebrow').textContent = data.role === 'owner' ? 'Owner · студия' : 'Member · студия';
+        document.getElementById('colRoleEyebrow').textContent = data.role === 'owner'
+          ? 'Owner · студия'
+          : (data.role === 'admin' ? 'Admin · студия' : 'Member · студия');
         document.getElementById('colSeats').textContent =
           (data.active_count != null ? data.active_count : '—') + ' / ' + (data.seat_limit || '—') + ' мест';
 

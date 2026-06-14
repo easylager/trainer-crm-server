@@ -17,9 +17,9 @@ from src.application.collective_use_cases import (
     MEMBER_ROLE_OWNER,
     MEMBER_STATUS_ACTIVE,
     SCHEDULE_MODE_STUDIO_CENTRAL,
-    _assert_collective_owner,
+    _assert_collective_studio_admin,
     get_collective_by_slug,
-    get_active_collective_membership,
+    is_collective_studio_admin_role,
     list_active_trainer_ids_for_collective_slug,
 )
 from src.shared.config import Settings
@@ -214,7 +214,7 @@ async def create_collective_session(
     coach_trainer_ids: list[int] | None = None,
 ) -> dict[str, Any] | None:
     """Owner creates a bookable center window."""
-    err = await _assert_collective_owner(session, collective_id, owner_trainer_id)
+    err = await _assert_collective_studio_admin(session, collective_id, owner_trainer_id)
     if err:
         return {"error": err}
     coll = await _require_studio_central_collective(session, collective_id)
@@ -290,7 +290,7 @@ async def update_collective_session_coaches(
     if row is None:
         return None
     cid = int(row[1])
-    err = await _assert_collective_owner(session, cid, owner_trainer_id)
+    err = await _assert_collective_studio_admin(session, cid, owner_trainer_id)
     if err:
         return {"error": err}
     coll = await get_collective_by_slug(
@@ -332,7 +332,7 @@ async def cancel_collective_session(
     row = r.fetchone()
     if row is None:
         return None
-    err = await _assert_collective_owner(session, int(row[0]), owner_trainer_id)
+    err = await _assert_collective_studio_admin(session, int(row[0]), owner_trainer_id)
     if err:
         return {"error": err}
     await session.execute(
@@ -591,13 +591,26 @@ async def create_collective_session_booking(
     }
 
 
+async def _booking_actor_may_manage(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    fulfillment_trainer_id: int,
+    actor_trainer_id: int,
+) -> bool:
+    if int(fulfillment_trainer_id) == int(actor_trainer_id):
+        return True
+    err = await _assert_collective_studio_admin(session, collective_id, actor_trainer_id)
+    return err is None
+
+
 async def confirm_collective_session_booking(
     session: AsyncSession,
     *,
     booking_id: int,
     trainer_id: int,
 ) -> dict[str, Any] | None:
-    """Trainer/owner confirms pending center booking."""
+    """Trainer/owner/admin confirms pending center booking."""
     r = await session.execute(
         text(
             """
@@ -610,10 +623,13 @@ async def confirm_collective_session_booking(
     row = r.fetchone()
     if row is None:
         return None
-    if int(row[1]) != int(trainer_id):
-        owner_id = await _get_collective_owner_trainer_id(session, int(row[3]))
-        if owner_id != int(trainer_id):
-            return {"error": "forbidden"}
+    if not await _booking_actor_may_manage(
+        session,
+        collective_id=int(row[3]),
+        fulfillment_trainer_id=int(row[1]),
+        actor_trainer_id=int(trainer_id),
+    ):
+        return {"error": "forbidden"}
     if str(row[2]) != BOOKING_STATUS_PENDING:
         return {"error": "not_pending"}
     await session.execute(
@@ -657,7 +673,7 @@ async def list_pending_collective_session_bookings_for_owner(
     limit: int = 50,
 ) -> dict[str, Any]:
     """Inbox for center admin — pending client requests (ADR Q4 lane-only → owner)."""
-    err = await _assert_collective_owner(session, collective_id, owner_trainer_id)
+    err = await _assert_collective_studio_admin(session, collective_id, owner_trainer_id)
     if err:
         return {"error": err}
     lim = max(1, min(int(limit), 200))
@@ -736,10 +752,13 @@ async def decline_collective_session_booking(
     row = r.fetchone()
     if row is None:
         return None
-    if int(row[1]) != int(trainer_id):
-        owner_id = await _get_collective_owner_trainer_id(session, int(row[3]))
-        if owner_id != int(trainer_id):
-            return {"error": "forbidden"}
+    if not await _booking_actor_may_manage(
+        session,
+        collective_id=int(row[3]),
+        fulfillment_trainer_id=int(row[1]),
+        actor_trainer_id=int(trainer_id),
+    ):
+        return {"error": "forbidden"}
     if str(row[2]) != BOOKING_STATUS_PENDING:
         return {"error": "not_pending"}
     await session.execute(
@@ -822,4 +841,75 @@ async def list_center_duties_for_trainer(
             }
         )
     return out
+
+
+def _times_overlap(start_a: time, end_a: time, start_b: time, end_b: time) -> bool:
+    """Half-open interval overlap on same calendar day."""
+    a0 = start_a.hour * 60 + start_a.minute
+    a1 = end_a.hour * 60 + end_a.minute
+    b0 = start_b.hour * 60 + start_b.minute
+    b1 = end_b.hour * 60 + end_b.minute
+    return a0 < b1 and b0 < a1
+
+
+async def find_trainer_center_duty_conflicts(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    slot_date: date,
+    intervals: list[tuple[time, time]],
+) -> list[dict[str, Any]]:
+    """Center duty windows overlapping proposed personal slot intervals."""
+    if not intervals:
+        return []
+    duties = await list_center_duties_for_trainer(
+        session,
+        trainer_id=int(trainer_id),
+        from_date=slot_date,
+        to_date=slot_date,
+    )
+    conflicts: list[dict[str, Any]] = []
+    for duty in duties:
+        try:
+            sh, sm = (duty["start_time"] or "00:00").split(":")[:2]
+            eh, em = (duty["end_time"] or "00:00").split(":")[:2]
+            d_start = time(int(sh), int(sm))
+            d_end = time(int(eh), int(em))
+        except (ValueError, TypeError):
+            continue
+        for start, end in intervals:
+            if _times_overlap(start, end, d_start, d_end):
+                conflicts.append(
+                    {
+                        "kind": "center_duty",
+                        "collective_name": duty.get("collective_name"),
+                        "start_time": duty.get("start_time"),
+                        "end_time": duty.get("end_time"),
+                    }
+                )
+                break
+    return conflicts
+
+
+async def assert_no_center_duty_conflict_for_slots(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    slot_date: date,
+    intervals: list[tuple[time, time]],
+) -> None:
+    """Raises ValueError when personal slots overlap assigned center duty (ADR §6)."""
+    conflicts = await find_trainer_center_duty_conflicts(
+        session,
+        trainer_id=trainer_id,
+        slot_date=slot_date,
+        intervals=intervals,
+    )
+    if not conflicts:
+        return
+    first = conflicts[0]
+    label = first.get("collective_name") or "центр"
+    raise ValueError(
+        f"Пересечение с дежурством ({label} {first.get('start_time')}–{first.get('end_time')})"
+    )
 

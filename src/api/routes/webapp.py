@@ -8,7 +8,7 @@ import os
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from itertools import groupby
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
@@ -331,7 +331,10 @@ from src.application.trainer_schedule_use_cases import (
     replace_week_with_template,
     trainer_offers_service,
 )
-from src.application.collective_session_use_cases import list_center_duties_for_trainer
+from src.application.collective_session_use_cases import (
+    assert_no_center_duty_conflict_for_slots,
+    list_center_duties_for_trainer,
+)
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
 from src.application.trainer_invite_links import (
@@ -1009,6 +1012,29 @@ class ScheduleSlotsDayBody(BaseModel):
         return self
 
 
+def _minutes_to_time(minutes: int) -> time:
+    return time(minutes // 60, minutes % 60)
+
+
+def _schedule_slot_intervals(body: ScheduleSlotsDayBody) -> list[tuple[time, time]]:
+    """Build (start, end) intervals from schedule POST body for duty overlap checks."""
+    if body.slot_entries is not None:
+        intervals: list[tuple[time, time]] = []
+        for entry in body.slot_entries:
+            start_m = next(iter(_hhmm_strings_to_minutes([entry.start_time])))
+            end_m = start_m + int(entry.duration_minutes)
+            intervals.append((_minutes_to_time(start_m), _minutes_to_time(end_m)))
+        return intervals
+    if body.start_times is not None:
+        minutes_set = _hhmm_strings_to_minutes(body.start_times)
+    elif body.start_hours is not None:
+        minutes_set = {h * 60 for h in body.start_hours if 0 <= h <= 23}
+    else:
+        return []
+    duration = int(body.duration_minutes)
+    return [(_minutes_to_time(m), _minutes_to_time(m + duration)) for m in minutes_set]
+
+
 @router.post("/schedule/slots")
 async def post_schedule_slots(
     body: ScheduleSlotsDayBody,
@@ -1050,6 +1076,18 @@ async def post_schedule_slots(
         raise HTTPException(status_code=400, detail="Invalid slot_date")
 
     arena_arg = int(body.arena_id) if body.capacity > 1 and body.arena_id is not None else None
+
+    try:
+        duty_intervals = _schedule_slot_intervals(body)
+        if duty_intervals:
+            await assert_no_center_duty_conflict_for_slots(
+                session,
+                trainer_id=trainer_id,
+                slot_date=slot_date,
+                intervals=duty_intervals,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     if body.slot_entries is not None:
         # Per-slot precise mode: each entry carries its own start + duration, no grid validation.
@@ -3180,13 +3218,15 @@ async def get_trainer_hub_bootstrap(
         try:
             from src.application.collective_use_cases import (
                 build_trainer_collective_bootstrap_payload,
-                get_active_collective_membership,
                 get_collective_entitlements_for_member,
+                list_active_collective_memberships,
             )
             from src.application.subscription_tier_use_cases import unlocked_capability_codes
 
-            membership = await get_active_collective_membership(session, trainer_id_linked)
+            memberships = await list_active_collective_memberships(session, trainer_id_linked)
+            membership = memberships[0] if memberships else None
             subscription_covers: list[str] = []
+            studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id_linked)
             if membership is not None:
                 coll_ent = await get_collective_entitlements_for_member(session, trainer_id_linked)
                 if coll_ent is not None:
@@ -3194,7 +3234,10 @@ async def get_trainer_hub_bootstrap(
             collective_payload = build_trainer_collective_bootstrap_payload(
                 membership,
                 subscription_covers=subscription_covers,
+                memberships=memberships,
             )
+            if collective_payload is not None:
+                collective_payload["studio_access_mode"] = studio_access_mode
         except Exception as exc:
             partial_errors["collective"] = str(exc)
 
@@ -5838,6 +5881,8 @@ class TrainerCreateBookingBody(BaseModel):
     arena_id: int | None = None
     service_price_variant_id: int | None = None  # individual slot: optional tier; ignored for group slots (capacity>1)
     allow_overbook: bool = False  # trainer-only: group slot (capacity>1) may exceed nominal capacity
+    target_trainer_id: int | None = Field(None, gt=0, description="Studio admin delegate booking")
+    collective_slug: str | None = Field(None, max_length=64, description="Studio context for delegate")
 
 
 class TrainerQuickBookingBody(BaseModel):
@@ -7100,7 +7145,21 @@ async def post_trainer_booking(
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     notify_tid = _trainer_bot_notify_telegram_id(principal)
     slot = await get_slot(session, body.slot_id)
-    if not slot or slot.get("trainer_id") != trainer_id:
+    booking_trainer_id = trainer_id
+    if body.target_trainer_id is not None and int(body.target_trainer_id) != int(trainer_id):
+        delegate_err = await assert_delegate_personal_slot_booking(
+            session,
+            actor_trainer_id=trainer_id,
+            target_trainer_id=int(body.target_trainer_id),
+            slot_id=body.slot_id,
+            collective_slug=body.collective_slug,
+        )
+        if delegate_err == "not_delegate_admin":
+            raise HTTPException(status_code=403, detail="Delegate booking requires studio admin")
+        if delegate_err:
+            raise HTTPException(status_code=400, detail=delegate_err)
+        booking_trainer_id = int(body.target_trainer_id)
+    if not slot or slot.get("trainer_id") != booking_trainer_id:
         raise HTTPException(status_code=400, detail="Slot not found or not available")
     st_raw = (slot.get("status") or "").strip().lower()
     cap_slot = max(1, int(slot.get("capacity") or 1))
@@ -7118,14 +7177,14 @@ async def post_trainer_booking(
     if arena_id is not None:
         rchk = await session.execute(
             text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": arena_id},
+            {"tid": booking_trainer_id, "aid": arena_id},
         )
         if not rchk.fetchone():
             raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
     booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
         session,
         slot_id=body.slot_id,
-        trainer_id=trainer_id,
+        trainer_id=booking_trainer_id,
         client_id=body.client_id,
         service_id=body.service_id,
         client_comment=None,
@@ -7137,7 +7196,9 @@ async def post_trainer_booking(
         allow_overbook=allow_ob,
     )
     if not booking_id:
-        detail_ru = await explain_trainer_booking_failure(session, trainer_id, body.slot_id, body.service_id)
+        detail_ru = await explain_trainer_booking_failure(
+            session, booking_trainer_id, body.slot_id, body.service_id
+        )
         raise HTTPException(status_code=400, detail=detail_ru)
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
@@ -7800,7 +7861,10 @@ async def post_trainer_request_book(
 from src.application.collective_use_cases import (
     get_trainer_collective_studio_payload,
     issue_collective_invite_token,
-    get_active_collective_membership,
+    is_collective_owner_role,
+    is_collective_studio_admin_role,
+    promote_collective_member_to_admin,
+    resolve_collective_membership,
     update_collective_brand,
     upload_collective_asset_from_bytes,
     remove_collective_member,
@@ -7809,8 +7873,81 @@ from src.application.collective_use_cases import (
     create_collective_subscription_invoice,
     confirm_collective_invoice_after_payment,
     admin_grant_collective_subscription,
+    get_trainer_studio_access_mode,
+)
+from src.application.collective_booking_context_use_cases import (
+    assert_delegate_personal_slot_booking,
+    create_staff_center_session_booking,
+    list_staff_bookable_center_sessions,
+    list_trainer_booking_contexts,
 )
 from src.application.collective_invoice_admin_notify import notify_admins_new_collective_subscription_invoice
+
+CollectiveSlugQuery = Annotated[
+    str | None,
+    Query(description="Studio context when trainer has multiple memberships"),
+]
+
+
+async def _require_collective_owner(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+    *,
+    collective_slug: str | None = None,
+) -> tuple[int, Any]:
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await resolve_collective_membership(
+        session,
+        trainer_id,
+        collective_slug=collective_slug,
+    )
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if not is_collective_owner_role(membership.role):
+        raise HTTPException(status_code=403, detail="Owner only")
+    return trainer_id, membership
+
+
+async def _require_collective_studio_admin(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+    *,
+    collective_slug: str | None = None,
+) -> tuple[int, Any]:
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await resolve_collective_membership(
+        session,
+        trainer_id,
+        collective_slug=collective_slug,
+    )
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if not is_collective_studio_admin_role(membership.role):
+        raise HTTPException(status_code=403, detail="Studio admin only")
+    return trainer_id, membership
+
+
+async def _require_collective_member(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+    *,
+    collective_slug: str | None = None,
+) -> tuple[int, Any]:
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await resolve_collective_membership(
+        session,
+        trainer_id,
+        collective_slug=collective_slug,
+    )
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    return trainer_id, membership
 
 
 class TrainerCollectiveBrandPatch(BaseModel):
@@ -7832,6 +7969,7 @@ class TrainerCollectiveBrandPatch(BaseModel):
 
 @router.get("/trainer/collective")
 async def get_trainer_collective_studio(
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
@@ -7839,7 +7977,11 @@ async def get_trainer_collective_studio(
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
-    payload = await get_trainer_collective_studio_payload(session, trainer_id)
+    payload = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=collective_slug,
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail="Not in a collective")
     return payload
@@ -7847,18 +7989,16 @@ async def get_trainer_collective_studio(
 
 @router.post("/trainer/collective/invite")
 async def post_trainer_collective_invite(
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner issues a one-time col_inv_* deep link for a new member."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
     issued = await issue_collective_invite_token(session, membership.collective_id, trainer_id)
     if issued is None:
         raise HTTPException(status_code=403, detail="Cannot issue invite")
@@ -7876,18 +8016,16 @@ async def post_trainer_collective_invite(
 @router.patch("/trainer/collective")
 async def patch_trainer_collective_brand(
     body: TrainerCollectiveBrandPatch,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner updates studio display name and tagline (Wave P1.5-B)."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+    trainer_id, membership = await _require_collective_studio_admin(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
     if not any(
         [
             body.display_name is not None,
@@ -7949,27 +8087,28 @@ async def patch_trainer_collective_brand(
     if err:
         raise HTTPException(status_code=403, detail=str(err))
 
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return studio or updated
 
 
 @router.post("/trainer/collective/assets")
 async def post_trainer_collective_asset(
+    collective_slug: CollectiveSlugQuery = None,
     kind: str = Query(..., pattern="^(logo|cover|gallery)$"),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal_multipart),
 ) -> dict[str, Any]:
     """Owner uploads studio logo, cover, or gallery photo (Wave P1.6)."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
-
+    trainer_id, membership = await _require_collective_studio_admin(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
     content_type = file.content_type or "image/jpeg"
     body_bytes = await file.read()
     uploaded = await upload_collective_asset_from_bytes(
@@ -7991,7 +8130,11 @@ async def post_trainer_collective_asset(
         raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
     if err:
         raise HTTPException(status_code=403, detail=str(err))
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {"asset": uploaded, "studio": studio}
 
 
@@ -8019,18 +8162,16 @@ def _collective_governance_http_error(err: str | None) -> None:
 @router.post("/trainer/collective/members/{target_trainer_id:int}/remove")
 async def post_trainer_collective_member_remove(
     target_trainer_id: int,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner removes a studio member."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
 
     result = await remove_collective_member(
         session,
@@ -8041,25 +8182,27 @@ async def post_trainer_collective_member_remove(
     err = result.get("error")
     _collective_governance_http_error(err if isinstance(err, str) else None)
 
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {"ok": True, "studio": studio}
 
 
 @router.post("/trainer/collective/transfer-ownership")
 async def post_trainer_collective_transfer_ownership(
     body: TrainerCollectiveTransferOwnershipBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner transfers studio control to another active member."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
 
     result = await transfer_collective_ownership(
         session,
@@ -8070,24 +8213,59 @@ async def post_trainer_collective_transfer_ownership(
     err = result.get("error")
     _collective_governance_http_error(err if isinstance(err, str) else None)
 
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
+    return {"ok": True, "studio": studio}
+
+
+@router.post("/trainer/collective/members/{target_trainer_id:int}/promote-admin")
+async def post_trainer_collective_member_promote_admin(
+    target_trainer_id: int,
+    collective_slug: CollectiveSlugQuery = None,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner promotes active member to studio admin (W5)."""
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
+    result = await promote_collective_member_to_admin(
+        session,
+        membership.collective_id,
+        trainer_id,
+        target_trainer_id,
+    )
+    err = result.get("error")
+    if err == "already_admin":
+        raise HTTPException(status_code=400, detail="Already admin")
+    if err == "cannot_promote_owner":
+        raise HTTPException(status_code=400, detail="Cannot promote owner")
+    _collective_governance_http_error(err if isinstance(err, str) else None)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {"ok": True, "studio": studio}
 
 
 @router.post("/trainer/collective/revoke-invites")
 async def post_trainer_collective_revoke_invites(
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner invalidates all unused invite links."""
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
 
     result = await revoke_pending_collective_invites(
         session, membership.collective_id, trainer_id
@@ -8095,7 +8273,11 @@ async def post_trainer_collective_revoke_invites(
     err = result.get("error")
     _collective_governance_http_error(err if isinstance(err, str) else None)
 
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {
         "ok": True,
         "revoked_count": int(result.get("revoked_count") or 0),
@@ -8107,24 +8289,10 @@ class CollectiveSubscriptionCheckoutBody(BaseModel):
     period_months: Literal[1, 3, 12]
 
 
-async def _require_collective_owner(
-    session: AsyncSession,
-    principal: MiniAppPrincipal,
-) -> tuple[int, Any]:
-    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Not in a collective")
-    if membership.role != "owner":
-        raise HTTPException(status_code=403, detail="Owner only")
-    return trainer_id, membership
-
-
 @router.post("/trainer/collective/subscription/invoice-request")
 async def post_trainer_collective_subscription_invoice_request(
     body: CollectiveSubscriptionCheckoutBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
@@ -8135,7 +8303,7 @@ async def post_trainer_collective_subscription_invoice_request(
             status_code=400,
             detail="Запрос счёта доступен только в режиме «счёт / ЕРИП» (invoice).",
         )
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_owner(session, principal, collective_slug=collective_slug)
     inv = await create_collective_subscription_invoice(
         session,
         collective_id=membership.collective_id,
@@ -8153,7 +8321,11 @@ async def post_trainer_collective_subscription_invoice_request(
     except Exception:
         logger.exception("collective invoice-request: admin notify failed invoice_id=%s", invoice_id)
 
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {
         "ok": True,
         "invoice_id": invoice_id,
@@ -8167,6 +8339,7 @@ async def post_trainer_collective_subscription_invoice_request(
 @router.post("/trainer/collective/subscription/bepaid-checkout")
 async def post_trainer_collective_subscription_bepaid_checkout(
     body: CollectiveSubscriptionCheckoutBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
@@ -8182,7 +8355,7 @@ async def post_trainer_collective_subscription_bepaid_checkout(
             status_code=400,
             detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
         )
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_owner(session, principal, collective_slug=collective_slug)
     inv = await create_collective_subscription_invoice(
         session,
         collective_id=membership.collective_id,
@@ -8238,6 +8411,7 @@ class CollectiveSubscriptionStubConfirmBody(BaseModel):
 @router.post("/trainer/collective/subscription/stub-confirm")
 async def post_trainer_collective_subscription_stub_confirm(
     body: CollectiveSubscriptionStubConfirmBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
@@ -8245,7 +8419,7 @@ async def post_trainer_collective_subscription_stub_confirm(
     settings = Settings()
     if not settings.payment_sandbox:
         raise HTTPException(status_code=404, detail="Not available when payment_sandbox is false")
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_owner(session, principal, collective_slug=collective_slug)
     from sqlalchemy import text
 
     r = await session.execute(
@@ -8266,13 +8440,18 @@ async def post_trainer_collective_subscription_stub_confirm(
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Invoice already paid or invalid")
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {"success": True, "studio": studio}
 
 
 @router.post("/trainer/collective/subscription/mock-checkout")
 async def post_trainer_collective_subscription_mock_checkout(
     body: CollectiveSubscriptionCheckoutBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
@@ -8282,7 +8461,7 @@ async def post_trainer_collective_subscription_mock_checkout(
             status_code=404,
             detail="Mock checkout is not available when payment_sandbox is disabled",
         )
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_owner(session, principal, collective_slug=collective_slug)
     result = await admin_grant_collective_subscription(
         session,
         slug=membership.slug,
@@ -8292,7 +8471,11 @@ async def post_trainer_collective_subscription_mock_checkout(
     )
     if not result or result.get("error"):
         raise HTTPException(status_code=400, detail="Could not activate studio subscription")
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     return {"ok": True, "studio": studio, "expires_at": result.get("expires_at")}
 
 
@@ -8350,14 +8533,19 @@ class ClientCollectiveSessionBookingBody(BaseModel):
 
 @router.get("/trainer/collective/sessions")
 async def get_trainer_collective_sessions(
+    collective_slug: CollectiveSlugQuery = None,
     from_date: date_type | None = None,
     to_date: date_type | None = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner: list center grid sessions for studio_central collective."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
-    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
+    studio = await get_trainer_collective_studio_payload(
+        session,
+        trainer_id,
+        collective_slug=membership.slug,
+    )
     if not studio or not studio.get("can_manage_center_schedule"):
         raise HTTPException(status_code=400, detail="Center schedule not enabled for this studio")
     today = date_type.today()
@@ -8381,11 +8569,12 @@ async def get_trainer_collective_sessions(
 @router.post("/trainer/collective/sessions")
 async def post_trainer_collective_session(
     body: CollectiveSessionCreateBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner creates a bookable center window."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     try:
         start = _parse_hhmm(body.start_time)
         end = _parse_hhmm(body.end_time)
@@ -8418,10 +8607,11 @@ async def post_trainer_collective_session(
 async def patch_trainer_collective_session_coaches(
     session_id: int,
     body: CollectiveSessionCoachesBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, _membership = await _require_collective_owner(session, principal)
+    trainer_id, _membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     updated = await update_collective_session_coaches(
         session,
         session_id=session_id,
@@ -8438,10 +8628,11 @@ async def patch_trainer_collective_session_coaches(
 @router.delete("/trainer/collective/sessions/{session_id:int}")
 async def delete_trainer_collective_session(
     session_id: int,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, _membership = await _require_collective_owner(session, principal)
+    trainer_id, _membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     result = await cancel_collective_session(
         session,
         session_id=session_id,
@@ -8513,12 +8704,13 @@ async def post_client_collective_session_booking(
 
 @router.get("/trainer/collective/session-bookings")
 async def get_trainer_collective_session_bookings(
+    collective_slug: CollectiveSlugQuery = None,
     status: str = "pending",
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner inbox: pending center session booking requests."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     if (status or "").strip().lower() != "pending":
         raise HTTPException(status_code=400, detail="Only pending inbox supported")
     result = await list_pending_collective_session_bookings_for_owner(
@@ -8534,10 +8726,11 @@ async def get_trainer_collective_session_bookings(
 @router.post("/trainer/collective/session-bookings/{booking_id:int}/confirm")
 async def post_trainer_collective_session_booking_confirm(
     booking_id: int,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, _membership = await _require_collective_owner(session, principal)
+    trainer_id, _membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     result = await confirm_collective_session_booking(
         session,
         booking_id=booking_id,
@@ -8557,10 +8750,11 @@ async def post_trainer_collective_session_booking_confirm(
 @router.post("/trainer/collective/session-bookings/{booking_id:int}/decline")
 async def post_trainer_collective_session_booking_decline(
     booking_id: int,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, _membership = await _require_collective_owner(session, principal)
+    trainer_id, _membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     result = await decline_collective_session_booking(
         session,
         booking_id=booking_id,
@@ -8614,11 +8808,12 @@ class CollectivePassIssueBody(BaseModel):
 
 @router.get("/trainer/collective/pass-products")
 async def get_trainer_collective_pass_products(
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner: center pass product catalog (W3)."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     products = await list_collective_pass_products(
         session,
         collective_id=membership.collective_id,
@@ -8628,11 +8823,12 @@ async def get_trainer_collective_pass_products(
 
 @router.post("/trainer/collective/pass-products/seed-reference")
 async def post_trainer_collective_pass_products_seed(
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner: load ADR-003 reference tariffs if empty."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     result = await seed_reference_collective_pass_products(
         session,
         collective_id=membership.collective_id,
@@ -8646,10 +8842,11 @@ async def post_trainer_collective_pass_products_seed(
 @router.post("/trainer/collective/pass-products")
 async def post_trainer_collective_pass_product(
     body: CollectivePassProductBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     created = await upsert_collective_pass_product(
         session,
         collective_id=membership.collective_id,
@@ -8671,10 +8868,11 @@ async def post_trainer_collective_pass_product(
 async def patch_trainer_collective_pass_product(
     product_id: int,
     body: CollectivePassProductPatchBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     existing_list = await list_collective_pass_products(
         session,
         collective_id=membership.collective_id,
@@ -8704,11 +8902,12 @@ async def patch_trainer_collective_pass_product(
 async def post_trainer_collective_pass_issue(
     product_id: int,
     body: CollectivePassIssueBody,
+    collective_slug: CollectiveSlugQuery = None,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Owner issues pass to client after external payment."""
-    trainer_id, membership = await _require_collective_owner(session, principal)
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
     issued = await issue_collective_pass_to_client(
         session,
         collective_id=membership.collective_id,
@@ -8722,6 +8921,93 @@ async def post_trainer_collective_pass_issue(
             raise HTTPException(status_code=404, detail=err)
         raise HTTPException(status_code=400, detail=err)
     return {"ok": True, "pass": issued}
+
+
+@router.get("/trainer/booking-contexts")
+async def get_trainer_booking_contexts_route(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Context picker data: personal slots vs center sessions (ADR-003 W4–W5)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    return await list_trainer_booking_contexts(session, trainer_id)
+
+
+@router.get("/trainer/collective/staff-booking-sessions")
+async def get_trainer_collective_staff_booking_sessions(
+    collective_slug: str,
+    from_date: date_type | None = None,
+    to_date: date_type | None = None,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Upcoming center windows for staff/coach client booking."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    result = await list_staff_bookable_center_sessions(
+        session,
+        actor_trainer_id=trainer_id,
+        collective_slug=collective_slug,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    if result.get("error") == "not_in_collective":
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=str(result["error"]))
+    return result
+
+
+class TrainerStaffCenterBookingBody(BaseModel):
+    collective_slug: str
+    session_id: int = Field(..., gt=0)
+    client_id: int = Field(..., gt=0)
+    attendance_mode: str
+    center_coach_id: int | None = Field(None, gt=0)
+    guest_count: int = Field(0, ge=0, le=20)
+    client_comment: str | None = Field(None, max_length=2000)
+    target_trainer_id: int | None = Field(None, gt=0, description="Admin delegate: fulfillment coach")
+
+
+@router.post("/trainer/collective/staff-session-booking")
+async def post_trainer_collective_staff_session_booking(
+    body: TrainerStaffCenterBookingBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Trainer/admin books client into center session (confirmed)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    created = await create_staff_center_session_booking(
+        session,
+        actor_trainer_id=trainer_id,
+        collective_slug=body.collective_slug.strip(),
+        session_id=body.session_id,
+        client_id=body.client_id,
+        attendance_mode=body.attendance_mode,
+        center_coach_id=body.center_coach_id,
+        guest_count=body.guest_count,
+        client_comment=body.client_comment,
+        target_trainer_id=body.target_trainer_id,
+    )
+    if created is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    err = created.get("error")
+    if err == "not_delegate_admin":
+        raise HTTPException(status_code=403, detail="Delegate booking requires studio admin")
+    if err == "not_assigned_coach":
+        raise HTTPException(status_code=403, detail="Not assigned to this session")
+    if err == "session_full":
+        raise HTTPException(status_code=409, detail="Session full")
+    if err:
+        raise HTTPException(status_code=400, detail=str(err))
+    return {"success": True, **created}
 
 
 @router.get("/client/collective-passes")

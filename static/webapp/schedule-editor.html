@@ -623,6 +623,10 @@
   <div id="modalBookClient" class="modal-overlay book-flow-overlay" style="display: none;">
     <div class="modal book-flow-modal">
       <h3 id="modalBookTitle" class="book-modal-title">Записать клиента</h3>
+      <div id="bookStepContext" class="book-step" data-step="context" style="display:none;">
+        <p class="book-choice-lead">Куда записываем?</p>
+        <div id="bookContextActions" class="book-choice-actions"></div>
+      </div>
       <div id="bookStepChoice" class="book-step" data-step="choice">
         <p class="book-choice-lead">Кого записать на занятие?</p>
         <div id="bookChoiceActions" class="book-choice-actions">
@@ -647,6 +651,23 @@
             <span class="btn-book-option-arrow" aria-hidden="true">›</span>
           </button>
         </div>
+      </div>
+      <div id="bookStepCenter" class="book-step" data-step="center" style="display:none;">
+        <button type="button" class="book-modal-back" id="bookBackFromCenter">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <p class="book-choice-lead" id="bookCenterLead">Окно центра</p>
+        <div id="bookCenterSessionList" class="client-list book-client-list"></div>
+        <div id="bookCenterModeWrap" style="display:none;margin-top:12px;">
+          <label class="book-field-label" for="bookCenterModeSelect">Формат</label>
+          <select id="bookCenterModeSelect" class="input book-service-select"></select>
+        </div>
+        <div id="bookCenterCoachWrap" style="display:none;margin-top:12px;">
+          <label class="book-field-label" for="bookCenterCoachSelect">Тренер центра</label>
+          <select id="bookCenterCoachSelect" class="input book-service-select"></select>
+        </div>
+        <button type="button" class="btn-block btn-primary" id="btnBookCenterConfirm" style="display:none;margin-top:14px;">Записать в центр</button>
       </div>
       <div id="bookStepExisting" class="book-step" data-step="existing" style="display:none;">
         <div id="bookExistingStepClient">
@@ -693,6 +714,10 @@
           <div class="book-field-stack" id="bookArenaWrap" style="display:none;">
             <label class="book-field-label" for="bookArenaSelect">Площадка</label>
             <select id="bookArenaSelect" class="input book-service-select"></select>
+          </div>
+          <div class="book-field-stack" id="bookDelegateCoachWrap" style="display:none;">
+            <label class="book-field-label" for="bookDelegateCoachSelect">Тренер (запись от имени)</label>
+            <select id="bookDelegateCoachSelect" class="input book-service-select"></select>
           </div>
           <button type="button" class="btn-block btn-primary" id="btnBookExistingServiceNext">Далее — подтверждение</button>
         </div>

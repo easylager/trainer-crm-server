@@ -66,7 +66,13 @@ SCHEDULE_MODE_MEMBER_AUTONOMOUS = "member_autonomous"
 SCHEDULE_MODE_STUDIO_CENTRAL = "studio_central"
 
 MEMBER_ROLE_OWNER = "owner"
+MEMBER_ROLE_ADMIN = "admin"
 MEMBER_ROLE_MEMBER = "member"
+
+STUDIO_ACCESS_MODE_FULL = "full_trainer"
+STUDIO_ACCESS_MODE_ADMIN_ONLY = "studio_admin_only"
+
+COLLECTIVE_STUDIO_ADMIN_ROLES = frozenset({MEMBER_ROLE_OWNER, MEMBER_ROLE_ADMIN})
 
 MEMBER_STATUS_INVITED = "invited"
 MEMBER_STATUS_ACTIVE = "active"
@@ -87,8 +93,9 @@ class CollectiveMembershipContext:
     display_name: str
     tagline: str | None
     logo_key: str | None
-    role: Literal["owner", "member"]
+    role: Literal["owner", "admin", "member"]
     seat_limit: int
+    schedule_mode: str = SCHEDULE_MODE_MEMBER_AUTONOMOUS
 
 
 @dataclass(frozen=True)
@@ -107,6 +114,15 @@ class ConsumeCollectiveInviteResult:
     error: str | None = None
 
 
+def is_collective_studio_admin_role(role: str | None) -> bool:
+    """Owner or studio admin may manage center grid and delegate bookings (ADR-003 §7)."""
+    return (role or "").strip() in COLLECTIVE_STUDIO_ADMIN_ROLES
+
+
+def is_collective_owner_role(role: str | None) -> bool:
+    return (role or "").strip() == MEMBER_ROLE_OWNER
+
+
 def normalize_collective_slug(raw: str) -> str | None:
     slug = (raw or "").strip().lower()
     if not slug or len(slug) > 64:
@@ -116,94 +132,96 @@ def normalize_collective_slug(raw: str) -> str | None:
     return slug
 
 
+async def get_trainer_studio_access_mode(session: AsyncSession, trainer_id: int) -> str:
+    """full_trainer (default) or studio_admin_only — ADR-003 W5."""
+    r = await session.execute(
+        text("SELECT studio_access_mode FROM trainers WHERE id = :tid"),
+        {"tid": int(trainer_id)},
+    )
+    row = r.fetchone()
+    if row is None:
+        return STUDIO_ACCESS_MODE_FULL
+    mode = (str(row[0]) if row[0] else STUDIO_ACCESS_MODE_FULL).strip()
+    return mode if mode in (STUDIO_ACCESS_MODE_FULL, STUDIO_ACCESS_MODE_ADMIN_ONLY) else STUDIO_ACCESS_MODE_FULL
+
+
 async def get_collective_entitlements_for_member(
     session: AsyncSession,
     trainer_id: int,
 ) -> TrainerEntitlements | None:
     """
-    Collective subscription grant for an active member.
+    Union of collective subscription grants across all active memberships (ADR-003 §5).
 
-    Returns None when trainer has no membership or collective has no active subscription row
-    (solo effective entitlements unchanged).
+    Returns None when trainer has no membership or no collective has an active subscription row.
     """
-    membership = await get_active_collective_membership(session, trainer_id)
-    if membership is None:
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    if not memberships:
         return None
 
     now = datetime.now(timezone.utc)
-    result = await session.execute(
-        text(
-            """
-            SELECT tier, modules
-            FROM collective_subscriptions
-            WHERE collective_id = :cid
-              AND started_at <= :now
-              AND expires_at > :now
-              AND status IN (:s1, :s2)
-              AND tier IS NOT NULL
-            """
-        ),
-        {
-            "cid": membership.collective_id,
-            "now": now,
-            "s1": SUBSCRIPTION_STATUS_TRIAL,
-            "s2": SUBSCRIPTION_STATUS_ACTIVE,
-        },
-    )
-    rows = result.fetchall()
-    if not rows:
-        return None
-
     union = default_modules_dict()
     any_raw_tier: str | None = None
-    for row in rows:
-        raw_tier = row[0]
-        mods = normalize_modules_dict(row[1])
-        if raw_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
-            mods = infer_modules_from_legacy_tier(raw_tier)
-        for key in union:
-            if mods.get(key):
-                union[key] = True
-        any_raw_tier = any_raw_tier or raw_tier
+    found_any = False
+
+    for membership in memberships:
+        result = await session.execute(
+            text(
+                """
+                SELECT tier, modules
+                FROM collective_subscriptions
+                WHERE collective_id = :cid
+                  AND started_at <= :now
+                  AND expires_at > :now
+                  AND status IN (:s1, :s2)
+                  AND tier IS NOT NULL
+                """
+            ),
+            {
+                "cid": membership.collective_id,
+                "now": now,
+                "s1": SUBSCRIPTION_STATUS_TRIAL,
+                "s2": SUBSCRIPTION_STATUS_ACTIVE,
+            },
+        )
+        for row in result.fetchall():
+            found_any = True
+            raw_tier = row[0]
+            mods = normalize_modules_dict(row[1])
+            if raw_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
+                mods = infer_modules_from_legacy_tier(raw_tier)
+            for key in union:
+                if mods.get(key):
+                    union[key] = True
+            any_raw_tier = any_raw_tier or raw_tier
+
+    if not found_any:
+        return None
     return TrainerEntitlements(has_base_crm=True, modules=union, raw_tier=any_raw_tier)
 
 
-async def get_active_collective_membership(
-    session: AsyncSession,
-    trainer_id: int,
-) -> CollectiveMembershipContext | None:
-    """Active collective row for trainer, if any."""
-    result = await session.execute(
-        text(
-            """
-            SELECT
-                c.id,
-                c.slug,
-                c.display_name,
-                c.tagline,
-                c.logo_key,
-                cm.role,
-                c.seat_limit
-            FROM collective_members cm
-            INNER JOIN collectives c ON c.id = cm.collective_id
-            WHERE cm.trainer_id = :tid
-              AND cm.status = :active
-              AND c.status = :collective_active
-            LIMIT 1
-            """
-        ),
-        {
-            "tid": trainer_id,
-            "active": MEMBER_STATUS_ACTIVE,
-            "collective_active": COLLECTIVE_STATUS_ACTIVE,
-        },
-    )
-    row = result.fetchone()
-    if row is None:
-        return None
+_MEMBERSHIP_SELECT_SQL = """
+    SELECT
+        c.id,
+        c.slug,
+        c.display_name,
+        c.tagline,
+        c.logo_key,
+        cm.role,
+        c.seat_limit,
+        c.schedule_mode
+    FROM collective_members cm
+    INNER JOIN collectives c ON c.id = cm.collective_id
+    WHERE cm.trainer_id = :tid
+      AND cm.status = :active
+      AND c.status = :collective_active
+"""
+
+
+def _membership_from_row(row: Any) -> CollectiveMembershipContext:
     role = str(row[5])
-    if role not in (MEMBER_ROLE_OWNER, MEMBER_ROLE_MEMBER):
+    if role not in (MEMBER_ROLE_OWNER, MEMBER_ROLE_ADMIN, MEMBER_ROLE_MEMBER):
         role = MEMBER_ROLE_MEMBER
+    schedule_mode = str(row[7] or SCHEDULE_MODE_MEMBER_AUTONOMOUS)
     return CollectiveMembershipContext(
         collective_id=int(row[0]),
         slug=str(row[1]),
@@ -212,7 +230,67 @@ async def get_active_collective_membership(
         logo_key=(str(row[4]).strip() if row[4] else None),
         role=role,  # type: ignore[arg-type]
         seat_limit=int(row[6]),
+        schedule_mode=schedule_mode,
     )
+
+
+async def list_active_collective_memberships(
+    session: AsyncSession,
+    trainer_id: int,
+) -> list[CollectiveMembershipContext]:
+    """All active studio memberships for trainer (ADR-003 W4 multi-collective)."""
+    result = await session.execute(
+        text(
+            _MEMBERSHIP_SELECT_SQL
+            + """
+            ORDER BY
+                CASE WHEN cm.role = :owner THEN 0 WHEN cm.role = :admin THEN 1 ELSE 2 END,
+                cm.joined_at ASC NULLS LAST,
+                c.id ASC
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "active": MEMBER_STATUS_ACTIVE,
+            "collective_active": COLLECTIVE_STATUS_ACTIVE,
+            "owner": MEMBER_ROLE_OWNER,
+            "admin": MEMBER_ROLE_ADMIN,
+        },
+    )
+    return [_membership_from_row(row) for row in result.fetchall()]
+
+
+async def resolve_collective_membership(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    collective_slug: str | None = None,
+) -> CollectiveMembershipContext | None:
+    """Pick membership by slug or default primary (owner-first, oldest join)."""
+    norm_slug = normalize_collective_slug(collective_slug) if collective_slug else None
+    if norm_slug:
+        result = await session.execute(
+            text(_MEMBERSHIP_SELECT_SQL + " AND c.slug = :slug LIMIT 1"),
+            {
+                "tid": trainer_id,
+                "active": MEMBER_STATUS_ACTIVE,
+                "collective_active": COLLECTIVE_STATUS_ACTIVE,
+                "slug": norm_slug,
+            },
+        )
+        row = result.fetchone()
+        return _membership_from_row(row) if row else None
+
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    return memberships[0] if memberships else None
+
+
+async def get_active_collective_membership(
+    session: AsyncSession,
+    trainer_id: int,
+) -> CollectiveMembershipContext | None:
+    """Primary active collective row for trainer, if any (backward-compatible)."""
+    return await resolve_collective_membership(session, trainer_id)
 
 
 def _collective_client_start_payload(slug: str) -> str:
@@ -251,11 +329,27 @@ def build_trainer_collective_bootstrap_payload(
     membership: CollectiveMembershipContext | None,
     *,
     subscription_covers: list[str] | None = None,
+    memberships: list[CollectiveMembershipContext] | None = None,
 ) -> dict[str, Any] | None:
     """Hub bootstrap slice; null for solo trainers."""
+    all_memberships = list(memberships or [])
+    if membership is None and all_memberships:
+        membership = all_memberships[0]
     if membership is None:
         return None
+    if not all_memberships:
+        all_memberships = [membership]
     client_link = build_collective_client_deep_link(membership.slug)
+    collectives = [
+        {
+            "collective_id": m.collective_id,
+            "slug": m.slug,
+            "display_name": m.display_name,
+            "role": m.role,
+            "schedule_mode": m.schedule_mode,
+        }
+        for m in all_memberships
+    ]
     return {
         "collective_id": membership.collective_id,
         "slug": membership.slug,
@@ -264,8 +358,12 @@ def build_trainer_collective_bootstrap_payload(
         "logo_key": membership.logo_key,
         "role": membership.role,
         "seat_limit": membership.seat_limit,
+        "schedule_mode": membership.schedule_mode,
         "client_link": client_link,
         "subscription_covers": list(subscription_covers or []),
+        "collectives": collectives,
+        "has_multiple_memberships": len(all_memberships) > 1,
+        "studio_access_mode": STUDIO_ACCESS_MODE_FULL,
     }
 
 
@@ -394,10 +492,6 @@ async def consume_collective_claim_token(
     if not tok:
         return ConsumeCollectiveClaimResult(error="invalid_token")
 
-    existing_member = await get_active_collective_membership(session, trainer_id)
-    if existing_member is not None:
-        return ConsumeCollectiveClaimResult(error="already_in_collective")
-
     result = await session.execute(
         text(
             """
@@ -423,6 +517,18 @@ async def consume_collective_claim_token(
     status = str(row[3])
     if status != COLLECTIVE_STATUS_DRAFT:
         return ConsumeCollectiveClaimResult(error="collective_not_draft")
+
+    dup_member = await session.execute(
+        text(
+            """
+            SELECT 1 FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid AND status = :active
+            """
+        ),
+        {"cid": collective_id, "tid": trainer_id, "active": MEMBER_STATUS_ACTIVE},
+    )
+    if dup_member.fetchone():
+        return ConsumeCollectiveClaimResult(error="already_in_collective")
 
     owner_check = await session.execute(
         text("SELECT owner_trainer_id FROM collectives WHERE id = :id FOR UPDATE"),
@@ -794,6 +900,94 @@ async def _assert_collective_owner(
     return None
 
 
+async def _assert_collective_studio_admin(
+    session: AsyncSession,
+    collective_id: int,
+    trainer_id: int,
+) -> str | None:
+    """Owner (collectives.owner_trainer_id or member role) or studio admin member."""
+    result = await session.execute(
+        text(
+            """
+            SELECT c.status, c.owner_trainer_id
+            FROM collectives c
+            WHERE c.id = :cid
+            """
+        ),
+        {"cid": collective_id},
+    )
+    row = result.fetchone()
+    if row is None:
+        return "collective_missing"
+    if str(row[0]) != COLLECTIVE_STATUS_ACTIVE:
+        return "collective_not_active"
+    if row[1] is not None and int(row[1]) == int(trainer_id):
+        return None
+    mem = await session.execute(
+        text(
+            """
+            SELECT role FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid AND status = :active
+            """
+        ),
+        {
+            "cid": collective_id,
+            "tid": int(trainer_id),
+            "active": MEMBER_STATUS_ACTIVE,
+        },
+    )
+    mem_row = mem.fetchone()
+    if mem_row is None:
+        return "not_studio_admin"
+    if is_collective_studio_admin_role(str(mem_row[0])):
+        return None
+    return "not_studio_admin"
+
+
+async def promote_collective_member_to_admin(
+    session: AsyncSession,
+    collective_id: int,
+    owner_trainer_id: int,
+    target_trainer_id: int,
+) -> dict[str, Any]:
+    """Owner promotes an active member to studio admin (W5)."""
+    owner_err = await _assert_collective_owner(session, collective_id, owner_trainer_id)
+    if owner_err:
+        return {"error": owner_err}
+    if int(target_trainer_id) == int(owner_trainer_id):
+        return {"error": "cannot_promote_owner"}
+    target_row = await session.execute(
+        text(
+            """
+            SELECT role, status FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid
+            FOR UPDATE
+            """
+        ),
+        {"cid": collective_id, "tid": int(target_trainer_id)},
+    )
+    row = target_row.fetchone()
+    if row is None:
+        return {"error": "member_not_found"}
+    if str(row[1]) != MEMBER_STATUS_ACTIVE:
+        return {"error": "target_not_active_member"}
+    if str(row[0]) == MEMBER_ROLE_OWNER:
+        return {"error": "already_owner"}
+    if str(row[0]) == MEMBER_ROLE_ADMIN:
+        return {"error": "already_admin"}
+    await session.execute(
+        text(
+            """
+            UPDATE collective_members SET role = :admin
+            WHERE collective_id = :cid AND trainer_id = :tid
+            """
+        ),
+        {"admin": MEMBER_ROLE_ADMIN, "cid": collective_id, "tid": int(target_trainer_id)},
+    )
+    await session.commit()
+    return {"promoted_trainer_id": int(target_trainer_id), "role": MEMBER_ROLE_ADMIN}
+
+
 async def issue_collective_invite_token(
     session: AsyncSession,
     collective_id: int,
@@ -1065,10 +1259,6 @@ async def consume_collective_invite_token(
     if not tok:
         return ConsumeCollectiveInviteResult(error="invalid_token")
 
-    existing_member = await get_active_collective_membership(session, trainer_id)
-    if existing_member is not None:
-        return ConsumeCollectiveInviteResult(error="already_in_collective")
-
     result = await session.execute(
         text(
             """
@@ -1095,6 +1285,18 @@ async def consume_collective_invite_token(
     seat_limit = int(row[4])
     if status != COLLECTIVE_STATUS_ACTIVE:
         return ConsumeCollectiveInviteResult(error="collective_not_active")
+
+    dup_member = await session.execute(
+        text(
+            """
+            SELECT 1 FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid AND status = :active
+            """
+        ),
+        {"cid": collective_id, "tid": trainer_id, "active": MEMBER_STATUS_ACTIVE},
+    )
+    if dup_member.fetchone():
+        return ConsumeCollectiveInviteResult(error="already_member")
 
     active_count = await count_active_collective_members(session, collective_id)
     if active_count >= seat_limit:
@@ -2011,11 +2213,25 @@ async def upload_collective_asset_from_bytes(
 async def get_trainer_collective_studio_payload(
     session: AsyncSession,
     trainer_id: int,
+    *,
+    collective_slug: str | None = None,
 ) -> dict[str, Any] | None:
     """Trainer mini-app «Студия» screen data; null for solo trainers."""
-    membership = await get_active_collective_membership(session, trainer_id)
+    membership = await resolve_collective_membership(session, trainer_id, collective_slug=collective_slug)
     if membership is None:
         return None
+
+    all_memberships = await list_active_collective_memberships(session, trainer_id)
+    memberships_summary = [
+        {
+            "collective_id": m.collective_id,
+            "slug": m.slug,
+            "display_name": m.display_name,
+            "role": m.role,
+            "schedule_mode": m.schedule_mode,
+        }
+        for m in all_memberships
+    ]
 
     members = await list_collective_members_for_studio(session, membership.collective_id)
     active_count = await count_active_collective_members(session, membership.collective_id)
@@ -2050,13 +2266,16 @@ async def get_trainer_collective_studio_payload(
         )
 
     row = await get_collective_by_slug(session, membership.slug, active_only=False)
-    kit = collective_brand_kit_enrichment(row or {}, include_owner_options=membership.role == MEMBER_ROLE_OWNER)
+    is_studio_admin = is_collective_studio_admin_role(membership.role)
+    is_owner = is_collective_owner_role(membership.role)
+    kit = collective_brand_kit_enrichment(row or {}, include_owner_options=is_studio_admin)
     location = await collective_location_payload(session, row or {"slug": membership.slug, "brand_tokens": None, "primary_arena_id": None})
     schedule_mode = (
         str(row.get("schedule_mode") or SCHEDULE_MODE_MEMBER_AUTONOMOUS)
         if row
         else SCHEDULE_MODE_MEMBER_AUTONOMOUS
     )
+    studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id)
 
     return {
         "collective_id": membership.collective_id,
@@ -2067,20 +2286,26 @@ async def get_trainer_collective_studio_payload(
         "role": membership.role,
         "seat_limit": membership.seat_limit,
         "schedule_mode": schedule_mode,
-        "can_manage_center_schedule": membership.role == MEMBER_ROLE_OWNER
+        "studio_access_mode": studio_access_mode,
+        "can_manage_center_schedule": is_studio_admin
+        and schedule_mode == SCHEDULE_MODE_STUDIO_CENTRAL,
+        "can_delegate_booking": is_studio_admin
         and schedule_mode == SCHEDULE_MODE_STUDIO_CENTRAL,
         "active_count": active_count,
         "client_link": client_link,
         "catalog_webapp_url": location.get("catalog_webapp_url"),
         "subscription_covers": subscription_covers,
         "members": members,
-        "can_invite": membership.role == MEMBER_ROLE_OWNER and seats_available,
+        "can_invite": is_owner and seats_available,
         "seats_available": seats_available,
-        "can_edit_brand": membership.role == MEMBER_ROLE_OWNER,
-        "can_manage_team": membership.role == MEMBER_ROLE_OWNER,
+        "can_edit_brand": is_studio_admin,
+        "can_manage_team": is_owner,
+        "can_promote_admin": is_owner,
         "pending_invite_count": pending_invite_count,
         "subscription_pool": subscription_pool,
         "subscription_checkout": subscription_checkout,
+        "memberships": memberships_summary,
+        "has_multiple_memberships": len(all_memberships) > 1,
         **kit,
         **location,
     }

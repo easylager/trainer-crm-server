@@ -17,6 +17,19 @@ from src.infrastructure.db.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _solo_trainer_no_collective_entitlements(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit mocks only subscription SQL — collective membership lookup must stay empty."""
+
+    async def _no_collective(_session: object, _trainer_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "src.application.collective_use_cases.get_collective_entitlements_for_member",
+        _no_collective,
+    )
+
+
 class _DualResultMock:
     """
     Session.execute().fetchone() / fetchall() helper: both return consistent data so

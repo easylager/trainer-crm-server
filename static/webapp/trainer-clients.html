@@ -114,6 +114,30 @@
     <div id="clientDetail"></div>
   </div>
   <!-- Quick book: same in-page flow as trainer hub (no schedule-editor flash). -->
+  <div id="tcModalQuickBookContext" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQuickBookContextTitle">
+      <h3 id="tcQuickBookContextTitle" class="book-modal-title">Куда записываем?</h3>
+      <div id="tcQuickBookContextActions" class="book-choice-actions"></div>
+      <button type="button" class="btn-block btn-secondary" id="tcQuickBookContextCancel" style="margin-top:14px;">Отмена</button>
+    </div>
+  </div>
+  <div id="tcModalQuickBookCenter" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQuickBookCenterTitle">
+      <h3 id="tcQuickBookCenterTitle" class="book-modal-title">Окно центра</h3>
+      <p id="tcQuickBookCenterLead" class="book-choice-lead"></p>
+      <div id="tcQuickBookCenterSessions" class="client-list book-client-list"></div>
+      <div id="tcQuickBookCenterModeWrap" style="display:none;margin-top:12px;">
+        <label class="book-field-label" for="tcQuickBookCenterMode">Формат</label>
+        <select id="tcQuickBookCenterMode" class="input book-service-select"></select>
+      </div>
+      <div id="tcQuickBookCenterCoachWrap" style="display:none;margin-top:12px;">
+        <label class="book-field-label" for="tcQuickBookCenterCoach">Тренер центра</label>
+        <select id="tcQuickBookCenterCoach" class="input book-service-select"></select>
+      </div>
+      <button type="button" class="btn-block btn-primary" id="tcQuickBookCenterConfirm" style="display:none;margin-top:14px;">Записать в центр</button>
+      <button type="button" class="btn-block btn-secondary" id="tcQuickBookCenterBack" style="margin-top:10px;">Назад</button>
+    </div>
+  </div>
   <div id="tcModalQuickBookDatetime" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
     <div class="modal tc-client-qb-card tc-qb-datetime-sheet" role="dialog" aria-labelledby="tcQuickBookTitle">
       <div class="tc-qb-datetime-hero">

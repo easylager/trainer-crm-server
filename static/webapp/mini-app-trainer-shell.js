@@ -121,6 +121,7 @@
     collectiveMenuVisible: false,
     collectiveMenuChecked: false,
     pendingCollectiveBootstrap: null,
+    collectiveBootstrap: null,
   };
 
   /* ─── Telegram helpers ──────────────────────────────────────────────────── */
@@ -229,12 +230,33 @@
     return String(path || '').replace(/^\.\//, '').split('?')[0].split('#')[0];
   }
 
+  function studioAccessMode() {
+    if (state.onboardingData && state.onboardingData.studio_access_mode) {
+      return state.onboardingData.studio_access_mode;
+    }
+    if (state.collectiveBootstrap && state.collectiveBootstrap.studio_access_mode) {
+      return state.collectiveBootstrap.studio_access_mode;
+    }
+    return 'full_trainer';
+  }
+
   /** Whether a shell route is reachable during «Первые шаги». */
   function evaluateOnboardingPath(path) {
     var data = state.onboardingData;
-    if (!data || onboardingAllComplete(data)) return { allow: true };
-
     var key = pathRouteKey(path);
+
+    if (studioAccessMode() === 'studio_admin_only') {
+      if (key === 'trainer-home' || key === 'trainer-collective') return { allow: true };
+      return {
+        allow: false,
+        title: 'Режим студии',
+        hint: 'Для вашего аккаунта открыты главная и раздел «Студия».',
+        primary: { path: 'trainer-collective', label: 'Открыть студию' },
+        secondary: null,
+      };
+    }
+
+    if (!data || onboardingAllComplete(data)) return { allow: true };
     if (key === 'trainer-home') return { allow: true };
 
     var ttOk = !!data.tt_minimal_complete;
@@ -739,6 +761,7 @@
   /** Hub bootstrap already resolved membership — skip extra round-trip. */
   function syncCollectiveMenuFromBootstrap(collectivePayload) {
     if (!collectivePayload || !collectivePayload.slug) return;
+    state.collectiveBootstrap = collectivePayload;
     state.collectiveMenuChecked = true;
     if (!document.querySelector('.trainer-more-sheet__list')) {
       state.pendingCollectiveBootstrap = collectivePayload;
