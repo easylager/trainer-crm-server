@@ -666,8 +666,17 @@ async def list_active_trainers_for_client(
     # Time-based filters
     filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
     filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
+    collective_slug: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Active trainers; optional arena filter (logical OR over arena_ids). Returns (items, total)."""
+    trainer_ids: list[int] | None = None
+    if collective_slug:
+        from src.application.collective_use_cases import list_active_trainer_ids_for_collective_slug
+
+        resolved = await list_active_trainer_ids_for_collective_slug(session, collective_slug)
+        if resolved is None:
+            return [], 0
+        trainer_ids = resolved
     return await TrainerRepository(session).list_active_with_details(
         limit=limit,
         offset=offset,
@@ -678,6 +687,7 @@ async def list_active_trainers_for_client(
         order_by=order_by,
         filter_days=filter_days,
         filter_time_slots=filter_time_slots,
+        trainer_ids=trainer_ids,
     )
 
 

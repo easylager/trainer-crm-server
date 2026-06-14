@@ -8,8 +8,8 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, MenuButtonCommands
 
+from src.bot.admin_bot_commands import register_admin_bot_commands
 from src.bot.handlers.admin_handlers import router as admin_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.shared.config import Settings
@@ -23,21 +23,7 @@ logger = logging.getLogger(__name__)
 
 async def setup_menu_and_commands(bot: Bot) -> None:
     """Menu button: show admin commands."""
-    await bot.set_my_commands(
-        [
-            BotCommand(command="pending", description="Тренеры на модерацию"),
-            BotCommand(command="trainer_welcome_link", description="Ссылка новому тренеру"),
-            BotCommand(command="stats", description="Статистика платформы"),
-            BotCommand(command="support", description="Обращения в поддержку"),
-            BotCommand(command="dicts", description="Города и арены"),
-            BotCommand(command="subscription_tiers", description="Тарифы подписки тренеров"),
-            BotCommand(command="subscription_invoices", description="Счета по подписке (ERIP)"),
-            BotCommand(command="grant_subscription", description="Выдать подписку тренеру"),
-            BotCommand(command="version", description="Версия деплоя и health API"),
-            BotCommand(command="problem_reports", description="Аудит отчётов о проблемах (E6)"),
-        ]
-    )
-    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    await register_admin_bot_commands(bot)
     logger.info("Admin bot: menu button and commands set")
 
 
@@ -64,4 +50,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

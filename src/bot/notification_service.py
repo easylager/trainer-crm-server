@@ -33,7 +33,7 @@ from src.bot.notification_loops import (
     run_trainer_booked_notifier_loop,
     run_weekly_sunday_digest_loop,
 )
-from src.shared.config import Settings
+from src.shared.config import get_settings, Settings
 from src.shared.notification_hours import set_notification_quiet_hours_bypass
 from src.shared.sentry_init import init_sentry
 
@@ -54,7 +54,7 @@ def _configure_logging_from_settings(settings: Settings) -> None:
 
 
 async def main() -> None:
-    settings = Settings()
+    settings = get_settings()
     _configure_logging_from_settings(settings)
     set_notification_quiet_hours_bypass(settings.notification_disable_quiet_hours)
     if settings.notification_disable_quiet_hours:
@@ -89,7 +89,7 @@ async def main() -> None:
     ]
     # Trainer-facing loops
     trainer_tasks = [
-        asyncio.create_task(run_trainer_session_wrapup_loop(trainer_bot), name="trainer_session_wrapup"),
+        asyncio.create_task(run_trainer_session_wrapup_loop(trainer_bot, settings), name="trainer_session_wrapup"),
         asyncio.create_task(run_booking_notifier_loop(trainer_bot), name="booking_notifier"),
         asyncio.create_task(run_request_notifier_loop(trainer_bot), name="request_notifier"),
         asyncio.create_task(run_completed_feedback_loop(trainer_bot), name="completed_feedback"),

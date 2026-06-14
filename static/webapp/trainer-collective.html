@@ -1,0 +1,2013 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Студия</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605085"></script>
+  <link rel="stylesheet" href="theme.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260425" />
+  <script>
+    (function () {
+      function isColDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyCollectiveTheme() {
+        var d = document.documentElement;
+        var dark = isColDark();
+        d.classList.toggle('col-is-dark', dark);
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+        d.style.setProperty('--app-chip-bg', dark ? '#3c3c3e' : '#fff5e1', 'important');
+        d.style.setProperty('--app-chip-text', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+      }
+      applyCollectiveTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyCollectiveTheme);
+      }
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && typeof tg.onEvent === 'function') {
+        try {
+          tg.onEvent('themeChanged', applyCollectiveTheme);
+        } catch (e) { /* noop */ }
+      }
+      window.__applyCollectiveTheme = applyCollectiveTheme;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    html { height: 100%; overflow-x: hidden; }
+    body.col-page {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100dvh;
+      padding: 12px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 24px);
+      -webkit-font-smoothing: antialiased;
+      --col-accent: #F7A600;
+    }
+    .col-shell { max-width: 540px; margin: 0 auto; animation: colFadeIn 0.35s ease both; }
+    @keyframes colFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .col-hero {
+      border-radius: 20px;
+      padding: 22px 18px;
+      margin-bottom: 14px;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.12) 0%, transparent 70%);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .col-hero__eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .col-hero__title { font-size: 22px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .col-hero__tagline { font-size: 14px; color: var(--tg-theme-hint-color); margin: 0; line-height: 1.45; }
+    .col-hero__seats {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+    }
+    .col-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .col-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .col-link-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid rgba(247, 166, 0, 0.18);
+    }
+    .col-link-text {
+      flex: 1;
+      font-size: 12px;
+      word-break: break-all;
+      line-height: 1.35;
+    }
+    .col-copy-btn {
+      flex-shrink: 0;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      background: var(--col-accent);
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    .col-copy-btn.copied { background: #34c759; color: #fff; }
+    .col-members { display: flex; flex-direction: column; gap: 8px; }
+    .col-coach-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .col-coach-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: var(--tg-theme-bg-color);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .col-inbox {
+      margin-bottom: 16px;
+      padding: 14px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--col-accent) 10%, var(--tg-theme-secondary-bg-color));
+    }
+    .col-inbox-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+    }
+    .col-inbox-item__actions {
+      display: flex;
+      gap: 8px;
+    }
+    .col-session-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .col-session-coach-edit {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+    }
+    .col-member {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+    }
+    .col-member__main { flex: 1; min-width: 0; }
+    .col-member__actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .col-member-action {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .col-member-action--danger { color: #ff3b30; }
+    .col-member-action--accent { color: var(--col-accent); }
+    .col-revoke-btn {
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid rgba(128,128,128,0.22);
+      background: transparent;
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .col-member__name { font-size: 14px; font-weight: 600; }
+    .col-member__meta { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; }
+    .col-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(247, 166, 0, 0.15);
+      color: #a66b00;
+      white-space: nowrap;
+    }
+    .col-badge--owner { background: rgba(52, 199, 89, 0.15); color: #248a3d; }
+    .col-hint { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0 0 10px; }
+    .col-loading, .col-error { text-align: center; padding: 48px 16px; color: var(--tg-theme-hint-color); }
+    .col-issue-btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--col-accent);
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    .col-issue-btn:disabled { opacity: 0.45; cursor: default; }
+    .col-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .col-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(247, 166, 0, 0.12);
+      color: var(--tg-theme-text-color);
+    }
+    .col-subs-status {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .col-subs-status--active { color: #248a3d; }
+    .col-subs-periods { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .col-subs-period {
+      border: 1px solid rgba(128,128,128,0.22);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--tg-theme-bg-color);
+      cursor: pointer;
+      min-width: 88px;
+      text-align: center;
+    }
+    .col-subs-period--active {
+      border-color: var(--col-accent, var(--tg-theme-button-color));
+      box-shadow: 0 0 0 1px var(--col-accent, var(--tg-theme-button-color));
+    }
+    .col-subs-period__months { font-size: 13px; font-weight: 700; }
+    .col-subs-period__price { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 4px; }
+    .col-subs-checkout-btn {
+      width: 100%;
+      margin-top: 12px;
+      border: none;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      cursor: pointer;
+    }
+    .col-subs-checkout-btn:disabled { opacity: 0.45; cursor: default; }
+    .col-subs-pending {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .col-field { margin-bottom: 12px; }
+    .col-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .col-field input,
+    .col-field textarea,
+    .col-field select {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 12px;
+      font: inherit;
+      font-size: 14px;
+    }
+    .col-field textarea { min-height: 72px; resize: vertical; }
+    .col-field__hint {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .col-location-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+      border-radius: 16px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .col-location-group__title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 2px;
+    }
+    .col-location-group .col-field { margin-bottom: 0; }
+    .col-picker {
+      position: relative;
+    }
+    .col-picker select {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 42px 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.3;
+      cursor: pointer;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .col-picker select:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--col-accent) 50%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--col-accent) 14%, transparent);
+    }
+    .col-picker select:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .col-picker::after {
+      content: '';
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      margin-top: -5px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      pointer-events: none;
+    }
+    .col-field input[type="date"],
+    .col-field input[type="time"],
+    .col-field input[type="number"] {
+      min-height: 48px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .col-save-btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--col-accent);
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    .col-save-btn:disabled { opacity: 0.45; cursor: default; }
+    .col-save-ok {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #248a3d;
+      text-align: center;
+    }
+    .col-media-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .col-media-slot {
+      position: relative; border-radius: 14px; overflow: hidden; min-height: 108px;
+      background: var(--tg-theme-bg-color); border: 1px dashed rgba(128,128,128,0.25);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .col-media-slot--cover { grid-column: 1 / -1; min-height: 132px; }
+    .col-media-slot img { width: 100%; height: 100%; object-fit: cover; display: block; position: absolute; inset: 0; }
+    .col-media-slot__label {
+      position: relative; z-index: 1; font-size: 12px; font-weight: 600; color: var(--tg-theme-hint-color); text-align: center; padding: 8px;
+    }
+    .col-media-slot.has-image .col-media-slot__label {
+      position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.55));
+      color: #fff; font-size: 11px;
+    }
+    .col-media-slot input { display: none; }
+    .col-accent-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .col-accent-chip {
+      border: 1px solid rgba(128,128,128,0.28);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--app-chip-bg, var(--tg-theme-secondary-bg-color));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .col-accent-chip.is-active {
+      background: var(--app-chip-bg, var(--tg-theme-secondary-bg-color));
+      border-color: var(--chip-accent, var(--col-accent));
+      box-shadow: 0 0 0 2px var(--chip-accent, var(--col-accent));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+    }
+    .col-accent-chip__dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+    .col-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .col-gallery-item {
+      aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative; background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128,128,128,0.15);
+    }
+    .col-gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+    .col-gallery-item button {
+      position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: none; border-radius: 50%;
+      background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+    }
+    .col-gallery-add {
+      aspect-ratio: 1; border-radius: 12px; border: 1px dashed rgba(128,128,128,0.28);
+      display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--tg-theme-hint-color);
+      cursor: pointer; background: transparent;
+    }
+    .col-preview-btn {
+      width: 100%; margin-top: 10px; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600;
+      border: 1px solid rgba(128,128,128,0.22); background: transparent; color: var(--tg-theme-text-color); cursor: pointer;
+    }
+    .col-hero__logo {
+      width: 56px; height: 56px; border-radius: 16px; object-fit: cover; margin-bottom: 10px;
+      border: 2px solid rgba(255,255,255,0.6); box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+    .col-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding: 4px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128,128,128,0.12);
+    }
+    .col-tab {
+      flex: 1;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+    }
+    .col-tab.is-active {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .col-tab-panel { display: none; }
+    .col-tab-panel.is-active { display: block; }
+    .col-preview-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: flex-end; justify-content: center;
+      padding: 12px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 12px);
+    }
+    .col-preview-overlay[hidden] { display: none !important; }
+    .col-preview-sheet {
+      width: 100%; max-width: 540px; max-height: 88dvh; overflow: auto;
+      border-radius: 20px 20px 16px 16px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 16px;
+    }
+    .col-preview-sheet__head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;
+    }
+    .col-preview-sheet__title { font-size: 16px; font-weight: 700; margin: 0; }
+    .col-preview-close {
+      border: none; background: var(--tg-theme-secondary-bg-color); border-radius: 10px;
+      width: 36px; height: 36px; font-size: 20px; cursor: pointer; color: var(--tg-theme-text-color);
+    }
+    .col-preview-hero {
+      border-radius: 16px; padding: 16px; margin-bottom: 12px;
+      background: var(--preview-accent-soft, rgba(247,166,0,0.12));
+      border: 1px solid var(--preview-accent-border, rgba(247,166,0,0.22));
+      background-size: cover; background-position: center;
+    }
+    .col-preview-hero--cover {
+      color: #fff;
+      border-color: rgba(255,255,255,0.18);
+    }
+    .col-preview-hero--cover .col-preview-hero__lead,
+    .col-preview-hero--cover .col-preview-powered {
+      color: rgba(255,255,255,0.82);
+    }
+    .col-preview-hero__logo {
+      width: 48px; height: 48px; border-radius: 12px; object-fit: cover; margin-bottom: 8px;
+      border: 2px solid rgba(255,255,255,0.7);
+    }
+    .col-preview-hero__title { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+    .col-preview-hero__lead { font-size: 14px; margin: 0; color: var(--tg-theme-hint-color); line-height: 1.45; }
+    .col-preview-hero__about { font-size: 14px; margin: 10px 0 0; line-height: 1.45; }
+    .col-preview-gallery { display: flex; gap: 8px; overflow-x: auto; margin-top: 12px; }
+    .col-preview-gallery img { width: 80px; height: 80px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+    .col-preview-powered { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 10px; }
+  </style>
+</head>
+<body class="col-page">
+  <div class="trainer-app-topbar trainer-mini-nav">
+    <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+  </div>
+  <div class="col-shell">
+    <div id="colLoading" class="col-loading">Загрузка…</div>
+    <div id="colError" class="col-error" style="display:none;"></div>
+    <div id="colContent" style="display:none;">
+      <header class="col-hero">
+        <img id="colHeroLogo" class="col-hero__logo" alt="" hidden />
+        <p class="col-hero__eyebrow" id="colRoleEyebrow">Студия</p>
+        <h1 class="col-hero__title" id="colTitle">—</h1>
+        <p class="col-hero__tagline" id="colTagline"></p>
+        <p class="col-hero__seats" id="colSeats"></p>
+      </header>
+
+      <div id="colOwnerArea" style="display:none;">
+        <nav class="col-tabs" id="colTabs" aria-label="Разделы студии">
+          <button type="button" class="col-tab is-active" data-col-tab="brand">Бренд</button>
+          <button type="button" class="col-tab" data-col-tab="page">Страница</button>
+          <button type="button" class="col-tab" data-col-tab="schedule" id="colTabScheduleBtn" hidden>Расписание</button>
+          <button type="button" class="col-tab" data-col-tab="passes" id="colTabPassesBtn" hidden>Абонементы</button>
+          <button type="button" class="col-tab" data-col-tab="team">Команда</button>
+        </nav>
+
+        <div class="col-card col-tab-panel is-active" id="colTabBrand" data-col-panel="brand">
+          <div class="col-media-grid">
+            <label class="col-media-slot col-media-slot--cover" id="colCoverSlot">
+              <input type="file" id="colCoverInput" accept="image/*" />
+              <img id="colCoverPreview" alt="" hidden />
+              <span class="col-media-slot__label">Обложка</span>
+            </label>
+            <label class="col-media-slot" id="colLogoSlot">
+              <input type="file" id="colLogoInput" accept="image/*" />
+              <img id="colLogoPreview" alt="" hidden />
+              <span class="col-media-slot__label">Логотип</span>
+            </label>
+          </div>
+          <div class="col-field" style="margin-top:12px;">
+            <label>Акцент страницы</label>
+            <div class="col-accent-chips" id="colAccentChips"></div>
+          </div>
+          <div class="col-field">
+            <label for="colBrandName">Название</label>
+            <input type="text" id="colBrandName" maxlength="128" autocomplete="organization" />
+          </div>
+          <div class="col-field">
+            <label for="colBrandTagline">Короткий подзаголовок</label>
+            <textarea id="colBrandTagline" maxlength="2000" placeholder="Йога и пилатес в центре Минска"></textarea>
+          </div>
+          <button type="button" class="col-save-btn" id="colBrandTabSave">Сохранить бренд</button>
+          <button type="button" class="col-preview-btn" id="colPreviewBrand">Посмотреть как клиент</button>
+          <p class="col-save-ok" id="colBrandSaved" style="display:none;">Сохранено</p>
+        </div>
+
+        <div class="col-card col-tab-panel" id="colTabPage" data-col-panel="page">
+          <div class="col-location-group">
+            <p class="col-location-group__title" id="colLocationGroupTitle">Как показываем студию</p>
+            <p class="col-hint" id="colLocationGroupHint" style="margin-top:0;"></p>
+            <div class="col-field">
+              <label for="colContactAddress">Адрес</label>
+              <input type="text" id="colContactAddress" maxlength="500" placeholder="Улица, дом — как добраться" />
+              <p class="col-field__hint" id="colAddressHint"></p>
+            </div>
+            <div class="col-field" id="colCatalogCityField">
+              <label for="colDefaultCity">Город в каталоге</label>
+              <div class="col-picker">
+                <select id="colDefaultCity"><option value="">Не задан</option></select>
+              </div>
+              <p class="col-field__hint">Только фильтр списка тренеров — не привязывает студию к одной арене.</p>
+            </div>
+          </div>
+          <div class="col-field">
+            <label for="colBrandAbout">О студии</label>
+            <textarea id="colBrandAbout" maxlength="4000" placeholder="Расскажите атмосферу, формат занятий, для кого студия…"></textarea>
+          </div>
+          <div class="col-field">
+            <label>Галерея</label>
+            <p class="col-hint" style="margin-top:0;">До 8 фото</p>
+            <div class="col-gallery-grid" id="colGalleryGrid"></div>
+            <input type="file" id="colGalleryInput" accept="image/*" hidden />
+          </div>
+          <p class="col-location-group__title" style="margin-top:4px;">Контакты</p>
+          <div class="col-field"><label for="colContactPhone">Телефон</label><input type="tel" id="colContactPhone" maxlength="500" /></div>
+          <div class="col-field"><label for="colContactTelegram">Telegram</label><input type="text" id="colContactTelegram" maxlength="500" placeholder="@channel или ссылка" /></div>
+          <div class="col-field"><label for="colContactInstagram">Instagram</label><input type="text" id="colContactInstagram" maxlength="500" placeholder="@studio" /></div>
+          <button type="button" class="col-save-btn" id="colPageTabSave">Сохранить страницу</button>
+          <button type="button" class="col-preview-btn" id="colPreviewPage">Посмотреть как клиент</button>
+          <p class="col-save-ok" id="colPageSaved" style="display:none;">Сохранено</p>
+        </div>
+
+        <div class="col-card col-tab-panel" id="colTabSchedule" data-col-panel="schedule" hidden>
+          <div id="colCenterInbox" class="col-inbox" hidden></div>
+          <div class="col-card-title" style="margin-top:0;">Сетка центра</div>
+          <p class="col-hint">Окна для записи клиентов (PAYG). Назначайте тренеров на смену — клиент выбирает из списка.</p>
+          <div class="col-field">
+            <label for="colSessionDate">Дата</label>
+            <input type="date" id="colSessionDate" />
+          </div>
+          <div class="col-field" style="display:flex; gap:10px;">
+            <div style="flex:1;">
+              <label for="colSessionStart">Начало</label>
+              <input type="time" id="colSessionStart" value="10:00" />
+            </div>
+            <div style="flex:1;">
+              <label for="colSessionEnd">Конец</label>
+              <input type="time" id="colSessionEnd" value="11:00" />
+            </div>
+          </div>
+          <div class="col-field">
+            <label for="colSessionCapacity">Мест</label>
+            <input type="number" id="colSessionCapacity" min="1" max="500" value="1" />
+          </div>
+          <div class="col-field" id="colSessionCoachesField">
+            <label>Тренеры на смене</label>
+            <div id="colSessionCoachPicker" class="col-coach-picker"></div>
+          </div>
+          <button type="button" class="col-save-btn" id="colSessionCreate">Добавить окно</button>
+          <div id="colSessionsList" style="margin-top:16px;"></div>
+        </div>
+
+        <div class="col-card col-tab-panel" id="colTabPasses" data-col-panel="passes" hidden>
+          <div class="col-card-title" style="margin-top:0;">Абонементы центра</div>
+          <p class="col-hint">Тарифы для списания при записи. Выдача клиенту — после оплаты на месте или переводом.</p>
+          <button type="button" class="col-save-btn" id="colPassSeedBtn">Загрузить тарифы центра</button>
+          <div id="colPassProductsList" style="margin-top:16px;"></div>
+          <div class="col-field" style="margin-top:20px;">
+            <label for="colPassIssueClientId">Выдать абонемент — ID клиента</label>
+            <input type="number" id="colPassIssueClientId" min="1" placeholder="Из карточки клиента" />
+          </div>
+          <div class="col-field">
+            <label for="colPassIssueProduct">Продукт</label>
+            <select id="colPassIssueProduct"><option value="">—</option></select>
+          </div>
+          <button type="button" class="col-issue-btn" id="colPassIssueBtn">Выдать абонемент</button>
+        </div>
+
+        <div class="col-card col-tab-panel" id="colTabTeam" data-col-panel="team">
+          <div class="col-card-title" style="margin-top:0;">Ссылка для клиентов</div>
+          <p class="col-hint">Deep link в клиентский бот — студия, бренд и запись.</p>
+          <div class="col-link-box">
+            <div class="col-link-text" id="colClientLink">—</div>
+            <button type="button" class="col-copy-btn" id="colCopyClient">Копировать</button>
+          </div>
+
+          <div id="colInviteCard" style="display:none; margin-top:14px;">
+            <div class="col-card-title">Пригласить тренера</div>
+            <p class="col-hint" id="colInviteHint">Одноразовая ссылка в trainer-бот — коллега станет member.</p>
+            <button type="button" class="col-issue-btn" id="colIssueInvite">Создать ссылку-приглашение</button>
+            <div class="col-link-box" id="colInviteBox" style="display:none; margin-top:12px;">
+              <div class="col-link-text" id="colInviteLink"></div>
+              <button type="button" class="col-copy-btn" id="colCopyInvite">Копировать</button>
+            </div>
+            <button type="button" class="col-revoke-btn" id="colRevokeInvites" style="display:none;">Отозвать неиспользованные приглашения</button>
+          </div>
+
+          <div id="colSubsCard" style="display:none; margin-top:14px;">
+            <div class="col-card-title">Подписка студии</div>
+            <div id="colSubsBody"></div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <div class="col-card-title">Команда</div>
+            <div class="col-members" id="colMembers"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="colMemberArea" style="display:none;">
+        <div class="col-card">
+          <div class="col-card-title">Ссылка для клиентов</div>
+          <div class="col-link-box">
+            <div class="col-link-text" id="colMemberClientLink">—</div>
+            <button type="button" class="col-copy-btn" id="colMemberCopyClient">Копировать</button>
+          </div>
+        </div>
+        <div class="col-card">
+          <div class="col-card-title">Команда</div>
+          <div class="col-members" id="colMemberMembers"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="colPreviewOverlay" class="col-preview-overlay" hidden>
+    <div class="col-preview-sheet" role="dialog" aria-modal="true" aria-labelledby="colPreviewTitle">
+      <div class="col-preview-sheet__head">
+        <h2 class="col-preview-sheet__title" id="colPreviewTitle">Как видят клиенты</h2>
+        <button type="button" class="col-preview-close" id="colPreviewClose" aria-label="Закрыть">×</button>
+      </div>
+      <div id="colPreviewContent"></div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+      }
+      var initData = tg && tg.initData ? tg.initData : '';
+
+      function headersJson() {
+        var h = { Accept: 'application/json' };
+        if (initData) h['X-Telegram-Init-Data'] = initData;
+        return h;
+      }
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function memberLabel(m) {
+        if (m.display_name) return m.display_name;
+        if (m.telegram_username) return '@' + m.telegram_username;
+        return 'Тренер #' + m.trainer_id;
+      }
+
+      function copyText(text, btn, okLabel) {
+        if (!text) return;
+        function done() {
+          btn.textContent = okLabel || 'Скопировано!';
+          btn.classList.add('copied');
+          setTimeout(function() {
+            btn.textContent = 'Копировать';
+            btn.classList.remove('copied');
+          }, 2000);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function() { fallbackCopy(text, btn, done); });
+        } else {
+          fallbackCopy(text, btn, done);
+        }
+      }
+
+      function fallbackCopy(text, btn, done) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          done();
+        } catch (e) {}
+        document.body.removeChild(ta);
+      }
+
+      var loadingEl = document.getElementById('colLoading');
+      var errorEl = document.getElementById('colError');
+      var contentEl = document.getElementById('colContent');
+      var inviteCardEl = document.getElementById('colInviteCard');
+      var inviteBoxEl = document.getElementById('colInviteBox');
+      var inviteLinkEl = document.getElementById('colInviteLink');
+      var issueBtnEl = document.getElementById('colIssueInvite');
+      var ownerAreaEl = document.getElementById('colOwnerArea');
+      var memberAreaEl = document.getElementById('colMemberArea');
+      var brandNameEl = document.getElementById('colBrandName');
+      var brandTaglineEl = document.getElementById('colBrandTagline');
+      var brandTabSaveEl = document.getElementById('colBrandTabSave');
+      var pageTabSaveEl = document.getElementById('colPageTabSave');
+      var brandSavedEl = document.getElementById('colBrandSaved');
+      var pageSavedEl = document.getElementById('colPageSaved');
+      var brandAboutEl = document.getElementById('colBrandAbout');
+      var defaultCityEl = document.getElementById('colDefaultCity');
+      var accentChipsEl = document.getElementById('colAccentChips');
+      var galleryGridEl = document.getElementById('colGalleryGrid');
+      var galleryInputEl = document.getElementById('colGalleryInput');
+      var logoFileEl = document.getElementById('colLogoInput');
+      var coverFileEl = document.getElementById('colCoverInput');
+      var clientLinkEl = document.getElementById('colClientLink');
+      var previewOverlayEl = document.getElementById('colPreviewOverlay');
+      var previewContentEl = document.getElementById('colPreviewContent');
+      var selectedAccentPreset = 'amber';
+      var studioData = null;
+      var selectedSubsPeriod = 1;
+      var catalogCities = [];
+      var catalogCitiesPromise = null;
+      var ACCENT_PRESET_COLORS = {
+        amber: '#F7A600',
+        slate: '#5C6370',
+        forest: '#2F6B4F',
+        rose: '#B85C72',
+        ocean: '#2B6CB0',
+      };
+
+      function apiUrl(path) {
+        var url = path;
+        if (initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+        return url;
+      }
+
+      function applyStudioAccent(data) {
+        var accent = (data && data.accent && data.accent.accent) || '#F7A600';
+        document.documentElement.style.setProperty('--col-accent', accent);
+      }
+
+      function renderMediaSlot(slotEl, imgEl, url) {
+        if (!slotEl || !imgEl) return;
+        if (url) {
+          imgEl.src = url;
+          imgEl.hidden = false;
+          slotEl.classList.add('has-image');
+        } else {
+          imgEl.removeAttribute('src');
+          imgEl.hidden = true;
+          slotEl.classList.remove('has-image');
+        }
+      }
+
+      function setColTab(tabId) {
+        document.querySelectorAll('.col-tab').forEach(function(btn) {
+          btn.classList.toggle('is-active', btn.getAttribute('data-col-tab') === tabId);
+        });
+        document.querySelectorAll('.col-tab-panel').forEach(function(panel) {
+          panel.classList.toggle('is-active', panel.getAttribute('data-col-panel') === tabId);
+        });
+      }
+
+      document.querySelectorAll('.col-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          setColTab(btn.getAttribute('data-col-tab') || 'brand');
+        });
+      });
+
+      function formatLocationLine(data) {
+        if (!data) return '';
+        var contacts = data.contacts || {};
+        var address = (contacts.address || '').trim();
+        if (address) return address;
+        var parts = [];
+        if (data.default_city_name) parts.push(data.default_city_name);
+        return parts.filter(Boolean).join(' · ');
+      }
+
+      function syncPageLocationMode(data) {
+        var isCentral = data && data.schedule_mode === 'studio_central';
+        var titleEl = document.getElementById('colLocationGroupTitle');
+        var hintEl = document.getElementById('colLocationGroupHint');
+        var addressHint = document.getElementById('colAddressHint');
+        var cityField = document.getElementById('colCatalogCityField');
+        if (titleEl) {
+          titleEl.textContent = isCentral ? 'Адрес центра' : 'Как показываем студию';
+        }
+        if (hintEl) {
+          hintEl.textContent = isCentral
+            ? 'Свой частный адрес — не попадает в общий список арен платформы.'
+            : 'Тренеры могут работать на разных площадках. Адрес — для лендинга; город ниже только фильтрует каталог.';
+        }
+        if (addressHint) {
+          addressHint.textContent = isCentral
+            ? 'Обязательно для клиентов — покажем на странице студии и в записи.'
+            : 'Необязательно. Если есть постоянная точка — укажите ориентир для клиентов.';
+        }
+        if (cityField) cityField.hidden = !!isCentral;
+        if (!isCentral) syncLocationCityPicker(data);
+      }
+
+      function syncLocationCityPicker(data) {
+        if (!defaultCityEl) return Promise.resolve();
+        return loadCatalogCities().then(function() {
+          renderCityOptions((data && data.default_city_id) || null);
+          if (!catalogCities.length) {
+            defaultCityEl.innerHTML = '<option value="">Нет городов в каталоге</option>';
+          }
+        });
+      }
+
+      function renderCityOptions(selectedId) {
+        if (!defaultCityEl) return;
+        var html = '<option value="">Не задан</option>';
+        if (!catalogCities.length) {
+          html += '<option value="" disabled>Загрузка городов…</option>';
+        }
+        catalogCities.forEach(function(c) {
+          var sel = selectedId && Number(selectedId) === Number(c.id) ? ' selected' : '';
+          html += '<option value="' + c.id + '"' + sel + '>' + escapeHtml(c.name) + '</option>';
+        });
+        defaultCityEl.innerHTML = html;
+      }
+
+      function loadCatalogCities() {
+        if (catalogCitiesPromise) return catalogCitiesPromise;
+        catalogCitiesPromise = fetch('/api/public/cities', { cache: 'no-store' })
+          .then(function(r) {
+            if (!r.ok) throw new Error('cities_failed');
+            return r.json();
+          })
+          .then(function(d) {
+            catalogCities = (d && d.items) || [];
+            return catalogCities;
+          })
+          .catch(function() {
+            catalogCities = [];
+            return catalogCities;
+          });
+        return catalogCitiesPromise;
+      }
+
+      loadCatalogCities();
+
+      function syncLocationPickers(data) {
+        syncPageLocationMode(data || {});
+      }
+
+      function renderAccentChips(data) {
+        if (!accentChipsEl) return;
+        var presets = (data && data.accent_presets) || [];
+        selectedAccentPreset = (data && data.accent_preset) || 'amber';
+        accentChipsEl.innerHTML = presets.map(function(p) {
+          var active = p.id === selectedAccentPreset ? ' is-active' : '';
+          var color = ACCENT_PRESET_COLORS[p.id] || ACCENT_PRESET_COLORS.amber;
+          return (
+            '<button type="button" class="col-accent-chip' + active + '" data-accent="' + escapeHtml(p.id) + '" style="--chip-accent:' + color + '">' +
+            '<span class="col-accent-chip__dot" style="background:' + color + '"></span>' +
+            escapeHtml(p.label) + '</button>'
+          );
+        }).join('');
+        accentChipsEl.querySelectorAll('.col-accent-chip').forEach(function(btn) {
+          btn.onclick = function() {
+            selectedAccentPreset = btn.getAttribute('data-accent') || 'amber';
+            accentChipsEl.querySelectorAll('.col-accent-chip').forEach(function(b) {
+              b.classList.toggle('is-active', b === btn);
+            });
+          };
+        });
+      }
+
+      function memberStatusLabel(status) {
+        if (status === 'active') return 'в студии';
+        if (status === 'invited') return 'приглашён';
+        return status || '';
+      }
+
+      function confirmStudioAction(message, onOk) {
+        if (tg && typeof tg.showConfirm === 'function') {
+          tg.showConfirm(message, function(confirmed) {
+            if (confirmed) onOk();
+          });
+          return;
+        }
+        if (window.confirm(message)) onOk();
+      }
+
+      function postCollectiveAction(path, onDone) {
+        fetch(apiUrl(path), { method: 'POST', headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'action_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            if (d && d.studio) renderStudio(d.studio);
+            if (onDone) onDone(d);
+          })
+          .catch(showPatchError);
+      }
+
+      function removeCollectiveMember(trainerId) {
+        confirmStudioAction('Снять тренера из студии?', function() {
+          postCollectiveAction('/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/remove');
+        });
+      }
+
+      function transferCollectiveOwnership(trainerId) {
+        var label = 'тренер';
+        (studioData && studioData.members || []).forEach(function(m) {
+          if (String(m.trainer_id) === String(trainerId)) label = memberLabel(m);
+        });
+        confirmStudioAction(
+          'Передать управление студией тренеру «' + label + '»? Вы останетесь member.',
+          function() {
+            fetch(apiUrl('/api/webapp/trainer/collective/transfer-ownership'), {
+              method: 'POST',
+              headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+              body: JSON.stringify({ new_owner_trainer_id: Number(trainerId) }),
+            })
+              .then(function(r) {
+                return r.json().then(function(d) {
+                  if (!r.ok) throw new Error((d && d.detail) || 'transfer_failed');
+                  return d;
+                });
+              })
+              .then(function(d) {
+                if (d && d.studio) renderStudio(d.studio);
+                if (tg && tg.showAlert) tg.showAlert('Студия передана. Теперь вы member.');
+              })
+              .catch(showPatchError);
+          }
+        );
+      }
+
+      function formatByn(cents) {
+        var v = Number(cents || 0) / 100;
+        return (v % 1 === 0 ? String(v) : v.toFixed(2)) + ' BYN';
+      }
+
+      function runCollectiveCheckout(mode, periodMonths, btn) {
+        if (!studioData || studioData.role !== 'owner') return;
+        var payload = { period_months: Number(periodMonths) };
+        var prevText = btn ? btn.textContent : '';
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Подготовка…';
+        }
+        function resetBtn() {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = prevText;
+          }
+        }
+        if (mode === 'sandbox') {
+          fetch(apiUrl('/api/webapp/trainer/collective/subscription/mock-checkout'), {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+            body: JSON.stringify(payload),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'checkout_failed');
+                return d;
+              });
+            })
+            .then(function(d) {
+              if (d && d.studio) renderStudio(d.studio);
+              if (tg && tg.showAlert) tg.showAlert('Подписка студии активирована.');
+              resetBtn();
+            })
+            .catch(function(e) {
+              showPatchError(e);
+              resetBtn();
+            });
+          return;
+        }
+        if (mode === 'bepaid') {
+          fetch(apiUrl('/api/webapp/trainer/collective/subscription/bepaid-checkout'), {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+            body: JSON.stringify(payload),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'checkout_failed');
+                return d;
+              });
+            })
+            .then(function(res) {
+              if (res.payment_url) {
+                window.location.href = res.payment_url;
+                return;
+              }
+              if (res.invoice_id) {
+                return fetch(apiUrl('/api/webapp/trainer/collective/subscription/stub-confirm'), {
+                  method: 'POST',
+                  headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+                  body: JSON.stringify({ invoice_id: res.invoice_id }),
+                }).then(function(r2) {
+                  return r2.json().then(function(d2) {
+                    if (!r2.ok) throw new Error((d2 && d2.detail) || 'confirm_failed');
+                    return d2;
+                  });
+                }).then(function(d2) {
+                  if (d2 && d2.studio) renderStudio(d2.studio);
+                  if (tg && tg.showAlert) tg.showAlert('Подписка студии активирована.');
+                  resetBtn();
+                });
+              }
+              resetBtn();
+            })
+            .catch(function(e) {
+              showPatchError(e);
+              resetBtn();
+            });
+          return;
+        }
+        fetch(apiUrl('/api/webapp/trainer/collective/subscription/invoice-request'), {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+          body: JSON.stringify(payload),
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'invoice_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            if (d && d.studio) renderStudio(d.studio);
+            if (tg && tg.showAlert) {
+              tg.showAlert('Запрос отправлен. Счёт выставим вручную — следите за сообщениями от платформы.');
+            }
+            resetBtn();
+          })
+          .catch(function(e) {
+            showPatchError(e);
+            resetBtn();
+          });
+      }
+
+      function renderSubscriptionPool(data) {
+        var card = document.getElementById('colSubsCard');
+        var body = document.getElementById('colSubsBody');
+        if (!card || !body) return;
+        var pool = data.subscription_pool || {};
+        var covers = data.subscription_covers || [];
+        var checkout = data.subscription_checkout || null;
+        if (!pool.active && !covers.length && !data.collective_id && !checkout) {
+          card.style.display = 'none';
+          return;
+        }
+        card.style.display = 'block';
+        var html = '';
+        if (pool.active) {
+          html += '<p class="col-subs-status col-subs-status--active">Активна до ' + escapeHtml(pool.expires_date || '—') + '</p>';
+          html += '<p class="col-hint" style="margin-top:0;">' + escapeHtml(pool.seats_label || '') + '</p>';
+          if (pool.modules && pool.modules.length) {
+            html += '<div class="col-chips" style="margin-top:8px;">' + pool.modules.map(function(m) {
+              return '<span class="col-chip">' + escapeHtml(m) + '</span>';
+            }).join('') + '</div>';
+          }
+        } else if (covers.length) {
+          html += '<p class="col-hint" style="margin-top:0;">Доступ через студию:</p>';
+          html += '<div class="col-chips">' + covers.map(function(code) {
+            return '<span class="col-chip">' + escapeHtml(code) + '</span>';
+          }).join('') + '</div>';
+          if (pool.seats_label) {
+            html += '<p class="col-hint">' + escapeHtml(pool.seats_label) + '</p>';
+          }
+        } else {
+          html += '<p class="col-hint" style="margin-top:0;">Pool-подписка пока не активна.</p>';
+          if (pool.seats_label) html += '<p class="col-hint">' + escapeHtml(pool.seats_label) + '</p>';
+        }
+
+        if (checkout && data.role === 'owner') {
+          var pricing = checkout.pricing || [];
+          if (pricing.length) {
+            if (!pricing.some(function(p) { return Number(p.period_months) === selectedSubsPeriod; })) {
+              selectedSubsPeriod = Number(pricing[0].period_months) || 1;
+            }
+            html += '<div class="col-subs-periods" id="colSubsPeriods">';
+            html += pricing.map(function(p) {
+              var active = Number(p.period_months) === selectedSubsPeriod ? ' col-subs-period--active' : '';
+              return (
+                '<button type="button" class="col-subs-period' + active + '" data-months="' + p.period_months + '">' +
+                  '<div class="col-subs-period__months">' + p.period_months + ' мес.</div>' +
+                  '<div class="col-subs-period__price">' + escapeHtml(p.amount_label || formatByn(p.amount_cents)) + '</div>' +
+                '</button>'
+              );
+            }).join('');
+            html += '</div>';
+          }
+          if (checkout.pending_invoice) {
+            var pi = checkout.pending_invoice;
+            html += '<div class="col-subs-pending">Счёт #' + escapeHtml(String(pi.invoice_id)) +
+              ' · ' + escapeHtml(formatByn(pi.amount_cents)) +
+              ' · ' + escapeHtml(String(pi.period_months)) + ' мес. — ожидает оплаты.</div>';
+          }
+          var mode = checkout.checkout_mode || 'invoice';
+          var btnLabel = pool.active ? 'Продлить подписку' : 'Оформить подписку';
+          if (mode === 'sandbox') btnLabel = (pool.active ? 'Продлить (демо)' : 'Оформить (демо)');
+          else if (mode === 'invoice') btnLabel = pool.active ? 'Запросить продление' : 'Запросить счёт';
+          html += '<button type="button" class="col-subs-checkout-btn" id="colSubsCheckoutBtn">' + escapeHtml(btnLabel) + '</button>';
+          if (checkout.modules && checkout.modules.length) {
+            html += '<p class="col-field__hint" style="margin-top:8px;">Пакет: ' +
+              escapeHtml(checkout.modules.join(', ')) + '</p>';
+          }
+        }
+
+        body.innerHTML = html;
+
+        if (checkout && data.role === 'owner') {
+          var periodsEl = document.getElementById('colSubsPeriods');
+          if (periodsEl) {
+            periodsEl.querySelectorAll('[data-months]').forEach(function(btn) {
+              btn.onclick = function() {
+                selectedSubsPeriod = Number(btn.getAttribute('data-months')) || 1;
+                renderSubscriptionPool(data);
+              };
+            });
+          }
+          var checkoutBtn = document.getElementById('colSubsCheckoutBtn');
+          if (checkoutBtn) {
+            checkoutBtn.onclick = function() {
+              runCollectiveCheckout(checkout.checkout_mode || 'invoice', selectedSubsPeriod, checkoutBtn);
+            };
+          }
+        }
+      }
+
+      function renderMembersList(el, members, canManage) {
+        if (!el) return;
+        el.innerHTML = (members || []).map(function(m) {
+          var badge = m.role === 'owner' ? 'owner' : 'member';
+          var badgeClass = m.role === 'owner' ? 'col-badge col-badge--owner' : 'col-badge';
+          var actions = '';
+          if (canManage && m.role !== 'owner' && (m.status === 'active' || m.status === 'invited')) {
+            actions = '<div class="col-member__actions">';
+            if (m.status === 'active') {
+              actions += '<button type="button" class="col-member-action col-member-action--accent" data-transfer="' + m.trainer_id + '">Передать</button>';
+            }
+            actions += '<button type="button" class="col-member-action col-member-action--danger" data-remove="' + m.trainer_id + '">Снять</button>';
+            actions += '</div>';
+          }
+          return (
+            '<div class="col-member">' +
+              '<div class="col-member__main">' +
+                '<div class="col-member__name">' + escapeHtml(memberLabel(m)) + '</div>' +
+                '<div class="col-member__meta">' + escapeHtml(memberStatusLabel(m.status)) + '</div>' +
+              '</div>' +
+              actions +
+              '<span class="' + badgeClass + '">' + badge + '</span>' +
+            '</div>'
+          );
+        }).join('');
+        if (canManage) {
+          el.querySelectorAll('[data-remove]').forEach(function(btn) {
+            btn.onclick = function() {
+              removeCollectiveMember(btn.getAttribute('data-remove'));
+            };
+          });
+          el.querySelectorAll('[data-transfer]').forEach(function(btn) {
+            btn.onclick = function() {
+              transferCollectiveOwnership(btn.getAttribute('data-transfer'));
+            };
+          });
+        }
+      }
+
+      function openClientPreview() {
+        if (!studioData || !studioData.slug || !previewOverlayEl || !previewContentEl) return;
+        previewContentEl.innerHTML = '<p class="col-hint">Загрузка превью…</p>';
+        previewOverlayEl.hidden = false;
+        fetch('/api/public/collectives/' + encodeURIComponent(studioData.slug), { cache: 'no-store' })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'preview_failed');
+              return d;
+            });
+          })
+          .then(function(brand) {
+            var accent = brand.accent || {};
+            var heroStyle = '';
+            if (accent.accent_soft) heroStyle += '--preview-accent-soft:' + accent.accent_soft + ';';
+            if (accent.accent_border) heroStyle += '--preview-accent-border:' + accent.accent_border + ';';
+            if (brand.cover_url) {
+              heroStyle += 'background-image:linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.55)),url(' + brand.cover_url + ');';
+            }
+            var heroClass = brand.cover_url ? 'col-preview-hero col-preview-hero--cover' : 'col-preview-hero';
+            var html = '<div class="' + heroClass + '" style="' + heroStyle + '">';
+            if (brand.logo_url) html += '<img class="col-preview-hero__logo" src="' + escapeHtml(brand.logo_url) + '" alt="" />';
+            html += '<h3 class="col-preview-hero__title">' + escapeHtml(brand.display_name || studioData.slug) + '</h3>';
+            html += '<p class="col-preview-hero__lead">' + escapeHtml(brand.tagline || 'Тренеры студии — выберите город и занятие.') + '</p>';
+            if (brand.about) html += '<p class="col-preview-hero__about">' + escapeHtml(brand.about) + '</p>';
+            var locLine = formatLocationLine(brand);
+            if (locLine) html += '<p class="col-preview-hero__lead">' + escapeHtml(locLine) + '</p>';
+            if (brand.gallery && brand.gallery.length) {
+              html += '<div class="col-preview-gallery">' + brand.gallery.map(function(g) {
+                return '<img src="' + escapeHtml(g.url) + '" alt="" />';
+              }).join('') + '</div>';
+            }
+            if (brand.powered_by) html += '<p class="col-preview-powered">powered by ' + escapeHtml(brand.powered_by) + '</p>';
+            html += '</div>';
+            previewContentEl.innerHTML = html;
+          })
+          .catch(function(e) {
+            previewContentEl.innerHTML = '<p class="col-hint">' + escapeHtml(e.message || 'Не удалось загрузить превью') + '</p>';
+          });
+      }
+
+      function closeClientPreview() {
+        if (previewOverlayEl) previewOverlayEl.hidden = true;
+      }
+
+      var previewCloseEl = document.getElementById('colPreviewClose');
+      if (previewCloseEl) previewCloseEl.onclick = closeClientPreview;
+      if (previewOverlayEl) {
+        previewOverlayEl.addEventListener('click', function(ev) {
+          if (ev.target === previewOverlayEl) closeClientPreview();
+        });
+      }
+      var previewBrandBtn = document.getElementById('colPreviewBrand');
+      var previewPageBtn = document.getElementById('colPreviewPage');
+      if (previewBrandBtn) previewBrandBtn.onclick = openClientPreview;
+      if (previewPageBtn) previewPageBtn.onclick = openClientPreview;
+
+      function renderGallery(data) {
+        if (!galleryGridEl) return;
+        var items = (data && data.gallery) || [];
+        var html = items.map(function(item) {
+          return (
+            '<div class="col-gallery-item" data-key="' + escapeHtml(item.key) + '">' +
+            '<img src="' + escapeHtml(item.url) + '" alt="" />' +
+            '<button type="button" aria-label="Удалить">&times;</button></div>'
+          );
+        }).join('');
+        if (items.length < 8) {
+          html += '<button type="button" class="col-gallery-add" id="colGalleryAdd">+</button>';
+        }
+        galleryGridEl.innerHTML = html;
+        galleryGridEl.querySelectorAll('.col-gallery-item button').forEach(function(btn) {
+          btn.onclick = function() {
+            var wrap = btn.closest('.col-gallery-item');
+            var key = wrap && wrap.getAttribute('data-key');
+            if (!key) return;
+            patchBrand({ gallery_remove_key: key }).then(renderStudio).catch(showPatchError);
+          };
+        });
+        var addBtn = document.getElementById('colGalleryAdd');
+        if (addBtn) addBtn.onclick = function() { galleryInputEl.click(); };
+      }
+
+      function uploadAsset(kind, file) {
+        var fd = new FormData();
+        fd.append('file', file);
+        var h = { Accept: 'application/json' };
+        if (initData) h['X-Telegram-Init-Data'] = initData;
+        return fetch(apiUrl('/api/webapp/trainer/collective/assets?kind=' + encodeURIComponent(kind)), {
+          method: 'POST',
+          headers: h,
+          body: fd,
+        }).then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) || 'upload_failed');
+            return d;
+          });
+        });
+      }
+
+      function patchBrand(body) {
+        return fetch(apiUrl('/api/webapp/trainer/collective'), {
+          method: 'PATCH',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headersJson()),
+          body: JSON.stringify(body),
+        }).then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) || 'patch_failed');
+            return d;
+          });
+        });
+      }
+
+      function showPatchError(e) {
+        var msg = (e && e.message) || 'Ошибка';
+        if (tg && tg.showAlert) tg.showAlert(msg);
+        else alert(msg);
+      }
+
+      function wireMediaInputs() {
+        if (logoFileEl) {
+          logoFileEl.onchange = function() {
+            var f = logoFileEl.files && logoFileEl.files[0];
+            if (!f) return;
+            uploadAsset('logo', f).then(function(res) {
+              renderStudio(res.studio || res);
+            }).catch(showPatchError).finally(function() { logoFileEl.value = ''; });
+          };
+        }
+        if (coverFileEl) {
+          coverFileEl.onchange = function() {
+            var f = coverFileEl.files && coverFileEl.files[0];
+            if (!f) return;
+            uploadAsset('cover', f).then(function(res) {
+              renderStudio(res.studio || res);
+            }).catch(showPatchError).finally(function() { coverFileEl.value = ''; });
+          };
+        }
+        if (galleryInputEl) {
+          galleryInputEl.onchange = function() {
+            var f = galleryInputEl.files && galleryInputEl.files[0];
+            if (!f) return;
+            uploadAsset('gallery', f).then(function(res) {
+              renderStudio(res.studio || res);
+            }).catch(showPatchError).finally(function() { galleryInputEl.value = ''; });
+          };
+        }
+      }
+      wireMediaInputs();
+
+      function showError(msg) {
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'none';
+        errorEl.textContent = msg;
+        errorEl.style.display = 'block';
+      }
+
+      function renderStudio(data) {
+        studioData = data;
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'none';
+        contentEl.style.display = 'block';
+
+        document.getElementById('colTitle').textContent = data.display_name || data.slug || 'Студия';
+        document.getElementById('colTagline').textContent = data.tagline || '';
+        applyStudioAccent(data);
+        var heroLogo = document.getElementById('colHeroLogo');
+        if (heroLogo) {
+          if (data.logo_url) {
+            heroLogo.src = data.logo_url;
+            heroLogo.hidden = false;
+          } else {
+            heroLogo.hidden = true;
+          }
+        }
+        document.getElementById('colRoleEyebrow').textContent = data.role === 'owner' ? 'Owner · студия' : 'Member · студия';
+        document.getElementById('colSeats').textContent =
+          (data.active_count != null ? data.active_count : '—') + ' / ' + (data.seat_limit || '—') + ' мест';
+
+        if (data.can_edit_brand) {
+          ownerAreaEl.style.display = 'block';
+          memberAreaEl.style.display = 'none';
+          var scheduleTabBtn = document.getElementById('colTabScheduleBtn');
+          var schedulePanel = document.getElementById('colTabSchedule');
+          if (scheduleTabBtn && schedulePanel) {
+            var showSchedule = !!data.can_manage_center_schedule;
+            scheduleTabBtn.hidden = !showSchedule;
+            schedulePanel.hidden = !showSchedule;
+            if (showSchedule) {
+              renderSessionCoachPicker([]);
+              loadCenterSessions();
+              loadCenterInbox();
+            }
+          }
+          var passesTabBtn = document.getElementById('colTabPassesBtn');
+          var passesPanel = document.getElementById('colTabPasses');
+          if (passesTabBtn && passesPanel) {
+            var showPasses = !!data.can_manage_center_schedule;
+            passesTabBtn.hidden = !showPasses;
+            passesPanel.hidden = !showPasses;
+            if (showPasses) loadCenterPassProducts();
+          }
+          brandNameEl.value = data.display_name || '';
+          brandTaglineEl.value = data.tagline || '';
+          if (brandAboutEl) brandAboutEl.value = data.about || '';
+          var contacts = data.contacts || {};
+          document.getElementById('colContactAddress').value = contacts.address || '';
+          document.getElementById('colContactPhone').value = contacts.phone || '';
+          document.getElementById('colContactTelegram').value = contacts.telegram || '';
+          document.getElementById('colContactInstagram').value = contacts.instagram || '';
+          renderMediaSlot(document.getElementById('colLogoSlot'), document.getElementById('colLogoPreview'), data.logo_url);
+          renderMediaSlot(document.getElementById('colCoverSlot'), document.getElementById('colCoverPreview'), data.cover_url);
+          renderAccentChips(data);
+          renderGallery(data);
+          syncLocationPickers(data);
+          brandSavedEl.style.display = 'none';
+          if (pageSavedEl) pageSavedEl.style.display = 'none';
+        } else {
+          ownerAreaEl.style.display = 'none';
+          memberAreaEl.style.display = 'block';
+          document.getElementById('colMemberClientLink').textContent = data.client_link || '—';
+          document.getElementById('colMemberCopyClient').onclick = function() {
+            copyText(data.client_link, this);
+          };
+          renderMembersList(document.getElementById('colMemberMembers'), data.members, false);
+        }
+
+        clientLinkEl.textContent = data.client_link || 'Ссылка пока недоступна';
+        document.getElementById('colCopyClient').onclick = function() {
+          copyText(data.client_link, this);
+        };
+
+        if (data.role === 'owner') {
+          inviteCardEl.style.display = 'block';
+          issueBtnEl.disabled = !data.can_invite;
+          if (!data.can_invite) {
+            document.getElementById('colInviteHint').textContent = 'Все места заняты — напишите в поддержку для расширения.';
+          }
+        } else if (inviteCardEl) {
+          inviteCardEl.style.display = 'none';
+        }
+
+        renderSubscriptionPool(data);
+
+        renderMembersList(document.getElementById('colMembers'), data.members, !!data.can_manage_team);
+
+        var revokeBtn = document.getElementById('colRevokeInvites');
+        if (revokeBtn) {
+          var pending = Number(data.pending_invite_count || 0);
+          if (data.can_manage_team && pending > 0) {
+            revokeBtn.style.display = 'block';
+            revokeBtn.textContent = 'Отозвать неиспользованные приглашения (' + pending + ')';
+            revokeBtn.onclick = function() {
+              confirmStudioAction('Отозвать все неиспользованные ссылки-приглашения?', function() {
+                postCollectiveAction('/api/webapp/trainer/collective/revoke-invites', function(res) {
+                  var n = res && res.revoked_count != null ? res.revoked_count : 0;
+                  if (tg && tg.showAlert) tg.showAlert('Отозвано ссылок: ' + n);
+                });
+              });
+            };
+          } else {
+            revokeBtn.style.display = 'none';
+          }
+        }
+      }
+
+      issueBtnEl.onclick = function() {
+        issueBtnEl.disabled = true;
+        issueBtnEl.textContent = 'Создаём…';
+        fetch(apiUrl('/api/webapp/trainer/collective/invite'), {
+          method: 'POST',
+          headers: headersJson(),
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'Не удалось создать ссылку');
+              return d;
+            });
+          })
+          .then(function(d) {
+            inviteBoxEl.style.display = 'flex';
+            inviteLinkEl.textContent = d.invite_link || '';
+            document.getElementById('colCopyInvite').onclick = function() {
+              copyText(d.invite_link, this);
+            };
+            issueBtnEl.textContent = 'Создать новую ссылку';
+            issueBtnEl.disabled = false;
+          })
+          .catch(function(e) {
+            issueBtnEl.textContent = 'Создать ссылку-приглашение';
+            issueBtnEl.disabled = false;
+            showError(e.message || 'Ошибка');
+          });
+      };
+
+      brandTabSaveEl.onclick = function() {
+        var name = (brandNameEl.value || '').trim();
+        if (!name) {
+          if (tg && tg.showAlert) tg.showAlert('Укажите название студии.');
+          else alert('Укажите название студии.');
+          return;
+        }
+        brandTabSaveEl.disabled = true;
+        brandTabSaveEl.textContent = 'Сохраняем…';
+        var tagline = (brandTaglineEl.value || '').trim();
+        var body = { display_name: name, accent_preset: selectedAccentPreset };
+        if (tagline) body.tagline = tagline;
+        else body.clear_tagline = true;
+        patchBrand(body)
+          .then(function(d) {
+            renderStudio(d);
+            brandSavedEl.style.display = 'block';
+            brandTabSaveEl.textContent = 'Сохранить бренд';
+            brandTabSaveEl.disabled = false;
+          })
+          .catch(function(e) {
+            brandTabSaveEl.textContent = 'Сохранить бренд';
+            brandTabSaveEl.disabled = false;
+            showPatchError(e);
+          });
+      };
+
+      pageTabSaveEl.onclick = function() {
+        pageTabSaveEl.disabled = true;
+        pageTabSaveEl.textContent = 'Сохраняем…';
+        var about = brandAboutEl ? (brandAboutEl.value || '').trim() : '';
+        var body = {
+          contacts: {
+            address: (document.getElementById('colContactAddress').value || '').trim(),
+            phone: (document.getElementById('colContactPhone').value || '').trim(),
+            telegram: (document.getElementById('colContactTelegram').value || '').trim(),
+            instagram: (document.getElementById('colContactInstagram').value || '').trim(),
+          },
+        };
+        var mode = (studioData && studioData.schedule_mode) || 'member_autonomous';
+        if (defaultCityEl && mode !== 'studio_central') {
+          if (defaultCityEl.value) body.default_city_id = parseInt(defaultCityEl.value, 10);
+          else body.clear_default_city = true;
+        } else if (mode === 'studio_central') {
+          body.clear_primary_arena = true;
+        }
+        if (about) body.about = about;
+        else body.clear_about = true;
+        patchBrand(body)
+          .then(function(d) {
+            renderStudio(d);
+            if (pageSavedEl) pageSavedEl.style.display = 'block';
+            pageTabSaveEl.textContent = 'Сохранить страницу';
+            pageTabSaveEl.disabled = false;
+          })
+          .catch(function(e) {
+            pageTabSaveEl.textContent = 'Сохранить страницу';
+            pageTabSaveEl.disabled = false;
+            showPatchError(e);
+          });
+      };
+
+      function renderCenterSessionsList(sessions) {
+        var listEl = document.getElementById('colSessionsList');
+        if (!listEl) return;
+        if (!sessions || !sessions.length) {
+          listEl.innerHTML = '<p class="col-hint">Пока нет окон — добавьте первое.</p>';
+          return;
+        }
+        listEl.innerHTML = sessions.map(function(s) {
+          var coaches = (s.assigned_coaches || []).map(function(c) { return escapeHtml(c.display_name); }).join(', ');
+          var coachLine = coaches
+            ? '<div class="col-hint">Тренеры: ' + coaches + '</div>'
+            : '<div class="col-hint">Тренеры не назначены</div>';
+          var coachIds = (s.assigned_coaches || []).map(function(c) { return c.trainer_id; }).join(',');
+          return '<div class="col-link-box" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">' +
+            '<div><strong>' + escapeHtml(s.slot_date) + '</strong> ' + escapeHtml(s.start_time) + '–' + escapeHtml(s.end_time) +
+            ' · мест ' + (s.booked_count || 0) + '/' + (s.capacity || 1) + '</div>' +
+            coachLine +
+            '<div class="col-session-actions">' +
+            '<button type="button" class="col-member-action col-member-action--accent" data-session-coaches="' + s.id + '" data-coach-ids="' + coachIds + '">Назначить тренеров</button>' +
+            '</div>' +
+            '<div class="col-session-coach-edit" id="colSessionCoachEdit-' + s.id + '" hidden></div>' +
+            '</div>';
+        }).join('');
+        listEl.querySelectorAll('[data-session-coaches]').forEach(function(btn) {
+          btn.onclick = function() {
+            var sid = parseInt(btn.getAttribute('data-session-coaches'), 10);
+            var editEl = document.getElementById('colSessionCoachEdit-' + sid);
+            if (!editEl) return;
+            var raw = btn.getAttribute('data-coach-ids') || '';
+            var selected = raw ? raw.split(',').map(function(x) { return parseInt(x, 10); }).filter(function(n) { return !isNaN(n); }) : [];
+            editEl.hidden = !editEl.hidden;
+            if (editEl.hidden) return;
+            editEl.innerHTML =
+              '<div id="colSessionCoachEditPicker-' + sid + '" class="col-coach-picker"></div>' +
+              '<button type="button" class="col-save-btn" style="margin-top:10px;" data-save-coaches="' + sid + '">Сохранить</button>';
+            renderSessionCoachPicker(selected, 'colSessionCoachEditPicker-' + sid);
+            var saveBtn = editEl.querySelector('[data-save-coaches]');
+            if (saveBtn) {
+              saveBtn.onclick = function() {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Сохраняем…';
+                var ids = readSessionCoachIds('colSessionCoachEditPicker-' + sid);
+                fetch(apiUrl('/api/webapp/trainer/collective/sessions/' + sid + '/coaches'), {
+                  method: 'PATCH',
+                  headers: headersJson(),
+                  body: JSON.stringify({ coach_trainer_ids: ids }),
+                })
+                  .then(function(r) {
+                    return r.json().then(function(d) {
+                      if (!r.ok) throw new Error((d && d.detail) || 'coaches_failed');
+                      return d;
+                    });
+                  })
+                  .then(function() {
+                    saveBtn.textContent = 'Сохранить';
+                    saveBtn.disabled = false;
+                    loadCenterSessions();
+                  })
+                  .catch(function(e) {
+                    saveBtn.textContent = 'Сохранить';
+                    saveBtn.disabled = false;
+                    if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось сохранить');
+                  });
+              };
+            }
+          };
+        });
+      }
+
+      function activeCoachMemberOptions() {
+        return (studioData && studioData.members || []).filter(function(m) {
+          return m.status === 'active';
+        });
+      }
+
+      function renderSessionCoachPicker(selectedIds, containerId) {
+        var el = document.getElementById(containerId || 'colSessionCoachPicker');
+        if (!el) return;
+        var members = activeCoachMemberOptions();
+        var selected = (selectedIds || []).map(function(x) { return Number(x); });
+        if (!members.length) {
+          el.innerHTML = '<p class="col-hint">Нет активных тренеров в команде.</p>';
+          return;
+        }
+        el.innerHTML = members.map(function(m) {
+          var id = Number(m.trainer_id);
+          var on = selected.indexOf(id) >= 0;
+          return '<label class="col-coach-chip"><input type="checkbox" value="' + id + '"' + (on ? ' checked' : '') + ' /> ' +
+            escapeHtml(memberLabel(m)) + '</label>';
+        }).join('');
+      }
+
+      function readSessionCoachIds(containerId) {
+        var el = document.getElementById(containerId || 'colSessionCoachPicker');
+        if (!el) return [];
+        return Array.prototype.slice.call(el.querySelectorAll('input[type="checkbox"]:checked')).map(function(input) {
+          return parseInt(input.value, 10);
+        }).filter(function(n) { return !isNaN(n); });
+      }
+
+      function formatCenterInboxPrice(cents) {
+        var v = Number(cents || 0) / 100;
+        if (!v) return 'по абонементу';
+        return (Math.round(v) === v ? v.toFixed(0) : v.toFixed(2)) + ' BYN';
+      }
+
+      function renderCenterInbox(bookings) {
+        var box = document.getElementById('colCenterInbox');
+        if (!box) return;
+        if (!bookings || !bookings.length) {
+          box.hidden = true;
+          box.innerHTML = '';
+          return;
+        }
+        box.hidden = false;
+        box.innerHTML = '<div class="col-card-title" style="margin-top:0;">Заявки клиентов (' + bookings.length + ')</div>' +
+          bookings.map(function(b) {
+            var when = escapeHtml(b.slot_date + ' ' + b.start_time + '–' + b.end_time);
+            var client = escapeHtml(b.client_name || 'Клиент');
+            var mode = escapeHtml(b.attendance_mode_label || b.attendance_mode || '');
+            var price = escapeHtml(formatCenterInboxPrice(b.booking_price_cents));
+            var coach = b.center_coach_name ? (' · ' + escapeHtml(b.center_coach_name)) : '';
+            return '<div class="col-inbox-item" data-booking-id="' + b.booking_id + '">' +
+              '<div><strong>' + when + '</strong></div>' +
+              '<div class="col-hint">' + client + ' · ' + mode + coach + ' · ' + price + '</div>' +
+              '<div class="col-inbox-item__actions">' +
+              '<button type="button" class="col-save-btn" style="flex:1; margin:0;" data-confirm-booking="' + b.booking_id + '">Подтвердить</button>' +
+              '<button type="button" class="col-member-action col-member-action--danger" data-decline-booking="' + b.booking_id + '">Отклонить</button>' +
+              '</div></div>';
+          }).join('');
+        box.querySelectorAll('[data-confirm-booking]').forEach(function(btn) {
+          btn.onclick = function() {
+            var bid = parseInt(btn.getAttribute('data-confirm-booking'), 10);
+            btn.disabled = true;
+            fetch(apiUrl('/api/webapp/trainer/collective/session-bookings/' + bid + '/confirm'), {
+              method: 'POST',
+              headers: headersJson(),
+            })
+              .then(function(r) {
+                return r.json().then(function(d) {
+                  if (!r.ok) throw new Error((d && d.detail) || 'confirm_failed');
+                  return d;
+                });
+              })
+              .then(function() {
+                loadCenterInbox();
+                loadCenterSessions();
+                if (tg && tg.showAlert) tg.showAlert('Заявка подтверждена');
+              })
+              .catch(function(e) {
+                btn.disabled = false;
+                if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось подтвердить');
+              });
+          };
+        });
+        box.querySelectorAll('[data-decline-booking]').forEach(function(btn) {
+          btn.onclick = function() {
+            var bid = parseInt(btn.getAttribute('data-decline-booking'), 10);
+            confirmStudioAction('Отклонить заявку клиента?', function() {
+              fetch(apiUrl('/api/webapp/trainer/collective/session-bookings/' + bid + '/decline'), {
+                method: 'POST',
+                headers: headersJson(),
+              })
+                .then(function(r) {
+                  return r.json().then(function(d) {
+                    if (!r.ok) throw new Error((d && d.detail) || 'decline_failed');
+                    return d;
+                  });
+                })
+                .then(function() {
+                  loadCenterInbox();
+                  loadCenterSessions();
+                })
+                .catch(function(e) {
+                  if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось отклонить');
+                });
+            });
+          };
+        });
+      }
+
+      function loadCenterInbox() {
+        return fetch(apiUrl('/api/webapp/trainer/collective/session-bookings?status=pending'), {
+          headers: headersJson(),
+          cache: 'no-store',
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'inbox_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            renderCenterInbox((d && d.bookings) || []);
+          })
+          .catch(function() {
+            renderCenterInbox([]);
+          });
+      }
+
+      function loadCenterSessions() {
+        return fetch(apiUrl('/api/webapp/trainer/collective/sessions'), { headers: headersJson(), cache: 'no-store' })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'sessions_load_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            renderCenterSessionsList((d && d.sessions) || []);
+          })
+          .catch(function() {
+            renderCenterSessionsList([]);
+          });
+      }
+
+      function renderCenterPassProductsList(products) {
+        var el = document.getElementById('colPassProductsList');
+        var selectEl = document.getElementById('colPassIssueProduct');
+        if (!el) return;
+        if (!products || !products.length) {
+          el.innerHTML = '<p class="col-hint">Нет продуктов — загрузите тарифы или создайте вручную через API.</p>';
+          if (selectEl) selectEl.innerHTML = '<option value="">—</option>';
+          return;
+        }
+        el.innerHTML = products.map(function(p) {
+          var price = (Number(p.price_cents) / 100).toFixed(0);
+          var validity = p.validity_days ? (' · ' + p.validity_days + ' дн.') : '';
+          var kind = p.pass_kind === 'coach' ? 'Тренер' : 'Дорожка';
+          var active = p.is_active ? '' : ' · выкл';
+          return '<div class="col-link-box" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">' +
+            '<div><strong>' + escapeHtml(p.name) + '</strong> · ' + escapeHtml(kind) + '</div>' +
+            '<div class="col-hint">' + p.sessions_total + ' пос. · ' + price + ' BYN' + validity + active + '</div>' +
+            '</div>';
+        }).join('');
+        if (selectEl) {
+          selectEl.innerHTML = '<option value="">—</option>' + products.filter(function(p) { return p.is_active; }).map(function(p) {
+            return '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>';
+          }).join('');
+        }
+      }
+
+      function loadCenterPassProducts() {
+        return fetch(apiUrl('/api/webapp/trainer/collective/pass-products'), { headers: headersJson(), cache: 'no-store' })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'pass_products_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            renderCenterPassProductsList((d && d.products) || []);
+          })
+          .catch(function() {
+            renderCenterPassProductsList([]);
+          });
+      }
+
+      var passSeedBtn = document.getElementById('colPassSeedBtn');
+      if (passSeedBtn) {
+        passSeedBtn.onclick = function() {
+          passSeedBtn.disabled = true;
+          passSeedBtn.textContent = 'Загружаем…';
+          fetch(apiUrl('/api/webapp/trainer/collective/pass-products/seed-reference'), {
+            method: 'POST',
+            headers: headersJson(),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'seed_failed');
+                return d;
+              });
+            })
+            .then(function(d) {
+              passSeedBtn.textContent = 'Загрузить тарифы центра';
+              passSeedBtn.disabled = false;
+              renderCenterPassProductsList((d && d.products) || []);
+              if (tg && tg.showAlert) tg.showAlert('Тарифы загружены');
+            })
+            .catch(function(e) {
+              passSeedBtn.textContent = 'Загрузить тарифы центра';
+              passSeedBtn.disabled = false;
+              if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось загрузить');
+            });
+        };
+      }
+
+      var passIssueBtn = document.getElementById('colPassIssueBtn');
+      if (passIssueBtn) {
+        passIssueBtn.onclick = function() {
+          var clientEl = document.getElementById('colPassIssueClientId');
+          var productEl = document.getElementById('colPassIssueProduct');
+          var clientId = clientEl ? parseInt(clientEl.value, 10) : 0;
+          var productId = productEl ? parseInt(productEl.value, 10) : 0;
+          if (!clientId || !productId) {
+            if (tg && tg.showAlert) tg.showAlert('Укажите клиента и продукт');
+            return;
+          }
+          passIssueBtn.disabled = true;
+          fetch(apiUrl('/api/webapp/trainer/collective/pass-products/' + productId + '/issue'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ client_id: clientId, collective_pass_product_id: productId }),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'issue_failed');
+                return d;
+              });
+            })
+            .then(function() {
+              passIssueBtn.disabled = false;
+              if (tg && tg.showAlert) tg.showAlert('Абонемент выдан');
+            })
+            .catch(function(e) {
+              passIssueBtn.disabled = false;
+              if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось выдать');
+            });
+        };
+      }
+
+      var sessionCreateBtn = document.getElementById('colSessionCreate');
+      if (sessionCreateBtn) {
+        sessionCreateBtn.onclick = function() {
+          var dateEl = document.getElementById('colSessionDate');
+          var startEl = document.getElementById('colSessionStart');
+          var endEl = document.getElementById('colSessionEnd');
+          var capEl = document.getElementById('colSessionCapacity');
+          if (!dateEl || !dateEl.value) {
+            if (tg && tg.showAlert) tg.showAlert('Укажите дату');
+            return;
+          }
+          sessionCreateBtn.disabled = true;
+          sessionCreateBtn.textContent = 'Добавляем…';
+          fetch(apiUrl('/api/webapp/trainer/collective/sessions'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({
+              slot_date: dateEl.value,
+              start_time: (startEl && startEl.value) ? startEl.value.slice(0, 5) : '10:00',
+              end_time: (endEl && endEl.value) ? endEl.value.slice(0, 5) : '11:00',
+              capacity: capEl ? parseInt(capEl.value, 10) || 1 : 1,
+              coach_trainer_ids: readSessionCoachIds(),
+            }),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'create_failed');
+                return d;
+              });
+            })
+            .then(function() {
+              sessionCreateBtn.textContent = 'Добавить окно';
+              sessionCreateBtn.disabled = false;
+              loadCenterSessions();
+            })
+            .catch(function(e) {
+              sessionCreateBtn.textContent = 'Добавить окно';
+              sessionCreateBtn.disabled = false;
+              if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось создать окно');
+            });
+        };
+      }
+
+      if (!initData) {
+        showError('Откройте через Telegram Mini App');
+        return;
+      }
+
+      fetch(apiUrl('/api/webapp/trainer/collective'), { headers: headersJson(), cache: 'no-store' })
+        .then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) || 'Студия недоступна');
+            return d;
+          });
+        })
+        .then(renderStudio)
+        .catch(function(e) {
+          showError(e.message || 'Не удалось загрузить студию');
+        });
+    })();
+  </script>
+  <script src="mini-app-trainer-home.js"></script>
+</body>
+</html>

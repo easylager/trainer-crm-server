@@ -2412,11 +2412,18 @@ TRAINER_CANCEL_IDLE = "Нечего отменять. Профиль — в «О
 # --- Admin bot: trainer moderation ---
 ADMIN_START = (
     "Привет! Это админ-бот для модерации тренеров.\n\n"
-    "Команды:\n"
-    "/pending — показать тренеров на модерацию.\n"
-    "/subscription_invoices — заявки на подписку (активировать / отклонить кнопками).\n"
-    "/grant_subscription &lt;trainer_id&gt; — выдать подписку конкретному тренеру.\n"
-    "/problem_reports — аудит отчётов «проблема с клиентом» (E6)."
+    "Команды (кнопка «≡» слева от поля ввода или «/»):\n"
+    "/pending — тренеры на модерацию\n"
+    "/stats — статистика платформы\n"
+    "/support — обращения в поддержку\n"
+    "/dicts — города и арены\n"
+    "/subscription_invoices — заявки на подписку (ERIP)\n"
+    "/grant_subscription — выдать подписку тренеру\n"
+    "/collective_draft — студия: черновик + claim-ссылка owner\n"
+    "/collective_sub — студия: pool-подписка (grant / status)\n"
+    "/problem_reports — аудит отчётов «проблема с клиентом»\n\n"
+    "Справка по студиям: <code>/collective_draft help</code>, "
+    "<code>/collective_sub help</code>"
 )
 ADMIN_NO_ACCESS = "У вас нет доступа к этому боту."
 ADMIN_PROBLEM_REPORTS_TITLE = "📋 <b>Отчёты «проблема с клиентом»</b> (аудит, E6)\n\n"
@@ -3673,6 +3680,90 @@ ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME = (
     "⚠️ В окружении не задан <code>TRAINER_BOT_USERNAME</code> — полная ссылка t.me не собирается.\n\n"
     "Передайте тренеру параметр для бота:\n<code>?start={start_payload}</code>\n\n"
     "После настройки имени бота пересоздайте ссылку командой выше."
+)
+
+ADMIN_COLLECTIVE_DRAFT_HELP = (
+    "<b>Студия (Collective) — черновик + claim-ссылка</b>\n\n"
+    "<code>/collective_draft slug|Название студии</code>\n"
+    "Пример: <code>/collective_draft ice-yoga-lane|Ice Yoga Lane</code>\n\n"
+    "Создаёт draft и одноразовую ссылку для owner в тренерском боте "
+    "(<code>?start=col_claim_…</code>). Owner должен быть уже привязан к боту "
+    "или сначала получить welcome-ссылку."
+)
+ADMIN_COLLECTIVE_DRAFT_BAD_ARGS = (
+    "Формат: <code>/collective_draft slug|Название</code>. "
+    "Slug: латиница, цифры, дефис. Справка: <code>/collective_draft help</code>"
+)
+ADMIN_COLLECTIVE_DRAFT_ISSUED = (
+    "🏢 <b>Студия #{collective_id}</b> · <code>{slug}</code>\n"
+    "Название: <b>{display_name}</b>\n"
+    "Статус: draft · мест: {seat_limit}\n\n"
+    "Claim до: <b>{expires}</b> (одноразовая)\n\n"
+    "{link_block}"
+)
+
+ADMIN_COLLECTIVE_SUB_HELP = (
+    "<b>Подписка студии (Collective pool)</b>\n\n"
+    "<code>/collective_sub grant slug месяцы [online] [analytics] [groups]</code>\n"
+    "Пример: <code>/collective_sub grant ice-yoga-lane 3</code> — полный пакет на 3 мес.\n"
+    "Только CRM: <code>/collective_sub grant ice-yoga-lane 1 online analytics groups</code>\n\n"
+    "<code>/collective_sub status slug</code> — текущий период и модули.\n"
+    "<code>/collective_sub confirm invoice_id</code> — подтвердить счёт студии (ЕРИП).\n\n"
+    "Members получают union(solo, studio) через существующий merge entitlements."
+)
+ADMIN_COLLECTIVE_SUB_BAD_ARGS = (
+    "Формат grant: <code>/collective_sub grant slug месяцы</code> (1–24).\n"
+    "Статус: <code>/collective_sub status slug</code>\n"
+    "Счёт: <code>/collective_sub confirm invoice_id</code>\n"
+    "Справка: <code>/collective_sub help</code>"
+)
+ADMIN_COLLECTIVE_SUB_NOT_FOUND = "Студия <code>{slug}</code> не найдена."
+ADMIN_COLLECTIVE_SUB_STATUS = (
+    "🏢 <b>{display_name}</b> · <code>{slug}</code>\n"
+    "Статус студии: <b>{collective_status}</b> · мест: {active_count}/{seat_limit}\n\n"
+    "{sub_block}"
+)
+ADMIN_COLLECTIVE_SUB_GRANTED = (
+    "✅ Подписка студии <b>{display_name}</b> · <code>{slug}</code>\n"
+    "Период: <b>{months} мес.</b>{extend_note}\n"
+    "Модули: {modules_label}\n"
+    "Действует до: <b>{expires}</b>"
+)
+ADMIN_COLLECTIVE_INVOICE_NOTIFY = (
+    "🏢 <b>Счёт pool-подписки студии</b> · #{invoice_id}\n"
+    "Студия: <b>{display_name}</b> · <code>{slug}</code>\n"
+    "Owner: {owner_name}\n"
+    "Мест: <b>{seats}</b> · период <b>{months} мес.</b>\n"
+    "Модули: {modules_label}\n"
+    "Сумма: <b>{amount_byn} {byr_sign}</b>\n"
+    "Период подписки: {period_start} — {period_end}"
+)
+ADMIN_COLLECTIVE_INVOICE_CONFIRMED = (
+    "✅ Pool-подписка активирована по счёту #{invoice_id}\n"
+    "Студия: <b>{display_name}</b> · <code>{slug}</code>"
+)
+
+TRAINER_COLLECTIVE_CLAIM_SUCCESS = (
+    "🏢 Студия <b>{name}</b> активирована — вы owner.\n\n"
+    "Клиентская ссылка и приглашения команды — в приложении, раздел «Студия»."
+)
+TRAINER_COLLECTIVE_CLAIM_INVALID = "Ссылка активации студии недействительна или уже использована."
+TRAINER_COLLECTIVE_CLAIM_NEED_LINK = (
+    "Не удалось привязать аккаунт. Если вы уже тренер в другом профиле — напишите в поддержку."
+)
+TRAINER_COLLECTIVE_CLAIM_ALREADY = "Вы уже состоите в другой студии."
+TRAINER_COLLECTIVE_INVITE_SUCCESS = (
+    "Вы в команде студии <b>{name}</b>.\n\n"
+    "Работайте как обычно — клиенты и расписание только ваши. Студия — общий бренд и ссылка для клиентов."
+)
+TRAINER_COLLECTIVE_INVITE_INVALID = "Ссылка приглашения недействительна или уже использована."
+TRAINER_COLLECTIVE_INVITE_ALREADY = "Вы уже состоите в другой студии."
+TRAINER_COLLECTIVE_INVITE_SEATS_FULL = "В студии заняты все места — попросите owner расширить команду."
+
+CLIENT_COLLECTIVE_LANDING = (
+    "🏢 <b>{name}</b>\n"
+    "{tagline_block}"
+    "Откройте каталог — покажем тренеров этой студии."
 )
 
 ADMIN_STATS_SECTION_PASSES_CERTS = "📦 <b>Абонементы и сертификаты</b>\n{lines}\n"

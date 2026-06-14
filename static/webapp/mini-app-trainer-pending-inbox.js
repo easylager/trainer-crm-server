@@ -138,7 +138,22 @@
 
   function fetchPendingRows() {
     if (c('getPendingRows')) {
-      return Promise.resolve(c('getPendingRows')() || []);
+      var local = c('getPendingRows')() || [];
+      if (local.length) return Promise.resolve(local);
+      if (c('getPendingBookingIds')) {
+        var ids = c('getPendingBookingIds')() || [];
+        if (ids.length) {
+          return Promise.resolve(
+            ids.map(function (id) {
+              return { id: id, booking: { id: id }, day: { date: '' } };
+            })
+          );
+        }
+      }
+      if (c('getPendingCount') && (parseInt(String(c('getPendingCount')()), 10) || 0) > 0) {
+        return fetchJson('/trainer/bookings?limit=32').then(defaultPendingRowsFromBookingsPayload);
+      }
+      return Promise.resolve([]);
     }
     return fetchJson('/trainer/bookings?limit=32').then(defaultPendingRowsFromBookingsPayload);
   }

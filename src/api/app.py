@@ -451,6 +451,15 @@ def webapp_trainer_referral_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-collective")
+def webapp_trainer_collective_page():
+    """Collective studio admin for members/owners (Wave P1)."""
+    path = _WEBAPP_DIR / "trainer-collective.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/referral-rules")
 def webapp_referral_rules_page():
     """Public referral program rules (BY)."""
@@ -610,6 +619,19 @@ def webapp_trainer_hub_css(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-trainer-pending-inbox.css")
+def webapp_trainer_pending_inbox_css(request: Request):
+    """Pending bookings sheet (trainer-home, schedule-editor). Use ``?v=…`` for long-lived cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-pending-inbox.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-trainer-nav.css")
 def webapp_trainer_nav_css(request: Request):
     """Trainer header buttons. Use ``?v=…`` for long-lived cache (schedule-editor, etc.)."""
@@ -718,6 +740,19 @@ def webapp_mini_app_trainer_celebration_js():
 def webapp_trainer_home_main_js(request: Request):
     """Trainer hub page logic (split from trainer-home.html for cache + smaller HTML parse). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "trainer-home-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-pending-inbox.js")
+def webapp_trainer_pending_inbox_js(request: Request):
+    """Shared pending bookings sheet + batch confirm (trainer-home, schedule-editor). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-pending-inbox.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

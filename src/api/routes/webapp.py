@@ -4,6 +4,7 @@ Web App API: trainer schedule (Mini App) and client booking (Mini App). Auth via
 import asyncio
 import html
 import logging
+import os
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from itertools import groupby
@@ -12,7 +13,7 @@ from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -330,6 +331,7 @@ from src.application.trainer_schedule_use_cases import (
     replace_week_with_template,
     trainer_offers_service,
 )
+from src.application.collective_session_use_cases import list_center_duties_for_trainer
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
 from src.application.trainer_invite_links import (
@@ -348,7 +350,10 @@ from src.application.client_notes_use_cases import (
 )
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
-from src.application.trainer_hub_action_inbox import build_trainer_hub_action_inbox
+from src.application.trainer_hub_action_inbox import (
+    build_trainer_hub_action_inbox,
+    fetch_hub_pending_booking_ids,
+)
 from src.application.trainer_use_cases import (
     get_trainer,
     get_trainer_moderation_readiness,
@@ -371,6 +376,7 @@ from src.api.miniapp_auth import (
     get_admin_miniapp_principal,
     get_client_miniapp_principal,
     get_trainer_miniapp_principal,
+    get_trainer_miniapp_principal_multipart,
     miniapp_credential_http_exception,
     reject_unsupported_miniapp_platform,
     require_miniapp_credential_in,
@@ -756,6 +762,13 @@ async def get_schedule(
     if view == "list":
         return {"trainer_id": trainer_id, "slots": out_slots}
 
+    center_duties = await list_center_duties_for_trainer(
+        session,
+        trainer_id=int(trainer_id),
+        from_date=from_date,
+        to_date=to_date,
+    )
+
     trainer_row = await get_trainer(session, trainer_id)
     group_classes_enabled = bool(
         (trainer_row.get("profile") or {}).get("group_classes_enabled")
@@ -772,6 +785,7 @@ async def get_schedule(
     return {
         "trainer_id": trainer_id,
         "slots": out_slots,
+        "center_duties": center_duties,
         "group_classes_enabled": group_classes_enabled,
         "session_duration_minutes": session_duration_minutes,
         "schedule_grid": schedule_grid_preset_to_api(grid_preset),
@@ -2957,6 +2971,41 @@ async def get_trainer_hub_revenue_mtd(
     return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
 
 
+def _hub_bootstrap_use_parallel_sessions() -> bool:
+    """
+    Production: fan-out reads on independent async_session_factory connections.
+    Pytest conftest binds the factory to one asyncpg connection (savepoint shim) — concurrent
+    child sessions raise loop/connection errors; use the request session sequentially instead.
+    """
+    return "PYTEST_CURRENT_TEST" not in os.environ
+
+
+async def _hub_bootstrap_gather_reads(
+    request_session: AsyncSession,
+    *read_fns: Any,
+) -> tuple[Any, ...]:
+    """Each read_fn: async (AsyncSession) -> result. Mirrors asyncio.gather(..., return_exceptions=True)."""
+
+    async def _with_fresh_session(fn: Any) -> Any:
+        async with async_session_factory() as s:
+            return await fn(s)
+
+    if _hub_bootstrap_use_parallel_sessions():
+        return tuple(
+            await asyncio.gather(
+                *[_with_fresh_session(fn) for fn in read_fns],
+                return_exceptions=True,
+            )
+        )
+    out: list[Any] = []
+    for fn in read_fns:
+        try:
+            out.append(await fn(request_session))
+        except BaseException as exc:
+            out.append(exc)
+    return tuple(out)
+
+
 @router.get("/trainer/hub/bootstrap")
 async def get_trainer_hub_bootstrap(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
@@ -3005,48 +3054,40 @@ async def get_trainer_hub_bootstrap(
     if trainer_id_linked:
         tid_l = trainer_id_linked
 
-        # Parallel reads use separate sessions: one AsyncSession must not run concurrent operations.
-        async def _hub_profile() -> dict[str, Any]:
-            async with async_session_factory() as s:
-                return await build_trainer_hub_profile_bootstrap_payload(s, tid_l)
+        async def _read_profile(s: AsyncSession) -> dict[str, Any]:
+            return await build_trainer_hub_profile_bootstrap_payload(s, tid_l)
 
-        async def _hub_onboarding() -> dict[str, Any] | None:
-            async with async_session_factory() as s:
-                od = await get_trainer_onboarding_checklist(s, tid_l)
-                return od if od else None
+        async def _read_onboarding(s: AsyncSession) -> dict[str, Any] | None:
+            od = await get_trainer_onboarding_checklist(s, tid_l)
+            return od if od else None
 
-        async def _hub_lifecycle() -> dict[str, Any]:
-            async with async_session_factory() as s:
-                return await build_trainer_lifecycle_payload(s, tid_l)
+        async def _read_lifecycle(s: AsyncSession) -> dict[str, Any]:
+            return await build_trainer_lifecycle_payload(s, tid_l)
 
         if trainer_id_active:
             tid_act = trainer_id_active
 
-            async def _hub_req_count() -> int:
-                async with async_session_factory() as s:
-                    return await count_unanswered_requests_for_trainer(s, tid_act)
+            async def _read_req_count(s: AsyncSession) -> int:
+                return await count_unanswered_requests_for_trainer(s, tid_act)
 
-            async def _hub_revenue() -> dict[str, Any]:
-                async with async_session_factory() as s:
-                    return await get_trainer_hub_revenue_month_to_date(s, tid_act)
+            async def _read_revenue(s: AsyncSession) -> dict[str, Any]:
+                return await get_trainer_hub_revenue_month_to_date(s, tid_act)
 
-            async def _hub_bookings() -> dict[str, Any]:
-                async with async_session_factory() as s:
-                    return await _trainer_bookings_grouped_days_payload(s, tid_act, limit=bookings_limit)
+            async def _read_bookings(s: AsyncSession) -> dict[str, Any]:
+                return await _trainer_bookings_grouped_days_payload(s, tid_act, limit=bookings_limit)
 
-            async def _hub_subscription() -> dict[str, Any]:
-                async with async_session_factory() as s:
-                    return await get_trainer_subscription_status(s, tid_act)
+            async def _read_subscription(s: AsyncSession) -> dict[str, Any]:
+                return await get_trainer_subscription_status(s, tid_act)
 
-            p_res, o_res, r_req, r_rev, r_book, r_sub, r_life = await asyncio.gather(
-                _hub_profile(),
-                _hub_onboarding(),
-                _hub_req_count(),
-                _hub_revenue(),
-                _hub_bookings(),
-                _hub_subscription(),
-                _hub_lifecycle(),
-                return_exceptions=True,
+            p_res, o_res, r_req, r_rev, r_book, r_sub, r_life = await _hub_bootstrap_gather_reads(
+                session,
+                _read_profile,
+                _read_onboarding,
+                _read_req_count,
+                _read_revenue,
+                _read_bookings,
+                _read_subscription,
+                _read_lifecycle,
             )
             if isinstance(p_res, BaseException):
                 if isinstance(p_res, HTTPException):
@@ -3082,11 +3123,11 @@ async def get_trainer_hub_bootstrap(
             else:
                 lifecycle = r_life
         else:
-            p_res, o_res, r_life = await asyncio.gather(
-                _hub_profile(),
-                _hub_onboarding(),
-                _hub_lifecycle(),
-                return_exceptions=True,
+            p_res, o_res, r_life = await _hub_bootstrap_gather_reads(
+                session,
+                _read_profile,
+                _read_onboarding,
+                _read_lifecycle,
             )
             if isinstance(p_res, BaseException):
                 if isinstance(p_res, HTTPException):
@@ -3106,11 +3147,10 @@ async def get_trainer_hub_bootstrap(
                 lifecycle = r_life
             if state == TrainerAccessState.BOOKING_READY and trainer_id_linked:
 
-                async def _hub_sub_ttv() -> dict[str, Any]:
-                    async with async_session_factory() as s:
-                        return await get_trainer_subscription_status(s, trainer_id_linked)
+                async def _read_subscription_ttv(s: AsyncSession) -> dict[str, Any]:
+                    return await get_trainer_subscription_status(s, trainer_id_linked)
 
-                r_sub_ttv = await _hub_sub_ttv()
+                (r_sub_ttv,) = await _hub_bootstrap_gather_reads(session, _read_subscription_ttv)
                 if isinstance(r_sub_ttv, BaseException):
                     partial_errors["subscription_status"] = str(r_sub_ttv)
                 else:
@@ -3121,12 +3161,42 @@ async def get_trainer_hub_bootstrap(
         req_n = 0
         if requests_summary and isinstance(requests_summary.get("unanswered_count"), int):
             req_n = int(requests_summary["unanswered_count"])
+        pending_booking_ids: list[int] | None = None
+        if schedule_unlocked:
+            try:
+                pending_booking_ids = await fetch_hub_pending_booking_ids(session, trainer_id_linked)
+            except Exception as exc:
+                partial_errors["action_inbox_pending_ids"] = str(exc)
         action_inbox = build_trainer_hub_action_inbox(
             onboarding=onboarding_checklist or {},
             requests_count=req_n,
             bookings=bookings,
             schedule_unlocked=schedule_unlocked,
+            pending_booking_ids=pending_booking_ids,
         )
+
+    collective_payload: dict[str, Any] | None = None
+    if trainer_id_linked:
+        try:
+            from src.application.collective_use_cases import (
+                build_trainer_collective_bootstrap_payload,
+                get_active_collective_membership,
+                get_collective_entitlements_for_member,
+            )
+            from src.application.subscription_tier_use_cases import unlocked_capability_codes
+
+            membership = await get_active_collective_membership(session, trainer_id_linked)
+            subscription_covers: list[str] = []
+            if membership is not None:
+                coll_ent = await get_collective_entitlements_for_member(session, trainer_id_linked)
+                if coll_ent is not None:
+                    subscription_covers = unlocked_capability_codes(coll_ent)
+            collective_payload = build_trainer_collective_bootstrap_payload(
+                membership,
+                subscription_covers=subscription_covers,
+            )
+        except Exception as exc:
+            partial_errors["collective"] = str(exc)
 
     return {
         "access": access,
@@ -3138,6 +3208,7 @@ async def get_trainer_hub_bootstrap(
         "subscription_status": subscription_status,
         "lifecycle": lifecycle,
         "action_inbox": action_inbox,
+        "collective": collective_payload,
         "partial_errors": partial_errors or None,
     }
 
@@ -4640,6 +4711,10 @@ async def post_trainer_certificate_issue(
         _un = (_s.client_bot_username or "").strip().lstrip("@")
         _activation = f"https://t.me/{_un}?start=cert_{_code}" if _un and _code else None
 
+        from src.application.collective_use_cases import resolve_certificate_brand_for_trainer
+
+        cert_brand = await resolve_certificate_brand_for_trainer(session, trainer_id)
+
         pdf_bytes = build_certificate_pdf(
             trainer_name=trainer_name,
             product_name=product_name,
@@ -4651,6 +4726,9 @@ async def post_trainer_certificate_issue(
             expires_at=expires_at,
             activation_url=_activation,
             client_bot_display_name=f"@{_un}" if _un else None,
+            brand_display=str(cert_brand.get("display_name") or ""),
+            brand_tagline=str(cert_brand.get("tagline") or ""),
+            brand_powered_by=cert_brand.get("powered_by"),
         )
         file_key = upload_certificate_file(pdf_bytes, trainer_id, instance["id"])
         await update_certificate_file_url(session, instance["id"], trainer_id, file_key)
@@ -7715,6 +7793,964 @@ async def post_trainer_request_book(
         "first_booking_milestone": first_booking_milestone,
         "share_catalog_tip": share_catalog_tip,
     }
+
+
+# --- Collective studio (Wave P1) ---
+
+from src.application.collective_use_cases import (
+    get_trainer_collective_studio_payload,
+    issue_collective_invite_token,
+    get_active_collective_membership,
+    update_collective_brand,
+    upload_collective_asset_from_bytes,
+    remove_collective_member,
+    transfer_collective_ownership,
+    revoke_pending_collective_invites,
+    create_collective_subscription_invoice,
+    confirm_collective_invoice_after_payment,
+    admin_grant_collective_subscription,
+)
+from src.application.collective_invoice_admin_notify import notify_admins_new_collective_subscription_invoice
+
+
+class TrainerCollectiveBrandPatch(BaseModel):
+    display_name: str | None = Field(None, min_length=1, max_length=128)
+    tagline: str | None = Field(None, max_length=2000)
+    clear_tagline: bool = False
+    about: str | None = Field(None, max_length=4000)
+    clear_about: bool = False
+    accent_preset: str | None = Field(None, max_length=32)
+    contacts: dict[str, str] | None = None
+    gallery_remove_key: str | None = Field(None, max_length=256)
+    clear_logo: bool = False
+    clear_cover: bool = False
+    primary_arena_id: int | None = None
+    clear_primary_arena: bool = False
+    default_city_id: int | None = None
+    clear_default_city: bool = False
+
+
+@router.get("/trainer/collective")
+async def get_trainer_collective_studio(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Studio screen for collective members; 404 when trainer is solo."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    payload = await get_trainer_collective_studio_payload(session, trainer_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    return payload
+
+
+@router.post("/trainer/collective/invite")
+async def post_trainer_collective_invite(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner issues a one-time col_inv_* deep link for a new member."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+    issued = await issue_collective_invite_token(session, membership.collective_id, trainer_id)
+    if issued is None:
+        raise HTTPException(status_code=403, detail="Cannot issue invite")
+    if issued.get("error") == "seats_full":
+        raise HTTPException(status_code=409, detail="Seats full")
+    return {
+        "invite_link": issued.get("deep_link"),
+        "start_payload": issued.get("start_payload"),
+        "expires_at": issued.get("expires_at"),
+        "seat_limit": issued.get("seat_limit"),
+        "active_count": issued.get("active_count"),
+    }
+
+
+@router.patch("/trainer/collective")
+async def patch_trainer_collective_brand(
+    body: TrainerCollectiveBrandPatch,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner updates studio display name and tagline (Wave P1.5-B)."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+    if not any(
+        [
+            body.display_name is not None,
+            body.tagline is not None,
+            body.clear_tagline,
+            body.about is not None,
+            body.clear_about,
+            body.accent_preset is not None,
+            body.contacts is not None,
+            body.gallery_remove_key,
+            body.clear_logo,
+            body.clear_cover,
+            body.primary_arena_id is not None,
+            body.clear_primary_arena,
+            body.default_city_id is not None,
+            body.clear_default_city,
+        ]
+    ):
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    updated = await update_collective_brand(
+        session,
+        collective_id=membership.collective_id,
+        trainer_id=trainer_id,
+        display_name=body.display_name,
+        tagline=body.tagline,
+        clear_tagline=body.clear_tagline,
+        about=body.about,
+        clear_about=body.clear_about,
+        accent_preset=body.accent_preset,
+        contacts=body.contacts,
+        gallery_remove_key=body.gallery_remove_key,
+        clear_logo=body.clear_logo,
+        clear_cover=body.clear_cover,
+        primary_arena_id=body.primary_arena_id,
+        clear_primary_arena=body.clear_primary_arena,
+        default_city_id=body.default_city_id,
+        clear_default_city=body.clear_default_city,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    err = updated.get("error")
+    if err == "display_name_required":
+        raise HTTPException(status_code=400, detail="Display name required")
+    if err == "nothing_to_update":
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if err == "invalid_logo_key":
+        raise HTTPException(status_code=400, detail="Invalid logo key")
+    if err == "invalid_cover_key":
+        raise HTTPException(status_code=400, detail="Invalid cover key")
+    if err == "invalid_gallery_key":
+        raise HTTPException(status_code=400, detail="Invalid gallery key")
+    if err == "gallery_too_large":
+        raise HTTPException(status_code=400, detail="Gallery limit reached")
+    if err == "invalid_primary_arena":
+        raise HTTPException(status_code=400, detail="Invalid primary arena")
+    if err == "invalid_default_city":
+        raise HTTPException(status_code=400, detail="Invalid default city")
+    if err:
+        raise HTTPException(status_code=403, detail=str(err))
+
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return studio or updated
+
+
+@router.post("/trainer/collective/assets")
+async def post_trainer_collective_asset(
+    kind: str = Query(..., pattern="^(logo|cover|gallery)$"),
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal_multipart),
+) -> dict[str, Any]:
+    """Owner uploads studio logo, cover, or gallery photo (Wave P1.6)."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+
+    content_type = file.content_type or "image/jpeg"
+    body_bytes = await file.read()
+    uploaded = await upload_collective_asset_from_bytes(
+        session,
+        collective_id=membership.collective_id,
+        trainer_id=trainer_id,
+        body=body_bytes,
+        content_type=content_type,
+        kind=kind,
+    )
+    err = uploaded.get("error")
+    if err == "too_large":
+        raise HTTPException(status_code=413, detail="File too large")
+    if err == "not_image":
+        raise HTTPException(status_code=400, detail="Not a valid image")
+    if err == "gallery_full":
+        raise HTTPException(status_code=409, detail="Gallery full")
+    if err == "storage":
+        raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
+    if err:
+        raise HTTPException(status_code=403, detail=str(err))
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {"asset": uploaded, "studio": studio}
+
+
+class TrainerCollectiveTransferOwnershipBody(BaseModel):
+    new_owner_trainer_id: int = Field(..., ge=1)
+
+
+def _collective_governance_http_error(err: str | None) -> None:
+    if err == "not_owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+    if err in ("member_not_found", "target_not_active_member"):
+        raise HTTPException(status_code=404, detail="Member not found")
+    if err == "cannot_remove_owner":
+        raise HTTPException(status_code=400, detail="Cannot remove owner")
+    if err == "cannot_remove_self":
+        raise HTTPException(status_code=400, detail="Use transfer ownership instead")
+    if err == "same_owner":
+        raise HTTPException(status_code=400, detail="Already owner")
+    if err == "member_not_removable":
+        raise HTTPException(status_code=409, detail="Member cannot be removed")
+    if err:
+        raise HTTPException(status_code=403, detail=str(err))
+
+
+@router.post("/trainer/collective/members/{target_trainer_id:int}/remove")
+async def post_trainer_collective_member_remove(
+    target_trainer_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner removes a studio member."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+
+    result = await remove_collective_member(
+        session,
+        membership.collective_id,
+        trainer_id,
+        target_trainer_id,
+    )
+    err = result.get("error")
+    _collective_governance_http_error(err if isinstance(err, str) else None)
+
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {"ok": True, "studio": studio}
+
+
+@router.post("/trainer/collective/transfer-ownership")
+async def post_trainer_collective_transfer_ownership(
+    body: TrainerCollectiveTransferOwnershipBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner transfers studio control to another active member."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+
+    result = await transfer_collective_ownership(
+        session,
+        membership.collective_id,
+        trainer_id,
+        body.new_owner_trainer_id,
+    )
+    err = result.get("error")
+    _collective_governance_http_error(err if isinstance(err, str) else None)
+
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {"ok": True, "studio": studio}
+
+
+@router.post("/trainer/collective/revoke-invites")
+async def post_trainer_collective_revoke_invites(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner invalidates all unused invite links."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+
+    result = await revoke_pending_collective_invites(
+        session, membership.collective_id, trainer_id
+    )
+    err = result.get("error")
+    _collective_governance_http_error(err if isinstance(err, str) else None)
+
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {
+        "ok": True,
+        "revoked_count": int(result.get("revoked_count") or 0),
+        "studio": studio,
+    }
+
+
+class CollectiveSubscriptionCheckoutBody(BaseModel):
+    period_months: Literal[1, 3, 12]
+
+
+async def _require_collective_owner(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> tuple[int, Any]:
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    membership = await get_active_collective_membership(session, trainer_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Not in a collective")
+    if membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Owner only")
+    return trainer_id, membership
+
+
+@router.post("/trainer/collective/subscription/invoice-request")
+async def post_trainer_collective_subscription_invoice_request(
+    body: CollectiveSubscriptionCheckoutBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """ERIP / manual: create unpaid studio pool invoice and notify admins."""
+    settings = Settings()
+    if settings.resolved_trainer_subscription_checkout_mode() != "invoice":
+        raise HTTPException(
+            status_code=400,
+            detail="Запрос счёта доступен только в режиме «счёт / ЕРИП» (invoice).",
+        )
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    inv = await create_collective_subscription_invoice(
+        session,
+        collective_id=membership.collective_id,
+        requested_by_trainer_id=trainer_id,
+        period_months=int(body.period_months),
+    )
+    if not inv:
+        raise HTTPException(status_code=400, detail="Could not create studio invoice")
+    if inv.get("error"):
+        raise HTTPException(status_code=403, detail=str(inv["error"]))
+
+    invoice_id = int(inv["invoice_id"])
+    try:
+        await notify_admins_new_collective_subscription_invoice(invoice_id)
+    except Exception:
+        logger.exception("collective invoice-request: admin notify failed invoice_id=%s", invoice_id)
+
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {
+        "ok": True,
+        "invoice_id": invoice_id,
+        "amount_cents": int(inv["amount_cents"]),
+        "plan_name": str(inv.get("plan_name") or "Подписка студии"),
+        "period_months": int(inv["period_months"]),
+        "studio": studio,
+    }
+
+
+@router.post("/trainer/collective/subscription/bepaid-checkout")
+async def post_trainer_collective_subscription_bepaid_checkout(
+    body: CollectiveSubscriptionCheckoutBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """bePaid: studio pool invoice + checkout URL."""
+    settings = Settings()
+    if settings.payment_sandbox:
+        raise HTTPException(
+            status_code=400,
+            detail="Режим песочницы: оплата через демо на экране студии, не через bePaid.",
+        )
+    if settings.resolved_trainer_subscription_checkout_mode() != "bepaid":
+        raise HTTPException(
+            status_code=400,
+            detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
+        )
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    inv = await create_collective_subscription_invoice(
+        session,
+        collective_id=membership.collective_id,
+        requested_by_trainer_id=trainer_id,
+        period_months=int(body.period_months),
+    )
+    if not inv or inv.get("error"):
+        raise HTTPException(status_code=400, detail="Could not create studio payment")
+
+    invoice_id = int(inv["invoice_id"])
+    amount_cents = int(inv["amount_cents"])
+    plan_name = str(inv.get("plan_name") or "Подписка студии")
+    webapp_base = (settings.webapp_base_url or "").rstrip("/")
+    api_base = (settings.api_base_url or webapp_base).rstrip("/")
+    return_url = f"{webapp_base}/webapp/trainer-collective?payment_success=1"
+    notification_url = f"{api_base}/api/webhooks/bepaid"
+    tracking_id = f"colinv_{invoice_id}"
+
+    def _date_str(d):
+        if d is None:
+            return None
+        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
+
+    base_out: dict[str, Any] = {
+        "invoice_id": invoice_id,
+        "amount_cents": amount_cents,
+        "plan_name": plan_name,
+        "period_start": _date_str(inv.get("period_start")),
+        "period_end": _date_str(inv.get("period_end")),
+        "period_months": int(body.period_months),
+        "payment_url": None,
+    }
+    if amount_cents <= 0:
+        return base_out
+
+    result = await create_checkout(
+        amount_cents=amount_cents,
+        currency="BYN",
+        description=plan_name[:255],
+        tracking_id=tracking_id,
+        return_url=return_url,
+        notification_url=notification_url,
+        success_url=return_url,
+    )
+    base_out["payment_url"] = result["payment_url"]
+    return base_out
+
+
+class CollectiveSubscriptionStubConfirmBody(BaseModel):
+    invoice_id: int
+
+
+@router.post("/trainer/collective/subscription/stub-confirm")
+async def post_trainer_collective_subscription_stub_confirm(
+    body: CollectiveSubscriptionStubConfirmBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Sandbox: confirm studio pool invoice without bePaid webhook."""
+    settings = Settings()
+    if not settings.payment_sandbox:
+        raise HTTPException(status_code=404, detail="Not available when payment_sandbox is false")
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    from sqlalchemy import text
+
+    r = await session.execute(
+        text(
+            """
+            SELECT collective_id, requested_by_trainer_id
+            FROM collective_invoices WHERE id = :iid
+            """
+        ),
+        {"iid": body.invoice_id},
+    )
+    row = r.fetchone()
+    if not row or int(row[0]) != membership.collective_id or int(row[1]) != trainer_id:
+        raise HTTPException(status_code=403, detail="Invoice not found or not yours")
+    payment_external_id = f"stub-colinv-{body.invoice_id}-{uuid.uuid4().hex[:12]}"
+    ok = await confirm_collective_invoice_after_payment(
+        session, body.invoice_id, payment_external_id
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invoice already paid or invalid")
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {"success": True, "studio": studio}
+
+
+@router.post("/trainer/collective/subscription/mock-checkout")
+async def post_trainer_collective_subscription_mock_checkout(
+    body: CollectiveSubscriptionCheckoutBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Sandbox demo: grant pool subscription without invoice (owner only)."""
+    if not Settings().payment_sandbox:
+        raise HTTPException(
+            status_code=404,
+            detail="Mock checkout is not available when payment_sandbox is disabled",
+        )
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    result = await admin_grant_collective_subscription(
+        session,
+        slug=membership.slug,
+        period_months=int(body.period_months),
+        modules=None,
+        admin_id=trainer_id,
+    )
+    if not result or result.get("error"):
+        raise HTTPException(status_code=400, detail="Could not activate studio subscription")
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    return {"ok": True, "studio": studio, "expires_at": result.get("expires_at")}
+
+
+# --- Collective center sessions (ADR-003 W2 studio_central) ---
+
+from datetime import date as date_type, time as time_type
+
+from src.application.collective_session_use_cases import (
+    ATTENDANCE_MODES,
+    cancel_collective_session,
+    center_tariff_catalog,
+    confirm_collective_session_booking,
+    create_collective_session,
+    create_collective_session_booking,
+    decline_collective_session_booking,
+    list_collective_sessions_for_studio,
+    list_pending_collective_session_bookings_for_owner,
+    update_collective_session_coaches,
+)
+
+
+def _parse_hhmm(raw: str) -> time_type:
+    parts = (raw or "").strip().split(":")
+    if len(parts) < 2:
+        raise ValueError("invalid_time")
+    hour = int(parts[0])
+    minute = int(parts[1])
+    return time_type(hour=hour, minute=minute)
+
+
+class CollectiveSessionCreateBody(BaseModel):
+    slot_date: date_type
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    capacity: int = Field(1, ge=1, le=500)
+    arena_id: int | None = None
+    coach_trainer_ids: list[int] = Field(default_factory=list)
+
+
+class CollectiveSessionCoachesBody(BaseModel):
+    coach_trainer_ids: list[int] = Field(default_factory=list)
+
+
+class ClientCollectiveSessionBookingBody(BaseModel):
+    session_id: int = Field(..., gt=0)
+    attendance_mode: str
+    center_coach_id: int | None = None
+    guest_count: int = Field(0, ge=0, le=20)
+    client_comment: str | None = Field(None, max_length=2000)
+    collective_pass_instance_id: int | None = Field(None, gt=0)
+    phone: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+@router.get("/trainer/collective/sessions")
+async def get_trainer_collective_sessions(
+    from_date: date_type | None = None,
+    to_date: date_type | None = None,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner: list center grid sessions for studio_central collective."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    studio = await get_trainer_collective_studio_payload(session, trainer_id)
+    if not studio or not studio.get("can_manage_center_schedule"):
+        raise HTTPException(status_code=400, detail="Center schedule not enabled for this studio")
+    today = date_type.today()
+    fd = from_date or today
+    td = to_date or (today + timedelta(days=28))
+    if td < fd:
+        raise HTTPException(status_code=400, detail="Invalid date range")
+    items = await list_collective_sessions_for_studio(
+        session,
+        collective_id=membership.collective_id,
+        from_date=fd,
+        to_date=td,
+    )
+    return {
+        "sessions": items,
+        "tariffs": center_tariff_catalog(),
+        "attendance_modes": list(ATTENDANCE_MODES),
+    }
+
+
+@router.post("/trainer/collective/sessions")
+async def post_trainer_collective_session(
+    body: CollectiveSessionCreateBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner creates a bookable center window."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    try:
+        start = _parse_hhmm(body.start_time)
+        end = _parse_hhmm(body.end_time)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid time format")
+    created = await create_collective_session(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+        slot_date=body.slot_date,
+        start_time=start,
+        end_time=end,
+        capacity=body.capacity,
+        arena_id=body.arena_id,
+        coach_trainer_ids=body.coach_trainer_ids,
+    )
+    if created is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    err = created.get("error")
+    if err == "not_studio_central":
+        raise HTTPException(status_code=400, detail="Studio is not studio_central")
+    if err == "invalid_time_range":
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+    if err:
+        raise HTTPException(status_code=403, detail=str(err))
+    return created
+
+
+@router.patch("/trainer/collective/sessions/{session_id:int}/coaches")
+async def patch_trainer_collective_session_coaches(
+    session_id: int,
+    body: CollectiveSessionCoachesBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, _membership = await _require_collective_owner(session, principal)
+    updated = await update_collective_session_coaches(
+        session,
+        session_id=session_id,
+        owner_trainer_id=trainer_id,
+        coach_trainer_ids=body.coach_trainer_ids,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if updated.get("error"):
+        raise HTTPException(status_code=403, detail=str(updated["error"]))
+    return updated
+
+
+@router.delete("/trainer/collective/sessions/{session_id:int}")
+async def delete_trainer_collective_session(
+    session_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, _membership = await _require_collective_owner(session, principal)
+    result = await cancel_collective_session(
+        session,
+        session_id=session_id,
+        owner_trainer_id=trainer_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if result.get("error"):
+        raise HTTPException(status_code=403, detail=str(result["error"]))
+    return result
+
+
+@router.post("/client/collective-session-booking")
+async def post_client_collective_session_booking(
+    body: ClientCollectiveSessionBookingBody,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Client books a studio_central center session (PAYG, W2)."""
+    telegram_id = client_catalog_telegram_key(principal)
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        principal,
+        cred.raw,
+        phone=(body.phone or "").strip() or None,
+        first_name=body.first_name,
+        last_name=body.last_name,
+    )
+    if not client_id:
+        raise HTTPException(status_code=400, detail="Client profile required")
+    created = await create_collective_session_booking(
+        session,
+        session_id=body.session_id,
+        client_id=int(client_id),
+        attendance_mode=body.attendance_mode,
+        center_coach_id=body.center_coach_id,
+        guest_count=body.guest_count,
+        client_comment=body.client_comment,
+        collective_pass_instance_id=body.collective_pass_instance_id,
+    )
+    if created is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    err = created.get("error")
+    if err == "session_not_available":
+        raise HTTPException(status_code=400, detail="Session not available")
+    if err == "session_full":
+        raise HTTPException(status_code=409, detail="Session full")
+    if err == "center_coach_required":
+        raise HTTPException(status_code=400, detail="Coach required for this mode")
+    if err == "coach_not_assigned":
+        raise HTTPException(status_code=400, detail="Coach not assigned to session")
+    if err == "guest_count_required":
+        raise HTTPException(status_code=400, detail="Guest count required")
+    if err == "pass_not_found":
+        raise HTTPException(status_code=404, detail="Pass not found")
+    if err == "pass_not_yours":
+        raise HTTPException(status_code=403, detail="Pass not yours")
+    if err == "pass_kind_mismatch":
+        raise HTTPException(status_code=400, detail="Pass cannot be used for this format")
+    if err == "pass_insufficient_credits":
+        raise HTTPException(status_code=400, detail="Not enough visits on pass")
+    if err == "pass_expired":
+        raise HTTPException(status_code=400, detail="Pass expired")
+    if err:
+        raise HTTPException(status_code=400, detail=str(err))
+    return {"success": True, **created}
+
+
+@router.get("/trainer/collective/session-bookings")
+async def get_trainer_collective_session_bookings(
+    status: str = "pending",
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner inbox: pending center session booking requests."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    if (status or "").strip().lower() != "pending":
+        raise HTTPException(status_code=400, detail="Only pending inbox supported")
+    result = await list_pending_collective_session_bookings_for_owner(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+    )
+    if result.get("error"):
+        raise HTTPException(status_code=403, detail=str(result["error"]))
+    return result
+
+
+@router.post("/trainer/collective/session-bookings/{booking_id:int}/confirm")
+async def post_trainer_collective_session_booking_confirm(
+    booking_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, _membership = await _require_collective_owner(session, principal)
+    result = await confirm_collective_session_booking(
+        session,
+        booking_id=booking_id,
+        trainer_id=trainer_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if result.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if result.get("error") == "not_pending":
+        raise HTTPException(status_code=400, detail="Booking not pending")
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=str(result["error"]))
+    return result
+
+
+@router.post("/trainer/collective/session-bookings/{booking_id:int}/decline")
+async def post_trainer_collective_session_booking_decline(
+    booking_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, _membership = await _require_collective_owner(session, principal)
+    result = await decline_collective_session_booking(
+        session,
+        booking_id=booking_id,
+        trainer_id=trainer_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if result.get("error") == "forbidden":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if result.get("error") == "not_pending":
+        raise HTTPException(status_code=400, detail="Booking not pending")
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=str(result["error"]))
+    return result
+
+
+from src.application.collective_pass_use_cases import (
+    PASS_KINDS,
+    issue_collective_pass_to_client,
+    list_client_collective_passes,
+    list_collective_pass_products,
+    seed_reference_collective_pass_products,
+    upsert_collective_pass_product,
+)
+
+
+class CollectivePassProductBody(BaseModel):
+    pass_kind: str
+    name: str = Field(..., min_length=1, max_length=128)
+    sessions_total: int = Field(..., ge=1, le=500)
+    price_cents: int = Field(..., ge=0)
+    validity_days: int | None = Field(None, ge=1, le=3650)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class CollectivePassProductPatchBody(BaseModel):
+    pass_kind: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=128)
+    sessions_total: int | None = Field(None, ge=1, le=500)
+    price_cents: int | None = Field(None, ge=0)
+    validity_days: int | None = Field(None, ge=1, le=3650)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+class CollectivePassIssueBody(BaseModel):
+    client_id: int = Field(..., gt=0)
+    collective_pass_product_id: int = Field(..., gt=0)
+
+
+@router.get("/trainer/collective/pass-products")
+async def get_trainer_collective_pass_products(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner: center pass product catalog (W3)."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    products = await list_collective_pass_products(
+        session,
+        collective_id=membership.collective_id,
+    )
+    return {"products": products, "pass_kinds": list(PASS_KINDS)}
+
+
+@router.post("/trainer/collective/pass-products/seed-reference")
+async def post_trainer_collective_pass_products_seed(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner: load ADR-003 reference tariffs if empty."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    result = await seed_reference_collective_pass_products(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+    )
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=str(result["error"]))
+    return result
+
+
+@router.post("/trainer/collective/pass-products")
+async def post_trainer_collective_pass_product(
+    body: CollectivePassProductBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    created = await upsert_collective_pass_product(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+        pass_kind=body.pass_kind,
+        name=body.name,
+        sessions_total=body.sessions_total,
+        price_cents=body.price_cents,
+        validity_days=body.validity_days,
+        is_active=body.is_active,
+        sort_order=body.sort_order,
+    )
+    if created.get("error"):
+        raise HTTPException(status_code=400, detail=str(created["error"]))
+    return created
+
+
+@router.patch("/trainer/collective/pass-products/{product_id:int}")
+async def patch_trainer_collective_pass_product(
+    product_id: int,
+    body: CollectivePassProductPatchBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    existing_list = await list_collective_pass_products(
+        session,
+        collective_id=membership.collective_id,
+    )
+    existing = next((p for p in existing_list if int(p["id"]) == int(product_id)), None)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    updated = await upsert_collective_pass_product(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+        product_id=product_id,
+        pass_kind=body.pass_kind or existing["pass_kind"],
+        name=body.name or existing["name"],
+        sessions_total=body.sessions_total if body.sessions_total is not None else existing["sessions_total"],
+        price_cents=body.price_cents if body.price_cents is not None else existing["price_cents"],
+        validity_days=body.validity_days if body.validity_days is not None else existing.get("validity_days"),
+        is_active=body.is_active if body.is_active is not None else existing["is_active"],
+        sort_order=body.sort_order if body.sort_order is not None else existing["sort_order"],
+    )
+    if updated.get("error"):
+        raise HTTPException(status_code=400, detail=str(updated["error"]))
+    return updated
+
+
+@router.post("/trainer/collective/pass-products/{product_id:int}/issue")
+async def post_trainer_collective_pass_issue(
+    product_id: int,
+    body: CollectivePassIssueBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner issues pass to client after external payment."""
+    trainer_id, membership = await _require_collective_owner(session, principal)
+    issued = await issue_collective_pass_to_client(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+        client_id=body.client_id,
+        collective_pass_product_id=product_id,
+    )
+    if issued.get("error"):
+        err = str(issued["error"])
+        if err == "client_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return {"ok": True, "pass": issued}
+
+
+@router.get("/client/collective-passes")
+async def get_client_collective_passes(
+    collective_slug: str,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict[str, Any]:
+    """Client redeemable passes at a studio_central collective."""
+    from src.application.collective_use_cases import get_collective_by_slug
+
+    coll = await get_collective_by_slug(session, collective_slug.strip(), active_only=True)
+    if coll is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    telegram_id = client_catalog_telegram_key(principal)
+    r = await session.execute(
+        text("SELECT id FROM clients WHERE telegram_id = :tid LIMIT 1"),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    if row is None:
+        return {"passes": []}
+    passes = await list_client_collective_passes(
+        session,
+        client_id=int(row[0]),
+        collective_id=int(coll["id"]),
+        redeemable_only=True,
+    )
+    return {"passes": passes, "collective_id": coll["id"]}
 
 
 # --- Referral program (B2B: trainer invites trainer) ---

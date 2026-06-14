@@ -198,6 +198,33 @@ async def get_trainer_entitlements(session: AsyncSession, trainer_id: int) -> Tr
     return TrainerEntitlements(has_base_crm=True, modules=union, raw_tier=any_raw_tier)
 
 
+def merge_entitlements(own: TrainerEntitlements, collective: TrainerEntitlements) -> TrainerEntitlements:
+    """Union module flags; CRM base if either side grants it."""
+    merged = default_modules_dict()
+    for key in SUBSCRIPTION_MODULES:
+        merged[key] = bool(own.modules.get(key)) or bool(collective.modules.get(key))
+    return TrainerEntitlements(
+        has_base_crm=own.has_base_crm or collective.has_base_crm,
+        modules=merged,
+        raw_tier=own.raw_tier or collective.raw_tier,
+    )
+
+
+async def get_effective_entitlements(session: AsyncSession, trainer_id: int) -> TrainerEntitlements:
+    """
+    Own subscription union optional collective grant.
+
+    Solo trainers without collective membership behave identically to get_trainer_entitlements.
+    """
+    from src.application.collective_use_cases import get_collective_entitlements_for_member
+
+    own = await get_trainer_entitlements(session, trainer_id)
+    collective = await get_collective_entitlements_for_member(session, trainer_id)
+    if collective is None:
+        return own
+    return merge_entitlements(own, collective)
+
+
 async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int) -> SubscriptionTier:
     """
     Synthetic tier for menus / legacy code: analytics if analytics module, elif online, elif crm.
@@ -702,7 +729,7 @@ async def trainer_has_tier_access(
     """
     if required_tier == SUBSCRIPTION_TIER_NONE:
         return True
-    ent = await get_trainer_entitlements(session, trainer_id)
+    ent = await get_effective_entitlements(session, trainer_id)
     if not ent.has_base_crm:
         return False
     if required_tier == SUBSCRIPTION_TIER_CRM:
@@ -716,23 +743,23 @@ async def trainer_has_tier_access(
 
 async def trainer_allows_online_booking(session: AsyncSession, trainer_id: int) -> bool:
     """Catalog self-booking requires CRM base + online module."""
-    ent = await get_trainer_entitlements(session, trainer_id)
+    ent = await get_effective_entitlements(session, trainer_id)
     return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_ONLINE))
 
 
 async def trainer_has_crm_access(session: AsyncSession, trainer_id: int) -> bool:
     """Active subscription with CRM base (any paid/trial row)."""
-    ent = await get_trainer_entitlements(session, trainer_id)
+    ent = await get_effective_entitlements(session, trainer_id)
     return ent.has_base_crm
 
 
 async def trainer_has_analytics_access(session: AsyncSession, trainer_id: int) -> bool:
-    ent = await get_trainer_entitlements(session, trainer_id)
+    ent = await get_effective_entitlements(session, trainer_id)
     return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_ANALYTICS))
 
 
 async def trainer_has_groups_access(session: AsyncSession, trainer_id: int) -> bool:
-    ent = await get_trainer_entitlements(session, trainer_id)
+    ent = await get_effective_entitlements(session, trainer_id)
     return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_GROUPS))
 
 

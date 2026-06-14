@@ -24,8 +24,8 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=202606169" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202606167" />
+  <link rel="preload" href="catalog-main.js?v=202606171" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202606282" />
   <link rel="stylesheet" href="booking-client.css?v=202605305" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202606281" />
@@ -62,9 +62,14 @@
     </div>
     <div id="catalogTabPanel" class="catalog-tab-panel active">
       <div class="catalog-home catalog-home--booting" id="catalogHome">
-        <header class="catalog-hero">
+        <header class="catalog-hero" id="catalogHero">
+          <img class="catalog-hero__logo" id="catalogHeroLogo" alt="" hidden />
           <h2 class="catalog-hero__title" id="catalogHeroTitle">Найдите тренера</h2>
+          <p class="catalog-hero__venue" id="catalogHeroVenue" hidden></p>
           <p class="catalog-hero__lead" id="catalogHeroLead">Город и занятие — покажем свободные слоты на аренах.</p>
+          <p class="catalog-hero__about" id="catalogHeroAbout" hidden></p>
+          <div class="catalog-hero__gallery" id="catalogHeroGallery" hidden></div>
+          <p class="catalog-hero__powered" id="catalogHeroPowered" hidden></p>
         </header>
 
         <section class="catalog-block catalog-block--popular" aria-labelledby="catalogScenariosLabel">
@@ -341,7 +346,70 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=202606169"></script>
+  <div
+    id="centerSessionBookingModal"
+    class="center-booking-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="centerBookingModalTitle"
+    hidden
+  >
+    <div class="center-booking-modal__backdrop" id="centerBookingModalBackdrop" aria-hidden="true"></div>
+    <div class="center-booking-modal__panel" id="centerSessionBookingPanel">
+      <div class="center-booking-modal__handle" aria-hidden="true"></div>
+      <div class="center-booking-modal__header">
+        <div class="center-booking-modal__header-main">
+          <div id="centerBookingModalTitle" class="center-booking-modal__title">Запись в центр</div>
+          <div id="centerBookingModalMeta" class="center-booking-modal__meta"></div>
+        </div>
+        <button type="button" class="center-booking-modal__close" id="centerBookingModalClose" aria-label="Закрыть">×</button>
+      </div>
+      <div class="center-booking-modal__body">
+        <div class="center-booking-section">
+          <div class="center-booking-section__label">Формат занятия</div>
+          <div id="centerBookingModeList" class="center-booking-modes" role="radiogroup" aria-label="Формат занятия"></div>
+        </div>
+        <div id="centerBookingCoachSection" class="center-booking-section" hidden>
+          <div class="center-booking-section__label">Тренер центра</div>
+          <div id="centerBookingCoachList" class="center-booking-coaches" role="radiogroup" aria-label="Тренер центра"></div>
+        </div>
+        <div id="centerBookingGuestSection" class="center-booking-section" hidden>
+          <div class="center-booking-section__label" id="centerBookingGuestLabel">Гостей</div>
+          <div class="center-booking-stepper">
+            <button type="button" class="center-booking-stepper__btn" id="centerBookingGuestMinus" aria-label="Меньше">−</button>
+            <span class="center-booking-stepper__value" id="centerBookingGuestValue">1</span>
+            <button type="button" class="center-booking-stepper__btn" id="centerBookingGuestPlus" aria-label="Больше">+</button>
+          </div>
+          <p class="center-booking-section__hint" id="centerBookingGuestHint"></p>
+        </div>
+        <div id="centerBookingPassSection" class="center-booking-section" hidden>
+          <div class="center-booking-section__label">Абонемент</div>
+          <div id="centerBookingPassList" class="center-booking-coaches" role="radiogroup" aria-label="Абонемент центра"></div>
+        </div>
+        <div class="center-booking-section center-booking-section--comment">
+          <label class="center-booking-section__label" for="centerBookingComment">Комментарий</label>
+          <textarea
+            id="centerBookingComment"
+            class="center-booking-comment"
+            rows="2"
+            maxlength="500"
+            placeholder="Пожелания, уровень, с кем приходите…"
+          ></textarea>
+        </div>
+      </div>
+      <div class="center-booking-modal__footer">
+        <div class="center-booking-price-row">
+          <span class="center-booking-price-label">К оплате на месте</span>
+          <span id="centerBookingPriceLine" class="center-booking-price">—</span>
+        </div>
+        <p id="centerBookingPriceBreakdown" class="center-booking-price-breakdown"></p>
+        <p class="center-booking-pay-hint">Центр подтвердит заявку и свяжется с вами</p>
+        <button type="button" class="btn-primary btn-block center-booking-submit" id="centerBookingSubmit">Отправить заявку</button>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="catalog-main.js?v=202606282"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

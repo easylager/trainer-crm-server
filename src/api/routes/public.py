@@ -1,6 +1,7 @@
 """Public API (no auth): catalog (cities, services, trainers) and photo serving for client/bot."""
 import logging
 import re
+from datetime import date, timedelta
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.middleware.http_limits import client_ip_from_request
+from src.application.brand_presentation import (
+    brand_presentation_to_public_dict,
+    resolve_brand_from_collective_row,
+)
 from src.application.catalog_use_cases import (
     get_platform_stats,
     list_arenas,
@@ -17,6 +22,7 @@ from src.application.catalog_use_cases import (
     list_cities,
     list_services,
 )
+from src.application.collective_use_cases import get_collective_by_slug, collective_location_payload
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.lifecycle_use_cases import resolve_lifecycle_snapshot
 from src.application.subscription_tier_use_cases import get_trainer_booking_availability
@@ -233,6 +239,59 @@ async def get_arenas(
     return {"items": items}
 
 
+def _public_logo_url(logo_key: str | None) -> str | None:
+    key = (logo_key or "").strip()
+    if not key:
+        return None
+    return f"/api/public/photos/{quote(key, safe='')}"
+
+
+@router.get("/collectives/{slug}")
+async def get_public_collective(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Public studio landing metadata for client catalog (?collective=slug)."""
+    row = await get_collective_by_slug(session, slug, active_only=True)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    brand = resolve_brand_from_collective_row(row)
+    payload = brand_presentation_to_public_dict(brand, slug=row["slug"])
+    location = await collective_location_payload(session, row)
+    payload.update(location)
+    payload["seat_limit"] = row.get("seat_limit")
+    payload["schedule_mode"] = row.get("schedule_mode") or "member_autonomous"
+    return payload
+
+
+@router.get("/collectives/{slug}/sessions")
+async def get_public_collective_sessions(
+    slug: str,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Bookable center grid for studio_central collectives (ADR-003 W2)."""
+    from src.application.collective_session_use_cases import list_public_collective_sessions
+
+    today = date.today()
+    fd = from_date or today
+    td = to_date or (today + timedelta(days=28))
+    if td < fd:
+        raise HTTPException(status_code=400, detail="Invalid date range")
+    payload = await list_public_collective_sessions(
+        session,
+        slug=slug,
+        from_date=fd,
+        to_date=td,
+    )
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    if payload.get("error") == "not_studio_central":
+        raise HTTPException(status_code=400, detail="Collective is not studio_central")
+    return payload
+
+
 @router.get("/trainers")
 async def list_active_trainers(
     response: Response,
@@ -246,6 +305,7 @@ async def list_active_trainers(
     # Time-based filters
     filter_days: str | None = None,  # comma-separated: "1,2,3" for Mon,Tue,Wed
     filter_time_slots: str | None = None,  # comma-separated: "09:00-12:00,18:00-21:00"
+    collective_slug: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -289,6 +349,7 @@ async def list_active_trainers(
         order_by=order_by,
         filter_days=days_filter,
         filter_time_slots=time_slots_filter,
+        collective_slug=(collective_slug or "").strip() or None,
     )
     trainer_ids_page = [t["id"] for t in items]
     open_grp = await batch_open_groups_count_for_trainers(session, trainer_ids_page)
@@ -510,8 +571,8 @@ async def get_trainer_education_public(
 @router.get("/photos/{file_key:path}")
 async def serve_photo(file_key: str) -> Response:
     """
-    Serve catalog trainer photos from S3 or local storage. Only object keys under `trainers/`
-    are readable here (private prefixes like `legal/`, `certificates/` are rejected in s3.get_photo).
+    Serve catalog trainer photos from S3 or local storage. Keys under `trainers/` or
+    `collectives/` (studio brand kit); private prefixes like `legal/` are rejected.
     """
     result = s3.get_photo(file_key)
     if not result:

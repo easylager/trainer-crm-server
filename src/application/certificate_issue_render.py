@@ -205,10 +205,19 @@ def _meta_html(trainer_name: str, expires_at: Optional[date]) -> str:
     return f"<b>Тренер</b>: {_esc((trainer_name or '').strip() or '—')}<br/><b>Действителен до</b>: {_esc(ex)}"
 
 
-def _sheet_foot_line(*, brand: str, issued_at: Optional[date], purchased_by_name: Optional[str]) -> str:
+def _sheet_foot_line(
+    *,
+    brand: str,
+    issued_at: Optional[date],
+    purchased_by_name: Optional[str],
+    powered_by: Optional[str] = None,
+) -> str:
     foot = f"{(brand or '').strip() or 'ICE STUDIO'} · выдан {_format_date(issued_at)}"
     if (purchased_by_name or "").strip():
         foot += f" · {(purchased_by_name or '').strip()}"
+    platform = (powered_by or "").strip()
+    if platform and platform.lower() not in (brand or "").strip().lower():
+        foot += f" · powered by {platform}"
     return _esc(foot)
 
 
@@ -226,6 +235,7 @@ def build_certificate_issue_html(
     expires_at: Optional[date] = None,
     activation_url: Optional[str] = None,
     client_bot_display_name: Optional[str] = None,
+    brand_powered_by: Optional[str] = None,
 ) -> str:
     """
     Fill ``static/templates/certificate_issue.html`` with escaped dynamic fields.
@@ -266,7 +276,12 @@ def build_certificate_issue_html(
     html = html.replace("__CODE__", _esc(((code or "").strip() or "—").replace("\n", " ")))
     html = html.replace(
         "__SHEET_FOOT__",
-        _sheet_foot_line(brand=(brand_display or "").strip() or "ICE STUDIO", issued_at=issued_at, purchased_by_name=purchased_by_name),
+        _sheet_foot_line(
+            brand=(brand_display or "").strip() or "ICE STUDIO",
+            issued_at=issued_at,
+            purchased_by_name=purchased_by_name,
+            powered_by=brand_powered_by,
+        ),
     )
     return html
 

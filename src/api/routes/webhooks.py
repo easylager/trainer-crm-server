@@ -12,11 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.bepaid_webhook_auth import verify_bepaid_webhook_http_basic
 from src.api.deps import get_session
 from src.application.subscription_use_cases import confirm_subscription_invoice_after_payment
+from src.application.collective_use_cases import confirm_collective_invoice_after_payment
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
 
 TRACKING_PREFIX_INVOICE = "inv_"
+TRACKING_PREFIX_COLLECTIVE_INVOICE = "colinv_"
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -65,6 +67,21 @@ async def bepaid_webhook(request: Request, session: AsyncSession = Depends(get_s
             logger.info("bepaid webhook: confirmed subscription invoice_id=%s", invoice_id)
         else:
             logger.warning("bepaid webhook: confirm subscription failed invoice_id=%s", invoice_id)
+        return {}
+
+    if isinstance(tracking_id, str) and tracking_id.startswith(TRACKING_PREFIX_COLLECTIVE_INVOICE):
+        try:
+            invoice_id = int(tracking_id[len(TRACKING_PREFIX_COLLECTIVE_INVOICE) :])
+        except ValueError:
+            logger.warning("bepaid webhook: invalid collective invoice tracking_id %s", tracking_id)
+            return {}
+        ok = await confirm_collective_invoice_after_payment(
+            session, invoice_id, payment_external_id
+        )
+        if ok:
+            logger.info("bepaid webhook: confirmed collective invoice_id=%s", invoice_id)
+        else:
+            logger.warning("bepaid webhook: confirm collective failed invoice_id=%s", invoice_id)
         return {}
 
     # Unknown tracking_id: currently only invoices are supported.

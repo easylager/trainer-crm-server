@@ -1390,6 +1390,56 @@
         });
       })();
 
+      function copyBookingClientPhone(phone) {
+        var p = String(phone || '').trim();
+        if (!p) return;
+        var rt = window.MiniAppRuntime;
+        if (rt && typeof rt.copyTextToClipboard === 'function') {
+          rt.copyTextToClipboard(p).then(function(ok) {
+            showToast(ok ? 'Телефон скопирован' : 'Не удалось скопировать');
+          });
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(p).then(
+            function() {
+              showToast('Телефон скопирован');
+            },
+            function() {
+              showToast('Не удалось скопировать');
+            }
+          );
+          return;
+        }
+        showToast(p);
+      }
+
+      function bookingDetailPhoneHtml(phone, extraClass) {
+        var p = String(phone || '').trim();
+        if (!p) return '';
+        var cls = 'bd-tel bd-tel--copy' + (extraClass ? ' ' + extraClass : '');
+        return (
+          '<button type="button" class="' +
+          cls +
+          '" data-copy-phone="' +
+          escapeHtml(p) +
+          '" aria-label="Скопировать телефон">' +
+          escapeHtml(p) +
+          '<span class="bd-tel-copy-hint">копировать</span></button>'
+        );
+      }
+
+      function wireBookingDetailPhoneCopy(root) {
+        if (!root) return;
+        root.querySelectorAll('[data-copy-phone]').forEach(function(btn) {
+          btn.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            copyBookingClientPhone(btn.getAttribute('data-copy-phone'));
+          });
+        });
+      }
+
       function openBookingDetail(bookingId) {
         if (state.bookingDetailReturn !== 'hub' && state.bookingDetailReturn !== 'group' && state.bookingDetailReturn !== 'hub_group') {
           state.bookingDetailReturn = 'schedule';
@@ -1437,8 +1487,7 @@
             html += '<svg class="bd-client-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
             html += '</a>';
             if (b.client_phone) {
-              var telRawP = String(b.client_phone).replace(/\s+/g, '');
-              html += '<a class="bd-tel bd-tel--block" href="tel:' + escapeHtml(telRawP) + '">' + escapeHtml(b.client_phone) + '</a>';
+              html += bookingDetailPhoneHtml(b.client_phone, 'bd-tel--block');
             }
             html += '</div>';
           } else {
@@ -1446,10 +1495,7 @@
             html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
             html += '<div class="bd-client-body">';
             html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false && !b.is_sandbox ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
-            if (b.client_phone) {
-              var telRaw = String(b.client_phone).replace(/\s+/g, '');
-              html += '<a class="bd-tel" href="tel:' + escapeHtml(telRaw) + '">' + escapeHtml(b.client_phone) + '</a>';
-            }
+            html += bookingDetailPhoneHtml(b.client_phone);
             html += '</div></div>';
           }
           html += '<div class="bd-section-label">Подробности</div>';
@@ -1519,6 +1565,7 @@
           }
           html += '</div></div>';
           document.getElementById('detailBookingContent').innerHTML = html;
+          wireBookingDetailPhoneCopy(document.getElementById('detailBookingContent'));
           bindBookingDetailEditableRows(b);
 
           var actions = document.getElementById('detailBookingActions');
@@ -1846,6 +1893,8 @@
         pendingOpenTemplateTab: false,
         weekStart: null,
         slots: [],
+        /** Center duty windows (studio_central) — empty for solo trainers; merged in calendar when non-empty. */
+        centerDuties: [],
         /** True after successful fetch (or prefetch) for current UI; avoids full refetch on back from booking detail. */
         scheduleDataLoaded: false,
         templates: [],
@@ -4586,6 +4635,9 @@
           })
           .then(function(data) {
             state.slots = (data && data.slots) ? data.slots : [];
+            state.centerDuties = (data && data.center_duties && data.center_duties.length)
+              ? data.center_duties
+              : [];
             if (data && data.trainer_id != null && !isNaN(parseInt(String(data.trainer_id), 10))) {
               state.trainerId = parseInt(String(data.trainer_id), 10);
             }
@@ -5467,6 +5519,42 @@
         updateTelegramBack();
       }
 
+      function scheduleEditorHasCenterDuties() {
+        return !!(state.centerDuties && state.centerDuties.length);
+      }
+
+      function scheduleTimeToMinutes(hhmm) {
+        if (!hhmm) return 0;
+        var parts = String(hhmm).split(':');
+        return parseInt(parts[0], 10) * 60 + parseInt(parts[1] || '0', 10);
+      }
+
+      function scheduleRangesOverlap(aStart, aEnd, bStart, bEnd) {
+        return scheduleTimeToMinutes(aStart) < scheduleTimeToMinutes(bEnd)
+          && scheduleTimeToMinutes(bStart) < scheduleTimeToMinutes(aEnd);
+      }
+
+      function scheduleCenterDutiesForDate(dateKey) {
+        if (!scheduleEditorHasCenterDuties()) return [];
+        return (state.centerDuties || []).filter(function(d) { return d.slot_date === dateKey; });
+      }
+
+      function renderScheduleCenterDutyRowHtml(duty, daySlots) {
+        var overlap = (daySlots || []).some(function(s) {
+          return scheduleRangesOverlap(s.start_time, s.end_time, duty.start_time, duty.end_time);
+        });
+        var title = escapeHtml(duty.collective_name || 'Центр');
+        var meta = 'Дежурство · ' + (duty.booked_count || 0) + '/' + (duty.capacity || 1);
+        return '<div class="slot-row slot-row-center-duty' + (overlap ? ' slot-row-center-duty--overlap' : '') + '" role="note">'
+          + '<div class="slot-row-left">'
+          + '<div class="slot-time-row"><span class="slot-time">' + escapeHtml(duty.start_time || '') + '–' + escapeHtml(duty.end_time || '') + '</span></div>'
+          + '<div class="slot-cohort-hint">' + title + '</div>'
+          + '<div class="slot-client-hint">' + escapeHtml(meta) + '</div>'
+          + '</div>'
+          + '<div class="slot-meta"><span class="slot-status slot-status-center-duty">центр</span></div>'
+          + '</div>';
+      }
+
       function renderCalendar() {
         teardownScheduleCalendarScrollSpy();
         syncAddSlotsButtonEligibility();
@@ -5480,6 +5568,11 @@
           if (!byDay[key]) byDay[key] = [];
           byDay[key].push(s);
         });
+        if (scheduleEditorHasCenterDuties()) {
+          (state.centerDuties || []).forEach(function(d) {
+            if (!byDay[d.slot_date]) byDay[d.slot_date] = [];
+          });
+        }
         const days = Object.keys(byDay).sort();
         const content = document.getElementById('calendarContent');
         if (days.length === 0) {
@@ -5492,7 +5585,9 @@
           const daySlots = byDay[dateKey]
             .filter(function(s) { return !s.training_group_id; })
             .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
-          if (!daySlots.length) return;
+          var dayDuties = scheduleCenterDutiesForDate(dateKey)
+            .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+          if (!daySlots.length && !dayDuties.length) return;
           html += '<div class="day-block cal-day-anchor" id="cal-day-' + dateKey + '"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
@@ -5610,6 +5705,11 @@
             }
             html += '</div></div>';
           });
+          if (dayDuties.length) {
+            dayDuties.forEach(function(d) {
+              html += renderScheduleCenterDutyRowHtml(d, daySlots);
+            });
+          }
           html += '</div>';
         });
         if (!html) {

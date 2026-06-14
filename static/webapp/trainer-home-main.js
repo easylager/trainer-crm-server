@@ -2350,18 +2350,29 @@
         return buildHubInboxItemsFromClient();
       }
 
-      function collectHubPendingBookings() {
+      function hubPendingBookingIdsFromInbox() {
         var items = buildHubInboxItems();
-        var pendingItem = null;
-        for (var pi = 0; pi < items.length; pi++) {
-          if (items[pi].kind === 'pending') {
-            pendingItem = items[pi];
-            break;
+        for (var hi = 0; hi < items.length; hi++) {
+          if (items[hi].kind === 'pending' && items[hi].booking_ids && items[hi].booking_ids.length) {
+            return items[hi].booking_ids;
           }
         }
-        if (pendingItem && pendingItem.booking_ids && pendingItem.booking_ids.length) {
+        if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items)) {
+          for (var si = 0; si < hubServerActionInbox.items.length; si++) {
+            var raw = hubServerActionInbox.items[si];
+            if (raw.id === 'pending_bookings' && Array.isArray(raw.booking_ids) && raw.booking_ids.length) {
+              return raw.booking_ids;
+            }
+          }
+        }
+        return [];
+      }
+
+      function collectHubPendingBookings() {
+        var bookingIds = hubPendingBookingIdsFromInbox();
+        if (bookingIds.length) {
           var idSet = {};
-          pendingItem.booking_ids.forEach(function(id) {
+          bookingIds.forEach(function(id) {
             idSet[String(id)] = true;
           });
           var matched = [];
@@ -2375,7 +2386,7 @@
             });
           }
           if (matched.length) return matched;
-          return pendingItem.booking_ids.map(function(id) {
+          return bookingIds.map(function(id) {
             return { id: id, booking: { id: id }, day: { date: '' } };
           });
         }
@@ -2389,6 +2400,39 @@
           });
         });
         return out;
+      }
+
+      /** Fallback when pending-inbox module failed to load (e.g. missing /webapp route). */
+      function hubConfirmPendingBookingIdsInline(bookingIds) {
+        var ids = (bookingIds || [])
+          .map(function(id) {
+            return parseInt(String(id), 10);
+          })
+          .filter(function(n) {
+            return !isNaN(n) && n > 0;
+          });
+        if (!ids.length) {
+          hubToast('Нет записей, ожидающих подтверждения.');
+          return Promise.resolve();
+        }
+        return postJsonTrainer('/trainer/bookings/confirm-batch', { booking_ids: ids })
+          .then(function(res) {
+            var ok = parseInt(String((res && res.confirmed_count) || 0), 10) || 0;
+            invalidateHubServerActionInbox();
+            renderHubActionInbox();
+            loadBookings();
+            loadOnboardingChecklist();
+            if (ok > 0) {
+              hubToast(
+                ok + ' ' + pluralRu(ok, 'запись подтверждена', 'записи подтверждены', 'записей подтверждено')
+              );
+            } else {
+              hubToast('Не удалось подтвердить записи. Попробуйте позже.');
+            }
+          })
+          .catch(function(err) {
+            hubToast((err && err.message) || 'Не удалось подтвердить записи.');
+          });
       }
 
       function syncHubInboxShellBadges() {
@@ -2440,9 +2484,22 @@
       }
 
       function runHubInboxItemAction(item) {
-        if (!item) return;
-        if (item.kind === 'pending') {
-          openHubPendingConfirmSheet();
+        if (!item) {
+          hubToast('Не удалось выполнить действие. Обновите страницу.');
+          return;
+        }
+        if (item.kind === 'pending' || item.primary_action === 'batch_confirm') {
+          var pendingIds = item.booking_ids && item.booking_ids.length ? item.booking_ids : hubPendingBookingIdsFromInbox();
+          if (pendingIds.length === 1) {
+            initTrainerPendingInboxModule();
+            if (window.TrainerPendingInbox) {
+              TrainerPendingInbox.batchConfirmAll();
+            } else {
+              hubConfirmPendingBookingIdsInline(pendingIds);
+            }
+            return;
+          }
+          openHubPendingConfirmSheet(pendingIds);
           return;
         }
         if (item.kind === 'requests') {
@@ -2655,6 +2712,10 @@
           postJsonTrainer: postJsonTrainer,
           dayHeaderLine: dayHeaderLine,
           getPendingRows: collectHubPendingBookings,
+          getPendingCount: function() {
+            return hubLastPendingCount;
+          },
+          getPendingBookingIds: hubPendingBookingIdsFromInbox,
           onAfterConfirm: function() {
             invalidateHubServerActionInbox();
             renderHubActionInbox();
@@ -2664,13 +2725,27 @@
         });
       }
 
-      function openHubPendingConfirmSheet() {
+      function openHubPendingConfirmSheet(pendingIdsHint) {
         initTrainerPendingInboxModule();
-        if (window.TrainerPendingInbox) {
-          TrainerPendingInbox.openSheet().then(function() {
-            renderHubActionInbox();
-          });
+        if (!window.TrainerPendingInbox) {
+          var ids =
+            pendingIdsHint && pendingIdsHint.length
+              ? pendingIdsHint
+              : hubPendingBookingIdsFromInbox();
+          if (ids.length) {
+            hubConfirmPendingBookingIdsInline(ids);
+          } else {
+            hubToast('Не удалось открыть подтверждение. Обновите страницу.');
+          }
+          return;
         }
+        TrainerPendingInbox.openSheet()
+          .then(function() {
+            renderHubActionInbox();
+          })
+          .catch(function(err) {
+            hubToast((err && err.message) || 'Не удалось загрузить записи.');
+          });
       }
 
       function closeHubPendingConfirmSheet() {
@@ -2687,46 +2762,47 @@
       }
 
       function wireHubActionInboxEvents(host, visibleItems) {
-        if (!host) return;
-        if (!hubActionInboxWired) {
-          hubActionInboxWired = true;
-          host.addEventListener('click', function(ev) {
-            var t = ev.target;
-            if (!t || !t.closest) return;
-            var dismissEl = t.closest('[data-inbox-dismiss]');
-            if (dismissEl) {
-              dismissHubInboxRhythmItem(dismissEl.getAttribute('data-inbox-dismiss'));
-              return;
-            }
-            var expandEl = t.closest('#hubActionInboxExpand');
-            if (expandEl) {
-              hubActionInboxExpanded = true;
-              renderHubActionInbox();
-              return;
-            }
-            var collapseEl = t.closest('#hubActionInboxCollapse');
-            if (collapseEl) {
-              hubActionInboxExpanded = false;
-              renderHubActionInbox();
-              return;
-            }
-            var primaryEl = t.closest('[data-inbox-primary]');
-            if (primaryEl) {
-              var pix = parseInt(primaryEl.getAttribute('data-inbox-primary'), 10);
-              var itemsNow = buildHubInboxItems();
-              var shown = hubActionInboxExpanded ? itemsNow : itemsNow.slice(0, HUB_INBOX_COLLAPSED_MAX);
-              runHubInboxItemAction(shown[pix]);
-              return;
-            }
-            var secondaryEl = t.closest('[data-inbox-secondary]');
-            if (secondaryEl) {
-              var six = parseInt(secondaryEl.getAttribute('data-inbox-secondary'), 10);
-              var itemsNow2 = buildHubInboxItems();
-              var shown2 = hubActionInboxExpanded ? itemsNow2 : itemsNow2.slice(0, HUB_INBOX_COLLAPSED_MAX);
-              runHubInboxItemSecondaryAction(shown2[six]);
-            }
-          });
-        }
+        if (hubActionInboxWired) return;
+        hubActionInboxWired = true;
+        document.addEventListener('click', function(ev) {
+          var inboxHost = document.getElementById('hubActionInbox');
+          if (!inboxHost || inboxHost.hasAttribute('hidden')) return;
+          if (!inboxHost.contains(ev.target)) return;
+          var t = ev.target;
+          if (!t || !t.closest) return;
+          var dismissEl = t.closest('[data-inbox-dismiss]');
+          if (dismissEl) {
+            dismissHubInboxRhythmItem(dismissEl.getAttribute('data-inbox-dismiss'));
+            return;
+          }
+          var expandEl = t.closest('#hubActionInboxExpand');
+          if (expandEl) {
+            hubActionInboxExpanded = true;
+            renderHubActionInbox();
+            return;
+          }
+          var collapseEl = t.closest('#hubActionInboxCollapse');
+          if (collapseEl) {
+            hubActionInboxExpanded = false;
+            renderHubActionInbox();
+            return;
+          }
+          var primaryEl = t.closest('[data-inbox-primary]');
+          if (primaryEl) {
+            var pix = parseInt(primaryEl.getAttribute('data-inbox-primary'), 10);
+            var itemsNow = buildHubInboxItems();
+            var shown = hubActionInboxExpanded ? itemsNow : itemsNow.slice(0, HUB_INBOX_COLLAPSED_MAX);
+            runHubInboxItemAction(shown[pix]);
+            return;
+          }
+          var secondaryEl = t.closest('[data-inbox-secondary]');
+          if (secondaryEl) {
+            var six = parseInt(secondaryEl.getAttribute('data-inbox-secondary'), 10);
+            var itemsNow2 = buildHubInboxItems();
+            var shown2 = hubActionInboxExpanded ? itemsNow2 : itemsNow2.slice(0, HUB_INBOX_COLLAPSED_MAX);
+            runHubInboxItemSecondaryAction(shown2[six]);
+          }
+        });
       }
 
       /** Builds rhythm candidates and renders unified action inbox (replaces legacy rhythm slots). */
@@ -7869,6 +7945,15 @@
         }
         if (payload.action_inbox && typeof payload.action_inbox === 'object') {
           hubServerActionInbox = payload.action_inbox;
+        }
+        if (window.TrainerShell) {
+          if (payload.collective && payload.collective.slug) {
+            if (typeof TrainerShell.syncCollectiveMenuFromBootstrap === 'function') {
+              TrainerShell.syncCollectiveMenuFromBootstrap(payload.collective);
+            }
+          } else if (typeof TrainerShell.refreshCollectiveMenuVisibility === 'function') {
+            TrainerShell.refreshCollectiveMenuVisibility();
+          }
         }
         if (payload.revenue_mtd && payload.revenue_mtd.revenue_total_cents != null) {
           hubMtdRevenueText = formatHubMoneyCents(payload.revenue_mtd.revenue_total_cents);

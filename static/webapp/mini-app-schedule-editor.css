@@ -2632,6 +2632,26 @@
       letter-spacing: 0.02em;
     }
     .bd-tel:active { opacity: 0.8; }
+    .bd-tel--copy {
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      font: inherit;
+      text-align: left;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bd-tel--copy:active {
+      opacity: 0.75;
+    }
+    .bd-tel-copy-hint {
+      margin-left: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
     .bd-client--profile {
       flex-direction: column;
       align-items: stretch;
@@ -2669,6 +2689,9 @@
       margin: 0 -18px -16px;
       padding: 0 18px 16px 88px;
       display: block;
+    }
+    .bd-tel--block.bd-tel--copy {
+      width: calc(100% + 36px);
     }
     .bd-section-label {
       font-size: 11px;
@@ -3795,4 +3818,21 @@
     .precise-slot-tag__remove:active {
       background: color-mix(in srgb, #ff3b30 20%, transparent);
       color: #ff3b30;
+    }
+
+    /* Center duty overlay — only rendered when center_duties[] is non-empty (solo trainers unchanged). */
+    .slot-row-center-duty {
+      border-left: 3px solid color-mix(in srgb, #007aff 70%, #6366f1);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent);
+      cursor: default;
+    }
+    .slot-row-center-duty--overlap {
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff9500 45%, transparent);
+    }
+    .slot-status-center-duty {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: color-mix(in srgb, #007aff 14%, var(--tg-theme-secondary-bg-color));
+      color: var(--tg-theme-text-color);
     }

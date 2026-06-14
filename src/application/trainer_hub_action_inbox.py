@@ -9,6 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.notification_hours import NOTIFICATION_TZ
+
+_SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
+
 HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6
 
 
@@ -47,6 +54,37 @@ def _onboarding_all_complete(d: dict[str, Any]) -> bool:
     if not d.get("is_active") and d.get("schedule_unlocked") and d.get("tt_minimal_complete"):
         return True
     return False
+
+
+async def fetch_hub_pending_booking_ids(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    limit: int = 50,
+) -> list[int]:
+    """Future pending bookings for hub confirm — same filter as open_loop_pending_bookings_count."""
+    lim = max(1, min(int(limit), 200))
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid
+              AND b.status = 'pending'
+              AND NOT b.is_sandbox
+              AND s.status IN ('available', 'booked')
+              AND """
+            + _SQL_SLOT_END_TS
+            + """
+              > CURRENT_TIMESTAMP
+            ORDER BY s.slot_date, s.start_time, b.id
+            LIMIT :lim
+            """
+        ),
+        {"tid": int(trainer_id), "lim": lim},
+    )
+    return [int(row[0]) for row in r.fetchall()]
 
 
 def _pending_booking_ids_from_hub_bookings(bookings: dict[str, Any] | None) -> list[int]:
@@ -383,6 +421,7 @@ def build_trainer_hub_action_inbox(
     requests_count: int = 0,
     bookings: dict[str, Any] | None = None,
     schedule_unlocked: bool = False,
+    pending_booking_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     """
     Build unified hub inbox payload for bootstrap and inbox-count endpoint.
@@ -394,7 +433,10 @@ def build_trainer_hub_action_inbox(
 
     if onboarding:
         pending_count = _non_negative_int(onboarding.get("open_loop_pending_bookings_count"))
-    pending_ids = _pending_booking_ids_from_hub_bookings(bookings)
+    if pending_booking_ids is not None:
+        pending_ids = [int(x) for x in pending_booking_ids]
+    else:
+        pending_ids = _pending_booking_ids_from_hub_bookings(bookings)
 
     if schedule_unlocked and pending_count > 0:
         n = pending_count

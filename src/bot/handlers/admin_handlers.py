@@ -64,6 +64,14 @@ from src.application.trainer_link_token_use_cases import (
     create_trainer_and_issue_welcome_link_token,
     issue_trainer_welcome_link_token,
 )
+from src.bot.admin_bot_commands import register_admin_bot_commands
+from src.application.collective_use_cases import (
+    admin_confirm_collective_invoice,
+    admin_grant_collective_subscription,
+    create_collective_draft,
+    get_collective_subscription_status,
+    issue_collective_claim_token,
+)
 from src.application.trainer_profile_pending import (
     build_trainer_profile_for_moderation_card,
     trainer_photo_file_key_for_moderation_ui,
@@ -316,11 +324,11 @@ async def cmd_start(message: Message) -> None:
     if not _is_admin(user_id):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
-    # No keyboard: all actions via menu commands (/pending, /stats, /support, /dicts)
-    await message.answer(
-        msg.ADMIN_START
-        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/subscription_invoices — заявки на подписку (активировать/отклонить)\n/grant_subscription — выдать подписку конкретному тренеру\n/problem_reports — аудит отчётов о проблемах"
-    )
+    try:
+        await register_admin_bot_commands(message.bot)
+    except Exception:
+        pass
+    await message.answer(msg.ADMIN_START)
 
 
 def _admin_stats_message(s: dict) -> str:
@@ -1075,6 +1083,34 @@ async def on_admin_sub_invoice_noop(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith("cs:act:"))
+async def on_admin_collective_invoice_activate(callback: CallbackQuery) -> None:
+    """One-tap: confirm studio pool invoice (ERIP / manual)."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    iid = safe_parse_id(callback.data[len("cs:act:"):])
+    if iid is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        result = await admin_confirm_collective_invoice(session, iid, admin_id=user_id)
+    if not result:
+        await callback.answer("Счёт не найден или уже обработан", show_alert=True)
+        return
+    await callback.answer("Pool-подписка активирована")
+    if callback.message:
+        await callback.message.answer(
+            msg.ADMIN_COLLECTIVE_INVOICE_CONFIRMED.format(
+                invoice_id=result["invoice_id"],
+                display_name=html.escape(result["display_name"]),
+                slug=html.escape(result["slug"]),
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith("as:act:"))
 async def on_admin_sub_invoice_activate(callback: CallbackQuery) -> None:
     """One-tap: activate the trainer's invoice exactly as they requested."""
@@ -1531,6 +1567,242 @@ async def cmd_trainer_welcome_link(message: Message) -> None:
         ),
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
+    )
+
+
+@router.message(Command("collective_draft"))
+async def cmd_collective_draft(message: Message) -> None:
+    """Create draft studio + owner claim link (Wave P0)."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or parts[1].lower() in ("help", "?", "помощь"):
+        await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_HELP, parse_mode=ParseMode.HTML)
+        return
+    body = parts[1].strip()
+    if "|" not in body:
+        await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+    slug_raw, name_raw = body.split("|", 1)
+    slug = slug_raw.strip()
+    display_name = name_raw.strip()
+    if not slug or not display_name:
+        await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+    try:
+        async with async_session_factory() as session:
+            collective = await create_collective_draft(session, slug=slug, display_name=display_name)
+            claim = await issue_collective_claim_token(session, int(collective["id"]))
+    except ValueError as exc:
+        if str(exc) == "slug_invalid":
+            await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS, parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(f"Ошибка: {html.escape(str(exc))}", parse_mode=ParseMode.HTML)
+        return
+    except Exception as exc:
+        err = str(exc).lower()
+        if "unique" in err and "slug" in err:
+            await message.answer("Студия с таким slug уже существует.", parse_mode=ParseMode.HTML)
+            return
+        raise
+    if claim is None:
+        await message.answer("Не удалось выпустить claim-ссылку.", parse_mode=ParseMode.HTML)
+        return
+    audit_log(
+        "admin.collective_draft_created",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        {"collective_id": collective["id"], "slug": collective["slug"]},
+    )
+    exp = claim["expires_at"]
+    expires_str = exp[:16].replace("T", " ") if isinstance(exp, str) else str(exp)
+    dl = claim.get("deep_link")
+    if dl:
+        link_block = (
+            f'<a href="{html.escape(dl)}">Открыть claim в Telegram</a>\n\n'
+            f"<code>{html.escape(dl)}</code>"
+        )
+    else:
+        link_block = msg.ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME.format(
+            start_payload=html.escape(claim["start_payload"]),
+        )
+    await message.answer(
+        msg.ADMIN_COLLECTIVE_DRAFT_ISSUED.format(
+            collective_id=collective["id"],
+            slug=html.escape(collective["slug"]),
+            display_name=html.escape(collective["display_name"]),
+            seat_limit=collective["seat_limit"],
+            expires=html.escape(expires_str),
+            link_block=link_block,
+        ),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
+def _parse_collective_sub_modules(tokens: list[str]) -> dict[str, bool] | None:
+    """Optional trailing module flags; None = full studio pool."""
+    if not tokens:
+        return None
+    allowed = {"online", "analytics", "groups"}
+    unknown = [t for t in tokens if t.lower() not in allowed]
+    if unknown:
+        return {}
+    mods = default_modules_dict()
+    for t in tokens:
+        mods[t.lower()] = True
+    return mods
+
+
+@router.message(Command("collective_sub"))
+async def cmd_collective_sub(message: Message) -> None:
+    """Grant or inspect collective subscription pool (Wave P1.5-A)."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+
+    parts = (message.text or "").split()
+    if len(parts) < 2 or parts[1].lower() in ("help", "?", "помощь"):
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_HELP, parse_mode=ParseMode.HTML)
+        return
+
+    action = parts[1].lower()
+    if action == "status":
+        if len(parts) < 3:
+            await message.answer(msg.ADMIN_COLLECTIVE_SUB_HELP, parse_mode=ParseMode.HTML)
+            return
+        slug = parts[2].strip()
+        async with async_session_factory() as session:
+            status = await get_collective_subscription_status(session, slug=slug)
+        if status is None:
+            await message.answer(
+                msg.ADMIN_COLLECTIVE_SUB_NOT_FOUND.format(slug=html.escape(slug)),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        active = status.get("active_subscription")
+        if active:
+            exp = active.get("expires_at") or "—"
+            exp_disp = exp[:16].replace("T", " ") if isinstance(exp, str) else str(exp)
+            mods = active.get("modules") or {}
+            mod_parts = ["CRM"]
+            for key in ("online", "analytics", "groups"):
+                if mods.get(key):
+                    mod_parts.append(key)
+            sub_block = (
+                f"Активна до <b>{html.escape(exp_disp)}</b>\n"
+                f"Модули: <code>{html.escape(', '.join(mod_parts))}</code>"
+            )
+        else:
+            sub_block = "Активной подписки нет — members используют только solo-тариф."
+        await message.answer(
+            msg.ADMIN_COLLECTIVE_SUB_STATUS.format(
+                slug=html.escape(status["slug"]),
+                display_name=html.escape(status["display_name"]),
+                collective_status=html.escape(status["status"]),
+                seat_limit=status["seat_limit"],
+                active_count=status["active_member_count"],
+                sub_block=sub_block,
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    if action != "grant" and action != "confirm":
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_HELP, parse_mode=ParseMode.HTML)
+        return
+
+    if action == "confirm":
+        if len(parts) < 3:
+            await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+            return
+        try:
+            invoice_id = int(parts[2].strip())
+        except ValueError:
+            await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+            return
+        async with async_session_factory() as session:
+            result = await admin_confirm_collective_invoice(
+                session, invoice_id, admin_id=user_id
+            )
+        if result is None:
+            await message.answer(
+                f"Счёт <code>{invoice_id}</code> не найден или уже обработан.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        await message.answer(
+            msg.ADMIN_COLLECTIVE_INVOICE_CONFIRMED.format(
+                invoice_id=result["invoice_id"],
+                display_name=html.escape(result["display_name"]),
+                slug=html.escape(result["slug"]),
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    if len(parts) < 4:
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+
+    slug = parts[2].strip()
+    try:
+        months = int(parts[3].strip())
+    except ValueError:
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+
+    mod_tokens = parts[4:]
+    modules = _parse_collective_sub_modules(mod_tokens)
+    if modules == {}:
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+
+    async with async_session_factory() as session:
+        result = await admin_grant_collective_subscription(
+            session,
+            slug=slug,
+            period_months=months,
+            modules=modules,
+            admin_id=user_id,
+        )
+
+    if result is None:
+        await message.answer(
+            msg.ADMIN_COLLECTIVE_SUB_NOT_FOUND.format(slug=html.escape(slug)),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    if result.get("error") == "invalid_period":
+        await message.answer(msg.ADMIN_COLLECTIVE_SUB_BAD_ARGS, parse_mode=ParseMode.HTML)
+        return
+    if result.get("error"):
+        await message.answer(
+            f"Не удалось выдать подписку: <code>{html.escape(str(result['error']))}</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    exp = result.get("expires_at") or ""
+    exp_disp = exp[:16].replace("T", " ") if isinstance(exp, str) else str(exp)
+    extend_note = (
+        " (продлено от текущего периода)"
+        if result.get("extended_from_existing")
+        else ""
+    )
+    await message.answer(
+        msg.ADMIN_COLLECTIVE_SUB_GRANTED.format(
+            slug=html.escape(result["slug"]),
+            display_name=html.escape(result["display_name"]),
+            months=result["period_months"],
+            modules_label=html.escape(result["modules_label"]),
+            expires=html.escape(exp_disp),
+            extend_note=extend_note,
+        ),
+        parse_mode=ParseMode.HTML,
     )
 
 

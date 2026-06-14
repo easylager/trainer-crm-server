@@ -30,6 +30,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from sqlalchemy import text
 
 from src.application.booking_use_cases import (
+    can_trainer_repeat_booking_same_time_next_week,
     get_pending_completed_for_trainer,
     get_trainer_telegram_id,
     list_bookings_to_complete,
@@ -37,7 +38,6 @@ from src.application.booking_use_cases import (
     mark_trainer_completed_sent,
 )
 from src.application.client_use_cases import get_or_create_client
-from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import BOOKING_ADD_NOTE_PREFIX
@@ -158,19 +158,29 @@ async def run_once() -> None:
                     trainer_name=b.get("trainer_name") or "Тренер",
                     service_name=b.get("service_name"),
                 )
-                # Same as client_app: hide Repeat/Become regular if same day+time in 7 days is already reserved
+                # Same as client_app: hide Repeat/Become regular if same day+time in 7 days is truly occupied
                 slot_date_val = b["slot_date"]
-                target_date = (slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val) + timedelta(days=7)
+                start_time_val = b["start_time"]
+                sd = slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val
+                st_norm = (
+                    start_time_val.replace(second=0, microsecond=0)
+                    if hasattr(start_time_val, "replace")
+                    else start_time_val
+                )
                 async with async_session_factory() as check_session:
-                    status_next, _ = await get_slot_status_on_date(
-                        check_session, b["trainer_id"], target_date, b["start_time"]
+                    can_repeat = await can_trainer_repeat_booking_same_time_next_week(
+                        check_session,
+                        trainer_id=b["trainer_id"],
+                        slot_date=sd,
+                        start_time=st_norm,
+                        end_time=b.get("end_time"),
                     )
                 kb = msg.build_client_booking_completed_inline_keyboard(
                     webapp_base_url=(settings.webapp_base_url or ""),
                     trainer_id=b["trainer_id"],
                     booking_id=int(b["id"]),
                     trainer_telegram_id=b.get("trainer_telegram_id"),
-                    show_repeat_row=(status_next != "booked"),
+                    show_repeat_row=can_repeat,
                 )
                 try:
                     await client_bot.send_message(chat_id=chat_id, text=text_client, reply_markup=kb)
@@ -240,17 +250,20 @@ async def run_once() -> None:
                 )
             if slot_date and start_time:
                 sd = slot_date.date() if hasattr(slot_date, "date") else slot_date
-                target_d = sd + timedelta(days=7)
                 st_norm = (
                     start_time.replace(second=0, microsecond=0)
                     if hasattr(start_time, "replace")
                     else start_time
                 )
                 async with async_session_factory() as chk_s:
-                    status_next, _ = await get_slot_status_on_date(
-                        chk_s, p["trainer_id"], target_d, st_norm
+                    can_repeat = await can_trainer_repeat_booking_same_time_next_week(
+                        chk_s,
+                        trainer_id=p["trainer_id"],
+                        slot_date=sd,
+                        start_time=st_norm,
+                        end_time=end_time,
                     )
-                if status_next != "booked":
+                if can_repeat:
                     rows_tr.append(
                         [
                             InlineKeyboardButton(

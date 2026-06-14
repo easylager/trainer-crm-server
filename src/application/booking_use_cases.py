@@ -821,6 +821,49 @@ def _booking_interval_duration_minutes(start_time: time, end_time: time) -> int:
     return 45
 
 
+async def can_trainer_repeat_booking_same_time_next_week(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    slot_date: date,
+    start_time: time,
+    end_time: time | None = None,
+) -> bool:
+    """
+    Whether «Записать на то же время» (+7 days) can succeed for this interval.
+    Uses pending/confirmed occupancy vs capacity — not raw slots.status (stale 'booked' without bookings still allows repeat).
+    """
+    from src.application.recurring_use_cases import trainer_calendar_interval_clear
+
+    slot_d = slot_date.date() if hasattr(slot_date, "date") else slot_date
+    target_d = slot_d + timedelta(days=7)
+    st = start_time.replace(second=0, microsecond=0) if hasattr(start_time, "replace") else start_time
+
+    r = await session.execute(
+        text(
+            """
+            SELECT id, capacity
+            FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st
+              AND status <> 'cancelled'
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "d": target_d, "st": st},
+    )
+    row = r.fetchone()
+    if row:
+        slot_id, cap = int(row[0]), max(1, int(row[1]))
+        cnt = await _count_occupying_bookings(session, slot_id)
+        return cnt < cap
+
+    duration_minutes = _booking_interval_duration_minutes(st, end_time) if end_time is not None else 45
+    start_minutes = st.hour * 60 + st.minute
+    end_minutes = start_minutes + duration_minutes
+    interval_end = time(end_minutes // 60, end_minutes % 60)
+    return await trainer_calendar_interval_clear(session, trainer_id, target_d, st, interval_end)
+
+
 def _map_link(latitude: object, longitude: object) -> str | None:
     """Build a stable external map URL from arena coordinates."""
     try:
@@ -882,8 +925,6 @@ async def trainer_repeat_booking_same_time_next_week(
         {"success": False, "error": str, ...} — not_found, slot_booked, no_service,
         create_failed, price_tier_required, schedule_error (optional "message" for ValueError text).
     """
-    from src.application.recurring_use_cases import get_slot_status_on_date
-
     r = await session.execute(
         text("""
             SELECT b.client_id, b.service_id, b.service_price_variant_id, b.arena_id,
@@ -916,8 +957,13 @@ async def trainer_repeat_booking_same_time_next_week(
     st = start_time.replace(second=0, microsecond=0) if hasattr(start_time, "replace") else start_time
     target_date = slot_d + timedelta(days=7)
 
-    status_next, _ = await get_slot_status_on_date(session, trainer_id, target_date, st)
-    if status_next == "booked":
+    if not await can_trainer_repeat_booking_same_time_next_week(
+        session,
+        trainer_id=trainer_id,
+        slot_date=slot_d,
+        start_time=st,
+        end_time=end_time,
+    ):
         return {"success": False, "error": "slot_booked"}
 
     if service_id is None:

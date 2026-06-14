@@ -1172,6 +1172,7 @@ class TrainerRepository:
         # Time-based filters
         filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
         filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
+        trainer_ids: list[int] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         Active trainers with profile, photos, service_ids; paginated.
@@ -1201,6 +1202,16 @@ class TrainerRepository:
         # (самозапись и слоты по-прежнему зависят от тарифа в карточке / API).
         where = " WHERE t.status = 'active' AND t.is_catalog_visible = true"
         params: dict[str, Any] = {"lim": limit, "off": offset}
+        if trainer_ids is not None:
+            if not trainer_ids:
+                return [], 0
+            unique_ids = list({int(t) for t in trainer_ids if t is not None})
+            if not unique_ids:
+                return [], 0
+            id_phs = ", ".join(f":trainer_id_{i}" for i in range(len(unique_ids)))
+            where += f" AND t.id IN ({id_phs})"
+            for i, tid in enumerate(unique_ids):
+                params[f"trainer_id_{i}"] = tid
         if service_id is not None:
             base += " INNER JOIN trainer_services ts ON ts.trainer_id = t.id AND ts.service_id = :service_id"
             params["service_id"] = service_id

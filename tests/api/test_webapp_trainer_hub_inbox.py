@@ -100,6 +100,25 @@ async def test_hub_bootstrap_includes_action_inbox(app_use_test_db, db_session) 
 
 
 @pytest.mark.asyncio
+async def test_hub_bootstrap_pending_inbox_includes_booking_ids(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    bid = await _insert_pending_booking(db_session, trainer_id)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/hub/bootstrap?bookings_limit=1",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    inbox = resp.json()["action_inbox"]
+    pending = next((it for it in inbox["items"] if it["id"] == "pending_bookings"), None)
+    assert pending is not None
+    assert pending["count"] == 1
+    assert bid in (pending.get("booking_ids") or [])
+
+
+@pytest.mark.asyncio
 async def test_hub_inbox_event_records_audit(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     await _create_active_trainer(db_session, tg, with_crm=True)

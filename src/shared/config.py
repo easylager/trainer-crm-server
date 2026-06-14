@@ -1,6 +1,7 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator
@@ -130,6 +131,8 @@ class Settings(BaseSettings):
     subscription_invoice_bank_hint_ru: str | None = None
     subscription_invoice_extra_hint_ru: str | None = None
     subscription_support_url: str | None = None
+    # Collective studio pool: BYN cents per seat per month (× seat_limit × period_months).
+    collective_subscription_cents_per_seat_month: int = 2900
 
     # Group cohort RSVP: hours before slot to ask «Буду?» in client bot (disabled if unset or 0).
     group_attendance_prompt_hours: int | None = None
@@ -217,3 +220,9 @@ class Settings(BaseSettings):
         ).strip():
             return "bepaid"
         return "invoice"
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Process-wide settings singleton — load .env once per worker (notification_service, bots, API)."""
+    return Settings()

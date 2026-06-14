@@ -7,7 +7,10 @@ from datetime import date, time, timedelta
 import pytest
 from sqlalchemy import text
 
-from src.application.booking_use_cases import trainer_repeat_booking_same_time_next_week
+from src.application.booking_use_cases import (
+    can_trainer_repeat_booking_same_time_next_week,
+    trainer_repeat_booking_same_time_next_week,
+)
 
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
@@ -211,3 +214,64 @@ async def test_trainer_repeat_slot_booked_returns_error(db_session) -> None:
     out = await trainer_repeat_booking_same_time_next_week(db_session, booking_id, trainer_id)
     assert out.get("success") is False
     assert out.get("error") == "slot_booked"
+
+
+@pytest.mark.asyncio
+async def test_trainer_repeat_stale_booked_slot_without_active_bookings(db_session) -> None:
+    """Target slot may stay status='booked' after completion without sync — repeat must still work."""
+    trainer_id, service_id, arena_id = await _seed_trainer_with_arena(db_session)
+    tg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    past = date.today() - timedelta(days=3)
+    target = past + timedelta(days=7)
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, arena_id)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked', :aid)
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": target, "aid": arena_id},
+    )
+    (stale_slot_id,) = r.fetchone()
+    assert stale_slot_id is not None
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, arena_id)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked', :aid)
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": past, "aid": arena_id},
+    )
+    (orig_slot_id,) = r.fetchone()
+    r = await db_session.execute(
+        text("""
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            RETURNING id
+        """),
+        {"sid": orig_slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    (booking_id,) = r.fetchone()
+    await db_session.commit()
+
+    can_repeat = await can_trainer_repeat_booking_same_time_next_week(
+        db_session,
+        trainer_id=trainer_id,
+        slot_date=past,
+        start_time=time(10, 0),
+        end_time=time(11, 0),
+    )
+    assert can_repeat is True
+
+    out = await trainer_repeat_booking_same_time_next_week(db_session, booking_id, trainer_id)
+    assert out.get("success") is True

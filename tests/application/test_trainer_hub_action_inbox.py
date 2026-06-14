@@ -84,3 +84,18 @@ def test_action_inbox_hidden_when_schedule_locked() -> None:
         schedule_unlocked=False,
     )
     assert not any(it["id"] == "pending_bookings" for it in inbox["items"])
+
+
+def test_action_inbox_uses_explicit_pending_booking_ids() -> None:
+    """Pending count from onboarding; IDs may come from DB outside bookings preview."""
+    onboarding = {"open_loop_pending_bookings_count": 1}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings={"days": []},
+        schedule_unlocked=True,
+        pending_booking_ids=[555],
+    )
+    pending = next(it for it in inbox["items"] if it["id"] == "pending_bookings")
+    assert pending["count"] == 1
+    assert pending["booking_ids"] == [555]

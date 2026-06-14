@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606157';
+  var SHELL_VERSION = '202606162';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
@@ -37,6 +37,14 @@
     stats: moreIconSvg('<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>'),
     groups: moreIconSvg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
     referral: moreIconSvg('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>'),
+    collective: moreIconSvg('<path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 21v-6h4v6"/>'),
+  };
+
+  var COLLECTIVE_MORE_ITEM = {
+    path: 'trainer-collective',
+    label: 'Студия',
+    icon: MORE_ICONS.collective,
+    hint: 'Бренд, команда и ссылка для клиентов',
   };
 
   var MORE_ITEMS = [
@@ -97,6 +105,7 @@
     'trainer-stats',
     'trainer-groups',
     'trainer-referral',
+    'trainer-collective',
     'trainer-bookings',
     'trainer-faq',
   ];
@@ -109,6 +118,9 @@
     onboardingData: null,
     onboardingLoaded: false,
     inboxBadges: { schedule: 0, more: 0, clients: 0 },
+    collectiveMenuVisible: false,
+    collectiveMenuChecked: false,
+    pendingCollectiveBootstrap: null,
   };
 
   /* ─── Telegram helpers ──────────────────────────────────────────────────── */
@@ -489,28 +501,7 @@
     list.className = 'trainer-more-sheet__list';
 
     MORE_ITEMS.forEach(function (item) {
-      var li = document.createElement('li');
-      li.className = 'trainer-more-sheet__item';
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'trainer-more-sheet__link';
-      btn.setAttribute('data-shell-path', item.path);
-      btn.innerHTML =
-        '<span class="trainer-more-sheet__icon-wrap" aria-hidden="true">' +
-        item.icon +
-        '</span><span class="trainer-more-sheet__body"><span class="trainer-more-sheet__label">' +
-        item.label +
-        '</span><span class="trainer-more-sheet__hint">' +
-        item.hint +
-        '</span></span>' +
-        MORE_CHEVRON;
-      btn.addEventListener('click', function () {
-        hapticSelection();
-        closeMoreSheet();
-        navigate(item.path);
-      });
-      li.appendChild(btn);
-      list.appendChild(li);
+      list.appendChild(buildMoreSheetItem(item));
     });
 
     sheet.appendChild(list);
@@ -659,6 +650,109 @@
 
   /* ─── More sheet open/close ─────────────────────────────────────────────── */
 
+  function buildMoreSheetItem(item) {
+    var li = document.createElement('li');
+    li.className = 'trainer-more-sheet__item';
+    li.dataset.collectiveItem = item.path === 'trainer-collective' ? '1' : '0';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'trainer-more-sheet__link';
+    btn.setAttribute('data-shell-path', item.path);
+    btn.innerHTML =
+      '<span class="trainer-more-sheet__icon-wrap" aria-hidden="true">' +
+      item.icon +
+      '</span><span class="trainer-more-sheet__body"><span class="trainer-more-sheet__label">' +
+      item.label +
+      '</span><span class="trainer-more-sheet__hint">' +
+      item.hint +
+      '</span></span>' +
+      MORE_CHEVRON;
+    btn.addEventListener('click', function () {
+      hapticSelection();
+      closeMoreSheet();
+      navigate(item.path);
+    });
+    li.appendChild(btn);
+    return li;
+  }
+
+  /** Inserts «Студия» into the More sheet when membership is confirmed. Idempotent. */
+  function ensureCollectiveMoreItem() {
+    var list = document.querySelector('.trainer-more-sheet__list');
+    if (!list) return false;
+    if (list.querySelector('[data-shell-path="trainer-collective"]')) {
+      state.collectiveMenuVisible = true;
+      return true;
+    }
+    var groupsItem = list.querySelector('[data-shell-path="trainer-groups"]');
+    var node = buildMoreSheetItem(COLLECTIVE_MORE_ITEM);
+    if (groupsItem && groupsItem.parentElement) {
+      groupsItem.parentElement.insertAdjacentElement('afterend', node);
+    } else {
+      list.appendChild(node);
+    }
+    state.collectiveMenuVisible = true;
+    syncOnboardingTabLocks();
+    return true;
+  }
+
+  function flushPendingCollectiveBootstrap() {
+    if (!state.pendingCollectiveBootstrap) return;
+    var payload = state.pendingCollectiveBootstrap;
+    state.pendingCollectiveBootstrap = null;
+    syncCollectiveMenuFromBootstrap(payload);
+  }
+
+  function fetchCollectiveMenuVisibility(forceRefresh) {
+    if (!forceRefresh && state.collectiveMenuChecked) {
+      return Promise.resolve(state.collectiveMenuVisible);
+    }
+    var initData = getInitData();
+    if (!initData) {
+      state.collectiveMenuChecked = true;
+      state.collectiveMenuVisible = false;
+      return Promise.resolve(false);
+    }
+    var url = '/api/webapp/trainer/collective';
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+    return fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Telegram-Init-Data': initData },
+    })
+      .then(function (r) {
+        state.collectiveMenuChecked = true;
+        if (r.ok) {
+          ensureCollectiveMoreItem();
+          return state.collectiveMenuVisible;
+        }
+        state.collectiveMenuVisible = false;
+        return false;
+      })
+      .catch(function () {
+        state.collectiveMenuChecked = true;
+        state.collectiveMenuVisible = false;
+        return false;
+      });
+  }
+
+  /** Hub bootstrap already resolved membership — skip extra round-trip. */
+  function syncCollectiveMenuFromBootstrap(collectivePayload) {
+    if (!collectivePayload || !collectivePayload.slug) return;
+    state.collectiveMenuChecked = true;
+    if (!document.querySelector('.trainer-more-sheet__list')) {
+      state.pendingCollectiveBootstrap = collectivePayload;
+      return;
+    }
+    ensureCollectiveMoreItem();
+  }
+
+  function refreshCollectiveMenuVisibility() {
+    state.collectiveMenuChecked = false;
+    state.collectiveMenuVisible = false;
+    return fetchCollectiveMenuVisibility(true);
+  }
+
   function openMoreSheet() {
     state.moreOpen = true;
     var overlay = document.getElementById('trainerMoreOverlay');
@@ -688,10 +782,14 @@
   }
 
   function toggleMoreSheet() {
-    if (state.moreOpen) closeMoreSheet();
-    else openMoreSheet();
+    if (state.moreOpen) {
+      closeMoreSheet();
+      return;
+    }
+    fetchCollectiveMenuVisibility(true).finally(function () {
+      openMoreSheet();
+    });
   }
-
   /* ─── Public API ────────────────────────────────────────────────────────── */
 
   function setTabBarVisible(visible) {
@@ -764,6 +862,7 @@
     if (!document.getElementById('trainerMoreOverlay')) {
       document.body.appendChild(buildMoreSheet());
     }
+    flushPendingCollectiveBootstrap();
 
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') {
@@ -777,6 +876,7 @@
     syncTabBarActive();
     syncInboxBadges();
     fetchOnboardingChecklist();
+    fetchCollectiveMenuVisibility();
   }
 
   /* ─── Auto-init via data attribute ─────────────────────────────────────── */
@@ -807,6 +907,8 @@
     setInboxBadges: setInboxBadges,
     syncOnboarding: syncOnboarding,
     fetchOnboardingChecklist: fetchOnboardingChecklist,
+    syncCollectiveMenuFromBootstrap: syncCollectiveMenuFromBootstrap,
+    refreshCollectiveMenuVisibility: refreshCollectiveMenuVisibility,
     disableVerticalSwipes: function () {
       setNativeVerticalSwipeEnabled(false);
     },

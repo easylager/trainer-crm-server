@@ -412,6 +412,83 @@ async def _schedule_keyboard(trainer_id: int) -> tuple[str, InlineKeyboardMarkup
     return text, keyboard
 
 
+async def _cmd_collective_claim(message: Message, session, token: str) -> None:
+    """Activate studio draft when owner opens col_claim_* deep link."""
+    from src.application.collective_use_cases import (
+        consume_collective_claim_token,
+        ensure_trainer_id_for_collective_bot_user,
+    )
+    from src.application.subscription_use_cases import ensure_trainer_welcome_trial
+
+    user_id = message.from_user.id if message.from_user else 0
+    username = (message.from_user.username if message.from_user else None) or None
+    trainer_id, link_err = await ensure_trainer_id_for_collective_bot_user(
+        session, user_id, telegram_username=username
+    )
+    if trainer_id is None:
+        if link_err == "telegram_other_trainer":
+            await message.answer(msg.TRAINER_LINK_TELEGRAM_CONFLICT, parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(msg.TRAINER_COLLECTIVE_CLAIM_NEED_LINK, parse_mode=ParseMode.HTML)
+        return
+    await ensure_trainer_welcome_trial(session, trainer_id)
+    outcome = await consume_collective_claim_token(session, token, trainer_id)
+    if outcome.error == "invalid_token":
+        await message.answer(msg.TRAINER_COLLECTIVE_CLAIM_INVALID, parse_mode=ParseMode.HTML)
+        return
+    if outcome.error == "already_in_collective":
+        await message.answer(msg.TRAINER_COLLECTIVE_CLAIM_ALREADY, parse_mode=ParseMode.HTML)
+        return
+    if outcome.error or outcome.collective_id is None:
+        await message.answer(msg.TRAINER_COLLECTIVE_CLAIM_INVALID, parse_mode=ParseMode.HTML)
+        return
+    name = html.escape((outcome.display_name or outcome.slug or "Студия").strip())
+    await message.answer(
+        msg.TRAINER_COLLECTIVE_CLAIM_SUCCESS.format(name=name),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def _cmd_collective_invite(message: Message, session, token: str) -> None:
+    """Join studio as member when trainer opens col_inv_* deep link."""
+    from src.application.collective_use_cases import (
+        consume_collective_invite_token,
+        ensure_trainer_id_for_collective_bot_user,
+    )
+    from src.application.subscription_use_cases import ensure_trainer_welcome_trial
+
+    user_id = message.from_user.id if message.from_user else 0
+    username = (message.from_user.username if message.from_user else None) or None
+    trainer_id, link_err = await ensure_trainer_id_for_collective_bot_user(
+        session, user_id, telegram_username=username
+    )
+    if trainer_id is None:
+        if link_err == "telegram_other_trainer":
+            await message.answer(msg.TRAINER_LINK_TELEGRAM_CONFLICT, parse_mode=ParseMode.HTML)
+        else:
+            await message.answer(msg.TRAINER_COLLECTIVE_INVITE_INVALID, parse_mode=ParseMode.HTML)
+        return
+    await ensure_trainer_welcome_trial(session, trainer_id)
+    outcome = await consume_collective_invite_token(session, token, trainer_id)
+    if outcome.error == "invalid_token":
+        await message.answer(msg.TRAINER_COLLECTIVE_INVITE_INVALID, parse_mode=ParseMode.HTML)
+        return
+    if outcome.error == "already_in_collective":
+        await message.answer(msg.TRAINER_COLLECTIVE_INVITE_ALREADY, parse_mode=ParseMode.HTML)
+        return
+    if outcome.error == "seats_full":
+        await message.answer(msg.TRAINER_COLLECTIVE_INVITE_SEATS_FULL, parse_mode=ParseMode.HTML)
+        return
+    if outcome.error or outcome.collective_id is None:
+        await message.answer(msg.TRAINER_COLLECTIVE_INVITE_INVALID, parse_mode=ParseMode.HTML)
+        return
+    name = html.escape((outcome.display_name or outcome.slug or "Студия").strip())
+    await message.answer(
+        msg.TRAINER_COLLECTIVE_INVITE_SUCCESS.format(name=name),
+        parse_mode=ParseMode.HTML,
+    )
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
@@ -420,6 +497,16 @@ async def cmd_start(message: Message) -> None:
     args = text.split(maxsplit=1)
     pending_referrer_id: int | None = None  # Referral code to attribute after link
     async with async_session_factory() as session:
+        if len(args) > 1:
+            from src.application.trainer_start_payload import TrainerStartKind, parse_trainer_start_payload
+
+            parsed_start = parse_trainer_start_payload(args[1])
+            if parsed_start.kind == TrainerStartKind.COLLECTIVE_CLAIM:
+                await _cmd_collective_claim(message, session, parsed_start.collective_token or "")
+                return
+            if parsed_start.kind == TrainerStartKind.COLLECTIVE_INVITE:
+                await _cmd_collective_invite(message, session, parsed_start.collective_token or "")
+                return
         # Parse referral code from payload (ref_<CODE> or link_<token>_ref_<CODE>)
         if len(args) > 1:
             payload = args[1]

@@ -11,6 +11,9 @@ from src.shared.config import Settings
 
 PHOTO_MAIN_MAX_SIZE = 800
 PHOTO_LIST_MAX_SIZE = 320
+COLLECTIVE_LOGO_MAX_SIZE = 400
+COLLECTIVE_COVER_MAX_SIZE = 1600
+COLLECTIVE_GALLERY_MAX_SIZE = 800
 PHOTO_MAIN_QUALITY = 82
 PHOTO_LIST_QUALITY = 80
 PHOTO_CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -97,6 +100,42 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
             CacheControl=PHOTO_CACHE_CONTROL,
         )
     return file_key, file_key_list
+
+
+def upload_collective_image(
+    collective_id: int,
+    body: bytes,
+    content_type: str,
+    *,
+    kind: str,
+) -> str:
+    """Save studio asset under collectives/{id}/ — logo, cover, or gallery."""
+    kind_norm = (kind or "gallery").strip().lower()
+    if kind_norm not in ("logo", "cover", "gallery"):
+        kind_norm = "gallery"
+    max_size = {
+        "logo": COLLECTIVE_LOGO_MAX_SIZE,
+        "cover": COLLECTIVE_COVER_MAX_SIZE,
+        "gallery": COLLECTIVE_GALLERY_MAX_SIZE,
+    }[kind_norm]
+    main_bytes = _resize_image(body, content_type or "", max_size, PHOTO_MAIN_QUALITY) or body
+    file_key = f"collectives/{collective_id}/{kind_norm}_{uuid.uuid4().hex}.jpg"
+    settings = Settings()
+    ct = "image/jpeg"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        (root / file_key).parent.mkdir(parents=True, exist_ok=True)
+        (root / file_key).write_bytes(main_bytes)
+        return file_key
+    client = _get_client()
+    client.put_object(
+        Bucket=settings.s3_bucket,
+        Key=file_key,
+        Body=main_bytes,
+        ContentType=ct,
+        CacheControl=PHOTO_CACHE_CONTROL,
+    )
+    return file_key
 
 
 def upload_legal_document(body: bytes, content_type: str | None = None) -> str:
@@ -225,9 +264,9 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Only keys under trainers/ are allowed (no path traversal).
+    Allowed prefixes: trainers/, collectives/.
     """
-    return get_file(file_key, allowed_prefixes=("trainers/",))
+    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/"))
 
 
 def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:

@@ -22,6 +22,7 @@ from src.application.booking_payment_notice import load_booking_deduction_snapsh
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_use_cases import (
+    can_trainer_repeat_booking_same_time_next_week,
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     get_pending_booking_cancel_notifications,
@@ -72,7 +73,6 @@ from src.application.client_pass_order_use_cases import (
 )
 from src.application.client_cert_order_use_cases import split_cert_order_comment
 from src.application.pass_product_use_cases import get_pass_product
-from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
     get_certificate_product,
@@ -125,6 +125,7 @@ from src.shared.config import (
     TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX,
     TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN,
     Settings,
+    get_settings,
 )
 from src.shared.map_links import build_yandex_by_map_url
 from src.application.trainer_notification_prefs import is_trainer_push_allowed_now
@@ -1120,19 +1121,19 @@ async def _build_trainer_post_session_keyboard(
             ],
         )
     if slot_date and start_time:
-        sd = (
-            slot_date.date() if hasattr(slot_date, "date") else slot_date
-        )
-        target_d = sd + timedelta(days=7)
         st_norm = (
             start_time.replace(second=0, microsecond=0)
             if hasattr(start_time, "replace")
             else start_time
         )
-        status_next, _ = await get_slot_status_on_date(
-            session, p["trainer_id"], target_d, st_norm
-        )
-        if status_next != "booked":
+        sd = slot_date.date() if hasattr(slot_date, "date") else slot_date
+        if await can_trainer_repeat_booking_same_time_next_week(
+            session,
+            trainer_id=p["trainer_id"],
+            slot_date=sd,
+            start_time=st_norm,
+            end_time=p.get("end_time"),
+        ):
             rows.append(
                 [
                     InlineKeyboardButton(
@@ -1172,7 +1173,11 @@ async def _build_trainer_post_session_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
+async def process_trainer_session_wrapup_round(
+    trainer_bot: Bot,
+    *,
+    settings: Settings | None = None,
+) -> None:
     """
     One pass: «Занятие подходит к концу» when remaining slot time is in the fixed band (Europe/Minsk).
 
@@ -1181,7 +1186,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
 
     Does **not** defer on per-trainer quiet windows — those skips caused wrap-up to be missed while «завершено» still fired.
     """
-    settings = Settings()
+    cfg = settings or get_settings()
     rmin = int(TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN)
     rmax = int(TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX)
     if rmin <= 0 or rmax <= 0 or rmin >= rmax:
@@ -1193,7 +1198,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
             remaining_seconds_max=rmax,
             limit=25,
         )
-    base = (settings.webapp_base_url or "").rstrip("/")
+    base = (cfg.webapp_base_url or "").rstrip("/")
     webapp_https = base.startswith("https://")
     for p in pending:
         async with async_session_factory() as session:
@@ -1516,13 +1521,13 @@ async def run_group_attendance_prompt_loop(client_bot: Bot) -> None:
             logger.exception("Group attendance prompt loop: %s", e)
 
 
-async def run_trainer_session_wrapup_loop(trainer_bot: Bot) -> None:
+async def run_trainer_session_wrapup_loop(trainer_bot: Bot, settings: Settings) -> None:
     """Fast tick for pre-end trainer CTA; decoupled from `run_booking_complete_loop` for reliable narrow-window pickup."""
     logger.info("[trainer_session_wrapup_loop] started")
     while True:
         try:
             await asyncio.sleep(_trainer_session_wrapup_poll_interval_sec())
-            await process_trainer_session_wrapup_round(trainer_bot)
+            await process_trainer_session_wrapup_round(trainer_bot, settings=settings)
         except asyncio.CancelledError:
             logger.info("[trainer_session_wrapup_loop] cancelled")
             break

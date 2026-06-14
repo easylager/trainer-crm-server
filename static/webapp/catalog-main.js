@@ -48,6 +48,11 @@
         offset: 0,
         limit: 10,
         selectedTrainer: null,
+        collectiveSlug: null,
+        collectiveBrand: null,
+        centerSessions: null,
+        clientCenterPasses: null,
+        centerBookingDraft: null,
         /** When trainer has multiple price tiers for filtered service — required by POST /client/booking */
         catalogBookingPriceVariantId: null,
         /** GET /client/session?for_trainer_id → tier hint for booking_context service when it matches effective service. */
@@ -1140,6 +1145,7 @@
       }
       function makeTrainerListParams(offset) {
         var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
+        if (state.collectiveSlug) params.collective_slug = state.collectiveSlug;
         // Single arena → legacy arena_id (kept for proxy/CDN cache compat); multi → arena_ids CSV.
         if (state.arenaIds.length === 1) params.arena_id = state.arenaIds[0];
         else if (state.arenaIds.length > 1) params.arena_ids = state.arenaIds.join(',');
@@ -1175,7 +1181,763 @@
         var dayPart = f.days.length ? f.days.slice().sort(function(a, b) { return a - b; }).join('-') : '';
         var timePart = f.timeSlots.length ? f.timeSlots.slice().sort().join('|') : '';
         var mode = state.catalogMode || 'trainers';
-        return [mode, state.cityId || 0, state.serviceId || 0, arenaIdsCacheKey(), state.limit || 10, dayPart, timePart].join(':');
+        var colPart = state.collectiveSlug || '';
+        return [mode, state.cityId || 0, state.serviceId || 0, arenaIdsCacheKey(), state.limit || 10, dayPart, timePart, colPart].join(':');
+      }
+
+      function collectiveLocationLine(brand) {
+        if (!brand) return '';
+        var contacts = brand.contacts || {};
+        var address = (contacts.address || '').trim();
+        if (address) return address;
+        if (brand.default_city_name) return String(brand.default_city_name).trim();
+        return '';
+      }
+
+      function applyCollectiveHero(brand) {
+        var hero = document.getElementById('catalogHero');
+        var titleEl = document.getElementById('catalogHeroTitle');
+        var venueEl = document.getElementById('catalogHeroVenue');
+        var leadEl = document.getElementById('catalogHeroLead');
+        var aboutEl = document.getElementById('catalogHeroAbout');
+        var galleryEl = document.getElementById('catalogHeroGallery');
+        var logoEl = document.getElementById('catalogHeroLogo');
+        var poweredEl = document.getElementById('catalogHeroPowered');
+        if (!brand || !state.collectiveSlug) {
+          document.body.classList.remove('catalog-collective-mode');
+          document.documentElement.style.removeProperty('--catalog-collective-accent');
+          document.documentElement.style.removeProperty('--catalog-collective-accent-soft');
+          document.documentElement.style.removeProperty('--catalog-collective-accent-border');
+          if (titleEl) titleEl.textContent = 'Найдите тренера';
+          if (venueEl) { venueEl.hidden = true; venueEl.textContent = ''; }
+          if (leadEl) leadEl.textContent = 'Город и занятие — покажем свободные слоты на аренах.';
+          if (aboutEl) { aboutEl.hidden = true; aboutEl.textContent = ''; }
+          if (galleryEl) { galleryEl.hidden = true; galleryEl.innerHTML = ''; }
+          if (logoEl) { logoEl.hidden = true; logoEl.removeAttribute('src'); }
+          if (hero) hero.style.backgroundImage = '';
+          if (hero) hero.classList.remove('catalog-hero--cover');
+          if (poweredEl) { poweredEl.hidden = true; poweredEl.textContent = ''; }
+          return;
+        }
+        document.body.classList.add('catalog-collective-mode');
+        var accent = brand.accent || {};
+        if (accent.accent) document.documentElement.style.setProperty('--catalog-collective-accent', accent.accent);
+        if (accent.accent_soft) document.documentElement.style.setProperty('--catalog-collective-accent-soft', accent.accent_soft);
+        if (accent.accent_border) document.documentElement.style.setProperty('--catalog-collective-accent-border', accent.accent_border);
+        if (titleEl) titleEl.textContent = brand.display_name || state.collectiveSlug;
+        var locationLine = collectiveLocationLine(brand);
+        if (venueEl) {
+          if (locationLine) {
+            venueEl.textContent = locationLine;
+            venueEl.hidden = false;
+          } else {
+            venueEl.hidden = true;
+            venueEl.textContent = '';
+          }
+        }
+        if (leadEl) {
+          leadEl.textContent = brand.tagline ||
+            'Тренеры студии — выберите город и занятие, как в обычном каталоге.';
+        }
+        if (logoEl) {
+          if (brand.logo_url) {
+            logoEl.src = brand.logo_url;
+            logoEl.hidden = false;
+          } else {
+            logoEl.hidden = true;
+            logoEl.removeAttribute('src');
+          }
+        }
+        if (hero) {
+          if (brand.cover_url) {
+            hero.classList.add('catalog-hero--cover');
+            hero.style.backgroundImage =
+              'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.55) 100%), url(' + brand.cover_url + ')';
+            hero.style.backgroundSize = 'cover';
+            hero.style.backgroundPosition = 'center';
+          } else {
+            hero.classList.remove('catalog-hero--cover');
+            hero.style.backgroundImage = '';
+          }
+        }
+        if (aboutEl) {
+          if (brand.about) {
+            aboutEl.textContent = brand.about;
+            aboutEl.hidden = false;
+          } else {
+            aboutEl.hidden = true;
+            aboutEl.textContent = '';
+          }
+        }
+        if (galleryEl) {
+          var gallery = brand.gallery || [];
+          if (gallery.length) {
+            galleryEl.innerHTML = gallery.map(function(item) {
+              return '<img src="' + escapeHtml(item.url) + '" alt="" loading="lazy" />';
+            }).join('');
+            galleryEl.hidden = false;
+          } else {
+            galleryEl.hidden = true;
+            galleryEl.innerHTML = '';
+          }
+        }
+        if (poweredEl && brand.powered_by) {
+          poweredEl.hidden = false;
+          poweredEl.textContent = 'powered by ' + brand.powered_by;
+        }
+      }
+
+      var CENTER_ATTENDANCE_MODES = [
+        {
+          id: 'lane_self',
+          emoji: '🎯',
+          title: 'Дорожка',
+          subtitle: 'Самостоятельная тренировка',
+          needsCoach: false,
+          needsGuests: false,
+        },
+        {
+          id: 'lane_with_guest',
+          emoji: '👥',
+          title: 'Дорожка + гость',
+          subtitle: 'Вы и сопровождающий на дорожке',
+          needsCoach: false,
+          needsGuests: true,
+          minGuests: 1,
+        },
+        {
+          id: 'lane_own_coach',
+          emoji: '🏋️',
+          title: 'Со своим тренером',
+          subtitle: 'Дорожка; тренер свой (не из центра)',
+          needsCoach: false,
+          needsGuests: false,
+          optionalGuests: true,
+        },
+        {
+          id: 'center_coach_individual',
+          emoji: '🎓',
+          title: 'Индивидуально',
+          subtitle: 'Занятие с тренером центра',
+          needsCoach: true,
+          coachMode: true,
+        },
+        {
+          id: 'center_coach_pair',
+          emoji: '🤝',
+          title: 'Парная',
+          subtitle: 'Вы + партнёр с тренером центра',
+          needsCoach: true,
+          coachMode: true,
+          minGuests: 1,
+        },
+      ];
+
+      function centerBookingHapticSelection() {
+        if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
+          window.ClientShell.hapticSelection();
+        } else if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.selectionChanged === 'function') {
+          tg.HapticFeedback.selectionChanged();
+        }
+      }
+
+      function formatCenterSessionWhen(session) {
+        if (!session) return '';
+        var datePart = session.slot_date || '';
+        try {
+          var parts = String(datePart).split('-');
+          if (parts.length === 3) {
+            var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            var weekdays = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+            var months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+            datePart = weekdays[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()];
+          }
+        } catch (e) {}
+        return datePart + ' · ' + (session.start_time || '') + '–' + (session.end_time || '');
+      }
+
+      function formatCenterSeatsLabel(seats) {
+        var n = Number(seats);
+        if (isNaN(n) || n < 0) return '—';
+        if (n === 1) return '1 место';
+        if (n >= 2 && n <= 4) return n + ' места';
+        return n + ' мест';
+      }
+
+      function buildCenterPriceBreakdown(mode, guestCount, tariffs) {
+        var guest = Number((tariffs && tariffs.guest_surcharge_cents) != null ? tariffs.guest_surcharge_cents : 1500);
+        var guests = Math.max(0, parseInt(guestCount, 10) || 0);
+        var guestWord = guests === 1 ? 'гость' : (guests >= 2 && guests <= 4 ? 'гостя' : 'гостей');
+        if (mode === 'lane_self') return 'Дорожка 1 ч';
+        if (mode === 'lane_with_guest') {
+          return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' BYN';
+        }
+        if (mode === 'lane_own_coach') {
+          if (guests > 0) {
+            return 'Дорожка + ' + guests + ' ' + guestWord + ' × ' + (guest / 100).toFixed(0) + ' BYN';
+          }
+          return 'Дорожка 1 ч · свой тренер';
+        }
+        if (mode === 'center_coach_individual') return 'Индивидуально с тренером центра';
+        if (mode === 'center_coach_pair') return 'Парное занятие с тренером центра';
+        return '';
+      }
+
+      function formatCenterPriceByn(cents) {
+        if (cents == null || isNaN(cents)) return '—';
+        var v = Number(cents) / 100;
+        return (Math.round(v) === v ? v.toFixed(0) : v.toFixed(2)) + ' BYN';
+      }
+
+      function computeCenterBookingPriceCents(mode, guestCount, tariffs) {
+        var lane = Number((tariffs && tariffs.lane_hour_cents) != null ? tariffs.lane_hour_cents : 2000);
+        var guest = Number((tariffs && tariffs.guest_surcharge_cents) != null ? tariffs.guest_surcharge_cents : 1500);
+        var coachInd = Number((tariffs && tariffs.coach_individual_cents) != null ? tariffs.coach_individual_cents : 7000);
+        var coachPair = Number((tariffs && tariffs.coach_pair_cents) != null ? tariffs.coach_pair_cents : 10000);
+        var guests = Math.max(0, parseInt(guestCount, 10) || 0);
+        if (mode === 'lane_self') return lane;
+        if (mode === 'lane_with_guest') return lane + guests * guest;
+        if (mode === 'lane_own_coach') {
+          var base = lane;
+          if (guests > 0) base += guests * guest;
+          return base;
+        }
+        if (mode === 'center_coach_individual') return coachInd;
+        if (mode === 'center_coach_pair') return coachPair;
+        return 0;
+      }
+
+      function centerPassKindForMode(mode) {
+        if (mode === 'center_coach_individual' || mode === 'center_coach_pair') return 'coach';
+        if (mode === 'lane_self' || mode === 'lane_with_guest' || mode === 'lane_own_coach') return 'lane';
+        return null;
+      }
+
+      function centerPassCreditsForMode(mode) {
+        if (mode === 'center_coach_pair') return 2;
+        return 1;
+      }
+
+      function computeCenterBookingPriceWithPassCents(mode, guestCount, tariffs, passKind) {
+        var guests = Math.max(0, parseInt(guestCount, 10) || 0);
+        var guestRate = Number((tariffs && tariffs.guest_surcharge_cents) != null ? tariffs.guest_surcharge_cents : 1500);
+        if (!passKind) return computeCenterBookingPriceCents(mode, guestCount, tariffs);
+        if (passKind === 'lane') {
+          if (mode === 'lane_with_guest') return guests * guestRate;
+          if (mode === 'lane_own_coach' && guests > 0) return guests * guestRate;
+          if (mode === 'lane_self') return 0;
+          return computeCenterBookingPriceCents(mode, guestCount, tariffs);
+        }
+        if (passKind === 'coach' && (mode === 'center_coach_individual' || mode === 'center_coach_pair')) {
+          return 0;
+        }
+        return computeCenterBookingPriceCents(mode, guestCount, tariffs);
+      }
+
+      function eligibleCenterPassesForMode(mode) {
+        var passes = (state.clientCenterPasses && state.clientCenterPasses.passes) || [];
+        var kind = centerPassKindForMode(mode);
+        var credits = centerPassCreditsForMode(mode);
+        if (!kind) return [];
+        return passes.filter(function(p) {
+          return p.pass_kind === kind && Number(p.sessions_remaining) >= credits;
+        });
+      }
+
+      function loadClientCenterPasses() {
+        if (!state.collectiveSlug) return Promise.resolve(null);
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return Promise.resolve(null);
+        return fetch('/api/webapp/client/collective-passes?collective_slug=' + encodeURIComponent(state.collectiveSlug), {
+          headers: { 'X-Telegram-Init-Data': initData },
+          cache: 'no-store',
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'passes_failed');
+              return d;
+            });
+          })
+          .then(function(d) {
+            state.clientCenterPasses = d;
+            return d;
+          })
+          .catch(function() {
+            state.clientCenterPasses = { passes: [] };
+            return null;
+          });
+      }
+
+      function findCenterSessionById(sessionId) {
+        var sessions = (state.centerSessions && state.centerSessions.sessions) || [];
+        for (var i = 0; i < sessions.length; i++) {
+          if (Number(sessions[i].id) === Number(sessionId)) return sessions[i];
+        }
+        return null;
+      }
+
+      function centerBookingModeOptions(session) {
+        var coaches = (session && session.assigned_coaches) || [];
+        return CENTER_ATTENDANCE_MODES.filter(function(m) {
+          if (m.coachMode && !coaches.length) return false;
+          return true;
+        });
+      }
+
+      function centerBookingErrorMessage(detail) {
+        var raw = (detail || '').toString();
+        var map = {
+          'Session not available': 'Окно недоступно для записи',
+          'Session full': 'Свободных мест больше нет',
+          'Coach required for this mode': 'Выберите тренера центра',
+          'Coach not assigned to session': 'Этот тренер не назначен на это окно',
+          'Guest count required': 'Укажите количество гостей',
+          'Center coach not allowed': 'Для этого формата тренер не нужен',
+          'Client profile required': 'Не удалось определить профиль клиента',
+          'Укажите имя': 'Укажите имя в профиле Telegram',
+        };
+        return map[raw] || raw || 'Не удалось записаться';
+      }
+
+      function renderCenterSessionsCatalog() {
+        var listRoot = document.getElementById('trainerList');
+        if (!listRoot) return;
+        var panel = document.getElementById('centerSessionsPanel');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.id = 'centerSessionsPanel';
+          panel.className = 'catalog-center-sessions';
+          listRoot.parentNode.insertBefore(panel, listRoot);
+        }
+        var brand = state.collectiveBrand;
+        var sessions = state.centerSessions;
+        if (!brand || brand.schedule_mode !== 'studio_central' || !sessions) {
+          panel.hidden = true;
+          panel.innerHTML = '';
+          if (listRoot) listRoot.style.display = '';
+          return;
+        }
+        panel.hidden = false;
+        if (listRoot) listRoot.style.display = 'none';
+        var tariffs = sessions.tariffs || {};
+        var lanePrice = tariffs.lane_hour_cents != null ? (tariffs.lane_hour_cents / 100).toFixed(0) : '20';
+        var items = sessions.sessions || [];
+        if (!items.length) {
+          panel.innerHTML = '<div class="catalog-collective-sessions-empty">Свободных окон пока нет — загляните позже.</div>';
+          return;
+        }
+        panel.innerHTML = '<div class="catalog-collective-sessions-title">Запись в центр</div>' +
+          '<p class="catalog-collective-sessions-hint">Выберите окно и формат — дорожка от ' + lanePrice + ' BYN, гость +15 BYN</p>' +
+          items.map(function(s) {
+            var coaches = (s.assigned_coaches || []).map(function(c) { return escapeHtml(c.display_name); }).join(', ');
+            var coachLine = coaches
+              ? 'Тренеры на смене: ' + coaches
+              : 'Можно прийти самостоятельно или со своим тренером';
+            var seats = (s.seats_left != null ? s.seats_left : Math.max(0, (s.capacity || 1) - (s.booked_count || 0)));
+            return '<div class="catalog-collective-session-card" data-session-id="' + s.id + '">' +
+              '<div class="catalog-collective-session-card__head">' +
+              '<div class="catalog-collective-session-card__when">' + escapeHtml(formatCenterSessionWhen(s)) + '</div>' +
+              '<span class="catalog-collective-session-card__seats">' + escapeHtml(formatCenterSeatsLabel(seats)) + '</span>' +
+              '</div>' +
+              '<p class="catalog-collective-sessions-coaches">' + coachLine + '</p>' +
+              '<button type="button" class="btn-primary catalog-collective-session-book" data-session-id="' + s.id + '">Выбрать формат</button>' +
+              '</div>';
+          }).join('');
+        panel.querySelectorAll('.catalog-collective-session-book').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            centerBookingHapticSelection();
+            openCenterSessionBookingModal(parseInt(btn.getAttribute('data-session-id'), 10));
+          });
+        });
+      }
+
+      function openCenterSessionBookingModal(sessionId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) {
+          if (tg && tg.showAlert) tg.showAlert('Откройте каталог через клиентский бот Telegram');
+          return;
+        }
+        var session = findCenterSessionById(sessionId);
+        if (!session) {
+          if (tg && tg.showAlert) tg.showAlert('Окно не найдено — обновите страницу');
+          return;
+        }
+        var modes = centerBookingModeOptions(session);
+        var defaultMode = modes.length ? modes[0].id : 'lane_self';
+        var coaches = session.assigned_coaches || [];
+        state.centerBookingDraft = {
+          sessionId: sessionId,
+          session: session,
+          mode: defaultMode,
+          guestCount: 0,
+          centerCoachId: coaches.length === 1 ? coaches[0].trainer_id : null,
+          comment: '',
+          passInstanceId: null,
+        };
+        loadClientCenterPasses().then(function() {
+          var eligible = eligibleCenterPassesForMode(defaultMode);
+          if (eligible.length === 1) {
+            state.centerBookingDraft.passInstanceId = eligible[0].id;
+          }
+          renderCenterBookingModal();
+        });
+        renderCenterBookingModal();
+        var modal = document.getElementById('centerSessionBookingModal');
+        if (modal) {
+          modal.hidden = false;
+          document.body.classList.add('center-booking-sheet-open');
+          requestAnimationFrame(function() {
+            modal.classList.add('is-open');
+          });
+        }
+        if (window.ClientShell && typeof window.ClientShell.setTabBarVisible === 'function') {
+          window.ClientShell.setTabBarVisible(false);
+        }
+      }
+
+      function closeCenterSessionBookingModal() {
+        var modal = document.getElementById('centerSessionBookingModal');
+        if (modal) {
+          modal.classList.remove('is-open');
+          document.body.classList.remove('center-booking-sheet-open');
+          window.setTimeout(function() {
+            if (!modal.classList.contains('is-open')) modal.hidden = true;
+          }, 340);
+        }
+        state.centerBookingDraft = null;
+        if (window.ClientShell && typeof window.ClientShell.setTabBarVisible === 'function') {
+          window.ClientShell.setTabBarVisible(true);
+        }
+      }
+
+      function getCenterBookingModeDef(modeId) {
+        for (var i = 0; i < CENTER_ATTENDANCE_MODES.length; i++) {
+          if (CENTER_ATTENDANCE_MODES[i].id === modeId) return CENTER_ATTENDANCE_MODES[i];
+        }
+        return null;
+      }
+
+      function renderCenterBookingModal() {
+        var draft = state.centerBookingDraft;
+        if (!draft || !draft.session) return;
+        var session = draft.session;
+        var tariffs = (state.centerSessions && state.centerSessions.tariffs) || {};
+        var metaEl = document.getElementById('centerBookingModalMeta');
+        if (metaEl) metaEl.textContent = formatCenterSessionWhen(session);
+        var modes = centerBookingModeOptions(session);
+        var modeListEl = document.getElementById('centerBookingModeList');
+        if (modeListEl) {
+          modeListEl.innerHTML = modes.map(function(m) {
+            var guestPreview = 0;
+            if (m.id === 'center_coach_pair') guestPreview = 1;
+            else if (m.needsGuests) guestPreview = Math.max(m.minGuests || 1, draft.guestCount || 1);
+            else if (m.optionalGuests) guestPreview = Math.max(0, draft.guestCount || 0);
+            var price = computeCenterBookingPriceCents(m.id, guestPreview, tariffs);
+            var active = draft.mode === m.id ? ' is-active' : '';
+            return '<button type="button" class="center-booking-mode' + active + '" data-mode="' + m.id + '" role="radio" aria-checked="' + (active ? 'true' : 'false') + '">' +
+              '<span class="center-booking-mode__emoji" aria-hidden="true">' + (m.emoji || '•') + '</span>' +
+              '<span class="center-booking-mode__main">' +
+              '<span class="center-booking-mode__title">' + escapeHtml(m.title) + '</span>' +
+              '<span class="center-booking-mode__subtitle">' + escapeHtml(m.subtitle) + '</span>' +
+              '</span>' +
+              '<span class="center-booking-mode__price">' + escapeHtml(formatCenterPriceByn(price)) + '</span>' +
+              '</button>';
+          }).join('');
+          modeListEl.querySelectorAll('.center-booking-mode').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              centerBookingHapticSelection();
+              draft.mode = btn.getAttribute('data-mode') || 'lane_self';
+              var def = getCenterBookingModeDef(draft.mode);
+              if (def && def.needsGuests) draft.guestCount = Math.max(def.minGuests || 1, draft.guestCount || 1);
+              if (def && def.optionalGuests && !def.needsGuests && draft.guestCount < 0) draft.guestCount = 0;
+              if (def && def.coachMode) {
+                var coaches = session.assigned_coaches || [];
+                if (coaches.length === 1) draft.centerCoachId = coaches[0].trainer_id;
+              }
+              var eligible = eligibleCenterPassesForMode(draft.mode);
+              if (draft.passInstanceId && !eligible.some(function(p) { return Number(p.id) === Number(draft.passInstanceId); })) {
+                draft.passInstanceId = eligible.length === 1 ? eligible[0].id : null;
+              } else if (!draft.passInstanceId && eligible.length === 1) {
+                draft.passInstanceId = eligible[0].id;
+              }
+              renderCenterBookingModal();
+            });
+          });
+        }
+
+        var modeDef = getCenterBookingModeDef(draft.mode) || modes[0];
+        var coachSection = document.getElementById('centerBookingCoachSection');
+        var coachListEl = document.getElementById('centerBookingCoachList');
+        var coaches = session.assigned_coaches || [];
+        if (coachSection && coachListEl) {
+          var showCoach = !!(modeDef && modeDef.needsCoach && coaches.length);
+          coachSection.hidden = !showCoach;
+          if (showCoach) {
+            coachListEl.innerHTML = coaches.map(function(c) {
+              var active = Number(draft.centerCoachId) === Number(c.trainer_id) ? ' is-active' : '';
+              return '<button type="button" class="center-booking-coach' + active + '" data-coach-id="' + c.trainer_id + '">' +
+                escapeHtml(c.display_name) + '</button>';
+            }).join('');
+            coachListEl.querySelectorAll('.center-booking-coach').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                centerBookingHapticSelection();
+                draft.centerCoachId = parseInt(btn.getAttribute('data-coach-id'), 10);
+                renderCenterBookingModal();
+              });
+            });
+          }
+        }
+
+        var guestSection = document.getElementById('centerBookingGuestSection');
+        var guestValueEl = document.getElementById('centerBookingGuestValue');
+        var guestHintEl = document.getElementById('centerBookingGuestHint');
+        var guestLabelEl = document.getElementById('centerBookingGuestLabel');
+        var guestMinus = document.getElementById('centerBookingGuestMinus');
+        var guestPlus = document.getElementById('centerBookingGuestPlus');
+        var showGuests = !!(modeDef && (modeDef.needsGuests || modeDef.optionalGuests));
+        if (guestSection) guestSection.hidden = !showGuests;
+        if (showGuests) {
+          if (guestLabelEl) {
+            guestLabelEl.textContent = modeDef.optionalGuests ? 'Дополнительных гостей' : 'Гостей';
+          }
+          if (guestValueEl) guestValueEl.textContent = String(draft.guestCount);
+          if (guestHintEl) {
+            guestHintEl.textContent = modeDef.optionalGuests
+              ? '+15 BYN за каждого гостя на дорожке'
+              : '+15 BYN за каждого гостя сверх вас';
+          }
+          var minG = modeDef.needsGuests ? (modeDef.minGuests || 1) : 0;
+          if (guestMinus) {
+            guestMinus.disabled = draft.guestCount <= minG;
+            guestMinus.onclick = function() {
+              if (draft.guestCount > minG) {
+                centerBookingHapticSelection();
+                draft.guestCount -= 1;
+                renderCenterBookingModal();
+              }
+            };
+          }
+          if (guestPlus) {
+            guestPlus.disabled = draft.guestCount >= 10;
+            guestPlus.onclick = function() {
+              if (draft.guestCount < 10) {
+                centerBookingHapticSelection();
+                draft.guestCount += 1;
+                renderCenterBookingModal();
+              }
+            };
+          }
+        }
+
+        var commentEl = document.getElementById('centerBookingComment');
+        if (commentEl && commentEl !== document.activeElement) {
+          commentEl.value = draft.comment || '';
+        }
+
+        var passSection = document.getElementById('centerBookingPassSection');
+        var passListEl = document.getElementById('centerBookingPassList');
+        var eligiblePasses = eligibleCenterPassesForMode(draft.mode);
+        if (passSection && passListEl) {
+          passSection.hidden = !eligiblePasses.length;
+          if (eligiblePasses.length) {
+            var passButtons = [
+              '<button type="button" class="center-booking-coach' + (!draft.passInstanceId ? ' is-active' : '') + '" data-pass-id="">Без абонемента · PAYG</button>',
+            ].concat(eligiblePasses.map(function(p) {
+              var active = Number(draft.passInstanceId) === Number(p.id) ? ' is-active' : '';
+              var label = (p.product_name || 'Абонемент') + ' · ' + p.sessions_remaining + ' ост.';
+              return '<button type="button" class="center-booking-coach' + active + '" data-pass-id="' + p.id + '">' + escapeHtml(label) + '</button>';
+            }));
+            passListEl.innerHTML = passButtons.join('');
+            passListEl.querySelectorAll('[data-pass-id]').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                centerBookingHapticSelection();
+                var raw = btn.getAttribute('data-pass-id');
+                draft.passInstanceId = raw ? parseInt(raw, 10) : null;
+                renderCenterBookingModal();
+              });
+            });
+          }
+        }
+
+        var guestCountForPrice = 0;
+        if (modeDef) {
+          if (modeDef.id === 'center_coach_pair') guestCountForPrice = 1;
+          else if (modeDef.needsGuests) guestCountForPrice = Math.max(modeDef.minGuests || 1, draft.guestCount);
+          else if (modeDef.optionalGuests) guestCountForPrice = Math.max(0, draft.guestCount);
+        }
+        var totalCents = computeCenterBookingPriceWithPassCents(
+          draft.mode,
+          guestCountForPrice,
+          tariffs,
+          draft.passInstanceId ? centerPassKindForMode(draft.mode) : null
+        );
+        var priceEl = document.getElementById('centerBookingPriceLine');
+        if (priceEl) {
+          priceEl.textContent = draft.passInstanceId && totalCents === 0
+            ? 'По абонементу'
+            : formatCenterPriceByn(totalCents);
+        }
+        var breakdownEl = document.getElementById('centerBookingPriceBreakdown');
+        if (breakdownEl) {
+          if (draft.passInstanceId) {
+            var credits = centerPassCreditsForMode(draft.mode);
+            var extra = totalCents > 0 ? ' · доплата ' + formatCenterPriceByn(totalCents) : '';
+            breakdownEl.textContent = 'Списание ' + credits + ' посещ. с абонемента' + extra;
+          } else {
+            breakdownEl.textContent = buildCenterPriceBreakdown(draft.mode, guestCountForPrice, tariffs);
+          }
+        }
+
+        var submitBtn = document.getElementById('centerBookingSubmit');
+        if (submitBtn) {
+          var canSubmit = true;
+          if (modeDef && modeDef.needsCoach && !draft.centerCoachId) canSubmit = false;
+          if (modeDef && modeDef.needsGuests && draft.guestCount < (modeDef.minGuests || 1)) canSubmit = false;
+          submitBtn.disabled = !canSubmit;
+          if (!submitBtn.disabled && submitBtn.textContent === 'Отправляем…') {
+            submitBtn.textContent = 'Отправить заявку';
+          }
+        }
+      }
+
+      function submitCenterSessionBooking() {
+        var draft = state.centerBookingDraft;
+        if (!draft) return;
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return;
+        var modeDef = getCenterBookingModeDef(draft.mode);
+        var guestCount = 0;
+        if (modeDef) {
+          if (modeDef.id === 'center_coach_pair') guestCount = 1;
+          else if (modeDef.needsGuests) guestCount = Math.max(modeDef.minGuests || 1, draft.guestCount);
+          else if (modeDef.optionalGuests) guestCount = Math.max(0, draft.guestCount);
+        }
+        var commentEl = document.getElementById('centerBookingComment');
+        if (commentEl) draft.comment = (commentEl.value || '').trim();
+
+        var submitBtn = document.getElementById('centerBookingSubmit');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Отправляем…';
+        }
+
+        var payload = {
+          session_id: draft.sessionId,
+          attendance_mode: draft.mode,
+          guest_count: guestCount,
+          client_comment: draft.comment || null,
+        };
+        if (modeDef && modeDef.needsCoach && draft.centerCoachId) {
+          payload.center_coach_id = draft.centerCoachId;
+        }
+        if (draft.passInstanceId) {
+          payload.collective_pass_instance_id = draft.passInstanceId;
+        }
+
+        fetch('/api/webapp/client/collective-session-booking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+          body: JSON.stringify(payload),
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error(centerBookingErrorMessage(d && d.detail));
+              return d;
+            });
+          })
+          .then(function() {
+            closeCenterSessionBookingModal();
+            if (window.ClientShell && typeof window.ClientShell.hapticSuccess === 'function') {
+              window.ClientShell.hapticSuccess();
+            }
+            if (tg && tg.showAlert) tg.showAlert('Заявка отправлена — центр подтвердит запись');
+            loadCenterSessionsCatalog();
+          })
+          .catch(function(e) {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Отправить заявку';
+            }
+            if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось записаться');
+          });
+      }
+
+      function initCenterBookingModal() {
+        var modal = document.getElementById('centerSessionBookingModal');
+        var backdrop = document.getElementById('centerBookingModalBackdrop');
+        var closeBtn = document.getElementById('centerBookingModalClose');
+        var submitBtn = document.getElementById('centerBookingSubmit');
+        var commentEl = document.getElementById('centerBookingComment');
+        if (closeBtn) closeBtn.addEventListener('click', closeCenterSessionBookingModal);
+        if (backdrop) backdrop.addEventListener('click', closeCenterSessionBookingModal);
+        if (modal) {
+          modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeCenterSessionBookingModal();
+          });
+        }
+        if (submitBtn) submitBtn.addEventListener('click', submitCenterSessionBooking);
+        if (commentEl) {
+          commentEl.addEventListener('input', function() {
+            if (state.centerBookingDraft) state.centerBookingDraft.comment = commentEl.value;
+          });
+        }
+      }
+
+      initCenterBookingModal();
+
+      function loadCenterSessionsCatalog() {
+        if (!state.collectiveSlug || !state.collectiveBrand || state.collectiveBrand.schedule_mode !== 'studio_central') {
+          state.centerSessions = null;
+          renderCenterSessionsCatalog();
+          return Promise.resolve(null);
+        }
+        return fetch('/api/public/collectives/' + encodeURIComponent(state.collectiveSlug) + '/sessions', { cache: 'no-store' })
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error((data && data.detail) || 'sessions_failed');
+              return data;
+            });
+          })
+          .then(function(data) {
+            state.centerSessions = data;
+            renderCenterSessionsCatalog();
+            return data;
+          })
+          .catch(function() {
+            state.centerSessions = { sessions: [], tariffs: {} };
+            renderCenterSessionsCatalog();
+            return null;
+          });
+      }
+
+      function bootstrapCollectiveFromQuery(qp) {
+        var slug = (qp && qp.get('collective')) || '';
+        slug = (slug || '').trim().toLowerCase();
+        if (!slug) {
+          state.collectiveSlug = null;
+          state.collectiveBrand = null;
+          applyCollectiveHero(null);
+          return Promise.resolve(null);
+        }
+        state.collectiveSlug = slug;
+        return fetch('/api/public/collectives/' + encodeURIComponent(slug), { cache: 'no-store' })
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error((data && data.detail) || 'collective_not_found');
+              return data;
+            });
+          })
+          .then(function(data) {
+            state.collectiveBrand = data;
+            applyCollectiveHero(data);
+            return loadCenterSessionsCatalog().then(function() { return data; });
+          })
+          .catch(function() {
+            state.collectiveSlug = null;
+            state.collectiveBrand = null;
+            applyCollectiveHero(null);
+            return null;
+          });
       }
 
       function syncTimeFilterPanelAria() {
@@ -5283,7 +6045,13 @@
           }
           var qp = new URLSearchParams(window.location.search || '');
           var explicitTrainerArenaIdsFromUrl = parseExplicitTrainerArenaIdsFromQuery(qp);
+          bootstrapCollectiveFromQuery(qp).finally(function() {
           applySessionToState(session);
+          if (state.collectiveBrand && state.collectiveBrand.default_city_id && !qp.get('city_id')) {
+            state.cityId = Number(state.collectiveBrand.default_city_id);
+            state.cityName = state.collectiveBrand.default_city_name || '';
+            loadCatalogScenariosFromApi(state.cityId);
+          }
           var freshSessionFingerprint = catalogSessionFingerprint(session);
           var rawDeepTid = qp.get('trainer_id');
           var deepTidParsed = rawDeepTid != null && rawDeepTid !== '' ? parseInt(rawDeepTid, 10) : NaN;
@@ -5419,6 +6187,7 @@
             return;
           }
           showInitialScreen();
+          });
         })
         .catch(function() {
           loadCities();

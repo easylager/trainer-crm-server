@@ -10,6 +10,7 @@ import string
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from urllib.parse import quote
 
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -831,6 +832,48 @@ async def cmd_start(message: Message) -> None:
                 ),
             )
         return
+
+    # Studio landing: col_<slug> — filtered catalog for collective members.
+    if payload.startswith("col_"):
+        from src.application.collective_use_cases import get_collective_by_slug, normalize_collective_slug
+
+        slug = payload.removeprefix("col_").strip()
+        if normalize_collective_slug(slug):
+            async with async_session_factory() as db_session:
+                collective = await get_collective_by_slug(db_session, slug, active_only=True)
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            if collective and base.lower().startswith("https://"):
+                name = html.escape((collective.get("display_name") or slug).strip())
+                tagline = (collective.get("tagline") or "").strip()
+                tagline_block = (
+                    html.escape(tagline) + "\n" if tagline else ""
+                )
+                from src.application.brand_presentation import normalize_brand_tokens
+
+                tokens = normalize_brand_tokens(collective.get("brand_tokens"))
+                default_city_id = tokens.get("default_city_id")
+                catalog_url = f"{base}/webapp/catalog?collective={quote(slug)}&tab=catalog"
+                if default_city_id:
+                    catalog_url += f"&city_id={int(default_city_id)}"
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_BUTTON_OPEN_CATALOG_WEBAPP,
+                                web_app=WebAppInfo(url=catalog_url),
+                            )
+                        ],
+                    ]
+                )
+                await message.answer(
+                    msg.CLIENT_COLLECTIVE_LANDING.format(
+                        name=name,
+                        tagline_block=tagline_block,
+                    ),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=keyboard,
+                )
+                return
 
     # Certificate link: cert_<CODE> or cert_<CODE>_ref_<trainer_id>
     cert_code, ref_trainer_id = _parse_cert_start(payload)
