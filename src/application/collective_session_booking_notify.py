@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from aiogram import Bot
+from aiogram.utils.token import TokenValidationError, validate_token
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from sqlalchemy import text
@@ -29,6 +30,18 @@ from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_trainer_bot_token(settings: Settings | None = None) -> str | None:
+    """Return token only when aiogram can construct Bot (skip CI placeholders)."""
+    token = ((settings or Settings()).telegram_bot_token_trainer or "").strip()
+    if not token:
+        return None
+    try:
+        validate_token(token)
+    except TokenValidationError:
+        return None
+    return token
 
 
 async def resolve_collective_session_booking_notify_trainer_ids(
@@ -151,15 +164,15 @@ async def prepare_collective_session_booking_notify(
 
 async def send_collective_session_booking_notify(payload: dict[str, Any]) -> None:
     """Telegram-only step safe for FastAPI BackgroundTasks (no DB session reuse)."""
-    settings = Settings()
-    if not settings.telegram_bot_token_trainer:
+    token = resolve_trainer_bot_token()
+    if not token:
         return
     chat_ids = payload.get("chat_ids") or []
     body = str(payload.get("body") or "")
     if not chat_ids or not body:
         return
 
-    bot = Bot(token=settings.telegram_bot_token_trainer, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     try:
         for chat_id in chat_ids:
             try:
@@ -175,8 +188,7 @@ async def send_collective_session_booking_notify(payload: dict[str, Any]) -> Non
 
 async def notify_trainers_pending_collective_session_booking(booking_id: int) -> None:
     """Fire-and-forget trainer pushes for a new pending center session booking."""
-    settings = Settings()
-    if not settings.telegram_bot_token_trainer:
+    if not resolve_trainer_bot_token():
         return
 
     async with async_session_factory() as session:

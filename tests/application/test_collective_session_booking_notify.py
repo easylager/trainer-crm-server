@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from src.application.collective_session_booking_notify import (
     resolve_collective_session_booking_notify_trainer_ids,
+    resolve_trainer_bot_token,
 )
 from src.application.collective_session_use_cases import (
     ATTENDANCE_COACH_INDIVIDUAL,
@@ -125,3 +126,17 @@ async def test_coach_booking_notifies_assigned_coach_only(db_session) -> None:
         fulfillment_trainer_id=ctx["duty_coach_id"],
     )
     assert targets == [ctx["duty_coach_id"]]
+
+
+def test_resolve_trainer_bot_token_rejects_ci_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.shared.config import Settings
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN_TRAINER", "ci-placeholder")
+    assert resolve_trainer_bot_token(Settings()) is None
+
+
+def test_resolve_trainer_bot_token_accepts_real_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.shared.config import Settings
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN_TRAINER", "123456789:AAH-dummy_token_for_unit_test")
+    assert resolve_trainer_bot_token(Settings()) == "123456789:AAH-dummy_token_for_unit_test"

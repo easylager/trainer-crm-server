@@ -8043,6 +8043,7 @@ from src.application.collective_booking_context_use_cases import (
 from src.application.collective_invoice_admin_notify import notify_admins_new_collective_subscription_invoice
 from src.application.collective_session_booking_notify import (
     prepare_collective_session_booking_notify,
+    resolve_trainer_bot_token,
     send_collective_session_booking_notify,
 )
 
@@ -8949,7 +8950,11 @@ async def post_client_collective_session_booking(
     if err:
         raise HTTPException(status_code=400, detail=str(err))
     booking_id = created.get("booking_id")
-    if booking_id is not None and created.get("status") == "pending":
+    if (
+        booking_id is not None
+        and created.get("status") == "pending"
+        and resolve_trainer_bot_token()
+    ):
         notify_payload = await prepare_collective_session_booking_notify(session, int(booking_id))
         if notify_payload:
             background_tasks.add_task(send_collective_session_booking_notify, notify_payload)
