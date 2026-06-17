@@ -112,6 +112,67 @@ async def _load_pending_booking_notify_row(
     }
 
 
+async def prepare_collective_session_booking_notify(
+    session: AsyncSession,
+    booking_id: int,
+) -> dict[str, Any] | None:
+    """Resolve chat targets and message while the request session is still open."""
+    row = await _load_pending_booking_notify_row(session, int(booking_id))
+    if not row or row["status"] != BOOKING_STATUS_PENDING:
+        return None
+
+    trainer_ids = await resolve_collective_session_booking_notify_trainer_ids(
+        session,
+        collective_id=int(row["collective_id"]),
+        attendance_mode=str(row["attendance_mode"]),
+        center_coach_id=row.get("center_coach_id"),
+        fulfillment_trainer_id=int(row["fulfillment_trainer_id"]),
+    )
+
+    chat_ids: list[int] = []
+    for tid in trainer_ids:
+        tg_id = await get_trainer_telegram_id(session, int(tid))
+        if tg_id:
+            chat_ids.append(int(tg_id))
+    chat_ids = list(dict.fromkeys(chat_ids))
+    if not chat_ids:
+        return None
+
+    mode_label = _attendance_mode_label_ru(str(row["attendance_mode"]))
+    when = f"{row['slot_date']} {row['start_time']}–{row['end_time']}"
+    body = msg.TRAINER_COLLECTIVE_SESSION_BOOKING_PENDING.format(
+        collective_name=html.escape(row["collective_name"]),
+        client_name=html.escape(row["client_name"]),
+        when=html.escape(when),
+        mode=html.escape(mode_label),
+    )
+    return {"chat_ids": chat_ids, "body": body}
+
+
+async def send_collective_session_booking_notify(payload: dict[str, Any]) -> None:
+    """Telegram-only step safe for FastAPI BackgroundTasks (no DB session reuse)."""
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    chat_ids = payload.get("chat_ids") or []
+    body = str(payload.get("body") or "")
+    if not chat_ids or not body:
+        return
+
+    bot = Bot(token=settings.telegram_bot_token_trainer, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        for chat_id in chat_ids:
+            try:
+                await bot.send_message(chat_id=int(chat_id), text=body)
+            except Exception:
+                logger.exception(
+                    "collective session booking notify failed chat_id=%s",
+                    chat_id,
+                )
+    finally:
+        await bot.session.close()
+
+
 async def notify_trainers_pending_collective_session_booking(booking_id: int) -> None:
     """Fire-and-forget trainer pushes for a new pending center session booking."""
     settings = Settings()
@@ -119,46 +180,6 @@ async def notify_trainers_pending_collective_session_booking(booking_id: int) ->
         return
 
     async with async_session_factory() as session:
-        row = await _load_pending_booking_notify_row(session, int(booking_id))
-        if not row or row["status"] != BOOKING_STATUS_PENDING:
-            return
-
-        trainer_ids = await resolve_collective_session_booking_notify_trainer_ids(
-            session,
-            collective_id=int(row["collective_id"]),
-            attendance_mode=str(row["attendance_mode"]),
-            center_coach_id=row.get("center_coach_id"),
-            fulfillment_trainer_id=int(row["fulfillment_trainer_id"]),
-        )
-
-        chat_ids: list[int] = []
-        for tid in trainer_ids:
-            tg_id = await get_trainer_telegram_id(session, int(tid))
-            if tg_id:
-                chat_ids.append(int(tg_id))
-        chat_ids = list(dict.fromkeys(chat_ids))
-        if not chat_ids:
-            return
-
-        mode_label = _attendance_mode_label_ru(str(row["attendance_mode"]))
-        when = f"{row['slot_date']} {row['start_time']}–{row['end_time']}"
-        body = msg.TRAINER_COLLECTIVE_SESSION_BOOKING_PENDING.format(
-            collective_name=html.escape(row["collective_name"]),
-            client_name=html.escape(row["client_name"]),
-            when=html.escape(when),
-            mode=html.escape(mode_label),
-        )
-
-    bot = Bot(token=settings.telegram_bot_token_trainer, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    try:
-        for chat_id in chat_ids:
-            try:
-                await bot.send_message(chat_id=chat_id, text=body)
-            except Exception:
-                logger.exception(
-                    "collective session booking notify failed chat_id=%s booking_id=%s",
-                    chat_id,
-                    booking_id,
-                )
-    finally:
-        await bot.session.close()
+        payload = await prepare_collective_session_booking_notify(session, int(booking_id))
+    if payload:
+        await send_collective_session_booking_notify(payload)

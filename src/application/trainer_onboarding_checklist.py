@@ -34,6 +34,7 @@ from src.application.booking_use_cases import count_trainer_fill_slots_invite_ca
 from src.application.collective_use_cases import (
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
     get_effective_studio_access_mode,
+    get_trainer_studio_access_mode,
     list_active_collective_memberships,
 )
 from src.application.organization_capabilities import (
@@ -108,10 +109,11 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
 
     has_crm = await trainer_has_crm_access(session, trainer_id)
     out["has_crm_subscription_access"] = has_crm
-    studio_access_mode = await get_effective_studio_access_mode(session, trainer_id)
-    out["studio_access_mode"] = studio_access_mode
+    stored_studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id)
+    effective_studio_access_mode = await get_effective_studio_access_mode(session, trainer_id)
+    out["studio_access_mode"] = stored_studio_access_mode
 
-    if studio_access_mode == STUDIO_ACCESS_MODE_ADMIN_ONLY:
+    if stored_studio_access_mode == STUDIO_ACCESS_MODE_ADMIN_ONLY:
         out["schedule_unlocked"] = True
         out["tt_minimal_complete"] = True
         out["profile_complete"] = True
@@ -128,11 +130,11 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                 organization_format=m.organization_format,
                 schedule_mode=m.schedule_mode,
                 role=m.role,
-                studio_access_mode=studio_access_mode,
+                studio_access_mode=effective_studio_access_mode,
             )
         else:
             out["capabilities"] = organization_capabilities_to_dict(
-                resolve_solo_trainer_capabilities(studio_access_mode)
+                resolve_solo_trainer_capabilities(effective_studio_access_mode)
             )
         return out
 
@@ -475,11 +477,11 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
             organization_format=m.organization_format,
             schedule_mode=m.schedule_mode,
             role=m.role,
-            studio_access_mode=studio_access_mode,
+            studio_access_mode=effective_studio_access_mode,
         )
     else:
         out["capabilities"] = organization_capabilities_to_dict(
-            resolve_solo_trainer_capabilities(studio_access_mode)
+            resolve_solo_trainer_capabilities(effective_studio_access_mode)
         )
 
     return out

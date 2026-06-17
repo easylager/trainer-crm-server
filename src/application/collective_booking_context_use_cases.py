@@ -25,7 +25,7 @@ from src.application.collective_use_cases import (
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
     STUDIO_ACCESS_MODE_FULL,
     _assert_collective_studio_admin,
-    get_trainer_studio_access_mode,
+    get_effective_studio_access_mode,
     is_collective_studio_admin_role,
     list_active_collective_memberships,
     resolve_collective_membership,
