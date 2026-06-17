@@ -301,5 +301,6 @@ Do not start W4 before W2–W3 acceptance criteria pass for throwing center.
 ## References
 
 - [ADR 001: Collective overlay](./001-collective-overlay.md)
+- **[Appendix: Organization format → UX contract](./003-appendix-organization-format-ux.md)** — pilot onboarding table (O0.4)
 - Implemented: collective brand, roster, pool billing (P2.1), governance API (P1.8)
 - This ADR: accepted product contract for W2+

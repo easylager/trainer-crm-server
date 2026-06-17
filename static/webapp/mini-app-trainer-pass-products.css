@@ -638,6 +638,9 @@
       cursor: default;
     }
     .pp-issued-card {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
       margin-bottom: 10px;
       padding: 14px 16px 14px 14px;
       border-radius: 14px;
@@ -645,6 +648,15 @@
       border-left-width: 4px;
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      text-align: left;
+      font: inherit;
+      color: inherit;
+    }
+    button.pp-issued-card {
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
     }
     .pp-issued-card:last-child { margin-bottom: 0; }
     .pp-issued-card--live {
@@ -781,6 +793,295 @@
     }
     .pp-issued-summary-dot--live::before { background: var(--app-success); }
     .pp-issued-summary-dot--closed::before { background: var(--app-danger); }
+    .pp-issued-card--pass.pp-issued-card--clickable {
+      cursor: pointer;
+      position: relative;
+      padding-right: 36px;
+      padding-bottom: 16px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .pp-issued-card--pass.pp-issued-card--clickable:active {
+      transform: scale(0.99);
+    }
+    .pp-issued-card--pass.pp-issued-card--clickable::after {
+      content: '→';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.7;
+    }
+    .pp-issued-redeem-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: color-mix(in srgb, var(--tg-theme-button-color) 88%, #1a1a1a);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 26%, transparent);
+    }
+    @supports not (background: color-mix(in srgb, red, blue)) {
+      .pp-issued-redeem-cta {
+        color: #c47d00;
+        background: rgba(245, 166, 35, 0.12);
+        border: 1px solid rgba(245, 166, 35, 0.28);
+      }
+    }
+    #screenPassDetail {
+      padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0));
+    }
+    #screenPassDetail .pp-hero {
+      margin-left: 0;
+      margin-right: 0;
+    }
+    .pp-pass-detail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 0;
+    }
+    .pp-pass-detail-head .pp-hero-kicker { margin-bottom: 0; }
+    .pp-pass-detail-status {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .pp-pass-detail-status--live {
+      color: color-mix(in srgb, var(--app-success) 82%, #0a3d1a);
+      background: color-mix(in srgb, var(--app-success) 16%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-success) 28%, transparent);
+    }
+    .pp-pass-detail-status--closed {
+      color: color-mix(in srgb, var(--app-danger) 78%, var(--tg-theme-text-color));
+      background: color-mix(in srgb, var(--app-danger) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-danger) 22%, transparent);
+    }
+    .pp-pass-detail-stat-card {
+      border-radius: 18px;
+      padding: 18px 16px;
+      margin-bottom: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.35s ease, transform 0.35s ease;
+    }
+    .pp-pass-detail-stat-card.is-updated {
+      animation: pp-pass-stat-pulse 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes pp-pass-stat-pulse {
+      0% { transform: scale(1); box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06); }
+      40% { transform: scale(1.015); box-shadow: 0 6px 24px rgba(247, 166, 0, 0.22); }
+      100% { transform: scale(1); box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06); }
+    }
+    .pp-pass-detail-stat-row { margin-bottom: 12px; }
+    .pp-pass-detail-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .pp-pass-detail-stat-numbers { line-height: 1.15; }
+    .pp-pass-detail-num {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--tg-theme-text-color);
+      font-variant-numeric: tabular-nums;
+    }
+    .pp-pass-detail-num--muted {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+    .pp-pass-detail-sep {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 0 4px;
+    }
+    .pp-pass-detail-progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(128, 128, 128, 0.14);
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .pp-pass-detail-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ffc23d 0%, #f5a623 100%);
+      width: 0%;
+      transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .pp-pass-detail-meta-rows { margin-bottom: 18px; }
+    .pp-pass-detail-section { margin-bottom: 18px; }
+    .pp-pass-detail-callout {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+    }
+    @supports not (background: color-mix(in srgb, red, blue)) {
+      .pp-pass-detail-callout {
+        background: rgba(245, 166, 35, 0.08);
+        border: 1px solid rgba(245, 166, 35, 0.22);
+      }
+    }
+    .pp-pass-detail-callout__icon {
+      flex-shrink: 0;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+    .pp-pass-detail-callout__text {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      opacity: 0.92;
+    }
+    .pp-pass-detail-redeem-list .bd-rows { margin-bottom: 0; }
+    .pp-redeem-booking-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      padding: 14px 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: none;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+    .pp-redeem-booking-row:last-child { border-bottom: none; }
+    .pp-redeem-booking-row:active:not(:disabled) {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
+    }
+    .pp-redeem-booking-row:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+    .pp-redeem-booking-row__icon {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 24%, transparent);
+    }
+    @supports not (background: color-mix(in srgb, red, blue)) {
+      .pp-redeem-booking-row__icon {
+        background: rgba(245, 166, 35, 0.14);
+        border: 1px solid rgba(245, 166, 35, 0.24);
+      }
+    }
+    .pp-redeem-booking-row__main { flex: 1; min-width: 0; }
+    .pp-redeem-booking-row__date {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 2px;
+    }
+    .pp-redeem-booking-row__meta {
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .pp-redeem-booking-row__chip {
+      flex-shrink: 0;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--tg-theme-button-text-color, #1a1a1a);
+      background: var(--tg-theme-button-color, #f5a623);
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.28);
+    }
+    .pp-redemption-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .pp-redemption-row__dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--app-success);
+    }
+    .pp-redemption-row__text {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .pp-redemption-row__date {
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .pp-redemption-row__service {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .pp-pass-detail-footnote {
+      margin-top: 4px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .pp-pass-detail-skeleton {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .pp-pass-detail-skeleton-row {
+      height: 56px;
+      background: linear-gradient(
+        90deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, var(--tg-theme-text-color)) 50%,
+        var(--tg-theme-secondary-bg-color) 100%
+      );
+      background-size: 200% 100%;
+      animation: pp-pass-shimmer 1.2s ease-in-out infinite;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    .pp-pass-detail-skeleton-row:last-child { border-bottom: none; }
+    @keyframes pp-pass-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
     .form-group-checkbox { margin-bottom: 16px; }

@@ -26,11 +26,11 @@
     />
   </noscript>
   <link rel="preload" href="schedule-editor-main.js?v=202606165" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606162" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606314" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606165" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606313" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606162" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606163" />
 </head>
 <body data-trainer-shell="tabs">
   <!-- Covers main UI until quick-book modal opens (flow=book) or booking detail loads (open_booking=) — avoids calendar flash -->
@@ -110,7 +110,7 @@
     </div>
     <div class="tabs">
       <button type="button" class="tab active" data-tab="calendar">Расписание</button>
-      <button type="button" class="tab" data-tab="template">Шаблон недели</button>
+      <button type="button" class="tab" data-tab="template" id="tabTemplateNav">Шаблон недели</button>
     </div>
   </div>
   <div id="seCrmLockBanner" class="se-crm-lock-banner" hidden aria-hidden="true">
@@ -143,12 +143,43 @@
   </div>
 
   <div id="tabTemplate" class="tab-content">
-    <p class="screen-hint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Шаблон повторяется по неделям. При «Применить на неделю» свободные слоты заменяются им.</p>
-    <div class="action-bar" style="margin-bottom:16px;">
-      <button type="button" class="btn-block btn-primary" id="btnApplyThis">Применить шаблон на эту неделю</button>
-      <button type="button" class="btn-block btn-secondary" id="btnApplyNext">Применить шаблон на следующую</button>
+    <div id="personalTemplateSection">
+      <p class="screen-hint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Шаблон повторяется по неделям. При «Применить на неделю» свободные слоты заменяются им.</p>
+      <div class="action-bar" style="margin-bottom:16px;">
+        <button type="button" class="btn-block btn-primary" id="btnApplyThis">Применить шаблон на эту неделю</button>
+        <button type="button" class="btn-block btn-secondary" id="btnApplyNext">Применить шаблон на следующую</button>
+      </div>
+      <div id="templateList"></div>
     </div>
-    <div id="templateList"></div>
+    <section id="centerGridTemplateSection" class="center-grid-template-section" hidden aria-labelledby="centerGridTemplateTitle">
+      <div class="center-grid-template-section__divider" aria-hidden="true"></div>
+      <p class="center-grid-template-section__kicker">Смена центра</p>
+      <h3 class="center-grid-template-section__title" id="centerGridTemplateTitle">Сетка центра</h3>
+      <p class="center-grid-template-section__hint">Окна недели можно повторить вперёд. Совпадения по дате и времени пропускаются.</p>
+      <div class="center-grid-template-panel">
+        <div class="center-grid-template-week-nav week-nav week-nav--compact" role="group" aria-label="Неделя сетки центра">
+          <button type="button" id="centerGridWeekPrev" aria-label="Предыдущая неделя">‹</button>
+          <span id="centerGridWeekLabel">—</span>
+          <button type="button" id="centerGridWeekNext" aria-label="Следующая неделя">›</button>
+        </div>
+        <div id="centerGridTemplateList" class="center-grid-template-list"></div>
+      </div>
+      <div class="center-grid-template-actions action-bar">
+        <button type="button" class="btn-block btn-secondary" id="btnCenterGridCopyPrev">Заполнить из прошлой недели</button>
+        <button type="button" class="btn-block btn-primary" id="btnCenterGridCopyNext">Повторить на следующую неделю</button>
+        <div class="center-grid-copy-ahead-row">
+          <label for="centerGridWeeksAhead" class="slot-flow-label">Скопировать на несколько недель</label>
+          <div class="center-grid-copy-ahead-controls">
+            <select id="centerGridWeeksAhead" class="slot-flow-select" aria-label="Сколько недель вперёд">
+              <option value="2">2 недели</option>
+              <option value="3">3 недели</option>
+              <option value="4" selected>4 недели</option>
+            </select>
+            <button type="button" class="btn-block btn-secondary" id="btnCenterGridCopyAhead">Скопировать</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
   <nav id="scheduleWeekDayStrip" class="schedule-week-day-strip" aria-label="Выбор дня и переключение недели" hidden></nav>
   </div>
@@ -434,6 +465,12 @@
         <p class="slot-flow-help">Запись на группу только на эту площадку, без выбора при брони.</p>
       </div>
     </div>
+    <div id="centerEditCoachWrap" class="slot-flow-panel center-edit-coach-wrap" hidden>
+      <p class="slot-flow-label" id="centerEditCoachLabel">Кто на смене</p>
+      <div id="centerEditCoachChips" class="center-edit-coach-chips" role="group" aria-labelledby="centerEditCoachLabel"></div>
+      <p class="slot-flow-help" id="centerEditCoachHelp">Необязательно. Без тренеров — запись на дорожку; выберите смену, если нужен режим «с тренером центра».</p>
+      <p id="centerEditOverlapWarn" class="center-edit-overlap-warn" hidden role="status"></p>
+    </div>
     <div class="edit-actions">
       <button type="button" class="btn-block btn-primary" id="editDone">Готово</button>
       <button type="button" class="btn-block btn-secondary" id="editCancel">Отмена</button>
@@ -461,7 +498,7 @@
     </div>
   </div>
 
-  <div id="modalSlotIntent" class="modal-overlay" style="display: none;" aria-hidden="true">
+  <div id="modalSlotIntent" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
     <div class="modal">
       <h3 id="slotIntentTitle">Тип слотов</h3>
       <p id="slotIntentText" style="font-size:14px;color:var(--tg-theme-hint-color);line-height:1.45;margin:0 0 16px;">Выберите тип слотов.</p>
@@ -469,8 +506,15 @@
         <button type="button" class="slot-intent-choice" id="btnSlotIntentIndividual">
           <span class="slot-intent-choice-icon" aria-hidden="true">1</span>
           <span class="slot-intent-choice-body">
-            <span class="slot-intent-choice-title">Индивидуальные</span>
-            <span class="slot-intent-choice-hint">Один клиент на час, без доп. настроек.</span>
+            <span class="slot-intent-choice-title" id="slotIntentIndividualTitle">Индивидуальные</span>
+            <span class="slot-intent-choice-hint" id="slotIntentIndividualHint">Один клиент на час, без доп. настроек.</span>
+          </span>
+        </button>
+        <button type="button" class="slot-intent-choice slot-intent-choice--center" id="btnSlotIntentCenter" hidden>
+          <span class="slot-intent-choice-icon slot-intent-choice-icon--center" aria-hidden="true">◎</span>
+          <span class="slot-intent-choice-body">
+            <span class="slot-intent-choice-title" id="slotIntentCenterTitle">Центр · смена</span>
+            <span class="slot-intent-choice-hint" id="slotIntentCenterHint">Окно для клиентов центра. Личные слоты остаются отдельно.</span>
           </span>
         </button>
         <button type="button" class="slot-intent-choice" id="btnSlotIntentGroup">
@@ -492,6 +536,22 @@
       <div id="groupSlotList" class="group-slot-list"></div>
       <button type="button" class="btn-block btn-primary" id="groupSlotAddBtn" style="display: none;">Добавить участника</button>
       <button type="button" class="btn-block btn-secondary" id="groupSlotCloseBtn">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="modalCenterSession" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal center-session-modal" style="max-width: 420px;">
+      <p class="quick-book-kicker" id="centerSessionKicker">Смена центра</p>
+      <h3 id="centerSessionTitle" class="book-modal-title">10:00–11:00</h3>
+      <p id="centerSessionSub" class="group-slot-sub"></p>
+      <div id="centerSessionCoaches" class="center-session-coaches" hidden></div>
+      <div id="centerSessionMeta" class="center-session-meta"></div>
+      <div class="center-session-actions">
+        <button type="button" class="btn-block btn-primary" id="centerSessionBookBtn" hidden>Записать клиента</button>
+        <button type="button" class="btn-block btn-secondary" id="centerSessionEditBtn" hidden>Редактировать день</button>
+        <button type="button" class="btn-block btn-secondary center-session-cancel-btn" id="centerSessionCancelBtn" hidden>Снять окно</button>
+        <button type="button" class="btn-block btn-secondary" id="centerSessionCloseBtn">Закрыть</button>
+      </div>
     </div>
   </div>
 
@@ -801,11 +861,12 @@
     </div>
   </div>
 
+  <script src="trainer-booking-context.js?v=202606304"></script>
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <script src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
-  <script defer src="schedule-editor-main.js?v=202606165"></script>
-  <script src="mini-app-trainer-shell.js?v=202606162"></script>
+  <script defer src="schedule-editor-main.js?v=202606313"></script>
+  <script src="mini-app-trainer-shell.js?v=202606314"></script>
 </body>
 </html>

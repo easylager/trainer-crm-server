@@ -247,10 +247,14 @@ from src.application.pass_product_use_cases import (
     create_pass_product,
     delete_pass_product,
     enrich_pass_items_with_catalog_reference_prices,
+    get_trainer_pass_instance_detail,
     issue_pass_to_client,
     list_client_pass_instances,
     list_pass_instances_for_trainer_client,
     list_pass_products,
+    list_pass_redemptions_for_instance,
+    list_redeemable_bookings_for_pass_instance,
+    manual_redeem_pass_for_booking,
     update_pass_product,
 )
 from src.application.trainer_issued_use_cases import list_trainer_issued_items
@@ -333,6 +337,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.collective_session_use_cases import (
     assert_no_center_duty_conflict_for_slots,
+    build_center_schedule_admin_for_trainer,
     list_center_duties_for_trainer,
 )
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
@@ -354,6 +359,7 @@ from src.application.client_notes_use_cases import (
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
 from src.application.trainer_hub_action_inbox import (
+    build_hub_dual_summary,
     build_trainer_hub_action_inbox,
     fetch_hub_pending_booking_ids,
 )
@@ -771,6 +777,12 @@ async def get_schedule(
         from_date=from_date,
         to_date=to_date,
     )
+    center_schedule_admin = await build_center_schedule_admin_for_trainer(
+        session,
+        trainer_id=int(trainer_id),
+        from_date=from_date,
+        to_date=to_date,
+    )
 
     trainer_row = await get_trainer(session, trainer_id)
     group_classes_enabled = bool(
@@ -789,6 +801,7 @@ async def get_schedule(
         "trainer_id": trainer_id,
         "slots": out_slots,
         "center_duties": center_duties,
+        "center_schedule_admin": center_schedule_admin,
         "group_classes_enabled": group_classes_enabled,
         "session_duration_minutes": session_duration_minutes,
         "schedule_grid": schedule_grid_preset_to_api(grid_preset),
@@ -3048,6 +3061,7 @@ async def _hub_bootstrap_gather_reads(
 async def get_trainer_hub_bootstrap(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     bookings_limit: int = Query(32, ge=1, le=100),
+    collective_slug: str | None = Query(None, max_length=64),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -3194,7 +3208,50 @@ async def get_trainer_hub_bootstrap(
                 else:
                     subscription_status = r_sub_ttv
 
+    collective_payload: dict[str, Any] | None = None
+    suspended_collective: dict[str, Any] | None = None
+    if trainer_id_linked:
+        try:
+            from src.application.collective_use_cases import (
+                build_trainer_collective_bootstrap_payload,
+                get_collective_entitlements_for_member,
+                get_trainer_suspended_collective_notice,
+                list_active_collective_memberships,
+                resolve_collective_membership,
+            )
+            from src.application.subscription_tier_use_cases import unlocked_capability_codes
+
+            memberships = await list_active_collective_memberships(session, trainer_id_linked)
+            membership = await resolve_collective_membership(
+                session,
+                trainer_id_linked,
+                collective_slug=collective_slug,
+            )
+            subscription_covers: list[str] = []
+            studio_access_mode = await get_effective_studio_access_mode(session, trainer_id_linked)
+            if membership is not None:
+                coll_ent = await get_collective_entitlements_for_member(session, trainer_id_linked)
+                if coll_ent is not None:
+                    subscription_covers = unlocked_capability_codes(coll_ent)
+            collective_payload = build_trainer_collective_bootstrap_payload(
+                membership,
+                subscription_covers=subscription_covers,
+                memberships=memberships,
+                studio_access_mode=studio_access_mode,
+            )
+            if collective_payload is not None:
+                collective_payload["studio_access_mode"] = studio_access_mode
+            suspended_collective = await get_trainer_suspended_collective_notice(
+                session, trainer_id_linked
+            )
+        except Exception as exc:
+            partial_errors["collective"] = str(exc)
+
     action_inbox: dict[str, Any] | None = None
+    dual_summary: dict[str, Any] | None = None
+    center_inbox_pending = 0
+    show_center_inbox = False
+    center_hub_summary: dict[str, Any] | None = None
     if trainer_id_linked:
         req_n = 0
         if requests_summary and isinstance(requests_summary.get("unanswered_count"), int):
@@ -3205,41 +3262,54 @@ async def get_trainer_hub_bootstrap(
                 pending_booking_ids = await fetch_hub_pending_booking_ids(session, trainer_id_linked)
             except Exception as exc:
                 partial_errors["action_inbox_pending_ids"] = str(exc)
+        if collective_payload and isinstance(collective_payload.get("capabilities"), dict):
+            caps = collective_payload["capabilities"]
+            show_center_inbox = bool(caps.get("show_center_grid"))
+            if show_center_inbox and collective_payload.get("collective_id") is not None:
+                from src.application.collective_session_use_cases import (
+                    count_pending_collective_session_bookings_for_admin,
+                )
+
+                try:
+                    cnt = await count_pending_collective_session_bookings_for_admin(
+                        session,
+                        collective_id=int(collective_payload["collective_id"]),
+                        admin_trainer_id=trainer_id_linked,
+                    )
+                    if not cnt.get("error"):
+                        center_inbox_pending = int(cnt.get("count") or 0)
+                except Exception as exc:
+                    partial_errors["center_inbox_pending"] = str(exc)
+                try:
+                    from src.application.collective_session_use_cases import build_center_hub_summary
+
+                    center_hub_summary = await build_center_hub_summary(
+                        session,
+                        collective_id=int(collective_payload["collective_id"]),
+                        admin_trainer_id=trainer_id_linked,
+                    )
+                except Exception as exc:
+                    partial_errors["center_hub_summary"] = str(exc)
+            if bool(caps.get("show_personal_crm")) and bool(caps.get("show_center_grid")):
+                dual_summary = build_hub_dual_summary(
+                    bookings=bookings,
+                    center_inbox_pending=center_inbox_pending,
+                    collective_slug=str(collective_payload.get("slug") or ""),
+                    collective_label=str(
+                        caps.get("collective_screen_title")
+                        or collective_payload.get("display_name")
+                        or "Центр"
+                    ),
+                )
         action_inbox = build_trainer_hub_action_inbox(
             onboarding=onboarding_checklist or {},
             requests_count=req_n,
             bookings=bookings,
             schedule_unlocked=schedule_unlocked,
             pending_booking_ids=pending_booking_ids,
+            center_inbox_pending=center_inbox_pending,
+            show_center_inbox=show_center_inbox,
         )
-
-    collective_payload: dict[str, Any] | None = None
-    if trainer_id_linked:
-        try:
-            from src.application.collective_use_cases import (
-                build_trainer_collective_bootstrap_payload,
-                get_collective_entitlements_for_member,
-                list_active_collective_memberships,
-            )
-            from src.application.subscription_tier_use_cases import unlocked_capability_codes
-
-            memberships = await list_active_collective_memberships(session, trainer_id_linked)
-            membership = memberships[0] if memberships else None
-            subscription_covers: list[str] = []
-            studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id_linked)
-            if membership is not None:
-                coll_ent = await get_collective_entitlements_for_member(session, trainer_id_linked)
-                if coll_ent is not None:
-                    subscription_covers = unlocked_capability_codes(coll_ent)
-            collective_payload = build_trainer_collective_bootstrap_payload(
-                membership,
-                subscription_covers=subscription_covers,
-                memberships=memberships,
-            )
-            if collective_payload is not None:
-                collective_payload["studio_access_mode"] = studio_access_mode
-        except Exception as exc:
-            partial_errors["collective"] = str(exc)
 
     return {
         "access": access,
@@ -3251,7 +3321,10 @@ async def get_trainer_hub_bootstrap(
         "subscription_status": subscription_status,
         "lifecycle": lifecycle,
         "action_inbox": action_inbox,
+        "dual_summary": dual_summary,
         "collective": collective_payload,
+        "center_hub_summary": center_hub_summary,
+        "suspended_collective": suspended_collective,
         "partial_errors": partial_errors or None,
     }
 
@@ -4681,6 +4754,61 @@ async def get_trainer_issued_items(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/trainer/pass-instances/{pass_instance_id:int}")
+async def get_trainer_pass_instance(
+    pass_instance_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Pass instance detail for trainer manual redemption screen."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Абонемент не найден")
+    redemptions = await list_pass_redemptions_for_instance(session, trainer_id, pass_instance_id)
+    redeemable = await list_redeemable_bookings_for_pass_instance(session, trainer_id, pass_instance_id)
+    return {
+        "pass": detail,
+        "redemptions": redemptions,
+        "redeemable_bookings": redeemable.get("items") or [],
+    }
+
+
+class TrainerPassRedeemBody(BaseModel):
+    booking_id: int
+
+
+@router.post("/trainer/pass-instances/{pass_instance_id:int}/redeem")
+async def post_trainer_pass_instance_redeem(
+    pass_instance_id: int,
+    body: TrainerPassRedeemBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Retroactively debit one session from pass for a completed past booking."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    try:
+        result = await manual_redeem_pass_for_booking(
+            session,
+            trainer_id,
+            pass_instance_id,
+            body.booking_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    redemptions = await list_pass_redemptions_for_instance(session, trainer_id, pass_instance_id)
+    redeemable = await list_redeemable_bookings_for_pass_instance(session, trainer_id, pass_instance_id)
+    return {
+        **result,
+        "redemptions": redemptions,
+        "redeemable_bookings": redeemable.get("items") or [],
+    }
 
 
 class CertificateIssueBody(BaseModel):
@@ -7530,6 +7658,33 @@ def _serialize_trainer_request(req: dict) -> dict:
     elif created_at is not None:
         created_at = str(created_at)
     comment_raw = req.get("comment")
+    _cpid_marked, comment_body_collective = split_collective_pass_order_comment(comment_raw)
+    if _cpid_marked is not None:
+        return {
+            "id": req["id"],
+            "city_id": req["city_id"],
+            "service_id": req["service_id"],
+            "comment": comment_raw,
+            "comment_body": comment_body_collective,
+            "created_at": created_at,
+            "city_name": req.get("city_name"),
+            "service_name": req.get("service_name"),
+            "is_personalized": bool(req.get("is_personalized")),
+            "has_responded": bool(req.get("has_responded")),
+            "remind_slots_pending": bool(req.get("remind_slots_pending")),
+            "client_id": req.get("client_id"),
+            "client_telegram_id": req.get("client_telegram_id"),
+            "client_telegram_username": (req.get("client_telegram_username") or "").strip() or None,
+            "client_first_name": req.get("client_first_name"),
+            "client_last_name": req.get("client_last_name"),
+            "request_subtype": "collective_pass_product_order",
+            "pass_product_id": None,
+            "collective_pass_product_id": _cpid_marked,
+            "certificate_product_id": None,
+            "cert_recipient_email": None,
+            "cert_recipient_name": None,
+            "cert_purchased_by_name": None,
+        }
     _pid_marked, comment_body_pass = split_pass_order_comment(comment_raw)
     if _pid_marked is not None:
         return {
@@ -7551,6 +7706,7 @@ def _serialize_trainer_request(req: dict) -> dict:
             "client_last_name": req.get("client_last_name"),
             "request_subtype": "pass_product_order",
             "pass_product_id": _pid_marked,
+            "collective_pass_product_id": None,
             "certificate_product_id": None,
             "cert_recipient_email": None,
             "cert_recipient_name": None,
@@ -7583,6 +7739,7 @@ def _serialize_trainer_request(req: dict) -> dict:
             "client_last_name": req.get("client_last_name"),
             "request_subtype": "certificate_product_order",
             "pass_product_id": None,
+            "collective_pass_product_id": None,
             "certificate_product_id": _cid_marked,
             "cert_recipient_email": cert_meta.get("recipient_email"),
             "cert_recipient_name": cert_meta.get("recipient_name"),
@@ -7608,6 +7765,7 @@ def _serialize_trainer_request(req: dict) -> dict:
         "client_last_name": req.get("client_last_name"),
         "request_subtype": None,
         "pass_product_id": None,
+        "collective_pass_product_id": None,
         "certificate_product_id": None,
         "cert_recipient_email": None,
         "cert_recipient_name": None,
@@ -7864,6 +8022,7 @@ from src.application.collective_use_cases import (
     is_collective_owner_role,
     is_collective_studio_admin_role,
     promote_collective_member_to_admin,
+    preview_collective_member_removal,
     resolve_collective_membership,
     update_collective_brand,
     upload_collective_asset_from_bytes,
@@ -7873,7 +8032,7 @@ from src.application.collective_use_cases import (
     create_collective_subscription_invoice,
     confirm_collective_invoice_after_payment,
     admin_grant_collective_subscription,
-    get_trainer_studio_access_mode,
+    get_effective_studio_access_mode,
 )
 from src.application.collective_booking_context_use_cases import (
     assert_delegate_personal_slot_booking,
@@ -7882,6 +8041,9 @@ from src.application.collective_booking_context_use_cases import (
     list_trainer_booking_contexts,
 )
 from src.application.collective_invoice_admin_notify import notify_admins_new_collective_subscription_invoice
+from src.application.collective_session_booking_notify import (
+    notify_trainers_pending_collective_session_booking,
+)
 
 CollectiveSlugQuery = Annotated[
     str | None,
@@ -7965,6 +8127,23 @@ class TrainerCollectiveBrandPatch(BaseModel):
     clear_primary_arena: bool = False
     default_city_id: int | None = None
     clear_default_city: bool = False
+
+
+@router.get("/trainer/collective/suspended-notice")
+async def get_trainer_collective_suspended_notice(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Lightweight banner payload when trainer's collective is suspended (O8.4)."""
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    from src.application.collective_use_cases import get_trainer_suspended_collective_notice
+
+    notice = await get_trainer_suspended_collective_notice(session, int(trainer_id))
+    if notice is None:
+        return {"suspended": False}
+    return {"suspended": True, **notice}
 
 
 @router.get("/trainer/collective")
@@ -8159,6 +8338,30 @@ def _collective_governance_http_error(err: str | None) -> None:
         raise HTTPException(status_code=403, detail=str(err))
 
 
+@router.get("/trainer/collective/members/{target_trainer_id:int}/removal-preview")
+async def get_trainer_collective_member_removal_preview(
+    target_trainer_id: int,
+    collective_slug: CollectiveSlugQuery = None,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Owner-only soft validation before removing a member (O7.3)."""
+    trainer_id, membership = await _require_collective_owner(
+        session,
+        principal,
+        collective_slug=collective_slug,
+    )
+    preview = await preview_collective_member_removal(
+        session,
+        membership.collective_id,
+        trainer_id,
+        target_trainer_id,
+    )
+    err = preview.get("error")
+    _collective_governance_http_error(err if isinstance(err, str) else None)
+    return preview
+
+
 @router.post("/trainer/collective/members/{target_trainer_id:int}/remove")
 async def post_trainer_collective_member_remove(
     target_trainer_id: int,
@@ -8246,6 +8449,17 @@ async def post_trainer_collective_member_promote_admin(
     if err == "cannot_promote_owner":
         raise HTTPException(status_code=400, detail="Cannot promote owner")
     _collective_governance_http_error(err if isinstance(err, str) else None)
+    from src.shared.audit import ACTOR_API, audit_log
+
+    audit_log(
+        "collective.member.promoted_admin",
+        ACTOR_API,
+        int(trainer_id),
+        {
+            "collective_id": int(membership.collective_id),
+            "promoted_trainer_id": int(target_trainer_id),
+        },
+    )
     studio = await get_trainer_collective_studio_payload(
         session,
         trainer_id,
@@ -8491,6 +8705,7 @@ from src.application.collective_session_use_cases import (
     create_collective_session,
     create_collective_session_booking,
     decline_collective_session_booking,
+    duplicate_collective_sessions_week,
     list_collective_sessions_for_studio,
     list_pending_collective_session_bookings_for_owner,
     update_collective_session_coaches,
@@ -8517,6 +8732,11 @@ class CollectiveSessionCreateBody(BaseModel):
 
 class CollectiveSessionCoachesBody(BaseModel):
     coach_trainer_ids: list[int] = Field(default_factory=list)
+
+
+class CollectiveSessionDuplicateWeekBody(BaseModel):
+    source_week_start: date_type
+    weeks_ahead: int = Field(1, ge=1, le=8)
 
 
 class ClientCollectiveSessionBookingBody(BaseModel):
@@ -8603,6 +8823,30 @@ async def post_trainer_collective_session(
     return created
 
 
+@router.post("/trainer/collective/sessions/duplicate-week")
+async def post_trainer_collective_sessions_duplicate_week(
+    body: CollectiveSessionDuplicateWeekBody,
+    collective_slug: CollectiveSlugQuery = None,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, Any]:
+    """Copy center grid windows from one week to the following week(s)."""
+    trainer_id, membership = await _require_collective_studio_admin(session, principal, collective_slug=collective_slug)
+    result = await duplicate_collective_sessions_week(
+        session,
+        collective_id=membership.collective_id,
+        owner_trainer_id=trainer_id,
+        source_week_start=body.source_week_start,
+        weeks_ahead=body.weeks_ahead,
+    )
+    err = result.get("error")
+    if err == "not_studio_central":
+        raise HTTPException(status_code=400, detail="Studio is not studio_central")
+    if err:
+        raise HTTPException(status_code=403, detail=str(err))
+    return result
+
+
 @router.patch("/trainer/collective/sessions/{session_id:int}/coaches")
 async def patch_trainer_collective_session_coaches(
     session_id: int,
@@ -8648,6 +8892,7 @@ async def delete_trainer_collective_session(
 @router.post("/client/collective-session-booking")
 async def post_client_collective_session_booking(
     body: ClientCollectiveSessionBookingBody,
+    background_tasks: BackgroundTasks,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -8692,13 +8937,22 @@ async def post_client_collective_session_booking(
     if err == "pass_not_yours":
         raise HTTPException(status_code=403, detail="Pass not yours")
     if err == "pass_kind_mismatch":
-        raise HTTPException(status_code=400, detail="Pass cannot be used for this format")
+        raise HTTPException(
+            status_code=400,
+            detail="Абонемент не подходит к формату визита: для дорожки — lane, для тренера центра — coach.",
+        )
     if err == "pass_insufficient_credits":
         raise HTTPException(status_code=400, detail="Not enough visits on pass")
     if err == "pass_expired":
         raise HTTPException(status_code=400, detail="Pass expired")
     if err:
         raise HTTPException(status_code=400, detail=str(err))
+    booking_id = created.get("booking_id")
+    if booking_id is not None and created.get("status") == "pending":
+        background_tasks.add_task(
+            notify_trainers_pending_collective_session_booking,
+            int(booking_id),
+        )
     return {"success": True, **created}
 
 
@@ -8777,6 +9031,8 @@ from src.application.collective_pass_use_cases import (
     list_client_collective_passes,
     list_collective_pass_products,
     seed_reference_collective_pass_products,
+    split_collective_pass_order_comment,
+    submit_collective_pass_product_order_request,
     upsert_collective_pass_product,
 )
 
@@ -9037,6 +9293,78 @@ async def get_client_collective_passes(
         redeemable_only=True,
     )
     return {"passes": passes, "collective_id": coll["id"]}
+
+
+class ClientCollectivePassOrderRequestBody(BaseModel):
+    collective_slug: str = Field(..., min_length=1, max_length=128)
+    collective_pass_product_id: int = Field(..., ge=1)
+
+
+@router.post("/client/collective-pass-order/request")
+async def post_client_collective_pass_order_request(
+    background_tasks: BackgroundTasks,
+    body: ClientCollectivePassOrderRequestBody,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Create a personalized center pass purchase request to the collective owner."""
+    telegram_id = client_catalog_telegram_key(principal)
+    ik = (idempotency_key or "").strip()
+    idem_cache_key = (f"cpop{telegram_id}_{ik}"[:64]) if ik else ""
+    if idem_cache_key:
+        cached = await get_idempotency_response(session, idem_cache_key)
+        if isinstance(cached, dict) and cached.get("success") is True:
+            return cached
+
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        principal,
+        cred.raw,
+        phone=None,
+        first_name=None,
+        last_name=None,
+    )
+    result = await submit_collective_pass_product_order_request(
+        session,
+        client_id=client_id,
+        telegram_id=telegram_id,
+        collective_slug=body.collective_slug.strip(),
+        collective_pass_product_id=body.collective_pass_product_id,
+    )
+    if result.get("ok"):
+        out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
+        if idem_cache_key:
+            await set_idempotency_response(session, idem_cache_key, dict(out))
+        background_tasks.add_task(
+            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
+        )
+        return out
+    err = str(result.get("error") or "unknown")
+    mapping: dict[str, tuple[int, str]] = {
+        "collective_not_found": (404, "Центр не найден или недоступен."),
+        "not_studio_central": (400, "Абонементы доступны только в центрах с общим расписанием."),
+        "no_owner": (422, "У центра не назначен владелец — напишите администратору."),
+        "product_not_found": (404, "Этот абонемент недоступен."),
+        "product_inactive": (404, "Этот абонемент больше не продаётся."),
+        "trainer_city_missing": (
+            422,
+            "У центра не заполнен город в профиле. Напишите администратору.",
+        ),
+        "trainer_service_missing": (
+            422,
+            "У центра не настроены услуги. Напишите администратору.",
+        ),
+        "duplicate_pending": (
+            409,
+            "Заявка на этот абонемент уже отправлена. Дождитесь ответа центра.",
+        ),
+        "daily_limit": (429, "Заявка на этот абонемент уже отправлялась сегодня."),
+        "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+    }
+    status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
+    raise HTTPException(status_code=status_code, detail=detail)
 
 
 # --- Referral program (B2B: trainer invites trainer) ---

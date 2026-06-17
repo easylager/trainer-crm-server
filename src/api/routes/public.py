@@ -261,6 +261,15 @@ async def get_public_collective(
     payload.update(location)
     payload["seat_limit"] = row.get("seat_limit")
     payload["schedule_mode"] = row.get("schedule_mode") or "member_autonomous"
+    payload["organization_format"] = row.get("organization_format")
+    from src.application.organization_capabilities import resolve_public_collective_capabilities
+
+    payload.update(
+        resolve_public_collective_capabilities(
+            organization_format=row.get("organization_format"),
+            schedule_mode=payload["schedule_mode"],
+        )
+    )
     return payload
 
 

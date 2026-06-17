@@ -2194,6 +2194,10 @@
           navigateTo('trainer-referral');
           return;
         }
+        if (cand.action === 'trainer_collective_schedule' || cand.action === 'schedule_editor') {
+          navigateTo('schedule-editor');
+          return;
+        }
       }
 
       function hubInboxPlainTextFromHtml(html) {
@@ -2506,6 +2510,14 @@
           navigateTo('trainer-requests');
           return;
         }
+        if (
+          item.kind === 'center_pending' ||
+          item.primary_action === 'trainer_collective_schedule' ||
+          item.primary_action === 'schedule_editor'
+        ) {
+          navigateTo('schedule-editor');
+          return;
+        }
         if (item.kind === 'rhythm') {
           if (item.candidate) {
             runRhythmCandidateAction(item.candidate);
@@ -2541,6 +2553,10 @@
             return hasN
               ? n + ' ' + pluralRu(n, 'заявка без ответа', 'заявки без ответа', 'заявок без ответа')
               : 'Заявка без ответа';
+          case 'center_session_bookings':
+            return hasN
+              ? n + ' ' + pluralRu(n, 'заявка в центр', 'заявки в центр', 'заявок в центр')
+              : 'Заявки в центр';
           case 'slots_this_week':
             return 'Нет слотов на этой неделе';
           case 'slots_next_week':
@@ -3184,9 +3200,7 @@
             ensureHubBookingsPlaceholder();
             /* One bootstrap round-trip instead of access + profile + bookings (same as cold start). */
             fetch(
-              apiUrlWithQuery(
-                '/trainer/hub/bootstrap?bookings_limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT))
-              ),
+              apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
               { headers: headersJson(), cache: 'no-store' }
             )
               .then(function(r) {
@@ -4263,6 +4277,16 @@
       var hubQuickBookIsSandbox = false;
       /** Client-first quick book (hub): hide legacy pair «Выбрать клиента» / «Создать» — landing is search list + chip «Новый клиент». */
       var hubQuickBookHideLegacyClientChoice = false;
+      /** W5: personal slot vs center session (ADR-003 §6). */
+      var hubBookContexts = null;
+      var hubBookContextsPrefetch = null;
+      var hubBookContextsPrefetchPromise = null;
+      var hubBookContextKind = 'personal_slot';
+      var hubBookSessionContextId = null;
+      var hubBookCollectiveSlug = null;
+      var hubBookDelegateTargetId = null;
+      var hubBookCenterSession = null;
+      var hubBookCenterSessions = [];
       /** Book modal open — FAB fades out so it does not stack above the form (FAB z-index > overlay). */
       var hubBookModalOpen = false;
 
@@ -4569,6 +4593,13 @@
         hubBookClientFirstServiceFromNew = false;
         hubBookTrainerArenas = [];
         hubBookArenaId = null;
+        hubBookContexts = null;
+        hubBookContextKind = 'personal_slot';
+        hubBookSessionContextId = null;
+        hubBookCollectiveSlug = null;
+        hubBookDelegateTargetId = null;
+        hubBookCenterSession = null;
+        hubBookCenterSessions = [];
         hubSyncClientFirstQuickServiceChrome();
         ensureHubBookChoiceLeadDefault();
         var leadR = document.querySelector('#hubBookStepChoice .book-choice-lead');
@@ -4588,11 +4619,15 @@
         var ch = document.getElementById('hubBookStepChoice');
         var ex = document.getElementById('hubBookStepExisting');
         var nw = document.getElementById('hubBookStepNew');
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
         var modal = document.getElementById('hubModalBookGroupSlot');
         hubDockBookStepNewUnderModalChrome();
         if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
         if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(true);
         else hubSyncClientFirstQuickServiceChrome();
+        if (ctx) ctx.style.display = 'none';
+        if (ctr) ctr.style.display = 'none';
         if (ch) ch.style.display = 'block';
         if (ex) ex.style.display = 'none';
         if (nw) nw.style.display = 'none';
@@ -4602,6 +4637,544 @@
         var path = '/trainer/clients';
         if (q && String(q).trim()) path += '?q=' + encodeURIComponent(String(q).trim());
         return apiUrlWithQuery(path);
+      }
+
+      /** Show one hub book sub-step (context / clients / center / choice / new). */
+      function hubSetBookFlowStep(step) {
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        if (ctx) ctx.style.display = step === 'context' ? 'block' : 'none';
+        if (ctr) ctr.style.display = step === 'center' ? 'block' : 'none';
+        if (ch) ch.style.display = step === 'choice' || step === 'service' ? 'block' : 'none';
+        if (ex) ex.style.display = step === 'clients' ? 'block' : 'none';
+        if (nw) nw.style.display = step === 'new' ? 'block' : 'none';
+      }
+
+      function prefetchHubBookingContexts() {
+        if (!getInitData()) return null;
+        if (hubBookContextsPrefetch) return Promise.resolve(hubBookContextsPrefetch);
+        if (hubBookContextsPrefetchPromise) return hubBookContextsPrefetchPromise;
+        hubBookContextsPrefetchPromise = hubFetchBookingContexts()
+          .then(function(payload) {
+            hubBookContextsPrefetch = payload;
+            return payload;
+          })
+          .catch(function() {
+            hubBookContextsPrefetchPromise = null;
+            return null;
+          });
+        return hubBookContextsPrefetchPromise;
+      }
+
+      function hubResolveQuickBookShellKind() {
+        if (hubQuickBookIsSandbox) return 'sandbox';
+        var prefetch = hubBookContextsPrefetch;
+        if (prefetch && hubBookingContextsNeedPicker(prefetch)) return 'context';
+        if (prefetch) return 'clients';
+        return 'prepare';
+      }
+
+      function hubSetBookExistingSubstepVisible(visible) {
+        var toolbar = document.querySelector('#hubBookStepExisting .hub-book-existing-toolbar');
+        var searchStack = document.querySelector('#hubBookStepExisting .book-field-stack');
+        var display = visible ? '' : 'none';
+        if (toolbar) toolbar.style.display = display;
+        if (searchStack) searchStack.style.display = display;
+      }
+
+      function resetHubBookStepsToContextFirst() {
+        hubQuickBookHideLegacyClientChoice = true;
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        hubDockBookStepNewUnderModalChrome();
+        if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
+        if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(false);
+        else hubSyncClientFirstQuickServiceChrome();
+        if (ch) ch.style.display = 'none';
+        if (ex) ex.style.display = 'none';
+        if (nw) nw.style.display = 'none';
+        if (ctr) ctr.style.display = 'none';
+        if (ctx) ctx.style.display = 'block';
+        var wrap = document.getElementById('hubBookContextActions');
+        if (wrap) {
+          wrap.innerHTML =
+            '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+        }
+      }
+
+      function resetHubBookStepsToPrepareHold() {
+        hubQuickBookHideLegacyClientChoice = true;
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        hubDockBookStepNewUnderModalChrome();
+        if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
+        if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(false);
+        else hubSyncClientFirstQuickServiceChrome();
+        if (ctx) ctx.style.display = 'none';
+        if (ctr) ctr.style.display = 'none';
+        if (ch) ch.style.display = 'none';
+        if (ex) ex.style.display = 'block';
+        if (nw) nw.style.display = 'none';
+        hubSetBookExistingSubstepVisible(false);
+        var listEl = document.getElementById('hubBookClientList');
+        if (listEl) {
+          listEl.innerHTML =
+            '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+        }
+      }
+
+      function hubPrimeBookShellFromPrefetch() {
+        if (!hubBookContextsPrefetch) return;
+        hubBookContexts = hubBookContextsPrefetch;
+        var normalized = hubNormalizeBookingContexts(hubBookContextsPrefetch);
+        if (hubBookingContextsNeedPicker(normalized)) {
+          hubRenderBookContextStep(normalized, null, null);
+          hubSetBookFlowStep('context');
+          return;
+        }
+        if ((normalized.contexts || [])[0]) {
+          hubApplyBookContextSelection(normalized.contexts[0], null);
+        }
+      }
+
+      function hubFetchBookingContexts() {
+        if (window.TrainerBookingContext) {
+          return TrainerBookingContext.fetchContexts(function(path) {
+            return hubFetchJsonForQuickBookPrepare(path).then(function(r) {
+              return r.ok ? r.json() : null;
+            });
+          });
+        }
+        return hubFetchJsonForQuickBookPrepare('/trainer/booking-contexts')
+          .then(function(r) {
+            return r.ok ? r.json() : null;
+          })
+          .catch(function() {
+            return null;
+          })
+          .then(function(payload) {
+            if (!payload || !payload.contexts || !payload.contexts.length) {
+              return {
+                contexts: [{ kind: 'personal_slot', context_id: 'personal', label: 'Личное расписание' }],
+                needs_context_picker: false,
+              };
+            }
+            return payload;
+          });
+      }
+
+      function hubApplyBookContextSelection(ctx, clientId) {
+        if (window.TrainerBookingContext) {
+          var applied = TrainerBookingContext.applyContext(ctx);
+          hubBookContextKind = applied.kind;
+          hubBookCollectiveSlug = applied.collective_slug;
+          hubBookSessionContextId = applied.context_id;
+          if (clientId != null) {
+            TrainerBookingContext.rememberContextForClient(clientId, applied.context_id);
+          }
+          return;
+        }
+        hubBookContextKind = (ctx && ctx.kind) || 'personal_slot';
+        hubBookCollectiveSlug = (ctx && ctx.collective_slug) || null;
+        hubBookSessionContextId = (ctx && ctx.context_id) || null;
+      }
+
+      function hubBookingContextsNeedPicker(payload) {
+        if (window.TrainerBookingContext) {
+          return TrainerBookingContext.needsContextPicker(TrainerBookingContext.normalizePayload(payload));
+        }
+        return !!(payload && payload.needs_context_picker && (payload.contexts || []).length > 1);
+      }
+
+      function hubNormalizeBookingContexts(payload) {
+        if (window.TrainerBookingContext) {
+          return TrainerBookingContext.normalizePayload(payload);
+        }
+        return payload || { contexts: [], needs_context_picker: false };
+      }
+
+      /** Before client search: pick personal vs center when trainer has both. */
+      function hubApplyInitialBookContextAfterPrepare(contextsPayload, onReady) {
+        hubBookContexts = contextsPayload;
+        var normalized = hubNormalizeBookingContexts(contextsPayload);
+        if (!hubBookingContextsNeedPicker(normalized)) {
+          var first = (normalized.contexts || [])[0];
+          if (first) hubApplyBookContextSelection(first, null);
+          if (typeof onReady === 'function') onReady(false);
+          return;
+        }
+        hubRenderBookContextStep(normalized, null, function() {
+          if (typeof onReady === 'function') onReady(true);
+        });
+        hubSetBookFlowStep('context');
+      }
+
+      function hubAfterInitialBookContextReady(fromContextPicker) {
+        if (hubBookContextKind === 'center_session') {
+          hubBookSlotId = null;
+        }
+        hubSetBookFlowStep('clients');
+        if (hubBookClientFirstQuickMode || hubBookContextKind === 'center_session') {
+          hubEnsureQuickBookSearchOnlyLayout();
+        } else {
+          resetHubBookSteps();
+          primeHubBookChoicePairLayout();
+        }
+        hubSetBookExistingSubstepVisible(true);
+        hubSyncDelegateCoachUi();
+        var qinp = document.getElementById('hubBookClientSearch');
+        loadHubBookClients(qinp ? qinp.value.trim() : '');
+      }
+
+      function hubApplyContextForClient(clientId, onContinue) {
+        var payload = hubBookContexts;
+        if (hubQuickBookIsSandbox || !payload) {
+          if (typeof onContinue === 'function') onContinue();
+          return;
+        }
+        if (hubBookSessionContextId) {
+          var locked = (payload.contexts || []).filter(function(c) {
+            return c.context_id === hubBookSessionContextId;
+          })[0];
+          if (locked) {
+            hubApplyBookContextSelection(locked, clientId);
+            if (typeof onContinue === 'function') onContinue();
+            return;
+          }
+        }
+        if (window.TrainerBookingContext) {
+          var normalized = TrainerBookingContext.normalizePayload(payload);
+          if (!TrainerBookingContext.needsContextPicker(normalized)) {
+            hubApplyBookContextSelection(normalized.contexts[0], clientId);
+            if (typeof onContinue === 'function') onContinue();
+            return;
+          }
+          var resolved = TrainerBookingContext.resolveInitialContext(normalized, clientId);
+          if (resolved) {
+            hubApplyBookContextSelection(resolved, clientId);
+            if (typeof onContinue === 'function') onContinue();
+            return;
+          }
+          hubRenderBookContextStep(normalized, clientId, onContinue);
+          hubSetBookFlowStep('context');
+          return;
+        }
+        if (!payload.needs_context_picker) {
+          if (typeof onContinue === 'function') onContinue();
+          return;
+        }
+        hubRenderBookContextStep(payload, clientId, onContinue);
+        hubSetBookFlowStep('context');
+      }
+
+      function hubRenderBookContextStep(payload, clientId, onContinue) {
+        var wrap = document.getElementById('hubBookContextActions');
+        if (!wrap) {
+          if (typeof onContinue === 'function') onContinue();
+          return;
+        }
+        if (window.TrainerBookingContext) {
+          TrainerBookingContext.renderPicker(wrap, payload, {
+            escapeHtml: escapeHtml,
+            attrPrefix: 'data-hub-book',
+            slugAttr: 'data-collective-slug',
+            clientId: clientId,
+            onSelect: function(ctx) {
+              hubApplyBookContextSelection(ctx, clientId);
+              hubBookCenterSession = null;
+              if (hubBookContextKind === 'center_session') {
+                hubBookSlotId = null;
+              }
+              if (clientId != null) {
+                if (typeof onContinue === 'function') onContinue();
+                return;
+              }
+              hubAfterInitialBookContextReady(true);
+              if (typeof onContinue === 'function') onContinue();
+            },
+          });
+          return;
+        }
+        var contexts = (payload && payload.contexts) || [];
+        wrap.innerHTML = contexts
+          .map(function(ctx) {
+            return (
+              '<button type="button" class="btn-book-option" data-hub-book-kind="' +
+              escapeHtml(ctx.kind) +
+              '" data-hub-book-context="' +
+              escapeHtml(ctx.context_id) +
+              '" data-collective-slug="' +
+              escapeHtml(ctx.collective_slug || '') +
+              '">' +
+              '<span class="btn-book-option-body"><span class="btn-book-option-text">' +
+              escapeHtml(ctx.label) +
+              '</span></span>' +
+              '<span class="btn-book-option-arrow" aria-hidden="true">›</span>' +
+              '</button>'
+            );
+          })
+          .join('');
+        wrap.querySelectorAll('[data-hub-book-kind]').forEach(function(btn) {
+          btn.onclick = function() {
+            hubApplyBookContextSelection(
+              {
+                kind: btn.getAttribute('data-hub-book-kind') || 'personal_slot',
+                context_id: btn.getAttribute('data-hub-book-context') || 'manual',
+                collective_slug: btn.getAttribute('data-collective-slug') || null,
+              },
+              clientId
+            );
+            hubBookCenterSession = null;
+            if (hubBookContextKind === 'center_session') {
+              hubBookSlotId = null;
+            }
+            if (clientId != null) {
+              if (typeof onContinue === 'function') onContinue();
+              return;
+            }
+            hubAfterInitialBookContextReady(true);
+            if (typeof onContinue === 'function') onContinue();
+          };
+        });
+      }
+
+      function hubRenderCenterModePickers() {
+        var session = hubBookCenterSession;
+        var modeWrap = document.getElementById('hubBookCenterModeWrap');
+        var coachWrap = document.getElementById('hubBookCenterCoachWrap');
+        var modeSel = document.getElementById('hubBookCenterModeSelect');
+        var coachSel = document.getElementById('hubBookCenterCoachSelect');
+        var confirmBtn = document.getElementById('hubBookCenterConfirm');
+        if (!session || !modeSel) return;
+        modeSel.innerHTML = ['lane_self', 'center_coach_individual']
+          .map(function(m) {
+            return (
+              '<option value="' +
+              m +
+              '">' +
+              (m === 'lane_self' ? 'Дорожка' : 'С тренером центра') +
+              '</option>'
+            );
+          })
+          .join('');
+        if (modeWrap) modeWrap.style.display = '';
+        if (coachWrap && coachSel) {
+          var actorId =
+            trainerAccessSnapshot && trainerAccessSnapshot.trainer_id != null
+              ? trainerAccessSnapshot.trainer_id
+              : null;
+          var delegate = hubBookContexts && hubBookContexts.delegate;
+          var delegateCoaches = (delegate && delegate.coaches) || [];
+          var coaches =
+            delegateCoaches.length > 1
+              ? window.TrainerBookingContext
+                ? delegateCoaches.map(function(c) {
+                    if (actorId != null && parseInt(String(c.trainer_id), 10) === parseInt(String(actorId), 10)) {
+                      return { trainer_id: c.trainer_id, display_name: 'Я' };
+                    }
+                    return c;
+                  })
+                : delegateCoaches
+              : window.TrainerBookingContext
+                ? TrainerBookingContext.centerCoachesForStaffBooking(session, actorId)
+                : session.assigned_coaches || session.coaches || [];
+          coachSel.innerHTML = coaches
+            .map(function(c) {
+              return (
+                '<option value="' +
+                c.trainer_id +
+                '">' +
+                escapeHtml(c.display_name || 'Тренер #' + c.trainer_id) +
+                '</option>'
+              );
+            })
+            .join('');
+          coachWrap.style.display =
+            modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+          modeSel.onchange = function() {
+            coachWrap.style.display =
+              modeSel.value.indexOf('coach') >= 0 && coaches.length ? '' : 'none';
+          };
+        }
+        if (confirmBtn) confirmBtn.style.display = '';
+      }
+
+      function hubEnterCenterFlowForClient(clientId, displayName) {
+        var slug = hubBookCollectiveSlug;
+        if (!slug) {
+          hubToast('Не выбран контекст центра');
+          return;
+        }
+        hubBookPendingClientId = clientId;
+        hubBookPendingClientName = displayName || 'Клиент';
+        hubSetBookFlowStep('center');
+        var lead = document.getElementById('hubBookCenterLead');
+        if (lead) lead.textContent = hubBookPendingClientName + ' — выберите окно центра';
+        var list = document.getElementById('hubBookCenterSessionList');
+        if (list) list.innerHTML = '<p class="book-choice-lead">Загрузка окон…</p>';
+        hubBookCenterSession = null;
+        var modeWrap = document.getElementById('hubBookCenterModeWrap');
+        var coachWrap = document.getElementById('hubBookCenterCoachWrap');
+        var confirmBtn = document.getElementById('hubBookCenterConfirm');
+        if (modeWrap) modeWrap.style.display = 'none';
+        if (coachWrap) coachWrap.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+        fetch(
+          apiUrlWithQuery(
+            '/trainer/collective/staff-booking-sessions?collective_slug=' + encodeURIComponent(slug)
+          ),
+          { headers: headersJson(), cache: 'no-store' }
+        )
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error(hubApiErrorMessage(d));
+              return d;
+            });
+          })
+          .then(function(data) {
+            hubBookCenterSessions = data.sessions || [];
+            if (!hubBookCenterSessions.length) {
+              if (list) list.innerHTML = '<p style="color:#c62828;padding:8px;">Нет доступных окон</p>';
+              return;
+            }
+            if (!list) return;
+            list.innerHTML = hubBookCenterSessions
+              .map(function(s) {
+                return (
+                  '<button type="button" class="client-row" data-session-id="' +
+                  s.id +
+                  '">' +
+                  escapeHtml((s.slot_date || '') + ' ' + (s.start_time || '') + '–' + (s.end_time || '')) +
+                  '</button>'
+                );
+              })
+              .join('');
+            list.querySelectorAll('[data-session-id]').forEach(function(row) {
+              row.onclick = function() {
+                var sid = parseInt(row.getAttribute('data-session-id'), 10);
+                hubBookCenterSession =
+                  hubBookCenterSessions.filter(function(x) {
+                    return Number(x.id) === sid;
+                  })[0] || null;
+                hubRenderCenterModePickers();
+              };
+            });
+          })
+          .catch(function(e) {
+            if (list) {
+              list.innerHTML =
+                '<p style="color:#c62828;padding:8px;">' + escapeHtml(e.message || 'Ошибка') + '</p>';
+            }
+          });
+      }
+
+      function hubSubmitCenterStaffBooking() {
+        var clientId = hubBookPendingClientId;
+        var session = hubBookCenterSession;
+        var modeSel = document.getElementById('hubBookCenterModeSelect');
+        var coachSel = document.getElementById('hubBookCenterCoachSelect');
+        if (!clientId || !session || !modeSel || !hubBookCollectiveSlug) return;
+        var payload = {
+          collective_slug: hubBookCollectiveSlug,
+          session_id: session.id,
+          client_id: clientId,
+          attendance_mode: modeSel.value,
+          guest_count: 0,
+        };
+        if (modeSel.value.indexOf('coach') >= 0 && coachSel && coachSel.value) {
+          var selectedCoachId = parseInt(coachSel.value, 10);
+          var actorId =
+            trainerAccessSnapshot && trainerAccessSnapshot.trainer_id != null
+              ? parseInt(String(trainerAccessSnapshot.trainer_id), 10)
+              : NaN;
+          if (
+            hubBookContexts &&
+            hubBookContexts.delegate &&
+            !isNaN(selectedCoachId) &&
+            !isNaN(actorId) &&
+            selectedCoachId !== actorId
+          ) {
+            payload.target_trainer_id = selectedCoachId;
+          } else {
+            payload.center_coach_id = selectedCoachId;
+          }
+        }
+        fetch(apiUrlWithQuery('/trainer/collective/staff-session-booking'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify(payload),
+        })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error(hubApiErrorMessage(d));
+              return d;
+            });
+          })
+          .then(function() {
+            closeHubBookGroupModals();
+            resetHubBookSlotState();
+            hubToast('Запись в центр создана');
+            loadBookings();
+            loadOnboardingChecklist();
+          })
+          .catch(function(e) {
+            hubToast(e.message || 'Ошибка');
+          });
+      }
+
+      function hubSyncDelegateCoachUi() {
+        var wrap = document.getElementById('hubBookDelegateCoachWrap');
+        var sel = document.getElementById('hubBookDelegateCoachSelect');
+        if (!wrap || !sel) return;
+        var delegate = hubBookContexts && hubBookContexts.delegate;
+        var coaches = (delegate && delegate.coaches) || [];
+        var actorId =
+          trainerAccessSnapshot && trainerAccessSnapshot.trainer_id != null
+            ? parseInt(String(trainerAccessSnapshot.trainer_id), 10)
+            : NaN;
+        var show = !!(
+          delegate &&
+          coaches.length > 1 &&
+          hubBookContextKind === 'personal_slot' &&
+          hubBookSlotId
+        );
+        wrap.style.display = show ? '' : 'none';
+        if (!show) {
+          hubBookDelegateTargetId = null;
+          return;
+        }
+        if (!hubBookCollectiveSlug && delegate.collective_slug) {
+          hubBookCollectiveSlug = delegate.collective_slug;
+        }
+        sel.innerHTML = coaches
+          .map(function(c) {
+            var isSelf = !isNaN(actorId) && parseInt(String(c.trainer_id), 10) === actorId;
+            return (
+              '<option value="' +
+              c.trainer_id +
+              '">' +
+              escapeHtml(isSelf ? 'Я' : c.display_name || 'Тренер #' + c.trainer_id) +
+              '</option>'
+            );
+          })
+          .join('');
+        var preferred = hubBookDelegateTargetId || actorId || coaches[0].trainer_id;
+        sel.value = String(preferred);
+        hubBookDelegateTargetId = parseInt(sel.value, 10) || null;
+        sel.onchange = function() {
+          hubBookDelegateTargetId = parseInt(sel.value, 10) || null;
+        };
       }
 
       function setHubBookServiceVisibility(show) {
@@ -4896,7 +5469,18 @@
         hubBookClientFirstServiceStepOpen = false;
         hubBookClientFirstServiceFromNew = false;
         hubBookQuickPayload = null;
-        if (!openHubBookModalShell({ quickBookSearchFirst: !hubQuickBookIsSandbox })) return;
+        hubBookContexts = null;
+        hubBookContextKind = 'personal_slot';
+        hubBookSessionContextId = null;
+        hubBookCollectiveSlug = null;
+        hubBookDelegateTargetId = null;
+        hubBookCenterSession = null;
+        hubBookCenterSessions = [];
+        var shellKind = hubQuickBookIsSandbox ? 'sandbox' : hubResolveQuickBookShellKind();
+        if (!openHubBookModalShell({ shellKind: shellKind })) return;
+        if ((shellKind === 'context' || shellKind === 'clients') && !hubQuickBookIsSandbox) {
+          hubPrimeBookShellFromPrefetch();
+        }
         hubQuickBookPrepareGen += 1;
         var prepareGen = hubQuickBookPrepareGen;
         hubBookQuickServices = [];
@@ -4939,13 +5523,6 @@
             failHubQuickBookPrepare(prepareGen);
             return;
           }
-          if (hubBookClientFirstQuickMode && !hubQuickBookIsSandbox) {
-            try {
-              loadHubBookClients('');
-            } catch (eQb) {
-              /* noop */
-            }
-          }
           Promise.all([
             hubFetchJsonForQuickBookPrepare('/trainer/my-services').then(function(r) {
               if (!r.ok) return Promise.reject(new Error('services'));
@@ -4957,12 +5534,16 @@
                 return j;
               });
             }),
+            hubFetchBookingContexts(),
           ])
             .then(function(results) {
               if (prepareGen !== hubQuickBookPrepareGen) return;
               setHubBookChoiceQuickLoading(false);
               var servicePayload = results[0] || {};
               var clientsPayload = results[1] || {};
+              var contextsPayload = results[2] || {};
+              hubBookContextsPrefetch = contextsPayload;
+              hubBookContexts = contextsPayload;
               hubBookQuickServices = servicePayload.services || [];
               syncHubMyServicesAccentMap(hubBookQuickServices);
               if (!hubBookQuickServices.length) {
@@ -5024,13 +5605,24 @@
                   setHubBookServiceVisibility(false);
                   syncHubBookPriceTierRadios();
                   hubSyncClientFirstQuickServiceChrome();
-                  var qinpN = document.getElementById('hubBookClientSearch');
-                  hubEnsureQuickBookSearchOnlyLayout();
-                  loadHubBookClients(qinpN ? qinpN.value.trim() : '');
+                  var ctxEl = document.getElementById('hubBookStepContext');
+                  var contextStepOpen =
+                    ctxEl &&
+                    ctxEl.style.display !== 'none' &&
+                    String(ctxEl.style.display || '').toLowerCase() !== '';
+                  if (contextStepOpen && hubBookingContextsNeedPicker(hubNormalizeBookingContexts(contextsPayload))) {
+                    hubRenderBookContextStep(hubNormalizeBookingContexts(contextsPayload), null, null);
+                  } else {
+                    hubApplyInitialBookContextAfterPrepare(contextsPayload, function(fromPicker) {
+                      if (fromPicker) return;
+                      hubAfterInitialBookContextReady(false);
+                    });
+                  }
                   var stepNewNx = document.getElementById('hubBookStepNew');
                   var backNx = document.getElementById('hubBookBackFromNew');
                   if (stepNewNx) stepNewNx.style.display = 'none';
                   if (backNx) backNx.style.display = '';
+                  return;
                 } else {
                   syncHubBookPriceTierRadios();
                   hubSyncClientFirstQuickServiceChrome();
@@ -5223,14 +5815,19 @@
         var ch = document.getElementById('hubBookStepChoice');
         var ex = document.getElementById('hubBookStepExisting');
         var nw = document.getElementById('hubBookStepNew');
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
         var modal = document.getElementById('hubModalBookGroupSlot');
         hubDockBookStepNewUnderModalChrome();
         if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
         if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(false);
         else hubSyncClientFirstQuickServiceChrome();
+        if (ctx) ctx.style.display = 'none';
+        if (ctr) ctr.style.display = 'none';
         if (ch) ch.style.display = 'none';
         if (ex) ex.style.display = 'block';
         if (nw) nw.style.display = 'none';
+        hubSetBookExistingSubstepVisible(true);
         var listEl = document.getElementById('hubBookClientList');
         if (listEl) {
           listEl.innerHTML =
@@ -5242,19 +5839,28 @@
       function hubEnsureQuickBookSearchOnlyLayout() {
         if (!hubBookClientFirstQuickMode || hubQuickBookIsSandbox) return;
         hubQuickBookHideLegacyClientChoice = true;
+        var ctx = document.getElementById('hubBookStepContext');
+        var ctr = document.getElementById('hubBookStepCenter');
         var ch = document.getElementById('hubBookStepChoice');
         var ex = document.getElementById('hubBookStepExisting');
         var nw = document.getElementById('hubBookStepNew');
         var modal = document.getElementById('hubModalBookGroupSlot');
         if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
         if (hubBookClientFirstServiceStepOpen) return;
+        if (ctx) ctx.style.display = 'none';
+        if (ctr) ctr.style.display = 'none';
         if (ch) ch.style.display = 'none';
         if (ex) ex.style.display = 'block';
         if (nw) nw.style.display = 'none';
+        hubSetBookExistingSubstepVisible(true);
         hubSyncClientFirstQuickChoiceActionsVisible(false);
       }
 
       function hubGoBookNewClientFlow() {
+        if (hubBookContextKind === 'center_session') {
+          hubToast('Для записи в окно центра выберите клиента из списка.');
+          return;
+        }
         hubDockBookStepNewUnderModalChrome();
         var modal = document.getElementById('hubModalBookGroupSlot');
         if (modal) modal.classList.add('hub-book-flow-overlay--new-client');
@@ -5277,7 +5883,12 @@
       function openHubBookModalShell(opts) {
         opts = opts || {};
         resetHubBookFormFields();
-        if (opts.quickBookSearchFirst) {
+        var shellKind = opts.shellKind || (opts.quickBookSearchFirst ? 'clients' : 'choice');
+        if (shellKind === 'context') {
+          resetHubBookStepsToContextFirst();
+        } else if (shellKind === 'prepare') {
+          resetHubBookStepsToPrepareHold();
+        } else if (shellKind === 'clients') {
           resetHubBookStepsToQuickClientSearchFirst();
         } else {
           resetHubBookSteps();
@@ -5708,56 +6319,63 @@
                 hubBookPendingClientId = clientId;
                 hubBookPendingClientName = clientName;
                 hubBookPendingClientIsSandbox = row.getAttribute('data-is-sandbox') === '1';
-                if (hubBookClientFirstQuickMode) {
-                  hubBookClientFirstServiceFromNew = false;
-                  list.innerHTML =
-                    '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
-                  hubWhenQuickBookServicesReady(function() {
-                    fetch(
-                      apiUrlWithQuery(
-                        '/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'
-                      ),
-                      { headers: headersJson(), cache: 'no-store' }
-                    )
-                      .then(function(r) {
-                        return r.ok ? r.json() : {};
-                      })
-                      .then(function(def) {
-                        var stepEx = document.getElementById('hubBookStepExisting');
-                        var stepCh = document.getElementById('hubBookStepChoice');
-                        if (stepEx) stepEx.style.display = 'none';
-                        if (stepCh) stepCh.style.display = 'block';
-                        hubApplyBookingDefaultsPayload(def || {});
-                        hubEnterClientFirstServiceStep(
-                          'Услуга и тариф — как в прошлый раз. Поменяйте при необходимости.'
-                        );
-                      })
-                      .catch(function() {
-                        var stepEx2 = document.getElementById('hubBookStepExisting');
-                        var stepCh2 = document.getElementById('hubBookStepChoice');
-                        if (stepEx2) stepEx2.style.display = 'none';
-                        if (stepCh2) stepCh2.style.display = 'block';
-                        hubApplyBookingDefaultsPayload({});
-                        hubEnterClientFirstServiceStep(null);
-                      });
-                  });
-                  return;
-                }
-                var txt = document.getElementById('hubBookConfirmText');
-                if (txt) {
-                  txt.textContent = 'Записать ' + clientName + ' на ' + (hubBookSlotWhenLabel || 'слот') + '?';
-                }
-                var m = document.getElementById('hubModalBookGroupSlot');
-                if (m) {
-                  m.style.display = 'none';
-                  m.setAttribute('aria-hidden', 'true');
-                }
-                var cf = document.getElementById('hubModalBookGroupConfirm');
-                if (cf) {
-                  cf.style.display = 'flex';
-                  cf.setAttribute('aria-hidden', 'false');
-                }
-                syncHubBookFlowChrome();
+                hubApplyContextForClient(clientId, function() {
+                  if (hubBookContextKind === 'center_session') {
+                    hubEnterCenterFlowForClient(clientId, clientName);
+                    return;
+                  }
+                  if (hubBookClientFirstQuickMode) {
+                    hubBookClientFirstServiceFromNew = false;
+                    list.innerHTML =
+                      '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+                    hubWhenQuickBookServicesReady(function() {
+                      fetch(
+                        apiUrlWithQuery(
+                          '/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'
+                        ),
+                        { headers: headersJson(), cache: 'no-store' }
+                      )
+                        .then(function(r) {
+                          return r.ok ? r.json() : {};
+                        })
+                        .then(function(def) {
+                          var stepEx = document.getElementById('hubBookStepExisting');
+                          var stepCh = document.getElementById('hubBookStepChoice');
+                          if (stepEx) stepEx.style.display = 'none';
+                          if (stepCh) stepCh.style.display = 'block';
+                          hubApplyBookingDefaultsPayload(def || {});
+                          hubEnterClientFirstServiceStep(
+                            'Услуга и тариф — как в прошлый раз. Поменяйте при необходимости.'
+                          );
+                        })
+                        .catch(function() {
+                          var stepEx2 = document.getElementById('hubBookStepExisting');
+                          var stepCh2 = document.getElementById('hubBookStepChoice');
+                          if (stepEx2) stepEx2.style.display = 'none';
+                          if (stepCh2) stepCh2.style.display = 'block';
+                          hubApplyBookingDefaultsPayload({});
+                          hubEnterClientFirstServiceStep(null);
+                        });
+                    });
+                    return;
+                  }
+                  hubSyncDelegateCoachUi();
+                  var txt = document.getElementById('hubBookConfirmText');
+                  if (txt) {
+                    txt.textContent = 'Записать ' + clientName + ' на ' + (hubBookSlotWhenLabel || 'слот') + '?';
+                  }
+                  var m = document.getElementById('hubModalBookGroupSlot');
+                  if (m) {
+                    m.style.display = 'none';
+                    m.setAttribute('aria-hidden', 'true');
+                  }
+                  var cf = document.getElementById('hubModalBookGroupConfirm');
+                  if (cf) {
+                    cf.style.display = 'flex';
+                    cf.setAttribute('aria-hidden', 'false');
+                  }
+                  syncHubBookFlowChrome();
+                });
               };
             });
           })
@@ -5786,9 +6404,34 @@
         hubBookSlotWhenLabel = (whenLabel || '').trim();
         setHubBookServiceVisibility(false);
         fillHubBookServiceSelect([]);
-        if (!openHubBookModalShell()) return;
+        var slotShellKind = hubResolveQuickBookShellKind();
+        if (!openHubBookModalShell({ shellKind: slotShellKind === 'context' ? 'context' : slotShellKind === 'prepare' ? 'prepare' : 'choice' })) return;
+        if (slotShellKind === 'context') {
+          hubPrimeBookShellFromPrefetch();
+        }
         applyHubBookNewSubmitButtonLabel();
         syncHubBookPriceTierRadios();
+        var contextsPromise = hubBookContextsPrefetch
+          ? Promise.resolve(hubBookContextsPrefetch)
+          : hubFetchBookingContexts();
+        contextsPromise
+          .then(function(contextsPayload) {
+            hubBookContextsPrefetch = contextsPayload;
+            hubApplyInitialBookContextAfterPrepare(contextsPayload, function(fromPicker) {
+              if (fromPicker) return;
+              if (hubBookContextKind === 'center_session') {
+                hubAfterInitialBookContextReady(false);
+                return;
+              }
+              resetHubBookSteps();
+              primeHubBookChoicePairLayout();
+              hubSyncDelegateCoachUi();
+            });
+          })
+          .catch(function() {
+            resetHubBookSteps();
+            primeHubBookChoicePairLayout();
+          });
         fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() })
           .then(function(r) {
             return r.json();
@@ -5844,6 +6487,16 @@
           payload.is_sandbox = explicitSb ? !!quickBookingClientIsSandbox : !!hubQuickBookIsSandbox;
         } else {
           payload = { slot_id: hubBookSlotId, client_id: clientId, service_id: hubBookServiceId };
+          if (
+            hubBookDelegateTargetId &&
+            trainerAccessSnapshot &&
+            trainerAccessSnapshot.trainer_id != null &&
+            parseInt(String(hubBookDelegateTargetId), 10) !==
+              parseInt(String(trainerAccessSnapshot.trainer_id), 10)
+          ) {
+            payload.target_trainer_id = hubBookDelegateTargetId;
+            if (hubBookCollectiveSlug) payload.collective_slug = hubBookCollectiveSlug;
+          }
         }
         return fetch(apiUrlWithQuery(url), {
           method: 'POST',
@@ -5901,17 +6554,28 @@
         if (be) {
           be.onclick = function() {
             if (hubBookClientFirstQuickMode && hubQuickBookHideLegacyClientChoice && !hubQuickBookIsSandbox) {
-              var mQx = document.getElementById('hubModalBookGroupSlot');
-              if (mQx) {
-                mQx.style.display = 'none';
-                mQx.setAttribute('aria-hidden', 'true');
-              }
-              closeHubBookGroupModals();
-              resetHubBookSlotState();
+              hubSetBookFlowStep('clients');
+              hubEnsureQuickBookSearchOnlyLayout();
+              var qinpBack = document.getElementById('hubBookClientSearch');
+              loadHubBookClients(qinpBack ? qinpBack.value.trim() : '');
               return;
             }
             resetHubBookSteps();
           };
+        }
+        var hubBackCenter = document.getElementById('hubBookBackFromCenter');
+        if (hubBackCenter) {
+          hubBackCenter.onclick = function() {
+            hubBookCenterSession = null;
+            hubSetBookFlowStep('clients');
+            hubEnsureQuickBookSearchOnlyLayout();
+            var qinp = document.getElementById('hubBookClientSearch');
+            loadHubBookClients(qinp ? qinp.value.trim() : '');
+          };
+        }
+        var hubCenterConfirm = document.getElementById('hubBookCenterConfirm');
+        if (hubCenterConfirm) {
+          hubCenterConfirm.onclick = hubSubmitCenterStaffBooking;
         }
         var bwn = document.getElementById('hubBookBackFromNew');
         if (bwn) {
@@ -7917,6 +8581,64 @@
       wireHubRhythmSlots();
 
       /** Maps GET /trainer/hub/bootstrap payload into hub globals (single round-trip). */
+      var HUB_COLLECTIVE_SLUG_KEY = 'trainer_collective_slug';
+
+      function getHubCollectiveSlugFromStorage() {
+        try {
+          return (sessionStorage.getItem(HUB_COLLECTIVE_SLUG_KEY) || '').trim().toLowerCase();
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function hubBootstrapQueryString() {
+        var q = 'bookings_limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT));
+        var slug = getHubCollectiveSlugFromStorage();
+        if (slug) q += '&collective_slug=' + encodeURIComponent(slug);
+        return q;
+      }
+
+      function renderHubCollectiveSwitcher(collective) {
+        var wrap = document.getElementById('hubCollectiveSwitcher');
+        if (!wrap) return;
+        if (
+          !collective ||
+          !collective.has_multiple_memberships ||
+          !collective.collectives ||
+          collective.collectives.length < 2
+        ) {
+          wrap.hidden = true;
+          wrap.innerHTML = '';
+          return;
+        }
+        wrap.hidden = false;
+        var currentSlug = collective.slug;
+        wrap.innerHTML = collective.collectives
+          .map(function (m) {
+            var active = m.slug === currentSlug ? ' is-active' : '';
+            return (
+              '<button type="button" class="hub-collective-switch' +
+              active +
+              '" data-hub-col-slug="' +
+              escapeHtml(m.slug) +
+              '">' +
+              escapeHtml(m.display_name || m.slug) +
+              '</button>'
+            );
+          })
+          .join('');
+        wrap.querySelectorAll('[data-hub-col-slug]').forEach(function (btn) {
+          btn.onclick = function () {
+            var slug = btn.getAttribute('data-hub-col-slug');
+            if (!slug || slug === currentSlug) return;
+            try {
+              sessionStorage.setItem(HUB_COLLECTIVE_SLUG_KEY, slug);
+            } catch (e) {}
+            window.location.reload();
+          };
+        });
+      }
+
       function applyHubBootstrapPayload(payload) {
         if (!payload || typeof payload !== 'object') return;
         if (payload.access) {
@@ -7947,12 +8669,26 @@
           hubServerActionInbox = payload.action_inbox;
         }
         if (window.TrainerShell) {
+          if (typeof TrainerShell.syncSuspendedCollectiveNotice === 'function') {
+            TrainerShell.syncSuspendedCollectiveNotice(
+              payload.suspended_collective
+                ? Object.assign({ suspended: true }, payload.suspended_collective)
+                : { suspended: false }
+            );
+          }
           if (payload.collective && payload.collective.slug) {
+            renderHubCollectiveSwitcher(payload.collective);
             if (typeof TrainerShell.syncCollectiveMenuFromBootstrap === 'function') {
               TrainerShell.syncCollectiveMenuFromBootstrap(payload.collective);
             }
-          } else if (typeof TrainerShell.refreshCollectiveMenuVisibility === 'function') {
-            TrainerShell.refreshCollectiveMenuVisibility();
+          } else {
+            renderHubCollectiveSwitcher(null);
+            try {
+              sessionStorage.removeItem(HUB_COLLECTIVE_SLUG_KEY);
+            } catch (e) {}
+            if (typeof TrainerShell.refreshCollectiveMenuVisibility === 'function') {
+              TrainerShell.refreshCollectiveMenuVisibility();
+            }
           }
         }
         if (payload.revenue_mtd && payload.revenue_mtd.revenue_total_cents != null) {
@@ -7964,6 +8700,15 @@
           hubRevenueSkipFetchOnce = true;
         }
         renderHubSummaryHints();
+        renderHubActionInbox();
+        syncHubInboxShellBadges();
+        if (
+          trainerAccessSnapshot &&
+          window.TrainerMiniAppGate &&
+          TrainerMiniAppGate.isActive(trainerAccessSnapshot)
+        ) {
+          prefetchHubBookingContexts();
+        }
       }
 
       /**
@@ -8078,9 +8823,7 @@
         ensureHubBookingsPlaceholder();
         showHubRhythmHintsSkeleton();
         fetch(
-          apiUrlWithQuery(
-            '/trainer/hub/bootstrap?bookings_limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT))
-          ),
+          apiUrlWithQuery('/trainer/hub/bootstrap?' + hubBootstrapQueryString()),
           { headers: headersJson(), cache: 'no-store' }
         )
           .then(function(r) {

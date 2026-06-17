@@ -833,9 +833,13 @@ async def cmd_start(message: Message) -> None:
             )
         return
 
-    # Studio landing: col_<slug> — filtered catalog for collective members.
+    # Studio / center landing: col_<slug> — format-aware catalog entry (O6.13–O6.14).
     if payload.startswith("col_"):
-        from src.application.collective_use_cases import get_collective_by_slug, normalize_collective_slug
+        from src.application.collective_use_cases import (
+            build_collective_client_landing_payload,
+            get_collective_by_slug,
+            normalize_collective_slug,
+        )
 
         slug = payload.removeprefix("col_").strip()
         if normalize_collective_slug(slug):
@@ -843,37 +847,50 @@ async def cmd_start(message: Message) -> None:
                 collective = await get_collective_by_slug(db_session, slug, active_only=True)
             base = (Settings().webapp_base_url or "").rstrip("/")
             if collective and base.lower().startswith("https://"):
-                name = html.escape((collective.get("display_name") or slug).strip())
-                tagline = (collective.get("tagline") or "").strip()
-                tagline_block = (
-                    html.escape(tagline) + "\n" if tagline else ""
+                landing = build_collective_client_landing_payload(
+                    collective,
+                    webapp_base_url=base,
                 )
-                from src.application.brand_presentation import normalize_brand_tokens
-
-                tokens = normalize_brand_tokens(collective.get("brand_tokens"))
-                default_city_id = tokens.get("default_city_id")
-                catalog_url = f"{base}/webapp/catalog?collective={quote(slug)}&tab=catalog"
-                if default_city_id:
-                    catalog_url += f"&city_id={int(default_city_id)}"
-                keyboard = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_OPEN_CATALOG_WEBAPP,
-                                web_app=WebAppInfo(url=catalog_url),
-                            )
-                        ],
-                    ]
-                )
-                await message.answer(
-                    msg.CLIENT_COLLECTIVE_LANDING.format(
-                        name=name,
-                        tagline_block=tagline_block,
-                    ),
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard,
-                )
-                return
+                if landing:
+                    name = html.escape(landing["display_name"])
+                    tagline = landing.get("tagline") or ""
+                    tagline_block = html.escape(tagline) + "\n" if tagline else ""
+                    is_studio = landing["landing_variant"] == "studio"
+                    body = (
+                        msg.CLIENT_COLLECTIVE_LANDING_STUDIO
+                        if is_studio
+                        else msg.CLIENT_COLLECTIVE_LANDING_CENTER
+                    ).format(name=name, tagline_block=tagline_block)
+                    btn_text = (
+                        msg.CLIENT_BUTTON_COLLECTIVE_STUDIO
+                        if is_studio
+                        else msg.CLIENT_BUTTON_COLLECTIVE_CENTER
+                    )
+                    keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=btn_text,
+                                    web_app=WebAppInfo(url=landing["catalog_url"]),
+                                )
+                            ],
+                        ]
+                    )
+                    cover_url = landing.get("cover_url")
+                    if cover_url:
+                        await message.answer_photo(
+                            photo=cover_url,
+                            caption=body,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard,
+                        )
+                    else:
+                        await message.answer(
+                            body,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=keyboard,
+                        )
+                    return
 
     # Certificate link: cert_<CODE> or cert_<CODE>_ref_<trainer_id>
     cert_code, ref_trainer_id = _parse_cert_start(payload)

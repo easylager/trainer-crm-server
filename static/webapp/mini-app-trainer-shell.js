@@ -11,14 +11,17 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606162';
+  var SHELL_VERSION = '202606165';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
     schedule: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     clients: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 21v-6h4v6"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
+
+  var CENTER_TAB_PATH = 'trainer-collective?tab=brand';
 
   /** Lucide-style stroke icons — same language as tab bar and booking detail (.bd-icon). */
   function moreIconSvg(inner) {
@@ -117,7 +120,7 @@
     forcedTab: null,
     onboardingData: null,
     onboardingLoaded: false,
-    inboxBadges: { schedule: 0, more: 0, clients: 0 },
+    inboxBadges: { schedule: 0, center: 0, more: 0, clients: 0 },
     collectiveMenuVisible: false,
     collectiveMenuChecked: false,
     pendingCollectiveBootstrap: null,
@@ -196,6 +199,7 @@
     if (key === 'trainer-home') return 'home';
     if (key === 'schedule-editor') return 'schedule';
     if (key === 'trainer-clients') return 'clients';
+    if (key === 'trainer-collective' && showCenterGridTab()) return 'center';
     for (var i = 0; i < MORE_ROUTE_KEYS.length; i++) {
       if (key === MORE_ROUTE_KEYS[i]) return 'more';
     }
@@ -240,18 +244,86 @@
     return 'full_trainer';
   }
 
+  function organizationCapabilities() {
+    if (state.collectiveBootstrap && state.collectiveBootstrap.capabilities) {
+      return state.collectiveBootstrap.capabilities;
+    }
+    if (state.onboardingData && state.onboardingData.capabilities) {
+      return state.onboardingData.capabilities;
+    }
+    return null;
+  }
+
+  function shellNavProfile() {
+    var caps = organizationCapabilities();
+    if (caps && caps.shell_nav_profile) return caps.shell_nav_profile;
+    return studioAccessMode() === 'studio_admin_only' ? 'organization_admin' : 'full';
+  }
+
+  function collectiveScreenTitle() {
+    var caps = organizationCapabilities();
+    if (caps && caps.collective_screen_title) return caps.collective_screen_title;
+    if (organizationFormat() === 'center' || organizationFormat() === 'center_hybrid') return 'Центр';
+    return 'Студия';
+  }
+
+  function collectiveMoreLabel() {
+    return collectiveScreenTitle();
+  }
+
+  function organizationLabel() {
+    var caps = organizationCapabilities();
+    if (caps && caps.organization_label) return caps.organization_label;
+    return organizationFormat() === 'center' || organizationFormat() === 'center_hybrid' ? 'центр' : 'студия';
+  }
+
+  function organizationFormat() {
+    var caps = organizationCapabilities();
+    if (caps && caps.organization_format) return caps.organization_format;
+    if (state.collectiveBootstrap && state.collectiveBootstrap.organization_format) {
+      return state.collectiveBootstrap.organization_format;
+    }
+    return 'studio';
+  }
+
+  function collectiveMoreHint() {
+    var caps = organizationCapabilities();
+    if (caps && caps.catalog_mode === 'center_grid') {
+      if (caps.show_personal_crm) return 'Центр и ваши личные клиенты';
+      return 'Управление центром и сеткой';
+    }
+    return 'Команда и бренд студии';
+  }
+
+  function isOrganizationAdminNav() {
+    return shellNavProfile() === 'organization_admin';
+  }
+
+  function showPersonalCrm() {
+    var caps = organizationCapabilities();
+    if (caps && caps.show_personal_crm != null) return !!caps.show_personal_crm;
+    // Until capabilities load, keep solo wedge nav — hide only when API explicitly says so.
+    return true;
+  }
+
+  function showCenterGridTab() {
+    var caps = organizationCapabilities();
+    return !!(caps && caps.show_center_grid);
+  }
+
   /** Whether a shell route is reachable during «Первые шаги». */
   function evaluateOnboardingPath(path) {
     var data = state.onboardingData;
     var key = pathRouteKey(path);
 
-    if (studioAccessMode() === 'studio_admin_only') {
+    if (isOrganizationAdminNav() && !showPersonalCrm()) {
+      var screenTitle = collectiveScreenTitle();
       if (key === 'trainer-home' || key === 'trainer-collective') return { allow: true };
       return {
         allow: false,
-        title: 'Режим студии',
-        hint: 'Для вашего аккаунта открыты главная и раздел «Студия».',
-        primary: { path: 'trainer-collective', label: 'Открыть студию' },
+        title: 'Режим ' + organizationLabel(),
+        hint: 'Для вашего аккаунта открыты главная и раздел «' + screenTitle + '».',
+        primary: { path: CENTER_TAB_PATH, label: 'Открыть ' + screenTitle.toLowerCase() },
         secondary: null,
       };
     }
@@ -365,6 +437,100 @@
     showOnboardingNavSheet(decision);
   }
 
+  function buildCenterTabButton() {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'trainer-tab-bar__btn';
+    btn.setAttribute('role', 'tab');
+    btn.dataset.tabId = 'center';
+    btn.innerHTML =
+      '<span class="trainer-tab-bar__icon-wrap">' +
+      TAB_ICONS.center +
+      '<span class="trainer-tab-bar__badge" hidden aria-hidden="true"></span>' +
+      '</span><span>' +
+      collectiveScreenTitle() +
+      '</span>';
+    btn.addEventListener('click', function () {
+      hapticSelection();
+      if (btn.classList.contains('trainer-tab-bar__btn--locked')) {
+        showOnboardingNavSheet(evaluateOnboardingPath('trainer-collective'));
+        return;
+      }
+      if (isSameTabRoute('trainer-collective')) {
+        syncTabBarActive();
+        return;
+      }
+      navigate(CENTER_TAB_PATH);
+    });
+    return btn;
+  }
+
+  function updateCenterTabLabel() {
+    var btn = document.querySelector('.trainer-tab-bar__btn[data-tab-id="center"]');
+    if (!btn) return;
+    var spans = btn.querySelectorAll('span');
+    var label = spans.length ? spans[spans.length - 1] : null;
+    if (label) label.textContent = collectiveScreenTitle();
+  }
+
+  function ensureCenterTabButton() {
+    var bar = document.getElementById('trainerTabBar');
+    if (!bar) return;
+    var existing = bar.querySelector('[data-tab-id="center"]');
+    if (!showCenterGridTab()) {
+      if (existing) existing.remove();
+      syncCollectiveMoreItemVisibility();
+      return;
+    }
+    if (!existing) {
+      var moreBtn = bar.querySelector('[data-tab-id="more"]');
+      var centerBtn = buildCenterTabButton();
+      if (moreBtn) bar.insertBefore(centerBtn, moreBtn);
+      else bar.appendChild(centerBtn);
+    } else {
+      updateCenterTabLabel();
+      existing.removeAttribute('hidden');
+      existing.style.display = '';
+    }
+    syncCollectiveMoreItemVisibility();
+  }
+
+  function syncCollectiveMoreItemVisibility() {
+    var link = document.querySelector('[data-shell-path="trainer-collective"]');
+    var item = link && link.closest('.trainer-more-sheet__item');
+    if (!item) return;
+    if (showCenterGridTab()) {
+      item.setAttribute('hidden', 'hidden');
+      item.style.display = 'none';
+    } else {
+      item.removeAttribute('hidden');
+      item.style.display = '';
+    }
+  }
+
+  function syncShellNavForCapabilities() {
+    var bar = document.getElementById('trainerTabBar');
+    if (!bar) return;
+    var caps = organizationCapabilities();
+    var hidePersonalTabs = !!(caps && caps.show_personal_crm === false);
+    bar.querySelectorAll('.trainer-tab-bar__btn').forEach(function (btn) {
+      var id = btn.dataset.tabId;
+      if (id === 'center') return;
+      if (hidePersonalTabs && (id === 'schedule' || id === 'clients')) {
+        btn.setAttribute('hidden', 'hidden');
+        btn.style.display = 'none';
+      } else {
+        btn.removeAttribute('hidden');
+        btn.style.display = '';
+      }
+    });
+    ensureCenterTabButton();
+    updateCollectiveMoreItemHint();
+    updateCollectiveMoreItemLabel();
+    syncOnboardingTabLocks();
+    syncInboxBadges();
+  }
+
   function syncOnboardingTabLocks() {
     var bar = document.getElementById('trainerTabBar');
     if (!bar) return;
@@ -378,6 +544,7 @@
         if (id === 'home') locked = false;
         else if (id === 'schedule') locked = !evaluateOnboardingPath('schedule-editor').allow;
         else if (id === 'clients') locked = !evaluateOnboardingPath('trainer-clients').allow;
+        else if (id === 'center') locked = !evaluateOnboardingPath('trainer-collective').allow;
         else if (id === 'more') locked = false;
       }
       btn.classList.toggle('trainer-tab-bar__btn--locked', locked);
@@ -421,6 +588,7 @@
         state.onboardingData = d;
         state.onboardingLoaded = true;
         syncOnboardingTabLocks();
+        syncShellNavForCapabilities();
         return d;
       });
   }
@@ -429,6 +597,7 @@
     state.onboardingData = data || null;
     state.onboardingLoaded = true;
     syncOnboardingTabLocks();
+    syncShellNavForCapabilities();
   }
 
   /* ─── Navigation ────────────────────────────────────────────────────────── */
@@ -621,6 +790,7 @@
       if (!badgeEl) return;
       var n = 0;
       if (id === 'schedule') n = parseInt(String(badges.schedule || 0), 10) || 0;
+      else if (id === 'center') n = parseInt(String(badges.center || 0), 10) || 0;
       else if (id === 'more') n = parseInt(String(badges.more || 0), 10) || 0;
       else if (id === 'clients') n = parseInt(String(badges.clients || 0), 10) || 0;
       if (n > 0) {
@@ -636,7 +806,7 @@
   }
 
   function setInboxBadges(badges) {
-    state.inboxBadges = badges || { schedule: 0, more: 0, clients: 0 };
+    state.inboxBadges = badges || { schedule: 0, center: 0, more: 0, clients: 0 };
     syncInboxBadges();
   }
 
@@ -699,21 +869,38 @@
   }
 
   /** Inserts «Студия» into the More sheet when membership is confirmed. Idempotent. */
+  function updateCollectiveMoreItemHint() {
+    var hintEl = document.querySelector(
+      '[data-shell-path="trainer-collective"] .trainer-more-sheet__hint'
+    );
+    if (hintEl) hintEl.textContent = collectiveMoreHint();
+  }
+
+  function updateCollectiveMoreItemLabel() {
+    var labelEl = document.querySelector(
+      '[data-shell-path="trainer-collective"] .trainer-more-sheet__label'
+    );
+    if (labelEl) labelEl.textContent = collectiveMoreLabel();
+  }
+
   function ensureCollectiveMoreItem() {
     var list = document.querySelector('.trainer-more-sheet__list');
     if (!list) return false;
     if (list.querySelector('[data-shell-path="trainer-collective"]')) {
       state.collectiveMenuVisible = true;
+      updateCollectiveMoreItemHint();
       return true;
     }
     var groupsItem = list.querySelector('[data-shell-path="trainer-groups"]');
-    var node = buildMoreSheetItem(COLLECTIVE_MORE_ITEM);
+    var item = Object.assign({}, COLLECTIVE_MORE_ITEM, { hint: collectiveMoreHint() });
+    var node = buildMoreSheetItem(item);
     if (groupsItem && groupsItem.parentElement) {
       groupsItem.parentElement.insertAdjacentElement('afterend', node);
     } else {
       list.appendChild(node);
     }
     state.collectiveMenuVisible = true;
+    syncCollectiveMoreItemVisibility();
     syncOnboardingTabLocks();
     return true;
   }
@@ -768,6 +955,57 @@
       return;
     }
     ensureCollectiveMoreItem();
+    syncShellNavForCapabilities();
+  }
+
+  function ensureSuspendedBannerEl() {
+    var el = document.getElementById('trainerShellSuspendedBanner');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'trainerShellSuspendedBanner';
+    el.className = 'trainer-shell-suspended-banner';
+    el.setAttribute('role', 'status');
+    el.hidden = true;
+    document.body.insertBefore(el, document.body.firstChild);
+    return el;
+  }
+
+  /** O8.4: show when collective status is suspended — catalog/brand booking off. */
+  function syncSuspendedCollectiveNotice(notice) {
+    var el = ensureSuspendedBannerEl();
+    if (!notice || notice.suspended !== true) {
+      el.hidden = true;
+      el.textContent = '';
+      document.body.classList.remove('trainer-shell-has-suspended-banner');
+      return;
+    }
+    el.hidden = false;
+    el.textContent =
+      notice.message ||
+      'Организация приостановлена — каталог и запись через бренд недоступны.';
+    document.body.classList.add('trainer-shell-has-suspended-banner');
+  }
+
+  function fetchSuspendedCollectiveNotice() {
+    var initData = getInitData();
+    if (!initData) return Promise.resolve();
+    var url =
+      '/api/webapp/trainer/collective/suspended-notice?init_data=' +
+      encodeURIComponent(initData);
+    return fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Telegram-Init-Data': initData },
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (payload) {
+        if (payload) syncSuspendedCollectiveNotice(payload);
+      })
+      .catch(function () {
+        /* non-fatal */
+      });
   }
 
   function refreshCollectiveMenuVisibility() {
@@ -900,6 +1138,7 @@
     syncInboxBadges();
     fetchOnboardingChecklist();
     fetchCollectiveMenuVisibility();
+    fetchSuspendedCollectiveNotice();
   }
 
   /* ─── Auto-init via data attribute ─────────────────────────────────────── */
@@ -931,7 +1170,11 @@
     syncOnboarding: syncOnboarding,
     fetchOnboardingChecklist: fetchOnboardingChecklist,
     syncCollectiveMenuFromBootstrap: syncCollectiveMenuFromBootstrap,
+    syncSuspendedCollectiveNotice: syncSuspendedCollectiveNotice,
     refreshCollectiveMenuVisibility: refreshCollectiveMenuVisibility,
+    organizationCapabilities: organizationCapabilities,
+    shellNavProfile: shellNavProfile,
+    collectiveScreenTitle: collectiveScreenTitle,
     disableVerticalSwipes: function () {
       setNativeVerticalSwipeEnabled(false);
     },

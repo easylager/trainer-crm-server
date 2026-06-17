@@ -13,6 +13,25 @@ body.trainer-shell-body {
   padding-bottom: var(--trainer-shell-tab-inset);
 }
 
+body.trainer-shell-has-suspended-banner {
+  padding-top: calc(52px + env(safe-area-inset-top, 0px));
+}
+
+.trainer-shell-suspended-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9500;
+  padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px));
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: #5c4a00;
+  background: color-mix(in srgb, #f7a600 22%, var(--tg-theme-bg-color, #fffbec));
+  border-bottom: 1px solid color-mix(in srgb, #f7a600 35%, transparent);
+}
+
 body.trainer-shell-body.trainer-shell-tabs-hidden {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }

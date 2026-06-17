@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from src.application.client_cert_order_use_cases import split_cert_order_comment
 from src.application.client_pass_order_use_cases import split_pass_order_comment
+from src.application.collective_pass_use_cases import split_collective_pass_order_comment
 
 
 def client_visible_request_comment(comment: str | None) -> str | None:
@@ -13,6 +14,11 @@ def client_visible_request_comment(comment: str | None) -> str | None:
     if not comment or not str(comment).strip():
         return None
     raw = str(comment).strip()
+    cpid, body_collective = split_collective_pass_order_comment(comment)
+    if cpid is not None:
+        if body_collective.strip() == raw:
+            return None
+        return body_collective.strip() or None
     pid, body_pass = split_pass_order_comment(comment)
     if pid is not None:
         if body_pass.strip() == raw:
@@ -27,7 +33,10 @@ def client_visible_request_comment(comment: str | None) -> str | None:
 
 
 def client_request_subtype(comment: str | None) -> str | None:
-    """pass_product_order | certificate_product_order | None (ordinary demand request)."""
+    """pass_product_order | collective_pass_product_order | certificate_product_order | None."""
+    cpid, _ = split_collective_pass_order_comment(comment)
+    if cpid is not None:
+        return "collective_pass_product_order"
     pid, _ = split_pass_order_comment(comment)
     if pid is not None:
         return "pass_product_order"

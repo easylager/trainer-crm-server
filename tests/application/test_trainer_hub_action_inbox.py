@@ -1,5 +1,6 @@
 """Unit tests for trainer hub unified action inbox builder (Wave B)."""
 from src.application.trainer_hub_action_inbox import (
+    build_hub_dual_summary,
     build_trainer_hub_action_inbox,
     build_trainer_hub_inbox_badges,
 )
@@ -99,3 +100,32 @@ def test_action_inbox_uses_explicit_pending_booking_ids() -> None:
     pending = next(it for it in inbox["items"] if it["id"] == "pending_bookings")
     assert pending["count"] == 1
     assert pending["booking_ids"] == [555]
+
+
+def test_action_inbox_center_pending_for_hybrid_admin() -> None:
+    inbox = build_trainer_hub_action_inbox(
+        onboarding={"open_loop_pending_bookings_count": 0},
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        center_inbox_pending=3,
+        show_center_inbox=True,
+    )
+    center = next(it for it in inbox["items"] if it["id"] == "center_session_bookings")
+    assert center["kind"] == "center_pending"
+    assert center["count"] == 3
+    assert center["primary_action"] == "schedule_editor"
+    assert inbox["badges"]["center"] == 3
+
+
+def test_build_hub_dual_summary() -> None:
+    summary = build_hub_dual_summary(
+        bookings={"today_sessions": {"total": 4, "remaining": 2}},
+        center_inbox_pending=1,
+        collective_slug="broski",
+        collective_label="Центр",
+    )
+    assert summary["personal_today_total"] == 4
+    assert summary["personal_today_remaining"] == 2
+    assert summary["center_inbox_pending"] == 1
+    assert summary["collective_slug"] == "broski"

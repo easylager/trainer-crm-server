@@ -3684,19 +3684,57 @@ ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME = (
 
 ADMIN_COLLECTIVE_DRAFT_HELP = (
     "<b>Студия (Collective) — черновик + claim-ссылка</b>\n\n"
-    "<code>/collective_draft slug|Название студии</code>\n"
-    "Пример: <code>/collective_draft ice-yoga-lane|Ice Yoga Lane</code>\n\n"
+    "<code>/collective_draft slug|Название</code> — studio по умолчанию\n"
+    "<code>/collective_draft slug|Название|format|места|owner</code>\n\n"
+    "Форматы: <code>studio</code> · <code>center</code> · <code>center_hybrid</code>\n"
+    "Owner: <code>trainer</code> или <code>manager</code>\n\n"
+    "Примеры:\n"
+    "<code>/collective_draft ice-yoga-lane|Ice Yoga Lane</code>\n"
+    "<code>/collective_draft broski|Broski Center|center_hybrid|8</code>\n"
+    "<code>/collective_draft ops-desk|Ops Desk|center</code>\n\n"
+    "Список форматов: <code>/collective_draft formats</code>\n"
+    "Статус студии: <code>/collective_draft status slug</code>\n\n"
+    "Таблица format → UX (каталог, shell, роли): "
+    "<code>docs/adr/003-appendix-organization-format-ux.md</code>\n\n"
     "Создаёт draft и одноразовую ссылку для owner в тренерском боте "
     "(<code>?start=col_claim_…</code>). Owner должен быть уже привязан к боту "
     "или сначала получить welcome-ссылку."
 )
 ADMIN_COLLECTIVE_DRAFT_BAD_ARGS = (
-    "Формат: <code>/collective_draft slug|Название</code>. "
+    "Формат: <code>/collective_draft slug|Название|format|места|owner</code>. "
     "Slug: латиница, цифры, дефис. Справка: <code>/collective_draft help</code>"
+)
+ADMIN_COLLECTIVE_DRAFT_INVALID_FORMAT = (
+    "Неизвестный формат. Доступны: <code>studio</code>, <code>center</code>, "
+    "<code>center_hybrid</code>. Список: <code>/collective_draft formats</code>"
+)
+ADMIN_COLLECTIVE_DRAFT_INVALID_SEATS = (
+    "Мест в студии: от 2 до 50. Пример: <code>/collective_draft slug|Name|studio|12</code>"
+)
+ADMIN_COLLECTIVE_DRAFT_INVALID_OWNER = (
+    "Owner: <code>trainer</code> (личный CRM) или <code>manager</code> (только студия)."
+)
+ADMIN_COLLECTIVE_DRAFT_STATUS_HELP = (
+    "Укажите slug: <code>/collective_draft status ice-yoga-lane</code>"
+)
+ADMIN_COLLECTIVE_DRAFT_STATUS_NOT_FOUND = "Студия <code>{slug}</code> не найдена."
+ADMIN_COLLECTIVE_DRAFT_STATUS = (
+    "<b>{display_name}</b> · <code>{slug}</code>\n\n"
+    "Статус: <b>{collective_status}</b>\n"
+    "Claim: {claim_state}\n\n"
+    "Format: <code>{organization_format}</code>\n"
+    "Schedule: <code>{schedule_mode}</code>\n"
+    "Owner mode: {owner_mode_label}\n"
+    "Owner: {owner_line}\n\n"
+    "Места: {active_count}/{seat_limit}\n"
+    "Pending invites: {pending_invites}\n"
+    "Pending claim links: {pending_claims}"
 )
 ADMIN_COLLECTIVE_DRAFT_ISSUED = (
     "🏢 <b>Студия #{collective_id}</b> · <code>{slug}</code>\n"
     "Название: <b>{display_name}</b>\n"
+    "Формат: <b>{org_format}</b> · {schedule_label}\n"
+    "Owner после claim: <b>{owner_label}</b>\n"
     "Статус: draft · мест: {seat_limit}\n\n"
     "Claim до: <b>{expires}</b> (одноразовая)\n\n"
     "{link_block}"
@@ -3759,12 +3797,31 @@ TRAINER_COLLECTIVE_INVITE_SUCCESS = (
 TRAINER_COLLECTIVE_INVITE_INVALID = "Ссылка приглашения недействительна или уже использована."
 TRAINER_COLLECTIVE_INVITE_ALREADY = "Вы уже состоите в другой студии."
 TRAINER_COLLECTIVE_INVITE_SEATS_FULL = "В студии заняты все места — попросите owner расширить команду."
+TRAINER_COLLECTIVE_SESSION_BOOKING_PENDING = (
+    "📥 <b>Заявка в центр «{collective_name}»</b>\n"
+    "Клиент: {client_name}\n"
+    "Когда: {when}\n"
+    "Формат: {mode}\n\n"
+    "Подтвердите или отклоните в mini-app → Студия → Inbox."
+)
 
 CLIENT_COLLECTIVE_LANDING = (
     "🏢 <b>{name}</b>\n"
     "{tagline_block}"
     "Откройте каталог — покажем тренеров этой студии."
 )
+CLIENT_COLLECTIVE_LANDING_STUDIO = (
+    "🏢 <b>{name}</b>\n"
+    "{tagline_block}"
+    "Выберите тренера — покажем расписание команды студии."
+)
+CLIENT_COLLECTIVE_LANDING_CENTER = (
+    "🏢 <b>{name}</b>\n"
+    "{tagline_block}"
+    "Расписание центра — выберите окно и формат визита."
+)
+CLIENT_BUTTON_COLLECTIVE_STUDIO = "👤 Выберите тренера"
+CLIENT_BUTTON_COLLECTIVE_CENTER = "📅 Расписание центра"
 
 ADMIN_STATS_SECTION_PASSES_CERTS = "📦 <b>Абонементы и сертификаты</b>\n{lines}\n"
 ADMIN_STATS_PASSES_ACTIVE = "абонементов активно (с остатком занятий)"

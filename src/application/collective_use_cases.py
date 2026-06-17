@@ -10,7 +10,8 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from sqlalchemy import text
@@ -55,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 _COLLECTIVE_ROW_SELECT = """
     id, slug, display_name, tagline, logo_key, cover_key, about, gallery_keys, brand_tokens,
-    primary_arena_id, status, seat_limit, schedule_mode
+    primary_arena_id, status, seat_limit, schedule_mode, organization_format
 """
 
 COLLECTIVE_STATUS_DRAFT = "draft"
@@ -74,6 +75,9 @@ STUDIO_ACCESS_MODE_ADMIN_ONLY = "studio_admin_only"
 
 COLLECTIVE_STUDIO_ADMIN_ROLES = frozenset({MEMBER_ROLE_OWNER, MEMBER_ROLE_ADMIN})
 
+COLLECTIVE_DRAFT_SEAT_MIN = 2
+COLLECTIVE_DRAFT_SEAT_MAX = 50
+
 MEMBER_STATUS_INVITED = "invited"
 MEMBER_STATUS_ACTIVE = "active"
 MEMBER_STATUS_LEFT = "left"
@@ -86,6 +90,12 @@ DEFAULT_COLLECTIVE_INVITE_EXPIRE_DAYS = 14
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
+ORG_FORMAT_STUDIO = "studio"
+ORG_FORMAT_CENTER = "center"
+ORG_FORMAT_CENTER_HYBRID = "center_hybrid"
+CANONICAL_ORG_FORMATS = frozenset({ORG_FORMAT_STUDIO, ORG_FORMAT_CENTER, ORG_FORMAT_CENTER_HYBRID})
+
+
 @dataclass(frozen=True)
 class CollectiveMembershipContext:
     collective_id: int
@@ -96,6 +106,7 @@ class CollectiveMembershipContext:
     role: Literal["owner", "admin", "member"]
     seat_limit: int
     schedule_mode: str = SCHEDULE_MODE_MEMBER_AUTONOMOUS
+    organization_format: str = ORG_FORMAT_STUDIO
 
 
 @dataclass(frozen=True)
@@ -112,6 +123,188 @@ class ConsumeCollectiveInviteResult:
     slug: str | None = None
     display_name: str | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class CollectiveOrgFormatPreset:
+    """Admin draft preset — maps product format to schedule + owner access."""
+
+    key: str
+    label_ru: str
+    schedule_mode: str
+    seat_limit_default: int
+    owner_studio_access_mode: str
+
+
+COLLECTIVE_ORG_FORMAT_PRESETS: dict[str, CollectiveOrgFormatPreset] = {
+    ORG_FORMAT_STUDIO: CollectiveOrgFormatPreset(
+        key=ORG_FORMAT_STUDIO,
+        label_ru="Студия — автономные тренеры, без центральной сетки",
+        schedule_mode=SCHEDULE_MODE_MEMBER_AUTONOMOUS,
+        seat_limit_default=5,
+        owner_studio_access_mode=STUDIO_ACCESS_MODE_FULL,
+    ),
+    ORG_FORMAT_CENTER: CollectiveOrgFormatPreset(
+        key=ORG_FORMAT_CENTER,
+        label_ru="Центр — сетка admin/owner, owner без личного CRM",
+        schedule_mode=SCHEDULE_MODE_STUDIO_CENTRAL,
+        seat_limit_default=8,
+        owner_studio_access_mode=STUDIO_ACCESS_MODE_ADMIN_ONLY,
+    ),
+    ORG_FORMAT_CENTER_HYBRID: CollectiveOrgFormatPreset(
+        key=ORG_FORMAT_CENTER_HYBRID,
+        label_ru="Центр + owner-тренер — сетка и личные клиенты",
+        schedule_mode=SCHEDULE_MODE_STUDIO_CENTRAL,
+        seat_limit_default=8,
+        owner_studio_access_mode=STUDIO_ACCESS_MODE_FULL,
+    ),
+}
+
+COLLECTIVE_ORG_FORMAT_ALIASES: dict[str, str] = {
+    "studio": ORG_FORMAT_STUDIO,
+    "ice": ORG_FORMAT_STUDIO,
+    "autonomous": ORG_FORMAT_STUDIO,
+    "white": ORG_FORMAT_STUDIO,
+    "white-label": ORG_FORMAT_STUDIO,
+    "whitelabel": ORG_FORMAT_STUDIO,
+    "member": ORG_FORMAT_STUDIO,
+    "coworking": ORG_FORMAT_STUDIO,
+    "lanes": ORG_FORMAT_STUDIO,
+    "rental": ORG_FORMAT_STUDIO,
+    ORG_FORMAT_CENTER: ORG_FORMAT_CENTER,
+    "central": ORG_FORMAT_CENTER,
+    "manager": ORG_FORMAT_CENTER,
+    "facility": ORG_FORMAT_CENTER,
+    "admin_only": ORG_FORMAT_CENTER,
+    "non_trainer": ORG_FORMAT_CENTER,
+    "operator": ORG_FORMAT_CENTER,
+    ORG_FORMAT_CENTER_HYBRID: ORG_FORMAT_CENTER_HYBRID,
+    "hybrid": ORG_FORMAT_CENTER_HYBRID,
+    "owner_trainer": ORG_FORMAT_CENTER_HYBRID,
+    "throwing": ORG_FORMAT_CENTER_HYBRID,
+    "studio_central": ORG_FORMAT_CENTER_HYBRID,
+}
+
+COLLECTIVE_DRAFT_OWNER_ALIASES: dict[str, str] = {
+    "trainer": STUDIO_ACCESS_MODE_FULL,
+    "coach": STUDIO_ACCESS_MODE_FULL,
+    "full": STUDIO_ACCESS_MODE_FULL,
+    "full_trainer": STUDIO_ACCESS_MODE_FULL,
+    "manager": STUDIO_ACCESS_MODE_ADMIN_ONLY,
+    "admin": STUDIO_ACCESS_MODE_ADMIN_ONLY,
+    "facility": STUDIO_ACCESS_MODE_ADMIN_ONLY,
+    "non_trainer": STUDIO_ACCESS_MODE_ADMIN_ONLY,
+    "studio_admin_only": STUDIO_ACCESS_MODE_ADMIN_ONLY,
+}
+
+
+@dataclass(frozen=True)
+class CollectiveDraftAdminSpec:
+    slug: str
+    display_name: str
+    organization_format: str
+    schedule_mode: str
+    seat_limit: int
+    owner_studio_access_mode: str
+
+
+def normalize_organization_format(raw: str | None) -> str:
+    """Map legacy draft keys and derive canonical product format."""
+    key = (raw or ORG_FORMAT_STUDIO).strip().lower()
+    legacy = {
+        "ice": ORG_FORMAT_STUDIO,
+        "coworking": ORG_FORMAT_STUDIO,
+        "manager": ORG_FORMAT_CENTER,
+    }
+    if key in legacy:
+        return legacy[key]
+    if key in CANONICAL_ORG_FORMATS:
+        return key
+    resolved = COLLECTIVE_ORG_FORMAT_ALIASES.get(key)
+    if resolved in CANONICAL_ORG_FORMATS:
+        return resolved
+    return ORG_FORMAT_STUDIO
+
+
+def derive_stored_organization_format(
+    schedule_mode: str,
+    owner_studio_access_mode: str,
+) -> str:
+    """Canonical stored format from schedule + intended owner access."""
+    if schedule_mode == SCHEDULE_MODE_MEMBER_AUTONOMOUS:
+        return ORG_FORMAT_STUDIO
+    if owner_studio_access_mode == STUDIO_ACCESS_MODE_ADMIN_ONLY:
+        return ORG_FORMAT_CENTER
+    return ORG_FORMAT_CENTER_HYBRID
+
+
+def list_collective_org_format_presets() -> list[CollectiveOrgFormatPreset]:
+    return list(COLLECTIVE_ORG_FORMAT_PRESETS.values())
+
+
+def resolve_collective_org_format_key(raw: str | None) -> str | None:
+    key = (raw or ORG_FORMAT_STUDIO).strip().lower()
+    if not key:
+        return ORG_FORMAT_STUDIO
+    resolved = COLLECTIVE_ORG_FORMAT_ALIASES.get(key)
+    if resolved and resolved in COLLECTIVE_ORG_FORMAT_PRESETS:
+        return resolved
+    return None
+
+
+def parse_admin_collective_draft_body(body: str) -> CollectiveDraftAdminSpec | str:
+    """
+    Parse admin bot `/collective_draft slug|Name|format|seats|owner`.
+
+    Returns spec or machine-readable error code (invalid_slug, invalid_format, …).
+    """
+    parts = [(p or "").strip() for p in (body or "").split("|")]
+    if len(parts) < 2:
+        return "missing_fields"
+    slug_raw, display_name = parts[0], parts[1]
+    if not slug_raw or not display_name:
+        return "missing_fields"
+
+    norm_slug = normalize_collective_slug(slug_raw)
+    if not norm_slug:
+        return "invalid_slug"
+
+    format_key = resolve_collective_org_format_key(parts[2] if len(parts) > 2 else ORG_FORMAT_STUDIO)
+    if format_key is None:
+        return "invalid_format"
+    preset = COLLECTIVE_ORG_FORMAT_PRESETS[format_key]
+
+    seat_limit = preset.seat_limit_default
+    if len(parts) > 3 and parts[3]:
+        try:
+            seat_limit = int(parts[3])
+        except ValueError:
+            return "invalid_seats"
+        if seat_limit < COLLECTIVE_DRAFT_SEAT_MIN or seat_limit > COLLECTIVE_DRAFT_SEAT_MAX:
+            return "invalid_seats"
+
+    owner_mode = preset.owner_studio_access_mode
+    if len(parts) > 4 and parts[4]:
+        owner_key = parts[4].strip().lower()
+        resolved_owner = COLLECTIVE_DRAFT_OWNER_ALIASES.get(owner_key)
+        if resolved_owner is None:
+            return "invalid_owner_mode"
+        owner_mode = resolved_owner
+
+    if preset.schedule_mode == SCHEDULE_MODE_MEMBER_AUTONOMOUS:
+        if owner_mode == STUDIO_ACCESS_MODE_ADMIN_ONLY:
+            return "invalid_owner_mode"
+
+    org_format = derive_stored_organization_format(preset.schedule_mode, owner_mode)
+
+    return CollectiveDraftAdminSpec(
+        slug=norm_slug,
+        display_name=display_name[:128],
+        organization_format=org_format,
+        schedule_mode=preset.schedule_mode,
+        seat_limit=seat_limit,
+        owner_studio_access_mode=owner_mode,
+    )
 
 
 def is_collective_studio_admin_role(role: str | None) -> bool:
@@ -143,6 +336,17 @@ async def get_trainer_studio_access_mode(session: AsyncSession, trainer_id: int)
         return STUDIO_ACCESS_MODE_FULL
     mode = (str(row[0]) if row[0] else STUDIO_ACCESS_MODE_FULL).strip()
     return mode if mode in (STUDIO_ACCESS_MODE_FULL, STUDIO_ACCESS_MODE_ADMIN_ONLY) else STUDIO_ACCESS_MODE_FULL
+
+
+async def get_effective_studio_access_mode(session: AsyncSession, trainer_id: int) -> str:
+    """Admin-only shell applies only while trainer has an active collective membership."""
+    mode = await get_trainer_studio_access_mode(session, trainer_id)
+    if mode != STUDIO_ACCESS_MODE_ADMIN_ONLY:
+        return mode
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    if not memberships:
+        return STUDIO_ACCESS_MODE_FULL
+    return mode
 
 
 async def get_collective_entitlements_for_member(
@@ -208,7 +412,8 @@ _MEMBERSHIP_SELECT_SQL = """
         c.logo_key,
         cm.role,
         c.seat_limit,
-        c.schedule_mode
+        c.schedule_mode,
+        c.organization_format
     FROM collective_members cm
     INNER JOIN collectives c ON c.id = cm.collective_id
     WHERE cm.trainer_id = :tid
@@ -222,6 +427,7 @@ def _membership_from_row(row: Any) -> CollectiveMembershipContext:
     if role not in (MEMBER_ROLE_OWNER, MEMBER_ROLE_ADMIN, MEMBER_ROLE_MEMBER):
         role = MEMBER_ROLE_MEMBER
     schedule_mode = str(row[7] or SCHEDULE_MODE_MEMBER_AUTONOMOUS)
+    org_format = normalize_organization_format(str(row[8]) if len(row) > 8 and row[8] else None)
     return CollectiveMembershipContext(
         collective_id=int(row[0]),
         slug=str(row[1]),
@@ -231,6 +437,7 @@ def _membership_from_row(row: Any) -> CollectiveMembershipContext:
         role=role,  # type: ignore[arg-type]
         seat_limit=int(row[6]),
         schedule_mode=schedule_mode,
+        organization_format=org_format,
     )
 
 
@@ -325,13 +532,44 @@ def build_collective_client_deep_link(slug: str) -> str | None:
     return f"https://t.me/{client_uname}?start={_collective_client_start_payload(slug)}"
 
 
+def build_collective_client_landing_payload(
+    collective: dict[str, Any],
+    *,
+    webapp_base_url: str,
+) -> dict[str, Any] | None:
+    """Format-aware client bot landing for ``col_<slug>`` (O6.13–O6.14)."""
+    slug = str(collective.get("slug") or "").strip()
+    if not slug:
+        return None
+    base = (webapp_base_url or "").strip().rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    fmt = normalize_organization_format(collective.get("organization_format"))
+    tokens = normalize_brand_tokens(collective.get("brand_tokens"))
+    default_city_id = tokens.get("default_city_id")
+    catalog_url = f"{base}/webapp/catalog?collective={quote(slug)}&tab=catalog"
+    if default_city_id is not None:
+        catalog_url += f"&city_id={int(default_city_id)}"
+    brand = collective_brand_kit_enrichment(collective)
+    return {
+        "landing_variant": "studio" if fmt == ORG_FORMAT_STUDIO else "center",
+        "catalog_url": catalog_url,
+        "cover_url": brand.get("cover_url"),
+        "display_name": (collective.get("display_name") or slug).strip(),
+        "tagline": (collective.get("tagline") or "").strip() or None,
+    }
+
+
 def build_trainer_collective_bootstrap_payload(
     membership: CollectiveMembershipContext | None,
     *,
     subscription_covers: list[str] | None = None,
     memberships: list[CollectiveMembershipContext] | None = None,
+    studio_access_mode: str = STUDIO_ACCESS_MODE_FULL,
 ) -> dict[str, Any] | None:
     """Hub bootstrap slice; null for solo trainers."""
+    from src.application.organization_capabilities import capabilities_for_collective_membership
+
     all_memberships = list(memberships or [])
     if membership is None and all_memberships:
         membership = all_memberships[0]
@@ -347,9 +585,22 @@ def build_trainer_collective_bootstrap_payload(
             "display_name": m.display_name,
             "role": m.role,
             "schedule_mode": m.schedule_mode,
+            "organization_format": m.organization_format,
+            "capabilities": capabilities_for_collective_membership(
+                organization_format=m.organization_format,
+                schedule_mode=m.schedule_mode,
+                role=m.role,
+                studio_access_mode=studio_access_mode,
+            ),
         }
         for m in all_memberships
     ]
+    primary_caps = capabilities_for_collective_membership(
+        organization_format=membership.organization_format,
+        schedule_mode=membership.schedule_mode,
+        role=membership.role,
+        studio_access_mode=studio_access_mode,
+    )
     return {
         "collective_id": membership.collective_id,
         "slug": membership.slug,
@@ -359,11 +610,13 @@ def build_trainer_collective_bootstrap_payload(
         "role": membership.role,
         "seat_limit": membership.seat_limit,
         "schedule_mode": membership.schedule_mode,
+        "organization_format": membership.organization_format,
+        "capabilities": primary_caps,
         "client_link": client_link,
         "subscription_covers": list(subscription_covers or []),
         "collectives": collectives,
         "has_multiple_memberships": len(all_memberships) > 1,
-        "studio_access_mode": STUDIO_ACCESS_MODE_FULL,
+        "studio_access_mode": studio_access_mode,
     }
 
 
@@ -375,6 +628,9 @@ async def create_collective_draft(
     tagline: str | None = None,
     seat_limit: int = 5,
     primary_arena_id: int | None = None,
+    schedule_mode: str = SCHEDULE_MODE_MEMBER_AUTONOMOUS,
+    owner_studio_access_mode: str = STUDIO_ACCESS_MODE_FULL,
+    organization_format: str = ORG_FORMAT_STUDIO,
 ) -> dict[str, Any]:
     """Admin: create draft studio before owner claim."""
     norm_slug = normalize_collective_slug(slug)
@@ -383,20 +639,32 @@ async def create_collective_draft(
     name = (display_name or "").strip()
     if not name:
         raise ValueError("display_name_required")
-    limit = max(2, min(int(seat_limit), 10))
+    if schedule_mode not in (SCHEDULE_MODE_MEMBER_AUTONOMOUS, SCHEDULE_MODE_STUDIO_CENTRAL):
+        raise ValueError("invalid_schedule_mode")
+    if owner_studio_access_mode not in (STUDIO_ACCESS_MODE_FULL, STUDIO_ACCESS_MODE_ADMIN_ONLY):
+        raise ValueError("invalid_owner_studio_access_mode")
+    fmt = normalize_organization_format(organization_format)
+    if fmt not in CANONICAL_ORG_FORMATS:
+        fmt = derive_stored_organization_format(schedule_mode, owner_studio_access_mode)
+    limit = max(COLLECTIVE_DRAFT_SEAT_MIN, min(int(seat_limit), COLLECTIVE_DRAFT_SEAT_MAX))
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text(
             """
             INSERT INTO collectives (
                 slug, display_name, tagline, primary_arena_id,
-                status, seat_limit, created_at, updated_at
+                status, seat_limit, schedule_mode,
+                owner_studio_access_mode, organization_format,
+                created_at, updated_at
             )
             VALUES (
                 :slug, :name, :tagline, :arena_id,
-                :status, :seat_limit, :now, :now
+                :status, :seat_limit, :schedule_mode,
+                :owner_mode, :org_format,
+                :now, :now
             )
-            RETURNING id, slug, display_name, status, seat_limit
+            RETURNING id, slug, display_name, status, seat_limit, schedule_mode,
+                      owner_studio_access_mode, organization_format
             """
         ),
         {
@@ -406,6 +674,9 @@ async def create_collective_draft(
             "arena_id": primary_arena_id,
             "status": COLLECTIVE_STATUS_DRAFT,
             "seat_limit": limit,
+            "schedule_mode": schedule_mode,
+            "owner_mode": owner_studio_access_mode,
+            "org_format": fmt,
             "now": now,
         },
     )
@@ -419,6 +690,9 @@ async def create_collective_draft(
         "display_name": str(row[2]),
         "status": str(row[3]),
         "seat_limit": int(row[4]),
+        "schedule_mode": str(row[5]),
+        "owner_studio_access_mode": str(row[6]),
+        "organization_format": str(row[7]),
     }
 
 
@@ -495,7 +769,8 @@ async def consume_collective_claim_token(
     result = await session.execute(
         text(
             """
-            SELECT ct.collective_id, c.slug, c.display_name, c.status
+            SELECT ct.collective_id, c.slug, c.display_name, c.status,
+                   c.owner_studio_access_mode
             FROM collective_tokens ct
             INNER JOIN collectives c ON c.id = ct.collective_id
             WHERE ct.token = :token
@@ -515,6 +790,9 @@ async def consume_collective_claim_token(
     slug = str(row[1])
     display_name = str(row[2])
     status = str(row[3])
+    owner_access_mode = str(row[4] or STUDIO_ACCESS_MODE_FULL).strip()
+    if owner_access_mode not in (STUDIO_ACCESS_MODE_FULL, STUDIO_ACCESS_MODE_ADMIN_ONLY):
+        owner_access_mode = STUDIO_ACCESS_MODE_FULL
     if status != COLLECTIVE_STATUS_DRAFT:
         return ConsumeCollectiveClaimResult(error="collective_not_draft")
 
@@ -581,6 +859,16 @@ async def consume_collective_claim_token(
         },
     )
     await session.execute(
+        text(
+            """
+            UPDATE trainers
+            SET studio_access_mode = :mode
+            WHERE id = :tid
+            """
+        ),
+        {"mode": owner_access_mode, "tid": int(trainer_id)},
+    )
+    await session.execute(
         text("UPDATE collective_tokens SET used_at = :now WHERE token = :token"),
         {"now": now, "token": tok},
     )
@@ -627,6 +915,9 @@ def _row_to_collective_dict(row: Any) -> dict[str, Any]:
         "status": str(row[10]),
         "seat_limit": int(row[11]),
         "schedule_mode": str(row[12]) if len(row) > 12 and row[12] else SCHEDULE_MODE_MEMBER_AUTONOMOUS,
+        "organization_format": normalize_organization_format(
+            str(row[13]) if len(row) > 13 and row[13] else None
+        ),
     }
 
 
@@ -1153,6 +1444,85 @@ async def remove_collective_member(
     return {"removed_trainer_id": int(target_trainer_id)}
 
 
+async def preview_collective_member_removal(
+    session: AsyncSession,
+    collective_id: int,
+    owner_trainer_id: int,
+    target_trainer_id: int,
+) -> dict[str, Any]:
+    """Soft validation before owner removes a member (O7.3)."""
+    owner_err = await _assert_collective_owner(session, collective_id, owner_trainer_id)
+    if owner_err:
+        return {"error": owner_err}
+
+    member_row = await session.execute(
+        text(
+            """
+            SELECT role, status
+            FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid
+            """
+        ),
+        {"cid": collective_id, "tid": int(target_trainer_id)},
+    )
+    row = member_row.fetchone()
+    if row is None:
+        return {"error": "member_not_found"}
+    if str(row[0]) == MEMBER_ROLE_OWNER:
+        return {"error": "cannot_remove_owner"}
+    if int(target_trainer_id) == int(owner_trainer_id):
+        return {"error": "cannot_remove_self"}
+
+    today = date.today()
+    duty_r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)::int
+            FROM collective_session_coaches csc
+            INNER JOIN collective_sessions cs ON cs.id = csc.collective_session_id
+            WHERE cs.collective_id = :cid
+              AND csc.trainer_id = :tid
+              AND cs.slot_date >= :today
+              AND cs.status = 'available'
+            """
+        ),
+        {"cid": collective_id, "tid": int(target_trainer_id), "today": today},
+    )
+    future_duty_sessions = int(duty_r.scalar_one() or 0)
+
+    bookings_r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)::int
+            FROM collective_session_bookings b
+            INNER JOIN collective_sessions cs ON cs.id = b.collective_session_id
+            WHERE b.collective_id = :cid
+              AND b.status IN ('pending', 'confirmed')
+              AND cs.slot_date >= :today
+              AND (b.trainer_id = :tid OR b.center_coach_id = :tid)
+            """
+        ),
+        {"cid": collective_id, "tid": int(target_trainer_id), "today": today},
+    )
+    active_center_bookings = int(bookings_r.scalar_one() or 0)
+
+    warnings: list[str] = []
+    if future_duty_sessions:
+        warnings.append(
+            f"У тренера {future_duty_sessions} будущих смен в сетке — снимите назначение или дождитесь даты."
+        )
+    if active_center_bookings:
+        warnings.append(
+            f"Есть {active_center_bookings} активных записей в центре с участием этого тренера."
+        )
+
+    return {
+        "future_duty_sessions": future_duty_sessions,
+        "active_center_bookings": active_center_bookings,
+        "warnings": warnings,
+    }
+
+
 async def transfer_collective_ownership(
     session: AsyncSession,
     collective_id: int,
@@ -1470,6 +1840,171 @@ async def get_collective_subscription_status(
         "active_member_count": active_count,
         "active_subscription": active,
         "history": history,
+    }
+
+
+async def count_pending_collective_claim_tokens(
+    session: AsyncSession,
+    collective_id: int,
+) -> int:
+    """Unused, non-expired owner claim tokens awaiting col_claim_* consumption."""
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)::int
+            FROM collective_tokens
+            WHERE collective_id = :cid
+              AND kind = :kind
+              AND used_at IS NULL
+              AND expires_at > :now
+            """
+        ),
+        {"cid": int(collective_id), "kind": TOKEN_KIND_CLAIM, "now": now},
+    )
+    row = result.fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def _owner_access_mode_label_ru(mode: str | None) -> str:
+    if (mode or "").strip() == STUDIO_ACCESS_MODE_ADMIN_ONLY:
+        return "manager (studio_admin_only)"
+    return "trainer (full_trainer)"
+
+
+def _collective_claim_state_label(
+    *,
+    collective_status: str,
+    owner_trainer_id: int | None,
+    pending_claim_tokens: int,
+) -> str:
+    if collective_status == COLLECTIVE_STATUS_DRAFT:
+        if owner_trainer_id is not None:
+            return "draft · owner assigned (unexpected)"
+        if pending_claim_tokens > 0:
+            return f"draft · claim link outstanding ({pending_claim_tokens})"
+        return "draft · no active claim link"
+    if owner_trainer_id is None:
+        return f"{collective_status} · owner not set"
+    return f"{collective_status} · claimed (owner trainer_id={owner_trainer_id})"
+
+
+async def get_collective_ops_status(
+    session: AsyncSession,
+    *,
+    slug: str,
+) -> dict[str, Any] | None:
+    """Admin ops snapshot: format, seats, owner mode, claim state (O8.2)."""
+    norm = normalize_collective_slug(slug)
+    if not norm:
+        return None
+    result = await session.execute(
+        text(
+            """
+            SELECT id, slug, display_name, status, seat_limit, schedule_mode,
+                   organization_format, owner_studio_access_mode, owner_trainer_id
+            FROM collectives
+            WHERE slug = :slug
+            LIMIT 1
+            """
+        ),
+        {"slug": norm},
+    )
+    row = result.fetchone()
+    if row is None:
+        return None
+
+    collective_id = int(row[0])
+    owner_trainer_id = int(row[8]) if row[8] is not None else None
+    collective_status = str(row[3])
+    pending_claims = await count_pending_collective_claim_tokens(session, collective_id)
+    pending_invites = await count_pending_collective_invite_tokens(session, collective_id)
+    active_count = await count_active_collective_members(session, collective_id)
+
+    owner_name: str | None = None
+    if owner_trainer_id is not None:
+        owner_row = await session.execute(
+            text(
+                """
+                SELECT tp.first_name, tp.last_name, t.telegram_username
+                FROM trainers t
+                LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+                WHERE t.id = :tid
+                LIMIT 1
+                """
+            ),
+            {"tid": owner_trainer_id},
+        )
+        o = owner_row.fetchone()
+        if o:
+            fn = (o[0] or "").strip()
+            ln = (o[1] or "").strip()
+            owner_name = " ".join(filter(None, [fn, ln])).strip() or None
+            if not owner_name and o[2]:
+                owner_name = f"@{str(o[2]).strip().lstrip('@')}"
+
+    return {
+        "collective_id": collective_id,
+        "slug": str(row[1]),
+        "display_name": str(row[2]),
+        "status": collective_status,
+        "organization_format": normalize_organization_format(str(row[6]) if row[6] else None),
+        "schedule_mode": str(row[5] or SCHEDULE_MODE_MEMBER_AUTONOMOUS),
+        "owner_studio_access_mode": str(row[7] or STUDIO_ACCESS_MODE_FULL),
+        "owner_studio_access_mode_label": _owner_access_mode_label_ru(str(row[7])),
+        "seat_limit": int(row[4]),
+        "active_member_count": active_count,
+        "pending_invite_count": pending_invites,
+        "pending_claim_count": pending_claims,
+        "owner_trainer_id": owner_trainer_id,
+        "owner_display_name": owner_name,
+        "claim_state_label": _collective_claim_state_label(
+            collective_status=collective_status,
+            owner_trainer_id=owner_trainer_id,
+            pending_claim_tokens=pending_claims,
+        ),
+    }
+
+
+async def get_trainer_suspended_collective_notice(
+    session: AsyncSession,
+    trainer_id: int,
+) -> dict[str, Any] | None:
+    """Banner payload when member's collective is suspended (O8.4)."""
+    result = await session.execute(
+        text(
+            """
+            SELECT c.slug, c.display_name, cm.role
+            FROM collective_members cm
+            INNER JOIN collectives c ON c.id = cm.collective_id
+            WHERE cm.trainer_id = :tid
+              AND cm.status = :active
+              AND c.status = :suspended
+            ORDER BY
+                CASE cm.role WHEN :owner THEN 0 WHEN :admin THEN 1 ELSE 2 END,
+                cm.joined_at NULLS LAST
+            LIMIT 1
+            """
+        ),
+        {
+            "tid": int(trainer_id),
+            "active": MEMBER_STATUS_ACTIVE,
+            "suspended": COLLECTIVE_STATUS_SUSPENDED,
+            "owner": MEMBER_ROLE_OWNER,
+            "admin": MEMBER_ROLE_ADMIN,
+        },
+    )
+    row = result.fetchone()
+    if row is None:
+        return None
+    return {
+        "slug": str(row[0]),
+        "display_name": str(row[1]),
+        "role": str(row[2]),
+        "message": (
+            f"«{str(row[1])}» приостановлена — каталог и запись через бренд недоступны. "
+            "Личный CRM работает как обычно."
+        ),
     }
 
 
@@ -2229,6 +2764,7 @@ async def get_trainer_collective_studio_payload(
             "display_name": m.display_name,
             "role": m.role,
             "schedule_mode": m.schedule_mode,
+            "organization_format": m.organization_format,
         }
         for m in all_memberships
     ]
@@ -2275,7 +2811,31 @@ async def get_trainer_collective_studio_payload(
         if row
         else SCHEDULE_MODE_MEMBER_AUTONOMOUS
     )
-    studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id)
+    studio_access_mode = await get_effective_studio_access_mode(session, trainer_id)
+    org_format = membership.organization_format
+    from src.application.organization_capabilities import capabilities_for_collective_membership
+
+    capabilities = capabilities_for_collective_membership(
+        organization_format=org_format,
+        schedule_mode=schedule_mode,
+        role=membership.role,
+        studio_access_mode=studio_access_mode,
+    )
+
+    my_center_duties: list[dict[str, Any]] = []
+    if schedule_mode == SCHEDULE_MODE_STUDIO_CENTRAL:
+        from src.application.collective_session_use_cases import list_center_duties_for_trainer
+
+        today = date.today()
+        duties = await list_center_duties_for_trainer(
+            session,
+            trainer_id=trainer_id,
+            from_date=today,
+            to_date=today + timedelta(days=28),
+        )
+        my_center_duties = [
+            d for d in duties if d.get("collective_slug") == membership.slug
+        ]
 
     return {
         "collective_id": membership.collective_id,
@@ -2286,6 +2846,8 @@ async def get_trainer_collective_studio_payload(
         "role": membership.role,
         "seat_limit": membership.seat_limit,
         "schedule_mode": schedule_mode,
+        "organization_format": org_format,
+        "capabilities": capabilities,
         "studio_access_mode": studio_access_mode,
         "can_manage_center_schedule": is_studio_admin
         and schedule_mode == SCHEDULE_MODE_STUDIO_CENTRAL,
@@ -2306,6 +2868,8 @@ async def get_trainer_collective_studio_payload(
         "subscription_checkout": subscription_checkout,
         "memberships": memberships_summary,
         "has_multiple_memberships": len(all_memberships) > 1,
+        "my_center_duties": my_center_duties,
+        "self_trainer_id": int(trainer_id),
         **kit,
         **location,
     }

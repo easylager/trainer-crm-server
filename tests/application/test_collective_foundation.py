@@ -5,6 +5,9 @@ pytestmark = pytest.mark.collective
 from unittest.mock import AsyncMock, MagicMock
 
 from src.application.collective_use_cases import (
+    ORG_FORMAT_CENTER,
+    ORG_FORMAT_STUDIO,
+    build_collective_client_landing_payload,
     normalize_collective_slug,
     consume_collective_invite_token,
     issue_collective_invite_token,
@@ -52,6 +55,47 @@ class TestNormalizeCollectiveSlug:
 
     def test_rejects_spaces(self) -> None:
         assert normalize_collective_slug("ice yoga") is None
+
+
+class TestCollectiveClientLandingPayload:
+    def test_studio_variant_and_city(self) -> None:
+        payload = build_collective_client_landing_payload(
+            {
+                "slug": "ice-studio",
+                "display_name": "Ice Studio",
+                "tagline": "Йога для всех",
+                "organization_format": ORG_FORMAT_STUDIO,
+                "brand_tokens": {"default_city_id": 3},
+            },
+            webapp_base_url="https://app.example.com",
+        )
+        assert payload is not None
+        assert payload["landing_variant"] == "studio"
+        assert payload["display_name"] == "Ice Studio"
+        assert payload["tagline"] == "Йога для всех"
+        assert "collective=ice-studio" in payload["catalog_url"]
+        assert "city_id=3" in payload["catalog_url"]
+
+    def test_center_variant(self) -> None:
+        payload = build_collective_client_landing_payload(
+            {
+                "slug": "throwing-center",
+                "display_name": "Throwing Center",
+                "organization_format": ORG_FORMAT_CENTER,
+            },
+            webapp_base_url="https://app.example.com",
+        )
+        assert payload is not None
+        assert payload["landing_variant"] == "center"
+
+    def test_rejects_non_https_base(self) -> None:
+        assert (
+            build_collective_client_landing_payload(
+                {"slug": "x", "organization_format": ORG_FORMAT_STUDIO},
+                webapp_base_url="http://insecure.example",
+            )
+            is None
+        )
 
 
 class TestMergeEntitlements:

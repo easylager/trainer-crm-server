@@ -409,7 +409,20 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=202606282"></script>
+  <div id="centerPassOrderConfirmModal" class="center-pass-order-modal" hidden>
+    <button type="button" class="center-pass-order-modal__backdrop" id="centerPassOrderConfirmBackdrop" aria-label="Закрыть"></button>
+    <div class="center-pass-order-modal__sheet" role="dialog" aria-modal="true" aria-labelledby="centerPassOrderConfirmTitle">
+      <h3 id="centerPassOrderConfirmTitle">Оформить абонемент?</h3>
+      <p class="center-pass-order-modal__text" id="centerPassOrderConfirmText"></p>
+      <p class="center-pass-order-modal__hint">Центр свяжется с вами для оплаты и выдаст абонемент после подтверждения.</p>
+      <div class="center-pass-order-modal__actions">
+        <button type="button" class="center-pass-order-modal__btn secondary" id="centerPassOrderConfirmCancel">Отмена</button>
+        <button type="button" class="center-pass-order-modal__btn primary" id="centerPassOrderConfirmSend">Отправить заявку</button>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="catalog-main.js?v=202606283"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

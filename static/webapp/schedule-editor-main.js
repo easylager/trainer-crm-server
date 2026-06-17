@@ -739,6 +739,9 @@
         var mQuickSvc = document.getElementById('modalQuickBookService') && document.getElementById('modalQuickBookService').style.display === 'flex';
         var mBook = document.getElementById('modalBookClient').style.display === 'flex';
         var mGroup = document.getElementById('modalGroupSlot') && document.getElementById('modalGroupSlot').style.display === 'flex';
+        var mCenterSession =
+          document.getElementById('modalCenterSession') &&
+          document.getElementById('modalCenterSession').style.display === 'flex';
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
         var mEditSvc =
@@ -756,6 +759,7 @@
           mQuickSvc ||
           mBook ||
           mGroup ||
+          mCenterSession ||
           mBookConf ||
           mCancelB ||
           mEditSvc ||
@@ -904,6 +908,11 @@
       }
 
       function handleTelegramBackUnified() {
+        var mcs = document.getElementById('modalCenterSession');
+        if (mcs && mcs.style.display === 'flex') {
+          closeCenterSessionModal();
+          return;
+        }
         var mgr = document.getElementById('modalGroupSlot');
         if (mgr && mgr.style.display === 'flex') {
           mgr.style.display = 'none';
@@ -918,8 +927,10 @@
           state.pendingTemplateDay = null;
           var ind = document.getElementById('btnSlotIntentIndividual');
           var grp = document.getElementById('btnSlotIntentGroup');
+          var centerBtnBack = document.getElementById('btnSlotIntentCenter');
           if (ind) ind.classList.remove('is-suggested');
           if (grp) grp.classList.remove('is-suggested');
+          if (centerBtnBack) centerBtnBack.classList.remove('is-suggested');
           updateTelegramBack();
           return;
         }
@@ -1983,7 +1994,15 @@
         quickBookStartMinutes: null,
         quickBookDurationMinutes: 45,
         bookContexts: null,
+        bookContextsPrefetch: null,
+        bookContextsPrefetchPromise: null,
+        centerScheduleAdmin: null,
+        centerEditCoachIds: null,
+        /** After center day edit: 'daypick' | 'template' | 'calendar'. */
+        centerEditReturn: null,
+        centerGridWeekLoadInFlight: false,
         bookContextKind: 'personal_slot',
+        bookSessionContextId: null,
         bookCollectiveSlug: null,
         bookCenterSession: null,
         bookCenterSessions: null,
@@ -2208,6 +2227,7 @@
         state.bookServiceStepFromNewClient = false;
         state.bookModalClientSearchFirst = false;
         state.bookContextKind = 'personal_slot';
+        state.bookSessionContextId = null;
         state.bookCollectiveSlug = null;
         state.bookDelegateTargetId = null;
         state.bookCenterSession = null;
@@ -2250,14 +2270,128 @@
       }
 
       function fetchBookingContexts() {
+        if (window.TrainerBookingContext) {
+          return TrainerBookingContext.fetchContexts(function(path) {
+            return getJsonTrainer(path);
+          });
+        }
         return getJsonTrainer('/trainer/booking-contexts').catch(function() {
           return { contexts: [{ kind: 'personal_slot', context_id: 'personal', label: 'Личное расписание' }], needs_context_picker: false };
         });
       }
 
-      function renderBookContextStep(payload) {
+      function scheduleBookContextsNeedPicker(payload) {
+        if (window.TrainerBookingContext) {
+          return TrainerBookingContext.needsContextPicker(TrainerBookingContext.normalizePayload(payload));
+        }
+        return !!(payload && payload.needs_context_picker && (payload.contexts || []).length > 1);
+      }
+
+      function scheduleResolveBookShellKind(prefilledClient) {
+        if (prefilledClient) return 'profile';
+        var prefetch = state.bookContextsPrefetch;
+        if (prefetch && scheduleBookContextsNeedPicker(prefetch)) return 'context';
+        if (prefetch) return 'clients';
+        return 'prepare';
+      }
+
+      function prefetchScheduleBookingContexts() {
+        if (state.bookContextsPrefetch) return Promise.resolve(state.bookContextsPrefetch);
+        if (state.bookContextsPrefetchPromise) return state.bookContextsPrefetchPromise;
+        state.bookContextsPrefetchPromise = fetchBookingContexts()
+          .then(function(payload) {
+            state.bookContextsPrefetch = payload;
+            return payload;
+          })
+          .catch(function() {
+            state.bookContextsPrefetchPromise = null;
+            return null;
+          });
+        return state.bookContextsPrefetchPromise;
+      }
+
+      function applyBookContextSelection(ctx, clientId) {
+        var applied = window.TrainerBookingContext
+          ? TrainerBookingContext.applyContext(ctx)
+          : { kind: ctx.kind, collective_slug: ctx.collective_slug || null, context_id: ctx.context_id };
+        state.bookContextKind = applied.kind;
+        state.bookCollectiveSlug = applied.collective_slug;
+        state.bookSessionContextId = applied.context_id || (ctx && ctx.context_id) || null;
+        if (clientId != null && window.TrainerBookingContext) {
+          TrainerBookingContext.rememberContextForClient(clientId, applied.context_id);
+        }
+      }
+
+      function maybeApplyBookContextForClient(clientId, onContinue) {
+        var payload = state.bookContexts;
+        if (!payload) {
+          onContinue();
+          return;
+        }
+        if (state.bookSessionContextId) {
+          var locked = (payload.contexts || []).filter(function(c) {
+            return c.context_id === state.bookSessionContextId;
+          })[0];
+          if (locked) {
+            applyBookContextSelection(locked, clientId);
+            onContinue();
+            return;
+          }
+        }
+        if (window.TrainerBookingContext) {
+          var normalized = TrainerBookingContext.normalizePayload(payload);
+          if (!TrainerBookingContext.needsContextPicker(normalized)) {
+            applyBookContextSelection(normalized.contexts[0], clientId);
+            onContinue();
+            return;
+          }
+          var resolved = TrainerBookingContext.resolveInitialContext(normalized, clientId);
+          if (resolved) {
+            applyBookContextSelection(resolved, clientId);
+            onContinue();
+            return;
+          }
+        } else if (!payload.needs_context_picker) {
+          onContinue();
+          return;
+        }
+        renderBookContextStep(payload, clientId, onContinue);
+        showBookStep('bookStepContext');
+      }
+
+      function renderBookContextStep(payload, clientId, onContinue) {
         var wrap = document.getElementById('bookContextActions');
         if (!wrap) return;
+        if (window.TrainerBookingContext) {
+          TrainerBookingContext.renderPicker(wrap, payload, {
+            escapeHtml: escapeHtml,
+            attrPrefix: 'data-book',
+            clientId: clientId,
+            onSelect: function(ctx) {
+              applyBookContextSelection(ctx, clientId);
+              if (state.bookContextKind === 'center_session') {
+                state.bookSlotId = null;
+                state.bookFlowQuick = false;
+                showBookStep('bookStepExisting');
+                setBookClientSearchSectionVisible(true);
+                if (clientId) {
+                  enterBookCenterFlowForClient(clientId, null);
+                } else {
+                  loadBookClients('');
+                }
+                return;
+              }
+              if (typeof onContinue === 'function') {
+                onContinue();
+                return;
+              }
+              showBookStep('bookStepExisting');
+              setBookClientSearchSectionVisible(true);
+              loadBookClients('');
+            },
+          });
+          return;
+        }
         var contexts = (payload && payload.contexts) || [];
         wrap.innerHTML = contexts.map(function(ctx) {
           return (
@@ -2269,15 +2403,25 @@
         }).join('');
         wrap.querySelectorAll('[data-book-context]').forEach(function(btn) {
           btn.onclick = function() {
-            state.bookContextKind = btn.getAttribute('data-book-kind') || 'personal_slot';
-            state.bookCollectiveSlug = btn.getAttribute('data-collective-slug') || null;
-            state.bookDelegateTargetId = null;
+            applyBookContextSelection({
+              kind: btn.getAttribute('data-book-kind') || 'personal_slot',
+              context_id: btn.getAttribute('data-book-context') || 'personal',
+              collective_slug: btn.getAttribute('data-collective-slug') || null,
+            }, clientId);
             if (state.bookContextKind === 'center_session') {
               state.bookSlotId = null;
               state.bookFlowQuick = false;
               showBookStep('bookStepExisting');
               setBookClientSearchSectionVisible(true);
-              loadBookClients('');
+              if (clientId) {
+                enterBookCenterFlowForClient(clientId, null);
+              } else {
+                loadBookClients('');
+              }
+              return;
+            }
+            if (typeof onContinue === 'function') {
+              onContinue();
               return;
             }
             showBookStep('bookStepExisting');
@@ -2292,6 +2436,21 @@
         var slug = state.bookCollectiveSlug;
         if (!slug) {
           alert('Не выбран контекст центра');
+          return;
+        }
+        if (state.bookCenterSession && state.bookCenterSession.id != null) {
+          showBookStep('bookStepCenter');
+          var leadPreset = document.getElementById('bookCenterLead');
+          if (leadPreset) {
+            var sess = state.bookCenterSession;
+            leadPreset.textContent =
+              (displayNameOrNull || 'Клиент') +
+              ' — ' +
+              (sess.start_time || '') +
+              '–' +
+              (sess.end_time || '');
+          }
+          renderBookCenterModePickers();
           return;
         }
         showBookStep('bookStepCenter');
@@ -2369,7 +2528,19 @@
         }).join('');
         modeWrap.style.display = '';
         if (coachWrap && coachSel) {
-          var coaches = session.coaches || [];
+          var delegate = state.bookContexts && state.bookContexts.delegate;
+          var delegateCoaches = (delegate && delegate.coaches) || [];
+          var coaches =
+            delegateCoaches.length > 1
+              ? delegateCoaches.map(function(c) {
+                  if (state.trainerId != null && parseInt(String(c.trainer_id), 10) === parseInt(String(state.trainerId), 10)) {
+                    return { trainer_id: c.trainer_id, display_name: 'Я' };
+                  }
+                  return c;
+                })
+              : window.TrainerBookingContext
+                ? TrainerBookingContext.centerCoachesForStaffBooking(session, state.trainerId)
+                : session.assigned_coaches || session.coaches || [];
           coachSel.innerHTML = coaches.map(function(c) {
             return '<option value="' + c.trainer_id + '">' + escapeHtml(c.display_name || ('Тренер #' + c.trainer_id)) + '</option>';
           }).join('');
@@ -2395,7 +2566,19 @@
           guest_count: 0,
         };
         if (modeSel.value.indexOf('coach') >= 0 && coachSel && coachSel.value) {
-          payload.center_coach_id = parseInt(coachSel.value, 10);
+          var selectedCoachId = parseInt(coachSel.value, 10);
+          var actorId = state.trainerId != null ? parseInt(String(state.trainerId), 10) : NaN;
+          if (
+            state.bookContexts &&
+            state.bookContexts.delegate &&
+            !isNaN(selectedCoachId) &&
+            !isNaN(actorId) &&
+            selectedCoachId !== actorId
+          ) {
+            payload.target_trainer_id = selectedCoachId;
+          } else {
+            payload.center_coach_id = selectedCoachId;
+          }
         }
         fetch(apiUrlWithQuery('/trainer/collective/staff-session-booking'), {
           method: 'POST',
@@ -2418,6 +2601,16 @@
        * After client picked from roster: load per-client defaults (GET booking-defaults), then show service/tariff.
        * Slot booking: арена слота фиксируется в POST; UI площадки для «из списка» не показываем.
        */
+      function proceedBookExistingClient(clientId, clientName) {
+        maybeApplyBookContextForClient(clientId, function() {
+          if (state.bookContextKind === 'center_session') {
+            enterBookCenterFlowForClient(clientId, clientName);
+            return;
+          }
+          enterBookExistingServiceStepFromClient(clientId, clientName);
+        });
+      }
+
       function enterBookExistingServiceStepFromClient(clientId, displayNameOrNull, options) {
         options = options || {};
         if (state.bookContextKind === 'center_session') {
@@ -2963,6 +3156,14 @@
        * Mirrors openEditCalendarDay filters: no training_group rows, not cancelled.
        */
       function countExistingSlotsForDayPick(dateStr) {
+        if (slotIntentUseCenterUi()) {
+          var sessions = (state.centerScheduleAdmin && state.centerScheduleAdmin.sessions) || [];
+          var nCenter = 0;
+          for (var ci = 0; ci < sessions.length; ci++) {
+            if (String(sessions[ci].slot_date) === String(dateStr)) nCenter++;
+          }
+          return nCenter;
+        }
         var useGroup = slotIntentUseGroupUi();
         var rows = state.slots || [];
         var n = 0;
@@ -3356,6 +3557,7 @@
           teardownScheduleCalendarScrollSpy();
           loadTemplates();
         }
+        syncScheduleEditorFormatChrome();
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
       }
@@ -3367,7 +3569,8 @@
         };
       });
 
-      function showMain() {
+      function showMain(opts) {
+        opts = opts || {};
         showBookingStack('main');
         document.getElementById('screenEdit').style.display = 'none';
         document.getElementById('screenDayPick').style.display = 'none';
@@ -3382,7 +3585,7 @@
           x.classList.toggle('active', x.dataset.tab === state.tab);
         });
         if (state.tab === 'calendar') loadSlots();
-        else loadTemplates();
+        else if (!opts.skipTemplateReload) loadTemplates(opts.templateLoadOpts || {});
         state.slotEditIntent = null;
         state.pendingIntentFlow = null;
         state.pendingTemplateDay = null;
@@ -3390,6 +3593,7 @@
         state.calendarBaselinePreciseKeys = null;
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
+        syncScheduleEditorFormatChrome();
       }
 
       function isGroupClassesFeatureEnabled() {
@@ -3399,6 +3603,395 @@
       /** Group-only editor controls are visible only for explicit "group" intent. */
       function slotIntentUseGroupUi() {
         return isGroupClassesFeatureEnabled() && state.slotEditIntent === 'group';
+      }
+
+      function hasCenterScheduleAdmin() {
+        var admin = state.centerScheduleAdmin;
+        return !!(admin && admin.collective_slug && (admin.coaches || []).length);
+      }
+
+      function scheduleEditorOrgCaps() {
+        var admin = state.centerScheduleAdmin;
+        if (admin && admin.capabilities) return admin.capabilities;
+        if (
+          window.TrainerMiniAppShell &&
+          typeof window.TrainerMiniAppShell.organizationCapabilities === 'function'
+        ) {
+          return window.TrainerMiniAppShell.organizationCapabilities() || null;
+        }
+        return null;
+      }
+
+      /** Owner/admin with both personal CRM and center grid (center_hybrid or center owner who coaches). */
+      function scheduleEditorDualContour() {
+        var caps = scheduleEditorOrgCaps();
+        if (caps) return !!(caps.show_personal_crm && caps.show_center_grid);
+        return hasCenterScheduleAdmin();
+      }
+
+      /** Facility operator: center grid only, no personal schedule UX in this editor. */
+      function scheduleEditorCenterOperatorOnly() {
+        var caps = scheduleEditorOrgCaps();
+        if (caps) return !!(caps.show_center_grid && !caps.show_personal_crm);
+        return false;
+      }
+
+      function scheduleEditorPersonalOverlapEnabled() {
+        return scheduleEditorDualContour();
+      }
+
+      function syncScheduleEditorFormatChrome() {
+        var personal = document.getElementById('personalTemplateSection');
+        var tabTpl = document.getElementById('tabTemplateNav');
+        var addBtn = document.getElementById('btnAddSlots');
+        var centerOnly = scheduleEditorCenterOperatorOnly();
+        var dual = scheduleEditorDualContour();
+        if (personal) personal.hidden = centerOnly;
+        if (tabTpl) {
+          tabTpl.textContent = centerOnly && hasCenterScheduleAdmin() ? 'Сетка центра' : 'Шаблон недели';
+        }
+        if (addBtn) {
+          addBtn.textContent = centerOnly
+            ? '➕ Добавить окна центра'
+            : dual
+              ? '➕ Добавить слоты'
+              : '➕ Добавить слоты на неделю';
+        }
+      }
+
+      function shouldOpenSlotIntentModal() {
+        if (scheduleEditorCenterOperatorOnly()) return false;
+        if (scheduleEditorDualContour()) return isGroupClassesFeatureEnabled() || hasCenterScheduleAdmin();
+        return isGroupClassesFeatureEnabled();
+      }
+
+      function startAddSlotsFlow() {
+        if (scheduleEditorCenterOperatorOnly()) {
+          state.slotEditIntent = 'center';
+          showDayPickScreen();
+          return;
+        }
+        if (shouldOpenSlotIntentModal()) {
+          openSlotIntentModal('calendar', null, 'individual');
+          return;
+        }
+        state.slotEditIntent = 'individual';
+        showDayPickScreen();
+      }
+
+      function slotIntentUseCenterUi() {
+        return hasCenterScheduleAdmin() && state.slotEditIntent === 'center';
+      }
+
+      function centerSessionsForEditDate() {
+        var admin = state.centerScheduleAdmin;
+        if (!admin || !state.editDate) return [];
+        return (admin.sessions || []).filter(function(s) {
+          return String(s.slot_date) === String(state.editDate);
+        });
+      }
+
+      function centerSessionByStartMinute(minute) {
+        var sessions = centerSessionsForEditDate();
+        for (var i = 0; i < sessions.length; i++) {
+          if (parseStartToMinutes(sessions[i].start_time) === minute) return sessions[i];
+        }
+        return null;
+      }
+
+      /** Owner's personal slots on the day being edited (center grid context overlay). */
+      function ownerPersonalSlotIntervalsForCenterEdit() {
+        if (!state.editDate) return [];
+        var dateStr = String(state.editDate);
+        return (state.slots || [])
+          .filter(function(s) {
+            if (String(s.slot_date) !== dateStr) return false;
+            if (s.training_group_id) return false;
+            if (String(s.status || '').toLowerCase() === 'cancelled') return false;
+            var cap = s.capacity != null ? parseInt(String(s.capacity), 10) : 1;
+            return !isNaN(cap) && cap <= 1;
+          })
+          .map(function(s) {
+            var sm = parseStartToMinutes(s.start_time);
+            var em = parseStartToMinutes(s.end_time);
+            return {
+              startMin: sm,
+              endMin: em > sm ? em : sm + (state.defaultSlotDurationMinutes || 45),
+              start_time: s.start_time,
+              end_time: s.end_time,
+            };
+          });
+      }
+
+      function centerPersonalOverlapAtMinute(candidateSm, candidateDur) {
+        var intervals = ownerPersonalSlotIntervalsForCenterEdit();
+        for (var i = 0; i < intervals.length; i++) {
+          var iv = intervals[i];
+          var ivDur = Math.max(15, iv.endMin - iv.startMin);
+          if (intervalsOverlapMin(iv.startMin, ivDur, candidateSm, candidateDur)) return iv;
+        }
+        return null;
+      }
+
+      function centerEditSelfOnShift() {
+        var picked = ensureCenterEditCoachIds();
+        var selfId = state.trainerId != null ? parseInt(String(state.trainerId), 10) : null;
+        return selfId != null && !isNaN(selfId) && picked.has(selfId);
+      }
+
+      function centerEditSelfOnlyOnShift() {
+        var picked = ensureCenterEditCoachIds();
+        return picked.size === 1 && centerEditSelfOnShift();
+      }
+
+      /** Selected center windows that overlap owner's personal slots while «Я» is on shift. */
+      function centerEditSelfPersonalOverlapIssues() {
+        if (!scheduleEditorPersonalOverlapEnabled()) return [];
+        if (!slotIntentUseCenterUi() || !centerEditSelfOnShift()) return [];
+        var dur = getEditDurationMinutes();
+        var issues = [];
+        state.selectedStarts.forEach(function(m) {
+          var ov = centerPersonalOverlapAtMinute(m, dur);
+          if (ov) {
+            issues.push({ centerMinute: m, personal: ov });
+          }
+        });
+        return issues.sort(function(a, b) {
+          return a.centerMinute - b.centerMinute;
+        });
+      }
+
+      function syncCenterEditOverlapWarn() {
+        var el = document.getElementById('centerEditOverlapWarn');
+        if (!el) return;
+        if (!slotIntentUseCenterUi() || !scheduleEditorPersonalOverlapEnabled()) {
+          el.hidden = true;
+          el.textContent = '';
+          return;
+        }
+        var issues = centerEditSelfPersonalOverlapIssues();
+        if (!issues.length) {
+          el.hidden = true;
+          el.textContent = '';
+          return;
+        }
+        el.hidden = false;
+        if (centerEditSelfOnlyOnShift()) {
+          el.className = 'center-edit-overlap-warn center-edit-overlap-warn--block';
+          el.textContent =
+            'На смене только вы, но выбранные часы пересекаются с личными слотами. Добавьте другого тренера на смену, снимите «Я» или уберите личное время.';
+        } else {
+          el.className = 'center-edit-overlap-warn center-edit-overlap-warn--info';
+          el.textContent =
+            'Есть пересечение с вашими личными слотами — клиенты центра в эти часы пойдут на других тренеров смены.';
+        }
+      }
+
+      function centerEditSaveBlockedByPersonalOverlap() {
+        return centerEditSelfOnlyOnShift() && centerEditSelfPersonalOverlapIssues().length > 0;
+      }
+
+      function resetCenterEditCoachIds() {
+        state.centerEditCoachIds = null;
+      }
+
+      function ensureCenterEditCoachIds() {
+        if (state.centerEditCoachIds instanceof Set) return state.centerEditCoachIds;
+        var picked = new Set();
+        centerSessionsForEditDate().forEach(function(s) {
+          (s.assigned_coaches || []).forEach(function(c) {
+            var id = parseInt(String(c.trainer_id), 10);
+            if (!isNaN(id)) picked.add(id);
+          });
+        });
+        state.centerEditCoachIds = picked;
+        return picked;
+      }
+
+      function renderCenterEditCoachChips() {
+        var host = document.getElementById('centerEditCoachChips');
+        var admin = state.centerScheduleAdmin;
+        if (!host || !admin) return;
+        var coaches = admin.coaches || [];
+        var picked = ensureCenterEditCoachIds();
+        if (host.childElementCount !== coaches.length) {
+          host.innerHTML = '';
+        }
+        if (!host.childElementCount) {
+          host.innerHTML = coaches
+            .map(function(c) {
+              var id = parseInt(String(c.trainer_id), 10);
+              var on = picked.has(id);
+              var isSelf = state.trainerId != null && id === parseInt(String(state.trainerId), 10);
+              return (
+                '<button type="button" class="center-coach-chip' +
+                (on ? ' is-selected' : '') +
+                '" data-coach-id="' +
+                id +
+                '">' +
+                escapeHtml(isSelf ? 'Я' : c.display_name || 'Тренер #' + id) +
+                '</button>'
+              );
+            })
+            .join('');
+          host.querySelectorAll('.center-coach-chip').forEach(function(btn) {
+            btn.onclick = function() {
+              var id = parseInt(btn.getAttribute('data-coach-id'), 10);
+              if (picked.has(id)) {
+                picked.delete(id);
+              } else {
+                picked.add(id);
+              }
+              host.querySelectorAll('.center-coach-chip').forEach(function(chip) {
+                var cid = parseInt(chip.getAttribute('data-coach-id'), 10);
+                chip.classList.toggle('is-selected', picked.has(cid));
+              });
+              renderHourGrid();
+              syncCenterEditOverlapWarn();
+              updateEditDoneButton();
+            };
+          });
+          return;
+        }
+        host.querySelectorAll('.center-coach-chip').forEach(function(chip) {
+          var cid = parseInt(chip.getAttribute('data-coach-id'), 10);
+          chip.classList.toggle('is-selected', picked.has(cid));
+        });
+      }
+
+      function syncCenterEditChrome() {
+        var useCenter = slotIntentUseCenterUi();
+        var coachWrap = document.getElementById('centerEditCoachWrap');
+        var capWrap = document.getElementById('slotCapacityWrap');
+        var capInput = document.getElementById('slotCapacityInput');
+        var capLabel = capWrap ? capWrap.querySelector('.slot-flow-label') : null;
+        var switcher = document.getElementById('slotAddModeSwitcher');
+        var preciseForm = document.getElementById('preciseSlotForm');
+        var preciseAdded = document.getElementById('preciseSlotsAdded');
+        var cgw = document.getElementById('calendarGroupServiceWrap');
+        var caw = document.getElementById('calendarGroupArenaWrap');
+        var gridLabel = document.getElementById('scheduleTimeGridLabel');
+        var gridHint = document.getElementById('scheduleTimeGridHint');
+        var centerTitle = document.getElementById('slotIntentCenterTitle');
+        var admin = state.centerScheduleAdmin;
+        if (centerTitle && admin && admin.collective_name) {
+          centerTitle.textContent = admin.collective_name + ' · смена';
+        }
+        if (coachWrap) coachWrap.hidden = !useCenter;
+        if (gridLabel) gridLabel.textContent = useCenter ? 'Начало окна' : 'Начало слота';
+        if (gridHint) {
+          gridHint.textContent = useCenter
+            ? scheduleEditorPersonalOverlapEnabled()
+              ? 'Тренеры на смене — опционально: без них окно для дорожки. Оранжевый контур — ваши личные слоты.'
+              : 'Тренеры на смене — опционально. Без них — запись на дорожку.'
+            : 'Слева — час, справа четверти (:00 … :45)';
+        }
+        if (capLabel) capLabel.textContent = useCenter ? 'Мест в окне' : 'Мест в слоте';
+        if (useCenter) {
+          if (capWrap) capWrap.style.display = 'block';
+          if (capInput) {
+            capInput.setAttribute('min', '1');
+            if (!capInput.value || parseInt(capInput.value, 10) < 1) capInput.value = '1';
+          }
+          if (switcher) switcher.style.display = 'none';
+          if (preciseForm) preciseForm.style.display = 'none';
+          if (preciseAdded) preciseAdded.style.display = 'none';
+          if (cgw) cgw.style.display = 'none';
+          if (caw) caw.style.display = 'none';
+          renderCenterEditCoachChips();
+          syncCenterEditOverlapWarn();
+        } else {
+          var warnEl = document.getElementById('centerEditOverlapWarn');
+          if (warnEl) {
+            warnEl.hidden = true;
+            warnEl.textContent = '';
+          }
+        }
+      }
+
+      function saveCenterCalendarDay(startsSorted, durationMinutes) {
+        var admin = state.centerScheduleAdmin;
+        if (!admin || !admin.collective_slug || !state.editDate) {
+          showToast('Нет данных центра');
+          return;
+        }
+        var coachIds = Array.from(ensureCenterEditCoachIds()).filter(function(id) {
+          return !isNaN(id);
+        });
+        if (centerEditSaveBlockedByPersonalOverlap()) {
+          showToast('На смене только вы — уберите пересечение с личными слотами');
+          return;
+        }
+        var capRaw = parseInt(document.getElementById('slotCapacityInput').value, 10);
+        var capacity = isNaN(capRaw) || capRaw < 1 ? 1 : Math.min(500, capRaw);
+        var baseline = state.calendarBaselineStarts || new Set();
+        var selected = new Set(startsSorted);
+        var newStarts = startsSorted.filter(function(m) {
+          return !baseline.has(m);
+        });
+        var removed = [];
+        baseline.forEach(function(m) {
+          if (!selected.has(m) && !state.lockedStarts.has(m)) removed.push(m);
+        });
+        if (!newStarts.length && !removed.length) return;
+        var postUrl =
+          apiUrlWithQuery('/trainer/collective/sessions?collective_slug=' + encodeURIComponent(admin.collective_slug));
+        var tasks = [];
+        newStarts.forEach(function(m) {
+          tasks.push(
+            fetch(postUrl, {
+              method: 'POST',
+              headers: headers(),
+              body: JSON.stringify({
+                slot_date: state.editDate,
+                start_time: formatMinuteClock(m),
+                end_time: formatMinuteClock(m + durationMinutes),
+                capacity: capacity,
+                coach_trainer_ids: coachIds,
+              }),
+            }).then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'create_failed');
+              });
+            })
+          );
+        });
+        removed.forEach(function(m) {
+          var sess = centerSessionByStartMinute(m);
+          if (!sess || !sess.id) return;
+          tasks.push(
+            fetch(
+              apiUrlWithQuery(
+                '/trainer/collective/sessions/' +
+                  encodeURIComponent(String(sess.id)) +
+                  '?collective_slug=' +
+                  encodeURIComponent(admin.collective_slug)
+              ),
+              { method: 'DELETE', headers: headers() }
+            ).then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'delete_failed');
+              });
+            })
+          );
+        });
+        Promise.all(tasks)
+          .then(function() {
+            var msg =
+              newStarts.length && removed.length
+                ? 'Смена центра обновлена'
+                : newStarts.length === 1
+                  ? 'Добавлено окно центра'
+                  : newStarts.length > 1
+                    ? 'Добавлено окон: ' + newStarts.length
+                    : 'Окно центра снято';
+            showToast(msg);
+            finishCenterCalendarEdit({ refreshCenterGrid: true });
+          })
+          .catch(function(e) {
+            showToast(e.message || 'Не удалось сохранить смену');
+            loadSlots();
+          });
       }
 
       function detectSlotIntentFromRows(rows) {
@@ -3432,11 +4025,26 @@
         }
         var ind = document.getElementById('btnSlotIntentIndividual');
         var grp = document.getElementById('btnSlotIntentGroup');
+        var centerBtn = document.getElementById('btnSlotIntentCenter');
+        var indTitle = document.getElementById('slotIntentIndividualTitle');
+        var showCenter = hasCenterScheduleAdmin() && flow !== 'template' && scheduleEditorDualContour();
         if (grp) {
           grp.style.display = isGroupClassesFeatureEnabled() ? '' : 'none';
         }
+        if (centerBtn) centerBtn.hidden = !showCenter;
+        if (indTitle) indTitle.textContent = showCenter ? 'Мои часы' : 'Индивидуальные';
+        var centerTitle = document.getElementById('slotIntentCenterTitle');
+        var admin = state.centerScheduleAdmin;
+        if (centerTitle && admin && admin.collective_name) {
+          centerTitle.textContent = admin.collective_name + ' · смена';
+        }
         if (ind) ind.classList.remove('is-suggested');
         if (grp) grp.classList.remove('is-suggested');
+        if (centerBtn) centerBtn.classList.remove('is-suggested');
+        var centerHint = document.getElementById('slotIntentCenterHint');
+        if (centerHint) {
+          centerHint.textContent = 'Окно для клиентов центра. Личные слоты остаются отдельно.';
+        }
         if (suggestedIntent === 'group') {
           if (grp) grp.classList.add('is-suggested');
         } else if (ind) {
@@ -3468,8 +4076,15 @@
         if (!btn) return;
         if (state.editMode === 'calendar' && state.calendarBaselineStarts) {
           var ok = hasCalendarNewSlotSelection();
+          if (slotIntentUseCenterUi() && centerEditSaveBlockedByPersonalOverlap()) {
+            ok = false;
+          }
           btn.disabled = !ok;
-          btn.title = ok ? '' : 'Добавьте время, уберите свободный слот или сохраните точное время';
+          btn.title = ok
+            ? ''
+            : slotIntentUseCenterUi() && centerEditSaveBlockedByPersonalOverlap()
+              ? 'На смене только вы — уберите пересечение с личными слотами'
+              : 'Добавьте время, уберите свободный слот или сохраните точное время';
         } else {
           btn.disabled = false;
           btn.title = '';
@@ -4294,9 +4909,11 @@
         if (!state.weekStart) return;
         var dayPickTitle = document.getElementById('dayPickTitle');
         if (dayPickTitle) {
-          dayPickTitle.textContent = slotIntentUseGroupUi()
-            ? 'Добавить групповые слоты на какой день?'
-            : 'Добавить индивидуальные слоты на какой день?';
+          dayPickTitle.textContent = slotIntentUseCenterUi()
+            ? 'Добавить окна центра на какой день?'
+            : slotIntentUseGroupUi()
+              ? 'Добавить групповые слоты на какой день?'
+              : 'Добавить индивидуальные слоты на какой день?';
         }
         syncDayPickWeekNav();
         const list = document.getElementById('dayPickList');
@@ -4333,6 +4950,7 @@
           document.getElementById('screenDayPick').style.display = 'block';
           updateTelegramBack();
           syncScheduleWeekDayStripVisibility();
+          window.scrollTo(0, 0);
           document.querySelectorAll('#dayPickList .template-day-card').forEach(function(btn) {
             btn.onclick = function(ev) {
               var sup = Number(state.scheduleDayPickSwipeSuppressUntil) || 0;
@@ -4342,6 +4960,7 @@
                 return;
               }
               document.getElementById('screenDayPick').style.display = 'none';
+              state.centerEditReturn = 'daypick';
               openEditCalendarDay(btn.dataset.date);
             };
           });
@@ -4365,6 +4984,10 @@
         state.lockedStarts = new Set();
         state.preciseSlots = [];
         state.slotAddMode = 'grid';
+        resetCenterEditCoachIds();
+        state.centerEditReturn = null;
+        var coachWrapReset = document.getElementById('centerEditCoachWrap');
+        if (coachWrapReset) coachWrapReset.hidden = true;
         if (opts.reloadSlots) {
           loadSlots({
             onComplete: function() {
@@ -4389,8 +5012,10 @@
         }
         var ind = document.getElementById('btnSlotIntentIndividual');
         var grp = document.getElementById('btnSlotIntentGroup');
+        var centerBtn = document.getElementById('btnSlotIntentCenter');
         if (ind) ind.classList.remove('is-suggested');
         if (grp) grp.classList.remove('is-suggested');
+        if (centerBtn) centerBtn.classList.remove('is-suggested');
         if (flow === 'calendar') {
           showDayPickScreen();
         } else if (flow === 'template' && dayNum != null) {
@@ -4409,8 +5034,10 @@
         }
         var ind = document.getElementById('btnSlotIntentIndividual');
         var grp = document.getElementById('btnSlotIntentGroup');
+        var centerBtn = document.getElementById('btnSlotIntentCenter');
         if (ind) ind.classList.remove('is-suggested');
         if (grp) grp.classList.remove('is-suggested');
+        if (centerBtn) centerBtn.classList.remove('is-suggested');
         updateTelegramBack();
       }
 
@@ -4833,6 +5460,11 @@
             state.centerDuties = (data && data.center_duties && data.center_duties.length)
               ? data.center_duties
               : [];
+            state.centerScheduleAdmin =
+              data && data.center_schedule_admin && data.center_schedule_admin.collective_slug
+                ? data.center_schedule_admin
+                : null;
+            prefetchScheduleBookingContexts();
             if (data && data.trainer_id != null && !isNaN(parseInt(String(data.trainer_id), 10))) {
               state.trainerId = parseInt(String(data.trainer_id), 10);
             }
@@ -4875,6 +5507,7 @@
                 } catch (eCb) { /* ignore */ }
               }
               refreshScheduleEditorInboxCounts();
+              syncScheduleEditorFormatChrome();
             });
           })
           .catch(function(err) {
@@ -4897,18 +5530,122 @@
           });
       }
 
-      function loadTemplates() {
+      function loadTemplates(opts) {
+        opts = opts || {};
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
-        document.getElementById('templateList').innerHTML = buildTemplateListSkeletonHtml();
-        fetch(apiUrlWithQuery('/schedule/templates'), { headers: headers() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
+        var templateList = document.getElementById('templateList');
+        var softPersonalRefresh =
+          opts.softPersonalRefresh && templateList && templateList.querySelector('.template-day-card');
+        if (!softPersonalRefresh && templateList) {
+          templateList.innerHTML = buildTemplateListSkeletonHtml();
+        }
+        var centerList = document.getElementById('centerGridTemplateList');
+        var centerSection = document.getElementById('centerGridTemplateSection');
+        var softCenterRefresh =
+          opts.softCenterRefresh &&
+          centerList &&
+          centerList.querySelector('.template-day-card--center-grid');
+        if (centerList && !softCenterRefresh) {
+          centerList.innerHTML = buildTemplateListSkeletonHtml();
+        }
+        if (centerSection && !softCenterRefresh) {
+          centerSection.hidden = true;
+        }
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        var weekEnd = new Date(state.weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        var from = dateToStr(state.weekStart);
+        var to = dateToStr(weekEnd);
+        Promise.all([
+          fetch(apiUrlWithQuery('/schedule/templates'), { headers: headers() }).then(function(r) {
+            return r.json();
+          }),
+          fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), {
+            headers: headers(),
+          })
+            .then(function(r) {
+              if (!r.ok) return null;
+              return r.json();
+            })
+            .catch(function() {
+              return null;
+            }),
+        ])
+          .then(function(results) {
+            var data = results[0] || {};
             state.templates = data.templates || [];
             applyScheduleGridFromApi(data);
+            var sched = results[1];
+            if (sched) {
+              state.slots = sched.slots || state.slots || [];
+              state.centerScheduleAdmin =
+                sched.center_schedule_admin && sched.center_schedule_admin.collective_slug
+                  ? sched.center_schedule_admin
+                  : null;
+              if (sched.trainer_id != null && !isNaN(parseInt(String(sched.trainer_id), 10))) {
+                state.trainerId = parseInt(String(sched.trainer_id), 10);
+              }
+            }
             renderTemplate();
           })
           .catch(function() {
             renderTemplateLoadFailure();
+          });
+      }
+
+      function setCenterGridWeekNavBusy(busy) {
+        var prevBtn = document.getElementById('centerGridWeekPrev');
+        var nextBtn = document.getElementById('centerGridWeekNext');
+        if (prevBtn) prevBtn.disabled = !!busy;
+        if (nextBtn) nextBtn.disabled = !!busy;
+      }
+
+      /** Refresh only center grid block (week nav / duplicate) — no personal-template skeleton flash. */
+      function loadCenterGridWeekData(opts) {
+        opts = opts || {};
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
+        if (state.centerGridWeekLoadInFlight) return;
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        var list = document.getElementById('centerGridTemplateList');
+        if (list) list.classList.add('center-grid-template-list--loading');
+        state.centerGridWeekLoadInFlight = true;
+        setCenterGridWeekNavBusy(true);
+        var weekEnd = new Date(state.weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        fetch(
+          apiUrlWithQuery(
+            '/schedule?from_date=' +
+              encodeURIComponent(dateToStr(state.weekStart)) +
+              '&to_date=' +
+              encodeURIComponent(dateToStr(weekEnd))
+          ),
+          { headers: headers() }
+        )
+          .then(function(r) {
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .then(function(sched) {
+            if (sched) {
+              state.slots = sched.slots || state.slots || [];
+              state.centerScheduleAdmin =
+                sched.center_schedule_admin && sched.center_schedule_admin.collective_slug
+                  ? sched.center_schedule_admin
+                  : null;
+            }
+            renderCenterGridTemplate();
+            if (opts.syncCalendarWeekLabel) {
+              var wl = document.getElementById('weekLabel');
+              if (wl && state.weekStart) wl.textContent = formatWeekLabel(state.weekStart);
+            }
+          })
+          .catch(function() {
+            showToast('Не удалось обновить сетку центра');
+          })
+          .finally(function() {
+            state.centerGridWeekLoadInFlight = false;
+            setCenterGridWeekNavBusy(false);
+            if (list) list.classList.remove('center-grid-template-list--loading');
           });
       }
 
@@ -4918,9 +5655,25 @@
         return dsl + ' ' + formatMinuteClock(state.quickBookStartMinutes);
       }
 
+      function quickBookCenterDutyConflict(startMinutes, durationMinutes, isoDate) {
+        if (!scheduleEditorHasCenterDuties()) return null;
+        var duties = scheduleCenterDutiesForDate(isoDate);
+        var newEnd = startMinutes + durationMinutes;
+        var startLabel = formatMinuteClock(startMinutes);
+        var endLabel = formatMinuteClock(newEnd);
+        for (var i = 0; i < duties.length; i++) {
+          var d = duties[i];
+          if (scheduleRangesOverlap(startLabel, endLabel, d.start_time, d.end_time)) {
+            return d;
+          }
+        }
+        return null;
+      }
+
       /**
        * free — можно создать/использовать слот; busy — занято; group — группа;
        * past — уже прошло; overlap — пересечение с другим слотом при этой длительности; invalid — не влезает в сутки.
+       * center_duty — пересечение со сменой в центре (ADR §6).
        */
       function quickBookSlotAvailability(slotsForDay, startMinutes, durationMinutes, isoDate) {
         var dm = durationMinutes || 45;
@@ -4950,6 +5703,7 @@
           if (occ >= 1) return 'busy';
           return 'overlap';
         }
+        if (quickBookCenterDutyConflict(startMinutes, dm, isoDate)) return 'center_duty';
         return 'free';
       }
 
@@ -5041,6 +5795,9 @@
               } else if (av === 'overlap') {
                 opt.disabled = true;
                 opt.textContent = label + ' — пересечение';
+              } else if (av === 'center_duty') {
+                opt.disabled = true;
+                opt.textContent = label + ' — смена в центре';
               } else if (av === 'invalid') {
                 opt.disabled = true;
                 opt.textContent = label + ' — не влезает';
@@ -5492,8 +6249,9 @@
       /** Loads services/clients and wires book modal (shared by slot-based and quick book). */
       function runBookModalShellAndFetch() {
         var prefilledClient = !!state.deepLinkClientId;
-        state.bookModalClientSearchFirst = !prefilledClient;
-        state.bookModalStep = 'existing';
+        var shellKind = scheduleResolveBookShellKind(prefilledClient);
+        state.bookModalClientSearchFirst = !prefilledClient && shellKind === 'clients';
+        state.bookModalStep = shellKind === 'context' ? 'context' : 'existing';
         var bookModalOv = document.getElementById('modalBookClient');
         if (bookModalOv) bookModalOv.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookClientSearch').value = '';
@@ -5501,11 +6259,12 @@
         document.getElementById('bookNewFirstName').value = '';
         document.getElementById('bookNewLastName').value = '';
         state.bookContextKind = 'personal_slot';
+        state.bookSessionContextId = null;
         state.bookCollectiveSlug = null;
         state.bookCenterSession = null;
         state.bookCenterClientId = null;
         document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = 'none'; });
-        if (prefilledClient) {
+        if (shellKind === 'profile') {
           document.getElementById('bookStepExisting').style.display = 'block';
           document.getElementById('bookStepExisting').classList.add('active');
           document.getElementById('bookStepNew').style.display = 'none';
@@ -5513,8 +6272,31 @@
           setBookClientSearchSectionVisible(false);
           showBookExistingClientStep();
           state.bookModalClientSearchFirst = false;
+        } else if (shellKind === 'context') {
+          state.bookContexts = state.bookContextsPrefetch;
+          showBookStep('bookStepContext');
+          if (state.bookContextsPrefetch) {
+            renderBookContextStep(state.bookContextsPrefetch, null, function() {
+              scheduleBookModalShowClientSearchFirstLayout();
+              loadBookClients('');
+            });
+          } else {
+            var ctxWrap = document.getElementById('bookContextActions');
+            if (ctxWrap) ctxWrap.innerHTML = '<p class="book-choice-lead">Загрузка…</p>';
+          }
+        } else if (shellKind === 'prepare') {
+          document.getElementById('bookStepExisting').style.display = 'block';
+          document.getElementById('bookStepExisting').classList.add('active');
+          setBookClientSearchSectionVisible(false);
+          document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
         } else {
-          document.getElementById('bookStepContext').style.display = 'none';
+          if (state.bookContextsPrefetch) {
+            state.bookContexts = state.bookContextsPrefetch;
+            var firstCtx = (window.TrainerBookingContext
+              ? TrainerBookingContext.normalizePayload(state.bookContextsPrefetch)
+              : state.bookContextsPrefetch).contexts;
+            applyBookContextSelection((firstCtx || [])[0] || null, null);
+          }
           scheduleBookModalShowClientSearchFirstLayout();
           document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
         }
@@ -5536,9 +6318,37 @@
             var clientsPayload = results[1];
             var ctxPayload = results[2];
             state.bookContexts = ctxPayload;
-            if (!prefilledClient && ctxPayload && ctxPayload.needs_context_picker) {
-              renderBookContextStep(ctxPayload);
-              showBookStep('bookStepContext');
+            state.bookContextsPrefetch = ctxPayload;
+            if (!prefilledClient && ctxPayload) {
+              var ctxStepEl = document.getElementById('bookStepContext');
+              var contextStepOpen =
+                ctxStepEl &&
+                ctxStepEl.style.display !== 'none' &&
+                String(ctxStepEl.style.display || '').toLowerCase() !== '';
+              if (contextStepOpen && scheduleBookContextsNeedPicker(ctxPayload)) {
+                renderBookContextStep(ctxPayload, null, function() {
+                  scheduleBookModalShowClientSearchFirstLayout();
+                  loadBookClients('');
+                });
+              } else if (!contextStepOpen) {
+                var normalizedCtx = window.TrainerBookingContext
+                  ? TrainerBookingContext.normalizePayload(ctxPayload)
+                  : ctxPayload;
+                if (scheduleBookContextsNeedPicker(normalizedCtx)) {
+                  renderBookContextStep(ctxPayload, null, function() {
+                    scheduleBookModalShowClientSearchFirstLayout();
+                    loadBookClients('');
+                  });
+                  showBookStep('bookStepContext');
+                } else {
+                  applyBookContextSelection((normalizedCtx.contexts || [])[0] || null, null);
+                  if (shellKind === 'prepare') {
+                    scheduleBookModalShowClientSearchFirstLayout();
+                    setBookClientSearchSectionVisible(true);
+                    loadBookClients('');
+                  }
+                }
+              }
             }
             var hasClients = !!(clientsPayload.clients && clientsPayload.clients.length);
             state.trainerHasBookClients = hasClients;
@@ -5598,7 +6408,14 @@
               state.bookModalStep = 'existing';
               loadBookClients('');
             } else if (state.bookModalClientSearchFirst) {
-              loadBookClients('');
+              var ctxStepEl = document.getElementById('bookStepContext');
+              var waitingForContext =
+                ctxStepEl &&
+                ctxStepEl.style.display !== 'none' &&
+                String(ctxStepEl.style.display || '').toLowerCase() !== '';
+              if (!waitingForContext) {
+                loadBookClients('');
+              }
             }
             scheduleRevealBookChoicePairIfNeeded();
           })
@@ -5724,8 +6541,433 @@
         updateTelegramBack();
       }
 
+      function findCenterDutyBySessionId(sessionId, dateKey) {
+        var rows = scheduleCenterOverlayRowsForDate(dateKey);
+        for (var i = 0; i < rows.length; i++) {
+          if (Number(rows[i].collective_session_id) === Number(sessionId)) return rows[i];
+        }
+        return null;
+      }
+
+      function resolveCenterSessionFromDuty(duty) {
+        if (!duty) return null;
+        var sid = duty.collective_session_id;
+        var admin = state.centerScheduleAdmin;
+        if (admin && admin.sessions) {
+          for (var i = 0; i < admin.sessions.length; i++) {
+            if (Number(admin.sessions[i].id) === Number(sid)) return admin.sessions[i];
+          }
+        }
+        return {
+          id: sid,
+          slot_date: duty.slot_date,
+          start_time: duty.start_time,
+          end_time: duty.end_time,
+          capacity: duty.capacity != null ? duty.capacity : 1,
+          booked_count: duty.booked_count || 0,
+          assigned_coaches: [],
+        };
+      }
+
+      function centerDutyCollectiveSlug(duty) {
+        if (duty && duty.collective_slug) return duty.collective_slug;
+        var admin = state.centerScheduleAdmin;
+        return admin && admin.collective_slug ? admin.collective_slug : null;
+      }
+
+      function isCenterDutyEndedInPast(duty) {
+        if (!duty || !duty.slot_date) return false;
+        var today = dateToStr(new Date());
+        if (String(duty.slot_date).slice(0, 10) < today) return true;
+        if (String(duty.slot_date).slice(0, 10) > today) return false;
+        var endM = parseStartToMinutes(duty.end_time || duty.start_time || '23:59');
+        var now = new Date();
+        return now.getHours() * 60 + now.getMinutes() >= endM;
+      }
+
+      function closeCenterSessionModal() {
+        var mgr = document.getElementById('modalCenterSession');
+        if (!mgr) return;
+        mgr.style.display = 'none';
+        mgr.setAttribute('aria-hidden', 'true');
+        state.centerSessionModalDuty = null;
+        updateTelegramBack();
+      }
+
+      function openCenterDayEditFromCalendar(slotDate, returnTo) {
+        if (!assertScheduleCrmWriteAllowed()) return;
+        if (!hasCenterScheduleAdmin()) return;
+        closeCenterSessionModal();
+        state.slotEditIntent = 'center';
+        state.centerEditReturn = returnTo || 'calendar';
+        openEditCalendarDay(slotDate);
+        window.scrollTo(0, 0);
+      }
+
+      function openCenterDayEditFromTemplate(slotDate) {
+        openCenterDayEditFromCalendar(slotDate, 'template');
+      }
+
+      /** Leave center day editor back to day-pick, template tab, or calendar. */
+      function finishCenterCalendarEdit(opts) {
+        opts = opts || {};
+        document.getElementById('screenEdit').style.display = 'none';
+        state.editMode = null;
+        state.editDate = null;
+        resetCenterEditCoachIds();
+        state.calendarBaselineStarts = null;
+        state.selectedStarts = new Set();
+        state.lockedStarts = new Set();
+        var ret = state.centerEditReturn || 'daypick';
+        state.centerEditReturn = null;
+        if (ret === 'template') {
+          var scrollY = window.scrollY || 0;
+          showMain({ skipTemplateReload: true });
+          if (opts.refreshCenterGrid) loadCenterGridWeekData();
+          requestAnimationFrame(function() {
+            window.scrollTo(0, scrollY);
+          });
+          return;
+        }
+        if (ret === 'calendar') {
+          loadSlots();
+          showMain({ skipTemplateReload: true });
+          return;
+        }
+        loadSlots({
+          onComplete: function() {
+            showDayPickScreen();
+          },
+          onLoadError: function() {
+            showDayPickScreen();
+          },
+        });
+      }
+
+      function centerSessionsForWeekStart(weekStart) {
+        var admin = state.centerScheduleAdmin;
+        if (!admin || !weekStart) return [];
+        var mon = dateToStr(weekStart);
+        var end = new Date(weekStart);
+        end.setDate(end.getDate() + 6);
+        var sun = dateToStr(end);
+        return (admin.sessions || []).filter(function(s) {
+          var d = String(s.slot_date || '');
+          return d >= mon && d <= sun;
+        });
+      }
+
+      function renderCenterGridTemplate() {
+        var section = document.getElementById('centerGridTemplateSection');
+        if (!section) return;
+        var show = hasCenterScheduleAdmin();
+        section.hidden = !show;
+        if (!show) return;
+        var admin = state.centerScheduleAdmin;
+        var titleEl = document.getElementById('centerGridTemplateTitle');
+        if (titleEl && admin && admin.collective_name) {
+          titleEl.textContent = admin.collective_name + ' · сетка';
+        }
+        var weekLabel = document.getElementById('centerGridWeekLabel');
+        if (weekLabel && state.weekStart) {
+          weekLabel.textContent = formatWeekLabel(state.weekStart);
+        }
+        var list = document.getElementById('centerGridTemplateList');
+        if (!list || !state.weekStart) return;
+        var byDate = {};
+        centerSessionsForWeekStart(state.weekStart).forEach(function(s) {
+          var key = String(s.slot_date || '');
+          if (!byDate[key]) byDate[key] = [];
+          var cap = s.capacity != null ? parseInt(String(s.capacity), 10) : 1;
+          var timeShort = (s.start_time || '').toString().substring(0, 5);
+          byDate[key].push(cap > 1 ? timeShort + ' ×' + cap : timeShort);
+        });
+        var html = '';
+        var todayStr = dateToStr(new Date());
+        for (var i = 0; i < 7; i++) {
+          var d = new Date(state.weekStart);
+          d.setDate(d.getDate() + i);
+          var dateStr = dateToStr(d);
+          var times = (byDate[dateStr] || []).sort(function(a, b) {
+            return String(a).localeCompare(String(b));
+          });
+          var slotsText = times.length ? times.join(', ') : 'Нет окон';
+          var past = dateStr < todayStr;
+          html +=
+            '<button type="button" class="template-day-card template-day-card--center-grid' +
+            (past ? ' template-day-card--past' : '') +
+            '" data-center-date="' +
+            escapeHtml(dateStr) +
+            '"' +
+            (past ? ' disabled' : '') +
+            ' aria-label="' +
+            escapeHtml(DAYS[i] + ', ' + formatDateKey(dateStr) + ', ' + slotsText) +
+            '">';
+          html += '<span class="center-grid-day-block">';
+          html += '<span class="day-name">' + DAYS[i] + '</span>';
+          html += '<span class="day-date">' + escapeHtml(formatDateKeyNoWeekday(dateStr)) + '</span>';
+          html += '</span>';
+          html +=
+            '<span class="day-slots ' +
+            (times.length ? '' : 'empty') +
+            '">' +
+            escapeHtml(slotsText) +
+            '</span>';
+          html += '<span class="arrow" aria-hidden="true">' + (past ? '—' : '›') + '</span></button>';
+        }
+        list.innerHTML = html;
+        list.querySelectorAll('.template-day-card--center-grid:not([disabled])').forEach(function(btn) {
+          btn.onclick = function() {
+            openCenterDayEditFromTemplate(btn.getAttribute('data-center-date'));
+          };
+        });
+        syncScheduleEditorFormatChrome();
+      }
+
+      function postCenterDuplicateWeek(sourceWeekStart, weeksAhead) {
+        var admin = state.centerScheduleAdmin;
+        if (!admin || !admin.collective_slug) {
+          return Promise.reject(new Error('Нет данных центра'));
+        }
+        return fetch(
+          apiUrlWithQuery(
+            '/trainer/collective/sessions/duplicate-week?collective_slug=' +
+              encodeURIComponent(admin.collective_slug)
+          ),
+          {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+              source_week_start: sourceWeekStart,
+              weeks_ahead: weeksAhead,
+            }),
+          }
+        ).then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) || 'duplicate_failed');
+            return d;
+          });
+        });
+      }
+
+      function runCenterGridDuplicate(sourceWeekStart, weeksAhead, confirmText) {
+        if (!assertScheduleCrmWriteAllowed()) return;
+        if (!hasCenterScheduleAdmin() || !sourceWeekStart) return;
+        showAppConfirm(confirmText, { okText: 'Скопировать', cancelText: 'Отмена' }).then(function(ok) {
+          if (!ok) return;
+          var copyBtns = [
+            document.getElementById('btnCenterGridCopyPrev'),
+            document.getElementById('btnCenterGridCopyNext'),
+            document.getElementById('btnCenterGridCopyAhead'),
+          ];
+          copyBtns.forEach(function(b) {
+            if (b) b.disabled = true;
+          });
+          postCenterDuplicateWeek(sourceWeekStart, weeksAhead)
+            .then(function(d) {
+              var msg = 'Добавлено окон: ' + (d.created_count || 0);
+              if (d.skipped_count) msg += ', пропущено: ' + d.skipped_count;
+              showToast(msg, 2800);
+              loadCenterGridWeekData();
+            })
+            .catch(function(e) {
+              showToast(e.message || 'Не удалось скопировать');
+            })
+            .finally(function() {
+              copyBtns.forEach(function(b) {
+                if (b) b.disabled = false;
+              });
+            });
+        });
+      }
+
+      function openBookModalForCenterSession(session, collectiveSlug) {
+        if (!assertScheduleCrmWriteAllowed()) return;
+        if (!session || session.id == null || !collectiveSlug) return;
+        closeCenterSessionModal();
+        state.bookFlowQuick = false;
+        state.bookSlotId = null;
+        state.bookCenterSession = session;
+        state.bookCenterSessions = [session];
+        state.bookCollectiveSlug = collectiveSlug;
+        state.bookContextKind = 'center_session';
+        state.bookCenterClientId = null;
+        state.bookModalClientSearchFirst = true;
+        state.bookModalStep = 'existing';
+        var bookModalOv = document.getElementById('modalBookClient');
+        if (bookModalOv) bookModalOv.classList.remove('book-flow-overlay--new-client');
+        var searchEl = document.getElementById('bookClientSearch');
+        if (searchEl) searchEl.value = '';
+        document.querySelectorAll('.book-step').forEach(function(step) {
+          step.classList.remove('active');
+          step.style.display = 'none';
+        });
+        scheduleBookModalShowClientSearchFirstLayout();
+        var listEl = document.getElementById('bookClientList');
+        if (listEl) listEl.innerHTML = buildBookClientListSkeletonHtml();
+        if (bookModalOv) bookModalOv.style.display = 'flex';
+        applyBookModalGroupUi();
+        updateTelegramBack();
+        Promise.all([
+          fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() }).then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
+          }),
+          fetch(clientsRequestUrl(''), { headers: headers() }).then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
+          }),
+        ])
+          .then(function(results) {
+            state.bookServices = (results[0] && results[0].services) || [];
+            state.trainerHasBookClients = !!(results[1].clients && results[1].clients.length);
+            loadBookClients('');
+          })
+          .catch(function() {
+            loadBookClients('');
+          });
+      }
+
+      function cancelCenterSessionWindow(session, collectiveSlug) {
+        if (!assertScheduleCrmWriteAllowed()) return;
+        if (!session || session.id == null || !collectiveSlug) return;
+        if ((session.booked_count || 0) > 0) {
+          showToast('Нельзя снять окно с записями');
+          return;
+        }
+        showAppConfirm('Снять это окно центра?', { okText: 'Снять', cancelText: 'Отмена' }).then(function(ok) {
+          if (!ok) return;
+          fetch(
+            apiUrlWithQuery(
+              '/trainer/collective/sessions/' +
+                encodeURIComponent(String(session.id)) +
+                '?collective_slug=' +
+                encodeURIComponent(collectiveSlug)
+            ),
+            { method: 'DELETE', headers: headers() }
+          )
+            .then(function(r) {
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error((d && d.detail) || 'delete_failed');
+              });
+            })
+            .then(function() {
+              closeCenterSessionModal();
+              showToast('Окно центра снято');
+              loadSlots();
+            })
+            .catch(function(e) {
+              showToast(e.message || 'Не удалось снять окно');
+            });
+        });
+      }
+
+      function openCenterSessionModal(duty) {
+        if (!duty) return;
+        var session = resolveCenterSessionFromDuty(duty);
+        if (!session) return;
+        var mgr = document.getElementById('modalCenterSession');
+        if (!mgr) return;
+        state.centerSessionModalDuty = duty;
+        mgr.style.display = 'flex';
+        mgr.setAttribute('aria-hidden', 'false');
+        var cap = parseInt(String(session.capacity != null ? session.capacity : 1), 10);
+        if (isNaN(cap) || cap < 1) cap = 1;
+        var booked = parseInt(String(session.booked_count || 0), 10) || 0;
+        var spotsLeft = Math.max(0, cap - booked);
+        var slug = centerDutyCollectiveSlug(duty);
+        var centerName = duty.collective_name || (state.centerScheduleAdmin && state.centerScheduleAdmin.collective_name) || 'Центр';
+        var kicker = document.getElementById('centerSessionKicker');
+        if (kicker) kicker.textContent = centerName;
+        var titleEl = document.getElementById('centerSessionTitle');
+        if (titleEl) {
+          titleEl.textContent = (session.start_time || '') + '–' + (session.end_time || '');
+        }
+        var subEl = document.getElementById('centerSessionSub');
+        if (subEl) {
+          var sub =
+            formatDateKey(session.slot_date || duty.slot_date) +
+            ' · ' +
+            booked +
+            '/' +
+            cap +
+            ' записей';
+          if (spotsLeft > 0) sub += ' · свободно мест: ' + spotsLeft;
+          else sub += ' · окно заполнено';
+          subEl.textContent = sub;
+        }
+        var coachesEl = document.getElementById('centerSessionCoaches');
+        var coaches = session.assigned_coaches || [];
+        if (coachesEl) {
+          if (coaches.length) {
+            coachesEl.hidden = false;
+            coachesEl.innerHTML = coaches
+              .map(function(c) {
+                var isSelf =
+                  state.trainerId != null &&
+                  parseInt(String(c.trainer_id), 10) === parseInt(String(state.trainerId), 10);
+                return (
+                  '<span class="center-session-coach-pill">' +
+                  escapeHtml(isSelf ? 'Я' : c.display_name || 'Тренер #' + c.trainer_id) +
+                  '</span>'
+                );
+              })
+              .join('');
+          } else {
+            coachesEl.hidden = true;
+            coachesEl.innerHTML = '';
+          }
+        }
+        var metaEl = document.getElementById('centerSessionMeta');
+        if (metaEl) {
+          if (duty.admin_overlay && hasCenterScheduleAdmin()) {
+            metaEl.textContent = 'Окно сетки центра — можно редактировать часы дня или записать клиента.';
+          } else if (booked > 0) {
+            metaEl.textContent = 'Активные записи учитываются в загрузке окна. Детали — в заявках центра.';
+          } else {
+            metaEl.textContent = 'Смена центра — запишите клиента в это окно.';
+          }
+        }
+        var past = isCenterDutyEndedInPast(duty);
+        var canWrite = !!state.scheduleCrmWriteAllowed;
+        var isAdmin = hasCenterScheduleAdmin();
+        var bookBtn = document.getElementById('centerSessionBookBtn');
+        var editBtn = document.getElementById('centerSessionEditBtn');
+        var cancelBtn = document.getElementById('centerSessionCancelBtn');
+        if (bookBtn) {
+          bookBtn.hidden = true;
+          bookBtn.onclick = null;
+        }
+        if (editBtn) {
+          editBtn.hidden = true;
+          editBtn.onclick = null;
+        }
+        if (cancelBtn) {
+          cancelBtn.hidden = true;
+          cancelBtn.onclick = null;
+        }
+        if (bookBtn && !past && spotsLeft > 0 && canWrite && slug) {
+          bookBtn.hidden = false;
+          bookBtn.onclick = function() {
+            openBookModalForCenterSession(session, slug);
+          };
+        }
+        if (editBtn && isAdmin && canWrite && !past) {
+          editBtn.hidden = false;
+          editBtn.onclick = function() {
+            openCenterDayEditFromCalendar(session.slot_date || duty.slot_date);
+          };
+        }
+        if (cancelBtn && isAdmin && canWrite && !past && booked === 0 && slug) {
+          cancelBtn.hidden = false;
+          cancelBtn.onclick = function() {
+            cancelCenterSessionWindow(session, slug);
+          };
+        }
+        updateTelegramBack();
+      }
+
       function scheduleEditorHasCenterDuties() {
-        return !!(state.centerDuties && state.centerDuties.length);
+        if (state.centerDuties && state.centerDuties.length) return true;
+        return !!(state.centerScheduleAdmin && state.centerScheduleAdmin.sessions && state.centerScheduleAdmin.sessions.length);
       }
 
       function scheduleTimeToMinutes(hhmm) {
@@ -5739,6 +6981,36 @@
           && scheduleTimeToMinutes(bStart) < scheduleTimeToMinutes(aEnd);
       }
 
+      function scheduleCenterOverlayRowsForDate(dateKey) {
+        var rows = scheduleCenterDutiesForDate(dateKey).slice();
+        var admin = state.centerScheduleAdmin;
+        if (!admin || !admin.sessions || !admin.sessions.length) return rows;
+        var seen = {};
+        rows.forEach(function(r) {
+          seen[r.collective_session_id] = true;
+        });
+        admin.sessions.forEach(function(s) {
+          if (s.slot_date !== dateKey || seen[s.id]) return;
+          rows.push({
+            kind: 'center_duty',
+            collective_session_id: s.id,
+            collective_id: s.collective_id,
+            collective_name: admin.collective_name || 'Центр',
+            collective_slug: admin.collective_slug,
+            slot_date: s.slot_date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            capacity: s.capacity,
+            booked_count: s.booked_count || 0,
+            status: s.status,
+            admin_overlay: true,
+          });
+        });
+        return rows.sort(function(a, b) {
+          return (a.start_time || '').localeCompare(b.start_time || '');
+        });
+      }
+
       function scheduleCenterDutiesForDate(dateKey) {
         if (!scheduleEditorHasCenterDuties()) return [];
         return (state.centerDuties || []).filter(function(d) { return d.slot_date === dateKey; });
@@ -5748,16 +7020,163 @@
         var overlap = (daySlots || []).some(function(s) {
           return scheduleRangesOverlap(s.start_time, s.end_time, duty.start_time, duty.end_time);
         });
-        var title = escapeHtml(duty.collective_name || 'Центр');
-        var meta = 'Дежурство · ' + (duty.booked_count || 0) + '/' + (duty.capacity || 1);
-        return '<div class="slot-row slot-row-center-duty' + (overlap ? ' slot-row-center-duty--overlap' : '') + '" role="note">'
+        var title = 'Смена · ' + escapeHtml(duty.collective_name || 'Центр');
+        var meta = (duty.booked_count || 0) + '/' + (duty.capacity || 1) + ' записей';
+        var sid = duty.collective_session_id;
+        return (
+          '<div class="slot-row slot-row-center-duty slot-row-center-duty--clickable' +
+          (overlap ? ' slot-row-center-duty--overlap' : '') +
+          '" role="button" tabindex="0" data-center-session-id="' +
+          escapeHtml(String(sid)) +
+          '" data-center-slot-date="' +
+          escapeHtml(String(duty.slot_date || '')) +
+          '">'
           + '<div class="slot-row-left">'
           + '<div class="slot-time-row"><span class="slot-time">' + escapeHtml(duty.start_time || '') + '–' + escapeHtml(duty.end_time || '') + '</span></div>'
           + '<div class="slot-cohort-hint">' + title + '</div>'
           + '<div class="slot-client-hint">' + escapeHtml(meta) + '</div>'
           + '</div>'
-          + '<div class="slot-meta"><span class="slot-status slot-status-center-duty">центр</span></div>'
-          + '</div>';
+          + '<div class="slot-meta"><span class="slot-status slot-status-center-duty">центр</span><span aria-hidden="true" class="slot-row-chevron">›</span></div>'
+          + '</div>'
+        );
+      }
+
+      /** Personal/group slot row — extracted so center duties can merge into the day timeline. */
+      function renderCalendarDaySlotRowHtml(s) {
+        const status = s.status || 'available';
+        const cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+        const occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+        const spotsLeft = (s.spots_left != null) ? parseInt(s.spots_left, 10) : Math.max(0, cap - occ);
+        const cohortSlot = !!(s.training_group_id);
+        const available = status === 'available' && spotsLeft > 0;
+        const bookableAvailable = available && !cohortSlot;
+        const slotPast = isSlotEndedInPast(s);
+        const groupHub = cap > 1 && occ > 1 && !cohortSlot;
+        const bookedClick = !!(s.booking_id) && !available && !groupHub && !cohortSlot;
+        const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
+        const bookingPending = bookedClick && bst === 'pending';
+        const bookingCompleted = bookedClick && bst === 'completed';
+        const bookingConfirmed = bookedClick && bst === 'confirmed';
+        let statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
+        if (cap > 1 && !groupHub) {
+          statusLabel = occ + '/' + cap;
+          if (spotsLeft > 0) statusLabel += ' · есть места';
+          else statusLabel += ' · полная группа';
+        }
+        let statusClass = status;
+        if (bookedClick) {
+          if (bookingPending) {
+            statusLabel = 'к подтверждению';
+            statusClass = 'booked booked-pending';
+          } else if (bookingCompleted) {
+            statusLabel = 'проведено';
+            statusClass = 'booked booked-completed';
+          } else {
+            statusLabel = 'подтверждено';
+            statusClass = 'booked booked-confirmed';
+          }
+        }
+        const pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
+        var serviceBadge = '';
+        if (groupHub || bookedClick) {
+          serviceBadge = scheduleEditorServiceBadgeHtml(s.service_id, s.service_label);
+        }
+        var html = '<div class="slot-row' + (slotPast ? ' slot-past' : '')
+          + (cohortSlot ? ' slot-cohort' : '')
+          + (groupHub ? ' slot-group-hub' : '')
+          + (!groupHub && bookableAvailable ? ' slot-available' : '')
+          + (!groupHub && bookedClick ? ' slot-booked-click' : '')
+          + (bookingPending ? ' slot-booking-pending' : '')
+          + (bookingConfirmed ? ' slot-booking-confirmed' : '')
+          + (bookingCompleted ? ' slot-booking-completed' : '')
+          + '"'
+          + (!groupHub && bookableAvailable ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
+          + (groupHub ? ' data-slot-id="' + s.id + '" data-group-hub="1" role="button" tabindex="0"' : '')
+          + (cohortSlot ? ' data-training-group-id="' + String(s.training_group_id) + '" role="button" tabindex="0"' : '')
+          + (!groupHub && bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
+          + (!groupHub && bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
+          + '>';
+        html += '<div class="slot-row-left">';
+        html += '<div class="slot-time-row">';
+        html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
+        if (s.has_sandbox_booking && !groupHub) {
+          html += '<span class="schedule-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>';
+        }
+        html += '</div>';
+        if (serviceBadge) {
+          html += '<div class="slot-service-badge-row">' + serviceBadge + '</div>';
+        }
+        if (s.training_group_id && s.training_group_name) {
+          html += '<div class="slot-cohort-hint">Группа: ' + escapeHtml(s.training_group_name) + '</div>';
+        }
+        if (cap > 1) {
+          var svcL = (s.service_label && String(s.service_label).trim()) || '';
+          var arL = (s.arena_label && String(s.arena_label).trim()) || '';
+          if (svcL || arL) {
+            html += '<div class="slot-group-catalog-meta">';
+            if (svcL) html += '<div class="slot-group-meta-line">' + escapeHtml(svcL) + '</div>';
+            if (arL) html += '<div class="slot-group-meta-line">' + escapeHtml(arL) + '</div>';
+            html += '</div>';
+          }
+        }
+        if (groupHub) {
+          html += '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>';
+        }
+        if (bookedClick) {
+          const v = s.venue_label;
+          const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
+          html += '<div class="slot-venue">📍 ' + vt + '</div>';
+          if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+        } else if (occ > 0 && s.client_preview && !groupHub && !cohortSlot) {
+          html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+        } else if (groupHub && s.client_preview) {
+          html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+        }
+        html += '</div>';
+        html += '<div class="slot-meta">';
+        if (groupHub) {
+          html += '<span class="slot-group-chip">' + occ + '/' + cap + '</span>';
+          if (s.has_sandbox_booking) {
+            html += '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">тест</span>';
+          }
+          if (spotsLeft > 0) {
+            html += '<span class="slot-status available" style="font-size:11px;padding:4px 8px;">ещё места</span>';
+          } else {
+            html += '<span class="slot-status booked" style="font-size:11px;padding:4px 8px;">полная</span>';
+          }
+        } else {
+          html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
+          if (bookedClick && !cohortSlot) {
+            html += scheduleEditorSlotMessageButtonHtml(s, cap);
+          }
+        }
+        if (status === 'available' && occ === 0 && !cohortSlot) {
+          html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
+        } else if (bookedClick && slotPast && !groupHub && !cohortSlot) {
+          html += '<button type="button" class="btn-slot-del btn-booking-purge" data-booking-id="' + s.booking_id + '" aria-label="Убрать запись">×</button>';
+        }
+        html += '</div></div>';
+        return html;
+      }
+
+      function mergeDayCalendarTimelineHtml(daySlots, dayDuties) {
+        var si = 0;
+        var di = 0;
+        var out = '';
+        while (si < daySlots.length || di < dayDuties.length) {
+          var slot = daySlots[si];
+          var duty = dayDuties[di];
+          var takeSlot =
+            di >= dayDuties.length ||
+            (si < daySlots.length &&
+              String(slot.start_time || '').localeCompare(String(duty.start_time || '')) <= 0);
+          if (takeSlot) {
+            out += renderCalendarDaySlotRowHtml(daySlots[si++]);
+          } else {
+            out += renderScheduleCenterDutyRowHtml(dayDuties[di++], daySlots);
+          }
+        }
+        return out;
       }
 
       function renderCalendar() {
@@ -5790,131 +7209,11 @@
           const daySlots = byDay[dateKey]
             .filter(function(s) { return !s.training_group_id; })
             .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
-          var dayDuties = scheduleCenterDutiesForDate(dateKey)
+          var dayDuties = scheduleCenterOverlayRowsForDate(dateKey)
             .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
           if (!daySlots.length && !dayDuties.length) return;
           html += '<div class="day-block cal-day-anchor" id="cal-day-' + dateKey + '"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
-          daySlots.forEach(function(s) {
-            const status = s.status || 'available';
-            const cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
-            const occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
-            const spotsLeft = (s.spots_left != null) ? parseInt(s.spots_left, 10) : Math.max(0, cap - occ);
-            const cohortSlot = !!(s.training_group_id);
-            const available = status === 'available' && spotsLeft > 0;
-            const bookableAvailable = available && !cohortSlot;
-            const slotPast = isSlotEndedInPast(s);
-            const groupHub = cap > 1 && occ > 1 && !cohortSlot;
-            const bookedClick = !!(s.booking_id) && !available && !groupHub && !cohortSlot;
-            const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
-            const bookingPending = bookedClick && bst === 'pending';
-            const bookingCompleted = bookedClick && bst === 'completed';
-            const bookingConfirmed = bookedClick && bst === 'confirmed';
-            let statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
-            if (cap > 1 && !groupHub) {
-              statusLabel = occ + '/' + cap;
-              if (spotsLeft > 0) statusLabel += ' · есть места';
-              else statusLabel += ' · полная группа';
-            }
-            let statusClass = status;
-            if (bookedClick) {
-              if (bookingPending) {
-                statusLabel = 'к подтверждению';
-                statusClass = 'booked booked-pending';
-              } else if (bookingCompleted) {
-                statusLabel = 'проведено';
-                statusClass = 'booked booked-completed';
-              } else {
-                statusLabel = 'подтверждено';
-                statusClass = 'booked booked-confirmed';
-              }
-            }
-            const pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
-            var serviceBadge = '';
-            if (groupHub || bookedClick) {
-              serviceBadge = scheduleEditorServiceBadgeHtml(s.service_id, s.service_label);
-            }
-            html += '<div class="slot-row' + (slotPast ? ' slot-past' : '')
-              + (cohortSlot ? ' slot-cohort' : '')
-              + (groupHub ? ' slot-group-hub' : '')
-              + (!groupHub && bookableAvailable ? ' slot-available' : '')
-              + (!groupHub && bookedClick ? ' slot-booked-click' : '')
-              + (bookingPending ? ' slot-booking-pending' : '')
-              + (bookingConfirmed ? ' slot-booking-confirmed' : '')
-              + (bookingCompleted ? ' slot-booking-completed' : '')
-              + '"'
-              + (!groupHub && bookableAvailable ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
-              + (groupHub ? ' data-slot-id="' + s.id + '" data-group-hub="1" role="button" tabindex="0"' : '')
-              + (cohortSlot ? ' data-training-group-id="' + String(s.training_group_id) + '" role="button" tabindex="0"' : '')
-              + (!groupHub && bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
-              + (!groupHub && bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
-              + '>';
-            html += '<div class="slot-row-left">';
-            html += '<div class="slot-time-row">';
-            html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
-            if (s.has_sandbox_booking && !groupHub) {
-              html += '<span class="schedule-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>';
-            }
-            html += '</div>';
-            if (serviceBadge) {
-              html += '<div class="slot-service-badge-row">' + serviceBadge + '</div>';
-            }
-            if (s.training_group_id && s.training_group_name) {
-              html += '<div class="slot-cohort-hint">Группа: ' + escapeHtml(s.training_group_name) + '</div>';
-            }
-            if (cap > 1) {
-              var svcL = (s.service_label && String(s.service_label).trim()) || '';
-              var arL = (s.arena_label && String(s.arena_label).trim()) || '';
-              if (svcL || arL) {
-                html += '<div class="slot-group-catalog-meta">';
-                if (svcL) html += '<div class="slot-group-meta-line">' + escapeHtml(svcL) + '</div>';
-                if (arL) html += '<div class="slot-group-meta-line">' + escapeHtml(arL) + '</div>';
-                html += '</div>';
-              }
-            }
-            if (groupHub) {
-              html += '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>';
-            }
-            if (bookedClick) {
-              const v = s.venue_label;
-              const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
-              html += '<div class="slot-venue">📍 ' + vt + '</div>';
-              // Group cohort slots: keep card compact — roster lives in «Группы», not on every slot row
-              if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
-            } else if (occ > 0 && s.client_preview && !groupHub && !cohortSlot) {
-              html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
-            } else if (groupHub && s.client_preview) {
-              html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
-            }
-            html += '</div>';
-            html += '<div class="slot-meta">';
-            if (groupHub) {
-              html += '<span class="slot-group-chip">' + occ + '/' + cap + '</span>';
-              if (s.has_sandbox_booking) {
-                html += '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">тест</span>';
-              }
-              if (spotsLeft > 0) {
-                html += '<span class="slot-status available" style="font-size:11px;padding:4px 8px;">ещё места</span>';
-              } else {
-                html += '<span class="slot-status booked" style="font-size:11px;padding:4px 8px;">полная</span>';
-              }
-            } else {
-              html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
-              if (bookedClick && !cohortSlot) {
-                html += scheduleEditorSlotMessageButtonHtml(s, cap);
-              }
-            }
-            if (status === 'available' && occ === 0 && !cohortSlot) {
-              html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
-            } else if (bookedClick && slotPast && !groupHub && !cohortSlot) {
-              html += '<button type="button" class="btn-slot-del btn-booking-purge" data-booking-id="' + s.booking_id + '" aria-label="Убрать запись">×</button>';
-            }
-            html += '</div></div>';
-          });
-          if (dayDuties.length) {
-            dayDuties.forEach(function(d) {
-              html += renderScheduleCenterDutyRowHtml(d, daySlots);
-            });
-          }
+          html += mergeDayCalendarTimelineHtml(daySlots, dayDuties);
           html += '</div>';
         });
         if (!html) {
@@ -6016,6 +7315,21 @@
           row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModalForSlot(parseInt(row.dataset.slotId, 10)); };
           row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModalForSlot(parseInt(row.dataset.slotId, 10)); } };
         });
+        content.querySelectorAll('.slot-row-center-duty--clickable').forEach(function(row) {
+          row.onclick = function() {
+            var sid = parseInt(row.getAttribute('data-center-session-id'), 10);
+            var dateKey = row.getAttribute('data-center-slot-date');
+            if (!sid || !dateKey) return;
+            var duty = findCenterDutyBySessionId(sid, dateKey);
+            if (duty) openCenterSessionModal(duty);
+          };
+          row.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              row.click();
+            }
+          };
+        });
         renderScheduleWeekDayStrip();
         installScheduleCalendarScrollSpy();
       }
@@ -6045,7 +7359,7 @@
               if (found) {
                 var autoName = ((found.first_name || '') + ' ' + (found.last_name || '')).trim() || 'Клиент';
                 list.innerHTML = '';
-                enterBookExistingServiceStepFromClient(found.id, autoName);
+                proceedBookExistingClient(found.id, autoName);
                 return;
               }
               showToast('Клиент из ссылки не найден в списке.');
@@ -6064,7 +7378,7 @@
               row.onclick = function() {
                 var clientId = parseInt(row.dataset.clientId, 10);
                 var clientName = (row.dataset.clientName || 'Клиент').replace(/&quot;/g, '"');
-                enterBookExistingServiceStepFromClient(clientId, clientName);
+                proceedBookExistingClient(clientId, clientName);
               };
             });
           })
@@ -6199,6 +7513,15 @@
             }
             if (av === 'overlap') {
               showToast('Пересекается с другим слотом — смените время или длительность.');
+              refreshQuickBookHourOptions(sd).finally(finishBtn);
+              return;
+            }
+            if (av === 'center_duty') {
+              var duty = quickBookCenterDutyConflict(startMinutes, dm, sd);
+              var dutyName = (duty && duty.collective_name) || 'центр';
+              showToast(
+                'Это время пересекается со сменой в «' + dutyName + '». Выберите другое окно или отмените смену в сетке центра.'
+              );
               refreshQuickBookHourOptions(sd).finally(finishBtn);
               return;
             }
@@ -6374,14 +7697,14 @@
           updateTelegramBack();
           return;
         }
-        if (state.bookContexts && state.bookContexts.needs_context_picker) {
-          state.bookSelectedExistingClientId = null;
-          state.bookSelectedExistingClientName = '';
-          showBookStep('bookStepContext');
-          return;
-        }
         state.bookSelectedExistingClientId = null;
         state.bookSelectedExistingClientName = '';
+        if (state.bookModalClientSearchFirst) {
+          showBookExistingClientStep();
+          showBookStep('bookStepExisting');
+          loadBookClients(document.getElementById('bookClientSearch') ? document.getElementById('bookClientSearch').value.trim() : '');
+          return;
+        }
         showBookExistingClientStep();
         document.getElementById('bookStepExisting').style.display = 'none';
         document.getElementById('bookStepExisting').classList.remove('active');
@@ -6593,6 +7916,8 @@
             openEditTemplateDay(day);
           };
         });
+        renderCenterGridTemplate();
+        syncScheduleEditorFormatChrome();
       }
 
       function openEditTemplateDay(day) {
@@ -6757,22 +8082,49 @@
         const daySlots = (state.slots || []).filter(function(s) {
           return s.slot_date === slotDate && !s.training_group_id;
         });
-        if (!isGroupClassesFeatureEnabled()) {
+        if (!isGroupClassesFeatureEnabled() && !(state.slotEditIntent === 'center' && hasCenterScheduleAdmin())) {
           state.slotEditIntent = 'individual';
-        } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
+        } else if (
+          state.slotEditIntent !== 'group' &&
+          state.slotEditIntent !== 'individual' &&
+          state.slotEditIntent !== 'center'
+        ) {
           state.slotEditIntent = detectSlotIntentFromRows(daySlots);
         }
         var gridDefaultDurForCalUi = Math.min(
           480,
           Math.max(15, state.defaultSlotDurationMinutes || 45)
         );
+        var useCalCenter = slotIntentUseCenterUi();
         var useCalGroup = slotIntentUseGroupUi();
         var allowedCalendarStarts = new Set(
           allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
         );
         state.selectedStarts = new Set();
         state.lockedStarts = new Set();
-        if (useCalGroup) {
+        if (useCalCenter) {
+          state.preciseSlots = [];
+          resetCenterEditCoachIds();
+          var coachHostReset = document.getElementById('centerEditCoachChips');
+          if (coachHostReset) coachHostReset.innerHTML = '';
+          var centerDay = centerSessionsForEditDate();
+          centerDay.forEach(function(s) {
+            var m = parseStartToMinutes(s.start_time);
+            if (!allowedCalendarStarts.has(m)) return;
+            state.selectedStarts.add(m);
+            if ((s.booked_count || 0) > 0) state.lockedStarts.add(m);
+          });
+          state.calendarBaselineStarts = new Set(state.selectedStarts);
+          state.calendarBaselinePreciseKeys = new Set();
+          if (centerDay.length) {
+            var centerDurs = centerDay.map(function(s) {
+              return parseStartToMinutes(s.end_time) - parseStartToMinutes(s.start_time);
+            });
+            if (centerDurs.length && centerDurs.every(function(x) { return x === centerDurs[0]; })) {
+              gridDefaultDurForCalUi = centerDurs[0];
+            }
+          }
+        } else if (useCalGroup) {
           state.preciseSlots = [];
           daySlots.forEach(function(s) {
             var m = parseStartToMinutes(s.start_time);
@@ -6825,30 +8177,45 @@
           );
         }
         var durElCal = document.getElementById('slotDurationSelect');
-        if (durElCal && daySlots.length) {
-          if (useCalGroup) {
+        if (durElCal) {
+          if (useCalGroup && daySlots.length) {
             var durs = daySlots.map(slotDurationFromRow);
             var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 45;
             durElCal.value = String(Math.min(480, Math.max(15, dcal)));
-          } else {
+          } else if (useCalCenter || daySlots.length) {
             durElCal.value = String(normalizeDurationToScheduleSelect(gridDefaultDurForCalUi));
+          } else {
+            durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 45));
           }
-        } else if (durElCal) {
-          durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 45));
         }
         syncDurationUIFromScheduleGrid();
         document.querySelector('.tabs').style.display = 'none';
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
-        document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
-        document.getElementById('editHint').textContent = useCalGroup
-          ? 'Групповые слоты: параметры для новых начал. Свободное окно снимите повторным нажатием на время; со записью — нельзя. «Готово» — когда есть изменения.'
-          : 'Индивидуальные слоты: нажмите на время — добавить или убрать свободное окно. Запись на слот снять нельзя. «Готово» — когда есть изменения.';
+        document.getElementById('editTitle').textContent = useCalCenter
+          ? 'Смена · ' + formatDateKey(slotDate)
+          : 'Слоты на ' + formatDateKey(slotDate);
+        document.getElementById('editHint').textContent = useCalCenter
+          ? 'Смена центра: нажмите на время — добавить или убрать свободное окно. С записью снять нельзя. «Готово» — когда есть изменения.'
+          : useCalGroup
+            ? 'Групповые слоты: параметры для новых начал. Свободное окно снимите повторным нажатием на время; со записью — нельзя. «Готово» — когда есть изменения.'
+            : 'Индивидуальные слоты: нажмите на время — добавить или убрать свободное окно. Запись на слот снять нельзя. «Готово» — когда есть изменения.';
         var capWrap = document.getElementById('slotCapacityWrap');
         var capInput = document.getElementById('slotCapacityInput');
         if (capInput) capInput.setAttribute('min', useCalGroup ? '2' : '1');
         if (capWrap) {
-          if (useCalGroup) {
+          if (useCalCenter) {
+            capWrap.style.display = 'block';
+            var centerCaps = centerSessionsForEditDate().map(function(s) {
+              return s.capacity != null ? parseInt(s.capacity, 10) : 1;
+            });
+            var centerCapVal = 1;
+            if (centerCaps.length && centerCaps.every(function(c) { return c === centerCaps[0]; })) {
+              centerCapVal = centerCaps[0];
+            }
+            if (centerCapVal < 1) centerCapVal = 1;
+            if (capInput) capInput.value = String(Math.min(500, Math.max(1, centerCapVal)));
+          } else if (useCalGroup) {
             capWrap.style.display = 'block';
             var caps = daySlots.map(function(s) { return (s.capacity != null) ? parseInt(s.capacity, 10) : 1; });
             var capVal = 2;
@@ -6914,11 +8281,13 @@
         state.slotAddMode = 'grid';
         // Show mode switcher only for individual calendar slots
         var switcher = document.getElementById('slotAddModeSwitcher');
-        if (switcher) switcher.style.display = useCalGroup ? 'none' : 'flex';
+        if (switcher) switcher.style.display = useCalGroup || useCalCenter ? 'none' : 'flex';
         // Must sync DOM (duration + grid vs precise) — after «Точное время» a raw display:none on
         // preciseSlotForm leaves stale hidden grid + wrong active tab until user re-taps a mode.
         setSlotAddMode('grid');
+        syncCenterEditChrome();
         document.getElementById('screenEdit').style.display = 'block';
+        window.scrollTo(0, 0);
         pruneSelectedStartsForOverlap(getEditDurationMinutes());
         renderHourGrid();
         renderPreciseSlotsAdded();
@@ -6935,6 +8304,7 @@
         const durationMinutes = getEditDurationMinutes();
         const preset = state.scheduleGridPreset || defaultScheduleGridPreset();
         const calEditDate = state.editMode === 'calendar' ? state.editDate : null;
+        var useCenterGrid = slotIntentUseCenterUi();
         var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
         if (isNaN(h0)) h0 = 6;
         var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
@@ -6973,23 +8343,45 @@
             var intervalBlockKind =
               selected || locked || pinned ? null : classifyIntervalConsumptionBlock(m, candDur);
             const blockedByOverlap = intervalBlockKind != null;
+            var personalOverlap =
+              useCenterGrid &&
+              scheduleEditorPersonalOverlapEnabled() &&
+              ownerPersonalSlotIntervalsForCenterEdit().length
+                ? centerPersonalOverlapAtMinute(m, candDur)
+                : null;
+            var personalGhost = !!personalOverlap;
+            var personalSelfOnlyBlock =
+              personalGhost && centerEditSelfOnlyOnShift() && !selected && !locked;
             const labelFull = formatMinuteClock(m);
             const labelShort = ':' + String(m % 60).padStart(2, '0');
             /** Short aria only (no hover titles): grid reads as «tap where allowed». */
             var ariaBits = [labelFull];
+            if (personalGhost) {
+              ariaBits.push(
+                'пересекается с личным ' +
+                  (personalOverlap.start_time || '') +
+                  '–' +
+                  (personalOverlap.end_time || '')
+              );
+            }
             if (blockedByOverlap) {
               ariaBits.push('занято, начало недоступно');
             } else if (locked) {
               ariaBits.push('нельзя убрать');
             } else if (pinned) {
               ariaBits.push('открытый слот, нажмите чтобы убрать');
+            } else if (personalSelfOnlyBlock) {
+              ariaBits.push('на смене только вы — личный слот');
             }
             var btnAttrs = ' aria-label="' + escapeHtml(ariaBits.join(' · ')) + '"';
-            if (blockedByOverlap || locked) {
+            if (blockedByOverlap || locked || personalSelfOnlyBlock) {
               btnAttrs += ' disabled';
             }
             html +=
               '<button type="button" class="hour-chip' +
+              (useCenterGrid ? ' hour-chip--center' : '') +
+              (personalGhost ? ' hour-chip--personal-ghost' : '') +
+              (personalGhost && centerEditSelfOnlyOnShift() ? ' hour-chip--personal-conflict' : '') +
               (selected ? ' selected' : '') +
               (locked ? ' locked' : '') +
               (pinned ? ' pinned' : '') +
@@ -7013,9 +8405,20 @@
         }
         grid.innerHTML = html;
         grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
-        grid.querySelectorAll('.hour-chip:not(.locked):not(.duration-blocked)').forEach(function(btn) {
+        grid.querySelectorAll('.hour-chip:not(.locked):not(.duration-blocked):not(:disabled)').forEach(function(btn) {
           btn.onclick = function() {
             const m = parseInt(btn.dataset.minute, 10);
+            if (slotIntentUseCenterUi() && !state.selectedStarts.has(m)) {
+              var dur = getEditDurationMinutes();
+              if (
+                scheduleEditorPersonalOverlapEnabled() &&
+                centerPersonalOverlapAtMinute(m, dur) &&
+                centerEditSelfOnlyOnShift()
+              ) {
+                showToast('На смене только вы — это время занято личным слотом');
+                return;
+              }
+            }
             if (state.selectedStarts.has(m)) state.selectedStarts.delete(m);
             else state.selectedStarts.add(m);
             renderHourGrid();
@@ -7025,6 +8428,7 @@
           var tpanHide = document.getElementById('templateCapacityPanel');
           if (tpanHide) tpanHide.style.display = 'none';
         }
+        syncCenterEditOverlapWarn();
         updateEditDoneButton();
       }
 
@@ -7149,6 +8553,10 @@
             })
             .catch(function() { showToast('Ошибка сети'); });
         } else {
+          if (slotIntentUseCenterUi()) {
+            saveCenterCalendarDay(startsSorted, durationMinutes);
+            return;
+          }
           var capRaw = parseInt(document.getElementById('slotCapacityInput').value, 10);
           var capacity = (isNaN(capRaw) || capRaw < 1) ? 1 : Math.min(500, capRaw);
           if (slotIntentUseGroupUi()) {
@@ -7292,6 +8700,10 @@
 
       document.getElementById('editCancel').onclick = function() {
         if (state.editMode === 'calendar') {
+          if (slotIntentUseCenterUi() && (state.centerEditReturn === 'template' || state.centerEditReturn === 'calendar')) {
+            finishCenterCalendarEdit();
+            return;
+          }
           returnToCalendarDayPickFromEdit({ reloadSlots: false });
           return;
         }
@@ -7320,6 +8732,73 @@
         updateTelegramBack();
       };
 
+      (function wireCenterGridTemplateActions() {
+        function shiftCenterGridTemplateWeek(delta) {
+          if (!state.weekStart) state.weekStart = getMonday(new Date());
+          if (state.centerGridWeekLoadInFlight) return;
+          var next = new Date(state.weekStart);
+          next.setDate(next.getDate() + delta * 7);
+          state.weekStart = getMonday(next);
+          loadCenterGridWeekData({ syncCalendarWeekLabel: true });
+        }
+        var prevBtn = document.getElementById('centerGridWeekPrev');
+        var nextBtn = document.getElementById('centerGridWeekNext');
+        if (prevBtn) prevBtn.onclick = function() { shiftCenterGridTemplateWeek(-1); };
+        if (nextBtn) nextBtn.onclick = function() { shiftCenterGridTemplateWeek(1); };
+        var copyPrev = document.getElementById('btnCenterGridCopyPrev');
+        if (copyPrev) {
+          copyPrev.onclick = function() {
+            if (!state.weekStart) return;
+            var prev = new Date(state.weekStart);
+            prev.setDate(prev.getDate() - 7);
+            var source = dateToStr(prev);
+            runCenterGridDuplicate(
+              source,
+              1,
+              'Скопировать окна с прошлой недели (' +
+                formatWeekLabel(prev) +
+                ') на текущую (' +
+                formatWeekLabel(state.weekStart) +
+                ')?'
+            );
+          };
+        }
+        var copyNext = document.getElementById('btnCenterGridCopyNext');
+        if (copyNext) {
+          copyNext.onclick = function() {
+            if (!state.weekStart) return;
+            var nxt = new Date(state.weekStart);
+            nxt.setDate(nxt.getDate() + 7);
+            runCenterGridDuplicate(
+              dateToStr(state.weekStart),
+              1,
+              'Скопировать все окна с ' +
+                formatWeekLabel(state.weekStart) +
+                ' на следующую (' +
+                formatWeekLabel(nxt) +
+                ')?'
+            );
+          };
+        }
+        var copyAhead = document.getElementById('btnCenterGridCopyAhead');
+        if (copyAhead) {
+          copyAhead.onclick = function() {
+            if (!state.weekStart) return;
+            var aheadEl = document.getElementById('centerGridWeeksAhead');
+            var weeks = aheadEl ? parseInt(aheadEl.value, 10) || 2 : 2;
+            runCenterGridDuplicate(
+              dateToStr(state.weekStart),
+              weeks,
+              'Скопировать окна с ' +
+                formatWeekLabel(state.weekStart) +
+                ' на ' +
+                weeks +
+                ' нед. вперёд? Уже существующие окна пропускаются.'
+            );
+          };
+        }
+      })();
+
       document.getElementById('modalConfirmNo').onclick = function() {
         document.getElementById('modalConfirm').style.display = 'none';
         updateTelegramBack();
@@ -7333,6 +8812,15 @@
         }
         updateTelegramBack();
       };
+
+      var centerSessionCloseBtn = document.getElementById('centerSessionCloseBtn');
+      if (centerSessionCloseBtn) centerSessionCloseBtn.onclick = closeCenterSessionModal;
+      var modalCenterSession = document.getElementById('modalCenterSession');
+      if (modalCenterSession) {
+        modalCenterSession.addEventListener('click', function(ev) {
+          if (ev.target === modalCenterSession) closeCenterSessionModal();
+        });
+      }
 
       document.getElementById('modalConfirmYes').onclick = function() {
         if (!state.applyWeekStart) return;
@@ -7369,12 +8857,7 @@
           return;
         }
         if (!state.weekStart) return;
-        if (isGroupClassesFeatureEnabled()) {
-          openSlotIntentModal('calendar', null, 'individual');
-          return;
-        }
-        state.slotEditIntent = 'individual';
-        showDayPickScreen();
+        startAddSlotsFlow();
       };
 
       document.getElementById('btnSlotIntentIndividual').onclick = function() {
@@ -7383,6 +8866,12 @@
       document.getElementById('btnSlotIntentGroup').onclick = function() {
         applySlotIntentChoice('group');
       };
+      var btnSlotIntentCenter = document.getElementById('btnSlotIntentCenter');
+      if (btnSlotIntentCenter) {
+        btnSlotIntentCenter.onclick = function() {
+          applySlotIntentChoice('center');
+        };
+      }
       document.getElementById('btnSlotIntentCancel').onclick = function() {
         cancelSlotIntentModal();
       };

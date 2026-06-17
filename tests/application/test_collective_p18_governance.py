@@ -1,5 +1,5 @@
 """Collective Wave P1.8: team governance (remove, transfer, revoke invites)."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 import pytest
 
@@ -123,3 +123,32 @@ async def test_cannot_remove_owner(db_session) -> None:
     cid, owner_id, _member_id = await _seed_studio_with_owner_and_member(db_session)
     result = await remove_collective_member(db_session, cid, owner_id, owner_id)
     assert result.get("error") == "cannot_remove_self"
+
+
+@pytest.mark.asyncio
+async def test_preview_collective_member_removal(db_session) -> None:
+    from datetime import time as time_type
+
+    from src.application.collective_session_use_cases import create_collective_session
+    from src.application.collective_use_cases import (
+        SCHEDULE_MODE_STUDIO_CENTRAL,
+        preview_collective_member_removal,
+    )
+
+    cid, owner_id, member_id = await _seed_studio_with_owner_and_member(db_session)
+    await db_session.execute(
+        text("UPDATE collectives SET schedule_mode = :mode WHERE id = :cid"),
+        {"mode": SCHEDULE_MODE_STUDIO_CENTRAL, "cid": cid},
+    )
+    await create_collective_session(
+        db_session,
+        collective_id=cid,
+        owner_trainer_id=owner_id,
+        slot_date=date.today(),
+        start_time=time_type(10, 0),
+        end_time=time_type(11, 0),
+        coach_trainer_ids=[member_id],
+    )
+    preview = await preview_collective_member_removal(db_session, cid, owner_id, member_id)
+    assert preview.get("future_duty_sessions", 0) >= 1
+    assert preview.get("warnings")

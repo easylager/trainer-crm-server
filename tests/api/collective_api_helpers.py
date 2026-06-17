@@ -15,6 +15,8 @@ async def seed_active_collective_owner(
     slug: str = "api-col-studio",
     seats: int = 5,
     schedule_mode: str = "member_autonomous",
+    organization_format: str = "studio",
+    owner_studio_access_mode: str = "full_trainer",
 ) -> int:
     now = datetime.now(timezone.utc)
     r = await db_session.execute(
@@ -22,9 +24,13 @@ async def seed_active_collective_owner(
             """
             INSERT INTO collectives (
                 slug, display_name, status, seat_limit, owner_trainer_id,
-                schedule_mode, created_at, updated_at
+                schedule_mode, organization_format, owner_studio_access_mode,
+                created_at, updated_at
             )
-            VALUES (:slug, 'API Studio', 'active', :seats, :tid, :mode, :now, :now)
+            VALUES (
+                :slug, 'API Studio', 'active', :seats, :tid,
+                :mode, :org_fmt, :owner_mode, :now, :now
+            )
             RETURNING id
             """
         ),
@@ -33,6 +39,8 @@ async def seed_active_collective_owner(
             "tid": trainer_id,
             "seats": seats,
             "mode": schedule_mode,
+            "org_fmt": organization_format,
+            "owner_mode": owner_studio_access_mode,
             "now": now,
         },
     )

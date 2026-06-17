@@ -69,8 +69,11 @@ from src.application.collective_use_cases import (
     admin_confirm_collective_invoice,
     admin_grant_collective_subscription,
     create_collective_draft,
+    get_collective_ops_status,
     get_collective_subscription_status,
     issue_collective_claim_token,
+    list_collective_org_format_presets,
+    parse_admin_collective_draft_body,
 )
 from src.application.trainer_profile_pending import (
     build_trainer_profile_for_moderation_card,
@@ -1582,18 +1585,109 @@ async def cmd_collective_draft(message: Message) -> None:
         await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_HELP, parse_mode=ParseMode.HTML)
         return
     body = parts[1].strip()
+    if body.lower().startswith("status"):
+        slug_parts = body.split(maxsplit=1)
+        if len(slug_parts) < 2 or not slug_parts[1].strip():
+            await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_STATUS_HELP, parse_mode=ParseMode.HTML)
+            return
+        slug = slug_parts[1].strip().split()[0]
+        async with async_session_factory() as session:
+            ops = await get_collective_ops_status(session, slug=slug)
+        if ops is None:
+            await message.answer(
+                msg.ADMIN_COLLECTIVE_DRAFT_STATUS_NOT_FOUND.format(slug=html.escape(slug)),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        owner_line = (
+            f"<code>{ops['owner_trainer_id']}</code>"
+            + (f" · {html.escape(ops['owner_display_name'])}" if ops.get("owner_display_name") else "")
+            if ops.get("owner_trainer_id") is not None
+            else "— (не claimed)"
+        )
+        await message.answer(
+            msg.ADMIN_COLLECTIVE_DRAFT_STATUS.format(
+                slug=html.escape(ops["slug"]),
+                display_name=html.escape(ops["display_name"]),
+                collective_status=html.escape(ops["status"]),
+                claim_state=html.escape(ops["claim_state_label"]),
+                organization_format=html.escape(str(ops["organization_format"])),
+                schedule_mode=html.escape(str(ops["schedule_mode"])),
+                owner_mode_label=html.escape(str(ops["owner_studio_access_mode_label"])),
+                owner_line=owner_line,
+                active_count=ops["active_member_count"],
+                seat_limit=ops["seat_limit"],
+                pending_invites=ops["pending_invite_count"],
+                pending_claims=ops["pending_claim_count"],
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    if body.lower() in ("formats", "format", "форматы", "формат"):
+        lines = [
+            "<b>Форматы организации (Collective draft)</b>",
+            "",
+            "<code>/collective_draft slug|Название|format|места|owner</code>",
+            "",
+        ]
+        for preset in list_collective_org_format_presets():
+            lines.append(
+                f"• <code>{html.escape(preset.key)}</code> — {html.escape(preset.label_ru)}"
+                f" · мест по умолч. {preset.seat_limit_default}"
+            )
+        lines.extend(
+            [
+                "",
+                "<b>Алиасы format</b> (см. also legacy):",
+                "• studio → ice, coworking, lanes, rental…",
+                "• center → manager, facility, operator…",
+                "• center_hybrid → hybrid, throwing, studio_central",
+                "• legacy: format <code>center</code> + owner <code>trainer</code> → center_hybrid",
+                "",
+                "Owner: <code>trainer</code> (личный CRM) или <code>manager</code> (только студия).",
+                "",
+                "Ops: <code>/collective_draft status slug</code>",
+                "",
+                "Таблица format → UX: <code>docs/adr/003-appendix-organization-format-ux.md</code>",
+                "Runbook: <code>docs/ops/onboard-collective-formats.md</code>",
+                "",
+                "Примеры:",
+                "<code>/collective_draft broski|Broski Center|center_hybrid|8</code>",
+                "<code>/collective_draft ice-yoga|Ice Yoga Lane|studio</code>",
+                "<code>/collective_draft fit-hub|Fit Hub|studio|12</code>",
+                "<code>/collective_draft ops|Ops Desk|center</code>",
+            ]
+        )
+        await message.answer("\n".join(lines), parse_mode=ParseMode.HTML)
+        return
     if "|" not in body:
         await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS, parse_mode=ParseMode.HTML)
         return
-    slug_raw, name_raw = body.split("|", 1)
-    slug = slug_raw.strip()
-    display_name = name_raw.strip()
-    if not slug or not display_name:
-        await message.answer(msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS, parse_mode=ParseMode.HTML)
+    spec = parse_admin_collective_draft_body(body)
+    if isinstance(spec, str):
+        err_map = {
+            "missing_fields": msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS,
+            "invalid_slug": msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS,
+            "invalid_format": msg.ADMIN_COLLECTIVE_DRAFT_INVALID_FORMAT,
+            "invalid_seats": msg.ADMIN_COLLECTIVE_DRAFT_INVALID_SEATS,
+            "invalid_owner_mode": msg.ADMIN_COLLECTIVE_DRAFT_INVALID_OWNER,
+        }
+        await message.answer(
+            err_map.get(spec, msg.ADMIN_COLLECTIVE_DRAFT_BAD_ARGS),
+            parse_mode=ParseMode.HTML,
+        )
         return
     try:
         async with async_session_factory() as session:
-            collective = await create_collective_draft(session, slug=slug, display_name=display_name)
+            collective = await create_collective_draft(
+                session,
+                slug=spec.slug,
+                display_name=spec.display_name,
+                seat_limit=spec.seat_limit,
+                schedule_mode=spec.schedule_mode,
+                owner_studio_access_mode=spec.owner_studio_access_mode,
+                organization_format=spec.organization_format,
+            )
             claim = await issue_collective_claim_token(session, int(collective["id"]))
     except ValueError as exc:
         if str(exc) == "slug_invalid":
@@ -1614,7 +1708,13 @@ async def cmd_collective_draft(message: Message) -> None:
         "admin.collective_draft_created",
         ACTOR_ADMIN_BOT,
         user_id,
-        {"collective_id": collective["id"], "slug": collective["slug"]},
+        {
+            "collective_id": collective["id"],
+            "slug": collective["slug"],
+            "organization_format": collective.get("organization_format"),
+            "schedule_mode": collective.get("schedule_mode"),
+            "owner_studio_access_mode": collective.get("owner_studio_access_mode"),
+        },
     )
     exp = claim["expires_at"]
     expires_str = exp[:16].replace("T", " ") if isinstance(exp, str) else str(exp)
@@ -1628,12 +1728,25 @@ async def cmd_collective_draft(message: Message) -> None:
         link_block = msg.ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME.format(
             start_payload=html.escape(claim["start_payload"]),
         )
+    owner_label = (
+        "менеджер (без личного CRM)"
+        if collective.get("owner_studio_access_mode") == "studio_admin_only"
+        else "тренер (полный CRM)"
+    )
+    schedule_label = (
+        "центр (studio_central)"
+        if collective.get("schedule_mode") == "studio_central"
+        else "автономные тренеры"
+    )
     await message.answer(
         msg.ADMIN_COLLECTIVE_DRAFT_ISSUED.format(
             collective_id=collective["id"],
             slug=html.escape(collective["slug"]),
             display_name=html.escape(collective["display_name"]),
             seat_limit=collective["seat_limit"],
+            org_format=html.escape(str(collective.get("organization_format") or "studio")),
+            schedule_label=html.escape(schedule_label),
+            owner_label=html.escape(owner_label),
             expires=html.escape(expires_str),
             link_block=link_block,
         ),

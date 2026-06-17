@@ -5,6 +5,10 @@ from src.application.client_pass_order_use_cases import (
     PASS_ORDER_LINE_PREFIX,
     build_pass_product_order_comment,
 )
+from src.application.collective_pass_use_cases import (
+    COLLECTIVE_PASS_ORDER_LINE_PREFIX,
+    build_collective_pass_product_order_comment,
+)
 from src.application.client_request_comment_display import (
     client_request_comment_editable,
     client_request_subtype,
@@ -59,6 +63,15 @@ def test_cert_and_pass_orders_not_editable() -> None:
     pass_raw = build_pass_product_order_comment(pass_product_id=2, human_block="Хочу абонемент")
     assert client_request_subtype(pass_raw) == "pass_product_order"
     assert client_request_comment_editable(pass_raw) is False
+
+    collective_raw = build_collective_pass_product_order_comment(
+        collective_pass_product_id=11,
+        human_block="Хочу абонемент центра",
+    )
+    assert COLLECTIVE_PASS_ORDER_LINE_PREFIX in collective_raw
+    assert client_visible_request_comment(collective_raw) == "Хочу абонемент центра"
+    assert client_request_subtype(collective_raw) == "collective_pass_product_order"
+    assert client_request_comment_editable(collective_raw) is False
 
     assert client_request_comment_editable("Обычная заявка") is True
     assert client_request_subtype("Обычная заявка") is None

@@ -392,11 +392,14 @@ def build_trainer_hub_inbox_badges(
     onboarding: dict[str, Any] | None,
     requests_count: int,
     pending_count: int,
+    center_inbox_pending: int = 0,
+    show_center_inbox: bool = False,
 ) -> dict[str, int]:
-    """Tab bar badge counts — schedule / more / clients."""
+    """Tab bar badge counts — schedule / center / more / clients."""
     schedule = max(0, int(pending_count))
     more = max(0, int(requests_count))
     clients = 0
+    center = max(0, int(center_inbox_pending)) if show_center_inbox else 0
     if onboarding:
         clients = _non_negative_int(onboarding.get("open_loop_clients_no_telegram_count"))
         if _onboarding_booking_step_done(onboarding):
@@ -410,8 +413,27 @@ def build_trainer_hub_inbox_badges(
                 more += 1
     return {
         "schedule": schedule,
+        "center": center,
         "more": more,
         "clients": clients if clients > 0 else 0,
+    }
+
+
+def build_hub_dual_summary(
+    *,
+    bookings: dict[str, Any] | None,
+    center_inbox_pending: int,
+    collective_slug: str,
+    collective_label: str,
+) -> dict[str, Any]:
+    """Two-number glance for center_hybrid owners — personal today + center inbox."""
+    today = (bookings or {}).get("today_sessions") or {}
+    return {
+        "personal_today_total": _non_negative_int(today.get("total")),
+        "personal_today_remaining": _non_negative_int(today.get("remaining")),
+        "center_inbox_pending": max(0, int(center_inbox_pending)),
+        "collective_slug": collective_slug,
+        "collective_label": collective_label,
     }
 
 
@@ -422,6 +444,8 @@ def build_trainer_hub_action_inbox(
     bookings: dict[str, Any] | None = None,
     schedule_unlocked: bool = False,
     pending_booking_ids: list[int] | None = None,
+    center_inbox_pending: int = 0,
+    show_center_inbox: bool = False,
 ) -> dict[str, Any]:
     """
     Build unified hub inbox payload for bootstrap and inbox-count endpoint.
@@ -477,6 +501,27 @@ def build_trainer_hub_action_inbox(
             )
         )
 
+    center_n = max(0, int(center_inbox_pending))
+    if show_center_inbox and center_n > 0:
+        items.append(
+            _inbox_item(
+                item_id="center_session_bookings",
+                kind="center_pending",
+                priority=96,
+                urgent=True,
+                count=center_n,
+                title=(
+                    f"{center_n} "
+                    f"{_plural_ru(center_n, 'заявка в центр', 'заявки в центр', 'заявок в центр')} "
+                    "ждёт подтверждения"
+                ),
+                subtitle="Подтвердите или отклоните в расписании",
+                primary_label="Открыть расписание",
+                primary_action="schedule_editor",
+                dismissible=False,
+            )
+        )
+
     if onboarding:
         items.extend(_build_hub_rhythm_inbox_candidates(onboarding))
 
@@ -485,6 +530,8 @@ def build_trainer_hub_action_inbox(
         onboarding=onboarding,
         requests_count=req_n,
         pending_count=pending_count if schedule_unlocked else 0,
+        center_inbox_pending=center_n,
+        show_center_inbox=show_center_inbox,
     )
     return {
         "total_actionable": len(items),

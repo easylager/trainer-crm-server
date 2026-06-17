@@ -40,7 +40,7 @@
     })();
   </script>
   <link rel="preload" href="trainer-pass-products-main.js?v=202606156" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=202606156" />
+  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=202606159" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -102,7 +102,7 @@
           </div>
         </div>
       </div>
-      <p class="products-hint" id="issuedHint" style="display:none;">Новые сверху · зелёная полоска слева — активные, красная — закрытые</p>
+      <p class="products-hint" id="issuedHint" style="display:none;">Активные абонементы — нажмите, чтобы списать прошедшее занятие без абонемента</p>
       <div id="issuedListContent">
         <div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">📋</div><p class="pp-state-title">Откройте вкладку — загрузим список</p></div>
       </div>
@@ -249,6 +249,7 @@
       try {
         var p = new URLSearchParams(location.search || '');
         if (p.get('certificate_product_id')) return;
+        if (p.get('pass_instance_id')) return;
         var tab = (p.get('tab') || '').toLowerCase();
         if (tab === 'certs' || tab === 'cert' || tab === 'certificates') return;
         var cid = parseInt(p.get('client_id') || '', 10);
@@ -349,8 +350,52 @@
     </div>
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
+
+  <div id="screenPassDetail" data-screen>
+    <div class="pp-hero pp-pass-detail-hero">
+      <div class="pp-hero-inner">
+        <div class="pp-pass-detail-head">
+          <p class="pp-hero-kicker">Абонемент клиента</p>
+          <span class="pp-pass-detail-status" id="passDetailStatus" hidden></span>
+        </div>
+        <h1 class="pp-hero-title" id="passDetailProduct">—</h1>
+        <p class="pp-hero-sub" id="passDetailClient">—</p>
+      </div>
+    </div>
+    <div class="pp-pass-detail-stat-card" id="passDetailStatCard">
+      <div class="pp-pass-detail-stat-row">
+        <span class="pp-pass-detail-stat-label">Осталось занятий</span>
+      </div>
+      <div class="pp-pass-detail-stat-numbers">
+        <span class="pp-pass-detail-num" id="passDetailRem">0</span>
+        <span class="pp-pass-detail-sep"> из </span>
+        <span class="pp-pass-detail-num pp-pass-detail-num--muted" id="passDetailTotal">0</span>
+      </div>
+      <div class="pp-pass-detail-progress-track">
+        <div class="pp-pass-detail-progress-fill" id="passDetailProgress"></div>
+      </div>
+    </div>
+    <div class="bd-section-label">Подробности</div>
+    <div class="bd-rows pp-pass-detail-meta-rows" id="passDetailMetaRows"></div>
+    <div class="pp-pass-detail-section" id="passDetailRedeemSection">
+      <div class="bd-section-label">Списать за прошедшее занятие</div>
+      <div class="pp-pass-detail-callout" role="note">
+        <span class="pp-pass-detail-callout__icon" aria-hidden="true">💡</span>
+        <p class="pp-pass-detail-callout__text">Выберите проведённое занятие без абонемента — оно войдёт в этот абонемент, а в статистике будет учтено как визит по абонементу.</p>
+      </div>
+      <div id="passDetailRedeemableList" class="pp-pass-detail-redeem-list"></div>
+    </div>
+    <div class="pp-pass-detail-section" id="passDetailHistorySection" hidden>
+      <div class="bd-section-label">Уже списано</div>
+      <div class="bd-rows" id="passDetailRedemptionList"></div>
+    </div>
+    <div class="pp-pass-detail-footnote" id="passDetailFootnote" hidden>
+      Автоматическое списание происходит при отметке «Проведено» в расписании. Здесь — для занятий, которые прошли до выдачи абонемента.
+    </div>
+  </div>
+
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-pass-products-main.js?v=202606156"></script>
+  <script defer src="trainer-pass-products-main.js?v=202606160"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

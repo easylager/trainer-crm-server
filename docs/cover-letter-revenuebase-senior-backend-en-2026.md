@@ -1,7 +1,7 @@
 # Cover letter — RevenueBase · Senior Backend Engineer (Python)
 
 **To:** Hiring team, RevenueBase  
-**From:** Maksim Vasilenko · pinkpanterpython3@gmail.com · +375 29 667-53-89 · Telegram @maksimvasilenko11
+**From:** Maksim Vasilenka · pinkpanterpython3@gmail.com · +375 29 667-53-89 · Telegram @maksimvasilenko11
 
 ---
 
@@ -14,10 +14,10 @@ You ship **trusted B2B data through APIs for GTM/automation workflows** — wher
 Happy to walk through one service end-to-end on a call.
 
 Best regards,  
-**Maksim Vasilenko**
+**Maksim Vasilenka**
 
 ---
 
 ## One block (very tight character limit)
 
-Trusted **API-first B2B data** for GTM/agents = **correctness + performance** as the product — that’s my motivation. **~6y** Python backend, **FastAPI** in prod, **Postgres**, **distributed patterns** (queues/cache/workers), **GCP + K8s** experience. **DynamoDB:** ramp from **GCP/Azure NoSQL** background. **Docker**, **remote**, **B2 English**. **Maksim Vasilenko** · pinkpanterpython3@gmail.com
+Trusted **API-first B2B data** for GTM/agents = **correctness + performance** as the product — that’s my motivation. **~6y** Python backend, **FastAPI** in prod, **Postgres**, **distributed patterns** (queues/cache/workers), **GCP + K8s** experience. **DynamoDB:** ramp from **GCP/Azure NoSQL** background. **Docker**, **remote**, **B2 English**. **Maksim Vasilenka** · pinkpanterpython3@gmail.com

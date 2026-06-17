@@ -64,12 +64,12 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606294" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606162" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606302" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606165" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
-  <link rel="preload" href="trainer-home-main.js?v=202606299" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606162" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202606304" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606314" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -321,6 +321,7 @@
     <header class="hub-header">
       <div class="hub-header-text">
         <h1 class="hub-header-title" id="hubPageTitle">Доброе утро</h1>
+        <div id="hubCollectiveSwitcher" class="hub-collective-switcher" hidden></div>
       </div>
       <div class="hub-header-actions">
         <button
@@ -338,6 +339,7 @@
         </button>
       </div>
     </header>
+
     <script>
       (function () {
         if (typeof window.__syncHubPageTitle === 'function') {
@@ -752,6 +754,27 @@
   <div id="hubModalBookGroupSlot" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
     <div class="modal book-flow-modal hub-book-modal">
       <h3 class="book-modal-title">Записать клиента</h3>
+      <div id="hubBookStepContext" class="book-step" data-step="context" style="display:none;">
+        <p class="book-choice-lead">Куда записываем?</p>
+        <div id="hubBookContextActions" class="book-choice-actions"></div>
+      </div>
+      <div id="hubBookStepCenter" class="book-step" data-step="center" style="display:none;">
+        <button type="button" class="book-modal-back" id="hubBookBackFromCenter">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <p class="book-choice-lead" id="hubBookCenterLead">Окно центра</p>
+        <div id="hubBookCenterSessionList" class="client-list book-client-list"></div>
+        <div id="hubBookCenterModeWrap" style="display:none;margin-top:12px;">
+          <label class="book-field-label" for="hubBookCenterModeSelect">Формат</label>
+          <select id="hubBookCenterModeSelect" class="input book-service-select"></select>
+        </div>
+        <div id="hubBookCenterCoachWrap" style="display:none;margin-top:12px;">
+          <label class="book-field-label" for="hubBookCenterCoachSelect">Тренер центра</label>
+          <select id="hubBookCenterCoachSelect" class="input book-service-select"></select>
+        </div>
+        <button type="button" class="btn-block btn-primary" id="hubBookCenterConfirm" style="display:none;margin-top:14px;">Записать в центр</button>
+      </div>
       <div id="hubBookStepChoice" class="book-step">
         <p class="book-choice-lead">Кого записать на занятие?</p>
         <button type="button" class="book-modal-back hub-book-back--service-step" id="hubBookBackFromService" style="display: none;" hidden aria-hidden="true">
@@ -893,6 +916,10 @@
           <label class="book-field-label" for="hubBookClientSearch">Поиск по имени или телефону</label>
           <input type="text" id="hubBookClientSearch" class="book-search-input" placeholder="Имя или телефон..." autocomplete="off">
         </div>
+        <div class="book-field-stack" id="hubBookDelegateCoachWrap" style="display:none;">
+          <label class="book-field-label" for="hubBookDelegateCoachSelect">Тренер (запись от имени)</label>
+          <select id="hubBookDelegateCoachSelect" class="input book-service-select"></select>
+        </div>
         <div id="hubBookClientList" class="client-list book-client-list"></div>
       </div>
       <div id="hubBookStepNew" style="display: none;">
@@ -958,7 +985,8 @@
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
   <script src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
-  <script defer src="trainer-home-main.js?v=202606299"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202606162"></script>
+  <script src="trainer-booking-context.js?v=202606304"></script>
+  <script defer src="trainer-home-main.js?v=202606304"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202606314"></script>
 </body>
 </html>

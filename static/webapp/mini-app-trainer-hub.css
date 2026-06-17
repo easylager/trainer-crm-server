@@ -61,6 +61,37 @@
       line-height: 1.12;
       color: var(--tg-theme-text-color);
     }
+
+    .hub-collective-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .hub-collective-switcher[hidden] {
+      display: none !important;
+    }
+
+    .hub-collective-switch {
+      appearance: none;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .hub-collective-switch.is-active {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-secondary-bg-color));
+      color: var(--tg-theme-text-color);
+    }
+
     .hub-header-actions {
       display: flex;
       align-items: flex-start;

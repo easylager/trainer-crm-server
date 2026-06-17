@@ -19,6 +19,7 @@ from src.application.collective_session_use_cases import (
 )
 from src.application.collective_use_cases import (
     MEMBER_ROLE_MEMBER,
+    MEMBER_ROLE_OWNER,
     SCHEDULE_MODE_MEMBER_AUTONOMOUS,
     SCHEDULE_MODE_STUDIO_CENTRAL,
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
@@ -92,11 +93,15 @@ async def list_trainer_booking_contexts(
     trainer_id: int,
 ) -> dict[str, Any]:
     """Contexts for coach/staff client booking picker."""
-    access_mode = await get_trainer_studio_access_mode(session, trainer_id)
+    access_mode = await get_effective_studio_access_mode(session, trainer_id)
     memberships = await list_active_collective_memberships(session, trainer_id)
     contexts: list[dict[str, Any]] = []
 
-    if access_mode != STUDIO_ACCESS_MODE_ADMIN_ONLY:
+    # Owner on studio_admin_only claim still coaches personally (see organization_capabilities).
+    is_org_owner = any(m.role == MEMBER_ROLE_OWNER for m in memberships)
+    include_personal = access_mode != STUDIO_ACCESS_MODE_ADMIN_ONLY or is_org_owner
+
+    if include_personal:
         has_autonomous = any(m.schedule_mode == SCHEDULE_MODE_MEMBER_AUTONOMOUS for m in memberships)
         if not memberships or has_autonomous or len(memberships) == 1:
             label = "Личное расписание"
@@ -136,7 +141,7 @@ async def list_trainer_booking_contexts(
             {
                 "kind": "center_session",
                 "context_id": f"center:{m.slug}",
-                "label": f"{m.display_name} · окна центра",
+                "label": f"{m.display_name} · через центр",
                 "collective_slug": m.slug,
                 "collective_display_name": m.display_name,
                 "schedule_mode": m.schedule_mode,

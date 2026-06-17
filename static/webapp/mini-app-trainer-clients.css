@@ -840,6 +840,48 @@
       text-decoration: none;
     }
     .tc-tel:active { opacity: 0.8; }
+    .tc-pass-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      color: var(--tg-theme-text-color);
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .tc-pass-link:active {
+      transform: scale(0.99);
+      opacity: 0.92;
+    }
+    .tc-pass-link__arrow {
+      flex-shrink: 0;
+      font-size: 16px;
+      color: var(--tg-theme-button-color);
+      opacity: 0.85;
+    }
+    .tc-pass-cert-extra {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-passes-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #clientPassesCertsContent .tc-passes-stack + .tc-pass-cert-extra {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+    }
     .detail-row {
       margin-bottom: 10px;
       font-size: 14px;

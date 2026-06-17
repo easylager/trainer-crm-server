@@ -1001,9 +1001,72 @@
           refreshTimeOptions(dateEl.value || today, { silentLoadingHint: true });
         }
 
-        function renderTcQuickBookContextStep(payload) {
+        function tcContinueAfterContext() {
+          if (qb.bookContextKind === 'center_session') {
+            openCenterBookingStep();
+            return;
+          }
+          openDatetimeStep();
+        }
+
+        function tcApplyContextSelection(ctx, clientId) {
+          if (window.TrainerBookingContext) {
+            var applied = TrainerBookingContext.applyContext(ctx);
+            qb.bookContextKind = applied.kind;
+            qb.bookCollectiveSlug = applied.collective_slug;
+            if (clientId != null) {
+              TrainerBookingContext.rememberContextForClient(clientId, applied.context_id);
+            }
+            return;
+          }
+          qb.bookContextKind = (ctx && ctx.kind) || 'personal_slot';
+          qb.bookCollectiveSlug = (ctx && ctx.collective_slug) || null;
+        }
+
+        function tcApplyContextAndContinue(ctxPayload, clientId, forcePicker) {
+          qb.bookContexts = ctxPayload;
+          if (window.TrainerBookingContext) {
+            var normalized = TrainerBookingContext.normalizePayload(ctxPayload);
+            if (!forcePicker && !TrainerBookingContext.needsContextPicker(normalized)) {
+              tcApplyContextSelection(normalized.contexts[0], clientId);
+              tcContinueAfterContext();
+              return;
+            }
+            if (!forcePicker) {
+              var resolved = TrainerBookingContext.resolveInitialContext(normalized, clientId);
+              if (resolved) {
+                tcApplyContextSelection(resolved, clientId);
+                tcContinueAfterContext();
+                return;
+              }
+            }
+            openContextStep(normalized, clientId);
+            return;
+          }
+          if (ctxPayload && ctxPayload.needs_context_picker) {
+            openContextStep(ctxPayload, clientId);
+            return;
+          }
+          tcContinueAfterContext();
+        }
+
+        function renderTcQuickBookContextStep(payload, clientId) {
           var wrap = document.getElementById('tcQuickBookContextActions');
           if (!wrap) return;
+          if (window.TrainerBookingContext) {
+            TrainerBookingContext.renderPicker(wrap, payload, {
+              escapeHtml: escapeHtml,
+              attrPrefix: 'data-tc-book',
+              slugAttr: 'data-collective-slug',
+              clientId: clientId,
+              onSelect: function(ctx) {
+                tcApplyContextSelection(ctx, clientId);
+                closeContextModal();
+                tcContinueAfterContext();
+              },
+            });
+            return;
+          }
           var contexts = (payload && payload.contexts) || [];
           wrap.innerHTML = contexts.map(function(ctx) {
             return (
@@ -1015,24 +1078,24 @@
           }).join('');
           wrap.querySelectorAll('[data-tc-book-kind]').forEach(function(btn) {
             btn.onclick = function() {
-              qb.bookContextKind = btn.getAttribute('data-tc-book-kind') || 'personal_slot';
-              qb.bookCollectiveSlug = btn.getAttribute('data-collective-slug') || null;
-              if (qb.bookContextKind === 'center_session') {
-                openCenterBookingStep();
-                return;
-              }
-              openDatetimeStep();
+              tcApplyContextSelection({
+                kind: btn.getAttribute('data-tc-book-kind') || 'personal_slot',
+                context_id: 'manual',
+                collective_slug: btn.getAttribute('data-collective-slug') || null,
+              }, clientId);
+              closeContextModal();
+              tcContinueAfterContext();
             };
           });
         }
 
-        function openContextStep(payload) {
+        function openContextStep(payload, clientId) {
           var modal = document.getElementById('tcModalQuickBookContext');
           if (!modal) {
-            openDatetimeStep();
+            tcContinueAfterContext();
             return;
           }
-          renderTcQuickBookContextStep(payload);
+          renderTcQuickBookContextStep(payload, clientId);
           modal.style.display = 'flex';
           modal.setAttribute('aria-hidden', 'false');
         }
@@ -1171,7 +1234,7 @@
             centerBack.onclick = function() {
               closeCenterModal();
               if (qb.bookContexts && qb.bookContexts.needs_context_picker) {
-                openContextStep(qb.bookContexts);
+                openContextStep(qb.bookContexts, qb.lockedClientId);
               } else {
                 closeAll();
               }
@@ -1388,12 +1451,7 @@
             })
             .then(function(ctxPayload) {
               if (qb.lockedClientId !== clientId) return;
-              qb.bookContexts = ctxPayload;
-              if (ctxPayload && ctxPayload.needs_context_picker) {
-                openContextStep(ctxPayload);
-                return;
-              }
-              openDatetimeStep();
+              tcApplyContextAndContinue(ctxPayload, clientId, false);
             })
             .catch(function() {
               openDatetimeStep();
@@ -3505,30 +3563,48 @@
             var certs = (results[1] && results[1].items) ? results[1].items : [];
             var activePasses = passes.filter(function(p) { return (p.status || '') === 'active'; });
             var activeCerts = certs.filter(function(c) { return (c.status || '') === 'active'; });
-            var parts = [];
+            var pathBase = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
             if (activePasses.length) {
-              var lines = activePasses.map(function(p) {
+              var passHtml = activePasses.map(function(p) {
                 var total = typeof p.sessions_total === 'number' ? p.sessions_total : 0;
                 var left = typeof p.sessions_remaining === 'number' ? p.sessions_remaining : 0;
                 var name = (p.product_name || '').trim() || 'Абонемент';
-                return name + ': ' + left + ' из ' + total;
-              });
-              parts.push('Абонементы: ' + lines.join('; '));
-            } else if (passes.length) {
-              parts.push('Абонементы: нет активных');
+                var canRedeem = left > 0;
+                var label = name + ': ' + left + ' из ' + total;
+                if (canRedeem) {
+                  var href = pathBase + 'trainer-pass-products?pass_instance_id=' + encodeURIComponent(String(p.id)) +
+                    '&client_id=' + encodeURIComponent(String(id)) + '&tab=issued';
+                  return '<a class="tc-pass-link" href="' + href + '">' +
+                    '<span>' + escapeHtml(label) + '</span>' +
+                    '<span class="tc-pass-link__arrow" aria-hidden="true">→</span></a>';
+                }
+                return escapeHtml(label);
+              }).join('');
+              contentEl.innerHTML = '<div class="tc-passes-stack">' + passHtml + '</div>';
+              if (activeCerts.length) {
+                var certLines = activeCerts.map(function(c) {
+                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
+                  return amount;
+                });
+                contentEl.innerHTML += '<div class="tc-pass-cert-extra">Сертификаты: ' + activeCerts.length +
+                  ' активных (' + escapeHtml(certLines.join(', ')) + ')</div>';
+              }
+            } else {
+              var parts = [];
+              if (passes.length) parts.push('Абонементы: нет активных');
+              if (activeCerts.length) {
+                var certLines2 = activeCerts.map(function(c) {
+                  var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
+                  return amount;
+                });
+                parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines2.join(', ') + ')');
+              } else if (certs.length) {
+                parts.push('Сертификаты: нет активных');
+              }
+              if (!parts.length) parts.push('Нет активных абонементов и сертификатов');
+              contentEl.textContent = parts.join(' · ');
             }
-            if (activeCerts.length) {
-              var certLines = activeCerts.map(function(c) {
-                var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
-                return amount;
-              });
-              parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines.join(', ') + ')');
-            } else if (certs.length) {
-              parts.push('Сертификаты: нет активных');
-            }
-            if (!parts.length) parts.push('Нет активных абонементов и сертификатов');
             contentEl.classList.remove('is-loading');
-            contentEl.textContent = parts.join(' · ');
             contentEl.classList.add('tc-reveal-once');
           }).catch(function() {
             contentEl.classList.remove('is-loading');

@@ -1475,7 +1475,9 @@
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
           const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
-          const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
+          const passBadge = (r.request_subtype === 'pass_product_order' || r.request_subtype === 'collective_pass_product_order')
+            ? '<span class="badge pass-order">' + (r.request_subtype === 'collective_pass_product_order' ? 'Абонемент центра' : 'Абонемент') + '</span>'
+            : '';
           const certBadge = r.request_subtype === 'certificate_product_order' ? '<span class="badge cert-order">Сертификат</span>' : '';
           return '<button type="button" class="request-card request-card--new" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
@@ -1490,7 +1492,9 @@
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
           const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
-          const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
+          const passBadge = (r.request_subtype === 'pass_product_order' || r.request_subtype === 'collective_pass_product_order')
+            ? '<span class="badge pass-order">' + (r.request_subtype === 'collective_pass_product_order' ? 'Абонемент центра' : 'Абонемент') + '</span>'
+            : '';
           const certBadge = r.request_subtype === 'certificate_product_order' ? '<span class="badge cert-order">Сертификат</span>' : '';
           return '<button type="button" class="request-card request-card--progress" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
@@ -1559,17 +1563,19 @@
         req.remind_slots_pending = !!req.remind_slots_pending;
 
         var isPassOrder = req.request_subtype === 'pass_product_order';
+        var isCollectivePassOrder = req.request_subtype === 'collective_pass_product_order';
         var isCertOrder = req.request_subtype === 'certificate_product_order';
-        var isCatalogOrder = isPassOrder || isCertOrder;
+        var isCatalogOrder = isPassOrder || isCollectivePassOrder || isCertOrder;
         var detailScreen = document.getElementById('screenDetail');
         if (detailScreen) {
-          detailScreen.classList.toggle('detail-screen--pass-order', isPassOrder);
+          detailScreen.classList.toggle('detail-screen--pass-order', isPassOrder || isCollectivePassOrder);
           detailScreen.classList.toggle('detail-screen--cert-order', isCertOrder);
         }
 
         var detailKickerEl = document.getElementById('detailKicker');
         if (detailKickerEl) {
           if (isPassOrder) detailKickerEl.textContent = 'Заявка на абонемент';
+          else if (isCollectivePassOrder) detailKickerEl.textContent = 'Заявка на абонемент центра';
           else if (isCertOrder) detailKickerEl.textContent = 'Заявка на сертификат';
           else detailKickerEl.textContent = 'Заявка';
         }
@@ -1581,6 +1587,11 @@
             passFlowHintEl.style.display = 'block';
             passFlowHintEl.textContent =
               'Примите оплату и выдайте абонемент в разделе «Абонементы». Кнопка «Написать клиенту» в уведомлении Telegram открывает переписку с клиентом через бота (сообщение уйдёт в чат клиента).';
+          } else if (isCollectivePassOrder) {
+            passFlowHintEl.className = 'detail-pass-flow-hint';
+            passFlowHintEl.style.display = 'block';
+            passFlowHintEl.textContent =
+              'Примите оплату и выдайте абонемент в разделе «Коллектив» → «Абонементы». Кнопка «Написать клиенту» открывает переписку с клиентом через бота.';
           } else if (isCertOrder) {
             passFlowHintEl.className = 'detail-cert-flow-hint';
             passFlowHintEl.style.display = 'block';
@@ -1632,6 +1643,7 @@
         var titleBadges = [];
         if (req.is_personalized) titleBadges.push('<span class="badge personalized">Заявка для вас</span>');
         if (isPassOrder) titleBadges.push('<span class="badge pass-order">Абонемент</span>');
+        if (isCollectivePassOrder) titleBadges.push('<span class="badge pass-order">Абонемент центра</span>');
         if (isCertOrder) titleBadges.push('<span class="badge cert-order">Сертификат</span>');
         if (req.has_responded) titleBadges.push('<span class="detail-badge-in-progress">В работе</span>');
         if (titleMainEl) {

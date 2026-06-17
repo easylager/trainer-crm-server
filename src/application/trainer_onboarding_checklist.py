@@ -33,7 +33,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.booking_use_cases import count_trainer_fill_slots_invite_candidates
 from src.application.collective_use_cases import (
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
-    get_trainer_studio_access_mode,
+    get_effective_studio_access_mode,
+    list_active_collective_memberships,
+)
+from src.application.organization_capabilities import (
+    capabilities_for_collective_membership,
+    organization_capabilities_to_dict,
+    resolve_solo_trainer_capabilities,
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
@@ -102,16 +108,32 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
 
     has_crm = await trainer_has_crm_access(session, trainer_id)
     out["has_crm_subscription_access"] = has_crm
-    studio_access_mode = await get_trainer_studio_access_mode(session, trainer_id)
+    studio_access_mode = await get_effective_studio_access_mode(session, trainer_id)
     out["studio_access_mode"] = studio_access_mode
 
     if studio_access_mode == STUDIO_ACCESS_MODE_ADMIN_ONLY:
         out["schedule_unlocked"] = True
         out["tt_minimal_complete"] = True
         out["profile_complete"] = True
+        out["full_profile_complete"] = True
+        # Center manager path: skip solo «первая запись» onboarding (hub step 2).
+        out["has_any_booking"] = True
         out["slots_locked_reason"] = None
         out["bookings_locked_reason"] = None
         out["trainer_id"] = trainer_id
+        memberships = await list_active_collective_memberships(session, trainer_id)
+        if memberships:
+            m = memberships[0]
+            out["capabilities"] = capabilities_for_collective_membership(
+                organization_format=m.organization_format,
+                schedule_mode=m.schedule_mode,
+                role=m.role,
+                studio_access_mode=studio_access_mode,
+            )
+        else:
+            out["capabilities"] = organization_capabilities_to_dict(
+                resolve_solo_trainer_capabilities(studio_access_mode)
+            )
         return out
 
     pending_ttv_unlock = (
@@ -445,5 +467,19 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out["fill_slots_invite_candidates_count"] = await count_trainer_fill_slots_invite_candidates(
         session, trainer_id
     )
+
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    if memberships:
+        m = memberships[0]
+        out["capabilities"] = capabilities_for_collective_membership(
+            organization_format=m.organization_format,
+            schedule_mode=m.schedule_mode,
+            role=m.role,
+            studio_access_mode=studio_access_mode,
+        )
+    else:
+        out["capabilities"] = organization_capabilities_to_dict(
+            resolve_solo_trainer_capabilities(studio_access_mode)
+        )
 
     return out

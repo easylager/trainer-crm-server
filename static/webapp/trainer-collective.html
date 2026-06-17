@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="theme.css?v=20260425" />
   <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606165" />
   <script>
     (function () {
       function isColDark() {
@@ -57,6 +58,9 @@
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 24px);
       -webkit-font-smoothing: antialiased;
       --col-accent: #F7A600;
+    }
+    body.col-page.trainer-shell-body {
+      padding-bottom: calc(var(--trainer-shell-tab-inset, 80px) + 12px);
     }
     .col-shell { max-width: 540px; margin: 0 auto; animation: colFadeIn 0.35s ease both; }
     @keyframes colFadeIn {
@@ -155,6 +159,30 @@
       gap: 8px;
       margin-top: 6px;
     }
+    .col-coach-self-row {
+      width: 100%;
+      margin-bottom: 4px;
+    }
+    .col-coach-self-btn {
+      width: 100%;
+      margin: 0;
+      font-size: 14px;
+    }
+    .col-pass-section {
+      margin-bottom: 16px;
+    }
+    .col-pass-section__title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color, #6b7280);
+      margin-bottom: 4px;
+    }
+    .col-pass-section__hint {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
     .col-coach-chip {
       display: inline-flex;
       align-items: center;
@@ -170,6 +198,27 @@
       padding: 14px;
       border-radius: 14px;
       background: color-mix(in srgb, var(--col-accent) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--col-accent) 18%, transparent);
+    }
+    .col-inbox__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .col-inbox__count {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, #ff9500 18%, transparent);
+      color: var(--tg-theme-text-color);
+    }
+    .col-inbox__empty {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
     }
     .col-inbox-item {
       display: flex;
@@ -179,6 +228,35 @@
       margin-top: 10px;
       border-radius: 12px;
       background: var(--tg-theme-bg-color);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
+    }
+    .col-inbox-item__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .col-inbox-item__pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, #ff9500 14%, var(--tg-theme-secondary-bg-color));
+    }
+    .col-tab__badge {
+      display: inline-flex;
+      min-width: 18px;
+      height: 18px;
+      align-items: center;
+      justify-content: center;
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #ff9500;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      vertical-align: middle;
     }
     .col-inbox-item__actions {
       display: flex;
@@ -193,6 +271,132 @@
       margin-top: 10px;
       padding-top: 10px;
       border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+    }
+    .col-schedule-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .col-schedule-head__hint { margin: 4px 0 0; }
+    .col-schedule-head__cta {
+      flex-shrink: 0;
+      margin: 0;
+      width: auto;
+      min-width: 118px;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+    .col-sessions-list { margin-top: 4px; }
+    .col-sessions-empty {
+      padding: 20px 16px;
+      border-radius: 16px;
+      text-align: center;
+      background: var(--tg-theme-bg-color);
+      border: 1px dashed color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 28%, transparent);
+    }
+    .col-sessions-empty__text {
+      margin: 0 0 14px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .col-session-card {
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      border-radius: 16px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 22%, transparent);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    .col-session-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(
+        ellipse,
+        color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 10%, transparent) 0%,
+        transparent 70%
+      );
+      pointer-events: none;
+    }
+    .col-session-card__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .col-session-card__when {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+    }
+    .col-session-card__seats {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 14%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 24%, transparent);
+    }
+    .col-session-card__coaches {
+      position: relative;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+    }
+    .col-session-sheet-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+    .col-session-sheet-overlay[hidden] { display: none !important; }
+    .col-session-sheet {
+      width: 100%;
+      max-width: 520px;
+      max-height: 92vh;
+      overflow-y: auto;
+      border-radius: 20px 20px 0 0;
+      background: var(--tg-theme-bg-color);
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+    }
+    .col-session-sheet__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .col-session-sheet__title {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .col-session-tariff-hint {
+      margin: 0 0 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      background: color-mix(in srgb, var(--col-accent, var(--tg-theme-button-color)) 10%, var(--tg-theme-secondary-bg-color));
     }
     .col-member {
       display: flex;
@@ -556,9 +760,60 @@
     .col-preview-gallery { display: flex; gap: 8px; overflow-x: auto; margin-top: 12px; }
     .col-preview-gallery img { width: 80px; height: 80px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
     .col-preview-powered { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 10px; }
+    .col-preview-open-catalog {
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+    }
+    .col-seats-meter {
+      margin: 8px 0 0;
+      max-width: 220px;
+    }
+    .col-seats-meter__label {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .col-seats-meter__track {
+      height: 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+      overflow: hidden;
+    }
+    .col-seats-meter__fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--col-accent, var(--tg-theme-button-color));
+      transition: width .25s ease;
+    }
+    .col-admin-scope-hint {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-text-color);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+    }
+    .col-member-headline {
+      margin: 4px 0 8px;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .col-duty-list { display: flex; flex-direction: column; gap: 8px; }
+    .col-duty-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+    }
+    .col-duty-item__when { font-size: 14px; font-weight: 600; }
+    .col-duty-item__meta { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
   </style>
 </head>
-<body class="col-page">
+<body class="col-page" data-trainer-shell="tabs">
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
     <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
@@ -574,9 +829,14 @@
         <h1 class="col-hero__title" id="colTitle">—</h1>
         <p class="col-hero__tagline" id="colTagline"></p>
         <p class="col-hero__seats" id="colSeats"></p>
+        <div class="col-seats-meter" id="colSeatsMeter" hidden>
+          <p class="col-seats-meter__label" id="colSeatsMeterLabel"></p>
+          <div class="col-seats-meter__track"><div class="col-seats-meter__fill" id="colSeatsMeterFill"></div></div>
+        </div>
       </header>
 
       <div id="colOwnerArea" style="display:none;">
+        <p class="col-admin-scope-hint" id="colAdminScopeHint" hidden></p>
         <nav class="col-tabs" id="colTabs" aria-label="Разделы студии">
           <button type="button" class="col-tab is-active" data-col-tab="brand">Бренд</button>
           <button type="button" class="col-tab" data-col-tab="page">Страница</button>
@@ -653,32 +913,34 @@
 
         <div class="col-card col-tab-panel" id="colTabSchedule" data-col-panel="schedule" hidden>
           <div id="colCenterInbox" class="col-inbox" hidden></div>
-          <div class="col-card-title" style="margin-top:0;">Сетка центра</div>
-          <p class="col-hint">Окна для записи клиентов (PAYG). Назначайте тренеров на смену — клиент выбирает из списка.</p>
-          <div class="col-field">
-            <label for="colSessionDate">Дата</label>
-            <input type="date" id="colSessionDate" />
-          </div>
-          <div class="col-field" style="display:flex; gap:10px;">
-            <div style="flex:1;">
-              <label for="colSessionStart">Начало</label>
-              <input type="time" id="colSessionStart" value="10:00" />
+          <div class="col-schedule-head">
+            <div>
+              <div class="col-card-title" style="margin-top:0;" id="colScheduleTitle">Сетка центра</div>
+              <p class="col-hint col-schedule-head__hint" id="colScheduleHint">
+                Окна для записи клиентов. Назначайте тренеров на смену — клиент выбирает формат визита.
+              </p>
             </div>
-            <div style="flex:1;">
-              <label for="colSessionEnd">Конец</label>
-              <input type="time" id="colSessionEnd" value="11:00" />
+            <button type="button" class="col-save-btn col-schedule-head__cta" id="colSessionOpenSheet">Создать окно</button>
+          </div>
+          <div class="col-duplicate-week" id="colDuplicateWeekBlock" style="margin-top:4px; padding-top:16px; border-top:1px solid var(--tg-theme-secondary-bg-color, rgba(0,0,0,0.06));">
+            <div class="col-card-title" style="margin-top:0; font-size:15px;">Повтор недели</div>
+            <p class="col-hint">Скопируйте все окна с выбранной недели на следующие — удобно для регулярной сетки.</p>
+            <div class="col-field">
+              <label for="colDuplicateWeekStart">Неделя (любой день)</label>
+              <input type="date" id="colDuplicateWeekStart" />
             </div>
+            <div class="col-field">
+              <label for="colDuplicateWeeksAhead">Сколько недель вперёд</label>
+              <select id="colDuplicateWeeksAhead">
+                <option value="1" selected>1 неделя</option>
+                <option value="2">2 недели</option>
+                <option value="3">3 недели</option>
+                <option value="4">4 недели</option>
+              </select>
+            </div>
+            <button type="button" class="col-preview-btn" id="colDuplicateWeekBtn">Скопировать неделю</button>
           </div>
-          <div class="col-field">
-            <label for="colSessionCapacity">Мест</label>
-            <input type="number" id="colSessionCapacity" min="1" max="500" value="1" />
-          </div>
-          <div class="col-field" id="colSessionCoachesField">
-            <label>Тренеры на смене</label>
-            <div id="colSessionCoachPicker" class="col-coach-picker"></div>
-          </div>
-          <button type="button" class="col-save-btn" id="colSessionCreate">Добавить окно</button>
-          <div id="colSessionsList" style="margin-top:16px;"></div>
+          <div id="colSessionsList" class="col-sessions-list"></div>
         </div>
 
         <div class="col-card col-tab-panel" id="colTabPasses" data-col-panel="passes" hidden>
@@ -709,6 +971,7 @@
             <div class="col-card-title">Пригласить тренера</div>
             <p class="col-hint" id="colInviteHint">Одноразовая ссылка в trainer-бот — коллега станет member.</p>
             <button type="button" class="col-issue-btn" id="colIssueInvite">Создать ссылку-приглашение</button>
+            <button type="button" class="col-preview-btn" id="colInviteUpgradeBtn" hidden style="margin-top:10px;">Расширить pool подписки</button>
             <div class="col-link-box" id="colInviteBox" style="display:none; margin-top:12px;">
               <div class="col-link-text" id="colInviteLink"></div>
               <button type="button" class="col-copy-btn" id="colCopyInvite">Копировать</button>
@@ -730,11 +993,21 @@
 
       <div id="colMemberArea" style="display:none;">
         <div class="col-card">
+          <p class="col-hero__eyebrow" id="colMemberEyebrow">Member</p>
+          <h2 class="col-member-headline" id="colMemberHeadline">—</h2>
+          <p class="col-hint" id="colMemberHint">Ссылка ниже — для ваших клиентов в этой организации.</p>
+        </div>
+        <div class="col-card">
           <div class="col-card-title">Ссылка для клиентов</div>
           <div class="col-link-box">
             <div class="col-link-text" id="colMemberClientLink">—</div>
             <button type="button" class="col-copy-btn" id="colMemberCopyClient">Копировать</button>
           </div>
+        </div>
+        <div class="col-card" id="colMemberShiftsCard" hidden>
+          <div class="col-card-title">Мои смены</div>
+          <p class="col-hint" style="margin-top:0;">Ближайшие окна, где вы назначены тренером на смене.</p>
+          <div id="colMemberShifts" class="col-duty-list"></div>
         </div>
         <div class="col-card">
           <div class="col-card-title">Команда</div>
@@ -751,6 +1024,39 @@
         <button type="button" class="col-preview-close" id="colPreviewClose" aria-label="Закрыть">×</button>
       </div>
       <div id="colPreviewContent"></div>
+    </div>
+  </div>
+
+  <div id="colSessionSheetOverlay" class="col-session-sheet-overlay" hidden>
+    <div class="col-session-sheet" role="dialog" aria-modal="true" aria-labelledby="colSessionSheetTitle">
+      <div class="col-session-sheet__head">
+        <h2 class="col-session-sheet__title" id="colSessionSheetTitle">Новое окно</h2>
+        <button type="button" class="col-preview-close" id="colSessionSheetClose" aria-label="Закрыть">×</button>
+      </div>
+      <p class="col-session-tariff-hint" id="colSessionTariffHint">Тариф записи: дорожка 1 ч — по прайсу центра.</p>
+      <div class="col-field">
+        <label for="colSessionDate">Дата</label>
+        <input type="date" id="colSessionDate" />
+      </div>
+      <div class="col-field" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label for="colSessionStart">Начало</label>
+          <input type="time" id="colSessionStart" value="10:00" />
+        </div>
+        <div style="flex:1;">
+          <label for="colSessionEnd">Конец</label>
+          <input type="time" id="colSessionEnd" value="11:00" />
+        </div>
+      </div>
+      <div class="col-field">
+        <label for="colSessionCapacity">Мест</label>
+        <input type="number" id="colSessionCapacity" min="1" max="500" value="1" />
+      </div>
+      <div class="col-field" id="colSessionCoachesField">
+        <label>Тренеры на смене</label>
+        <div id="colSessionCoachPicker" class="col-coach-picker"></div>
+      </div>
+      <button type="button" class="col-save-btn" id="colSessionCreate">Добавить окно</button>
     </div>
   </div>
 
@@ -838,6 +1144,7 @@
       var previewContentEl = document.getElementById('colPreviewContent');
       var selectedAccentPreset = 'amber';
       var studioData = null;
+      var centerSessionTariffs = null;
       var selectedSubsPeriod = 1;
       var catalogCities = [];
       var catalogCitiesPromise = null;
@@ -950,6 +1257,9 @@
       }
 
       function setColTab(tabId) {
+        if (studioData && !colTabAllowedForViewer(tabId, studioData)) {
+          tabId = studioData.can_edit_brand ? 'brand' : 'team';
+        }
         document.querySelectorAll('.col-tab').forEach(function(btn) {
           btn.classList.toggle('is-active', btn.getAttribute('data-col-tab') === tabId);
         });
@@ -958,11 +1268,46 @@
         });
       }
 
+      function isCenterGridOrg(data) {
+        var caps = colCapabilities(data);
+        return caps.catalog_mode === 'center_grid' || !!caps.show_center_grid;
+      }
+
+      function colAdminOnlyTab(tabId) {
+        return tabId === 'schedule' || tabId === 'passes';
+      }
+
+      function colTabAllowedForViewer(tabId, data) {
+        if (!data || !tabId) return true;
+        if (!data.can_edit_brand) {
+          return false;
+        }
+        if (colAdminOnlyTab(tabId)) {
+          if (isCenterGridOrg(data)) return false;
+          var caps = colCapabilities(data);
+          if (caps.show_center_grid === false || caps.show_center_passes === false) {
+            if (tabId === 'schedule' && caps.show_center_grid === false) return false;
+            if (tabId === 'passes' && caps.show_center_passes === false) return false;
+          }
+          if (!data.can_manage_center_schedule) return false;
+        }
+        return true;
+      }
+
       document.querySelectorAll('.col-tab').forEach(function(btn) {
         btn.addEventListener('click', function() {
           setColTab(btn.getAttribute('data-col-tab') || 'brand');
         });
       });
+
+      function colCapabilities(data) {
+        return (data && data.capabilities) || {};
+      }
+
+      function isCenterCatalogMode(data) {
+        var caps = colCapabilities(data);
+        return caps.catalog_mode === 'center_grid';
+      }
 
       function formatLocationLine(data) {
         if (!data) return '';
@@ -975,7 +1320,7 @@
       }
 
       function syncPageLocationMode(data) {
-        var isCentral = data && data.schedule_mode === 'studio_central';
+        var isCentral = isCenterCatalogMode(data);
         var titleEl = document.getElementById('colLocationGroupTitle');
         var hintEl = document.getElementById('colLocationGroupHint');
         var addressHint = document.getElementById('colAddressHint');
@@ -1099,9 +1444,30 @@
       }
 
       function removeCollectiveMember(trainerId) {
-        confirmStudioAction('Снять тренера из студии?', function() {
-          postCollectiveAction('/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/remove');
-        });
+        fetch(
+          apiUrl('/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/removal-preview'),
+          { headers: headersJson(), cache: 'no-store' }
+        )
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || 'preview_failed');
+              return d;
+            });
+          })
+          .then(function(preview) {
+            var msg = 'Снять тренера из студии?';
+            if (preview && preview.warnings && preview.warnings.length) {
+              msg += '\n\n' + preview.warnings.join('\n');
+            }
+            confirmStudioAction(msg, function() {
+              postCollectiveAction('/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/remove');
+            });
+          })
+          .catch(function(e) {
+            confirmStudioAction('Снять тренера из студии?', function() {
+              postCollectiveAction('/api/webapp/trainer/collective/members/' + encodeURIComponent(trainerId) + '/remove');
+            });
+          });
       }
 
       function transferCollectiveOwnership(trainerId) {
@@ -1109,8 +1475,12 @@
         (studioData && studioData.members || []).forEach(function(m) {
           if (String(m.trainer_id) === String(trainerId)) label = memberLabel(m);
         });
+        var isCenter = studioData && isCenterCatalogMode(studioData);
+        var transferHint = isCenter
+          ? 'Передать управление центром тренеру «' + label + '»? Вы останетесь member без admin-доступа.'
+          : 'Передать управление студией тренеру «' + label + '»? Вы останетесь member.';
         confirmStudioAction(
-          'Передать управление студией тренеру «' + label + '»? Вы останетесь member.',
+          transferHint,
           function() {
             fetch(apiUrl('/api/webapp/trainer/collective/transfer-ownership'), {
               method: 'POST',
@@ -1252,6 +1622,9 @@
         }
         card.style.display = 'block';
         var html = '';
+        if (data.role === 'owner') {
+          html += '<p class="col-hint" style="margin-top:0;">Подписка покрывает команду — CRM и модули для всех мест.</p>';
+        }
         if (pool.active) {
           html += '<p class="col-subs-status col-subs-status--active">Активна до ' + escapeHtml(pool.expires_date || '—') + '</p>';
           html += '<p class="col-hint" style="margin-top:0;">' + escapeHtml(pool.seats_label || '') + '</p>';
@@ -1387,6 +1760,88 @@
         }
       }
 
+      function openCatalogWebapp(url) {
+        if (!url) return;
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && typeof tg.openLink === 'function') {
+          tg.openLink(url);
+          return;
+        }
+        window.open(url, '_blank');
+      }
+
+      function renderSeatsMeter(data) {
+        var meterEl = document.getElementById('colSeatsMeter');
+        var labelEl = document.getElementById('colSeatsMeterLabel');
+        var fillEl = document.getElementById('colSeatsMeterFill');
+        var seatsEl = document.getElementById('colSeats');
+        if (!meterEl || !seatsEl) return;
+        var active = Number(data.active_count || 0);
+        var limit = Number(data.seat_limit || 0);
+        seatsEl.textContent = active + ' / ' + (limit || '—') + ' мест';
+        if (!limit || !data.can_manage_team) {
+          meterEl.hidden = true;
+          return;
+        }
+        meterEl.hidden = false;
+        var pct = Math.min(100, Math.round((active / limit) * 100));
+        if (labelEl) {
+          labelEl.textContent = active + ' из ' + limit + ' мест занято';
+        }
+        if (fillEl) fillEl.style.width = pct + '%';
+      }
+
+      function renderMemberShifts(duties) {
+        var card = document.getElementById('colMemberShiftsCard');
+        var listEl = document.getElementById('colMemberShifts');
+        if (!card || !listEl) return;
+        if (!duties || !duties.length) {
+          card.hidden = true;
+          listEl.innerHTML = '';
+          return;
+        }
+        card.hidden = false;
+        listEl.innerHTML = duties.map(function(d) {
+          return (
+            '<div class="col-duty-item">' +
+              '<div class="col-duty-item__when">' + escapeHtml(d.slot_date) + ' · ' +
+              escapeHtml(d.start_time) + '–' + escapeHtml(d.end_time) + '</div>' +
+              '<div class="col-duty-item__meta">Записей: ' + escapeHtml(String(d.booked_count || 0)) +
+              ' · мест ' + escapeHtml(String(d.capacity || 1)) + '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      function syncCollectiveNavLabels(data) {
+        var caps = colCapabilities(data);
+        var screenTitle = caps.collective_screen_title || 'Студия';
+        var isCenter = caps.catalog_mode === 'center_grid';
+        var tabs = document.getElementById('colTabs');
+        if (tabs) tabs.setAttribute('aria-label', 'Разделы: ' + screenTitle.toLowerCase());
+        document.title = screenTitle + ' — тренер';
+        var scheduleTitle = document.getElementById('colScheduleTitle');
+        var scheduleHint = document.getElementById('colScheduleHint');
+        if (scheduleTitle) {
+          scheduleTitle.textContent = isCenter ? 'Управление центром' : 'Сетка центра';
+        }
+        if (scheduleHint) {
+          scheduleHint.textContent = isCenter
+            ? 'Окна для записи клиентов. Назначайте тренеров на смену — клиент выбирает формат визита.'
+            : 'Окна для записи. Назначайте тренеров на смену — клиент выбирает из списка.';
+        }
+      }
+
+      function applyDefaultOrgTab(data) {
+        var params = new URLSearchParams(window.location.search || '');
+        var tab = (params.get('tab') || '').trim();
+        if (tab && colTabAllowedForViewer(tab, data)) {
+          setColTab(tab);
+          return;
+        }
+        setColTab(data.can_edit_brand ? 'brand' : 'team');
+      }
+
       function openClientPreview() {
         if (!studioData || !studioData.slug || !previewOverlayEl || !previewContentEl) return;
         previewContentEl.innerHTML = '<p class="col-hint">Загрузка превью…</p>';
@@ -1406,11 +1861,14 @@
             if (brand.cover_url) {
               heroStyle += 'background-image:linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.55)),url(' + brand.cover_url + ');';
             }
+            var defaultLead = brand.hero_variant === 'center'
+              ? 'Расписание центра — выберите окно и формат визита.'
+              : 'Тренеры студии — выберите город и занятие.';
             var heroClass = brand.cover_url ? 'col-preview-hero col-preview-hero--cover' : 'col-preview-hero';
             var html = '<div class="' + heroClass + '" style="' + heroStyle + '">';
             if (brand.logo_url) html += '<img class="col-preview-hero__logo" src="' + escapeHtml(brand.logo_url) + '" alt="" />';
             html += '<h3 class="col-preview-hero__title">' + escapeHtml(brand.display_name || studioData.slug) + '</h3>';
-            html += '<p class="col-preview-hero__lead">' + escapeHtml(brand.tagline || 'Тренеры студии — выберите город и занятие.') + '</p>';
+            html += '<p class="col-preview-hero__lead">' + escapeHtml(brand.tagline || defaultLead) + '</p>';
             if (brand.about) html += '<p class="col-preview-hero__about">' + escapeHtml(brand.about) + '</p>';
             var locLine = formatLocationLine(brand);
             if (locLine) html += '<p class="col-preview-hero__lead">' + escapeHtml(locLine) + '</p>';
@@ -1421,7 +1879,17 @@
             }
             if (brand.powered_by) html += '<p class="col-preview-powered">powered by ' + escapeHtml(brand.powered_by) + '</p>';
             html += '</div>';
+            var catalogUrl = studioData.catalog_webapp_url || brand.catalog_webapp_url;
+            if (catalogUrl) {
+              html += '<button type="button" class="col-save-btn col-preview-open-catalog" id="colPreviewOpenCatalog">Открыть каталог как клиент</button>';
+            }
             previewContentEl.innerHTML = html;
+            var openBtn = document.getElementById('colPreviewOpenCatalog');
+            if (openBtn && catalogUrl) {
+              openBtn.onclick = function() {
+                openCatalogWebapp(catalogUrl);
+              };
+            }
           })
           .catch(function(e) {
             previewContentEl.innerHTML = '<p class="col-hint">' + escapeHtml(e.message || 'Не удалось загрузить превью') + '</p>';
@@ -1552,7 +2020,7 @@
         errorEl.style.display = 'none';
         contentEl.style.display = 'block';
 
-        document.getElementById('colTitle').textContent = data.display_name || data.slug || 'Студия';
+        document.getElementById('colTitle').textContent = data.display_name || data.slug || (colCapabilities(data).collective_screen_title || 'Студия');
         document.getElementById('colTagline').textContent = data.tagline || '';
         applyStudioAccent(data);
         var heroLogo = document.getElementById('colHeroLogo');
@@ -1564,11 +2032,27 @@
             heroLogo.hidden = true;
           }
         }
-        document.getElementById('colRoleEyebrow').textContent = data.role === 'owner'
-          ? 'Owner · студия'
-          : (data.role === 'admin' ? 'Admin · студия' : 'Member · студия');
-        document.getElementById('colSeats').textContent =
-          (data.active_count != null ? data.active_count : '—') + ' / ' + (data.seat_limit || '—') + ' мест';
+        var caps = colCapabilities(data);
+        var orgLabel = caps.organization_label || 'студия';
+        var rolePrefix = data.role === 'owner' ? 'Owner' : (data.role === 'admin' ? 'Admin' : 'Member');
+        document.getElementById('colRoleEyebrow').textContent = rolePrefix + ' · ' + orgLabel;
+        renderSeatsMeter(data);
+        syncCollectiveNavLabels(data);
+        if (window.TrainerShell && typeof TrainerShell.syncCollectiveMenuFromBootstrap === 'function') {
+          TrainerShell.syncCollectiveMenuFromBootstrap(data);
+        }
+
+        var adminHint = document.getElementById('colAdminScopeHint');
+        if (adminHint) {
+          if (data.role === 'admin') {
+            adminHint.hidden = false;
+            adminHint.textContent =
+              'Вы — admin: сетка и бренд доступны. Приглашения, подписка и роли — у owner.';
+          } else {
+            adminHint.hidden = true;
+            adminHint.textContent = '';
+          }
+        }
 
         if (data.can_edit_brand) {
           ownerAreaEl.style.display = 'block';
@@ -1576,11 +2060,17 @@
           var scheduleTabBtn = document.getElementById('colTabScheduleBtn');
           var schedulePanel = document.getElementById('colTabSchedule');
           if (scheduleTabBtn && schedulePanel) {
-            var showSchedule = !!data.can_manage_center_schedule;
+            var showSchedule = !isCenterGridOrg(data) && (
+              caps.show_center_grid != null
+                ? !!caps.show_center_grid
+                : !!data.can_manage_center_schedule
+            );
             scheduleTabBtn.hidden = !showSchedule;
             schedulePanel.hidden = !showSchedule;
             if (showSchedule) {
-              renderSessionCoachPicker([]);
+              var todayIso = new Date().toISOString().slice(0, 10);
+              var dupWeekEl = document.getElementById('colDuplicateWeekStart');
+              if (dupWeekEl && !dupWeekEl.value) dupWeekEl.value = todayIso;
               loadCenterSessions();
               loadCenterInbox();
             }
@@ -1588,7 +2078,11 @@
           var passesTabBtn = document.getElementById('colTabPassesBtn');
           var passesPanel = document.getElementById('colTabPasses');
           if (passesTabBtn && passesPanel) {
-            var showPasses = !!data.can_manage_center_schedule;
+            var showPasses = !isCenterGridOrg(data) && (
+              caps.show_center_passes != null
+                ? !!caps.show_center_passes
+                : !!data.can_manage_center_schedule
+            );
             passesTabBtn.hidden = !showPasses;
             passesPanel.hidden = !showPasses;
             if (showPasses) loadCenterPassProducts();
@@ -1611,10 +2105,23 @@
         } else {
           ownerAreaEl.style.display = 'none';
           memberAreaEl.style.display = 'block';
+          var memberEyebrow = document.getElementById('colMemberEyebrow');
+          var memberHeadline = document.getElementById('colMemberHeadline');
+          var memberHint = document.getElementById('colMemberHint');
+          if (memberEyebrow) memberEyebrow.textContent = rolePrefix + ' · ' + orgLabel;
+          if (memberHeadline) {
+            memberHeadline.textContent = 'Вы в «' + (data.display_name || data.slug || caps.collective_screen_title || 'Студия') + '»';
+          }
+          if (memberHint) {
+            memberHint.textContent = isCenterCatalogMode(data)
+              ? 'Клиенты записываются через центр. Ваша ссылка — для личных клиентов.'
+              : 'Ссылка ниже — для ваших клиентов в этой организации.';
+          }
           document.getElementById('colMemberClientLink').textContent = data.client_link || '—';
           document.getElementById('colMemberCopyClient').onclick = function() {
             copyText(data.client_link, this);
           };
+          renderMemberShifts(data.my_center_duties || []);
           renderMembersList(document.getElementById('colMemberMembers'), data.members, false);
         }
 
@@ -1623,11 +2130,24 @@
           copyText(data.client_link, this);
         };
 
-        if (data.role === 'owner') {
+        if (data.role === 'owner' && (caps.show_team_invite != null ? caps.show_team_invite : true)) {
           inviteCardEl.style.display = 'block';
           issueBtnEl.disabled = !data.can_invite;
+          var upgradeBtn = document.getElementById('colInviteUpgradeBtn');
           if (!data.can_invite) {
-            document.getElementById('colInviteHint').textContent = 'Все места заняты — напишите в поддержку для расширения.';
+            document.getElementById('colInviteHint').textContent =
+              'Все места заняты — расширьте pool подписки или отзовите неиспользованные приглашения.';
+            if (upgradeBtn) {
+              upgradeBtn.hidden = false;
+              upgradeBtn.onclick = function() {
+                var subs = document.getElementById('colSubsCard');
+                if (subs) subs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              };
+            }
+          } else {
+            document.getElementById('colInviteHint').textContent =
+              'Одноразовая ссылка в trainer-бот — коллега станет member.';
+            if (upgradeBtn) upgradeBtn.hidden = true;
           }
         } else if (inviteCardEl) {
           inviteCardEl.style.display = 'none';
@@ -1655,6 +2175,9 @@
             revokeBtn.style.display = 'none';
           }
         }
+
+        syncPageLocationMode(data);
+        applyDefaultOrgTab(data);
       }
 
       issueBtnEl.onclick = function() {
@@ -1682,6 +2205,12 @@
           .catch(function(e) {
             issueBtnEl.textContent = 'Создать ссылку-приглашение';
             issueBtnEl.disabled = false;
+            if (String(e.message || '').toLowerCase().indexOf('seats full') >= 0) {
+              showError('Все места заняты — расширьте pool подписки ниже.');
+              var upgradeBtn = document.getElementById('colInviteUpgradeBtn');
+              if (upgradeBtn) upgradeBtn.hidden = false;
+              return;
+            }
             showError(e.message || 'Ошибка');
           });
       };
@@ -1748,23 +2277,73 @@
           });
       };
 
+      function formatCenterSessionWhen(s) {
+        var datePart = s.slot_date || '';
+        var start = s.start_time || '';
+        var end = s.end_time || '';
+        return datePart + (start ? ' · ' + start + (end ? '–' + end : '') : '');
+      }
+
+      function formatCenterSeatsLabel(s) {
+        var booked = parseInt(String(s.booked_count || 0), 10) || 0;
+        var cap = parseInt(String(s.capacity || 1), 10) || 1;
+        var left = Math.max(0, cap - booked);
+        return left > 0 ? left + ' из ' + cap : 'заполнено';
+      }
+
+      function syncSessionTariffHint() {
+        var el = document.getElementById('colSessionTariffHint');
+        if (!el) return;
+        var t = centerSessionTariffs || {};
+        var lane = Number(t.lane_hour_cents || 0);
+        var laneText = lane ? (lane / 100).toFixed(0) + ' BYN' : 'по прайсу центра';
+        el.textContent = 'Услуга: дорожка 1 ч · ' + laneText + ' — так клиент видит цену в каталоге.';
+      }
+
+      function openSessionSheet() {
+        var overlay = document.getElementById('colSessionSheetOverlay');
+        if (!overlay) return;
+        renderSessionCoachPicker([]);
+        syncSessionTariffHint();
+        var todayIso = new Date().toISOString().slice(0, 10);
+        var sessionDateEl = document.getElementById('colSessionDate');
+        if (sessionDateEl && !sessionDateEl.value) sessionDateEl.value = todayIso;
+        overlay.hidden = false;
+        if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.impactOccurred === 'function') {
+          tg.HapticFeedback.impactOccurred('light');
+        }
+      }
+
+      function closeSessionSheet() {
+        var overlay = document.getElementById('colSessionSheetOverlay');
+        if (overlay) overlay.hidden = true;
+      }
+
       function renderCenterSessionsList(sessions) {
         var listEl = document.getElementById('colSessionsList');
         if (!listEl) return;
         if (!sessions || !sessions.length) {
-          listEl.innerHTML = '<p class="col-hint">Пока нет окон — добавьте первое.</p>';
+          listEl.innerHTML =
+            '<div class="col-sessions-empty">' +
+            '<p class="col-sessions-empty__text">Пока нет окон — клиенты не смогут записаться в центр.</p>' +
+            '<button type="button" class="col-save-btn" id="colSessionOpenSheetEmpty">Создать первое окно</button>' +
+            '</div>';
+          var emptyBtn = document.getElementById('colSessionOpenSheetEmpty');
+          if (emptyBtn) emptyBtn.onclick = openSessionSheet;
           return;
         }
         listEl.innerHTML = sessions.map(function(s) {
           var coaches = (s.assigned_coaches || []).map(function(c) { return escapeHtml(c.display_name); }).join(', ');
           var coachLine = coaches
-            ? '<div class="col-hint">Тренеры: ' + coaches + '</div>'
-            : '<div class="col-hint">Тренеры не назначены</div>';
+            ? 'Тренеры: ' + coaches
+            : 'Тренеры не назначены — назначьте для режима «с тренером центра»';
           var coachIds = (s.assigned_coaches || []).map(function(c) { return c.trainer_id; }).join(',');
-          return '<div class="col-link-box" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">' +
-            '<div><strong>' + escapeHtml(s.slot_date) + '</strong> ' + escapeHtml(s.start_time) + '–' + escapeHtml(s.end_time) +
-            ' · мест ' + (s.booked_count || 0) + '/' + (s.capacity || 1) + '</div>' +
-            coachLine +
+          return '<div class="col-session-card" data-session-id="' + s.id + '">' +
+            '<div class="col-session-card__head">' +
+            '<div class="col-session-card__when">' + escapeHtml(formatCenterSessionWhen(s)) + '</div>' +
+            '<span class="col-session-card__seats">' + escapeHtml(formatCenterSeatsLabel(s)) + '</span>' +
+            '</div>' +
+            '<div class="col-session-card__coaches">' + coachLine + '</div>' +
             '<div class="col-session-actions">' +
             '<button type="button" class="col-member-action col-member-action--accent" data-session-coaches="' + s.id + '" data-coach-ids="' + coachIds + '">Назначить тренеров</button>' +
             '</div>' +
@@ -1828,16 +2407,41 @@
         if (!el) return;
         var members = activeCoachMemberOptions();
         var selected = (selectedIds || []).map(function(x) { return Number(x); });
+        var selfId = studioData && studioData.self_trainer_id != null ? Number(studioData.self_trainer_id) : null;
         if (!members.length) {
           el.innerHTML = '<p class="col-hint">Нет активных тренеров в команде.</p>';
           return;
         }
-        el.innerHTML = members.map(function(m) {
+        var html = '';
+        if (selfId && members.some(function(m) { return Number(m.trainer_id) === selfId; })) {
+          var selfMember = members.filter(function(m) { return Number(m.trainer_id) === selfId; })[0];
+          var selfOn = selected.indexOf(selfId) >= 0;
+          html +=
+            '<div class="col-coach-self-row">' +
+            '<button type="button" class="col-save-btn col-coach-self-btn" data-self-coach-id="' + selfId + '">' +
+            (selfOn ? '✓ Вы на смене' : 'Назначить себя') +
+            '</button>' +
+            '<p class="col-hint" style="margin:6px 0 0;">' + escapeHtml(memberLabel(selfMember)) + '</p>' +
+            '</div>';
+        }
+        html += members.map(function(m) {
           var id = Number(m.trainer_id);
           var on = selected.indexOf(id) >= 0;
           return '<label class="col-coach-chip"><input type="checkbox" value="' + id + '"' + (on ? ' checked' : '') + ' /> ' +
             escapeHtml(memberLabel(m)) + '</label>';
         }).join('');
+        el.innerHTML = html;
+        var selfBtn = el.querySelector('[data-self-coach-id]');
+        if (selfBtn) {
+          selfBtn.onclick = function() {
+            var sid = parseInt(selfBtn.getAttribute('data-self-coach-id'), 10);
+            var cb = el.querySelector('input[type="checkbox"][value="' + sid + '"]');
+            if (cb) {
+              cb.checked = true;
+              selfBtn.textContent = '✓ Вы на смене';
+            }
+          };
+        }
       }
 
       function readSessionCoachIds(containerId) {
@@ -1854,25 +2458,53 @@
         return (Math.round(v) === v ? v.toFixed(0) : v.toFixed(2)) + ' BYN';
       }
 
+      function syncScheduleTabInboxBadge(count) {
+        var btn = document.getElementById('colTabScheduleBtn');
+        if (!btn) return;
+        var n = parseInt(String(count || 0), 10) || 0;
+        var existing = btn.querySelector('.col-tab__badge');
+        if (existing) existing.remove();
+        if (n <= 0) return;
+        var badge = document.createElement('span');
+        badge.className = 'col-tab__badge';
+        badge.textContent = String(n > 99 ? '99+' : n);
+        btn.appendChild(badge);
+      }
+
       function renderCenterInbox(bookings) {
         var box = document.getElementById('colCenterInbox');
         if (!box) return;
-        if (!bookings || !bookings.length) {
-          box.hidden = true;
-          box.innerHTML = '';
+        var count = (bookings && bookings.length) || 0;
+        syncScheduleTabInboxBadge(count);
+        box.hidden = false;
+        if (!count) {
+          box.innerHTML =
+            '<div class="col-inbox__head">' +
+            '<div class="col-card-title" style="margin-top:0;">Inbox центра</div>' +
+            '</div>' +
+            '<p class="col-inbox__empty">Новых заявок нет — клиенты увидят подтверждение сразу после вашего ответа.</p>';
           return;
         }
-        box.hidden = false;
-        box.innerHTML = '<div class="col-card-title" style="margin-top:0;">Заявки клиентов (' + bookings.length + ')</div>' +
+        box.innerHTML =
+          '<div class="col-inbox__head">' +
+          '<div class="col-card-title" style="margin-top:0;">Inbox центра</div>' +
+          '<span class="col-inbox__count">' + count + '</span>' +
+          '</div>' +
+          '<p class="col-hint" style="margin-top:0;">Подтвердите или отклоните — клиент получит уведомление в боте.</p>' +
           bookings.map(function(b) {
-            var when = escapeHtml(b.slot_date + ' ' + b.start_time + '–' + b.end_time);
+            var when = escapeHtml(b.slot_date + ' · ' + b.start_time + '–' + b.end_time);
             var client = escapeHtml(b.client_name || 'Клиент');
             var mode = escapeHtml(b.attendance_mode_label || b.attendance_mode || '');
             var price = escapeHtml(formatCenterInboxPrice(b.booking_price_cents));
-            var coach = b.center_coach_name ? (' · ' + escapeHtml(b.center_coach_name)) : '';
+            var coach = b.center_coach_name ? ('<span class="col-inbox-item__pill">' + escapeHtml(b.center_coach_name) + '</span>') : '';
             return '<div class="col-inbox-item" data-booking-id="' + b.booking_id + '">' +
               '<div><strong>' + when + '</strong></div>' +
-              '<div class="col-hint">' + client + ' · ' + mode + coach + ' · ' + price + '</div>' +
+              '<div class="col-inbox-item__meta">' +
+              '<span class="col-inbox-item__pill">ожидает</span>' +
+              '<span class="col-hint" style="margin:0;">' + client + '</span>' +
+              coach +
+              '</div>' +
+              '<div class="col-hint">' + mode + ' · ' + price + '</div>' +
               '<div class="col-inbox-item__actions">' +
               '<button type="button" class="col-save-btn" style="flex:1; margin:0;" data-confirm-booking="' + b.booking_id + '">Подтвердить</button>' +
               '<button type="button" class="col-member-action col-member-action--danger" data-decline-booking="' + b.booking_id + '">Отклонить</button>' +
@@ -1957,11 +2589,22 @@
             });
           })
           .then(function(d) {
+            centerSessionTariffs = (d && d.tariffs) || null;
             renderCenterSessionsList((d && d.sessions) || []);
           })
           .catch(function() {
             renderCenterSessionsList([]);
           });
+      }
+
+      function renderCenterPassProductCard(p) {
+        var price = (Number(p.price_cents) / 100).toFixed(0);
+        var validity = p.validity_days ? (' · ' + p.validity_days + ' дн.') : '';
+        var active = p.is_active ? '' : ' · выкл';
+        return '<div class="col-link-box" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">' +
+          '<div><strong>' + escapeHtml(p.name) + '</strong></div>' +
+          '<div class="col-hint">' + p.sessions_total + ' пос. · ' + price + ' BYN' + validity + active + '</div>' +
+          '</div>';
       }
 
       function renderCenterPassProductsList(products) {
@@ -1973,19 +2616,31 @@
           if (selectEl) selectEl.innerHTML = '<option value="">—</option>';
           return;
         }
-        el.innerHTML = products.map(function(p) {
-          var price = (Number(p.price_cents) / 100).toFixed(0);
-          var validity = p.validity_days ? (' · ' + p.validity_days + ' дн.') : '';
-          var kind = p.pass_kind === 'coach' ? 'Тренер' : 'Дорожка';
-          var active = p.is_active ? '' : ' · выкл';
-          return '<div class="col-link-box" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">' +
-            '<div><strong>' + escapeHtml(p.name) + '</strong> · ' + escapeHtml(kind) + '</div>' +
-            '<div class="col-hint">' + p.sessions_total + ' пос. · ' + price + ' BYN' + validity + active + '</div>' +
+        var laneProducts = products.filter(function(p) { return p.pass_kind !== 'coach'; });
+        var coachProducts = products.filter(function(p) { return p.pass_kind === 'coach'; });
+        function renderSection(title, hint, items) {
+          if (!items.length) return '';
+          return '<div class="col-pass-section">' +
+            '<div class="col-pass-section__title">' + escapeHtml(title) + '</div>' +
+            '<p class="col-hint col-pass-section__hint">' + escapeHtml(hint) + '</p>' +
+            items.map(renderCenterPassProductCard).join('') +
             '</div>';
-        }).join('');
+        }
+        el.innerHTML =
+          renderSection(
+            'Дорожка',
+            'Lane / lane_self — аренда дорожки без персонального тренера центра',
+            laneProducts
+          ) +
+          renderSection(
+            'Тренер центра',
+            'center_coach — персональные занятия с тренером центра',
+            coachProducts
+          );
         if (selectEl) {
           selectEl.innerHTML = '<option value="">—</option>' + products.filter(function(p) { return p.is_active; }).map(function(p) {
-            return '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>';
+            var kind = p.pass_kind === 'coach' ? ' · тренер' : ' · дорожка';
+            return '<option value="' + p.id + '">' + escapeHtml(p.name + kind) + '</option>';
           }).join('');
         }
       }
@@ -2102,6 +2757,7 @@
             .then(function() {
               sessionCreateBtn.textContent = 'Добавить окно';
               sessionCreateBtn.disabled = false;
+              closeSessionSheet();
               loadCenterSessions();
             })
             .catch(function(e) {
@@ -2109,6 +2765,75 @@
               sessionCreateBtn.disabled = false;
               if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось создать окно');
             });
+        };
+      }
+
+      function mondayOfWeek(dateStr) {
+        if (!dateStr) return '';
+        var parts = dateStr.split('-');
+        var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        var day = d.getDay();
+        var diff = day === 0 ? -6 : 1 - day;
+        d.setDate(d.getDate() + diff);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      }
+
+      var sessionOpenSheetBtn = document.getElementById('colSessionOpenSheet');
+      if (sessionOpenSheetBtn) sessionOpenSheetBtn.onclick = openSessionSheet;
+      var sessionSheetCloseBtn = document.getElementById('colSessionSheetClose');
+      if (sessionSheetCloseBtn) sessionSheetCloseBtn.onclick = closeSessionSheet;
+      var sessionSheetOverlay = document.getElementById('colSessionSheetOverlay');
+      if (sessionSheetOverlay) {
+        sessionSheetOverlay.addEventListener('click', function(ev) {
+          if (ev.target === sessionSheetOverlay) closeSessionSheet();
+        });
+      }
+
+      var duplicateWeekBtn = document.getElementById('colDuplicateWeekBtn');
+      if (duplicateWeekBtn) {
+        duplicateWeekBtn.onclick = function() {
+          var weekEl = document.getElementById('colDuplicateWeekStart');
+          var aheadEl = document.getElementById('colDuplicateWeeksAhead');
+          var rawDate = weekEl && weekEl.value;
+          if (!rawDate) {
+            if (tg && tg.showAlert) tg.showAlert('Укажите неделю для копирования');
+            return;
+          }
+          var weeksAhead = aheadEl ? parseInt(aheadEl.value, 10) || 1 : 1;
+          confirmStudioAction(
+            'Скопировать все окна недели с ' + mondayOfWeek(rawDate) + ' на ' + weeksAhead + ' нед. вперёд?',
+            function() {
+              duplicateWeekBtn.disabled = true;
+              duplicateWeekBtn.textContent = 'Копируем…';
+              fetch(apiUrl('/api/webapp/trainer/collective/sessions/duplicate-week'), {
+                method: 'POST',
+                headers: headersJson(),
+                body: JSON.stringify({
+                  source_week_start: rawDate,
+                  weeks_ahead: weeksAhead,
+                }),
+              })
+                .then(function(r) {
+                  return r.json().then(function(d) {
+                    if (!r.ok) throw new Error((d && d.detail) || 'duplicate_failed');
+                    return d;
+                  });
+                })
+                .then(function(d) {
+                  duplicateWeekBtn.textContent = 'Скопировать неделю';
+                  duplicateWeekBtn.disabled = false;
+                  loadCenterSessions();
+                  var msg = 'Добавлено окон: ' + (d.created_count || 0);
+                  if (d.skipped_count) msg += ', пропущено (уже есть): ' + d.skipped_count;
+                  if (tg && tg.showAlert) tg.showAlert(msg);
+                })
+                .catch(function(e) {
+                  duplicateWeekBtn.textContent = 'Скопировать неделю';
+                  duplicateWeekBtn.disabled = false;
+                  if (tg && tg.showAlert) tg.showAlert(e.message || 'Не удалось скопировать');
+                });
+            }
+          );
         };
       }
 
@@ -2130,6 +2855,7 @@
         });
     })();
   </script>
+  <script defer src="mini-app-trainer-shell.js?v=202606314"></script>
   <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

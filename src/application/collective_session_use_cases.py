@@ -374,6 +374,165 @@ async def list_collective_sessions_for_studio(
     return out
 
 
+def _monday_of_week(d: date) -> date:
+    """Normalize any date to the Monday of its ISO week."""
+    return d - timedelta(days=d.weekday())
+
+
+def _hhmm_to_time(raw: str) -> time:
+    parts = (raw or "").strip().split(":")
+    return time(int(parts[0]), int(parts[1]))
+
+
+async def _collective_session_exists(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    slot_date: date,
+    start_time: time,
+    end_time: time,
+) -> bool:
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM collective_sessions
+            WHERE collective_id = :cid
+              AND slot_date = :d
+              AND start_time = :st
+              AND end_time = :et
+              AND status != :cancelled
+            LIMIT 1
+            """
+        ),
+        {
+            "cid": int(collective_id),
+            "d": slot_date,
+            "st": start_time,
+            "et": end_time,
+            "cancelled": SESSION_STATUS_CANCELLED,
+        },
+    )
+    return r.fetchone() is not None
+
+
+async def duplicate_collective_sessions_week(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    owner_trainer_id: int,
+    source_week_start: date,
+    weeks_ahead: int = 1,
+) -> dict[str, Any]:
+    """
+    Copy all center windows from source Mon–Sun to the following week(s).
+    Skips slots that already exist at the same date/time.
+    """
+    err = await _assert_collective_studio_admin(session, collective_id, owner_trainer_id)
+    if err:
+        return {"error": err}
+    coll = await _require_studio_central_collective(session, collective_id)
+    if coll is None:
+        return {"error": "collective_not_found"}
+    if coll.get("error"):
+        return coll
+
+    weeks = max(1, min(int(weeks_ahead), 8))
+    monday = _monday_of_week(source_week_start)
+    source_end = monday + timedelta(days=6)
+    source_sessions = await list_collective_sessions_for_studio(
+        session,
+        collective_id=int(collective_id),
+        from_date=monday,
+        to_date=source_end,
+    )
+    if not source_sessions:
+        return {
+            "ok": True,
+            "created_count": 0,
+            "skipped_count": 0,
+            "source_week_start": monday.isoformat(),
+            "weeks_ahead": weeks,
+            "created_session_ids": [],
+        }
+
+    member_ids = set(
+        await list_active_trainer_ids_for_collective_slug(session, coll["slug"]) or []
+    )
+    created_count = 0
+    skipped_count = 0
+    created_ids: list[int] = []
+
+    for offset in range(1, weeks + 1):
+        day_delta = timedelta(days=7 * offset)
+        for src in source_sessions:
+            src_date = date.fromisoformat(str(src["slot_date"]))
+            target_date = src_date + day_delta
+            start_time = _hhmm_to_time(str(src["start_time"]))
+            end_time = _hhmm_to_time(str(src["end_time"]))
+            if await _collective_session_exists(
+                session,
+                collective_id=int(collective_id),
+                slot_date=target_date,
+                start_time=start_time,
+                end_time=end_time,
+            ):
+                skipped_count += 1
+                continue
+
+            cap = max(1, min(int(src.get("capacity") or 1), 500))
+            arena_id = src.get("arena_id")
+            coach_ids = [
+                int(c["trainer_id"])
+                for c in (src.get("assigned_coaches") or [])
+                if int(c["trainer_id"]) in member_ids
+            ]
+
+            r = await session.execute(
+                text(
+                    """
+                    INSERT INTO collective_sessions (
+                        collective_id, slot_date, start_time, end_time, capacity, arena_id, status
+                    )
+                    VALUES (:cid, :d, :st, :et, :cap, :aid, :status)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "cid": int(collective_id),
+                    "d": target_date,
+                    "st": start_time,
+                    "et": end_time,
+                    "cap": cap,
+                    "aid": arena_id,
+                    "status": SESSION_STATUS_AVAILABLE,
+                },
+            )
+            sid = int(r.scalar_one())
+            for tid in coach_ids:
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO collective_session_coaches (collective_session_id, trainer_id)
+                        VALUES (:sid, :tid)
+                        ON CONFLICT DO NOTHING
+                        """
+                    ),
+                    {"sid": sid, "tid": tid},
+                )
+            created_count += 1
+            created_ids.append(sid)
+
+    await session.commit()
+    return {
+        "ok": True,
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "source_week_start": monday.isoformat(),
+        "weeks_ahead": weeks,
+        "created_session_ids": created_ids,
+    }
+
+
 async def list_public_collective_sessions(
     session: AsyncSession,
     *,
@@ -665,6 +824,103 @@ def _client_display_name(first: str | None, last: str | None, client_id: int) ->
     return name or f"Клиент #{client_id}"
 
 
+async def build_center_hub_summary(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    admin_trainer_id: int,
+    summary_date: date | None = None,
+) -> dict[str, Any] | None:
+    """Today grid stats + pending inbox for trainer hub center ops card."""
+    err = await _assert_collective_studio_admin(session, collective_id, admin_trainer_id)
+    if err:
+        return None
+    day = summary_date or date.today()
+    pending = await count_pending_collective_session_bookings_for_admin(
+        session,
+        collective_id=int(collective_id),
+        admin_trainer_id=int(admin_trainer_id),
+    )
+    pending_count = int(pending.get("count") or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                cs.id,
+                cs.start_time,
+                cs.end_time,
+                GREATEST(cs.capacity, 1)::int AS capacity,
+                (
+                    SELECT COUNT(*)::int
+                    FROM collective_session_bookings b
+                    WHERE b.collective_session_id = cs.id
+                      AND b.status IN ('pending', 'confirmed', 'completed')
+                ) AS booked
+            FROM collective_sessions cs
+            WHERE cs.collective_id = :cid
+              AND cs.slot_date = :day
+              AND cs.status != :cancelled
+            ORDER BY cs.start_time, cs.id
+            """
+        ),
+        {
+            "cid": int(collective_id),
+            "day": day,
+            "cancelled": SESSION_STATUS_CANCELLED,
+        },
+    )
+    rows = r.fetchall()
+    session_count = len(rows)
+    capacity_total = sum(int(row[3]) for row in rows)
+    booked_total = sum(int(row[4] or 0) for row in rows)
+    next_session: dict[str, Any] | None = None
+    if rows:
+        row0 = rows[0]
+        cap0 = int(row0[3])
+        booked0 = int(row0[4] or 0)
+        next_session = {
+            "id": int(row0[0]),
+            "start_time": row0[1].strftime("%H:%M") if hasattr(row0[1], "strftime") else str(row0[1])[:5],
+            "end_time": row0[2].strftime("%H:%M") if hasattr(row0[2], "strftime") else str(row0[2])[:5],
+            "booked_count": booked0,
+            "capacity": cap0,
+            "seats_left": max(0, cap0 - booked0),
+        }
+    return {
+        "date": day.isoformat(),
+        "pending_bookings": pending_count,
+        "sessions_today": session_count,
+        "capacity_today": capacity_total,
+        "booked_today": booked_total,
+        "seats_left_today": max(0, capacity_total - booked_total),
+        "next_session": next_session,
+    }
+
+
+async def count_pending_collective_session_bookings_for_admin(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    admin_trainer_id: int,
+) -> dict[str, Any]:
+    """Lightweight pending count for hub dual summary and inbox badges."""
+    err = await _assert_collective_studio_admin(session, collective_id, admin_trainer_id)
+    if err:
+        return {"error": err, "count": 0}
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM collective_session_bookings b
+            WHERE b.collective_id = :cid AND b.status = :pending
+            """
+        ),
+        {"cid": int(collective_id), "pending": BOOKING_STATUS_PENDING},
+    )
+    return {"count": int(r.scalar_one() or 0)}
+
+
 async def list_pending_collective_session_bookings_for_owner(
     session: AsyncSession,
     *,
@@ -773,6 +1029,75 @@ async def decline_collective_session_booking(
     )
     await session.commit()
     return {"ok": True, "booking_id": int(booking_id)}
+
+
+async def build_center_schedule_admin_for_trainer(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    from_date: date,
+    to_date: date,
+) -> dict[str, Any] | None:
+    """Studio admin overlay for unified schedule: all center windows + team roster."""
+    from src.application.collective_use_cases import (
+        get_effective_studio_access_mode,
+        is_collective_studio_admin_role,
+        list_active_collective_memberships,
+        SCHEDULE_MODE_STUDIO_CENTRAL,
+    )
+    from src.application.organization_capabilities import capabilities_for_collective_membership
+
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    studio_access_mode = await get_effective_studio_access_mode(session, trainer_id)
+    for m in memberships:
+        if m.schedule_mode != SCHEDULE_MODE_STUDIO_CENTRAL:
+            continue
+        if not is_collective_studio_admin_role(m.role):
+            continue
+        sessions = await list_collective_sessions_for_studio(
+            session,
+            collective_id=m.collective_id,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        caps = capabilities_for_collective_membership(
+            organization_format=m.organization_format,
+            schedule_mode=m.schedule_mode,
+            role=m.role,
+            studio_access_mode=studio_access_mode,
+        )
+        cr = await session.execute(
+            text(
+                """
+                SELECT cm.trainer_id, tp.first_name, tp.last_name
+                FROM collective_members cm
+                LEFT JOIN trainer_profiles tp ON tp.trainer_id = cm.trainer_id
+                WHERE cm.collective_id = :cid
+                  AND cm.status = 'active'
+                  AND cm.role IN ('owner', 'admin', 'member')
+                ORDER BY cm.role, cm.trainer_id
+                """
+            ),
+            {"cid": m.collective_id},
+        )
+        coaches: list[dict[str, Any]] = []
+        for row in cr.fetchall():
+            name = " ".join(filter(None, [(row[1] or "").strip(), (row[2] or "").strip()])).strip()
+            coaches.append(
+                {
+                    "trainer_id": int(row[0]),
+                    "display_name": name or f"Тренер #{int(row[0])}",
+                }
+            )
+        return {
+            "collective_slug": m.slug,
+            "collective_name": m.display_name,
+            "sessions": sessions,
+            "coaches": coaches,
+            "organization_format": m.organization_format,
+            "capabilities": caps,
+        }
+    return None
 
 
 async def list_center_duties_for_trainer(

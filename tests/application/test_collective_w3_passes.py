@@ -5,14 +5,17 @@ import pytest
 from sqlalchemy import text
 
 from src.application.collective_pass_use_cases import (
+    COLLECTIVE_PASS_ORDER_LINE_PREFIX,
     PASS_KIND_COACH,
     PASS_KIND_LANE,
+    build_collective_pass_product_order_comment,
     compute_center_booking_price_with_pass,
     issue_collective_pass_to_client,
     list_client_collective_passes,
     pass_credits_for_attendance_mode,
     redeem_collective_pass_for_session_booking,
     seed_reference_collective_pass_products,
+    submit_collective_pass_product_order_request,
 )
 from src.application.collective_session_use_cases import (
     ATTENDANCE_COACH_PAIR,
@@ -232,3 +235,88 @@ async def test_pass_kind_mismatch_rejected(db_session) -> None:
 @pytest.mark.asyncio
 async def test_coach_pair_debits_two_credits(db_session) -> None:
     assert pass_credits_for_attendance_mode(ATTENDANCE_COACH_PAIR) == 2
+
+
+async def _seed_owner_city_and_service(db_session, owner_id: int) -> tuple[int, int]:
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    _arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'Owner', 'Center', 35, :cid)
+            ON CONFLICT (trainer_id) DO UPDATE SET city_id = EXCLUDED.city_id
+            """
+        ),
+        {"tid": owner_id, "cid": city_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_services (trainer_id, service_id, price_cents)
+            VALUES (:tid, :sid, 5000)
+            ON CONFLICT (trainer_id, service_id) DO NOTHING
+            """
+        ),
+        {"tid": owner_id, "sid": service_id},
+    )
+    await db_session.commit()
+    return city_id, service_id
+
+
+@pytest.mark.asyncio
+async def test_submit_collective_pass_product_order_request(db_session) -> None:
+    cid, owner_id = await _seed_studio_central(db_session, slug="throw-center-pass-order")
+    client_id = await _seed_client(db_session, telegram_id=910777)
+    city_id, service_id = await _seed_owner_city_and_service(db_session, owner_id)
+
+    seeded = await seed_reference_collective_pass_products(
+        db_session,
+        collective_id=cid,
+        owner_trainer_id=owner_id,
+    )
+    lane_product = next(p for p in seeded["products"] if p["pass_kind"] == PASS_KIND_LANE)
+
+    result = await submit_collective_pass_product_order_request(
+        db_session,
+        client_id=client_id,
+        telegram_id=910777,
+        collective_slug="throw-center-pass-order",
+        collective_pass_product_id=int(lane_product["id"]),
+    )
+    assert result.get("ok") is True
+    request_id = int(result["request_id"])
+
+    r = await db_session.execute(
+        text(
+            """
+            SELECT trainer_id, city_id, service_id, comment, status
+            FROM client_requests WHERE id = :id
+            """
+        ),
+        {"id": request_id},
+    )
+    row = r.fetchone()
+    assert row is not None
+    assert int(row[0]) == owner_id
+    assert int(row[1]) == city_id
+    assert int(row[2]) == service_id
+    assert str(row[4]) == "new"
+    assert str(row[3]).startswith(COLLECTIVE_PASS_ORDER_LINE_PREFIX + str(lane_product["id"]))
+
+    dup = await submit_collective_pass_product_order_request(
+        db_session,
+        client_id=client_id,
+        telegram_id=910777,
+        collective_slug="throw-center-pass-order",
+        collective_pass_product_id=int(lane_product["id"]),
+    )
+    assert dup == {"ok": False, "error": "duplicate_pending"}
+
+    human = build_collective_pass_product_order_comment(
+        collective_pass_product_id=int(lane_product["id"]),
+        human_block="Тестовая заявка",
+    )
+    assert "Тестовая заявка" in human

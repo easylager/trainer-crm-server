@@ -205,6 +205,42 @@ async def test_booking_contexts_multi_studio_and_center(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_booking_contexts_admin_only_owner_keeps_personal_and_center(db_session) -> None:
+    owner_id = await _seed_trainer(db_session)
+    await db_session.execute(
+        text("UPDATE trainers SET studio_access_mode = :mode WHERE id = :tid"),
+        {"mode": STUDIO_ACCESS_MODE_ADMIN_ONLY, "tid": owner_id},
+    )
+    await db_session.commit()
+
+    center_id = await _seed_collective(
+        db_session,
+        slug="ops-desk",
+        owner_id=owner_id,
+        schedule_mode=SCHEDULE_MODE_STUDIO_CENTRAL,
+    )
+    slot_date = date.today() + timedelta(days=4)
+    created = await create_collective_session(
+        db_session,
+        collective_id=center_id,
+        owner_trainer_id=owner_id,
+        slot_date=slot_date,
+        start_time=time(10, 0),
+        end_time=time(11, 0),
+        coach_trainer_ids=[owner_id],
+    )
+    assert created and created.get("error") is None
+
+    payload = await list_trainer_booking_contexts(db_session, owner_id)
+    assert payload["needs_context_picker"] is True
+    kinds = {c["kind"] for c in payload["contexts"]}
+    assert "personal_slot" in kinds
+    assert "center_session" in kinds
+    center_ctx = next(c for c in payload["contexts"] if c["kind"] == "center_session")
+    assert "через центр" in center_ctx["label"]
+
+
+@pytest.mark.asyncio
 async def test_delegate_personal_slot_booking_by_studio_admin(db_session) -> None:
     owner_id = await _seed_trainer(db_session)
     admin_id = await _seed_trainer(db_session)
@@ -311,4 +347,5 @@ async def test_studio_admin_only_skips_trainer_onboarding_gates(db_session) -> N
     assert checklist["studio_access_mode"] == STUDIO_ACCESS_MODE_ADMIN_ONLY
     assert checklist["schedule_unlocked"] is True
     assert checklist["tt_minimal_complete"] is True
+    assert checklist["has_any_booking"] is True
     assert checklist["slots_locked_reason"] is None

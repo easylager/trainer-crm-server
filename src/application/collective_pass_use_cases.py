@@ -21,12 +21,15 @@ from src.application.collective_session_use_cases import (
     LANE_ATTENDANCE_MODES,
     compute_center_booking_price_cents,
 )
+from src.application.client_pass_order_use_cases import _trainer_city_and_request_service_for_pass
+from src.application.client_request_use_cases import create_client_request
+from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.collective_use_cases import (
-    MEMBER_ROLE_OWNER,
-    MEMBER_STATUS_ACTIVE,
     SCHEDULE_MODE_STUDIO_CENTRAL,
     _assert_collective_owner,
+    get_collective_by_slug,
 )
+from src.shared.byr_currency_display import BYR_SIGN
 
 PASS_KIND_LANE = "lane"
 PASS_KIND_COACH = "coach"
@@ -38,6 +41,37 @@ INSTANCE_STATUS_EXPIRED = "expired"
 INSTANCE_STATUS_CANCELLED = "cancelled"
 
 # ADR-003 reference tariff card (BYN cents, validity_days None = no expiry)
+COLLECTIVE_PASS_ORDER_LINE_PREFIX = "__COLLECTIVE_PASS_ORDER__:collective_pass_product_id="
+
+
+def split_collective_pass_order_comment(comment: str | None) -> tuple[int | None, str]:
+    """Returns (collective_pass_product_id_or_none, human-visible body)."""
+    if not comment or not str(comment).strip():
+        return None, ""
+    lines = str(comment).strip().split("\n")
+    first = lines[0].strip()
+    if not first.startswith(COLLECTIVE_PASS_ORDER_LINE_PREFIX):
+        return None, str(comment).strip()
+    raw_id = first[len(COLLECTIVE_PASS_ORDER_LINE_PREFIX) :].strip()
+    try:
+        pid = int(raw_id)
+    except (TypeError, ValueError):
+        return None, str(comment).strip()
+    rest = "\n".join(lines[1:]).strip()
+    return pid, rest if rest else str(comment).strip()
+
+
+def build_collective_pass_product_order_comment(
+    *,
+    collective_pass_product_id: int,
+    human_block: str,
+) -> str:
+    return (
+        f"{COLLECTIVE_PASS_ORDER_LINE_PREFIX}{int(collective_pass_product_id)}\n\n"
+        f"{human_block.strip()}"
+    )
+
+
 REFERENCE_COLLECTIVE_PASS_PRODUCTS: tuple[dict[str, Any], ...] = (
     {"pass_kind": PASS_KIND_LANE, "name": "Дорожка 4 посещения", "sessions_total": 4, "price_cents": 7500, "validity_days": None, "sort_order": 10},
     {"pass_kind": PASS_KIND_LANE, "name": "Дорожка 8 посещений", "sessions_total": 8, "price_cents": 14500, "validity_days": 60, "sort_order": 20},
@@ -473,6 +507,169 @@ async def validate_pass_for_booking(
         "booking_price_cents": payg,
         "guest_surcharge_cents": payg,
     }
+
+
+async def _pending_collective_pass_order_exists(
+    session: AsyncSession,
+    *,
+    client_id: int,
+    trainer_id: int,
+    collective_pass_product_id: int,
+) -> bool:
+    needle = f"{COLLECTIVE_PASS_ORDER_LINE_PREFIX}{int(collective_pass_product_id)}"
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM client_requests r
+            WHERE r.client_id = :cid
+              AND r.trainer_id = :tid
+              AND r.status = 'new'
+              AND POSITION(:needle IN COALESCE(r.comment, '')) = 1
+            LIMIT 1
+            """
+        ),
+        {"cid": int(client_id), "tid": int(trainer_id), "needle": needle},
+    )
+    return r.fetchone() is not None
+
+
+async def _collective_pass_order_sent_today_exists(
+    session: AsyncSession,
+    *,
+    client_id: int,
+    trainer_id: int,
+    collective_pass_product_id: int,
+) -> bool:
+    needle = f"{COLLECTIVE_PASS_ORDER_LINE_PREFIX}{int(collective_pass_product_id)}"
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM client_requests r
+            WHERE r.client_id = :cid
+              AND r.trainer_id = :tid
+              AND POSITION(:needle IN COALESCE(r.comment, '')) = 1
+              AND (r.created_at AT TIME ZONE 'Europe/Minsk')::date
+                  = (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date
+            LIMIT 1
+            """
+        ),
+        {"cid": int(client_id), "tid": int(trainer_id), "needle": needle},
+    )
+    return r.fetchone() is not None
+
+
+async def submit_collective_pass_product_order_request(
+    session: AsyncSession,
+    *,
+    client_id: int,
+    telegram_id: int,
+    collective_slug: str,
+    collective_pass_product_id: int,
+) -> dict[str, Any]:
+    """
+    Client requests a center pass product; owner receives a personalized client_request.
+    Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
+    """
+    resolved = await get_client_id_by_telegram_id(session, int(telegram_id))
+    if resolved is None or int(resolved) != int(client_id):
+        return {"ok": False, "error": "client_mismatch"}
+
+    slug = (collective_slug or "").strip()
+    if not slug:
+        return {"ok": False, "error": "collective_not_found"}
+
+    coll = await get_collective_by_slug(session, slug, active_only=True)
+    if coll is None:
+        return {"ok": False, "error": "collective_not_found"}
+
+    collective_id = int(coll["id"])
+    err = await _ensure_studio_central(session, collective_id)
+    if err:
+        return {"ok": False, "error": err}
+
+    r_own = await session.execute(
+        text("SELECT owner_trainer_id FROM collectives WHERE id = :id"),
+        {"id": collective_id},
+    )
+    own_row = r_own.fetchone()
+    if own_row is None or own_row[0] is None:
+        return {"ok": False, "error": "no_owner"}
+    owner_trainer_id = int(own_row[0])
+
+    r_prod = await session.execute(
+        text(
+            """
+            SELECT id, pass_kind, name, sessions_total, price_cents, validity_days, is_active
+            FROM collective_pass_products
+            WHERE id = :pid AND collective_id = :cid
+            """
+        ),
+        {"pid": int(collective_pass_product_id), "cid": collective_id},
+    )
+    prod = r_prod.fetchone()
+    if prod is None:
+        return {"ok": False, "error": "product_not_found"}
+    if not bool(prod[6]):
+        return {"ok": False, "error": "product_inactive"}
+
+    pname = (str(prod[2]) or "").strip() or "Абонемент"
+    pass_kind = str(prod[1])
+    sessions_total = int(prod[3])
+    price_cents = int(prod[4])
+    validity_days = prod[5]
+
+    city_id, service_id = await _trainer_city_and_request_service_for_pass(
+        session,
+        owner_trainer_id,
+        [],
+    )
+    if city_id is None:
+        return {"ok": False, "error": "trainer_city_missing"}
+    if service_id is None:
+        return {"ok": False, "error": "trainer_service_missing"}
+
+    if await _pending_collective_pass_order_exists(
+        session,
+        client_id=int(client_id),
+        trainer_id=owner_trainer_id,
+        collective_pass_product_id=int(collective_pass_product_id),
+    ):
+        return {"ok": False, "error": "duplicate_pending"}
+
+    if await _collective_pass_order_sent_today_exists(
+        session,
+        client_id=int(client_id),
+        trainer_id=owner_trainer_id,
+        collective_pass_product_id=int(collective_pass_product_id),
+    ):
+        return {"ok": False, "error": "daily_limit"}
+
+    center_name = (coll.get("display_name") or slug).strip() or "Центр"
+    kind_label = "дорожку" if pass_kind == PASS_KIND_LANE else "тренера"
+    price_txt = f"{(price_cents / 100):.2f}".rstrip("0").rstrip(".")
+    validity_txt = (
+        f", срок {int(validity_days)} дн."
+        if validity_days is not None
+        else ", без срока"
+    )
+    human = (
+        f"Клиент запрашивает абонемент центра «{center_name}» — «{pname}» "
+        f"({kind_label}): {sessions_total} посещений, {price_txt} {BYR_SIGN}{validity_txt}.\n"
+        "Свяжитесь для оплаты. После оплаты выдайте абонемент: «Коллектив» → «Абонементы»."
+    )
+    comment = build_collective_pass_product_order_comment(
+        collective_pass_product_id=int(collective_pass_product_id),
+        human_block=human,
+    )
+    request_id = await create_client_request(
+        session,
+        int(client_id),
+        int(city_id),
+        int(service_id),
+        comment=comment,
+        trainer_id=owner_trainer_id,
+    )
+    return {"ok": True, "request_id": request_id}
 
 
 async def redeem_collective_pass_for_session_booking(

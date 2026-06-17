@@ -8,8 +8,12 @@ Used by trainer Mini App, client catalog, redemption on completed bookings.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.notification_hours import NOTIFICATION_TZ
 
 from src.shared.price_tier_kind import (
     VALID_PRICE_TIER_KINDS,
@@ -51,12 +55,43 @@ SQL_PASS_PRODUCT_COVERS_BOOKING = """(
     )
 )"""
 
+# Same predicate wired to bookings alias `b` (for listing redeemable sessions).
+SQL_PASS_PRODUCT_COVERS_BOOKING_ROW = """(
+    (
+        NOT EXISTS (
+            SELECT 1 FROM trainer_pass_product_services t_svc
+            WHERE t_svc.pass_product_id = p.id
+        )
+        OR EXISTS (
+            SELECT 1 FROM trainer_pass_product_services t_svc
+            WHERE t_svc.pass_product_id = p.id
+              AND t_svc.service_id = b.service_id
+        )
+    )
+    AND (
+        NOT EXISTS (
+            SELECT 1 FROM trainer_pass_product_tiers t_tier
+            WHERE t_tier.pass_product_id = p.id
+        )
+        OR (
+            b.price_tier_kind IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM trainer_pass_product_tiers t_tier
+                WHERE t_tier.pass_product_id = p.id
+                  AND t_tier.tier_kind = b.price_tier_kind
+            )
+        )
+    )
+)"""
+
 # Legacy alias — callers that only pass booking_service_id still work if they add booking_tier_kind=None.
 # All internal callers are updated to pass both params.
 SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = SQL_PASS_PRODUCT_COVERS_BOOKING
 
 # Sale price frozen at issue time; COALESCE fallback for rows predating price_cents column.
 SQL_PASS_INSTANCE_SALE_PRICE_CENTS = "COALESCE(pi.price_cents, p.price_cents, 0)"
+
+_SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 
 async def _normalized_trainer_pass_service_ids(
@@ -910,4 +945,339 @@ async def redeem_pass_session_for_booking(
         {"bid": booking_id, "inst_id": inst_id},
     )
     return True
+
+
+def _iso_dt(value: object | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+async def get_trainer_pass_instance_detail(
+    session: AsyncSession,
+    trainer_id: int,
+    pass_instance_id: int,
+) -> dict | None:
+    """Trainer-owned pass snapshot for detail / manual redemption screen."""
+    r = await session.execute(
+        text(
+            f"""
+            SELECT
+                pi.id,
+                pi.client_id,
+                pi.sessions_remaining,
+                pi.sessions_total,
+                pi.issued_at,
+                pi.expires_at,
+                pi.status,
+                p.id AS pass_product_id,
+                p.name AS product_name,
+                {SQL_PASS_INSTANCE_SALE_PRICE_CENTS} AS price_cents,
+                COALESCE(
+                    (
+                        SELECT STRING_AGG(
+                            COALESCE(NULLIF(TRIM(srv.name), ''), '#' || tps.service_id::text),
+                            ', '
+                            ORDER BY srv.name NULLS LAST, tps.service_id
+                        )
+                        FROM trainer_pass_product_services tps
+                        LEFT JOIN services srv ON srv.id = tps.service_id
+                        WHERE tps.pass_product_id = p.id
+                    ),
+                    ''
+                ) AS scope_label,
+                TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                c.phone
+            FROM pass_instances pi
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id AND p.trainer_id = :tid
+            JOIN clients c ON c.id = pi.client_id
+            WHERE pi.id = :pid
+            """
+        ),
+        {"tid": trainer_id, "pid": int(pass_instance_id)},
+    )
+    row = r.fetchone()
+    if row is None:
+        return None
+    scope = (row[10] or "").strip() or None
+    client_name = (row[11] or "").strip()
+    client_id = int(row[1])
+    return {
+        "id": int(row[0]),
+        "client_id": client_id,
+        "client_name": client_name or f"Клиент #{client_id}",
+        "client_phone": (row[12] or "").strip() or None,
+        "sessions_remaining": int(row[2] or 0),
+        "sessions_total": int(row[3] or 0),
+        "issued_at": _iso_dt(row[4]),
+        "expires_at": _iso_dt(row[5]),
+        "status": str(row[6] or ""),
+        "pass_product_id": int(row[7]),
+        "product_name": (row[8] or "").strip() or "Абонемент",
+        "price_cents": int(row[9] or 0),
+        "service_scope": scope,
+        "can_redeem": str(row[6]) == "active" and int(row[2] or 0) > 0,
+    }
+
+
+async def list_pass_redemptions_for_instance(
+    session: AsyncSession,
+    trainer_id: int,
+    pass_instance_id: int,
+    *,
+    limit: int = 20,
+) -> list[dict]:
+    """Past sessions already debited from this pass (newest first)."""
+    lim = max(1, min(int(limit or 20), 50))
+    r = await session.execute(
+        text(
+            f"""
+            SELECT
+                pr.booking_id,
+                pr.redeemed_at,
+                s.slot_date,
+                s.start_time,
+                s.end_time,
+                COALESCE(NULLIF(TRIM(srv.name), ''), 'Занятие') AS service_name
+            FROM pass_redemptions pr
+            JOIN pass_instances pi ON pi.id = pr.pass_instance_id
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id AND p.trainer_id = :tid
+            JOIN bookings b ON b.id = pr.booking_id
+            JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN services srv ON srv.id = b.service_id
+            WHERE pr.pass_instance_id = :pid
+            ORDER BY s.slot_date DESC, s.start_time DESC
+            LIMIT :lim
+            """
+        ),
+        {"tid": trainer_id, "pid": int(pass_instance_id), "lim": lim},
+    )
+    out: list[dict] = []
+    for row in r.fetchall():
+        st = row[3]
+        et = row[4]
+        out.append(
+            {
+                "booking_id": int(row[0]),
+                "redeemed_at": _iso_dt(row[1]),
+                "slot_date": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
+                "start_time": st.isoformat() if hasattr(st, "isoformat") else str(st),
+                "end_time": et.isoformat() if hasattr(et, "isoformat") else str(et),
+                "service_name": (row[5] or "").strip() or "Занятие",
+            }
+        )
+    return out
+
+
+async def list_redeemable_bookings_for_pass_instance(
+    session: AsyncSession,
+    trainer_id: int,
+    pass_instance_id: int,
+    *,
+    limit: int = 30,
+) -> dict:
+    """
+    Completed past sessions of the pass owner without pass/cert payment,
+    matching pass product scope — candidates for retroactive debit.
+    """
+    detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
+    if detail is None:
+        return {"error": "pass_not_found"}
+    if not detail.get("can_redeem"):
+        return {"error": "pass_not_redeemable", "pass": detail, "items": []}
+
+    lim = max(1, min(int(limit or 30), 50))
+    r = await session.execute(
+        text(
+            f"""
+            SELECT
+                b.id,
+                s.slot_date,
+                s.start_time,
+                s.end_time,
+                COALESCE(NULLIF(TRIM(srv.name), ''), 'Занятие') AS service_name,
+                b.price_tier_kind,
+                COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents, 0) AS price_cents
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN pass_instances pi ON pi.id = :pid
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id AND p.trainer_id = :tid
+            LEFT JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            WHERE b.trainer_id = :tid
+              AND b.client_id = pi.client_id
+              AND b.status = 'completed'
+              AND NOT b.is_sandbox
+              AND {_SQL_SLOT_END_TS} < CURRENT_TIMESTAMP
+              AND NOT EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id)
+              AND NOT EXISTS (
+                  SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id
+              )
+              AND {SQL_PASS_PRODUCT_COVERS_BOOKING_ROW}
+            ORDER BY s.slot_date DESC, s.start_time DESC
+            LIMIT :lim
+            """
+        ),
+        {"tid": trainer_id, "pid": int(pass_instance_id), "lim": lim},
+    )
+    items: list[dict] = []
+    for row in r.fetchall():
+        st = row[2]
+        et = row[3]
+        items.append(
+            {
+                "booking_id": int(row[0]),
+                "slot_date": row[1].isoformat() if hasattr(row[1], "isoformat") else str(row[1]),
+                "start_time": st.isoformat() if hasattr(st, "isoformat") else str(st),
+                "end_time": et.isoformat() if hasattr(et, "isoformat") else str(et),
+                "service_name": (row[4] or "").strip() or "Занятие",
+                "price_tier_kind": row[5],
+                "price_cents": int(row[6] or 0),
+            }
+        )
+    return {"pass": detail, "items": items}
+
+
+async def manual_redeem_pass_for_booking(
+    session: AsyncSession,
+    trainer_id: int,
+    pass_instance_id: int,
+    booking_id: int,
+) -> dict:
+    """
+    Trainer applies a specific pass to a completed past session (retroactive debit).
+    Writes pass_redemptions so trainer stats treat the visit as pass-covered, not cash.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                pi.id, pi.client_id, pi.sessions_remaining, pi.status, pi.expires_at,
+                p.trainer_id
+            FROM pass_instances pi
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id
+            WHERE pi.id = :pid
+            FOR UPDATE OF pi
+            """
+        ),
+        {"pid": int(pass_instance_id)},
+    )
+    inst = r.fetchone()
+    if inst is None or int(inst[5]) != int(trainer_id):
+        raise ValueError("Абонемент не найден")
+    if str(inst[3]) != "active":
+        raise ValueError("Абонемент не активен")
+    rem = int(inst[2] or 0)
+    if rem <= 0:
+        raise ValueError("На абонементе не осталось занятий")
+
+    expires = inst[4]
+    if expires is not None:
+        exp_dt = expires if isinstance(expires, datetime) else datetime.fromisoformat(str(expires))
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+        if exp_dt <= datetime.now(timezone.utc):
+            raise ValueError("Срок абонемента истёк")
+
+    client_id = int(inst[1])
+    r_b = await session.execute(
+        text(
+            f"""
+            SELECT b.id, b.client_id, b.trainer_id, b.service_id, b.status, b.price_tier_kind,
+                   {_SQL_SLOT_END_TS} AS slot_end_ts
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid
+            FOR UPDATE OF b
+            """
+        ),
+        {"bid": int(booking_id)},
+    )
+    booking = r_b.fetchone()
+    if booking is None or int(booking[2]) != int(trainer_id):
+        raise ValueError("Запись не найдена")
+    if int(booking[1]) != client_id:
+        raise ValueError("Запись принадлежит другому клиенту")
+    if str(booking[4]).strip().lower() != "completed":
+        raise ValueError("Списать можно только с проведённого занятия")
+    if booking[6] is not None and booking[6] >= datetime.now(timezone.utc):
+        raise ValueError("Занятие ещё не завершилось")
+
+    chk_pr = await session.execute(
+        text(
+            """
+            SELECT pass_instance_id FROM pass_redemptions WHERE booking_id = :bid
+            """
+        ),
+        {"bid": int(booking_id)},
+    )
+    existing = chk_pr.fetchone()
+    if existing:
+        if int(existing[0]) == int(pass_instance_id):
+            await session.commit()
+            detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
+            return {"pass": detail, "already_redeemed": True}
+        raise ValueError("Занятие уже списано с другого абонемента")
+
+    chk_cert = await session.execute(
+        text("SELECT 1 FROM certificate_booking_credits WHERE booking_id = :bid"),
+        {"bid": int(booking_id)},
+    )
+    if chk_cert.fetchone():
+        raise ValueError("Занятие оплачено сертификатом — списание с абонемента невозможно")
+
+    service_id = int(booking[3]) if booking[3] is not None else None
+    tier_kind: str | None = booking[5] if booking[5] else None
+    if service_id is None:
+        raise ValueError("У записи не указана услуга")
+
+    r_scope = await session.execute(
+        text(
+            f"""
+            SELECT 1
+            FROM pass_instances pi
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id
+            WHERE pi.id = :pid AND {SQL_PASS_PRODUCT_COVERS_BOOKING}
+            """
+        ),
+        {
+            "pid": int(pass_instance_id),
+            "booking_service_id": service_id,
+            "booking_tier_kind": tier_kind,
+        },
+    )
+    if r_scope.fetchone() is None:
+        raise ValueError("Абонемент не покрывает эту услугу или тариф")
+
+    new_rem = rem - 1
+    new_status = "used_up" if new_rem <= 0 else "active"
+    await session.execute(
+        text(
+            """
+            UPDATE pass_instances
+            SET sessions_remaining = :rem, status = :st
+            WHERE id = :id
+            """
+        ),
+        {"rem": new_rem, "st": new_status, "id": int(pass_instance_id)},
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO pass_redemptions (booking_id, pass_instance_id)
+            VALUES (:bid, :inst_id)
+            ON CONFLICT (booking_id) DO NOTHING
+            """
+        ),
+        {"bid": int(booking_id), "inst_id": int(pass_instance_id)},
+    )
+    await session.commit()
+
+    detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
+    return {
+        "pass": detail,
+        "booking_id": int(booking_id),
+        "already_redeemed": False,
+    }
 

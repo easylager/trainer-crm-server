@@ -101,6 +101,12 @@
         issuedTotal: 0,
         issuedHasMore: false,
         issuedActiveCount: 0,
+        passDetailId: null,
+        passDetail: null,
+        passDetailRedemptions: [],
+        passDetailRedeemable: [],
+        passDetailReturnTab: 'issued',
+        passDetailReturnClientId: null,
       };
 
       function postClientInviteLinkFirstCopyRecorded() {
@@ -116,12 +122,52 @@
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
         document.documentElement.classList.remove('pp-boot-pass-issue');
+        var backBtn = document.getElementById('btnBack');
+        if (backBtn) {
+          var needsAppBack = id === 'screenPassDetail' || id === 'screenPassIssue' ||
+            id === 'screenForm' || id === 'screenCertForm' || id === 'screenCertIssue' ||
+            id === 'screenPassWelcomeLink';
+          backBtn.hidden = !needsAppBack;
+          backBtn.onclick = needsAppBack ? function() {
+            if (id === 'screenPassDetail') leavePassDetailScreen();
+            else if (id === 'screenPassIssue') leavePassIssueScreen();
+            else if (id === 'screenForm') { showScreen('screenList'); setTab('passes'); loadList(); }
+            else if (id === 'screenCertForm') { showScreen('screenList'); setTab('certs'); loadCertList(); }
+            else if (id === 'screenCertIssue') { showScreen('screenList'); setTab('certs'); }
+            else if (id === 'screenPassWelcomeLink') { showScreen('screenList'); setTab('passes'); }
+          } : null;
+        }
+        if (id === 'screenPassDetail' || id === 'screenList') {
+          try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+        }
+      }
+
+      function tgHaptic(kind) {
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg && tg.HapticFeedback) {
+            if (kind === 'success' && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+              tg.HapticFeedback.notificationOccurred('success');
+            } else if (typeof tg.HapticFeedback.impactOccurred === 'function') {
+              tg.HapticFeedback.impactOccurred('light');
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      function passDetailLoadingSkeletonHtml() {
+        return '<div class="pp-pass-detail-skeleton" aria-hidden="true">' +
+          '<div class="pp-pass-detail-skeleton-row"></div>' +
+          '<div class="pp-pass-detail-skeleton-row"></div>' +
+          '<div class="pp-pass-detail-skeleton-row"></div>' +
+          '</div>';
       }
 
       /** Deep-link from client card / pass order: ?client_id=… [&pass_product_id=…] */
       function parsePassIssueDeepLink() {
         var params = new URLSearchParams(window.location.search || '');
         if (params.get('certificate_product_id')) return null;
+        if (params.get('pass_instance_id')) return null;
         var tab = (params.get('tab') || '').toLowerCase();
         if (tab === 'certs' || tab === 'cert' || tab === 'certificates') return null;
         var clientId = parseInt(params.get('client_id') || '', 10);
@@ -295,6 +341,228 @@
           '</div>';
       }
 
+      function formatBookingSlotLabel(item) {
+        if (!item) return '—';
+        var d = item.slot_date || '';
+        if (d && d.indexOf('T') >= 0) d = d.split('T')[0];
+        var parts = d ? d.split('-') : [];
+        var dateRu = parts.length === 3 ? parts[2] + '.' + parts[1] + '.' + parts[0] : d;
+        var weekday = '';
+        if (parts.length === 3) {
+          try {
+            var dt = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            var wd = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][dt.getDay()];
+            if (wd) weekday = wd + ', ';
+          } catch (e) { /* ignore */ }
+        }
+        var st = (item.start_time || '').slice(0, 5);
+        var et = (item.end_time || '').slice(0, 5);
+        var timePart = st && et ? (st + '–' + et) : (st || '');
+        var head = (weekday + dateRu).trim();
+        return (head + (timePart ? ' · ' + timePart : '')).trim() || '—';
+      }
+
+      function formatBookingPriceHint(cents) {
+        if (cents == null || cents <= 0) return 'Без абонемента';
+        return 'Оплачено разово · ' + formatPricePlain(cents);
+      }
+
+      function passStatusLabelRu(status) {
+        var map = { active: 'Активен', used_up: 'Использован', cancelled: 'Отменён' };
+        return map[status] || status || '—';
+      }
+
+      function renderPassDetailMetaRows(p) {
+        var host = document.getElementById('passDetailMetaRows');
+        if (!host || !p) return;
+        var rows = [];
+        rows.push({ label: 'Клиент', value: p.client_name || '—' });
+        if (p.client_phone) rows.push({ label: 'Телефон', value: p.client_phone });
+        rows.push({ label: 'Услуги', value: p.service_scope || 'На все услуги' });
+        if (p.issued_at) rows.push({ label: 'Выдан', value: formatIssuedDate(p.issued_at) });
+        if (p.expires_at) rows.push({ label: 'Срок', value: 'до ' + formatIssuedDate(p.expires_at) });
+        var html = '';
+        rows.forEach(function(row) {
+          html += '<div class="bd-row"><div class="bd-row-text">';
+          html += '<div class="bd-row-label">' + escapeHtml(row.label) + '</div>';
+          html += '<div class="bd-row-value">' + escapeHtml(row.value) + '</div>';
+          html += '</div></div>';
+        });
+        host.innerHTML = html;
+      }
+
+      function openPassDetail(passInstanceId, opts) {
+        opts = opts || {};
+        state.passDetailId = passInstanceId;
+        state.passDetailReturnTab = opts.returnTab || 'issued';
+        state.passDetailReturnClientId = opts.returnClientId || null;
+        showScreen('screenPassDetail');
+        document.getElementById('passDetailProduct').textContent = '…';
+        document.getElementById('passDetailClient').textContent = 'Загрузка…';
+        var statusEl = document.getElementById('passDetailStatus');
+        if (statusEl) statusEl.hidden = true;
+        document.getElementById('passDetailMetaRows').innerHTML = passDetailLoadingSkeletonHtml();
+        document.getElementById('passDetailRedeemableList').innerHTML = passDetailLoadingSkeletonHtml();
+        document.getElementById('passDetailHistorySection').hidden = true;
+        document.getElementById('passDetailRedeemSection').hidden = true;
+        document.getElementById('passDetailFootnote').hidden = true;
+        fetch(apiFetchUrl('/trainer/pass-instances/' + encodeURIComponent(String(passInstanceId))), { headers: headers() })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            if (!o.ok) {
+              var detail = o.data && o.data.detail;
+              throw new Error(typeof detail === 'string' ? detail : 'Не удалось загрузить абонемент');
+            }
+            state.passDetail = o.data.pass || null;
+            state.passDetailRedemptions = o.data.redemptions || [];
+            state.passDetailRedeemable = o.data.redeemable_bookings || [];
+            renderPassDetailScreen();
+          })
+          .catch(function(err) {
+            document.getElementById('passDetailRedeemableList').innerHTML =
+              '<div class="pp-state pp-state--error"><p class="pp-state-title">' +
+              escapeHtml(err.message || 'Ошибка загрузки') + '</p></div>';
+          });
+      }
+
+      function renderPassDetailScreen(opts) {
+        opts = opts || {};
+        var p = state.passDetail;
+        if (!p) return;
+        document.getElementById('passDetailProduct').textContent = p.product_name || 'Абонемент';
+        document.getElementById('passDetailClient').textContent = p.client_name || 'Клиент';
+        var statusEl = document.getElementById('passDetailStatus');
+        if (statusEl) {
+          var st = (p.status || '').trim();
+          statusEl.hidden = !st;
+          statusEl.textContent = passStatusLabelRu(st);
+          statusEl.className = 'pp-pass-detail-status ' +
+            (st === 'active' ? 'pp-pass-detail-status--live' : 'pp-pass-detail-status--closed');
+        }
+        var rem = typeof p.sessions_remaining === 'number' ? p.sessions_remaining : 0;
+        var total = typeof p.sessions_total === 'number' ? p.sessions_total : 0;
+        document.getElementById('passDetailRem').textContent = String(rem);
+        document.getElementById('passDetailTotal').textContent = String(total);
+        var pct = total > 0 ? Math.round(100 * rem / total) : 0;
+        document.getElementById('passDetailProgress').style.width = pct + '%';
+        var statCard = document.getElementById('passDetailStatCard');
+        if (statCard && opts.pulseStat) {
+          statCard.classList.remove('is-updated');
+          void statCard.offsetWidth;
+          statCard.classList.add('is-updated');
+        }
+        renderPassDetailMetaRows(p);
+
+        var footnote = document.getElementById('passDetailFootnote');
+        if (footnote) footnote.hidden = !p.can_redeem;
+
+        var redeemSection = document.getElementById('passDetailRedeemSection');
+        var redeemList = document.getElementById('passDetailRedeemableList');
+        if (!p.can_redeem) {
+          redeemSection.hidden = true;
+        } else {
+          redeemSection.hidden = false;
+          if (!state.passDetailRedeemable.length) {
+            redeemList.innerHTML =
+              '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">✓</div>' +
+              '<p class="pp-state-title">Всё учтено</p>' +
+              '<p class="pp-state-text">Нет прошедших занятий без абонемента, которые можно включить в этот абонемент.</p></div>';
+          } else {
+            var html = '<div class="bd-rows">';
+            state.passDetailRedeemable.forEach(function(b) {
+              html += '<button type="button" class="pp-redeem-booking-row" data-booking-id="' + b.booking_id + '">';
+              html += '<span class="pp-redeem-booking-row__icon" aria-hidden="true">🏋</span>';
+              html += '<span class="pp-redeem-booking-row__main">';
+              html += '<div class="pp-redeem-booking-row__date">' + escapeHtml(formatBookingSlotLabel(b)) + '</div>';
+              html += '<div class="pp-redeem-booking-row__meta">' +
+                escapeHtml(b.service_name || 'Занятие') + ' · ' +
+                escapeHtml(formatBookingPriceHint(b.price_cents)) + '</div>';
+              html += '</span>';
+              html += '<span class="pp-redeem-booking-row__chip">−1</span>';
+              html += '</button>';
+            });
+            html += '</div>';
+            redeemList.innerHTML = html;
+            redeemList.querySelectorAll('.pp-redeem-booking-row').forEach(function(btn) {
+              btn.onclick = function() {
+                var bid = parseInt(btn.dataset.bookingId, 10);
+                if (!bid || !state.passDetailId || btn.disabled) return;
+                var booking = state.passDetailRedeemable.find(function(x) { return x.booking_id === bid; }) || {};
+                var label = formatBookingSlotLabel(booking);
+                showAppConfirm(
+                  'Списать 1 занятие с абонемента?\n\n' + label +
+                    '\n\nВ статистике визит будет учтён как оплаченный абонементом.',
+                  { okText: 'Списать', cancelText: 'Отмена' }
+                ).then(function(ok) {
+                  if (!ok) return;
+                  redeemList.querySelectorAll('.pp-redeem-booking-row').forEach(function(b) { b.disabled = true; });
+                  btn.querySelector('.pp-redeem-booking-row__chip').textContent = '…';
+                  fetch(apiFetchUrl('/trainer/pass-instances/' + encodeURIComponent(String(state.passDetailId)) + '/redeem'), {
+                    method: 'POST',
+                    headers: headers(),
+                    body: JSON.stringify({ booking_id: bid }),
+                  })
+                    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+                    .then(function(o) {
+                      if (!o.ok) {
+                        var detail = o.data && o.data.detail;
+                        throw new Error(typeof detail === 'string' ? detail : 'Не удалось списать');
+                      }
+                      state.passDetail = o.data.pass || state.passDetail;
+                      state.passDetailRedemptions = o.data.redemptions || [];
+                      state.passDetailRedeemable = o.data.redeemable_bookings || [];
+                      state.issuedLoaded = false;
+                      tgHaptic('success');
+                      renderPassDetailScreen({ pulseStat: true });
+                      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showPopup) {
+                        window.Telegram.WebApp.showPopup({
+                          message: 'Занятие списано · осталось ' + (state.passDetail.sessions_remaining || 0) + ' из ' + (state.passDetail.sessions_total || 0),
+                          buttons: [{ type: 'ok' }],
+                        });
+                      }
+                    })
+                    .catch(function(err) {
+                      redeemList.querySelectorAll('.pp-redeem-booking-row').forEach(function(b) { b.disabled = false; });
+                      if (btn.querySelector('.pp-redeem-booking-row__chip')) {
+                        btn.querySelector('.pp-redeem-booking-row__chip').textContent = '−1';
+                      }
+                      alert(err.message || 'Ошибка списания');
+                    });
+                });
+              };
+            });
+          }
+        }
+
+        var histSection = document.getElementById('passDetailHistorySection');
+        var histList = document.getElementById('passDetailRedemptionList');
+        if (!state.passDetailRedemptions.length) {
+          histSection.hidden = true;
+        } else {
+          histSection.hidden = false;
+          var histHtml = '';
+          state.passDetailRedemptions.forEach(function(r) {
+            histHtml += '<div class="bd-row pp-redemption-row">';
+            histHtml += '<span class="pp-redemption-row__dot" aria-hidden="true"></span>';
+            histHtml += '<div class="pp-redemption-row__text">';
+            histHtml += '<div class="pp-redemption-row__date">' + escapeHtml(formatBookingSlotLabel(r)) + '</div>';
+            histHtml += '<div class="pp-redemption-row__service">' + escapeHtml(r.service_name || 'Занятие') + '</div>';
+            histHtml += '</div></div>';
+          });
+          histList.innerHTML = histHtml;
+        }
+      }
+
+      function leavePassDetailScreen() {
+        if (state.passDetailReturnClientId) {
+          window.location.href = trainerClientCardUrl(state.passDetailReturnClientId);
+          return;
+        }
+        showScreen('screenList');
+        setTab(state.passDetailReturnTab || 'issued');
+        if (state.passDetailReturnTab === 'issued') loadIssuedList();
+      }
+
       function renderIssuedList() {
         var wrap = document.getElementById('issuedListContent');
         var hintEl = document.getElementById('issuedHint');
@@ -320,7 +588,13 @@
           var bucket = issuedStatusBucket(it);
           var lifeCls = bucket === 'active' ? 'pp-issued-card--live' : 'pp-issued-card--closed';
           var statusCls = bucket === 'active' ? 'pp-issued-status--live' : 'pp-issued-status--closed';
-          html += '<div class="pp-issued-card ' + kindCls + ' ' + lifeCls + '">';
+          var clickable = it.kind === 'pass' && bucket === 'active' && (it.sessions_remaining || 0) > 0;
+          var cardTag = clickable ? 'button' : 'div';
+          var cardExtra = clickable ? ' pp-issued-card--clickable' : '';
+          var cardAttrs = clickable
+            ? ' type="button" class="pp-issued-card ' + kindCls + ' ' + lifeCls + cardExtra + '" data-pass-id="' + it.id + '"'
+            : ' class="pp-issued-card ' + kindCls + ' ' + lifeCls + '"';
+          html += '<' + cardTag + cardAttrs + '>';
           html += '<div class="pp-issued-card-head">';
           html += '<span class="pp-issued-kind">' + escapeHtml(issuedKindLabel(it.kind)) + '</span>';
           html += '<span class="pp-issued-status ' + statusCls + '">' + escapeHtml(it.status_label_ru || it.status || '—') + '</span>';
@@ -338,6 +612,9 @@
             } else {
               html += '<div class="pp-issued-meta">На все услуги</div>';
             }
+            if (clickable) {
+              html += '<div class="pp-issued-redeem-cta">Списать прошедшее занятие</div>';
+            }
           } else {
             if (it.recipient_name && it.recipient_name !== (it.client_label_ru || '')) {
               html += '<div class="pp-issued-meta">Получатель: ' + escapeHtml(it.recipient_name) + '</div>';
@@ -354,9 +631,18 @@
           if (it.expires_at) {
             html += '<div class="pp-issued-meta">Срок: до ' + escapeHtml(formatIssuedDate(it.expires_at)) + '</div>';
           }
-          html += '</div>';
+          html += '</' + cardTag + '>';
         });
         wrap.innerHTML = html;
+        wrap.querySelectorAll('[data-pass-id]').forEach(function(btn) {
+          btn.onclick = function() {
+            var pid = parseInt(btn.dataset.passId, 10);
+            if (pid) {
+              tgHaptic('light');
+              openPassDetail(pid, { returnTab: 'issued' });
+            }
+          };
+        });
         renderIssuedPagination();
       }
 
@@ -1428,7 +1714,22 @@
         });
       };
 
+      /** Deep-link: ?pass_instance_id=… [&client_id=…] [&tab=issued] */
+      function parsePassDetailDeepLink() {
+        var params = new URLSearchParams(window.location.search || '');
+        var pid = parseInt(params.get('pass_instance_id') || '', 10);
+        if (!pid) return null;
+        var clientId = parseInt(params.get('client_id') || '', 10);
+        var tab = (params.get('tab') || 'issued').toLowerCase();
+        return {
+          passInstanceId: pid,
+          returnClientId: clientId > 0 ? clientId : null,
+          returnTab: tab === 'passes' || tab === 'certs' ? tab : 'issued',
+        };
+      }
+
       var passIssueDeepLink = parsePassIssueDeepLink();
+      var passDetailDeepLink = parsePassDetailDeepLink();
 
       function startCatalogLoads() {
         loadList();
@@ -1436,7 +1737,27 @@
         if (state.activeTab === 'issued') loadIssuedList();
       }
 
-      if (passIssueDeepLink) {
+      if (passDetailDeepLink) {
+        var startPassDetailDeepLink = function() {
+          openPassDetail(passDetailDeepLink.passInstanceId, {
+            returnTab: passDetailDeepLink.returnTab,
+            returnClientId: passDetailDeepLink.returnClientId,
+          });
+        };
+        if (initData && window.TrainerMiniAppGate) {
+          window.TrainerMiniAppGate.fetchAccess(initData)
+            .then(function (a) {
+              if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                window.TrainerMiniAppGate.showBlockingOverlay(a);
+                return;
+              }
+              startPassDetailDeepLink();
+            })
+            .catch(startPassDetailDeepLink);
+        } else {
+          startPassDetailDeepLink();
+        }
+      } else if (passIssueDeepLink) {
         var startPassIssueDeepLink = function() {
           runPassIssueDeepLink(passIssueDeepLink);
         };

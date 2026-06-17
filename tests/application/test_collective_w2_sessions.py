@@ -13,6 +13,8 @@ from src.application.collective_session_use_cases import (
     compute_center_booking_price_cents,
     create_collective_session,
     create_collective_session_booking,
+    duplicate_collective_sessions_week,
+    list_collective_sessions_for_studio,
     list_public_collective_sessions,
 )
 from src.application.collective_use_cases import (
@@ -187,6 +189,39 @@ async def test_booking_requires_assigned_coach(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_session_without_coaches_allows_lane_booking(db_session) -> None:
+    """Broski-style: lane window without duty coaches; coach required only for coach attendance modes."""
+    cid, owner_id = await _seed_studio_central(db_session)
+    slot_date = date.today() + timedelta(days=5)
+    created = await create_collective_session(
+        db_session,
+        collective_id=cid,
+        owner_trainer_id=owner_id,
+        slot_date=slot_date,
+        start_time=time(9, 0),
+        end_time=time(10, 0),
+        coach_trainer_ids=[],
+    )
+    assert created and created.get("error") is None
+    assert created.get("assigned_coaches") == []
+    session_id = int(created["id"])
+
+    r_client = await db_session.execute(
+        text("INSERT INTO clients (telegram_id, created_at) VALUES (900003, NOW()) RETURNING id")
+    )
+    client_id = int(r_client.scalar_one())
+    await db_session.commit()
+
+    ok = await create_collective_session_booking(
+        db_session,
+        session_id=session_id,
+        client_id=client_id,
+        attendance_mode=ATTENDANCE_LANE_SELF,
+    )
+    assert ok and ok.get("error") is None
+
+
+@pytest.mark.asyncio
 async def test_public_sessions_rejects_member_autonomous(db_session) -> None:
     now = datetime.now(timezone.utc)
     r = await db_session.execute(
@@ -208,3 +243,57 @@ async def test_public_sessions_rejects_member_autonomous(db_session) -> None:
         to_date=date.today() + timedelta(days=7),
     )
     assert payload and payload.get("error") == "not_studio_central"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_collective_sessions_week(db_session) -> None:
+    cid, owner_id = await _seed_studio_central(db_session, slug="dup-week")
+    monday = date.today() - timedelta(days=date.today().weekday())
+    wednesday = monday + timedelta(days=2)
+    friday = monday + timedelta(days=4)
+
+    for slot_date, start, end in (
+        (wednesday, time(10, 0), time(11, 0)),
+        (friday, time(18, 0), time(19, 30)),
+    ):
+        created = await create_collective_session(
+            db_session,
+            collective_id=cid,
+            owner_trainer_id=owner_id,
+            slot_date=slot_date,
+            start_time=start,
+            end_time=end,
+            capacity=3,
+        )
+        assert created and not created.get("error")
+
+    result = await duplicate_collective_sessions_week(
+        db_session,
+        collective_id=cid,
+        owner_trainer_id=owner_id,
+        source_week_start=wednesday,
+        weeks_ahead=1,
+    )
+    assert result.get("error") is None
+    assert result["created_count"] == 2
+    assert result["skipped_count"] == 0
+
+    dup = await duplicate_collective_sessions_week(
+        db_session,
+        collective_id=cid,
+        owner_trainer_id=owner_id,
+        source_week_start=monday,
+        weeks_ahead=1,
+    )
+    assert dup["created_count"] == 0
+    assert dup["skipped_count"] == 2
+
+    target_monday = monday + timedelta(days=7)
+    target_sunday = target_monday + timedelta(days=6)
+    copied = await list_collective_sessions_for_studio(
+        db_session,
+        collective_id=cid,
+        from_date=target_monday,
+        to_date=target_sunday,
+    )
+    assert len(copied) == 2
