@@ -77,7 +77,16 @@ async def test_hub_inbox_count_returns_badges(app_use_test_db, db_session) -> No
     assert resp.status_code == 200
     data = resp.json()
     assert "badges" in data
-    assert set(data["badges"].keys()) == {"schedule", "center", "more", "clients"}
+    assert set(data["badges"].keys()) == {
+        "schedule",
+        "center",
+        "more",
+        "clients",
+        "menu",
+        "menu_hints",
+    }
+    assert isinstance(data["badges"]["menu"], dict)
+    assert isinstance(data["badges"]["menu_hints"], dict)
     assert isinstance(data["total_actionable"], int)
 
 
