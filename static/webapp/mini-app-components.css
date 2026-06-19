@@ -449,6 +449,23 @@ body {
   text-decoration: none;
   letter-spacing: 0.02em;
 }
+button.bd-tel,
+button.tc-tel,
+button.crm-tel-link,
+button[data-call-phone]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
 .bd-tel:active { opacity: 0.8; }
 .bd-section-label {
   font-size: 11px;

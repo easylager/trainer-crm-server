@@ -6,7 +6,7 @@
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605085"></script>
-  <script src="mini-app-phone-field.js?v=202605203"></script>
+  <script src="mini-app-phone-field.js?v=202606281"></script>
   <link rel="stylesheet" href="theme.css?v=20260429" />
   <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <script src="mini-app-confirm.js"></script>
@@ -26,11 +26,11 @@
     />
   </noscript>
   <link rel="preload" href="schedule-editor-main.js?v=202606165" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606314" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606198" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606313" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606314" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606163" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606198" />
 </head>
 <body data-trainer-shell="tabs">
   <!-- Covers main UI until quick-book modal opens (flow=book) or booking detail loads (open_booking=) — avoids calendar flash -->
@@ -297,6 +297,25 @@
       </div>
     </div>
     <p id="slotDurationFixedNote" class="slot-flow-help schedule-fixed-duration-note" style="display:none;margin-top:0;" role="status"></p>
+
+    <div id="calendarGridArenaWrap" class="slot-flow-panel schedule-grid-arena-panel" style="display:none;margin-top:12px;" aria-live="polite">
+      <div class="slot-flow-field slot-flow-field--wide">
+        <span class="slot-flow-label" id="calendarGridArenaLabel">Площадка для отмеченных на сетке</span>
+        <div id="calendarGridArenaPick" class="schedule-grid-arena-chips" role="listbox" aria-labelledby="calendarGridArenaLabel"></div>
+        <select id="calendarGridArenaSelect" class="schedule-grid-arena-select-hidden" aria-hidden="true" tabindex="-1"></select>
+        <p class="slot-flow-help">Отметки на сетке «Быстро» сохранятся на выбранную площадку. На основной метка в расписании не показывается.</p>
+      </div>
+    </div>
+
+    <div id="templateGridArenaWrap" class="slot-flow-panel schedule-grid-arena-panel" style="display:none;margin-top:12px;" aria-live="polite">
+      <div class="slot-flow-field slot-flow-field--wide">
+        <span class="slot-flow-label" id="templateGridArenaLabel">Площадка для отмеченных на сетке (шаблон)</span>
+        <div id="templateGridArenaPick" class="schedule-grid-arena-chips" role="listbox" aria-labelledby="templateGridArenaLabel"></div>
+        <select id="templateGridArenaSelect" class="schedule-grid-arena-select-hidden" aria-hidden="true" tabindex="-1"></select>
+        <p class="slot-flow-help">Часы на сетке «Быстро» в этом дне шаблона — на выбранной площадке.</p>
+      </div>
+    </div>
+
     <div class="schedule-time-grid-section">
       <div class="schedule-time-grid-head">
         <p class="slot-flow-label schedule-time-grid-label" id="scheduleTimeGridLabel">Начало слота</p>
@@ -405,7 +424,7 @@
       <div class="slot-flow-field slot-flow-field--wide">
         <label for="calendarPreciseArenaSelect" class="slot-flow-label">Площадка для слотов «Точное время»</label>
         <select id="calendarPreciseArenaSelect" class="slot-flow-select"></select>
-        <p class="slot-flow-help">Только добавленные вручную окна ниже привязаны к этой площадке; маркеры на сетке — к площадке по умолчанию.</p>
+        <p class="slot-flow-help">Только окна, добавленные вручную на вкладке «Точное время». На сетке «Быстро» — отдельный выбор выше.</p>
       </div>
     </div>
 
@@ -413,7 +432,7 @@
       <div class="slot-flow-field slot-flow-field--wide">
         <label for="templatePreciseArenaSelect" class="slot-flow-label">Площадка для слотов «Точное время» (шаблон)</label>
         <select id="templatePreciseArenaSelect" class="slot-flow-select"></select>
-        <p class="slot-flow-help">Для окон вне сетки в этом дне шаблона. Отметки на сетке по-прежнему используют площадку по умолчанию при генерации недели.</p>
+        <p class="slot-flow-help">Для окон вне сетки в этом дне шаблона. Сетка «Быстро» — отдельный выбор выше.</p>
       </div>
     </div>
 
@@ -866,7 +885,7 @@
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <script src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
-  <script defer src="schedule-editor-main.js?v=202606313"></script>
-  <script src="mini-app-trainer-shell.js?v=202606314"></script>
+  <script defer src="schedule-editor-main.js?v=202606314"></script>
+  <script src="mini-app-trainer-shell.js?v=202606198"></script>
 </body>
 </html>

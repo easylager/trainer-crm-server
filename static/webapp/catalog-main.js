@@ -1215,7 +1215,7 @@
         var tg = (contacts.telegram || '').trim();
         var ig = (contacts.instagram || '').trim();
         var address = (contacts.address || '').trim();
-        if (phone) lines.push('<div class="empty-state-text"><strong>Телефон:</strong> ' + escapeHtml(phone) + '</div>');
+        if (phone) lines.push('<div class="empty-state-text"><strong>Телефон:</strong> ' + phoneCallHtml(phone) + '</div>');
         if (tg) lines.push('<div class="empty-state-text"><strong>Telegram:</strong> ' + escapeHtml(tg) + '</div>');
         if (ig) lines.push('<div class="empty-state-text"><strong>Instagram:</strong> ' + escapeHtml(ig) + '</div>');
         if (address) lines.push('<div class="empty-state-text"><strong>Адрес:</strong> ' + escapeHtml(address) + '</div>');
@@ -3722,6 +3722,23 @@
         });
       }
 
+      function phoneCallHtml(phone, extraClass) {
+        var p = String(phone || '').trim();
+        if (!p) return '';
+        var Pf = window.CrmPhoneField;
+        if (Pf && typeof Pf.phoneTelLinkHtml === 'function') {
+          return Pf.phoneTelLinkHtml(p, extraClass || 'bd-tel', escapeHtml);
+        }
+        return escapeHtml(p);
+      }
+
+      function wirePhoneCallLinks(root) {
+        var Pf = window.CrmPhoneField;
+        if (!Pf) return;
+        if (typeof Pf.wirePhoneCallButtons === 'function') Pf.wirePhoneCallButtons(root || document);
+        else if (typeof Pf.wirePhoneTelLinks === 'function') Pf.wirePhoneTelLinks(root || document);
+      }
+
       function escapeHtml(s) {
         if (s == null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -4841,6 +4858,7 @@
         var block = document.getElementById('trainerList');
         if (!block) return;
         block.innerHTML = '<div class="catalog-list-mount">' + innerHtml + '</div>';
+        wirePhoneCallLinks(block);
         var mount = block.firstElementChild;
         if (!mount) return;
         requestAnimationFrame(function() {
@@ -5791,7 +5809,7 @@
           var phoneLine = '';
           var ph = (p.phone || '').trim();
           var ct = (p.contacts || '').trim();
-          if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> <a href="tel:' + ph.replace(/[^\d+]/g, '') + '">' + escapeHtml(ph) + '</a></div>';
+          if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> ' + phoneCallHtml(ph) + '</div>';
           if (ct) phoneLine += '<div class="slots-empty slots-contact"><strong>Контакты:</strong> ' + escapeHtml(ct) + '</div>';
           // Lead Mode: trainer kept in catalog after subscription expiry. Promote a strong
           // "Write in Telegram" CTA over the generic "leave request" path so we capture the
@@ -5819,6 +5837,7 @@
           actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
           appendTrainerActionChips(actionsLeadEl, t, true);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
+          wirePhoneCallLinks(document.getElementById('trainerDetailSlots'));
           return;
         }
         loadTrainerDetailSlots(t)
@@ -6169,8 +6188,11 @@
               prefetch.firstPageKey = null;
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
-              document.getElementById('successText').innerHTML =
-                '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
+              var isPersonal = !!(state.requestForTrainer && state.requestForTrainer.id);
+              var trainerName = isPersonal && state.requestForTrainer.name ? state.requestForTrainer.name : '';
+              document.getElementById('successText').innerHTML = isPersonal
+                ? ('✅ <b>Заявка отправлена</b> ' + (trainerName ? trainerName : 'тренеру') + '.<br><br>Когда тренер ответит — напишем вам в боте.')
+                : '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
               showScreen('screenSuccess');
               getClientSession().then(function(session) {
                 applySessionToState(session);

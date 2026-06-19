@@ -1008,7 +1008,10 @@ class ScheduleSlotsDayBody(BaseModel):
     group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
     arena_id: int | None = Field(
         default=None,
-        description="Venue for new group slots (capacity > 1), or uniform venue for slot_entries without per-entry arena_id",
+        description=(
+            "Venue for new group slots (capacity > 1), uniform venue for start_times (individual grid), "
+            "or default for slot_entries rows without per-entry arena_id"
+        ),
     )
     # Per-slot pairs: each entry carries its own duration and bypasses arena grid alignment check.
     slot_entries: list[SlotEntryBody] | None = Field(default=None)
@@ -1076,19 +1079,19 @@ async def post_schedule_slots(
             )
         if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
             raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
-        if body.arena_id is not None:
-            rchk = await session.execute(
-                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                {"tid": trainer_id, "aid": int(body.arena_id)},
-            )
-            if not rchk.fetchone():
-                raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+    if body.arena_id is not None:
+        rchk = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": int(body.arena_id)},
+        )
+        if not rchk.fetchone():
+            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot_date")
 
-    arena_arg = int(body.arena_id) if body.capacity > 1 and body.arena_id is not None else None
+    arena_arg = int(body.arena_id) if body.arena_id is not None else None
 
     try:
         duty_intervals = _schedule_slot_intervals(body)
@@ -1975,6 +1978,7 @@ class ClientRequestCreateBody(BaseModel):
 @router.post("/client/request")
 async def post_client_request(
     body: ClientRequestCreateBody,
+    background_tasks: BackgroundTasks,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -1993,6 +1997,8 @@ async def post_client_request(
     request_id = await create_client_request(
         session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
     )
+    # Immediate DM — batch notifier can lag minutes; personalized requests must not wait.
+    background_tasks.add_task(_bg_notify_trainer_client_request_immediate, int(request_id))
     return {"success": True, "request_id": request_id}
 
 

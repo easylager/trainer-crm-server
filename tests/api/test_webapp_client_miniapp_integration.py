@@ -974,6 +974,100 @@ async def test_client_request_create_list_patch_delete(app_use_test_db, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_client_personalized_request_lists_and_schedules_trainer_notify(
+    app_use_test_db, db_session
+) -> None:
+    """Персональная заявка (trainer_id) видна клиенту и ставит immediate notify в background."""
+    ref_day, _ = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, _slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    assert service_id == sid
+    ctg = _fresh_client_telegram_id()
+
+    notify_mock = MagicMock()
+    with patch_client_init_auth(ctg):
+        with patch(
+            "src.api.routes.webapp._bg_notify_trainer_client_request_immediate",
+            new=notify_mock,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                cr = await client.post(
+                    "/api/webapp/client/request",
+                    json={
+                        "city_id": cid,
+                        "service_id": sid,
+                        "comment": "персонально",
+                        "trainer_id": trainer_id,
+                        "first_name": "Клиент",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                assert cr.status_code == 200
+                rid = cr.json()["request_id"]
+
+                listed = await client.get(
+                    "/api/webapp/client/requests",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                assert listed.status_code == 200
+                item = next((x for x in (listed.json().get("items") or []) if x.get("id") == rid), None)
+                assert item is not None
+                assert item.get("is_personalized") is True
+                assert item.get("trainer_id") == trainer_id
+
+    notify_mock.assert_called_once_with(int(rid))
+
+
+@pytest.mark.asyncio
+async def test_client_general_and_personal_requests_both_listed(
+    app_use_test_db, db_session
+) -> None:
+    """Общая и персональная заявки — две отдельные записи в списке клиента."""
+    ref_day, _ = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, _slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    assert service_id == sid
+    ctg = _fresh_client_telegram_id()
+
+    with patch_client_init_auth(ctg):
+        with patch("src.api.routes.webapp._bg_notify_trainer_client_request_immediate", new=MagicMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                g = await client.post(
+                    "/api/webapp/client/request",
+                    json={"city_id": cid, "service_id": sid, "comment": "общая", "first_name": "Клиент"},
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                p = await client.post(
+                    "/api/webapp/client/request",
+                    json={
+                        "city_id": cid,
+                        "service_id": sid,
+                        "comment": "персональная",
+                        "trainer_id": trainer_id,
+                        "first_name": "Клиент",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                assert g.status_code == 200 and p.status_code == 200
+                listed = await client.get(
+                    "/api/webapp/client/requests",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                items = listed.json().get("items") or []
+                assert len([x for x in items if x.get("status") != "archived"]) >= 2
+                personalized = [x for x in items if x.get("is_personalized")]
+                general = [x for x in items if not x.get("is_personalized")]
+                assert len(personalized) >= 1
+                assert len(general) >= 1
+
+
+@pytest.mark.asyncio
 async def test_pass_products_404_when_trainer_not_online_tier(app_use_test_db, db_session) -> None:
     ref_day, _ = _minsk_monday_reference()
     slot_day = ref_day + timedelta(days=4)

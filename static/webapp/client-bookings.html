@@ -6,6 +6,7 @@
   <title>Мои записи</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
+  <script src="mini-app-phone-field.js?v=202606281"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -74,6 +75,7 @@
         <div class="bd-avatar" id="detailTrainerAvatar">—</div>
         <div class="bd-client-body">
           <a href="#" class="bd-client-name bd-trainer-card-link" id="detailTrainerName">—</a>
+          <div id="detailTrainerPhoneWrap" class="bd-trainer-phone-wrap" style="display:none;"></div>
           <a href="#" class="bd-tel" id="detailTrainerContact" style="display:none;">Связаться</a>
         </div>
       </div>
@@ -174,6 +176,12 @@
             <circle cx="12" cy="10" r="3"/>
           </svg>
           Показать на карте
+        </button>
+        <button type="button" class="btn-secondary btn-block" id="detailCallPhoneBtn" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          Позвонить тренеру
         </button>
         <button type="button" class="btn-secondary btn-block" id="detailCopyPhoneBtn" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -378,6 +386,21 @@
         }, 2600);
       }
 
+      function callTrainerPhone(phone) {
+        var p = String(phone || '').trim();
+        if (!p) return;
+        var Pf = window.CrmPhoneField;
+        if (Pf && typeof Pf.openPhoneDialer === 'function') {
+          if (!Pf.openPhoneDialer(p) && tg && tg.showAlert) {
+            tg.showAlert('Не удалось открыть набор номера.');
+          }
+          return;
+        }
+        try {
+          window.open('tel:' + p.replace(/[^\d+]/g, ''), '_blank');
+        } catch (e) { /* */ }
+      }
+
       function copyTrainerPhone(phone) {
         var p = String(phone || '').trim();
         if (!p) return;
@@ -520,7 +543,9 @@
         var mapBtn = document.getElementById('detailMapBtn');
         var mapRow = document.getElementById('detailMapRow');
         var mapLinkEl = document.getElementById('detailMapLink');
+        var callPhoneBtn = document.getElementById('detailCallPhoneBtn');
         var copyPhoneBtn = document.getElementById('detailCopyPhoneBtn');
+        var phoneWrap = document.getElementById('detailTrainerPhoneWrap');
         var contactBtn = document.getElementById('detailContactBtn');
         var mapUrl = booking.map_link || '';
 
@@ -540,9 +565,29 @@
         }
 
         if (booking.trainer_phone) {
+          var trainerPh = String(booking.trainer_phone).trim();
+          if (phoneWrap) {
+            var Pf = window.CrmPhoneField;
+            phoneWrap.innerHTML =
+              Pf && typeof Pf.phoneTelLinkHtml === 'function'
+                ? Pf.phoneTelLinkHtml(trainerPh, 'bd-tel', escapeHtml)
+                : escapeHtml(trainerPh);
+            phoneWrap.style.display = '';
+            if (Pf && typeof Pf.wirePhoneCallButtons === 'function') {
+              Pf.wirePhoneCallButtons(phoneWrap);
+            }
+          }
+          callPhoneBtn.style.display = 'flex';
+          callPhoneBtn.onclick = function() { callTrainerPhone(trainerPh); };
           copyPhoneBtn.style.display = 'flex';
-          copyPhoneBtn.onclick = function() { copyTrainerPhone(booking.trainer_phone); };
+          copyPhoneBtn.onclick = function() { copyTrainerPhone(trainerPh); };
         } else {
+          if (phoneWrap) {
+            phoneWrap.innerHTML = '';
+            phoneWrap.style.display = 'none';
+          }
+          callPhoneBtn.style.display = 'none';
+          callPhoneBtn.onclick = null;
           copyPhoneBtn.style.display = 'none';
           copyPhoneBtn.onclick = null;
         }

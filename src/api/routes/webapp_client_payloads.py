@@ -83,6 +83,9 @@ def serialize_client_request(req: dict) -> dict:
         "status": req.get("status"),
         "city_name": req.get("city_name"),
         "service_name": req.get("service_name"),
+        "trainer_id": req.get("trainer_id"),
+        "trainer_name": req.get("trainer_name"),
+        "is_personalized": bool(req.get("is_personalized") or req.get("trainer_id")),
         "responses": [
             {
                 "trainer_id": r.get("trainer_id"),

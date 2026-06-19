@@ -1,5 +1,0 @@
-Hi Lazer team — applying for Senior DevOps/SRE Engineer (AWS/GCP). Best job post I've read in months: real infra, prod AI, senior studio work. I want Lazer, not another remote gig.
-
-Staff Engineer/DevOps on AI SaaS now (GCP, Docker, Pub/Sub, LLM ops, embeddings, token-cost guardrails). Health tech: Oscar Health + Qantev, HIPAA/PHI, Open Enrollment. At Oscar rewrote Go → multi-threaded Python; worked with Node.js BFF in K8s. 4+ yrs outstaff/consulting for US/EU teams. AWS/GCP, ArgoCD, CI/CD, Prometheus/Grafana, fintech, partner integrations at scale (Uber Eats, Grubhub, GloriaFood). Remote, B2 English. Happy to walk through a rollout on a call.
-
-Maksim Vasilenka · Minsk, Belarus

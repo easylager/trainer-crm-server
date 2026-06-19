@@ -751,10 +751,13 @@ async def list_my_requests_with_responses(
     r = await session.execute(
         text("""
             SELECT r.id, r.city_id, r.service_id, r.comment, r.created_at, r.status,
-                   c.name AS city_name, s.name AS service_name
+                   c.name AS city_name, s.name AS service_name,
+                   r.trainer_id,
+                   NULLIF(TRIM(CONCAT_WS(' ', tp.first_name, tp.last_name)), '') AS trainer_name
             FROM client_requests r
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
+            LEFT JOIN trainer_profiles tp ON tp.trainer_id = r.trainer_id
             WHERE r.client_id = :cid AND r.status != 'archived'
             ORDER BY r.created_at DESC
             LIMIT :lim
@@ -764,7 +767,18 @@ async def list_my_requests_with_responses(
     requests_rows = r.fetchall()
     out = []
     for row in requests_rows:
-        req_id, city_id, service_id, comment, created_at, status, city_name, service_name = row
+        (
+            req_id,
+            city_id,
+            service_id,
+            comment,
+            created_at,
+            status,
+            city_name,
+            service_name,
+            trainer_id,
+            trainer_name,
+        ) = row
         resp_r = await session.execute(
             text("""
                 SELECT resp.trainer_id, tp.first_name, tp.last_name, t.telegram_id, t.telegram_username, resp.trainer_comment,
@@ -818,6 +832,9 @@ async def list_my_requests_with_responses(
             "status": status,
             "city_name": city_name,
             "service_name": service_name,
+            "trainer_id": trainer_id,
+            "trainer_name": (trainer_name or "").strip() or None,
+            "is_personalized": trainer_id is not None,
             "responses": responders,
         })
     return out

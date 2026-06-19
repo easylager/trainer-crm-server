@@ -398,6 +398,114 @@
     return legacyWrap;
   }
 
+  /** Digits and leading + only — safe tel: URI for Telegram WebView / iOS data detectors. */
+  function phoneToTelUri(phone) {
+    var s = String(phone || '').trim();
+    if (!s) return '';
+    var cleaned = s.replace(/[^\d+]/g, '');
+    if (!cleaned || cleaned === '+') return '';
+    return 'tel:' + cleaned;
+  }
+
+  /** Open the system dialer. tel: is NOT supported by Telegram.WebApp.openLink. */
+  function openPhoneDialer(phone) {
+    var uri = phoneToTelUri(phone);
+    if (!uri) return false;
+    try {
+      window.open(uri, '_blank');
+      return true;
+    } catch (e0) {
+      /* continue */
+    }
+    try {
+      var a = document.createElement('a');
+      a.href = uri;
+      a.setAttribute('target', '_blank');
+      a.rel = 'noopener noreferrer';
+      a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      (document.body || document.documentElement).appendChild(a);
+      a.click();
+      setTimeout(function () {
+        try {
+          if (a.parentNode) a.parentNode.removeChild(a);
+        } catch (x) {
+          /* noop */
+        }
+      }, 0);
+      return true;
+    } catch (e1) {
+      /* continue */
+    }
+    try {
+      window.location.assign(uri);
+      return true;
+    } catch (e2) {
+      /* continue */
+    }
+    return false;
+  }
+
+  /**
+   * Tappable phone control for Telegram WebView (tap opens dialer; long-press iOS menu does not work in WebView).
+   * Pass escapeHtml from the host page for safe visible text.
+   */
+  function phoneTelLinkHtml(phone, extraClass, escapeHtmlFn) {
+    var p = String(phone || '').trim();
+    if (!p) return '';
+    var esc =
+      typeof escapeHtmlFn === 'function'
+        ? escapeHtmlFn
+        : function (x) {
+            return String(x);
+          };
+    var uri = phoneToTelUri(p);
+    if (!uri) return esc(p);
+    var cls = extraClass ? esc(extraClass) : 'crm-tel-link';
+    return (
+      '<button type="button" class="' +
+      cls +
+      '" data-call-phone="' +
+      esc(uri.replace(/^tel:/, '')) +
+      '" aria-label="Позвонить ' +
+      esc(p) +
+      '">' +
+      esc(p) +
+      '</button>'
+    );
+  }
+
+  function wirePhoneCallButtons(root) {
+    var scope = root && root.querySelectorAll ? root : global.document;
+    if (!scope.querySelectorAll) return;
+    var nodes = scope.querySelectorAll('[data-call-phone]');
+    for (var i = 0; i < nodes.length; i++) {
+      var btn = nodes[i];
+      if (btn.getAttribute('data-call-phone-wired') === '1') continue;
+      btn.setAttribute('data-call-phone-wired', '1');
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var el = ev.currentTarget;
+        var raw = el && el.getAttribute ? el.getAttribute('data-call-phone') || '' : '';
+        if (!openPhoneDialer(raw)) {
+          var tg = global.Telegram && global.Telegram.WebApp;
+          if (tg && typeof tg.showAlert === 'function') {
+            try {
+              tg.showAlert('Не удалось открыть набор номера. Скопируйте телефон и наберите вручную.');
+            } catch (e) {
+              /* noop */
+            }
+          }
+        }
+      });
+    }
+  }
+
+  /** @deprecated use wirePhoneCallButtons */
+  function wirePhoneTelLinks(root) {
+    wirePhoneCallButtons(root);
+  }
+
   global.CrmPhoneField = {
     COUNTRIES: COUNTRIES,
     init: init,
@@ -410,6 +518,11 @@
     formatNationalMasked: formatNationalMasked,
     nationalToE164: nationalToE164,
     parseE164ToCountryAndNational: parseE164ToCountryAndNational,
+    phoneToTelUri: phoneToTelUri,
+    openPhoneDialer: openPhoneDialer,
+    phoneTelLinkHtml: phoneTelLinkHtml,
+    wirePhoneCallButtons: wirePhoneCallButtons,
+    wirePhoneTelLinks: wirePhoneTelLinks,
   };
 
   /* Backward compat: legacy callers still work for BY-only paths. */

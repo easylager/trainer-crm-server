@@ -3331,9 +3331,14 @@
           ? ''
           : (client.first_date ? ('Клиент с ' + formatDate(client.first_date)) : '');
         var initials = clientInitials(name);
-        var phoneDisplay = phone !== '—'
-          ? '<a class=\"tc-tel\" href=\"tel:' + escapeHtml(String(phone).replace(/\\s+/g, '')) + '\">' + escapeHtml(phone) + '</a>'
-          : escapeHtml(phone);
+        var phoneDisplay = escapeHtml(phone);
+        if (phone !== '—') {
+          var PfTel = window.CrmPhoneField;
+          phoneDisplay =
+            PfTel && typeof PfTel.phoneTelLinkHtml === 'function'
+              ? PfTel.phoneTelLinkHtml(phone, 'tc-tel', escapeHtml)
+              : phoneDisplay;
+        }
         var ICO_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
         /* Ticket/coupon silhouette (readability vs generic “card” rectangle) */
         var ICO_TICKET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>';
@@ -3487,6 +3492,11 @@
         }
         detail += '</div></div>';
         document.getElementById('clientDetail').innerHTML = detail;
+        if (window.CrmPhoneField && typeof window.CrmPhoneField.wirePhoneCallButtons === 'function') {
+          window.CrmPhoneField.wirePhoneCallButtons(document.getElementById('clientDetail'));
+        } else if (window.CrmPhoneField && typeof window.CrmPhoneField.wirePhoneTelLinks === 'function') {
+          window.CrmPhoneField.wirePhoneTelLinks(document.getElementById('clientDetail'));
+        }
         wireClientHistoryDiscoverability();
         document.getElementById('clientsSection').style.display = 'none';
         document.querySelector('.search-box').style.display = 'none';

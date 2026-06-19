@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606165';
+  var SHELL_VERSION = '202606198';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
@@ -99,6 +99,37 @@
     '<svg class="trainer-more-sheet__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M9 6l6 6-6 6"/></svg>';
 
+  /** Route key → default hint; replaced when menu badge is active (syncMoreMenuBadges). */
+  var MORE_MENU_BADGE_HINTS = {
+    'trainer-requests': function (n) {
+      return (
+        n +
+        ' ' +
+        pluralRuMore(n, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа')
+      );
+    },
+    'trainer-profile': function () {
+      return 'Шаг для публикации в каталоге';
+    },
+  };
+
+  var MORE_MENU_LABELS = {
+    'trainer-requests': 'Заявки',
+    'trainer-profile': 'Профиль',
+    'trainer-pass-products': 'Абонементы',
+    'trainer-subscription': 'Подписка',
+    'trainer-stats': 'Статистика',
+    'trainer-groups': 'Группы',
+    'trainer-referral': 'Рефералы',
+    'trainer-collective': 'Студия',
+  };
+
+  /** Lower number = higher in «Требует внимания» block. */
+  var MORE_MENU_ATTENTION_PRIORITY = {
+    'trainer-requests': 10,
+    'trainer-profile': 20,
+  };
+
   /** Pages whose route key maps to «Ещё» tab */
   var MORE_ROUTE_KEYS = [
     'trainer-requests',
@@ -121,6 +152,8 @@
     onboardingData: null,
     onboardingLoaded: false,
     inboxBadges: { schedule: 0, center: 0, more: 0, clients: 0 },
+    menuBadges: {},
+    menuBadgeHints: {},
     collectiveMenuVisible: false,
     collectiveMenuChecked: false,
     pendingCollectiveBootstrap: null,
@@ -678,15 +711,25 @@
     handle.className = 'trainer-more-sheet__handle';
     sheet.appendChild(handle);
 
+    var scroll = document.createElement('div');
+    scroll.className = 'trainer-more-sheet__scroll';
+    scroll.setAttribute('data-more-sheet-scroll', '1');
+
     var title = document.createElement('h2');
     title.className = 'trainer-more-sheet__title';
     title.textContent = 'Ещё';
-    sheet.appendChild(title);
+    scroll.appendChild(title);
 
     var subtitle = document.createElement('p');
     subtitle.className = 'trainer-more-sheet__subtitle';
     subtitle.textContent = 'Профиль, финансы, группы и всё остальное';
-    sheet.appendChild(subtitle);
+    scroll.appendChild(subtitle);
+
+    var attention = document.createElement('div');
+    attention.id = 'trainerMoreAttention';
+    attention.className = 'trainer-more-sheet__attention';
+    attention.setAttribute('hidden', 'hidden');
+    scroll.appendChild(attention);
 
     var list = document.createElement('ul');
     list.className = 'trainer-more-sheet__list';
@@ -695,10 +738,51 @@
       list.appendChild(buildMoreSheetItem(item));
     });
 
-    sheet.appendChild(list);
+    scroll.appendChild(list);
+    sheet.appendChild(scroll);
     overlay.appendChild(sheet);
     wireMoreSheetGestures(sheet);
+    wireMoreSheetScrollGuard(scroll);
     return overlay;
+  }
+
+  /** Keep vertical pans inside the sheet — Telegram WebView may steal them when swipes are disabled. */
+  function wireMoreSheetScrollGuard(scrollEl) {
+    if (!scrollEl || scrollEl.dataset.scrollGuardWired === '1') return;
+    scrollEl.dataset.scrollGuardWired = '1';
+    scrollEl.addEventListener(
+      'touchmove',
+      function (ev) {
+        if (scrollEl.scrollHeight > scrollEl.clientHeight + 1) {
+          ev.stopPropagation();
+        }
+      },
+      { passive: true }
+    );
+  }
+
+  /** Upgrade legacy sheet DOM (list-only scroll) to unified scroll body. */
+  function ensureMoreSheetScrollUpgrade() {
+    var sheet = document.getElementById('trainerMoreSheet');
+    if (!sheet || sheet.querySelector('[data-more-sheet-scroll]')) return;
+
+    var scroll = document.createElement('div');
+    scroll.className = 'trainer-more-sheet__scroll';
+    scroll.setAttribute('data-more-sheet-scroll', '1');
+
+    var movable = [];
+    sheet.querySelectorAll(
+      '.trainer-more-sheet__title, .trainer-more-sheet__subtitle, #trainerMoreAttention, .trainer-more-sheet__list'
+    ).forEach(function (el) {
+      movable.push(el);
+    });
+    if (!movable.length) return;
+
+    movable.forEach(function (el) {
+      scroll.appendChild(el);
+    });
+    sheet.appendChild(scroll);
+    wireMoreSheetScrollGuard(scroll);
   }
 
   /** Tap handle or swipe down — dismiss sheet without collapsing the whole Mini App. */
@@ -706,8 +790,7 @@
     if (!sheet || sheet.dataset.dismissWired === '1') return;
     sheet.dataset.dismissWired = '1';
     var handle = sheet.querySelector('.trainer-more-sheet__handle');
-    var title = sheet.querySelector('.trainer-more-sheet__title');
-    var dragEls = [handle, title].filter(Boolean);
+    var dragEls = [handle].filter(Boolean);
     if (!dragEls.length) return;
 
     if (handle) {
@@ -780,6 +863,209 @@
     });
   }
 
+  function pluralRuMore(n, one, few, many) {
+    n = Math.abs(parseInt(String(n), 10) || 0);
+    var mod10 = n % 10;
+    var mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+    return many;
+  }
+
+  function menuBadgeHintForPath(path, count) {
+    if (state.menuBadgeHints && state.menuBadgeHints[path]) {
+      return String(state.menuBadgeHints[path]);
+    }
+    var fn = MORE_MENU_BADGE_HINTS[path];
+    if (typeof fn === 'function') return fn(count);
+    return '';
+  }
+
+  function attentionPriorityForPath(path) {
+    var p = MORE_MENU_ATTENTION_PRIORITY[path];
+    return p != null ? p : 50;
+  }
+
+  function attentionPillLabel(path, count) {
+    var label = MORE_MENU_LABELS[path] || path;
+    var hint = menuBadgeHintForPath(path, count);
+    if (hint) return label + ' — ' + hint;
+    if (count > 1) return label + ' · ' + count;
+    return label;
+  }
+
+  /** Inject attention block / row badges if sheet was built before this upgrade. */
+  function ensureMoreSheetAttentionUpgrade() {
+    var sheet = document.getElementById('trainerMoreSheet');
+    if (!sheet) return;
+    if (!document.getElementById('trainerMoreAttention')) {
+      var list = sheet.querySelector('.trainer-more-sheet__list');
+      if (list) {
+        var attention = document.createElement('div');
+        attention.id = 'trainerMoreAttention';
+        attention.className = 'trainer-more-sheet__attention';
+        attention.setAttribute('hidden', 'hidden');
+        var scrollHost = list.parentElement;
+        if (scrollHost) scrollHost.insertBefore(attention, list);
+        else sheet.insertBefore(attention, list);
+      }
+    }
+    sheet.querySelectorAll('.trainer-more-sheet__link[data-shell-path]').forEach(function (link) {
+      if (link.querySelector('.trainer-more-sheet__badge')) return;
+      var badge = document.createElement('span');
+      badge.className = 'trainer-more-sheet__badge';
+      badge.setAttribute('hidden', 'hidden');
+      badge.setAttribute('aria-hidden', 'true');
+      var chevron = link.querySelector('.trainer-more-sheet__chevron');
+      if (chevron) link.insertBefore(badge, chevron);
+      else link.appendChild(badge);
+    });
+  }
+
+  function syncMoreSheetSubtitle(hasAttention) {
+    var subtitle = document.querySelector('.trainer-more-sheet__subtitle');
+    if (!subtitle) return;
+    subtitle.textContent = hasAttention
+      ? 'Сначала разделы с пометкой — там нужно ваше действие'
+      : 'Профиль, финансы, группы и всё остальное';
+  }
+
+  function isNoticeMenuPath(path) {
+    return path === 'trainer-requests';
+  }
+
+  function syncMoreMenuBadges() {
+    var menu = state.menuBadges || {};
+    var list = document.querySelector('.trainer-more-sheet__list');
+    if (list) {
+      list.querySelectorAll('.trainer-more-sheet__link[data-shell-path]').forEach(function (link) {
+        var path = link.getAttribute('data-shell-path') || '';
+        var n = parseInt(String(menu[path] || 0), 10) || 0;
+        var badgeEl = link.querySelector('.trainer-more-sheet__badge');
+        var hintEl = link.querySelector('.trainer-more-sheet__hint');
+        var defaultHint = link.getAttribute('data-default-hint') || '';
+        var notice = isNoticeMenuPath(path);
+        link.classList.toggle('trainer-more-sheet__link--attention', n > 0 && !notice);
+        link.classList.toggle('trainer-more-sheet__link--notice', n > 0 && notice);
+        if (badgeEl) {
+          badgeEl.classList.toggle('trainer-more-sheet__badge--notice', n > 0 && notice);
+          if (n > 0) {
+            badgeEl.textContent = n > 9 ? '9+' : String(n);
+            badgeEl.removeAttribute('hidden');
+            badgeEl.setAttribute('aria-hidden', 'false');
+          } else {
+            badgeEl.setAttribute('hidden', 'hidden');
+            badgeEl.setAttribute('aria-hidden', 'true');
+            badgeEl.textContent = '';
+          }
+        }
+        if (hintEl) {
+          if (n > 0) {
+            var activeHint = menuBadgeHintForPath(path, n);
+            hintEl.textContent = activeHint || defaultHint;
+            hintEl.classList.toggle('trainer-more-sheet__hint--notice', notice);
+            hintEl.classList.toggle('trainer-more-sheet__hint--attention', !notice);
+          } else {
+            hintEl.textContent = defaultHint;
+            hintEl.classList.remove('trainer-more-sheet__hint--attention', 'trainer-more-sheet__hint--notice');
+          }
+        }
+      });
+    }
+
+    var attentionEl = document.getElementById('trainerMoreAttention');
+    if (!attentionEl) {
+      syncMoreSheetSubtitle(false);
+      return;
+    }
+    var parts = [];
+    Object.keys(menu).forEach(function (path) {
+      var n = parseInt(String(menu[path] || 0), 10) || 0;
+      if (n <= 0) return;
+      parts.push({ path: path, label: MORE_MENU_LABELS[path] || path, count: n });
+    });
+    parts.sort(function (a, b) {
+      var pa = attentionPriorityForPath(a.path);
+      var pb = attentionPriorityForPath(b.path);
+      if (pa !== pb) return pa - pb;
+      return String(a.label).localeCompare(String(b.label), 'ru');
+    });
+    if (!parts.length) {
+      attentionEl.setAttribute('hidden', 'hidden');
+      attentionEl.innerHTML = '';
+      attentionEl.classList.remove('trainer-more-sheet__attention--notice');
+      syncMoreSheetSubtitle(false);
+      return;
+    }
+    var allNotice = parts.every(function (p) {
+      return isNoticeMenuPath(p.path);
+    });
+    attentionEl.classList.toggle('trainer-more-sheet__attention--notice', allNotice);
+    syncMoreSheetSubtitle(true);
+    attentionEl.removeAttribute('hidden');
+    var pills = parts
+      .map(function (p) {
+        var pillClass = 'trainer-more-sheet__attention-pill';
+        if (isNoticeMenuPath(p.path)) pillClass += ' trainer-more-sheet__attention-pill--notice';
+        return (
+          '<button type="button" class="' +
+          pillClass +
+          '" data-attention-path="' +
+          p.path +
+          '">' +
+          escapeHtml(attentionPillLabel(p.path, p.count)) +
+          '</button>'
+        );
+      })
+      .join('');
+    var kicker = allNotice ? 'Есть новое' : 'Требует внимания';
+    attentionEl.innerHTML =
+      '<p class="trainer-more-sheet__attention-kicker">' +
+      kicker +
+      '</p>' +
+      '<div class="trainer-more-sheet__attention-pills" role="group" aria-label="Разделы с новым">' +
+      pills +
+      '</div>';
+    attentionEl.querySelectorAll('.trainer-more-sheet__attention-pill').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var path = btn.getAttribute('data-attention-path');
+        if (!path) return;
+        hapticSelection();
+        closeMoreSheet();
+        navigate(path);
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function fetchInboxBadgesFromServer() {
+    var initData = getInitData();
+    if (!initData) return Promise.resolve(null);
+    var url = '/api/webapp/trainer/hub/inbox-count?init_data=' + encodeURIComponent(initData);
+    return fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Telegram-Init-Data': initData },
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (payload) {
+        if (payload && payload.badges) setInboxBadges(payload.badges);
+        return payload;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
   function syncInboxBadges() {
     var bar = document.getElementById('trainerTabBar');
     if (!bar) return;
@@ -803,10 +1089,26 @@
         badgeEl.textContent = '';
       }
     });
+    syncMoreMenuBadges();
   }
 
   function setInboxBadges(badges) {
-    state.inboxBadges = badges || { schedule: 0, center: 0, more: 0, clients: 0 };
+    badges = badges || { schedule: 0, center: 0, more: 0, clients: 0 };
+    var menu = badges.menu && typeof badges.menu === 'object' ? badges.menu : {};
+    var moreFromMenu = 0;
+    Object.keys(menu).forEach(function (k) {
+      moreFromMenu += parseInt(String(menu[k] || 0), 10) || 0;
+    });
+    state.inboxBadges = {
+      schedule: parseInt(String(badges.schedule || 0), 10) || 0,
+      center: parseInt(String(badges.center || 0), 10) || 0,
+      /* Tab «Ещё» only when we know which menu rows are hot — avoids orphan dot without sheet hints. */
+      more: moreFromMenu,
+      clients: parseInt(String(badges.clients || 0), 10) || 0,
+    };
+    state.menuBadges = menu;
+    state.menuBadgeHints =
+      badges.menu_hints && typeof badges.menu_hints === 'object' ? badges.menu_hints : {};
     syncInboxBadges();
   }
 
@@ -850,6 +1152,7 @@
     btn.type = 'button';
     btn.className = 'trainer-more-sheet__link';
     btn.setAttribute('data-shell-path', item.path);
+    btn.setAttribute('data-default-hint', item.hint || '');
     btn.innerHTML =
       '<span class="trainer-more-sheet__icon-wrap" aria-hidden="true">' +
       item.icon +
@@ -858,6 +1161,7 @@
       '</span><span class="trainer-more-sheet__hint">' +
       item.hint +
       '</span></span>' +
+      '<span class="trainer-more-sheet__badge" hidden aria-hidden="true"></span>' +
       MORE_CHEVRON;
     btn.addEventListener('click', function () {
       hapticSelection();
@@ -1023,6 +1327,8 @@
     if (sheet) {
       resetMoreSheetDragTransform(sheet);
       sheet.classList.add('trainer-more-sheet--open');
+      var scroll = sheet.querySelector('[data-more-sheet-scroll]');
+      if (scroll) scroll.scrollTop = 0;
     }
     syncMoreSheetBodyLock();
     syncTabBarActive();
@@ -1048,7 +1354,10 @@
       return;
     }
     fetchCollectiveMenuVisibility(true).finally(function () {
-      openMoreSheet();
+      fetchInboxBadgesFromServer().finally(function () {
+        syncMoreMenuBadges();
+        openMoreSheet();
+      });
     });
   }
   /* ─── Public API ────────────────────────────────────────────────────────── */
@@ -1123,7 +1432,13 @@
     if (!document.getElementById('trainerMoreOverlay')) {
       document.body.appendChild(buildMoreSheet());
     }
+    ensureMoreSheetAttentionUpgrade();
+    ensureMoreSheetScrollUpgrade();
     flushPendingCollectiveBootstrap();
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') fetchInboxBadgesFromServer();
+    });
 
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') {
@@ -1139,6 +1454,7 @@
     fetchOnboardingChecklist();
     fetchCollectiveMenuVisibility();
     fetchSuspendedCollectiveNotice();
+    fetchInboxBadgesFromServer();
   }
 
   /* ─── Auto-init via data attribute ─────────────────────────────────────── */
@@ -1167,6 +1483,7 @@
     closeMoreSheet: closeMoreSheet,
     toggleMoreSheet: toggleMoreSheet,
     setInboxBadges: setInboxBadges,
+    fetchInboxBadgesFromServer: fetchInboxBadgesFromServer,
     syncOnboarding: syncOnboarding,
     fetchOnboardingChecklist: fetchOnboardingChecklist,
     syncCollectiveMenuFromBootstrap: syncCollectiveMenuFromBootstrap,

@@ -387,6 +387,41 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
     return out
 
 
+def build_trainer_hub_inbox_menu_badges(
+    *,
+    onboarding: dict[str, Any] | None,
+    requests_count: int,
+) -> dict[str, int]:
+    """Per-route badge counts for the trainer shell «Ещё» sheet."""
+    menu: dict[str, int] = {
+        "trainer-requests": max(0, int(requests_count)),
+        "trainer-profile": 0,
+    }
+    if onboarding and _onboarding_booking_step_done(onboarding):
+        cat_vis = onboarding.get("is_catalog_visible") is not False and onboarding.get("is_catalog_visible") != 0
+        in_public = (
+            bool(onboarding.get("is_active"))
+            and bool(onboarding.get("profile_complete"))
+            and cat_vis
+        )
+        if not in_public:
+            menu["trainer-profile"] = 1
+    return menu
+
+
+def build_trainer_hub_inbox_menu_hints(*, menu: dict[str, int]) -> dict[str, str]:
+    """Human-readable one-liners for «Ещё» sheet rows and attention pills."""
+    hints: dict[str, str] = {}
+    req_n = max(0, int(menu.get("trainer-requests") or 0))
+    if req_n > 0:
+        hints["trainer-requests"] = (
+            f"{req_n} {_plural_ru(req_n, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа')}"
+        )
+    if max(0, int(menu.get("trainer-profile") or 0)) > 0:
+        hints["trainer-profile"] = "Шаг для публикации в каталоге"
+    return hints
+
+
 def build_trainer_hub_inbox_badges(
     *,
     onboarding: dict[str, Any] | None,
@@ -394,28 +429,25 @@ def build_trainer_hub_inbox_badges(
     pending_count: int,
     center_inbox_pending: int = 0,
     show_center_inbox: bool = False,
-) -> dict[str, int]:
-    """Tab bar badge counts — schedule / center / more / clients."""
+) -> dict[str, Any]:
+    """Tab bar badge counts — schedule / center / more / clients + per-menu breakdown."""
+    menu = build_trainer_hub_inbox_menu_badges(
+        onboarding=onboarding,
+        requests_count=requests_count,
+    )
     schedule = max(0, int(pending_count))
-    more = max(0, int(requests_count))
+    more = sum(menu.values())
     clients = 0
     center = max(0, int(center_inbox_pending)) if show_center_inbox else 0
     if onboarding:
         clients = _non_negative_int(onboarding.get("open_loop_clients_no_telegram_count"))
-        if _onboarding_booking_step_done(onboarding):
-            cat_vis = onboarding.get("is_catalog_visible") is not False and onboarding.get("is_catalog_visible") != 0
-            in_public = (
-                bool(onboarding.get("is_active"))
-                and bool(onboarding.get("profile_complete"))
-                and cat_vis
-            )
-            if not in_public:
-                more += 1
     return {
         "schedule": schedule,
         "center": center,
         "more": more,
         "clients": clients if clients > 0 else 0,
+        "menu": menu,
+        "menu_hints": build_trainer_hub_inbox_menu_hints(menu=menu),
     }
 
 

@@ -354,7 +354,12 @@
       function formatRequestLabel(req) {
         const city = (req.city_name || '').trim() || '—';
         const service = (req.service_name || '').trim() || '—';
-        return city + ', ' + service;
+        var base = city + ', ' + service;
+        if (req.is_personalized) {
+          var tname = (req.trainer_name || '').trim();
+          return tname ? ('Персональная · ' + tname) : ('Персональная · ' + base);
+        }
+        return base;
       }
 
       function formatRequestCreatedAt(iso) {

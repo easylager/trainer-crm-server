@@ -372,12 +372,22 @@
         return map[status] || status || '—';
       }
 
+      function passDetailPhoneHtml(phone) {
+        var p = String(phone || '').trim();
+        if (!p) return '—';
+        var Pf = window.CrmPhoneField;
+        if (Pf && typeof Pf.phoneTelLinkHtml === 'function') {
+          return Pf.phoneTelLinkHtml(p, 'bd-tel', escapeHtml);
+        }
+        return escapeHtml(p);
+      }
+
       function renderPassDetailMetaRows(p) {
         var host = document.getElementById('passDetailMetaRows');
         if (!host || !p) return;
         var rows = [];
         rows.push({ label: 'Клиент', value: p.client_name || '—' });
-        if (p.client_phone) rows.push({ label: 'Телефон', value: p.client_phone });
+        if (p.client_phone) rows.push({ label: 'Телефон', value: p.client_phone, isPhone: true });
         rows.push({ label: 'Услуги', value: p.service_scope || 'На все услуги' });
         if (p.issued_at) rows.push({ label: 'Выдан', value: formatIssuedDate(p.issued_at) });
         if (p.expires_at) rows.push({ label: 'Срок', value: 'до ' + formatIssuedDate(p.expires_at) });
@@ -385,10 +395,13 @@
         rows.forEach(function(row) {
           html += '<div class="bd-row"><div class="bd-row-text">';
           html += '<div class="bd-row-label">' + escapeHtml(row.label) + '</div>';
-          html += '<div class="bd-row-value">' + escapeHtml(row.value) + '</div>';
+          html += '<div class="bd-row-value">' + (row.isPhone ? passDetailPhoneHtml(row.value) : escapeHtml(row.value)) + '</div>';
           html += '</div></div>';
         });
         host.innerHTML = html;
+        if (window.CrmPhoneField && typeof window.CrmPhoneField.wirePhoneCallButtons === 'function') {
+          window.CrmPhoneField.wirePhoneCallButtons(host);
+        }
       }
 
       function openPassDetail(passInstanceId, opts) {

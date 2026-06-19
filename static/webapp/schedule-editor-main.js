@@ -195,6 +195,177 @@
         );
       }
 
+      function scheduleEditorPrimaryArenaId() {
+        var ars = state.trainerScheduleArenas || [];
+        var prim = ars.filter(function(a) { return a.is_primary; })[0];
+        if (prim) return Number(prim.id);
+        return ars.length ? Number(ars[0].id) : null;
+      }
+
+      function scheduleEditorArenaNameById(aid) {
+        if (aid == null || isNaN(Number(aid))) return '';
+        var hit = (state.trainerScheduleArenas || []).filter(function(a) {
+          return Number(a.id) === Number(aid);
+        })[0];
+        return hit ? String(hit.name || '').trim() : '';
+      }
+
+      /** Compact arena label for chips — keeps mini-cards tidy when venue name is long. */
+      function scheduleEditorTruncateArenaLabel(name, maxLen) {
+        var base = String(name || '').trim();
+        if (!base) return '';
+        var lim = maxLen != null ? maxLen : 12;
+        if (base.length <= lim) return base;
+        return base.slice(0, lim - 1).trimEnd() + '…';
+      }
+
+      /** Pill for non-primary venue — same chip model as service badges on booking rows. */
+      function scheduleEditorArenaChipHtml(arenaId, arenaLabel) {
+        var primaryId = scheduleEditorPrimaryArenaId();
+        var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
+        if (aid == null || primaryId == null || aid === primaryId) return '';
+        var full = String(arenaLabel || scheduleEditorArenaNameById(aid) || '').trim();
+        if (!full) return '';
+        var short = scheduleEditorTruncateArenaLabel(full, 13);
+        return (
+          '<span class="svc-badge svc-badge--slate schedule-arena-chip" role="status" title="' + escapeHtml(full) + '">' +
+            '<span class="svc-badge-dot" aria-hidden="true"></span>' +
+            '<span class="svc-badge-label">' + escapeHtml(short) + '</span>' +
+          '</span>'
+        );
+      }
+
+      function scheduleEditorGridArenaSelectId() {
+        return state.editMode === 'template' ? 'templateGridArenaSelect' : 'calendarGridArenaSelect';
+      }
+
+      function scheduleEditorGridArenaPickHostId() {
+        return state.editMode === 'template' ? 'templateGridArenaPick' : 'calendarGridArenaPick';
+      }
+
+      function syncScheduleEditorGridArenaPickHighlight() {
+        var host = document.getElementById(scheduleEditorGridArenaPickHostId());
+        if (!host) return;
+        var aid = state.scheduleGridArenaPickId != null ? String(state.scheduleGridArenaPickId) : '';
+        host.querySelectorAll('.schedule-grid-arena-chip').forEach(function(b) {
+          var id = b.getAttribute('data-arena-id') || '';
+          var on = !!aid && id === aid;
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+          b.classList.toggle('is-selected', on);
+        });
+      }
+
+      function scheduleEditorSetGridArenaPick(aid) {
+        var n = aid != null && !isNaN(Number(aid)) ? Number(aid) : null;
+        state.scheduleGridArenaPickId = n;
+        var sel = document.getElementById(scheduleEditorGridArenaSelectId());
+        if (sel && n != null) sel.value = String(n);
+        syncScheduleEditorGridArenaPickHighlight();
+      }
+
+      /** Chip picklist + hidden select for grid «Быстро» arena (calendar + template). */
+      function fillScheduleEditorGridArenaPick(preferredId) {
+        var selectId = scheduleEditorGridArenaSelectId();
+        var pickId = scheduleEditorGridArenaPickHostId();
+        var sel = document.getElementById(selectId);
+        var host = document.getElementById(pickId);
+        if (!sel || !host) return;
+        var ars = state.trainerScheduleArenas || [];
+        sel.innerHTML = '';
+        host.innerHTML = '';
+        ars.forEach(function(a) {
+          var o = document.createElement('option');
+          o.value = String(a.id);
+          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+          sel.appendChild(o);
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'schedule-grid-arena-chip';
+          chip.setAttribute('role', 'option');
+          chip.setAttribute('data-arena-id', String(a.id));
+          chip.textContent = String(a.name || '—');
+          if (a.is_primary) chip.setAttribute('data-primary', '1');
+          chip.onclick = function() {
+            scheduleEditorSetGridArenaPick(a.id);
+          };
+          host.appendChild(chip);
+        });
+        var pick = preferredId != null && !isNaN(Number(preferredId)) ? Number(preferredId) : null;
+        if (pick == null && state.scheduleGridArenaPickId != null) pick = state.scheduleGridArenaPickId;
+        if (pick == null || !ars.some(function(x) { return Number(x.id) === pick; })) {
+          var prim = ars.filter(function(x) { return x.is_primary; })[0];
+          pick = prim ? Number(prim.id) : (ars.length ? Number(ars[0].id) : null);
+        }
+        if (pick != null) scheduleEditorSetGridArenaPick(pick);
+        else syncScheduleEditorGridArenaPickHighlight();
+      }
+
+      function fillScheduleEditorArenaSelect(selectId, preferredId) {
+        var sel = document.getElementById(selectId);
+        if (!sel) return;
+        var ars = state.trainerScheduleArenas || [];
+        var prev = sel.value;
+        sel.innerHTML = '';
+        ars.forEach(function(a) {
+          var o = document.createElement('option');
+          o.value = String(a.id);
+          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+          sel.appendChild(o);
+        });
+        var pick = preferredId != null && !isNaN(Number(preferredId)) ? Number(preferredId) : null;
+        if (pick != null && ars.some(function(x) { return Number(x.id) === pick; })) {
+          sel.value = String(pick);
+        } else if (prev && ars.some(function(x) { return String(x.id) === prev; })) {
+          sel.value = prev;
+        } else {
+          var prim = ars.filter(function(x) { return x.is_primary; })[0];
+          sel.value = String((prim || ars[0]).id);
+        }
+      }
+
+      /** When all grid-aligned rows share one explicit arena — prefill grid picker on editor open. */
+      function inferGridArenaIdFromSlotRows(rows, allowedStarts, gridDefaultDur) {
+        var aids = [];
+        (rows || []).forEach(function(row) {
+          var sm = parseStartToMinutes(row.start_time);
+          var dur = slotDurationFromRow(row);
+          if (!allowedStarts.has(sm) || dur !== gridDefaultDur) return;
+          var aidRaw = row.arena_id != null ? parseInt(String(row.arena_id), 10) : NaN;
+          if (!isNaN(aidRaw)) aids.push(aidRaw);
+        });
+        if (!aids.length) return null;
+        var unique = aids.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        return unique.length === 1 ? unique[0] : null;
+      }
+
+      function readGridArenaPickForSave() {
+        var ars = state.trainerScheduleArenas || [];
+        if (ars.length <= 1) return null;
+        var aid = state.scheduleGridArenaPickId;
+        if (aid == null || isNaN(Number(aid))) {
+          var sel = document.getElementById(scheduleEditorGridArenaSelectId());
+          aid = sel ? parseInt(sel.value, 10) : NaN;
+        } else {
+          aid = Number(aid);
+        }
+        if (isNaN(aid)) return null;
+        var primaryId = scheduleEditorPrimaryArenaId();
+        if (primaryId != null && aid === primaryId) return null;
+        return aid;
+      }
+
+      function readPreciseArenaPickForSave() {
+        var ars = state.trainerScheduleArenas || [];
+        if (ars.length <= 1) return null;
+        var selectId = state.editMode === 'template' ? 'templatePreciseArenaSelect' : 'calendarPreciseArenaSelect';
+        var sel = document.getElementById(selectId);
+        var aid = sel ? parseInt(sel.value, 10) : NaN;
+        if (isNaN(aid)) return null;
+        var primaryId = scheduleEditorPrimaryArenaId();
+        if (primaryId != null && aid === primaryId) return null;
+        return aid;
+      }
+
       /** «Написать клиенту» — same data-* contract as hub (wireHubSlotMessageButtons + TrainerRelayHelpers). */
       function scheduleEditorSlotMessageButtonHtml(s, cap) {
         var Sed = window.TrainerRelayHelpers;
@@ -1401,54 +1572,28 @@
         });
       })();
 
-      function copyBookingClientPhone(phone) {
-        var p = String(phone || '').trim();
-        if (!p) return;
-        var rt = window.MiniAppRuntime;
-        if (rt && typeof rt.copyTextToClipboard === 'function') {
-          rt.copyTextToClipboard(p).then(function(ok) {
-            showToast(ok ? 'Телефон скопирован' : 'Не удалось скопировать');
-          });
-          return;
-        }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(p).then(
-            function() {
-              showToast('Телефон скопирован');
-            },
-            function() {
-              showToast('Не удалось скопировать');
-            }
-          );
-          return;
-        }
-        showToast(p);
-      }
-
       function bookingDetailPhoneHtml(phone, extraClass) {
+        var Pf = window.CrmPhoneField;
+        if (Pf && typeof Pf.phoneTelLinkHtml === 'function') {
+          var cls = 'bd-tel' + (extraClass ? ' ' + extraClass : '');
+          return Pf.phoneTelLinkHtml(phone, cls, escapeHtml);
+        }
         var p = String(phone || '').trim();
         if (!p) return '';
-        var cls = 'bd-tel bd-tel--copy' + (extraClass ? ' ' + extraClass : '');
+        var telRaw = p.replace(/[^\d+]/g, '');
+        if (!telRaw) return escapeHtml(p);
+        var clsFallback = 'bd-tel' + (extraClass ? ' ' + extraClass : '');
         return (
           '<button type="button" class="' +
-          cls +
-          '" data-copy-phone="' +
+          clsFallback +
+          '" data-call-phone="' +
+          escapeHtml(telRaw) +
+          '" aria-label="Позвонить ' +
           escapeHtml(p) +
-          '" aria-label="Скопировать телефон">' +
+          '">' +
           escapeHtml(p) +
-          '<span class="bd-tel-copy-hint">копировать</span></button>'
+          '</button>'
         );
-      }
-
-      function wireBookingDetailPhoneCopy(root) {
-        if (!root) return;
-        root.querySelectorAll('[data-copy-phone]').forEach(function(btn) {
-          btn.addEventListener('click', function(ev) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            copyBookingClientPhone(btn.getAttribute('data-copy-phone'));
-          });
-        });
       }
 
       function openBookingDetail(bookingId) {
@@ -1576,7 +1721,11 @@
           }
           html += '</div></div>';
           document.getElementById('detailBookingContent').innerHTML = html;
-          wireBookingDetailPhoneCopy(document.getElementById('detailBookingContent'));
+          if (window.CrmPhoneField && typeof window.CrmPhoneField.wirePhoneCallButtons === 'function') {
+            window.CrmPhoneField.wirePhoneCallButtons(document.getElementById('detailBookingContent'));
+          } else if (window.CrmPhoneField && typeof window.CrmPhoneField.wirePhoneTelLinks === 'function') {
+            window.CrmPhoneField.wirePhoneTelLinks(document.getElementById('detailBookingContent'));
+          }
           bindBookingDetailEditableRows(b);
 
           var actions = document.getElementById('detailBookingActions');
@@ -2021,6 +2170,8 @@
         trainerServices: [],
         /** From GET /trainer/my-services: arenas for group slot venue picker. */
         trainerScheduleArenas: [],
+        /** Grid «Быстро» arena pick (calendar + template editor). */
+        scheduleGridArenaPickId: null,
         /** Calendar day editor: start minutes that already had slots when the screen opened (cannot deselect). */
         calendarBaselineStarts: null,
         /** Calendar individual: precise-slot keys at editor open — for toast counts (omit already-existing intervals). */
@@ -3591,6 +3742,7 @@
         state.pendingTemplateDay = null;
         state.calendarBaselineStarts = null;
         state.calendarBaselinePreciseKeys = null;
+        state.scheduleGridArenaPickId = null;
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
         syncScheduleEditorFormatChrome();
@@ -4616,6 +4768,10 @@
             '–' +
             formatMinuteClock(endM) +
             '</span>' +
+            scheduleEditorArenaChipHtml(
+              ps.arenaId,
+              scheduleEditorArenaNameById(ps.arenaId)
+            ) +
             '<span class="precise-slot-tag__dur">' +
             ps.durationMinutes +
             ' мин' +
@@ -4637,6 +4793,51 @@
         syncPreciseArenaWrapsAfterSlotsChanged();
       }
 
+      /** Calendar individual: arena for «Быстро» grid tab. */
+      function syncCalendarGridArenaWrapVisibility() {
+        var wrap = document.getElementById('calendarGridArenaWrap');
+        if (!wrap) return;
+        var useCalGroup =
+          state.editMode === 'calendar' && typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi();
+        var ars = state.trainerScheduleArenas || [];
+        var show =
+          state.editMode === 'calendar' &&
+          !useCalGroup &&
+          !(typeof slotIntentUseCenterUi === 'function' && slotIntentUseCenterUi()) &&
+          state.slotAddMode === 'grid' &&
+          ars.length > 1;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        var sel = document.getElementById('calendarGridArenaSelect');
+        if (!sel || !sel.options.length) {
+          fillScheduleEditorGridArenaPick(state.scheduleGridArenaPickId);
+        } else {
+          syncScheduleEditorGridArenaPickHighlight();
+        }
+      }
+
+      /** Template individual: arena for «Быстро» grid tab. */
+      function syncTemplateGridArenaWrapVisibility() {
+        var wrap = document.getElementById('templateGridArenaWrap');
+        if (!wrap) return;
+        var useTplGroup =
+          state.editMode === 'template' && typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi();
+        var ars = state.trainerScheduleArenas || [];
+        var show =
+          state.editMode === 'template' &&
+          !useTplGroup &&
+          state.slotAddMode === 'grid' &&
+          ars.length > 1;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        var sel = document.getElementById('templateGridArenaSelect');
+        if (!sel || !sel.options.length) {
+          fillScheduleEditorGridArenaPick(state.scheduleGridArenaPickId);
+        } else {
+          syncScheduleEditorGridArenaPickHighlight();
+        }
+      }
+
       /** Calendar individual: arena for «Точное время» only (hidden on Быстро tab). */
       function syncCalendarPreciseArenaWrapVisibility() {
         var wrap = document.getElementById('calendarPreciseArenaWrap');
@@ -4651,21 +4852,7 @@
           ars.length > 1;
         wrap.style.display = show ? 'block' : 'none';
         if (!show) return;
-        var sel = document.getElementById('calendarPreciseArenaSelect');
-        if (!sel) return;
-        var prev = sel.value;
-        sel.innerHTML = '';
-        ars.forEach(function(a) {
-          var o = document.createElement('option');
-          o.value = String(a.id);
-          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
-          sel.appendChild(o);
-        });
-        if (prev && ars.some(function(x) { return String(x.id) === prev; })) sel.value = prev;
-        else {
-          var prim = ars.filter(function(x) { return x.is_primary; })[0];
-          sel.value = String((prim || ars[0]).id);
-        }
+        fillScheduleEditorArenaSelect('calendarPreciseArenaSelect', null);
       }
 
       /** Template individual: arena for «Точное время» tab only. */
@@ -4682,24 +4869,12 @@
           ars.length > 1;
         wrap.style.display = show ? 'block' : 'none';
         if (!show) return;
-        var sel = document.getElementById('templatePreciseArenaSelect');
-        if (!sel) return;
-        var prev = sel.value;
-        sel.innerHTML = '';
-        ars.forEach(function(a) {
-          var o = document.createElement('option');
-          o.value = String(a.id);
-          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
-          sel.appendChild(o);
-        });
-        if (prev && ars.some(function(x) { return String(x.id) === prev; })) sel.value = prev;
-        else {
-          var prim = ars.filter(function(x) { return x.is_primary; })[0];
-          sel.value = String((prim || ars[0]).id);
-        }
+        fillScheduleEditorArenaSelect('templatePreciseArenaSelect', null);
       }
 
       function syncPreciseArenaWrapsAfterSlotsChanged() {
+        syncCalendarGridArenaWrapVisibility();
+        syncTemplateGridArenaWrapVisibility();
         syncCalendarPreciseArenaWrapVisibility();
         syncTemplatePreciseArenaWrapVisibility();
       }
@@ -4718,7 +4893,10 @@
           return;
         }
         if (!state.preciseSlots) state.preciseSlots = [];
-        state.preciseSlots.push({ startMinutes: ev.startMin, durationMinutes: ev.dur });
+        var psRow = { startMinutes: ev.startMin, durationMinutes: ev.dur };
+        var precArenaPick = readPreciseArenaPickForSave();
+        if (precArenaPick != null) psRow.arenaId = precArenaPick;
+        state.preciseSlots.push(psRow);
         setPreciseError('');
         renderPreciseSlotsAdded();
         renderHourGrid();
@@ -7102,6 +7280,9 @@
         if (s.has_sandbox_booking && !groupHub) {
           html += '<span class="schedule-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>';
         }
+        if (!bookedClick && !groupHub && !cohortSlot) {
+          html += scheduleEditorArenaChipHtml(s.arena_id, s.arena_label);
+        }
         html += '</div>';
         if (serviceBadge) {
           html += '<div class="slot-service-badge-row">' + serviceBadge + '</div>';
@@ -7939,6 +8120,7 @@
         var useTplGroup = slotIntentUseGroupUi();
         state.preciseSlots = [];
         state.slotAddMode = 'grid';
+        var gridArenaPrefTpl = null;
         var durTpl = document.getElementById('slotDurationSelect');
         if (useTplGroup) {
           state.selectedStarts = new Set(
@@ -7968,22 +8150,24 @@
           existingIndiv.forEach(function(t) {
             var sm = parseStartToMinutes(t.start_time);
             var dur = slotDurationFromRow(t);
+            var onGrid = allowedTemplateStarts.has(sm);
+            if (onGrid && dur === gridDefaultDur) {
+              state.selectedStarts.add(sm);
+              return;
+            }
+            var psTpl = { startMinutes: sm, durationMinutes: dur };
             var arenaFromTpl =
               t.arena_id != null && !isNaN(parseInt(String(t.arena_id), 10))
                 ? parseInt(String(t.arena_id), 10)
                 : null;
-            if (arenaFromTpl != null) {
-              state.preciseSlots.push({
-                startMinutes: sm,
-                durationMinutes: dur,
-                arenaId: arenaFromTpl,
-              });
-              return;
-            }
-            var onGrid = allowedTemplateStarts.has(sm);
-            if (onGrid && dur === gridDefaultDur) state.selectedStarts.add(sm);
-            else state.preciseSlots.push({ startMinutes: sm, durationMinutes: dur });
+            if (arenaFromTpl != null) psTpl.arenaId = arenaFromTpl;
+            state.preciseSlots.push(psTpl);
           });
+          gridArenaPrefTpl = inferGridArenaIdFromSlotRows(
+            existingIndiv,
+            allowedTemplateStarts,
+            gridDefaultDur
+          );
           if (durTpl) {
             durTpl.value = String(normalizeDurationToScheduleSelect(gridDefaultDur));
           }
@@ -8059,6 +8243,9 @@
           });
         } else {
           loadTrainerServicesIfNeeded().then(function() {
+            state.scheduleGridArenaPickId = gridArenaPrefTpl;
+            fillScheduleEditorGridArenaPick(gridArenaPrefTpl);
+            syncPreciseArenaWrapsAfterSlotsChanged();
             pruneSelectedStartsForOverlap(getEditDurationMinutes());
             renderHourGrid();
             renderPreciseSlotsAdded();
@@ -8097,6 +8284,7 @@
         );
         var useCalCenter = slotIntentUseCenterUi();
         var useCalGroup = slotIntentUseGroupUi();
+        var calendarGridArenaPref = null;
         var allowedCalendarStarts = new Set(
           allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
         );
@@ -8174,6 +8362,11 @@
             (state.preciseSlots || []).map(function(ps) {
               return calendarPreciseSlotStableKey(ps);
             })
+          );
+          calendarGridArenaPref = inferGridArenaIdFromSlotRows(
+            individualRows,
+            allowedCalendarStarts,
+            gridDefaultDurHydr
           );
         }
         var durElCal = document.getElementById('slotDurationSelect');
@@ -8294,6 +8487,8 @@
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
         loadTrainerServicesIfNeeded().then(function() {
+          state.scheduleGridArenaPickId = calendarGridArenaPref;
+          fillScheduleEditorGridArenaPick(calendarGridArenaPref);
           syncPreciseArenaWrapsAfterSlotsChanged();
         });
       }
@@ -8492,25 +8687,27 @@
             var arsTpl = state.trainerScheduleArenas || [];
             var multiArenaTpl = arsTpl.length > 1;
             var tplPrecArenaPick = null;
+            var tplGridArenaPick = readGridArenaPickForSave();
             var tplNeedArena =
               multiArenaTpl && precTpl.some(function(ps) { return ps.arenaId == null; });
             if (tplNeedArena) {
-              var paTpl = document.getElementById('templatePreciseArenaSelect');
-              var pavTpl = paTpl ? parseInt(paTpl.value, 10) : NaN;
-              if (isNaN(pavTpl)) {
+              var paTplEl = document.getElementById('templatePreciseArenaSelect');
+              if (!paTplEl) {
                 alert('Выберите площадку для слотов «Точное время» в шаблоне.');
                 return;
               }
-              tplPrecArenaPick = pavTpl;
+              tplPrecArenaPick = readPreciseArenaPickForSave();
             }
             slotsPayload = [];
             startsSorted.forEach(function(m0) {
-              slotsPayload.push({
+              var rowGrid = {
                 hour: Math.floor(m0 / 60),
                 minute: m0 % 60,
                 capacity: 1,
                 duration_minutes: durationMinutes,
-              });
+              };
+              if (multiArenaTpl && tplGridArenaPick != null) rowGrid.arena_id = tplGridArenaPick;
+              slotsPayload.push(rowGrid);
             });
             precTpl.forEach(function(ps) {
               var rowTpl = {
@@ -8566,6 +8763,7 @@
           }
           var precSlots = state.preciseSlots || [];
           var postBody;
+          var gridArenaPickCal = readGridArenaPickForSave();
           if (precSlots.length > 0) {
             // Mixed mode: build slot_entries combining grid starts + precise slots
             var slotEntries = [];
@@ -8574,16 +8772,17 @@
             var precArenaPayload = null;
             var needArenaPick = multiArenaPrec && precSlots.some(function(ps) { return ps.arenaId == null; });
             if (needArenaPick) {
-              var pasPick = document.getElementById('calendarPreciseArenaSelect');
-              var paidPick = pasPick ? parseInt(pasPick.value, 10) : NaN;
-              if (isNaN(paidPick)) {
-                alert('Выберите площадку для слотов «Точное время» (или у слотов из каталога уже задана своя).');
+              var pasPickEl = document.getElementById('calendarPreciseArenaSelect');
+              if (!pasPickEl) {
+                alert('Выберите площадку для слотов «Точное время».');
                 return;
               }
-              precArenaPayload = paidPick;
+              precArenaPayload = readPreciseArenaPickForSave();
             }
             startsSorted.forEach(function(m0) {
-              slotEntries.push({ start_time: formatMinuteClock(m0), duration_minutes: durationMinutes });
+              var entGrid = { start_time: formatMinuteClock(m0), duration_minutes: durationMinutes };
+              if (multiArenaPrec && gridArenaPickCal != null) entGrid.arena_id = gridArenaPickCal;
+              slotEntries.push(entGrid);
             });
             precSlots.forEach(function(ps) {
               var entPrec = {
@@ -8597,6 +8796,9 @@
               slotEntries.push(entPrec);
             });
             postBody = { slot_date: state.editDate, slot_entries: slotEntries, capacity: capacity };
+            if (multiArenaPrec && gridArenaPickCal != null && !slotEntries.some(function(e) { return e.arena_id != null; })) {
+              postBody.arena_id = gridArenaPickCal;
+            }
           } else {
             postBody = {
               slot_date: state.editDate,
@@ -8604,6 +8806,7 @@
               duration_minutes: durationMinutes,
               capacity: capacity,
             };
+            if (gridArenaPickCal != null) postBody.arena_id = gridArenaPickCal;
           }
           if (slotIntentUseGroupUi() && capacity > 1) {
             var gsel = document.getElementById('calendarGroupServiceSelect');

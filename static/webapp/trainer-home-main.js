@@ -2442,32 +2442,61 @@
       function syncHubInboxShellBadges() {
         if (!window.TrainerShell || typeof TrainerShell.setInboxBadges !== 'function') return;
         if (hubServerActionInbox && hubServerActionInbox.badges) {
-          TrainerShell.setInboxBadges(hubServerActionInbox.badges);
-          if (window.TrainerPendingInbox) TrainerPendingInbox.syncShellBadges(hubServerActionInbox.badges);
+          var badgesPayload = Object.assign({}, hubServerActionInbox.badges);
+          if (badgesPayload.menu) {
+            badgesPayload.menu = Object.assign({}, badgesPayload.menu);
+            if (isRhythmHintDismissed('catalog_publication')) {
+              badgesPayload.menu['trainer-profile'] = 0;
+            }
+            var moreSum = 0;
+            Object.keys(badgesPayload.menu).forEach(function(k) {
+              moreSum += parseInt(String(badgesPayload.menu[k] || 0), 10) || 0;
+            });
+            badgesPayload.more = moreSum;
+          }
+          TrainerShell.setInboxBadges(badgesPayload);
+          if (window.TrainerPendingInbox) TrainerPendingInbox.syncShellBadges(badgesPayload);
           return;
         }
         var d = hubOnboardingData;
         var scheduleBadge = hubLastPendingCount > 0 ? hubLastPendingCount : 0;
-        var moreBadge = hubRequestsStatReady && hubLastNewRequestsCount > 0 ? hubLastNewRequestsCount : 0;
+        var requestsBadge = hubRequestsStatReady && hubLastNewRequestsCount > 0 ? hubLastNewRequestsCount : 0;
+        var profileBadge = 0;
         if (d && !isRhythmHintDismissed('catalog_publication')) {
           var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
           var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
           if (!inPublicCatalog && onboardingBookingStepDone(d)) {
-            moreBadge += 1;
+            profileBadge = 1;
           }
         }
         var clientsBadge = d ? parseNonNegativeInt(d.open_loop_clients_no_telegram_count) : 0;
-        TrainerShell.setInboxBadges({
+        var payload = {
           schedule: scheduleBadge,
-          more: moreBadge,
+          more: requestsBadge + profileBadge,
           clients: clientsBadge > 0 ? clientsBadge : 0,
-        });
+          menu: {
+            'trainer-requests': requestsBadge,
+            'trainer-profile': profileBadge,
+          },
+          menu_hints: {},
+        };
+        if (requestsBadge > 0) {
+          payload.menu_hints['trainer-requests'] =
+            requestsBadge +
+            ' ' +
+            (requestsBadge === 1
+              ? 'новая заявка без ответа'
+              : requestsBadge >= 2 && requestsBadge <= 4
+                ? 'новые заявки без ответа'
+                : 'новых заявок без ответа');
+        }
+        if (profileBadge > 0) {
+          payload.menu_hints['trainer-profile'] = 'Шаг для публикации в каталоге';
+        }
+        payload.more = requestsBadge + profileBadge;
+        TrainerShell.setInboxBadges(payload);
         if (window.TrainerPendingInbox) {
-          TrainerPendingInbox.syncShellBadges({
-            schedule: scheduleBadge,
-            more: moreBadge,
-            clients: clientsBadge > 0 ? clientsBadge : 0,
-          });
+          TrainerPendingInbox.syncShellBadges(payload);
         }
       }
 

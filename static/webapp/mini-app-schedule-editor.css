@@ -347,6 +347,71 @@
     .slot-row .svc-badge.svc-badge--violet .svc-badge-dot { background: var(--svc-accent-violet); }
     .slot-row .svc-badge.svc-badge--rose .svc-badge-dot { background: var(--svc-accent-rose); }
     .slot-row .svc-badge.svc-badge--slate .svc-badge-dot { background: var(--svc-accent-slate); }
+
+    /* Secondary venue chip on slot mini-cards (svc-badge model; hidden when arena is primary). */
+    .slot-row .schedule-arena-chip,
+    .precise-slot-tag .schedule-arena-chip {
+      flex-shrink: 1;
+      max-width: min(100%, 9.5rem);
+    }
+    .slot-time-row .schedule-arena-chip {
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .precise-slot-tag .schedule-arena-chip {
+      margin-left: 6px;
+    }
+
+    /* Grid «Быстро» arena pick — chip row above hour grid (multi-venue trainers). */
+    .schedule-grid-arena-panel {
+      margin-bottom: 4px;
+    }
+    .schedule-grid-arena-select-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .schedule-grid-arena-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .schedule-grid-arena-chip {
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.25;
+      text-align: left;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .schedule-grid-arena-chip.is-selected {
+      border-color: color-mix(in srgb, var(--app-cta-fill) 72%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill) 16%, var(--tg-theme-secondary-bg-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
+    }
+    .schedule-grid-arena-chip:active {
+      opacity: 0.92;
+    }
     .schedule-sandbox-pill {
       display: inline-block;
       margin-left: 8px;
@@ -2630,6 +2695,15 @@
       color: var(--app-cta-fill);
       text-decoration: none;
       letter-spacing: 0.02em;
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-family: inherit;
+      line-height: inherit;
+      cursor: pointer;
+      text-align: left;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
     .bd-tel:active { opacity: 0.8; }
     .bd-tel--copy {

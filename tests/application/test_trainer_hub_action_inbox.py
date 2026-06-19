@@ -70,6 +70,10 @@ def test_inbox_badges_schedule_and_clients() -> None:
     assert badges["schedule"] == 4
     assert badges["more"] == 3  # 2 requests + catalog hint
     assert badges["clients"] == 3
+    assert badges["menu"]["trainer-requests"] == 2
+    assert badges["menu"]["trainer-profile"] == 1
+    assert "новые заявки" in badges["menu_hints"]["trainer-requests"]
+    assert badges["menu_hints"]["trainer-profile"] == "Шаг для публикации в каталоге"
 
 
 def test_action_inbox_hidden_when_schedule_locked() -> None:

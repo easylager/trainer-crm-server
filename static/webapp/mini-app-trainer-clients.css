@@ -834,10 +834,23 @@
     }
     .tc-row:last-child { border-bottom: none; }
     .tc-tel {
+      display: inline;
       font-size: 15px;
       font-weight: 500;
       color: #f5a623;
       text-decoration: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      font-family: inherit;
+      line-height: inherit;
+      cursor: pointer;
+      text-align: left;
+      -webkit-appearance: none;
+      appearance: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
     .tc-tel:active { opacity: 0.8; }
     .tc-pass-link {

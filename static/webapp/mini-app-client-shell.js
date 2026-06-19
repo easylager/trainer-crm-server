@@ -561,7 +561,7 @@
     var assets = [
       { href: base + 'catalog-main.js?v=202605273', as: 'script' },
       { href: base + 'mini-app-catalog.css?v=202605273', as: 'style' },
-      { href: base + 'mini-app-phone-field.js?v=202605203', as: 'script' },
+      { href: base + 'mini-app-phone-field.js?v=202606281', as: 'script' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -631,7 +631,7 @@
     var assets = [
       base + 'book',
       base + 'mini-app-client-nav.css',
-      base + 'mini-app-phone-field.js?v=202605203',
+      base + 'mini-app-phone-field.js?v=202606281',
     ];
     assets.forEach(function (href) {
       if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;

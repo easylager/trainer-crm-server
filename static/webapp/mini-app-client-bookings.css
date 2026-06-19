@@ -339,4 +339,8 @@ a.bd-client-name.bd-trainer-card-link:active { opacity: 0.88; }
   pointer-events: none;
 }
 
+.bd-trainer-phone-wrap {
+  margin-top: 4px;
+}
+
 #detailServiceNotice { white-space: pre-line; }
