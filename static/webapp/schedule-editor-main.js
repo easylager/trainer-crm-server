@@ -2219,7 +2219,20 @@
         if (s2 && s2.value !== v) s2.value = v;
       }
 
-      function fillTrainerArenasUI() {
+      /** Prefer last booking / slot hint when linked; else primary / first arena. */
+      function pickDefaultBookArenaId(arenas, preferredId) {
+        var list = arenas || [];
+        if (!list.length) return null;
+        if (preferredId != null) {
+          var want = parseInt(String(preferredId), 10);
+          if (!isNaN(want) && list.some(function(a) { return a.id === want; })) return want;
+        }
+        var prim = list.filter(function(a) { return a.is_primary; })[0];
+        if (prim) return prim.id;
+        return list[0].id;
+      }
+
+      function fillTrainerArenasUI(preferredArenaId) {
         if (state.bookSlotIsGroup) {
           var w1 = document.getElementById('bookArenaWrap');
           var w2 = document.getElementById('bookArenaWrapNew');
@@ -2227,17 +2240,18 @@
           if (w2) w2.style.display = 'none';
           return;
         }
-        var hideExistingArena = !state.bookFlowQuick && !!state.bookSlotId;
         var arenas = state.trainerArenas || [];
         var show = arenas.length > 1;
         var wrap = document.getElementById('bookArenaWrap');
         var wrapNew = document.getElementById('bookArenaWrapNew');
-        if (wrap) {
-          wrap.style.display = hideExistingArena ? 'none' : show ? 'block' : 'none';
-        }
+        if (wrap) wrap.style.display = show ? 'block' : 'none';
         if (wrapNew) wrapNew.style.display = show ? 'block' : 'none';
-        var primary = arenas.filter(function(a) { return a.is_primary; })[0];
-        state.bookArenaId = primary ? primary.id : (arenas.length ? arenas[0].id : null);
+        var pref = preferredArenaId != null ? preferredArenaId : state.bookArenaId;
+        if (pref == null && state.bookSlotId && !state.bookFlowQuick) {
+          var slotHint = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+          if (slotHint && slotHint.arena_id != null) pref = slotHint.arena_id;
+        }
+        state.bookArenaId = pickDefaultBookArenaId(arenas, pref);
         function fill(sel) {
           if (!sel) return;
           sel.innerHTML = '';
@@ -2249,9 +2263,7 @@
           });
           if (state.bookArenaId != null) sel.value = String(state.bookArenaId);
         }
-        if (!hideExistingArena) {
-          fill(document.getElementById('bookArenaSelect'));
-        }
+        fill(document.getElementById('bookArenaSelect'));
         fill(document.getElementById('bookArenaSelectNew'));
         function onArenaChange() {
           state.bookArenaId = this.value ? parseInt(this.value, 10) : null;
@@ -2307,14 +2319,12 @@
         if (!state.bookSlotIsGroup && state.bookPriceVariantId != null) {
           o.service_price_variant_id = state.bookPriceVariantId;
         }
-        /* Slot row already tied to a venue — do not let UI «площадка» override (individual slots). */
-        if (!state.bookFlowQuick && state.bookSlotId && !state.bookSlotIsGroup) {
-          var slot = state.slots.find(function(s) { return s.id === state.bookSlotId; });
-          var aid = slot && slot.arena_id != null ? parseInt(String(slot.arena_id), 10) : NaN;
-          if (!isNaN(aid)) o.arena_id = aid;
-          return o;
-        }
-        if (!state.bookSlotIsGroup && state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+        /* Group slots stay on the slot venue; individual trainer booking uses chosen arena (defaults + override). */
+        if (state.bookSlotIsGroup && state.bookSlotId) {
+          var slotG = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+          var aidG = slotG && slotG.arena_id != null ? parseInt(String(slotG.arena_id), 10) : NaN;
+          if (!isNaN(aidG)) o.arena_id = aidG;
+        } else if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
           o.arena_id = state.bookArenaId;
         }
         return o;
@@ -2749,8 +2759,8 @@
       }
 
       /**
-       * After client picked from roster: load per-client defaults (GET booking-defaults), then show service/tariff.
-       * Slot booking: арена слота фиксируется в POST; UI площадки для «из списка» не показываем.
+       * After client picked from roster: load per-client defaults (GET booking-defaults), then show service/tariff/arena.
+       * Slot booking: время из слота; площадка — из последней записи клиента (можно сменить), как в hub.
        */
       function proceedBookExistingClient(clientId, clientName) {
         maybeApplyBookContextForClient(clientId, function() {
@@ -2785,7 +2795,7 @@
             lead.textContent = options.leadHint
               ? options.leadHint
               : state.bookSelectedExistingClientName +
-                ' — услуга и тариф как в последней записи (можно изменить).';
+                ' — услуга, тариф и площадка как в последней записи (можно изменить).';
           }
 
           var sel = document.getElementById('bookServiceSelect');
@@ -2812,7 +2822,12 @@
             defaults.service_price_variant_id,
             defaults.price_tier_kind
           );
-          fillTrainerArenasUI();
+          var arenaPref = defaults.arena_id;
+          if (arenaPref == null && state.bookSlotId && !state.bookSlotIsGroup) {
+            var slotRow = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+            if (slotRow && slotRow.arena_id != null) arenaPref = slotRow.arena_id;
+          }
+          fillTrainerArenasUI(arenaPref);
           applyBookModalGroupUi();
           showBookExistingServiceStep();
           var modal = document.getElementById('modalBookClient');
