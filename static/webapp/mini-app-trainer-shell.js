@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606198';
+  var SHELL_VERSION = '202606199';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
@@ -109,7 +109,7 @@
       );
     },
     'trainer-profile': function () {
-      return 'Шаг для публикации в каталоге';
+      return 'Можно дополнить анкету — каталог по желанию';
     },
   };
 
@@ -922,16 +922,21 @@
     });
   }
 
-  function syncMoreSheetSubtitle(hasAttention) {
+  function syncMoreSheetSubtitle(hasUrgentAttention) {
     var subtitle = document.querySelector('.trainer-more-sheet__subtitle');
     if (!subtitle) return;
-    subtitle.textContent = hasAttention
-      ? 'Сначала разделы с пометкой — там нужно ваше действие'
+    subtitle.textContent = hasUrgentAttention
+      ? 'Сначала разделы с пометкой — там ждут ответа'
       : 'Профиль, финансы, группы и всё остальное';
   }
 
   function isNoticeMenuPath(path) {
     return path === 'trainer-requests';
+  }
+
+  /** Optional onboarding hint — not an alarm; no top banner or tab badge. */
+  function isSoftHintMenuPath(path) {
+    return path === 'trainer-profile';
   }
 
   function syncMoreMenuBadges() {
@@ -945,11 +950,13 @@
         var hintEl = link.querySelector('.trainer-more-sheet__hint');
         var defaultHint = link.getAttribute('data-default-hint') || '';
         var notice = isNoticeMenuPath(path);
-        link.classList.toggle('trainer-more-sheet__link--attention', n > 0 && !notice);
+        var softHint = isSoftHintMenuPath(path);
+        link.classList.toggle('trainer-more-sheet__link--attention', n > 0 && !notice && !softHint);
         link.classList.toggle('trainer-more-sheet__link--notice', n > 0 && notice);
+        link.classList.toggle('trainer-more-sheet__link--hint', n > 0 && softHint);
         if (badgeEl) {
           badgeEl.classList.toggle('trainer-more-sheet__badge--notice', n > 0 && notice);
-          if (n > 0) {
+          if (n > 0 && !softHint) {
             badgeEl.textContent = n > 9 ? '9+' : String(n);
             badgeEl.removeAttribute('hidden');
             badgeEl.setAttribute('aria-hidden', 'false');
@@ -964,10 +971,15 @@
             var activeHint = menuBadgeHintForPath(path, n);
             hintEl.textContent = activeHint || defaultHint;
             hintEl.classList.toggle('trainer-more-sheet__hint--notice', notice);
-            hintEl.classList.toggle('trainer-more-sheet__hint--attention', !notice);
+            hintEl.classList.toggle('trainer-more-sheet__hint--attention', !notice && !softHint);
+            hintEl.classList.toggle('trainer-more-sheet__hint--soft', softHint);
           } else {
             hintEl.textContent = defaultHint;
-            hintEl.classList.remove('trainer-more-sheet__hint--attention', 'trainer-more-sheet__hint--notice');
+            hintEl.classList.remove(
+              'trainer-more-sheet__hint--attention',
+              'trainer-more-sheet__hint--notice',
+              'trainer-more-sheet__hint--soft'
+            );
           }
         }
       });
@@ -981,7 +993,7 @@
     var parts = [];
     Object.keys(menu).forEach(function (path) {
       var n = parseInt(String(menu[path] || 0), 10) || 0;
-      if (n <= 0) return;
+      if (n <= 0 || isSoftHintMenuPath(path)) return;
       parts.push({ path: path, label: MORE_MENU_LABELS[path] || path, count: n });
     });
     parts.sort(function (a, b) {
@@ -1095,15 +1107,11 @@
   function setInboxBadges(badges) {
     badges = badges || { schedule: 0, center: 0, more: 0, clients: 0 };
     var menu = badges.menu && typeof badges.menu === 'object' ? badges.menu : {};
-    var moreFromMenu = 0;
-    Object.keys(menu).forEach(function (k) {
-      moreFromMenu += parseInt(String(menu[k] || 0), 10) || 0;
-    });
     state.inboxBadges = {
       schedule: parseInt(String(badges.schedule || 0), 10) || 0,
       center: parseInt(String(badges.center || 0), 10) || 0,
-      /* Tab «Ещё» only when we know which menu rows are hot — avoids orphan dot without sheet hints. */
-      more: moreFromMenu,
+      /* Server sends actionable-only count for tab «Ещё» (requests, not catalog hints). */
+      more: parseInt(String(badges.more != null ? badges.more : 0), 10) || 0,
       clients: parseInt(String(badges.clients || 0), 10) || 0,
     };
     state.menuBadges = menu;

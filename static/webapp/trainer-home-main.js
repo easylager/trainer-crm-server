@@ -352,9 +352,19 @@
       var hubLastRhythmPicked = [null, null];
       /** «Мало записей» vs свободные слоты (aligned with product). */
       var HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6;
-      /** × dismiss: короткий / длинный mute для rhythm hints. */
+      /** × dismiss: короткий / длинный / growth mute для rhythm hints. */
       var HUB_RHYTHM_DISMISS_DAYS_SHORT = 1;
       var HUB_RHYTHM_DISMISS_DAYS_LONG = 2;
+      var HUB_RHYTHM_DISMISS_DAYS_GROWTH = 14;
+      /** Max growth/education rhythm rows; urgent rhythm + operational never capped. */
+      var HUB_RHYTHM_GROWTH_MAX = 2;
+      var HUB_RHYTHM_URGENT_MIN_PRIORITY = 90;
+      var HUB_RHYTHM_GROWTH_HINT_IDS = {
+        share_link: true,
+        referral_growth: true,
+        open_loop_free_next_growth: true,
+        client_notes: true,
+      };
       /** schedule-editor ставит метку после создания слотов — поднимаем приоритет хинта «Напомнить» (рассылка приглашений). */
       var HUB_FILL_SLOTS_RHYTHM_BOOST_KEY = 'trainer_hub_fill_slots_rhythm_boost_v1';
       var HUB_FILL_SLOTS_RHYTHM_BOOST_TTL_MS = 72 * 60 * 60 * 1000;
@@ -368,10 +378,16 @@
       var hubRhythmHintsReady = false;
       /** Wave B: server-built inbox from bootstrap; cleared after local mutations. */
       var hubServerActionInbox = null;
-      /** Unified inbox: compact banner (top 1) vs full expanded list. */
+      /** Unified inbox: compact banner vs full expanded list. */
+      var HUB_INBOX_EXPANDED_SESSION_KEY = 'trainer_hub_inbox_expanded_v1';
       var hubActionInboxExpanded = false;
       var hubActionInboxWired = false;
-      var HUB_INBOX_COLLAPSED_MAX = 1;
+      var HUB_INBOX_COLLAPSED_MAX = 2;
+      try {
+        hubActionInboxExpanded = sessionStorage.getItem(HUB_INBOX_EXPANDED_SESSION_KEY) === '1';
+      } catch (eHubInboxSess) {
+        hubActionInboxExpanded = false;
+      }
 
       function showHubRhythmHintsSkeleton() {
         if (!getInitData() || hubRhythmHintsReady) return;
@@ -1701,6 +1717,74 @@
         return getRhythmDismissUntilMs(hintId) > Date.now();
       }
 
+      function persistHubInboxExpanded(expanded) {
+        hubActionInboxExpanded = !!expanded;
+        try {
+          sessionStorage.setItem(HUB_INBOX_EXPANDED_SESSION_KEY, expanded ? '1' : '0');
+        } catch (ePersist) {
+          /* noop */
+        }
+      }
+
+      /** Monday=0 … Sunday=6 in Europe/Minsk — aligned with server inbox rhythm timing. */
+      function hubMinskWeekdayMon0() {
+        try {
+          var fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Minsk', weekday: 'short' });
+          var wd = fmt.format(new Date());
+          var map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+          return map[wd] != null ? map[wd] : 0;
+        } catch (eWd) {
+          return (new Date().getDay() + 6) % 7;
+        }
+      }
+
+      function hubRhythmShowSlotsThisWeekHint() {
+        return hubMinskWeekdayMon0() <= 2;
+      }
+
+      function hubRhythmShowSlotsNextWeekHint() {
+        return hubMinskWeekdayMon0() >= 3;
+      }
+
+      function hubInboxRhythmIsUrgent(item) {
+        if (!item) return false;
+        if (item.urgent) return true;
+        return (parseInt(String(item.priority || 0), 10) || 0) >= HUB_RHYTHM_URGENT_MIN_PRIORITY;
+      }
+
+      function applyHubInboxRhythmCap(items) {
+        if (!items || !items.length) return items || [];
+        var operational = [];
+        var rhythm = [];
+        items.forEach(function(it) {
+          if (it.kind === 'rhythm') rhythm.push(it);
+          else operational.push(it);
+        });
+        var urgent = rhythm.filter(hubInboxRhythmIsUrgent);
+        var soft = rhythm.filter(function(it) {
+          return !hubInboxRhythmIsUrgent(it);
+        });
+        var growth = [];
+        var otherSoft = [];
+        soft.forEach(function(it) {
+          if (HUB_RHYTHM_GROWTH_HINT_IDS[it.id]) growth.push(it);
+          else otherSoft.push(it);
+        });
+        growth.sort(function(a, b) {
+          return b.priority - a.priority;
+        });
+        if (growth.length > HUB_RHYTHM_GROWTH_MAX) growth = growth.slice(0, HUB_RHYTHM_GROWTH_MAX);
+        var mergedRhythm = urgent.concat(otherSoft, growth);
+        mergedRhythm.sort(function(a, b) {
+          return b.priority - a.priority;
+        });
+        var merged = operational.concat(mergedRhythm);
+        merged.sort(function(a, b) {
+          return b.priority - a.priority;
+        });
+        return merged;
+      }
+
       /** True when schedule-editor недавно создал слоты — TTL в localStorage (переживает перезагрузку WebView; sessionStorage Telegram часто чистится). */
       function readTrainerHubFillSlotsRhythmBoostPending() {
         try {
@@ -1732,7 +1816,7 @@
       }
 
       /**
-       * Builds rhythm hint candidates (priority desc). Max two shown after dismiss filter.
+       * Builds rhythm hint candidates (priority desc). Growth hints capped in applyHubInboxRhythmCap; urgent always shown.
        */
       function buildHubRhythmCandidates() {
         var out = [];
@@ -1998,7 +2082,8 @@
         if (
           !slotRhythmDeferredForTemplateOnboarding &&
           availThis === 0 &&
-          bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD
+          bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD &&
+          hubRhythmShowSlotsThisWeekHint()
         ) {
           out.push({
             id: 'slots_this_week',
@@ -2011,7 +2096,7 @@
 
         var nextWeekGap =
           slotsNext === 0 || (availNext === 0 && bookNext < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD);
-        if (!slotRhythmDeferredForTemplateOnboarding && nextWeekGap) {
+        if (!slotRhythmDeferredForTemplateOnboarding && nextWeekGap && hubRhythmShowSlotsNextWeekHint()) {
           out.push({
             id: 'slots_next_week',
             priority: 90,
@@ -2349,9 +2434,9 @@
               });
             }
           }
-          return mapped;
+          return applyHubInboxRhythmCap(mapped);
         }
-        return buildHubInboxItemsFromClient();
+        return applyHubInboxRhythmCap(buildHubInboxItemsFromClient());
       }
 
       function hubPendingBookingIdsFromInbox() {
@@ -2502,15 +2587,23 @@
 
       function dismissHubInboxRhythmItem(hintId) {
         if (!hintId) return;
-        var days =
+        var days;
+        if (
           hintId === 'share_link' ||
+          hintId === 'referral_growth' ||
+          hintId === 'open_loop_free_next_growth'
+        ) {
+          days = HUB_RHYTHM_DISMISS_DAYS_GROWTH;
+        } else if (
           hintId === 'template' ||
           hintId === 'client_notes' ||
           hintId === 'catalog_publication' ||
-          hintId === 'subscription_lapsed' ||
-          hintId === 'referral_growth'
-            ? HUB_RHYTHM_DISMISS_DAYS_LONG
-            : HUB_RHYTHM_DISMISS_DAYS_SHORT;
+          hintId === 'subscription_lapsed'
+        ) {
+          days = HUB_RHYTHM_DISMISS_DAYS_LONG;
+        } else {
+          days = HUB_RHYTHM_DISMISS_DAYS_SHORT;
+        }
         setRhythmDismissUntilMs(hintId, Date.now() + days * 24 * 60 * 60 * 1000);
         applyHubRhythmResolver();
         renderHubSummaryHints();
@@ -2626,6 +2719,18 @@
         return (sp > 48 ? cut.slice(0, sp) : cut) + '…';
       }
 
+      /** Compact footer: «Ещё 2: шаблон, рефералы» — preview of hidden inbox rows. */
+      function hubInboxHiddenPreview(items, visibleCount) {
+        var hidden = items.slice(visibleCount);
+        if (!hidden.length) return '';
+        var labels = hidden.slice(0, 3).map(function(it) {
+          return hubInboxCompactTitle(it);
+        });
+        var tail = labels.join(', ');
+        if (hidden.length > 3) tail += '…';
+        return 'Ещё ' + hidden.length + ': ' + tail;
+      }
+
       function renderHubActionInbox() {
         var host = document.getElementById('hubActionInbox');
         if (!host) return;
@@ -2657,6 +2762,7 @@
         var rowsHtml = visible
           .map(function(item, ix) {
             var mod = item.urgent ? ' hub-action-inbox__item--urgent' : '';
+            if (isCompact && hiddenCount > 0) mod += ' hub-action-inbox__item--expandable';
             var dismissBtn =
               !isCompact && item.dismissible
                 ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--dismiss" data-inbox-dismiss="' +
@@ -2671,14 +2777,6 @@
                   ix +
                   '">' +
                   escapeHtml(item.secondaryLabel) +
-                  '</button>'
-                : '';
-            var expandInlineBtn =
-              isCompact && hiddenCount > 0 && ix === 0
-                ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--more" id="hubActionInboxExpand" aria-label="Показать ещё ' +
-                  hiddenCount +
-                  '">+' +
-                  hiddenCount +
                   '</button>'
                 : '';
             return (
@@ -2699,7 +2797,6 @@
                 : '') +
               '</div>' +
               '<div class="hub-action-inbox__actions">' +
-              expandInlineBtn +
               '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--primary" data-inbox-primary="' +
               ix +
               '">' +
@@ -2712,19 +2809,28 @@
           })
           .join('');
 
-        var footerHtml = '';
-        if (hubActionInboxExpanded && items.length > HUB_INBOX_COLLAPSED_MAX) {
-          footerHtml =
-            '<div class="hub-action-inbox__footer"><button type="button" class="hub-action-inbox__expand" id="hubActionInboxCollapse">Свернуть</button></div>';
+        var compactMoreHtml = '';
+        if (isCompact && hiddenCount > 0) {
+          compactMoreHtml =
+            '<button type="button" class="hub-action-inbox__more" id="hubActionInboxExpandMore" aria-label="Показать все ' +
+            items.length +
+            '">' +
+            escapeHtml(hubInboxHiddenPreview(items, visible.length)) +
+            '</button>';
         }
 
         var headHtml = isCompact
           ? ''
           : '<div class="hub-action-inbox__head">' +
             '<h2 class="hub-action-inbox__title">Сейчас важно</h2>' +
+            '<div class="hub-action-inbox__head-actions">' +
             '<span class="hub-action-inbox__count">' +
             items.length +
-            '</span></div>';
+            '</span>' +
+            (items.length > HUB_INBOX_COLLAPSED_MAX
+              ? '<button type="button" class="hub-action-inbox__collapse" id="hubActionInboxCollapse">Свернуть</button>'
+              : '') +
+            '</div></div>';
 
         host.innerHTML =
           '<div class="hub-action-inbox__card' +
@@ -2734,7 +2840,7 @@
           '<ul class="hub-action-inbox__list">' +
           rowsHtml +
           '</ul>' +
-          footerHtml +
+          compactMoreHtml +
           '</div>';
         host.removeAttribute('hidden');
         host.dataset.inboxItemsJson = JSON.stringify(items.slice(0, visible.length));
@@ -2820,15 +2926,23 @@
             dismissHubInboxRhythmItem(dismissEl.getAttribute('data-inbox-dismiss'));
             return;
           }
-          var expandEl = t.closest('#hubActionInboxExpand');
-          if (expandEl) {
-            hubActionInboxExpanded = true;
+          var expandMoreEl = t.closest('#hubActionInboxExpandMore');
+          if (expandMoreEl) {
+            persistHubInboxExpanded(true);
             renderHubActionInbox();
             return;
           }
+          if (inboxHost.querySelector('.hub-action-inbox__card--compact')) {
+            var expandRowEl = t.closest('.hub-action-inbox__item--expandable');
+            if (expandRowEl && !t.closest('.hub-action-inbox__btn')) {
+              persistHubInboxExpanded(true);
+              renderHubActionInbox();
+              return;
+            }
+          }
           var collapseEl = t.closest('#hubActionInboxCollapse');
           if (collapseEl) {
-            hubActionInboxExpanded = false;
+            persistHubInboxExpanded(false);
             renderHubActionInbox();
             return;
           }
@@ -2871,7 +2985,7 @@
 
       /** Same storage as «×» on growth strip — call after successful copy or dismiss. */
       function dismissHubShareLinkGrowthHintPersisted() {
-        setRhythmDismissUntilMs('share_link', Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
+        setRhythmDismissUntilMs('share_link', Date.now() + HUB_RHYTHM_DISMISS_DAYS_GROWTH * 24 * 60 * 60 * 1000);
         applyHubRhythmResolver();
         renderHubSummaryHints();
       }

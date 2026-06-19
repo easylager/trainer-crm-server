@@ -7,16 +7,76 @@ from onboarding checklist + hub bookings preview. Dismiss state stays client-sid
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
 from src.shared.notification_hours import NOTIFICATION_TZ
 
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6
+# Max low-priority growth/education rhythm rows; urgent + operational are never capped.
+HUB_RHYTHM_GROWTH_MAX = 2
+HUB_RHYTHM_URGENT_MIN_PRIORITY = 90
+HUB_RHYTHM_GROWTH_HINT_IDS = frozenset(
+    {
+        "share_link",
+        "referral_growth",
+        "open_loop_free_next_growth",
+        "client_notes",
+    }
+)
+
+
+def _minsk_weekday_mon0() -> int:
+    """Monday=0 … Sunday=6 in trainer local time (Europe/Minsk)."""
+    return datetime.now(ZoneInfo(NOTIFICATION_TZ)).weekday()
+
+
+def _rhythm_show_slots_this_week_hint() -> bool:
+    """Slot nudge for the current week — Mon–Wed when trainers plan the week ahead."""
+    return _minsk_weekday_mon0() <= 2
+
+
+def _rhythm_show_slots_next_week_hint() -> bool:
+    """Slot nudge for next week — Thu–Sun before the new week starts."""
+    return _minsk_weekday_mon0() >= 3
+
+
+def _is_inbox_rhythm_urgent(item: dict[str, Any]) -> bool:
+    if item.get("urgent"):
+        return True
+    return int(item.get("priority") or 0) >= HUB_RHYTHM_URGENT_MIN_PRIORITY
+
+
+def _cap_hub_inbox_rhythm_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Operational rows always pass through.
+    Urgent rhythm (pending slots, open loops, template, catalog) — all visible.
+    Only growth/education rhythm hints are capped to reduce noise.
+    """
+    operational = [x for x in items if x.get("kind") != "rhythm"]
+    rhythm = [x for x in items if x.get("kind") == "rhythm"]
+    urgent = [x for x in rhythm if _is_inbox_rhythm_urgent(x)]
+    soft = [x for x in rhythm if not _is_inbox_rhythm_urgent(x)]
+    growth = [x for x in soft if x.get("id") in HUB_RHYTHM_GROWTH_HINT_IDS]
+    other_soft = [x for x in soft if x.get("id") not in HUB_RHYTHM_GROWTH_HINT_IDS]
+    growth.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
+    if len(growth) > HUB_RHYTHM_GROWTH_MAX:
+        growth = growth[:HUB_RHYTHM_GROWTH_MAX]
+    merged_rhythm = urgent + other_soft + growth
+    merged_rhythm.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
+    merged = operational + merged_rhythm
+    merged.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
+    return merged
 
 
 def _plural_ru(n: int, one: str, few: str, many: str) -> str:
@@ -303,7 +363,12 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
             )
         )
 
-    if not slot_deferred and avail_this == 0 and book_this < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD:
+    if (
+        not slot_deferred
+        and avail_this == 0
+        and book_this < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD
+        and _rhythm_show_slots_this_week_hint()
+    ):
         out.append(
             _inbox_item(
                 item_id="slots_this_week",
@@ -318,7 +383,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
         )
 
     next_week_gap = slots_next == 0 or (avail_next == 0 and book_next < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD)
-    if not slot_deferred and next_week_gap:
+    if not slot_deferred and next_week_gap and _rhythm_show_slots_next_week_hint():
         out.append(
             _inbox_item(
                 item_id="slots_next_week",
@@ -418,7 +483,7 @@ def build_trainer_hub_inbox_menu_hints(*, menu: dict[str, int]) -> dict[str, str
             f"{req_n} {_plural_ru(req_n, 'новая заявка без ответа', 'новые заявки без ответа', 'новых заявок без ответа')}"
         )
     if max(0, int(menu.get("trainer-profile") or 0)) > 0:
-        hints["trainer-profile"] = "Шаг для публикации в каталоге"
+        hints["trainer-profile"] = "Можно дополнить анкету — каталог по желанию"
     return hints
 
 
@@ -436,7 +501,8 @@ def build_trainer_hub_inbox_badges(
         requests_count=requests_count,
     )
     schedule = max(0, int(pending_count))
-    more = sum(menu.values())
+    # Tab dot: only actionable inbox (requests), not optional catalog profile hints.
+    more = max(0, int(menu.get("trainer-requests") or 0))
     clients = 0
     center = max(0, int(center_inbox_pending)) if show_center_inbox else 0
     if onboarding:
@@ -558,6 +624,7 @@ def build_trainer_hub_action_inbox(
         items.extend(_build_hub_rhythm_inbox_candidates(onboarding))
 
     items.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
+    items = _cap_hub_inbox_rhythm_items(items)
     badges = build_trainer_hub_inbox_badges(
         onboarding=onboarding,
         requests_count=req_n,

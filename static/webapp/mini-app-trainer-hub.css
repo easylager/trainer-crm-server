@@ -4009,6 +4009,47 @@
       font-weight: 700;
       min-width: 32px;
     }
+    .hub-action-inbox__head-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .hub-action-inbox__collapse {
+      border: none;
+      background: transparent;
+      padding: 4px 2px;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hub-action-inbox__collapse:active {
+      opacity: 0.75;
+    }
+    .hub-action-inbox__more {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      border: none;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent);
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hub-action-inbox__more:active {
+      opacity: 0.85;
+    }
+    .hub-action-inbox__item--expandable .hub-action-inbox__body {
+      cursor: pointer;
+    }
     .hub-action-inbox__head {
       display: flex;
       align-items: center;
