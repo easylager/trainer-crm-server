@@ -455,7 +455,8 @@ button.crm-tel-link,
 button[data-call-phone]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
   -webkit-appearance: none;
   appearance: none;
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
   border: none;
   padding: 0;
   margin: 0;
@@ -465,6 +466,31 @@ button[data-call-phone]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
   text-align: left;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  box-shadow: none;
+}
+a.bd-tel,
+a.tc-tel,
+a.crm-tel-link,
+a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  /* iOS long-press «Позвонить / Скопировать» requires default callout + text selection. */
+  touch-action: auto;
+  -webkit-touch-callout: default;
+  user-select: text;
+  -webkit-user-select: text;
+  box-shadow: none;
 }
 .bd-tel:active { opacity: 0.8; }
 .bd-section-label {

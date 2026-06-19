@@ -411,17 +411,22 @@
   function openPhoneDialer(phone) {
     var uri = phoneToTelUri(phone);
     if (!uri) return false;
+    /* Same-document navigation works in more Telegram iOS builds than window.open(tel:). */
     try {
-      window.open(uri, '_blank');
+      window.location.href = uri;
       return true;
     } catch (e0) {
       /* continue */
     }
     try {
+      window.location.assign(uri);
+      return true;
+    } catch (e1) {
+      /* continue */
+    }
+    try {
       var a = document.createElement('a');
       a.href = uri;
-      a.setAttribute('target', '_blank');
-      a.rel = 'noopener noreferrer';
       a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
       (document.body || document.documentElement).appendChild(a);
       a.click();
@@ -433,21 +438,21 @@
         }
       }, 0);
       return true;
-    } catch (e1) {
+    } catch (e2) {
       /* continue */
     }
     try {
-      window.location.assign(uri);
+      window.open(uri, '_self');
       return true;
-    } catch (e2) {
+    } catch (e3) {
       /* continue */
     }
     return false;
   }
 
   /**
-   * Tappable phone control for Telegram WebView (tap opens dialer; long-press iOS menu does not work in WebView).
-   * Pass escapeHtml from the host page for safe visible text.
+   * Inline tel control: native <a href="tel:"> for tap + iOS long-press «Позвонить».
+   * Programmatic dialer is only for legacy <button data-call-phone> fallbacks.
    */
   function phoneTelLinkHtml(phone, extraClass, escapeHtmlFn) {
     var p = String(phone || '').trim();
@@ -462,22 +467,23 @@
     if (!uri) return esc(p);
     var cls = extraClass ? esc(extraClass) : 'crm-tel-link';
     return (
-      '<button type="button" class="' +
+      '<a href="' +
+      esc(uri) +
+      '" class="' +
       cls +
-      '" data-call-phone="' +
-      esc(uri.replace(/^tel:/, '')) +
-      '" aria-label="Позвонить ' +
+      '" aria-label="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c ' +
       esc(p) +
       '">' +
       esc(p) +
-      '</button>'
+      '</a>'
     );
   }
 
   function wirePhoneCallButtons(root) {
     var scope = root && root.querySelectorAll ? root : global.document;
     if (!scope.querySelectorAll) return;
-    var nodes = scope.querySelectorAll('[data-call-phone]');
+    /* Native tel: anchors — tap/long-press handled by WebView; do not preventDefault. */
+    var nodes = scope.querySelectorAll('button[data-call-phone]');
     for (var i = 0; i < nodes.length; i++) {
       var btn = nodes[i];
       if (btn.getAttribute('data-call-phone-wired') === '1') continue;
