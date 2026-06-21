@@ -562,7 +562,7 @@
           ban.hidden = allowed;
           ban.setAttribute('aria-hidden', allowed ? 'true' : 'false');
         }
-        ['btnApplyThis', 'btnApplyNext'].forEach(function(id) {
+        ['btnApplyTemplate'].forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.disabled = !allowed;
         });
@@ -934,6 +934,9 @@
           document.getElementById('modalBookingEditService').style.display === 'flex';
         var mClientProb = document.getElementById('modalClientProblem') && document.getElementById('modalClientProblem').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
+        var mTemplateApply =
+          document.getElementById('modalTemplateApply') &&
+          document.getElementById('modalTemplateApply').style.display === 'flex';
         var mIntent = document.getElementById('modalSlotIntent') && document.getElementById('modalSlotIntent').style.display === 'flex';
         btn.hidden = !(
           booking ||
@@ -950,6 +953,7 @@
           mEditSvc ||
           mClientProb ||
           mTpl ||
+          mTemplateApply ||
           mIntent
         );
       }
@@ -1139,6 +1143,11 @@
         if (mc && mc.style.display === 'flex') {
           mc.style.display = 'none';
           updateTelegramBack();
+          return;
+        }
+        var mta = document.getElementById('modalTemplateApply');
+        if (mta && mta.style.display === 'flex') {
+          closeTemplateApplySheet();
           return;
         }
         var mbf = document.getElementById('modalBookConfirm');
@@ -2086,6 +2095,8 @@
         slotAddMode: 'grid',
         preciseDraftDuration: 45,
         applyWeekStart: null,
+        /** Ordered Mondays (YYYY-MM-DD) for template apply confirm — one or many weeks. */
+        applyWeekStarts: null,
         /** When true, current/partial week lists Mon… + ended slots (backfill). */
         showPastThisWeek: false,
         /** `YYYY-MM-DD` within current `weekStart` week — bottom strip highlight + scroll target. */
@@ -3276,6 +3287,166 @@
         const day = date.getDay();
         const diff = date.getDate() - day + (day === 0 ? -6 : 1);
         return new Date(date.setDate(diff));
+      }
+
+      /** Calendar-anchored Monday (0 = current week, 1 = next) — not the week open in calendar nav. */
+      function calendarWeekMonday(offsetWeeks) {
+        var mon = getMonday(new Date());
+        var off = Number(offsetWeeks) || 0;
+        if (off) mon.setDate(mon.getDate() + off * 7);
+        return mon;
+      }
+
+      function buildCalendarWeekStarts(offsetWeeks, count) {
+        var n = Math.max(1, Math.min(Number(count) || 1, 8));
+        var startOff = Number(offsetWeeks) || 0;
+        var out = [];
+        for (var i = 0; i < n; i++) {
+          out.push(dateToStr(calendarWeekMonday(startOff + i)));
+        }
+        return out;
+      }
+
+      function formatTemplatePeriodRange(weekStarts) {
+        if (!weekStarts || !weekStarts.length) return '—';
+        if (weekStarts.length === 1) {
+          return formatWeekLabel(new Date(weekStarts[0] + 'T12:00:00'));
+        }
+        var first = new Date(weekStarts[0] + 'T12:00:00');
+        var lastMon = new Date(weekStarts[weekStarts.length - 1] + 'T12:00:00');
+        var lastSun = new Date(lastMon);
+        lastSun.setDate(lastSun.getDate() + 6);
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+        var effectiveStart = first < today ? today : first;
+        if (effectiveStart > lastSun) return fmt(first) + ' – ' + fmt(lastSun);
+        return fmt(effectiveStart) + ' – ' + fmt(lastSun);
+      }
+
+      function buildTemplateApplyPeriodOptions() {
+        return [
+          { label: 'Эта неделя', weeks: buildCalendarWeekStarts(0, 1) },
+          { label: 'Следующая', weeks: buildCalendarWeekStarts(1, 1) },
+          { label: '2 недели', weeks: buildCalendarWeekStarts(1, 2) },
+          { label: '3 недели', weeks: buildCalendarWeekStarts(1, 3) },
+          { label: '4 недели', weeks: buildCalendarWeekStarts(1, 4) },
+        ];
+      }
+
+      function renderTemplateApplySheetOptions() {
+        var host = document.getElementById('templateApplyOptions');
+        if (!host) return;
+        var options = buildTemplateApplyPeriodOptions();
+        var html = '';
+        options.forEach(function(opt, idx) {
+          if (idx === 2) {
+            html += '<div class="template-apply-options__divider" role="separator" aria-hidden="true"></div>';
+          }
+          var range = formatTemplatePeriodRange(opt.weeks);
+          html +=
+            '<button type="button" class="template-apply-option" data-week-idx="' +
+            idx +
+            '" role="option">' +
+            '<span class="template-apply-option__label">' +
+            escapeHtml(opt.label) +
+            '</span>' +
+            '<span class="template-apply-option__range">' +
+            escapeHtml(range) +
+            '</span>' +
+            '<span class="template-apply-option__chev" aria-hidden="true">›</span>' +
+            '</button>';
+        });
+        host.innerHTML = html;
+        host.querySelectorAll('.template-apply-option').forEach(function(btn) {
+          btn.onclick = function() {
+            var idx = parseInt(btn.getAttribute('data-week-idx'), 10);
+            if (!options[idx] || !options[idx].weeks) return;
+            onTemplateApplyPeriodPick(options[idx].weeks);
+          };
+        });
+      }
+
+      function closeTemplateApplySheet() {
+        var modal = document.getElementById('modalTemplateApply');
+        if (modal) {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+        }
+        updateTelegramBack();
+      }
+
+      function openTemplateApplySheet() {
+        renderTemplateApplySheetOptions();
+        var modal = document.getElementById('modalTemplateApply');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+      }
+
+      function onTemplateApplyPeriodPick(weekStarts) {
+        if (!assertScheduleCrmWriteAllowed()) return;
+        closeTemplateApplySheet();
+        if (!weekStarts || !weekStarts.length) return;
+        showToast('Применяем…', 1400);
+        applyTemplateToWeeks(weekStarts);
+      }
+
+      function applyTemplateToWeeks(weekStarts) {
+        var weeks = Array.isArray(weekStarts) ? weekStarts.slice() : [];
+        if (!weeks.length) return;
+        var idx = 0;
+        var totalSlots = 0;
+        var trainerId = null;
+        function finishOk() {
+          if (totalSlots > 0 && trainerId) markScheduleEditorHubFillSlotsRhythmBoost(trainerId);
+          var toastMsg = weeks.length > 1
+            ? 'Шаблон применён на ' + weeks.length + ' нед. Создано слотов: ' + totalSlots
+            : 'Шаблон применён. Создано слотов: ' + totalSlots;
+          showToast(toastMsg, weeks.length > 1 ? 3400 : 2800);
+          if (weeks.length === 1) {
+            setTimeout(function() {
+              showFirstApplyWeekShareToastIfNeeded(trainerId);
+            }, 2600);
+          }
+          loadSlots();
+          state.applyWeekStarts = null;
+          state.applyWeekStart = null;
+        }
+        function step() {
+          if (idx >= weeks.length) {
+            finishOk();
+            return;
+          }
+          fetch(apiUrlWithQuery('/schedule/apply-week'), {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({ week_start: weeks[idx] }),
+          })
+            .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+            .then(function(res) {
+              if (!res.ok || !res.data.ok) {
+                var err = (res.data && res.data.detail) || 'Ошибка';
+                showToast(typeof err === 'string' ? err : 'Не удалось применить шаблон');
+                state.applyWeekStarts = null;
+                state.applyWeekStart = null;
+                if (idx > 0) loadSlots();
+                return;
+              }
+              totalSlots += res.data.slots_created != null ? res.data.slots_created : 0;
+              trainerId = res.data.trainer_id || trainerId;
+              idx += 1;
+              step();
+            })
+            .catch(function() {
+              showToast('Ошибка сети');
+              state.applyWeekStarts = null;
+              state.applyWeekStart = null;
+              if (idx > 0) loadSlots();
+            });
+        }
+        step();
       }
 
       function formatWeekLabel(start) {
@@ -5436,11 +5607,23 @@
         return true;
       }
 
-      /** Y-offset from viewport top: day block above this line is «active» in the strip. */
+      /** Y-offset from viewport top: day block intersecting this line is «active» in the strip. */
       function scheduleCalendarScrollProbeY() {
+        var vh = window.innerHeight || 640;
         var chrome = document.getElementById('seScheduleTopChrome');
-        var h = chrome ? chrome.getBoundingClientRect().height : 0;
-        return h + 14;
+        var chromeH = chrome ? chrome.getBoundingClientRect().height : 0;
+        // Below fixed tabs/header, but not the top edge — matches «какой день сейчас читаю».
+        var belowChrome = chromeH + Math.max(40, Math.round((vh - chromeH) * 0.22));
+        return Math.min(belowChrome, Math.round(vh * 0.42));
+      }
+
+      function scheduleCalendarScrollAtBottom() {
+        var scrollEl = document.documentElement;
+        var scrollTop = window.scrollY || scrollEl.scrollTop || 0;
+        var viewportH = window.innerHeight || 0;
+        var scrollH = scrollEl.scrollHeight || 0;
+        var bottomSlack = Math.max(64, Math.round(viewportH * 0.1));
+        return scrollTop + viewportH >= scrollH - bottomSlack;
       }
 
       function updateScheduleWeekDayStripSelectionOnly() {
@@ -5461,13 +5644,23 @@
         if (!content) return;
         var anchors = content.querySelectorAll('.cal-day-anchor');
         if (!anchors.length) return;
-        var probeY = scheduleCalendarScrollProbeY();
-        var activeEl = anchors[0];
-        for (var i = 0; i < anchors.length; i++) {
-          var rect = anchors[i].getBoundingClientRect();
-          if (rect.top <= probeY) activeEl = anchors[i];
-          else break;
+
+        var activeEl = anchors[anchors.length - 1];
+        if (!scheduleCalendarScrollAtBottom()) {
+          var probeY = scheduleCalendarScrollProbeY();
+          var contained = null;
+          var passed = anchors[0];
+          for (var i = 0; i < anchors.length; i++) {
+            var rect = anchors[i].getBoundingClientRect();
+            if (rect.top <= probeY && rect.bottom > probeY) {
+              contained = anchors[i];
+              break;
+            }
+            if (rect.top <= probeY) passed = anchors[i];
+          }
+          activeEl = contained || passed;
         }
+
         var dateStr = String(activeEl.id || '').replace(/^cal-day-/, '');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
         if (state.scheduleStripSelectedDate === dateStr) return;
@@ -8941,27 +9134,23 @@
         showMain();
       };
 
-      document.getElementById('btnApplyThis').onclick = function() {
+      document.getElementById('btnApplyTemplate').onclick = function() {
         if (!assertScheduleCrmWriteAllowed()) return;
-        if (!state.weekStart) return;
-        state.applyWeekStart = dateToStr(state.weekStart);
-        document.getElementById('modalConfirmTitle').textContent = 'Применить шаблон на эту неделю?';
-        document.getElementById('modalConfirmText').textContent = 'Свободные слоты будут заменены шаблоном. Занятые не трогаем.';
-        document.getElementById('modalConfirm').style.display = 'flex';
-        updateTelegramBack();
+        openTemplateApplySheet();
       };
 
-      document.getElementById('btnApplyNext').onclick = function() {
-        if (!assertScheduleCrmWriteAllowed()) return;
-        if (!state.weekStart) return;
-        const next = new Date(state.weekStart);
-        next.setDate(next.getDate() + 7);
-        state.applyWeekStart = dateToStr(next);
-        document.getElementById('modalConfirmTitle').textContent = 'Применить шаблон на следующую неделю?';
-        document.getElementById('modalConfirmText').textContent = 'Свободные слоты будут заменены шаблоном. Занятые не трогаем.';
-        document.getElementById('modalConfirm').style.display = 'flex';
-        updateTelegramBack();
-      };
+      var btnTemplateApplyCancel = document.getElementById('btnTemplateApplyCancel');
+      if (btnTemplateApplyCancel) {
+        btnTemplateApplyCancel.onclick = function() {
+          closeTemplateApplySheet();
+        };
+      }
+      var modalTemplateApply = document.getElementById('modalTemplateApply');
+      if (modalTemplateApply) {
+        modalTemplateApply.addEventListener('click', function(ev) {
+          if (ev.target === modalTemplateApply) closeTemplateApplySheet();
+        });
+      }
 
       (function wireCenterGridTemplateActions() {
         function shiftCenterGridTemplateWeek(delta) {
@@ -9032,6 +9221,8 @@
 
       document.getElementById('modalConfirmNo').onclick = function() {
         document.getElementById('modalConfirm').style.display = 'none';
+        state.applyWeekStarts = null;
+        state.applyWeekStart = null;
         updateTelegramBack();
       };
 
@@ -9054,31 +9245,14 @@
       }
 
       document.getElementById('modalConfirmYes').onclick = function() {
-        if (!state.applyWeekStart) return;
+        var weeks = state.applyWeekStarts && state.applyWeekStarts.length
+          ? state.applyWeekStarts.slice()
+          : (state.applyWeekStart ? [state.applyWeekStart] : []);
+        if (!weeks.length) return;
         if (!assertScheduleCrmWriteAllowed()) return;
         document.getElementById('modalConfirm').style.display = 'none';
         updateTelegramBack();
-        fetch(apiUrlWithQuery('/schedule/apply-week'), {
-          method: 'POST',
-          headers: headers(),
-          body: JSON.stringify({ week_start: state.applyWeekStart }),
-        })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data.ok) {
-              const n = data.slots_created != null ? data.slots_created : 0;
-              if (n > 0) markScheduleEditorHubFillSlotsRhythmBoost(data.trainer_id);
-              showToast('Шаблон применён. Создано слотов: ' + n, 2800);
-              setTimeout(function() {
-                showFirstApplyWeekShareToastIfNeeded(data.trainer_id);
-              }, 2600);
-              loadSlots();
-            } else {
-              var err = data.detail || 'Ошибка';
-              showToast(typeof err === 'string' ? err : 'Не удалось применить шаблон');
-            }
-          })
-          .catch(function() { showToast('Ошибка сети'); });
+        applyTemplateToWeeks(weeks);
       };
 
       document.getElementById('btnAddSlots').onclick = function() {
