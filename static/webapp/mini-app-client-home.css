@@ -1250,6 +1250,14 @@ body.hub-body {
   min-width: 0;
 }
 
+.hub-primary-panel__pass-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color);
+}
+
 .hub-primary-panel__pass-title {
   font-size: 14px;
   font-weight: 600;

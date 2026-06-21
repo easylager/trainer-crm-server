@@ -919,15 +919,27 @@
         );
       }
 
+      function passProductNameForHubSubline(passInfo, total) {
+        var name = String((passInfo && passInfo.product_name) || '').trim();
+        if (!name || name === '—') return '';
+        if (total > 0) {
+          var compact = name.replace(/\s+/g, ' ').trim();
+          var sizeRe = new RegExp('^' + total + '\\s*(занятие|занятия|занятий)$', 'i');
+          if (sizeRe.test(compact)) return '';
+        }
+        return name;
+      }
+
       function buildPrimaryPassHtml(passInfo, opts) {
         opts = opts || {};
         if (!passInfo) return '';
         var remaining = Number(passInfo.sessions_remaining || 0);
         if (!remaining || remaining <= 0) return '';
-        var word = pluralRuHub(remaining, 'занятие', 'занятия', 'занятий');
+        var total = Number(passInfo.sessions_total || 0);
         var expiry = passInfo.expires_at ? formatHistoryDate(passInfo.expires_at) : '';
         var subParts = [];
-        if (passInfo.product_name) subParts.push(esc(String(passInfo.product_name)));
+        var productLabel = passProductNameForHubSubline(passInfo, total);
+        if (productLabel) subParts.push(esc(productLabel));
         if (expiry) subParts.push('до ' + esc(expiry));
         var subHtml = subParts.length
           ? '<span class="hub-primary-panel__pass-sub">' + subParts.join(' · ') + '</span>'
@@ -936,11 +948,27 @@
           ? '<span class="hub-primary-panel__pass-note">Спишется автоматически после занятия</span>'
           : '';
         var passMod = opts.autoDebitNote ? ' hub-primary-panel__pass--auto-debit' : '';
+        var titleHtml;
+        var ariaBalance;
+        if (total > 0) {
+          var totalWord = pluralRuHub(total, 'занятия', 'занятия', 'занятий');
+          titleHtml =
+            '<span class="hub-primary-panel__pass-kicker">осталось</span>' +
+            '<span class="hub-primary-panel__pass-title">из ' + esc(String(total)) + ' ' + totalWord + '</span>';
+          ariaBalance = 'Осталось ' + remaining + ' из ' + total + ' занятий по абонементу';
+        } else {
+          var word = pluralRuHub(remaining, 'занятие', 'занятия', 'занятий');
+          titleHtml =
+            '<span class="hub-primary-panel__pass-kicker">осталось</span>' +
+            '<span class="hub-primary-panel__pass-title">' + word + ' по абонементу</span>';
+          ariaBalance = 'Осталось ' + remaining + ' ' + word + ' по абонементу';
+        }
         return (
-          '<button type="button" class="hub-primary-panel__pass' + passMod + '" data-hub-action="open-pass">' +
-            '<span class="hub-primary-panel__pass-num">' + esc(String(remaining)) + '</span>' +
+          '<button type="button" class="hub-primary-panel__pass' + passMod + '" data-hub-action="open-pass"' +
+            ' aria-label="' + esc(ariaBalance) + '">' +
+            '<span class="hub-primary-panel__pass-num" aria-hidden="true">' + esc(String(remaining)) + '</span>' +
             '<span class="hub-primary-panel__pass-body">' +
-              '<span class="hub-primary-panel__pass-title">' + word + ' по абонементу</span>' +
+              titleHtml +
               subHtml +
               autoNoteHtml +
             '</span>' +
