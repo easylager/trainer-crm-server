@@ -172,7 +172,7 @@
     }
   }
 
-  /** Profile already complete — block re-submit via stale «Продолжить» Web App button. */
+  /** Profile already complete — ensure roster link for invite trainer, then redirect home. */
   function checkAlreadyRegistered() {
     if (!currentInit()) return;
     fetch(apiUrl('/client/session'), { headers: apiHeaders(), cache: 'no-store' })
@@ -184,12 +184,38 @@
         var phone =
           sess.client_phone != null && String(sess.client_phone).trim() !== '';
         if (!phone) return;
-        showSuccess({
-          message:
-            'Профиль уже сохранён. Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.',
-          skipAutoRedirect: false,
-          redirectMs: 2800,
-        });
+        var hubHint =
+          'Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.';
+        var done = function () {
+          showSuccess({
+            message: 'Профиль уже сохранён. ' + hubHint,
+            skipAutoRedirect: false,
+            redirectMs: 2800,
+          });
+        };
+        if (!trainerId) {
+          done();
+          return;
+        }
+        var firstName = String(sess.client_first_name || '').trim() || 'Клиент';
+        var lastName = String(sess.client_last_name || '').trim();
+        fetch(apiUrl('/client/self-register'), {
+          method: 'POST',
+          headers: apiHeaders(),
+          body: JSON.stringify({
+            trainer_id: trainerId,
+            phone: String(sess.client_phone).trim(),
+            first_name: firstName,
+            last_name: lastName || null,
+          }),
+        })
+          .then(parseFetchJsonResponse)
+          .then(function () {
+            done();
+          })
+          .catch(function () {
+            done();
+          });
       })
       .catch(function () {
         /* non-critical */

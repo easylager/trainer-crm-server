@@ -883,6 +883,62 @@ async def test_cancel_booking_success_and_second_cancel_fails(
 
 
 @pytest.mark.asyncio
+async def test_cancel_booking_returns_200_when_client_bot_push_fails(
+    app_use_test_db, db_session
+) -> None:
+    """Cancel must not 500 Mini App when Telegram client confirmation fails after DB commit."""
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    _tid, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock(side_effect=RuntimeError("bot blocked"))
+    mock_bot.session = MagicMock()
+    mock_bot.session.close = AsyncMock()
+
+    with patch_client_init_auth(ctg):
+        with patch("src.api.routes.webapp.Bot", return_value=mock_bot):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                    "src.api.routes.webapp.date"
+                ) as mock_date:
+                    mock_date.today.return_value = ref_day
+                    mock_dt.now.return_value = ref_now
+                    mock_dt.combine = datetime.combine
+                    book = await client.post(
+                        "/api/webapp/client/booking",
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Клиент",
+                        },
+                        headers={"X-Telegram-Init-Data": "mock"},
+                    )
+                bid = int(book.json()["booking_id"])
+                cancel = await client.post(
+                    f"/api/webapp/client/bookings/{bid}/cancel",
+                    json={"reason": "планы"},
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert book.status_code == 200
+    assert cancel.status_code == 200
+    assert cancel.json().get("success") is True
+
+    row = (
+        await db_session.execute(
+            text("SELECT status FROM bookings WHERE id = :id"),
+            {"id": bid},
+        )
+    ).one()
+    assert row[0] == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_cancel_booking_other_client_400(app_use_test_db, db_session) -> None:
     ref_day, ref_now = _minsk_monday_reference()
     slot_day = ref_day + timedelta(days=4)

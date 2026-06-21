@@ -25,7 +25,11 @@ from src.application.trainer_access_state import (
 )
 from src.bot import messages as msg
 from src.bot import trainer_benchmark_config as bench_cfg
-from src.bot.trainer_bot_state import trainer_booking_note_awaiting, trainer_support_awaiting
+from src.bot.trainer_bot_state import (
+    trainer_booking_decline_awaiting,
+    trainer_booking_note_awaiting,
+    trainer_support_awaiting,
+)
 from src.bot.trainer_gate_text import trainer_gate_message
 from src.infrastructure.db import async_session_factory
 
@@ -75,6 +79,9 @@ _ALLOWED_CALLBACK_EXACT: tuple[str, ...] = (
 _BOOKING_CRM_CALLBACK_PREFIXES: tuple[str, ...] = (
     "booking_add_note:",
     "booking_invite_client:",
+    "confirm_booking:",
+    "decline_booking:",
+    "decline_booking_skip:",
 )
 
 
@@ -145,6 +152,8 @@ class TrainerGateMiddleware(BaseMiddleware):
         if uid and uid in trainer_support_awaiting:
             return await handler(event, data)
         if uid and uid in trainer_booking_note_awaiting:
+            return await handler(event, data)
+        if uid and uid in trainer_booking_decline_awaiting:
             return await handler(event, data)
         if _is_allowed_command(event.text):
             return await handler(event, data)

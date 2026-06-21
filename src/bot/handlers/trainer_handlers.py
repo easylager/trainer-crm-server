@@ -113,6 +113,7 @@ from src.bot.trainer_bot_state import (
     clear_trainer_relay_reply_pending,
     peek_trainer_relay_reply_pending,
     set_trainer_relay_reply_pending,
+    trainer_booking_decline_awaiting,
     trainer_booking_note_awaiting,
     trainer_support_awaiting,
 )
@@ -197,6 +198,7 @@ CANCEL_BOOKING_PREFIX = "cancel_booking:"
 CANCEL_BOOKING_CONFIRM_PREFIX = "cancel_booking_confirm:"
 CONFIRM_BOOKING_PREFIX = "confirm_booking:"
 DECLINE_BOOKING_PREFIX = "decline_booking:"
+DECLINE_BOOKING_SKIP_PREFIX = "decline_booking_skip:"
 MAKE_RECURRING_TRAINER_PREFIX = "make_recurring_trainer:"
 REMOVE_RECURRING_PREFIX = "remove_recurring:"
 REQUESTS_CALLBACK = "requests"
@@ -323,10 +325,104 @@ _schedule_add_state: dict[int, dict] = {}
 _trainer_feedback_state: dict[int, dict] = {}
 # Trainer responding to request: telegram_id -> request_id (awaiting optional comment)
 _request_respond_state: dict[int, int] = {}
-# Trainer declining booking: telegram_id -> booking_id (awaiting required comment)
+# Trainer declining booking: telegram_id -> booking_id (awaiting optional comment)
 _booking_decline_state: dict[int, int] = {}
 # Trainer quick note after booking: telegram_id -> booking context for dated timeline entry.
 _trainer_booking_note_state: dict[int, dict] = {}
+
+
+def _clear_booking_decline_state(telegram_id: int) -> None:
+    _booking_decline_state.pop(telegram_id, None)
+    trainer_booking_decline_awaiting.discard(telegram_id)
+
+
+def _set_booking_decline_state(telegram_id: int, booking_id: int) -> None:
+    _booking_decline_state[telegram_id] = booking_id
+    trainer_booking_decline_awaiting.add(telegram_id)
+
+
+def _booking_decline_blocked_message(status: str) -> str:
+    st = (status or "").strip().lower()
+    if st == "confirmed":
+        return msg.TRAINER_BOOKING_DECLINE_ALREADY_CONFIRMED
+    if st in ("declined", "cancelled", "trainer_removed", "completed", "no_show"):
+        return msg.TRAINER_BOOKING_DECLINE_ALREADY_HANDLED
+    return msg.TRAINER_ERROR_BOOKING_NOT_FOUND
+
+
+async def _complete_trainer_booking_decline(
+    *,
+    telegram_id: int,
+    booking_id: int,
+    comment: str | None,
+    reply: Message,
+) -> bool:
+    """Decline pending booking and notify client. Returns True on success."""
+    try:
+        async with async_session_factory() as session:
+            trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        if not trainer_id:
+            await reply.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return False
+        async with async_session_factory() as session:
+            booking = await get_booking_with_slot(session, booking_id, trainer_id)
+        if not booking:
+            await reply.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+            return False
+        status = (booking.get("status") or "").strip().lower()
+        if status != "pending":
+            await reply.answer(_booking_decline_blocked_message(status))
+            return False
+        async with async_session_factory() as session:
+            info = await decline_booking(session, booking_id, trainer_id)
+        if not info:
+            async with async_session_factory() as session:
+                booking = await get_booking_with_slot(session, booking_id, trainer_id)
+            if booking:
+                await reply.answer(_booking_decline_blocked_message(str(booking.get("status") or "")))
+            else:
+                await reply.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+            return False
+
+        audit_log(
+            "booking.declined",
+            ACTOR_TRAINER_BOT,
+            telegram_id,
+            {"booking_id": booking_id, "trainer_id": trainer_id, "has_comment": bool((comment or "").strip())},
+        )
+        d = info["slot_date"]
+        date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+        dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+        start_time = info["start_time"]
+        time_str = _format_time(start_time)
+        await reply.answer(msg.TRAINER_BOOKING_DECLINED_DONE)
+        client_tid = info.get("client_telegram_id")
+        if not client_tid:
+            return True
+        settings = Settings()
+        client_bot = Bot(
+            token=settings.telegram_bot_token_client,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            decl_kb = msg.build_client_declined_booking_catalog_keyboard(
+                webapp_base_url=settings.webapp_base_url,
+            )
+            await client_bot.send_message(
+                chat_id=client_tid,
+                text=msg.format_client_booking_declined_by_trainer_html(
+                    date=date_str,
+                    day=dow,
+                    time=time_str,
+                    reason=(comment or "").strip(),
+                ),
+                reply_markup=decl_kb,
+            )
+        finally:
+            await client_bot.session.close()
+        return True
+    finally:
+        _clear_booking_decline_state(telegram_id)
 
 
 async def _trainer_typing(bot: Bot, chat_id: int) -> None:
@@ -2224,7 +2320,7 @@ async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(DECLINE_BOOKING_PREFIX))
 async def on_decline_booking_start(callback: CallbackQuery) -> None:
-    """Trainer tapped 'Отклонить' in notification: ask for required comment."""
+    """Trainer tapped 'Отклонить' in notification: optional comment, then decline."""
     await callback.answer()
     booking_id = safe_parse_id(callback.data[len(DECLINE_BOOKING_PREFIX) :])
     if booking_id is None:
@@ -2240,8 +2336,41 @@ async def on_decline_booking_start(callback: CallbackQuery) -> None:
     if not booking:
         await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
         return
-    _booking_decline_state[telegram_id] = booking_id
-    await callback.message.answer(msg.TRAINER_BOOKING_DECLINE_PROMPT)
+    status = (booking.get("status") or "").strip().lower()
+    if status != "pending":
+        await callback.message.answer(_booking_decline_blocked_message(status))
+        return
+    _set_booking_decline_state(telegram_id, booking_id)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BOOKING_DECLINE_SKIP,
+                    callback_data=f"{DECLINE_BOOKING_SKIP_PREFIX}{booking_id}",
+                )
+            ],
+        ]
+    )
+    await callback.message.answer(msg.TRAINER_BOOKING_DECLINE_PROMPT, reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(DECLINE_BOOKING_SKIP_PREFIX))
+async def on_decline_booking_skip(callback: CallbackQuery) -> None:
+    """Trainer taps 'Отправить без комментария' on pending booking decline."""
+    await callback.answer()
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    booking_id = safe_parse_id(callback.data[len(DECLINE_BOOKING_SKIP_PREFIX) :])
+    if booking_id is None or _booking_decline_state.get(telegram_id) != booking_id:
+        _clear_booking_decline_state(telegram_id)
+        return
+    if not callback.message:
+        return
+    await _complete_trainer_booking_decline(
+        telegram_id=telegram_id,
+        booking_id=booking_id,
+        comment=None,
+        reply=callback.message,
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(BOOKING_INVITE_CLIENT_PREFIX))
@@ -2507,57 +2636,19 @@ async def on_booking_note_message(message: Message) -> None:
 
 @router.message(lambda m: m.from_user and m.from_user.id in _booking_decline_state)
 async def on_decline_booking_comment(message: Message) -> None:
-    """Trainer sent decline comment for booking."""
+    """Trainer sent optional decline comment for pending booking."""
     telegram_id = message.from_user.id if message.from_user else 0
     booking_id = _booking_decline_state.get(telegram_id)
     if booking_id is None:
         return
     raw_comment = (message.text or "").strip()
-    if not raw_comment:
-        await message.answer(msg.TRAINER_BOOKING_DECLINE_COMMENT_REQUIRED)
-        return
-    comment = truncate_text(raw_comment, MAX_COMMENT_LEN)
-    _booking_decline_state.pop(telegram_id, None)
-    async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
-    async with async_session_factory() as session:
-        info = await decline_booking(session, booking_id, trainer_id)
-    if not info:
-        await message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
-        return
-    d = info["slot_date"]
-    date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
-    dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
-    start_time = info["start_time"]
-    time_str = _format_time(start_time)
-    await message.answer(msg.TRAINER_BOOKING_DECLINED_DONE)
-    client_tid = info.get("client_telegram_id")
-    if not client_tid:
-        return
-    settings = Settings()
-    client_bot = Bot(
-        token=settings.telegram_bot_token_client,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    comment = truncate_text(raw_comment, MAX_COMMENT_LEN) if raw_comment else None
+    ok = await _complete_trainer_booking_decline(
+        telegram_id=telegram_id,
+        booking_id=booking_id,
+        comment=comment,
+        reply=message,
     )
-    try:
-        decl_kb = msg.build_client_declined_booking_catalog_keyboard(
-            webapp_base_url=settings.webapp_base_url,
-        )
-        await client_bot.send_message(
-            chat_id=client_tid,
-            text=msg.format_client_booking_declined_by_trainer_html(
-                date=date_str,
-                day=dow,
-                time=time_str,
-                reason=comment,
-            ),
-            reply_markup=decl_kb,
-        )
-    finally:
-        await client_bot.session.close()
 
 
 @router.message(lambda m: m.text and m.from_user and m.from_user.id in _request_respond_state)
@@ -3512,6 +3603,7 @@ async def cmd_cancel_idle(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     _trainer_booking_note_state.pop(telegram_id, None)
     trainer_booking_note_awaiting.discard(telegram_id)
+    _clear_booking_decline_state(telegram_id)
     clear_trainer_relay_reply_pending(telegram_id)
     await message.answer(msg.TRAINER_CANCEL_IDLE)
 

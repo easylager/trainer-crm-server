@@ -1155,13 +1155,17 @@ def format_client_booking_declined_by_trainer_html(
     ds = html.escape(date)
     dy = html.escape(day)
     ts = html.escape(time)
-    rr = html.escape((reason or "").strip() or "—")
-    return (
+    reason_stripped = (reason or "").strip()
+    body = (
         "❌ <b>Запись отклонена</b>\n\n"
         f"📅 <b>{ds}</b> ({dy}) · {ts}\n"
-        f"💬 <b>Причина:</b> {rr}\n\n"
-        "Выберите другое время или другого тренера — кнопки ниже."
     )
+    if reason_stripped:
+        body += f"💬 <b>Причина:</b> {html.escape(reason_stripped)}\n\n"
+    else:
+        body += "\n"
+    body += "Выберите другое время или другого тренера — кнопки ниже."
+    return body
 def _ru_sessions_word(n: int) -> str:
     """Russian plural for «N занятий» (1 занятие / 2 занятия / 5 занятий)."""
     n = abs(int(n))
@@ -3180,13 +3184,18 @@ TRAINER_SHARE_CATALOG_TIP_PROFILE_INCOMPLETE = (
     "В профиле укажите <b>город и услугу</b> — тогда мы соберём для вас готовую ссылку на запись и на каталог."
 )
 TRAINER_BOOKING_DECLINE_PROMPT = (
-    "Напиши короткий комментарий, почему не получается провести это занятие.\n\n"
-    "Комментарий <b>обязателен</b> — клиент увидит его в уведомлении об отказе."
+    "Напиши короткий комментарий для клиента (необязательно).\n\n"
+    "Например: <i>Не смогу в это время — предложу другое</i>.\n\n"
+    "Или нажми «Отправить без комментария»."
 )
-TRAINER_BOOKING_DECLINE_COMMENT_REQUIRED = (
-    "Комментарий обязателен. Напиши причину отклонения для клиента (пустое сообщение не подойдёт)."
+TRAINER_BOOKING_DECLINE_SKIP = "Отправить без комментария"
+TRAINER_BOOKING_DECLINED_DONE = "Запись отклонена. Клиент получил уведомление."
+TRAINER_BOOKING_DECLINE_ALREADY_CONFIRMED = (
+    "Запись уже подтверждена. Если нужно отменить — открой «Моё расписание» в приложении."
 )
-TRAINER_BOOKING_DECLINED_DONE = "Запись отклонена, клиенту отправлено сообщение с причиной."
+TRAINER_BOOKING_DECLINE_ALREADY_HANDLED = (
+    "Эту запись уже обработали. Открой «Моё расписание» в приложении — там актуальный статус."
+)
 TRAINER_BOOKING_CONFIRM_REMINDER = (
     "⏰ <b>Скоро: нужно решение по записи</b>\n\n"
     "Слот начинается менее чем через <b>2 часа</b>.\n"

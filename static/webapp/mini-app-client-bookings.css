@@ -300,6 +300,11 @@ body.bookings-body--revealed .client-empty-state {
   color: var(--app-danger);
 }
 
+.app-toast.app-toast--success {
+  border-color: rgba(52, 199, 89, 0.35);
+  color: #248a3d;
+}
+
 .cb-booking-policy-hint {
   font-size: 13px;
   line-height: 1.45;

@@ -364,8 +364,26 @@
           headers: headers(),
           body: body ? JSON.stringify(body) : undefined
         }).then(function(r) {
-          if (!r.ok) throw new Error('Request failed');
-          return r.json();
+          return r.text().then(function(text) {
+            var data = null;
+            if (text) {
+              try {
+                data = JSON.parse(text);
+              } catch (parseErr) {
+                data = null;
+              }
+            }
+            if (!r.ok) {
+              var detail =
+                data && data.detail
+                  ? String(data.detail)
+                  : 'Не удалось выполнить действие (код ' + r.status + ').';
+              var err = new Error(detail);
+              err.status = r.status;
+              throw err;
+            }
+            return data || {};
+          });
         });
       }
 
@@ -379,11 +397,50 @@
         if (!el) return;
         el.textContent = message;
         el.classList.toggle('app-toast--error', !!isError);
+        el.classList.toggle('app-toast--success', !isError);
         el.classList.add('app-toast--visible');
         clearTimeout(el._toastTimer);
         el._toastTimer = setTimeout(function() {
           el.classList.remove('app-toast--visible');
         }, 2600);
+      }
+
+      function hapticSuccess() {
+        if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+          try {
+            tg.HapticFeedback.notificationOccurred('success');
+          } catch (e) {
+            /* noop */
+          }
+        }
+      }
+
+      function removeBookingFromLocalState(bookingId) {
+        var idNum = Number(bookingId);
+        for (var i = 0; i < state.days.length; i++) {
+          var day = state.days[i];
+          if (!day || !day.bookings) continue;
+          day.bookings = day.bookings.filter(function(b) {
+            return Number(b.id) !== idNum;
+          });
+        }
+      }
+
+      function finishBookingCancelSuccess(bookingId) {
+        hapticSuccess();
+        showAppToast('Запись отменена', false);
+        removeBookingFromLocalState(bookingId);
+        state.currentBooking = null;
+        if (state.returnToHub) {
+          setTimeout(function() {
+            navigateBackFromDetail();
+          }, 400);
+          return;
+        }
+        showScreen('screenList');
+        renderAllBookings();
+        bookingsFetchPromise = null;
+        loadBookings();
       }
 
       function callTrainerPhone(phone) {
@@ -790,16 +847,22 @@
         var reason = (document.getElementById('cancelReason').value || '').trim() || null;
         document.getElementById('modalCancel').style.display = 'none';
         state.cancelBookingId = null;
-        postJson(apiUrl('/client/bookings/' + id + '/cancel'), { reason: reason }).then(function() {
-          if (state.returnToHub) {
-            navigateBackFromDetail();
-            return;
-          }
-          loadBookings();
-          showScreen('screenList');
-        }).catch(function() {
-          alert('Не удалось отменить запись. Попробуйте ещё раз.');
-        });
+        postJson(apiUrl('/client/bookings/' + id + '/cancel'), { reason: reason })
+          .then(function() {
+            finishBookingCancelSuccess(id);
+          })
+          .catch(function(err) {
+            var msg =
+              err && err.message
+                ? err.message
+                : 'Не удалось отменить запись. Попробуйте ещё раз.';
+            showAppToast(msg, true);
+            if (tg && tg.showAlert) {
+              tg.showAlert(msg);
+            } else {
+              alert(msg);
+            }
+          });
       };
 
       // Обработчики для детального экрана

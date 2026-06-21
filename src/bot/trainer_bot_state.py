@@ -8,6 +8,8 @@ import time
 trainer_support_awaiting: set[int] = set()
 # Mirrors keys of `_trainer_booking_note_state` in trainer_handlers — gate must allow replies before profile tiers.
 trainer_booking_note_awaiting: set[int] = set()
+# Mirrors keys of `_booking_decline_state` — optional decline comment after «Отклонить» on pending booking push.
+trainer_booking_decline_awaiting: set[int] = set()
 
 # Relay: trainer's next plain-text DM routes to client bot while session open (trainer tg user id → session).
 # TTL bounds accidental misroutes if the trainer wandered into other workflows without /cancel.

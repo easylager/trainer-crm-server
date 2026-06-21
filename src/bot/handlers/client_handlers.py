@@ -38,11 +38,14 @@ from src.application.booking_use_cases import (
     get_trainer_default_city_and_service,
     get_trainer_telegram_id,
     list_bookings_for_client,
-    resolve_welcome_session_city_service,
     trainer_has_access_to_client,
 )
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
+from src.application.client_invite_use_cases import (
+    bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
+    client_invite_needs_registration_form,
+)
 from src.application.client_username_enrich import sync_client_telegram_username_from_client_bot
 from src.application.client_use_cases import (
     apply_certificate_recipient_to_client,
@@ -61,14 +64,12 @@ from src.application.client_session_use_cases import (
     clear_pending_request_id,
     get_or_create_session,
     get_session,
-    save_catalog_filters,
     set_arena,
     set_city,
     set_pending_request_id,
     set_selected_trainer,
     set_service,
 )
-from src.application.client_trainer_edge_use_cases import set_primary_trainer
 from src.application.client_request_comment_display import (
     client_request_comment_editable,
     client_visible_request_comment,
@@ -365,36 +366,6 @@ def _welcome_pass_invite_body(trainer: dict | None) -> str:
     """Единый текст после welcome-токена / ref / share_ref: тренер + контекст Ice Studio."""
     name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
     return msg.CLIENT_PASS_WELCOME.format(name=name)
-
-
-async def _bind_client_invite_trainer_context(
-    telegram_id: int,
-    trainer_id: int,
-    db_session: AsyncSession,
-    *,
-    preferred_service_id: int | None = None,
-) -> tuple[int | None, int | None]:
-    """
-    Persist catalog filters + primary trainer after invite / share_ref / welcome_ref.
-    Ensures Mini App opens the inviter's card and «Мой тренер» matches the link.
-    """
-    if preferred_service_id is not None:
-        city_id, service_id = await resolve_welcome_session_city_service(
-            db_session,
-            trainer_id,
-            preferred_service_id=preferred_service_id,
-        )
-    else:
-        city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
-    await save_catalog_filters(
-        telegram_id,
-        db_session,
-        city_id=city_id,
-        service_id=service_id,
-        trainer_id=int(trainer_id),
-    )
-    await set_primary_trainer(telegram_id, int(trainer_id), db_session)
-    return city_id, service_id
 
 
 # Mirrors redirect username rules so /r/tg/{id} does not 404 when the user taps «Написать».
@@ -984,12 +955,13 @@ async def cmd_start(message: Message) -> None:
         return
 
     # Generic invite: welcome_ref_<trainer_id> — universal entry point.
-    # Client with saved phone → book flow; no phone yet (even if clients row exists) → registration form.
+    # Complete profile → bind roster + notify; missing phone or name → registration form.
     trainer_id_ref = _parse_welcome_ref(payload)
     if trainer_id_ref is not None:
         async with async_session_factory() as db_session:
-            phone_for_identify = await get_client_phone_for_webapp(db_session, telegram_id)
-        phone_known = normalize_phone(phone_for_identify) is not None
+            needs_registration = await client_invite_needs_registration_form(
+                db_session, telegram_id
+            )
         base = (Settings().webapp_base_url or "").rstrip("/")
         async with async_session_factory() as db_session:
             trainer = await get_trainer(db_session, trainer_id_ref)
@@ -998,8 +970,8 @@ async def cmd_start(message: Message) -> None:
                 trainer_id=int(trainer_id_ref),
                 source=DEMAND_SOURCE_CLIENT_APP,
             )
-        if not phone_known and base.lower().startswith("https://"):
-            # No reachable phone yet: route to self-registration form in Mini App
+        if needs_registration and base.lower().startswith("https://"):
+            # Missing phone or display name: route to self-registration form in Mini App
             name = html.escape(_trainer_name(trainer) if trainer else "тренер")
             register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}"
             keyboard = InlineKeyboardMarkup(
@@ -1016,12 +988,17 @@ async def cmd_start(message: Message) -> None:
                 reply_markup=keyboard,
             )
             return
-        # Phone on file: inviter is primary; open client hub (not registration again).
+        # Profile complete: roster link + trainer notify, then client hub.
         name = html.escape(_trainer_name(trainer) if trainer else "тренер")
+        from_user = message.from_user
         async with async_session_factory() as db_session:
-            await get_or_create_client(db_session, telegram_id)
+            client_id = await get_or_create_client(
+                db_session,
+                telegram_id,
+                telegram_username=from_user.username if from_user else None,
+            )
             await _bind_client_invite_trainer_context(
-                telegram_id, trainer_id_ref, db_session
+                telegram_id, trainer_id_ref, db_session, client_id=client_id
             )
         if base.lower().startswith("https://"):
             home_url = f"{base}/webapp/client-home"

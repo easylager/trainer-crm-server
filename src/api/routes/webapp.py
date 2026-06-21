@@ -2749,9 +2749,17 @@ async def post_client_booking_cancel(
     )
     try:
         if principal.platform == MiniAppPlatform.TELEGRAM:
-            await client_bot.send_message(
-                chat_id=int(principal.user_id), text=text_client, reply_markup=reply_markup_client
-            )
+            try:
+                await client_bot.send_message(
+                    chat_id=int(principal.user_id), text=text_client, reply_markup=reply_markup_client
+                )
+            except Exception:
+                # Cancel is already committed — do not fail Mini App if client bot push fails.
+                logger.exception(
+                    "client booking cancel: failed to send client confirmation booking_id=%s telegram_id=%s",
+                    booking_id,
+                    telegram_id,
+                )
     finally:
         await client_bot.session.close()
     return {"success": True}
@@ -5847,7 +5855,7 @@ async def post_trainer_booking_problem_route(
 
 
 class DeclineBody(BaseModel):
-    comment: str
+    comment: str | None = None
 
 
 @router.post("/trainer/bookings/{booking_id:int}/confirm")
@@ -5913,8 +5921,6 @@ async def post_trainer_booking_decline(
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     comment = (body.comment or "").strip()
-    if not comment:
-        raise HTTPException(status_code=400, detail="Comment required for decline")
     info = await decline_booking(session, booking_id, trainer_id)
     if not info:
         raise HTTPException(status_code=400, detail="Booking not found or not pending")
@@ -5925,20 +5931,24 @@ async def post_trainer_booking_decline(
         date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
         dow = TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
         time_str = (info["start_time"].strftime("%H:%M") if hasattr(info["start_time"], "strftime") else str(info["start_time"])[:5])
-        trainer_obj = await get_trainer(session, trainer_id)
-        profile = (trainer_obj or {}).get("profile") or {}
-        trainer_name = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "Тренер"
         settings = Settings()
         client_bot = Bot(
             token=settings.telegram_bot_token_client,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
         try:
+            decl_kb = msg.build_client_declined_booking_catalog_keyboard(
+                webapp_base_url=settings.webapp_base_url,
+            )
             await client_bot.send_message(
                 chat_id=client_tid,
-                text=msg.CLIENT_BOOKING_DECLINED_BY_TRAINER.format(
-                    date=date_str, day=dow, time=time_str, reason=comment[:500],
+                text=msg.format_client_booking_declined_by_trainer_html(
+                    date=date_str,
+                    day=dow,
+                    time=time_str,
+                    reason=comment,
                 ),
+                reply_markup=decl_kb,
             )
         finally:
             await client_bot.session.close()

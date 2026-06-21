@@ -282,8 +282,8 @@ async def _absorb_telegram_stub_into_phone_client_if_needed(
               telegram_id = :tid,
               phone = :phone,
               phone_normalized = :pn,
-              first_name = :fn,
-              last_name = :ln,
+              first_name = COALESCE(NULLIF(TRIM(first_name), ''), :fn),
+              last_name = COALESCE(NULLIF(TRIM(last_name), ''), :ln),
               vk_user_id = COALESCE(:vk, vk_user_id),
               telegram_username = COALESCE(:tuname, telegram_username),
               updated_at = now()
@@ -316,6 +316,7 @@ async def get_or_create_client(
     """
     Resolve client by telegram_id (surrogate for MAX catalog) or vk_user_id. Create if missing; optionally update name/phone.
     If telegram row is missing but phone matches an offline row (telegram_id IS NULL), bind Telegram to it.
+    ``first_name`` / ``last_name`` only fill empty CRM fields — never overwrite trainer or self-register data.
     Returns client_id. Caller must commit (we do not commit here to allow same transaction as booking/request).
     """
     phone_val = (phone or "").strip()[:32] if phone is not None else None
@@ -377,11 +378,15 @@ async def get_or_create_client(
             if phone_norm is not None:
                 updates.append("phone_normalized = :phone_normalized")
                 params["phone_normalized"] = phone_norm
-        if first_name is not None:
-            updates.append("first_name = :first_name")
+        if first_name is not None and first_name_val is not None:
+            updates.append(
+                "first_name = COALESCE(NULLIF(TRIM(first_name), ''), :first_name)"
+            )
             params["first_name"] = first_name_val
-        if last_name is not None:
-            updates.append("last_name = :last_name")
+        if last_name is not None and last_name_val is not None:
+            updates.append(
+                "last_name = COALESCE(NULLIF(TRIM(last_name), ''), :last_name)"
+            )
             params["last_name"] = last_name_val
         if telegram_username is not None:
             updates.append("telegram_username = :telegram_username")
@@ -424,11 +429,15 @@ async def get_or_create_client(
                 params["phone"] = phone_val
                 updates.append("phone_normalized = :phone_normalized")
                 params["phone_normalized"] = phone_norm
-            if first_name is not None:
-                updates.append("first_name = :first_name")
+            if first_name is not None and first_name_val is not None:
+                updates.append(
+                    "first_name = COALESCE(NULLIF(TRIM(first_name), ''), :first_name)"
+                )
                 params["first_name"] = first_name_val
-            if last_name is not None:
-                updates.append("last_name = :last_name")
+            if last_name is not None and last_name_val is not None:
+                updates.append(
+                    "last_name = COALESCE(NULLIF(TRIM(last_name), ''), :last_name)"
+                )
                 params["last_name"] = last_name_val
             if telegram_username is not None:
                 updates.append("telegram_username = :telegram_username")
