@@ -284,8 +284,12 @@ def _pick_morning_recommendation(digest: dict[str, Any]) -> str:
 
     first_timer = next((s for s in sessions if s.get("is_first_time")), None)
     if first_timer:
-        return msg.TRAINER_DIGEST_MORNING_REC_FIRST_TIMER.format(
-            name=_h(_short_client_name(first_timer.get("client_name") or "Клиент")),
+        name = _h(_short_client_name(first_timer.get("client_name") or "Клиент"))
+        if first_timer is sessions[0]:
+            return msg.TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY.format(name=name)
+        return msg.TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER.format(
+            name=name,
+            time=_format_hhmm(first_timer["start_time"]),
         )
 
     pending_sess = next((s for s in sessions if s.get("status") == "pending"), None)

@@ -13,6 +13,19 @@
 
   var SHELL_VERSION = '202606199';
 
+  /** Prod default: off until TRAINER_COLLECTIVE_ENABLED=1 on API + hub bootstrap / access flag. */
+  function isCollectiveFeatureEnabled() {
+    if (global.TRAINER_COLLECTIVE_ENABLED === true) return true;
+    if (global.TRAINER_COLLECTIVE_ENABLED === false) return false;
+    var attr = document.body && document.body.getAttribute('data-trainer-collective-enabled');
+    if (attr === '1' || attr === 'true') return true;
+    return false;
+  }
+
+  function applyCollectiveFeatureFlag(enabled) {
+    global.TRAINER_COLLECTIVE_ENABLED = !!enabled;
+  }
+
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
     schedule: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
@@ -1225,6 +1238,11 @@
   }
 
   function fetchCollectiveMenuVisibility(forceRefresh) {
+    if (!isCollectiveFeatureEnabled()) {
+      state.collectiveMenuChecked = true;
+      state.collectiveMenuVisible = false;
+      return Promise.resolve(false);
+    }
     if (!forceRefresh && state.collectiveMenuChecked) {
       return Promise.resolve(state.collectiveMenuVisible);
     }
@@ -1243,12 +1261,18 @@
     })
       .then(function (r) {
         state.collectiveMenuChecked = true;
-        if (r.ok) {
+        if (!r.ok) {
+          state.collectiveMenuVisible = false;
+          return false;
+        }
+        return r.json().then(function (data) {
+          if (data && data.enabled === false) {
+            state.collectiveMenuVisible = false;
+            return false;
+          }
           ensureCollectiveMoreItem();
           return state.collectiveMenuVisible;
-        }
-        state.collectiveMenuVisible = false;
-        return false;
+        });
       })
       .catch(function () {
         state.collectiveMenuChecked = true;
@@ -1259,6 +1283,7 @@
 
   /** Hub bootstrap already resolved membership — skip extra round-trip. */
   function syncCollectiveMenuFromBootstrap(collectivePayload) {
+    if (!isCollectiveFeatureEnabled()) return;
     if (!collectivePayload || !collectivePayload.slug) return;
     state.collectiveBootstrap = collectivePayload;
     state.collectiveMenuChecked = true;
@@ -1299,6 +1324,7 @@
   }
 
   function fetchSuspendedCollectiveNotice() {
+    if (!isCollectiveFeatureEnabled()) return Promise.resolve();
     var initData = getInitData();
     if (!initData) return Promise.resolve();
     var url =
@@ -1460,8 +1486,10 @@
     syncTabBarActive();
     syncInboxBadges();
     fetchOnboardingChecklist();
-    fetchCollectiveMenuVisibility();
-    fetchSuspendedCollectiveNotice();
+    if (isCollectiveFeatureEnabled()) {
+      fetchCollectiveMenuVisibility();
+      fetchSuspendedCollectiveNotice();
+    }
     fetchInboxBadgesFromServer();
   }
 
@@ -1497,6 +1525,8 @@
     syncCollectiveMenuFromBootstrap: syncCollectiveMenuFromBootstrap,
     syncSuspendedCollectiveNotice: syncSuspendedCollectiveNotice,
     refreshCollectiveMenuVisibility: refreshCollectiveMenuVisibility,
+    applyCollectiveFeatureFlag: applyCollectiveFeatureFlag,
+    isCollectiveFeatureEnabled: isCollectiveFeatureEnabled,
     organizationCapabilities: organizationCapabilities,
     shellNavProfile: shellNavProfile,
     collectiveScreenTitle: collectiveScreenTitle,

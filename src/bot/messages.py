@@ -506,9 +506,13 @@ TRAINER_DIGEST_OWED_LINE_BOTH = (
 
 # Morning recommendation — exactly one 👉 line, picked by priority ladder in
 # trainer_digest_format._pick_morning_recommendation. Goal: close the open loop.
-TRAINER_DIGEST_MORNING_REC_FIRST_TIMER = (
+TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY = (
     "👉 Начни день с {name} — у клиента это первое занятие. "
     "Первые минуты знакомства часто решают, вернётся ли человек."
+)
+TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER = (
+    "👉 У {name} в <b>{time}</b> первое занятие — "
+    "первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_PENDING_CONFIRM = (
     "👉 Бронь {name} в <b>{time}</b> ещё висит без подтверждения — одно нажатие закроет."
@@ -2280,9 +2284,10 @@ TRAINER_BOOKINGS_CHAT_MODE_INTRO = (
     "Подробности по командам: /guide"
 )
 TRAINER_HOME_OPEN_WEBAPP = (
-    "<b>Обзор</b> — ближайшие записи и быстрые переходы в расписание, клиентов, заявки и другие разделы."
+    "<b>Обзор</b> — ближайшие записи и быстрые переходы в расписание, клиентов, заявки и другие разделы.\n\n"
+    "Основной вход — синяя кнопка <b>«Обзор»</b> слева от поля ввода; ниже — запасной ярлык на тот же экран."
 )
-TRAINER_BUTTON_HOME_WEBAPP = "Открыть обзор"
+TRAINER_BUTTON_HOME_WEBAPP = "Обзор"
 # Telegram chat menu button (left of input); short label, max ~64 chars.
 TRAINER_MENU_BUTTON_HUB = "Обзор"
 TRAINER_HOME_HTTPS_REQUIRED = (

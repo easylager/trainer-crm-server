@@ -8811,26 +8811,41 @@
         if (payload.action_inbox && typeof payload.action_inbox === 'object') {
           hubServerActionInbox = payload.action_inbox;
         }
+        if (payload.features && typeof payload.features.collective_enabled === 'boolean') {
+          if (window.TrainerShell && typeof TrainerShell.applyCollectiveFeatureFlag === 'function') {
+            TrainerShell.applyCollectiveFeatureFlag(payload.features.collective_enabled);
+          } else {
+            window.TRAINER_COLLECTIVE_ENABLED = payload.features.collective_enabled;
+          }
+        }
         if (window.TrainerShell) {
-          if (typeof TrainerShell.syncSuspendedCollectiveNotice === 'function') {
+          if (
+            typeof TrainerShell.isCollectiveFeatureEnabled === 'function' &&
+            !TrainerShell.isCollectiveFeatureEnabled()
+          ) {
+            renderHubCollectiveSwitcher(null);
+            if (typeof TrainerShell.syncSuspendedCollectiveNotice === 'function') {
+              TrainerShell.syncSuspendedCollectiveNotice({ suspended: false });
+            }
+          } else if (typeof TrainerShell.syncSuspendedCollectiveNotice === 'function') {
             TrainerShell.syncSuspendedCollectiveNotice(
               payload.suspended_collective
                 ? Object.assign({ suspended: true }, payload.suspended_collective)
                 : { suspended: false }
             );
-          }
-          if (payload.collective && payload.collective.slug) {
-            renderHubCollectiveSwitcher(payload.collective);
-            if (typeof TrainerShell.syncCollectiveMenuFromBootstrap === 'function') {
-              TrainerShell.syncCollectiveMenuFromBootstrap(payload.collective);
-            }
-          } else {
-            renderHubCollectiveSwitcher(null);
-            try {
-              sessionStorage.removeItem(HUB_COLLECTIVE_SLUG_KEY);
-            } catch (e) {}
-            if (typeof TrainerShell.refreshCollectiveMenuVisibility === 'function') {
-              TrainerShell.refreshCollectiveMenuVisibility();
+            if (payload.collective && payload.collective.slug) {
+              renderHubCollectiveSwitcher(payload.collective);
+              if (typeof TrainerShell.syncCollectiveMenuFromBootstrap === 'function') {
+                TrainerShell.syncCollectiveMenuFromBootstrap(payload.collective);
+              }
+            } else {
+              renderHubCollectiveSwitcher(null);
+              try {
+                sessionStorage.removeItem(HUB_COLLECTIVE_SLUG_KEY);
+              } catch (e) {}
+              if (typeof TrainerShell.refreshCollectiveMenuVisibility === 'function') {
+                TrainerShell.refreshCollectiveMenuVisibility();
+              }
             }
           }
         }

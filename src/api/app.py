@@ -788,6 +788,19 @@ def webapp_trainer_relay_helpers_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-booking-context.js")
+def webapp_trainer_booking_context_js(request: Request):
+    """Shared booking-context picker; trainer-home, trainer-clients, schedule-editor."""
+    path = _WEBAPP_DIR / "trainer-booking-context.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/schedule-editor-main.js")
 def webapp_schedule_editor_main_js(request: Request):
     """Schedule editor page logic (split from schedule-editor.html). Use ``?v=…`` for long cache."""

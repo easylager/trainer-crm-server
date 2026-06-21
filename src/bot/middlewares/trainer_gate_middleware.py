@@ -46,7 +46,7 @@ def _command_root(text: str | None) -> str | None:
 
 def _is_allowed_command(text: str | None) -> bool:
     root = _command_root(text)
-    return root in ("/start", "/guide", "/profile", "/myprofile", "/cancel")
+    return root in ("/start", "/home", "/guide", "/profile", "/myprofile", "/cancel")
 
 
 def _is_welcome_link_start(text: str | None) -> bool:

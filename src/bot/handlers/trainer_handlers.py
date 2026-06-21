@@ -599,12 +599,20 @@ async def cmd_start(message: Message) -> None:
         return
     if state == TrainerAccessState.ACTIVE:
         await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
-        async with async_session_factory() as session:
-            tid = await get_trainer_id_by_telegram_id(session, user_id)
-            if tid:
-                await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
+        await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
         return
-    await message.answer(trainer_gate_message(state, trainer))
+    await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    welcome_kb = (
+        _post_welcome_link_keyboard(for_active_menu=False)
+        if base.lower().startswith("https://")
+        else None
+    )
+    await message.answer(
+        trainer_gate_message(state, trainer),
+        parse_mode=ParseMode.HTML,
+        reply_markup=welcome_kb,
+    )
 
 
 def _trainer_guide_keyboard() -> InlineKeyboardMarkup:
@@ -630,6 +638,7 @@ async def cmd_guide(message: Message) -> None:
     if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
+    await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
     await message.answer(
         msg.TRAINER_GUIDE,
         parse_mode=ParseMode.HTML,
@@ -724,10 +733,11 @@ async def cmd_home(message: Message) -> None:
     if not base.lower().startswith("https://"):
         await message.answer(msg.TRAINER_HOME_HTTPS_REQUIRED)
         return
+    await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
     url = f"{base}/webapp/trainer-home"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_HOME_WEBAPP, web_app=WebAppInfo(url=url))],
+            [InlineKeyboardButton(text=msg.TRAINER_MENU_BUTTON_HUB, web_app=WebAppInfo(url=url))],
         ]
     )
     await message.answer(
@@ -3554,6 +3564,8 @@ async def fallback(message: Message) -> None:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     if not trainer_may_use_bot_workflows(state):
-        await message.answer(trainer_gate_message(state, trainer))
+        await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
+        await message.answer(trainer_gate_message(state, trainer), parse_mode=ParseMode.HTML)
         return
+    await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
     await message.answer(msg.TRAINER_FALLBACK)

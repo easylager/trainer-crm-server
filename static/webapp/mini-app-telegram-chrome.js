@@ -472,7 +472,7 @@ window.wireHubSlotMessageButtons = function (root) {
       '<div class="bd-trainer-gate__card">' +
       '<div class="bd-trainer-gate__icon" aria-hidden="true">⚠️</div>' +
       '<h2 class="bd-trainer-gate__title">Что-то пошло не так</h2>' +
-      '<p class="bd-trainer-gate__hint">Нажмите «Обновить» или закройте мини-приложение и откройте снова из бота.</p>' +
+      '<p class="bd-trainer-gate__hint">Нажмите «Обновить» или закройте мини-приложение и откройте снова через синюю кнопку «Обзор» в боте (или /home).</p>' +
       '<div class="bd-trainer-gate__actions">' +
       '<button type="button" class="bd-btn bd-btn--primary" data-miniapp-recover="reload">Обновить</button>' +
       '</div>' +

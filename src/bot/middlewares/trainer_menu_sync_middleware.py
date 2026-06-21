@@ -23,6 +23,7 @@ from src.bot.trainer_menu_commands import (
 from src.infrastructure.db import async_session_factory
 
 bench_log = logging.getLogger("trainer_bot.bench")
+logger = logging.getLogger(__name__)
 
 
 class TrainerMenuSyncMiddleware(BaseMiddleware):
@@ -62,14 +63,24 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
 
         now = time.monotonic()
         t_read = time.perf_counter()
-        async with async_session_factory() as session:
-            tid = await get_trainer_id_by_telegram_id(session, uid)
+        try:
+            async with async_session_factory() as session:
+                tid = await get_trainer_id_by_telegram_id(session, uid)
+        except Exception:
+            logger.exception("trainer_menu_sync: DB lookup failed user_id=%s — skip menu mutation", uid)
+            return await handler(event, data)
         read_ms = (time.perf_counter() - t_read) * 1000
 
         sig = "linked" if tid else "unlinked"
         prev_sig = self._last_sig.get(uid)
         signature_changed = prev_sig != sig
-        throttled = not signature_changed and (now - self._last_time.get(uid, 0.0)) < self.THROTTLE_SEC
+        # Linked trainers: always re-apply «Обзор» — Telegram may drop MenuButtonWebApp after Web App
+        # sessions; throttling here caused /home to leave the hub button missing (activation killer).
+        throttled = (
+            not tid
+            and not signature_changed
+            and (now - self._last_time.get(uid, 0.0)) < self.THROTTLE_SEC
+        )
         if throttled:
             if bench_cfg.log_inner_phases():
                 bench_log.info(
@@ -80,10 +91,19 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         t_sync = time.perf_counter()
-        if tid:
-            await sync_trainer_linked_chat_menu(bot, chat_id)
-        else:
-            await reset_trainer_menu_for_unlinked(bot, chat_id)
+        try:
+            if tid:
+                await sync_trainer_linked_chat_menu(bot, chat_id)
+            else:
+                await reset_trainer_menu_for_unlinked(bot, chat_id)
+        except Exception:
+            logger.exception(
+                "trainer_menu_sync: Telegram menu API failed user_id=%s chat_id=%s sig=%s",
+                uid,
+                chat_id,
+                sig,
+            )
+            return await handler(event, data)
         menu_sync_ms = (time.perf_counter() - t_sync) * 1000
         if bench_cfg.log_inner_phases():
             bench_log.info(

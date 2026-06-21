@@ -94,6 +94,31 @@ async def test_gate_passes_allowlisted_command_when_linked_but_blocked(
 
 
 @pytest.mark.asyncio
+async def test_gate_passes_allowlisted_home_when_linked_but_blocked(
+    monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
+) -> None:
+    async def fake_state(_session, _uid: int):
+        return TrainerAccessState.BLOCKED_PROFILE, {"id": 1}
+
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
+        fake_state,
+    )
+    mw = TrainerGateMiddleware()
+    handler = AsyncMock(return_value="ok")
+
+    msg = SimpleNamespace(
+        from_user=SimpleNamespace(id=42),
+        text="/home",
+        answer=AsyncMock(),
+    )
+
+    out = await mw._handle_message(handler, msg, {})
+    assert out == "ok"
+    handler.assert_awaited_once_with(msg, {})
+
+
+@pytest.mark.asyncio
 async def test_gate_blocks_allowlisted_command_when_not_linked(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:

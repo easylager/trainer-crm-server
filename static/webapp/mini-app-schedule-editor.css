@@ -2152,6 +2152,18 @@
       line-height: 1.45;
       color: var(--tg-theme-text-color);
     }
+    .schedule-reload-panel__detail {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--app-danger, #ff3b30);
+    }
+    .schedule-reload-panel__hint {
+      margin: 0 0 18px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
     .schedule-reload-panel__btn {
       min-width: 160px;
       padding: 12px 22px;

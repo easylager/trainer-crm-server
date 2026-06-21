@@ -255,3 +255,10 @@ async def db_session(_test_db_core) -> AsyncGenerator[AsyncSession, None]:
 async def app_use_test_db(_test_db_core) -> AsyncGenerator[None, None]:
     """Depends on _test_db_core; use with API tests that also need db_session for setup SQL."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def _enable_trainer_collective_feature_for_marked_tests(request, monkeypatch) -> None:
+    """Collective API/application tests assume TRAINER_COLLECTIVE_ENABLED=1."""
+    if request.node.get_closest_marker("collective"):
+        monkeypatch.setenv("TRAINER_COLLECTIVE_ENABLED", "1")

@@ -61,6 +61,13 @@ ACTOR_LABELS_RU: dict[str, str] = {
     "api": "API",
 }
 
+# Product telemetry with no admin-timeline value — still emitted to stdout audit log.
+ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "trainer.hub.inbox_item_shown",
+    }
+)
+
 
 def event_label_ru(event_type: str) -> str:
     return EVENT_LABELS_RU.get(event_type, event_type.replace(".", " · "))
@@ -142,6 +149,8 @@ async def _persist_audit_record(record: dict[str, Any]) -> None:
 
 async def insert_platform_audit_from_record(session: AsyncSession, record: dict[str, Any]) -> int | None:
     event_type = str(record.get("event") or "")
+    if event_type in ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES:
+        return None
     actor_type = str(record.get("actor_type") or "")
     actor_id = str(record.get("actor_id") or "")
     payload = dict(record.get("payload") or {})
@@ -201,6 +210,12 @@ async def list_platform_audit_events_for_admin(
     if trainer_id is not None:
         clauses.append("e.trainer_id = :trainer_id")
         params["trainer_id"] = trainer_id
+    if ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES:
+        hidden = sorted(ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES)
+        placeholders = ", ".join(f":hidden_ev_{i}" for i in range(len(hidden)))
+        clauses.append(f"e.event_type NOT IN ({placeholders})")
+        for i, event in enumerate(hidden):
+            params[f"hidden_ev_{i}"] = event
 
     where = " AND ".join(clauses)
     r = await session.execute(

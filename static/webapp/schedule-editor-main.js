@@ -731,12 +731,26 @@
       }
 
       /** Network / 5xx / parse failure: short copy + retry (tunnel drops show as fetch errors). */
-      function renderCalendarLoadFailure() {
+      function renderCalendarLoadFailure(err) {
         var el = document.getElementById('calendarContent');
         if (!el) return;
+        var detail = '';
+        if (err != null && err !== 'retry-init') {
+          var raw = typeof err === 'string' ? err : (err && err.message) ? String(err.message) : '';
+          if (raw && window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function') {
+            detail = MiniAppErrorUi.humanizeDetail(raw) || raw;
+          } else if (raw) {
+            detail = raw;
+          }
+        }
+        var detailHtml = detail
+          ? '<p class="schedule-reload-panel__detail">' + escapeHtml(detail) + '</p>'
+          : '';
         el.innerHTML =
           '<div class="schedule-reload-panel">' +
           '<p class="schedule-reload-panel__msg">Не удалось загрузить расписание. Проверьте соединение и попробуйте снова.</p>' +
+          detailHtml +
+          '<p class="schedule-reload-panel__hint">Если не помогло — закройте мини-приложение и снова нажмите синюю кнопку «Обзор» слева от поля ввода в боте (или /home).</p>' +
           '<button type="button" class="btn-secondary schedule-reload-panel__btn" id="btnScheduleCalendarReload">Обновить</button>' +
           '</div>';
         var btn = document.getElementById('btnScheduleCalendarReload');
@@ -5716,7 +5730,7 @@
               } catch (eLe) { /* ignore */ }
             }
             hideFlowBookBootOverlay();
-            renderCalendarLoadFailure();
+            renderCalendarLoadFailure(err);
           })
           .finally(function() {
             state.scheduleLoadInFlight = false;

@@ -15,6 +15,29 @@ pytestmark = pytest.mark.collective
 
 
 @pytest.mark.asyncio
+async def test_collective_get_endpoints_disabled_without_feature_flag(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("TRAINER_COLLECTIVE_ENABLED", "0")
+    tg = _fresh_trainer_telegram_id()
+    await _create_active_trainer(db_session, tg, with_crm=True)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            collective = await client.get(
+                "/api/webapp/trainer/collective",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            notice = await client.get(
+                "/api/webapp/trainer/collective/suspended-notice",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert collective.status_code == 200
+    assert collective.json() == {"enabled": False}
+    assert notice.status_code == 200
+    assert notice.json() == {"suspended": False, "enabled": False}
+
+
+@pytest.mark.asyncio
 async def test_patch_collective_brand_owner(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)

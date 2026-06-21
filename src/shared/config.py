@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     subscription_invoice_bank_hint_ru: str | None = None
     subscription_invoice_extra_hint_ru: str | None = None
     subscription_support_url: str | None = None
+    # Collective studio / center overlay (multi-trainer org). Off on prod until pilots are ready.
+    trainer_collective_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # Collective studio pool: BYN cents per seat per month (× seat_limit × period_months).
     collective_subscription_cents_per_seat_month: int = 2900
 

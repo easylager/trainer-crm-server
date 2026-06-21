@@ -1,0 +1,43 @@
+# Daily off-site Postgres backup (pg_dump → S3-compatible storage).
+# Secrets: BACKUP_DATABASE_URL, BACKUP_S3_* — see docs/ops/BACKUPS.md
+name: Backup Postgres
+
+on:
+  schedule:
+    # 02:15 UTC ≈ 05:15 Minsk (low traffic)
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup-postgres
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install Python deps (boto3)
+        run: pip install boto3
+
+      - name: Run backup upload
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_ACCESS_KEY: ${{ secrets.BACKUP_S3_ACCESS_KEY }}
+          BACKUP_S3_SECRET_KEY: ${{ secrets.BACKUP_S3_SECRET_KEY }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+          BACKUP_S3_PATH_STYLE: ${{ secrets.BACKUP_S3_PATH_STYLE }}
+          BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
+        run: python scripts/ops/backup_postgres.py

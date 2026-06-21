@@ -261,7 +261,17 @@ def test_morning_recommendation_prefers_first_timer() -> None:
     out = format_morning_digest(d)
     rec = out.rstrip().split("\n")[-1]
     assert "Ирина К." in rec
-    assert "первое" in rec or "впервые" in rec or "Первые минуты" in rec
+    assert "11:00" in rec
+    assert "первое занятие" in rec
+    assert "Начни день" not in rec
+
+
+def test_morning_recommendation_first_timer_opens_day() -> None:
+    d = _morning_digest_fixture([_session(hh=9, name="Виктория Шевченко", first=True)])
+    out = format_morning_digest(d)
+    rec = out.rstrip().split("\n")[-1]
+    assert "Начни день с Виктория Ш." in rec
+    assert "первое занятие" in rec
 
 
 def test_morning_recommendation_prefers_pending_confirm_over_requests() -> None:

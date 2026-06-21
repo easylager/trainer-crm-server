@@ -658,13 +658,15 @@ async def get_trainer_access_for_webapp(
     # Belt-and-suspenders: state machine + raw status (drivers may have returned non-str before normalize in repo).
     is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
     schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
+    settings = Settings()
     return {
         "access_state": state.value,
         "trainer_id": tid,
         "trainer_status": norm_status,
         "is_active": is_active,
         "schedule_unlocked": schedule_unlocked,
-        "force_client_chat_relay": bool(Settings().trainer_webapp_force_client_chat_relay),
+        "force_client_chat_relay": bool(settings.trainer_webapp_force_client_chat_relay),
+        "collective_enabled": bool(settings.trainer_collective_enabled),
     }
 
 
@@ -3216,7 +3218,8 @@ async def get_trainer_hub_bootstrap(
 
     collective_payload: dict[str, Any] | None = None
     suspended_collective: dict[str, Any] | None = None
-    if trainer_id_linked:
+    collective_feature_enabled = bool(Settings().trainer_collective_enabled)
+    if trainer_id_linked and collective_feature_enabled:
         try:
             from src.application.collective_use_cases import (
                 build_trainer_collective_bootstrap_payload,
@@ -3332,6 +3335,7 @@ async def get_trainer_hub_bootstrap(
         "center_hub_summary": center_hub_summary,
         "suspended_collective": suspended_collective,
         "partial_errors": partial_errors or None,
+        "features": {"collective_enabled": collective_feature_enabled},
     }
 
 
@@ -8143,6 +8147,8 @@ async def get_trainer_collective_suspended_notice(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Lightweight banner payload when trainer's collective is suspended (O8.4)."""
+    if not Settings().trainer_collective_enabled:
+        return {"suspended": False, "enabled": False}
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
@@ -8150,8 +8156,8 @@ async def get_trainer_collective_suspended_notice(
 
     notice = await get_trainer_suspended_collective_notice(session, int(trainer_id))
     if notice is None:
-        return {"suspended": False}
-    return {"suspended": True, **notice}
+        return {"suspended": False, "enabled": True}
+    return {"suspended": True, "enabled": True, **notice}
 
 
 @router.get("/trainer/collective")
@@ -8161,6 +8167,8 @@ async def get_trainer_collective_studio(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Studio screen for collective members; 404 when trainer is solo."""
+    if not Settings().trainer_collective_enabled:
+        return {"enabled": False}
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")

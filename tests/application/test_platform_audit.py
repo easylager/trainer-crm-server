@@ -10,6 +10,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.platform_audit_use_cases import (
+    ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES,
     insert_platform_audit_from_record,
     list_platform_audit_events_for_admin,
 )
@@ -54,6 +55,64 @@ async def test_insert_and_list_audit_event(db_session: AsyncSession) -> None:
     top = data["events"][0]
     assert top["event_type"] == "booking.created"
     assert top["trainer_id"] == trainer_id
+
+
+@pytest.mark.asyncio
+async def test_admin_timeline_excludes_inbox_item_shown(db_session: AsyncSession) -> None:
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO trainers (status, schedule_grid_step_minutes)
+            VALUES ('active', 15)
+            RETURNING id
+            """
+        )
+    )
+    trainer_id = int(r.scalar_one())
+
+    hidden_id = await insert_platform_audit_from_record(
+        db_session,
+        {
+            "event": "trainer.hub.inbox_item_shown",
+            "actor_type": "api",
+            "actor_id": str(trainer_id),
+            "payload": {"trainer_id": trainer_id, "item_id": "pending:1"},
+        },
+    )
+    visible_id = await insert_platform_audit_from_record(
+        db_session,
+        {
+            "event": "booking.created",
+            "actor_type": "client_bot",
+            "actor_id": "777",
+            "payload": {"booking_id": 101, "trainer_id": trainer_id},
+        },
+    )
+    await db_session.commit()
+
+    assert hidden_id is None
+    assert visible_id is not None
+    assert "trainer.hub.inbox_item_shown" in ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES
+
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO platform_audit_events (
+                event_type, actor_type, actor_id, source, trainer_id, payload
+            )
+            VALUES (
+                'trainer.hub.inbox_item_shown', 'api', :actor_id, 'api', :trainer_id, '{}'::jsonb
+            )
+            """
+        ),
+        {"actor_id": str(trainer_id), "trainer_id": trainer_id},
+    )
+    await db_session.commit()
+
+    data = await list_platform_audit_events_for_admin(db_session, limit=20, trainer_id=trainer_id)
+    event_types = {ev["event_type"] for ev in data["events"]}
+    assert "trainer.hub.inbox_item_shown" not in event_types
+    assert "booking.created" in event_types
 
 
 @pytest.mark.asyncio

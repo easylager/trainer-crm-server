@@ -40,6 +40,9 @@
           global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY = forceRelay;
           global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = forceRelay;
         }
+        if (d && typeof d.collective_enabled === 'boolean') {
+          global.TRAINER_COLLECTIVE_ENABLED = d.collective_enabled;
+        }
         return d;
       });
     });
