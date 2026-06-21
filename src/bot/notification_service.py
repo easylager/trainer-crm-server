@@ -17,6 +17,7 @@ from src.bot.notification_loops import (
     run_booking_complete_loop,
     run_trainer_session_wrapup_loop,
     run_booking_notifier_loop,
+    run_booking_party_notifier_loop,
     run_cancel_notifier_loop,
     run_certificate_email_outbox_loop,
     run_completed_feedback_loop,
@@ -90,6 +91,7 @@ async def main() -> None:
     # Trainer-facing loops
     trainer_tasks = [
         asyncio.create_task(run_trainer_session_wrapup_loop(trainer_bot, settings), name="trainer_session_wrapup"),
+        asyncio.create_task(run_booking_party_notifier_loop(trainer_bot, client_bot), name="booking_party_notifier"),
         asyncio.create_task(run_booking_notifier_loop(trainer_bot), name="booking_notifier"),
         asyncio.create_task(run_request_notifier_loop(trainer_bot), name="request_notifier"),
         asyncio.create_task(run_completed_feedback_loop(trainer_bot), name="completed_feedback"),

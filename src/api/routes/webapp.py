@@ -2681,88 +2681,96 @@ async def post_client_booking_cancel(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Cancel own booking with optional reason. Auth: client initData. Notifies trainer immediately."""
+    from src.application.booking_party_notifications import (
+        KIND_CLIENT_CANCEL_CONFIRM,
+        KIND_CLIENT_CANCEL_TRAINER,
+        booking_party_outbox_available,
+        delivery_status_label,
+    )
+    from src.bot.booking_party_notify import (
+        deliver_client_cancel_notifications_immediate,
+        try_deliver_booking_party_notifications_for_booking,
+    )
+    from src.shared.audit import ACTOR_API, audit_log
+
     telegram_id = client_catalog_telegram_key(principal)
     payload = await cancel_booking_by_client(
         session, booking_id, telegram_id, reason=body.reason
     )
     if not payload:
         raise HTTPException(status_code=400, detail="Booking not found or already cancelled")
-    slot_date = payload.get("slot_date")
-    start_time = payload.get("start_time")
-    date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
-    day_label = CLIENT_DAYS[slot_date.weekday()] if hasattr(slot_date, "weekday") else ""
-    time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5]
-    # Notify trainer right away (async in same flow, no polling)
-    trainer_tid = payload.get("trainer_telegram_id")
-    if trainer_tid:
-        client_name = (payload.get("client_name") or "Клиент").strip() or "Клиент"
-        client_name_safe = html.escape(client_name)
-        reason = payload.get("reason")
-        reason_safe = html.escape(reason) if reason else ""
-        if reason:
-            text = msg.TRAINER_BOOKING_CANCELLED_BY_CLIENT.format(
-                client_name=client_name_safe, date=date_str, day=day_label, time=time_str, reason=reason_safe
-            )
-        else:
-            text = msg.TRAINER_BOOKING_CANCELLED_BY_CLIENT_NO_REASON.format(
-                client_name=client_name_safe, date=date_str, day=day_label, time=time_str
-            )
-        trainer_bot = Bot(
-            token=Settings().telegram_bot_token_trainer,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        try:
-            reply_markup = None
-            ex_cid = payload.get("client_id")
-            slot_id_raw = payload.get("slot_id")
-            c_tid = payload.get("client_telegram_id")
-            if (
-                slot_id_raw is not None
-                and ex_cid is not None
-            ):
-                reply_markup = msg.build_trainer_client_cancel_notification_keyboard(
-                    webapp_base_url=Settings().webapp_base_url,
-                    slot_id=int(slot_id_raw),
-                    exclude_client_id=int(ex_cid),
-                    client_telegram_id=int(c_tid) if c_tid is not None else None,
-                )
-            await trainer_bot.send_message(
-                chat_id=trainer_tid, text=text, reply_markup=reply_markup
-            )
-        finally:
-            await trainer_bot.session.close()
-    settings_client = Settings()
-    reply_markup_client = msg.build_client_rebook_catalog_keyboard(
-        webapp_base_url=settings_client.webapp_base_url,
-        trainer_id=payload.get("trainer_id"),
-        service_id=payload.get("service_id"),
+
+    audit_log(
+        "booking.cancelled_by_client",
+        ACTOR_API,
+        telegram_id,
+        {
+            "booking_id": int(booking_id),
+            "trainer_id": payload.get("trainer_id"),
+            "already_cancelled": bool(payload.get("already_cancelled")),
+            "has_reason": bool((payload.get("reason") or "").strip()),
+        },
     )
-    cancel_tpl = (
-        msg.CLIENT_BOOKING_CANCELLED_BY_SELF
-        if reply_markup_client is not None
-        else msg.CLIENT_BOOKING_CANCELLED_BY_SELF_MENU
+
+    notifications: dict[str, str] = {}
+    settings = Settings()
+    trainer_bot = Bot(
+        token=settings.telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    text_client = cancel_tpl.format(date=date_str, day=day_label, time=time_str)
     client_bot = Bot(
-        token=settings_client.telegram_bot_token_client,
+        token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:
-        if principal.platform == MiniAppPlatform.TELEGRAM:
-            try:
-                await client_bot.send_message(
-                    chat_id=int(principal.user_id), text=text_client, reply_markup=reply_markup_client
+        outbox_ok = await booking_party_outbox_available(session)
+        if outbox_ok:
+            if payload.get("trainer_telegram_id"):
+                notifications["trainer"] = delivery_status_label(skipped=False, sent=False, queued=True)
+            else:
+                notifications["trainer"] = delivery_status_label(skipped=True, sent=False, queued=False)
+            if principal.platform == MiniAppPlatform.TELEGRAM:
+                delivered = await try_deliver_booking_party_notifications_for_booking(
+                    session,
+                    int(booking_id),
+                    trainer_bot=trainer_bot,
+                    client_bot=client_bot,
                 )
-            except Exception:
-                # Cancel is already committed — do not fail Mini App if client bot push fails.
-                logger.exception(
-                    "client booking cancel: failed to send client confirmation booking_id=%s telegram_id=%s",
-                    booking_id,
-                    telegram_id,
-                )
+                if KIND_CLIENT_CANCEL_TRAINER in delivered:
+                    notifications["trainer"] = delivered[KIND_CLIENT_CANCEL_TRAINER]
+                if KIND_CLIENT_CANCEL_CONFIRM in delivered:
+                    notifications["client"] = delivered[KIND_CLIENT_CANCEL_CONFIRM]
+                elif principal.platform == MiniAppPlatform.TELEGRAM:
+                    notifications["client"] = delivery_status_label(skipped=False, sent=False, queued=True)
+            else:
+                notifications["client"] = delivery_status_label(skipped=True, sent=False, queued=False)
+        else:
+            notifications = await deliver_client_cancel_notifications_immediate(
+                session,
+                int(booking_id),
+                payload,
+                trainer_bot=trainer_bot,
+                client_bot=client_bot,
+                client_telegram_id=int(telegram_id),
+                send_client_confirm=principal.platform == MiniAppPlatform.TELEGRAM,
+            )
     finally:
+        await trainer_bot.session.close()
         await client_bot.session.close()
-    return {"success": True}
+
+    logger.info(
+        "client booking cancel committed booking_id=%s client_telegram_id=%s already_cancelled=%s notifications=%s",
+        booking_id,
+        telegram_id,
+        bool(payload.get("already_cancelled")),
+        notifications,
+    )
+    return {
+        "success": True,
+        "booking_id": int(booking_id),
+        "already_cancelled": bool(payload.get("already_cancelled")),
+        "notifications": notifications,
+    }
 
 
 class ClientRequestPatchBody(BaseModel):
@@ -5924,35 +5932,63 @@ async def post_trainer_booking_decline(
     info = await decline_booking(session, booking_id, trainer_id)
     if not info:
         raise HTTPException(status_code=400, detail="Booking not found or not pending")
-    # Notify client (same as in trainer_handlers)
+    from src.application.booking_party_notifications import (
+        KIND_TRAINER_DECLINE_CLIENT,
+        enqueue_trainer_decline_client_notification,
+    )
+    from src.bot.booking_party_notify import try_deliver_booking_party_notifications_for_booking
+    from src.shared.audit import ACTOR_API, audit_log
+
+    audit_log(
+        "booking.declined",
+        ACTOR_API,
+        principal.user_id,
+        {
+            "booking_id": int(booking_id),
+            "trainer_id": int(trainer_id),
+            "has_comment": bool(comment),
+        },
+    )
     client_tid = info.get("client_telegram_id")
+    notifications: dict[str, str] = {}
     if client_tid:
         d = info["slot_date"]
         date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
         dow = TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
-        time_str = (info["start_time"].strftime("%H:%M") if hasattr(info["start_time"], "strftime") else str(info["start_time"])[:5])
+        time_str = (
+            info["start_time"].strftime("%H:%M")
+            if hasattr(info["start_time"], "strftime")
+            else str(info["start_time"])[:5]
+        )
+        await enqueue_trainer_decline_client_notification(
+            session,
+            booking_id=int(booking_id),
+            client_telegram_id=int(client_tid),
+            date_str=date_str,
+            day_label=dow,
+            time_str=time_str,
+            reason=comment or None,
+        )
+        await session.commit()
         settings = Settings()
         client_bot = Bot(
             token=settings.telegram_bot_token_client,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
         try:
-            decl_kb = msg.build_client_declined_booking_catalog_keyboard(
-                webapp_base_url=settings.webapp_base_url,
+            delivered = await try_deliver_booking_party_notifications_for_booking(
+                session,
+                int(booking_id),
+                client_bot=client_bot,
             )
-            await client_bot.send_message(
-                chat_id=client_tid,
-                text=msg.format_client_booking_declined_by_trainer_html(
-                    date=date_str,
-                    day=dow,
-                    time=time_str,
-                    reason=comment,
-                ),
-                reply_markup=decl_kb,
+            notifications["client"] = delivered.get(
+                KIND_TRAINER_DECLINE_CLIENT, "queued"
             )
         finally:
             await client_bot.session.close()
-    return {"success": True}
+    else:
+        notifications["client"] = "skipped"
+    return {"success": True, "notifications": notifications}
 
 
 @router.post("/trainer/bookings/{booking_id:int}/cancel")

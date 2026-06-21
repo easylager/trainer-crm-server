@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from aiogram.utils.token import TokenValidationError, validate_token
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,18 @@ from src.shared.config import Settings
 logger = logging.getLogger(__name__)
 
 TrainerClientRegistrationEvent = Literal["new_client", "telegram_linked"]
+
+
+def _trainer_bot_token(settings: Settings | None = None) -> str | None:
+    """Skip empty/placeholder tokens (CI .env) before aiogram Bot construction."""
+    token = ((settings or Settings()).telegram_bot_token_trainer or "").strip()
+    if not token:
+        return None
+    try:
+        validate_token(token)
+    except TokenValidationError:
+        return None
+    return token
 
 
 async def _client_display_label(session: AsyncSession, client_id: int) -> str:
@@ -83,7 +96,8 @@ async def notify_trainer_client_registered_from_invite(
 ) -> None:
     """Best-effort Telegram push to trainer after public invite self-registration."""
     settings = Settings()
-    if not settings.telegram_bot_token_trainer:
+    token = _trainer_bot_token(settings)
+    if not token:
         return
 
     trainer_tid = await get_trainer_telegram_id(session, trainer_id)
@@ -97,7 +111,7 @@ async def notify_trainer_client_registered_from_invite(
         text = msg.TRAINER_CLIENT_REGISTERED_NEW_HTML.format(client_label=label)
 
     bot = Bot(
-        token=settings.telegram_bot_token_trainer,
+        token=token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:
@@ -133,7 +147,8 @@ async def notify_trainers_family_access_member_joined(
 ) -> None:
     """Notify each trainer on roster: new Telegram joined shared family client card."""
     settings = Settings()
-    if not settings.telegram_bot_token_trainer:
+    token = _trainer_bot_token(settings)
+    if not token:
         return
     trainer_ids = await list_trainer_ids_for_client_crm_scope(session, int(primary_client_id))
     if not trainer_ids:
@@ -145,7 +160,7 @@ async def notify_trainers_family_access_member_joined(
         member_label=member_label,
     )
     bot = Bot(
-        token=settings.telegram_bot_token_trainer,
+        token=token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:

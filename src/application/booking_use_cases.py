@@ -4194,32 +4194,133 @@ async def cancel_booking_by_client(
 ) -> dict | None:
     """
     Cancel booking by client: slot freed, status cancelled, reminders cancelled, reason stored.
-    Returns payload for trainer notification:
-    trainer_telegram_id, slot_date, start_time, client_name, reason,
-    client_id, client_telegram_id, booking_id — or None if booking not found / not owned by client.
+    Idempotent: if this client already cancelled the booking, returns the same notification payload
+    with ``already_cancelled=True`` (no duplicate UPDATE).
+    Returns payload for party notifications or None if booking not found / not owned by client.
     """
+    from src.application.booking_party_notifications import (
+        KIND_CLIENT_CANCEL_CONFIRM,
+        KIND_CLIENT_CANCEL_TRAINER,
+        ROLE_CLIENT,
+        ROLE_TRAINER,
+        enqueue_booking_party_notification,
+    )
+
     reason_val = (reason or "").strip() or None
     cid_actor = await get_client_id_by_telegram_id(session, int(client_telegram_id))
     if cid_actor is None:
         return None
+
+    def _payload_from_row(
+        row: tuple,
+        *,
+        slot_id: int | None,
+        already_cancelled: bool,
+    ) -> dict[str, Any]:
+        trainer_telegram_id, trainer_id_cache, slot_date, start_time, client_name = (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            (row[4] or "").strip() or "Клиент",
+        )
+        client_id = int(row[5]) if row[5] is not None else None
+        service_id_raw = row[8] if len(row) > 8 else None
+        date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
+        day_label = ""
+        if hasattr(slot_date, "weekday"):
+            from src.bot import messages as msg_mod
+
+            day_label = msg_mod.TRAINER_DAYS[slot_date.weekday()]
+        time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5]
+        base = {
+            "trainer_telegram_id": trainer_telegram_id,
+            "trainer_id": int(trainer_id_cache),
+            "service_id": int(service_id_raw) if service_id_raw is not None else None,
+            "slot_id": int(slot_id) if slot_id is not None else None,
+            "slot_date": slot_date,
+            "start_time": start_time,
+            "client_name": client_name,
+            "reason": reason_val,
+            "client_id": client_id,
+            "client_telegram_id": int(client_telegram_id),
+            "booking_id": int(booking_id),
+            "already_cancelled": already_cancelled,
+            "date_str": date_str,
+            "day_label": day_label,
+            "time_str": time_str,
+        }
+        return base
+
+    async def _enqueue_party_notifications(payload: dict[str, Any]) -> None:
+        notify_payload = {
+            "date_str": payload["date_str"],
+            "day_label": payload["day_label"],
+            "time_str": payload["time_str"],
+            "client_name": payload["client_name"],
+            "reason": payload.get("reason"),
+            "trainer_id": payload.get("trainer_id"),
+            "service_id": payload.get("service_id"),
+            "slot_id": payload.get("slot_id"),
+            "client_id": payload.get("client_id"),
+            "client_telegram_id": payload.get("client_telegram_id"),
+        }
+        trainer_tid = payload.get("trainer_telegram_id")
+        if trainer_tid:
+            await enqueue_booking_party_notification(
+                session,
+                booking_id=int(booking_id),
+                kind=KIND_CLIENT_CANCEL_TRAINER,
+                recipient_role=ROLE_TRAINER,
+                recipient_telegram_id=int(trainer_tid),
+                payload=notify_payload,
+            )
+        await enqueue_booking_party_notification(
+            session,
+            booking_id=int(booking_id),
+            kind=KIND_CLIENT_CANCEL_CONFIRM,
+            recipient_role=ROLE_CLIENT,
+            recipient_telegram_id=int(client_telegram_id),
+            payload=notify_payload,
+        )
+
     # Load trainer + slot + client for notification before updating
     r = await session.execute(
         text("""
             SELECT t.telegram_id, b.trainer_id, s.slot_date, s.start_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
-                   c.id, c.telegram_id, b.recurring_client_slot_id, b.service_id
+                   c.id, c.telegram_id, b.recurring_client_slot_id, b.service_id, b.slot_id, b.status
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             JOIN trainers t ON t.id = b.trainer_id
-            WHERE b.id = :bid AND b.client_id = :cid AND b.status IN ('pending', 'confirmed')
-              AND s.status IN ('available', 'booked')
+            WHERE b.id = :bid AND b.client_id = :cid
         """),
         {"bid": booking_id, "cid": int(cid_actor)},
     )
     row = r.fetchone()
     if not row:
         return None
+
+    status = (row[10] or "").strip().lower()
+    slot_id_cancel = int(row[9])
+
+    if status == "cancelled":
+        src = await session.execute(
+            text("SELECT cancellation_source FROM bookings WHERE id = :bid"),
+            {"bid": booking_id},
+        )
+        src_row = src.fetchone()
+        if not src_row or (src_row[0] or "").strip().lower() != BOOKING_CANCELLATION_SOURCE_CLIENT:
+            return None
+        payload = _payload_from_row(row[:9], slot_id=slot_id_cancel, already_cancelled=True)
+        await _enqueue_party_notifications(payload)
+        await session.commit()
+        return payload
+
+    if status not in ("pending", "confirmed"):
+        return None
+
     trainer_telegram_id, trainer_id_cache, slot_date, start_time, client_name = (
         row[0],
         row[1],
@@ -4231,17 +4332,6 @@ async def cancel_booking_by_client(
     recurring_for_skip = row[7]
     service_id_raw = row[8]
 
-    r = await session.execute(
-        text("""
-            SELECT b.slot_id FROM bookings b
-            WHERE b.id = :bid AND b.client_id = :cid AND b.status IN ('pending', 'confirmed')
-        """),
-        {"bid": booking_id, "cid": int(cid_actor)},
-    )
-    row_slot = r.fetchone()
-    if not row_slot:
-        return None
-    slot_id_cancel = int(row_slot[0])
     await session.execute(
         text("""
             UPDATE bookings
@@ -4265,21 +4355,11 @@ async def cancel_booking_by_client(
     await sync_slot_status_for_occupancy(session, slot_id_cancel)
     if client_id is not None and slot_date is not None:
         await resync_pending_reminders_for_client_day(session, client_id, slot_date, do_commit=False)
+    payload = _payload_from_row(row[:9], slot_id=slot_id_cancel, already_cancelled=False)
+    await _enqueue_party_notifications(payload)
     await session.commit()
     invalidate_slots_for_trainer(trainer_id_cache)
-    return {
-        "trainer_telegram_id": trainer_telegram_id,
-        "trainer_id": int(trainer_id_cache),
-        "service_id": int(service_id_raw) if service_id_raw is not None else None,
-        "slot_id": int(slot_id_cancel),
-        "slot_date": slot_date,
-        "start_time": start_time,
-        "client_name": client_name,
-        "reason": reason_val,
-        "client_id": client_id,
-        "client_telegram_id": int(client_telegram_id),
-        "booking_id": booking_id,
-    }
+    return payload
 
 
 async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: int) -> dict | None:
@@ -4482,7 +4562,6 @@ async def decline_booking(
             WHERE b.id = :bid
               AND b.trainer_id = :tid
               AND b.status = 'pending'
-              AND s.status IN ('available', 'booked')
             """
         ),
         {"bid": booking_id, "tid": trainer_id},

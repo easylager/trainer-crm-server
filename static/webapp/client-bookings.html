@@ -426,6 +426,18 @@
         }
       }
 
+      function bookingStillPresent(bookingId) {
+        var idNum = Number(bookingId);
+        for (var i = 0; i < state.days.length; i++) {
+          var day = state.days[i];
+          if (!day || !day.bookings) continue;
+          for (var j = 0; j < day.bookings.length; j++) {
+            if (Number(day.bookings[j].id) === idNum) return true;
+          }
+        }
+        return false;
+      }
+
       function finishBookingCancelSuccess(bookingId) {
         hapticSuccess();
         showAppToast('Запись отменена', false);
@@ -852,16 +864,23 @@
             finishBookingCancelSuccess(id);
           })
           .catch(function(err) {
-            var msg =
-              err && err.message
-                ? err.message
-                : 'Не удалось отменить запись. Попробуйте ещё раз.';
-            showAppToast(msg, true);
-            if (tg && tg.showAlert) {
-              tg.showAlert(msg);
-            } else {
-              alert(msg);
-            }
+            bookingsFetchPromise = null;
+            loadBookings().then(function() {
+              if (!bookingStillPresent(id)) {
+                finishBookingCancelSuccess(id);
+                return;
+              }
+              var msg =
+                err && err.message
+                  ? err.message
+                  : 'Не удалось отменить запись. Попробуйте ещё раз.';
+              showAppToast(msg, true);
+              if (tg && tg.showAlert) {
+                tg.showAlert(msg);
+              } else {
+                alert(msg);
+              }
+            });
           });
       };
 

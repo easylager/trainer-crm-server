@@ -27,6 +27,7 @@ _audit_sessionmaker: async_sessionmaker[AsyncSession] | None = None
 EVENT_LABELS_RU: dict[str, str] = {
     "booking.created": "Клиент создал запись",
     "booking.cancelled": "Тренер отменил запись",
+    "booking.cancelled_by_client": "Клиент отменил запись",
     "booking.declined": "Тренер отклонил запись",
     "booking.no_show": "Отметка неявки",
     "booking.problem_reported": "Тренер сообщил о проблеме на занятии",

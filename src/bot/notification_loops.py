@@ -1561,6 +1561,27 @@ async def run_cancel_notifier_loop(client_bot: Bot) -> None:
             logger.exception("Cancel notifier: %s", e)
 
 
+async def run_booking_party_notifier_loop(trainer_bot: Bot, client_bot: Bot) -> None:
+    """Retry booking_party_notifications outbox (client↔trainer lifecycle pushes)."""
+    from src.bot.booking_party_notify import process_booking_party_notifications_batch
+
+    while True:
+        await asyncio.sleep(CANCEL_NOTIFIER_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                n = await process_booking_party_notifications_batch(
+                    session,
+                    trainer_bot=trainer_bot,
+                    client_bot=client_bot,
+                )
+                if n:
+                    logger.info("booking_party_notifier delivered=%s", n)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Booking party notifier: %s", e)
+
+
 async def run_response_notifier_loop(client_bot: Bot) -> None:
     while True:
         await asyncio.sleep(RESPONSE_NOTIFIER_INTERVAL_SEC)

@@ -397,29 +397,35 @@ async def _complete_trainer_booking_decline(
         time_str = _format_time(start_time)
         await reply.answer(msg.TRAINER_BOOKING_DECLINED_DONE)
         client_tid = info.get("client_telegram_id")
-        if not client_tid:
-            return True
-        settings = Settings()
-        client_bot = Bot(
-            token=settings.telegram_bot_token_client,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        try:
-            decl_kb = msg.build_client_declined_booking_catalog_keyboard(
-                webapp_base_url=settings.webapp_base_url,
+        if client_tid:
+            from src.application.booking_party_notifications import enqueue_trainer_decline_client_notification
+            from src.bot.booking_party_notify import try_deliver_booking_party_notifications_for_booking
+
+            async with async_session_factory() as session:
+                await enqueue_trainer_decline_client_notification(
+                    session,
+                    booking_id=int(booking_id),
+                    client_telegram_id=int(client_tid),
+                    date_str=date_str,
+                    day_label=dow,
+                    time_str=time_str,
+                    reason=(comment or "").strip() or None,
+                )
+                await session.commit()
+            settings = Settings()
+            client_bot = Bot(
+                token=settings.telegram_bot_token_client,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
-            await client_bot.send_message(
-                chat_id=client_tid,
-                text=msg.format_client_booking_declined_by_trainer_html(
-                    date=date_str,
-                    day=dow,
-                    time=time_str,
-                    reason=(comment or "").strip(),
-                ),
-                reply_markup=decl_kb,
-            )
-        finally:
-            await client_bot.session.close()
+            try:
+                async with async_session_factory() as session:
+                    await try_deliver_booking_party_notifications_for_booking(
+                        session,
+                        int(booking_id),
+                        client_bot=client_bot,
+                    )
+            finally:
+                await client_bot.session.close()
         return True
     finally:
         _clear_booking_decline_state(telegram_id)

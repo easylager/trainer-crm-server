@@ -1906,10 +1906,9 @@
 
       document.getElementById('btnDeclineSubmitBooking').onclick = function() {
         var comment = (document.getElementById('declineCommentBooking').value || '').trim();
-        if (!comment) { alert('Напишите причину отклонения для клиента.'); return; }
         var id = state.selectedBooking && state.selectedBooking.id;
         if (!id) return;
-        postJsonTrainer('/trainer/bookings/' + id + '/decline', { comment: comment }).then(function() {
+        postJsonTrainer('/trainer/bookings/' + id + '/decline', { comment: comment || null }).then(function() {
           leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       };
