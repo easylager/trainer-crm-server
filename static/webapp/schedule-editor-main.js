@@ -9326,9 +9326,9 @@
         function targetStartsOnExcludedControl(tgt, swipeRootEl) {
           if (!tgt || !tgt.closest) return true;
           if (tgt.closest('input, textarea, select, label, a[href]')) return true;
-          /* Bottom week strip lives outside #tabCalendar — attach swipe on #scheduleWeekDayStrip; allow starting on day <button>s. */
+          /* Bottom strip: day buttons = tap-to-scroll; week swipe via ‹ › and calendar body — not day pills. */
           if (swipeRootEl && swipeRootEl.id === 'scheduleWeekDayStrip') {
-            return false;
+            return !!tgt.closest('[data-strip-date]');
           }
           if (swipeRootEl && swipeRootEl.id === 'screenDayPick') {
             return !!tgt.closest('#dayPickWeekPrev, #dayPickWeekNext');
@@ -9529,6 +9529,13 @@
       })();
 
       state.weekStart = getMonday(new Date());
+      (function primeScheduleCalendarShell() {
+        var cc = document.getElementById('calendarContent');
+        if (cc && !String(cc.innerHTML || '').trim()) {
+          cc.innerHTML = buildCalendarSkeletonHtml();
+        }
+        renderScheduleWeekDayStrip();
+      })();
       initScheduleEditorPendingInbox();
 
       (function () {
@@ -9626,14 +9633,16 @@
           }
         }
         function startScheduleLoads() {
+          /* Subscription/status must not block first paint — tab switch already called loadSlots() without this gate. */
           runAfterScheduleCrmGate(function() {
-            if (state.pendingOpenTemplateTab) {
-              state.pendingOpenTemplateTab = false;
-              setActiveTab('template');
-              return;
-            }
-            loadSlots();
+            syncAddSlotsButtonEligibility();
           });
+          if (state.pendingOpenTemplateTab) {
+            state.pendingOpenTemplateTab = false;
+            setActiveTab('template');
+            return;
+          }
+          loadSlots();
         }
         withTrainerMiniAppAccessThen(startScheduleLoads);
       }
