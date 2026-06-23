@@ -29,7 +29,6 @@
   --landing-section-y: clamp(48px, 7vw, 64px);
   --landing-section-header-gap: 28px;
   --landing-photo-opacity: 0.24;
-  --landing-header-h: 56px;
   --app-font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
   --app-font-display: "Playfair Display", Georgia, serif;
 }
@@ -80,35 +79,12 @@ body.landing {
   pointer-events: none;
 }
 
-/* ─── Header ─── */
-.landing-header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  height: var(--landing-header-h);
-  transition: background 0.35s ease, backdrop-filter 0.35s ease, box-shadow 0.35s ease;
-}
-.landing-header--scrolled {
-  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--ice-deep) 8%, transparent);
-}
-.landing-header__inner {
-  max-width: var(--landing-max);
-  margin: 0 auto;
-  padding: 0 var(--landing-gutter);
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+/* ─── Brand wordmark (static in hero) ─── */
 .landing-wordmark {
+  margin: 0 0 10px;
   font-family: var(--app-font-display);
   font-weight: 600;
-  font-size: 1.125rem;
+  font-size: clamp(1.25rem, 3.5vw, 1.5rem);
   letter-spacing: -0.02em;
 }
 
@@ -149,7 +125,7 @@ body.landing {
 .landing-hero {
   position: relative;
   min-height: min(100vh, 920px);
-  padding: calc(var(--landing-header-h) + 32px) var(--landing-gutter) calc(var(--landing-section-y) * 0.75);
+  padding: max(24px, env(safe-area-inset-top, 0px)) var(--landing-gutter) calc(var(--landing-section-y) * 0.75);
   overflow: hidden;
 }
 .landing-hero__photo {
@@ -685,9 +661,8 @@ body.landing {
 }
 .landing-sticky-cta[hidden] { display: none !important; }
 
-/* Mobile: header compact link on desktop only; hero + sticky + band never overlap. */
+/* Mobile: extra footer room when bottom sticky CTA is visible. */
 @media (max-width: 859px) {
-  .landing-header__cta { display: none; }
   body.landing--sticky-cta .landing-footer {
     padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }

@@ -52,9 +52,6 @@
       var btn = document.getElementById(id);
       if (btn) btn.textContent = primaryLabel;
     });
-    var headerBtn = document.getElementById('headerCta');
-    if (headerBtn) headerBtn.textContent = hero.cta_header || 'Telegram';
-
     if (visual.hero_image) {
       var photo = document.getElementById('heroPhoto');
       if (photo) {
@@ -431,7 +428,7 @@
   }
 
   function bindCtas() {
-    ['heroCta', 'headerCta', 'bandCta', 'stickyCtaBtn'].forEach(function (id) {
+    ['heroCta', 'bandCta', 'stickyCtaBtn'].forEach(function (id) {
       var btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', function () { startTelegram(btn); });
@@ -530,16 +527,6 @@
     }
   }
 
-  function setupHeader() {
-    var header = document.getElementById('landingHeader');
-    if (!header) return;
-    function onScroll() {
-      header.classList.toggle('landing-header--scrolled', window.scrollY > 24);
-    }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-  }
-
   function setupStickyCta() {
     var sticky = document.getElementById('stickyCta');
     var heroCta = document.getElementById('heroCta');
@@ -567,7 +554,7 @@
         },
         {
           threshold: 0.15,
-          rootMargin: '-56px 0px -72px 0px',
+          rootMargin: '0px 0px -72px 0px',
         }
       );
       if (heroCta) io.observe(heroCta);
@@ -635,7 +622,6 @@
   loadConfig(function (cfg) {
     applyConfig(cfg);
     bindCtas();
-    setupHeader();
     setupStickyCta();
     setupPhoneTilt();
     setupShowcaseRotate();
