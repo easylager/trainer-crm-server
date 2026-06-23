@@ -1,0 +1,271 @@
+/**
+ * Ice Pro landing — cinematic motion (richer than Mini App; same easing DNA).
+ */
+
+/* ─── Intro timeline ─── */
+@keyframes landing-frost-bloom {
+  from { opacity: 0; transform: scale(1.08); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes landing-ken-burns {
+  from { transform: scale(1.06); }
+  to   { transform: scale(1); }
+}
+
+@keyframes landing-cta-glow {
+  0%, 100% { box-shadow: var(--shadow-amber); }
+  50%      { box-shadow: 0 16px 40px rgba(245, 166, 35, 0.38), 0 6px 16px rgba(245, 166, 35, 0.22); }
+}
+
+@keyframes landing-slot-shimmer {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.72; }
+}
+
+@keyframes landing-frost-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
+  50%      { transform: translate(2%, -1%) scale(1.04); opacity: 0.75; }
+}
+
+@keyframes landing-hero-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes landing-reveal-up {
+  from { opacity: 0; transform: translateY(28px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes landing-trace-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes landing-flake-fall {
+  0%   { transform: translateY(0) translateX(0) scale(0.6); opacity: 0; }
+  8%   { opacity: 0.85; }
+  85%  { opacity: 0.35; }
+  100% { transform: translateY(88vh) translateX(14px) scale(1); opacity: 0; }
+}
+
+@keyframes landing-phone-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+
+@keyframes landing-glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.9; transform: scale(1.06); }
+}
+
+@keyframes landing-tagline-shimmer {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.06); box-shadow: 0 4px 28px color-mix(in srgb, var(--vertical-brand-primary) 22%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent); }
+}
+
+@keyframes landing-link-glow {
+  0%, 100% { box-shadow: var(--shadow-card); }
+  50%      { box-shadow: var(--shadow-card), 0 0 28px color-mix(in srgb, var(--app-cta-fill) 28%, transparent); }
+}
+
+@keyframes landing-trace-spark {
+  0%, 100% { opacity: 0.85; stroke-width: 2.5; }
+  50%      { opacity: 1; stroke-width: 3; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--app-cta-fill) 50%, transparent)); }
+}
+
+/* Intro: photo + ambient */
+body.landing--ready .landing-hero__photo {
+  opacity: var(--landing-photo-opacity);
+  animation: landing-ken-burns 20s ease-out forwards;
+}
+
+body.landing--ready .landing-hero__ambient {
+  animation: landing-frost-drift 22s ease-in-out infinite;
+}
+
+body.landing--ready .landing-flake {
+  animation: landing-flake-fall 16s linear infinite;
+}
+
+body.landing--ready .landing-phone-glow {
+  animation: landing-glow-pulse 4.5s ease-in-out 0.8s infinite;
+}
+
+body.landing--ready .landing-phone-wrap {
+  animation: landing-phone-float 5.5s ease-in-out 1.4s infinite;
+}
+
+body.landing--ready .landing-tagline {
+  animation: landing-hero-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.42s both,
+             landing-tagline-shimmer 6s ease-in-out 2.5s infinite;
+}
+
+body.landing--ready .landing-hero__frost {
+  animation: landing-frost-bloom 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* SVG trace draw-in */
+.landing-trace__path {
+  stroke-dasharray: 420;
+  stroke-dashoffset: 420;
+}
+
+body.landing--ready .landing-trace__path {
+  animation: landing-trace-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards,
+             landing-trace-spark 3s ease-in-out 1.4s infinite;
+}
+
+/* Staggered hero copy */
+body.landing--ready .landing-reveal {
+  animation: landing-hero-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+body.landing--ready .landing-eyebrow       { animation-delay: 0.35s; filter: none; }
+body.landing--ready .landing-hero__title   { animation-delay: 0.48s; }
+body.landing--ready .landing-hero__sub     { animation-delay: 0.54s; }
+body.landing--ready .landing-pillars       { animation-delay: 0.58s; }
+body.landing--ready .landing-hero__actions { animation-delay: 0.66s; }
+body.landing--ready .landing-hero__visual  { animation-delay: 0.32s; }
+
+body.landing--ready .landing-phone {
+  animation: landing-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.38s both;
+}
+
+body.landing--ready .landing-btn--primary#heroCta {
+  animation: landing-cta-glow 3s ease-in-out 1.2s infinite;
+}
+
+body.landing--ready .ls-inbox {
+  animation: landing-inbox-pulse 2.5s ease-in-out 1.2s 1 both;
+}
+
+body.landing--ready .bv-sched__row--free {
+  animation: landing-slot-highlight 2.8s ease-in-out 0.8s infinite;
+}
+
+@keyframes landing-inbox-pulse {
+  0%, 100% { box-shadow: none; }
+  50%      { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vertical-brand-glow) 35%, transparent); }
+}
+
+@keyframes landing-slot-highlight {
+  0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--vertical-brand-primary) 25%, transparent); }
+  50%      { box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-cta-fill) 45%, transparent); }
+}
+
+/* Scroll reveal */
+.landing-reveal-scroll,
+.landing-bento__cell,
+.landing-step,
+.landing-arc__step {
+  opacity: 0;
+  transform: translateY(28px) scale(0.98);
+}
+
+.landing-reveal-scroll.is-visible,
+.landing-bento__cell.is-visible,
+.landing-step.is-visible,
+.landing-arc__step.is-visible {
+  animation: landing-reveal-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-arc__step:nth-child(1).is-visible { animation-delay: 0s; }
+.landing-arc__step:nth-child(2).is-visible { animation-delay: 0.08s; }
+.landing-arc__step:nth-child(3).is-visible { animation-delay: 0.16s; }
+.landing-arc__step:nth-child(4).is-visible { animation-delay: 0.24s; }
+
+.landing-arc__step--link.is-visible {
+  animation: landing-reveal-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both,
+             landing-link-glow 3.5s ease-in-out 0.9s infinite;
+}
+
+.landing-bento__cell:nth-child(1).is-visible { animation-delay: 0s; }
+.landing-bento__cell:nth-child(2).is-visible { animation-delay: 0.06s; }
+.landing-bento__cell:nth-child(3).is-visible { animation-delay: 0.12s; }
+.landing-bento__cell:nth-child(4).is-visible { animation-delay: 0.18s; }
+.landing-bento__cell:nth-child(5).is-visible { animation-delay: 0.24s; }
+.landing-bento__cell:nth-child(6).is-visible { animation-delay: 0.3s; }
+
+.landing-step:nth-child(1).is-visible { animation-delay: 0.05s; }
+.landing-step:nth-child(2).is-visible { animation-delay: 0.12s; }
+.landing-step:nth-child(3).is-visible { animation-delay: 0.19s; }
+
+/* Micro-interactions */
+@media (hover: hover) {
+  .landing-btn--primary:hover {
+    transform: scale(1.02);
+  }
+  .landing-btn--primary:active {
+    transform: scale(0.98);
+  }
+  .landing-bento__cell:hover {
+    box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--vertical-brand-glow) 25%, transparent);
+  }
+}
+
+/* Phone tilt on scroll — desktop only, applied via JS class */
+@media (min-width: 860px) {
+  .landing-phone--tilt {
+    transition: transform 0.15s ease-out;
+    will-change: transform;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  body.landing--ready .landing-hero__photo,
+  body.landing--ready .landing-hero__ambient,
+  body.landing--ready .landing-flake,
+  body.landing--ready .landing-phone-glow,
+  body.landing--ready .landing-phone-wrap,
+  body.landing--ready .landing-tagline,
+  body.landing--ready .landing-hero__frost,
+  body.landing--ready .landing-reveal,
+  body.landing--ready .landing-phone,
+  body.landing--ready .landing-trace__path,
+  body.landing--ready .landing-btn--primary#heroCta,
+  body.landing--ready .ls-inbox,
+  body.landing--ready .bv-sched__row--free,
+  .landing-reveal-scroll.is-visible,
+  .landing-bento__cell.is-visible,
+  .landing-step.is-visible,
+  .landing-arc__step.is-visible,
+  .landing-steps__list.is-visible::before {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .landing-hero__photo {
+    opacity: var(--landing-photo-opacity);
+    transform: none;
+  }
+
+  .landing-trace__path {
+    stroke-dashoffset: 0;
+  }
+
+  .landing-reveal,
+  .landing-reveal-scroll,
+  .landing-bento__cell,
+  .landing-step,
+  .landing-arc__step {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  .landing-steps__list::before {
+    transform: scaleX(1);
+  }
+}

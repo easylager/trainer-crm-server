@@ -176,6 +176,13 @@ class Settings(BaseSettings):
     )
     # Trainer bot: username for deep links (t.me/<username>?start=link_<token>). Used by admin /trainer_welcome_link.
     trainer_bot_username: str | None = None
+    # Ice Pro public landing (GET /): vertical/market manifest + trainer-start CTA.
+    landing_vertical: str = "ice"
+    landing_market: str = "by"
+    landing_trainer_registration_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
+    # Stricter cap for POST /api/public/trainer-start (per IP, sliding window).
+    landing_trainer_start_max_requests: int = 3
+    landing_trainer_start_window_sec: float = 600.0
     # SMTP for sending certificate link emails. When any is missing, email sending is disabled.
     smtp_host: str | None = None
     smtp_port: int = 587

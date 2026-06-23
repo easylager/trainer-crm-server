@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Ice Pro — CRM для индивидуального тренера на льду. Расписание, клиенты из каталога и аналитика в Telegram.">
+  <title>Ice Pro — CRM для тренера на льду</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/landing/landing.css?v=20260624f">
+  <link rel="stylesheet" href="/landing/landing-bento-viz.css?v=20260624c">
+  <link rel="stylesheet" href="/landing/landing-arc.css?v=20260624f">
+  <link rel="stylesheet" href="/landing/landing-showcase.css?v=20260624">
+  <link rel="stylesheet" href="/landing/landing-motion.css?v=20260624f">
+</head>
+<body class="landing landing--intro">
+  <a class="landing-skip" href="#main">К содержимому</a>
+
+  <header class="landing-header" id="landingHeader">
+    <div class="landing-header__inner">
+      <span class="landing-wordmark" id="brandName">Ice Pro</span>
+      <button type="button" class="landing-btn landing-btn--ghost landing-header__cta" id="headerCta">Telegram</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="landing-hero" aria-labelledby="heroTitle">
+      <div class="landing-hero__photo" id="heroPhoto" aria-hidden="true"></div>
+      <div class="landing-hero__frost" aria-hidden="true"></div>
+      <div class="landing-hero__ambient" aria-hidden="true"></div>
+      <div class="landing-flakes" aria-hidden="true">
+        <span class="landing-flake landing-flake--1"></span>
+        <span class="landing-flake landing-flake--2"></span>
+        <span class="landing-flake landing-flake--3"></span>
+        <span class="landing-flake landing-flake--4"></span>
+        <span class="landing-flake landing-flake--5"></span>
+        <span class="landing-flake landing-flake--6"></span>
+      </div>
+
+      <div class="landing-hero__grid">
+        <div class="landing-hero__copy">
+          <p class="landing-eyebrow landing-reveal" id="heroEyebrow">Ice Pro · solo-тренеры · Беларусь</p>
+          <p class="landing-tagline landing-reveal" id="heroTagline">Расписание, которое не тает</p>
+          <h1 class="landing-hero__title landing-reveal" id="heroTitle">CRM для тренера на льду</h1>
+          <p class="landing-hero__sub landing-reveal" id="heroSub"></p>
+          <ul class="landing-pillars landing-reveal" id="heroPillars" aria-label="Возможности Ice Pro"></ul>
+          <div class="landing-hero__actions landing-reveal">
+            <button type="button" class="landing-btn landing-btn--primary" id="heroCta">Начать в Telegram</button>
+          </div>
+        </div>
+
+        <div class="landing-hero__visual landing-reveal" id="heroVisual">
+          <svg class="landing-trace" viewBox="0 0 400 120" aria-hidden="true">
+            <path class="landing-trace__path" d="M 20 90 Q 120 20, 220 55 T 380 35" fill="none" stroke-width="2.5"/>
+          </svg>
+          <div class="landing-phone-wrap">
+            <div class="landing-phone-glow" aria-hidden="true"></div>
+            <div class="landing-phone" id="phoneMock">
+            <div class="landing-phone__shell">
+              <div class="landing-phone__notch"></div>
+              <div class="landing-phone__screen landing-showcase" id="landingShowcase" data-screen="hub">
+                <div class="landing-showcase__viewport">
+                  <!-- Screen A: Trainer Hub -->
+                  <div class="landing-showcase__screen landing-showcase__screen--hub" aria-hidden="false">
+                    <header class="ls-hub-header">
+                      <h2 class="ls-hub-header__title">Добрый день</h2>
+                      <span class="ls-hub-header__share" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93"/><path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41"/></svg>
+                      </span>
+                    </header>
+                    <nav class="ls-week-pulse" aria-label="Неделя">
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Пн</span><span class="ls-week-pulse__num">16</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Вт</span><span class="ls-week-pulse__num">17</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--medium"></span></span></div>
+                      <div class="ls-week-pulse__day ls-week-pulse__day--today"><span class="ls-week-pulse__wd">Ср</span><span class="ls-week-pulse__num">18</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--heavy"></span></span></div>
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Чт</span><span class="ls-week-pulse__num">19</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Пт</span><span class="ls-week-pulse__num">20</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--medium"></span></span></div>
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Сб</span><span class="ls-week-pulse__num">21</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
+                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Вс</span><span class="ls-week-pulse__num">22</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill"></span></span></div>
+                    </nav>
+                    <div class="ls-stats">
+                      <div class="ls-stat ls-stat--highlight"><span class="ls-stat__val">12</span><span class="ls-stat__lbl">записей</span></div>
+                      <div class="ls-stat"><span class="ls-stat__val">3</span><span class="ls-stat__lbl">новых</span></div>
+                      <div class="ls-stat"><span class="ls-stat__val">4</span><span class="ls-stat__lbl">слота</span></div>
+                    </div>
+                    <article class="ls-inbox">
+                      <p class="ls-inbox__kicker">Сейчас важно</p>
+                      <p class="ls-inbox__title">Анна · 18:00</p>
+                      <p class="ls-inbox__sub">Minsk Arena — подтвердить</p>
+                    </article>
+                  </div>
+                  <!-- Screen B: Schedule -->
+                  <div class="landing-showcase__screen landing-showcase__screen--schedule" aria-hidden="true">
+                    <header class="ls-sched-head">
+                      <h2 class="ls-sched-head__title">Среда, 18 июня</h2>
+                    </header>
+                    <ul class="ls-sched-list">
+                      <li class="ls-sched-row ls-sched-row--sky"><span class="ls-sched-row__time">16:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Максим</span><span class="ls-sched-row__meta">Minsk Arena</span></span></li>
+                      <li class="ls-sched-row ls-sched-row--amber"><span class="ls-sched-row__time">17:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Анна</span><span class="ls-sched-row__meta">Фигурное</span></span></li>
+                      <li class="ls-sched-row ls-sched-row--free ls-sched-row--sky"><span class="ls-sched-row__time">18:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Свободно</span><span class="ls-sched-row__meta">Онлайн-запись</span></span></li>
+                      <li class="ls-sched-row ls-sched-row--amber"><span class="ls-sched-row__time">19:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Дарья</span><span class="ls-sched-row__meta">Minsk Arena</span></span></li>
+                    </ul>
+                    <div class="ls-sched-fab" aria-hidden="true">+ слот</div>
+                  </div>
+                </div>
+                <nav class="ls-tab-bar" aria-hidden="true">
+                  <span class="ls-tab ls-tab--active" data-tab="hub">Главная</span>
+                  <span class="ls-tab" data-tab="schedule">Расписание</span>
+                  <span class="ls-tab">Клиенты</span>
+                  <span class="ls-tab">Ещё</span>
+                </nav>
+              </div>
+            </div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-arc" aria-labelledby="arcHeading">
+      <div class="landing-arc__inner">
+        <header class="landing-section-header landing-reveal-scroll">
+          <p class="landing-section-eyebrow" id="arcEyebrow">Ежедневный цикл</p>
+          <h2 class="landing-section-title" id="arcHeading">Ссылка → запись → подтверждение → рост</h2>
+          <p class="landing-section-desc" id="arcSub">Вместо переписки «когда можно?» — один поток в Telegram.</p>
+        </header>
+        <ol class="landing-arc__list" id="arcList"></ol>
+      </div>
+    </section>
+
+    <section class="landing-bento" aria-labelledby="bentoHeading">
+      <header class="landing-section-header landing-reveal-scroll">
+        <p class="landing-section-eyebrow" id="bentoEyebrow">Возможности</p>
+        <h2 class="landing-section-title" id="bentoHeading">CRM и поток клиентов</h2>
+      </header>
+      <div class="landing-bento__grid" id="bentoGrid"></div>
+    </section>
+
+    <section class="landing-steps" aria-labelledby="stepsHeading">
+      <header class="landing-section-header landing-reveal-scroll">
+        <p class="landing-section-eyebrow" id="stepsEyebrow">Старт</p>
+        <h2 class="landing-section-title" id="stepsHeading">Три шага до первой записи</h2>
+      </header>
+      <ol class="landing-steps__list" id="stepsList"></ol>
+    </section>
+
+    <section class="landing-cta-band" aria-labelledby="ctaBandTitle">
+      <div class="landing-cta-band__inner landing-reveal-scroll">
+        <h2 class="landing-cta-band__title" id="ctaBandTitle"></h2>
+        <p class="landing-cta-band__sub" id="ctaBandSub"></p>
+        <button type="button" class="landing-btn landing-btn--primary landing-btn--lg" id="bandCta">Начать в Telegram</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <p class="landing-footer__line">
+      <span id="footerBrand">Ice Pro</span> · <span id="footerGeo">Беларусь</span>
+    </p>
+    <p class="landing-footer__credit" id="footerCredit"></p>
+  </footer>
+
+  <div class="landing-sticky-cta" id="stickyCta" hidden>
+    <button type="button" class="landing-btn landing-btn--primary landing-btn--block" id="stickyCtaBtn">Начать в Telegram</button>
+  </div>
+
+  <p class="landing-error" id="landingError" role="alert" hidden></p>
+
+  <input type="text" name="website" id="hpWebsite" class="landing-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+  <script defer src="/landing/landing-main.js?v=20260624f"></script>
+</body>
+</html>

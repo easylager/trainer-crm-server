@@ -1,0 +1,211 @@
+/**
+ * Ice Pro landing — activation arc (Telegram → link → confirm → grow).
+ */
+
+.landing-arc {
+  padding: calc(var(--landing-section-y) * 0.65) var(--landing-gutter) var(--landing-section-y);
+}
+
+.landing-arc__inner {
+  max-width: var(--landing-max);
+  margin: 0 auto;
+}
+
+.landing-arc__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .landing-arc__list {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    position: relative;
+  }
+
+  .landing-arc__list::before {
+    content: "";
+    position: absolute;
+    top: 32px;
+    left: 8%;
+    right: 8%;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--vertical-brand-glow) 10%, transparent),
+      color-mix(in srgb, var(--vertical-brand-glow) 45%, transparent),
+      color-mix(in srgb, var(--app-cta-fill) 35%, transparent)
+    );
+    transform: scaleX(0);
+    transform-origin: left center;
+    z-index: 0;
+  }
+
+  .landing-arc__list.is-visible::before {
+    transform: scaleX(1);
+    transition: transform 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
+  }
+}
+
+.landing-arc__step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px;
+  border-radius: 18px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid color-mix(in srgb, var(--vertical-brand-primary) 14%, transparent);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-arc__step--link {
+  border-color: color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--app-cta-fill) 12%, var(--tg-theme-secondary-bg-color)),
+    var(--tg-theme-secondary-bg-color)
+  );
+}
+
+.landing-arc__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.landing-arc__icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--vertical-brand-primary);
+  background: color-mix(in srgb, var(--vertical-brand-mist) 55%, #fff);
+  border: 1px solid color-mix(in srgb, var(--vertical-brand-glow) 22%, transparent);
+}
+
+.landing-arc__step--link .landing-arc__icon {
+  color: #8a5a00;
+  background: color-mix(in srgb, var(--app-cta-fill) 22%, #fff);
+  border-color: color-mix(in srgb, var(--app-cta-fill) 32%, transparent);
+}
+
+.landing-arc__head-text {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.landing-arc__num {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tg-theme-hint-color);
+}
+
+.landing-arc__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.landing-arc__body {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--tg-theme-text-color) 58%, var(--tg-theme-hint-color));
+}
+
+.landing-arc__mock {
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #fff 80%, var(--vertical-brand-mist));
+  border: 1px solid color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
+}
+
+.landing-arc__mock-url {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--vertical-brand-primary) 28%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--vertical-brand-primary) 10%, transparent);
+}
+
+.landing-arc__mock-url-bot {
+  display: block;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: #168acf;
+  word-break: break-all;
+}
+
+.landing-arc__mock-url-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--tg-theme-text-color);
+}
+
+.landing-arc__mock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--tg-theme-text-color);
+  background: var(--tg-theme-bg-color);
+  border: 1px solid color-mix(in srgb, var(--vertical-brand-primary) 20%, transparent);
+}
+
+.landing-arc__mock-cta {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ice-deep);
+  background: var(--app-cta-fill);
+}
+
+@media (prefers-color-scheme: dark) {
+  .landing-arc__mock {
+    background: color-mix(in srgb, var(--tg-theme-bg-color) 85%, #fff);
+  }
+
+  .landing-arc__mock-url {
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 95%, #fff);
+    border-color: color-mix(in srgb, var(--vertical-brand-glow) 35%, transparent);
+  }
+
+  .landing-arc__mock-url-bot {
+    color: #5eb8f0;
+  }
+
+  .landing-arc__mock-row {
+    background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 90%, #fff);
+  }
+}

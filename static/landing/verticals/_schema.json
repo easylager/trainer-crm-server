@@ -1,0 +1,9 @@
+{
+  "$comment": "Contract for static/landing/verticals/{vertical}.{market}.json",
+  "required_top_level": ["brand", "hero", "bento", "steps", "cta", "visual", "footer"],
+  "brand": { "name": "string", "tagline": "string", "eyebrow": "string" },
+  "hero": { "title": "string", "subtitle": "string", "cta_primary": "string", "cta_loading": "string" },
+  "stats_labels": { "trainers": "string", "arenas": "string", "cities": "string" },
+  "bento": [{ "id": "string", "size": "large|stat|medium|wide|quote", "title": "string?", "body": "string", "icon": "string?" }],
+  "visual": { "hero_image": "string", "hero_image_alt": "string", "hero_image_credit": "string", "bento_texture": "string?" }
+}

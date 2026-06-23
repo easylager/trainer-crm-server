@@ -24,6 +24,7 @@ from src.api.routes import (
     webhooks_router,
 )
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
+from src.application.landing_manifest import inject_landing_html
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
@@ -78,6 +79,7 @@ async def _validation_exception_handler(_request, exc: RequestValidationError):
 
 # Telegram Web App: trainer schedule (Mini App)
 _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "webapp"
+_LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
 
 # SEC-G2: discourage MIME sniffing on all Mini App responses using these header sets (HTML + JS/CSS).
 _WEBAPP_SNIFFING = {"X-Content-Type-Options": "nosniff"}
@@ -1176,6 +1178,50 @@ def webapp_mini_app_confirm_js():
         media_type="application/javascript",
         headers=_WEBAPP_NO_CACHE_HEADERS,
     )
+
+
+_LANDING_ASSET_MEDIA = {
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+}
+
+
+@app.get("/")
+def landing_page():
+    """Ice Pro marketing landing — vertical entry for trainers."""
+    path = _LANDING_DIR / "index.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Landing not found")
+    html = path.read_text(encoding="utf-8")
+    try:
+        html = inject_landing_html(html)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
+@app.get("/landing/{asset_path:path}")
+def landing_asset(asset_path: str, request: Request):
+    """Static assets for Ice Pro landing (CSS/JS/images). Use ``?v=`` for long cache."""
+    if ".." in asset_path or asset_path.startswith("/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    path = (_LANDING_DIR / asset_path).resolve()
+    try:
+        path.relative_to(_LANDING_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found") from None
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    suffix = path.suffix.lower()
+    media = _LANDING_ASSET_MEDIA.get(suffix, "application/octet-stream")
+    cache = _webapp_versioned_asset_cache_headers(request)
+    return FileResponse(path, media_type=media, headers=cache)
 
 
 @app.get("/health")

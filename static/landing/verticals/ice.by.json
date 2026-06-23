@@ -1,0 +1,134 @@
+{
+  "brand": {
+    "name": "Ice Pro",
+    "tagline": "Расписание, которое не тает",
+    "eyebrow": "Ice Pro · solo-тренеры · Беларусь"
+  },
+  "hero": {
+    "title": "CRM для тренера на льду",
+    "subtitle": "Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог Ice Studio и аналитика — в одном боте. 14 дней бесплатно.",
+    "cta_primary": "Начать в Telegram",
+    "cta_loading": "Открываем Telegram…"
+  },
+  "value_pillars": [
+    { "id": "telegram", "label": "Telegram — без установки", "icon": "telegram" },
+    { "id": "link", "label": "Ссылка → клиент записался сам", "icon": "link" },
+    { "id": "growth", "label": "Каталог Ice Studio", "icon": "discover" },
+    { "id": "practice", "label": "Заметки, слоты, аналитика", "icon": "notes" }
+  ],
+  "sections": {
+    "arc_eyebrow": "Ежедневный цикл",
+    "arc_heading": "Ссылка → запись → подтверждение → рост",
+    "arc_subtitle": "Вместо переписки «когда можно?» — один поток в Telegram.",
+    "bento_eyebrow": "Возможности",
+    "bento_heading": "CRM и поток клиентов",
+    "steps_eyebrow": "Старт",
+    "steps_heading": "Три шага до первой записи"
+  },
+  "activation_arc": [
+    {
+      "id": "telegram",
+      "title": "Telegram",
+      "body": "Без установки и настройки CRM — вы уже здесь каждый день.",
+      "icon": "telegram"
+    },
+    {
+      "id": "link",
+      "title": "Ваша ссылка",
+      "body": "Кидаете в чат родителю или ученику — он сам выбирает слот.",
+      "icon": "link"
+    },
+    {
+      "id": "confirm",
+      "title": "Подтверждение",
+      "body": "Заявка приходит в бот. Одно нажатие — и напоминание обоим.",
+      "icon": "bell"
+    },
+    {
+      "id": "grow",
+      "title": "Рост",
+      "body": "Новые клиенты из каталога Ice Studio — пока вы на льду.",
+      "icon": "discover"
+    }
+  ],
+  "stats_labels": {
+    "trainers": "тренеров в каталоге",
+    "arenas": "арен подключено",
+    "cities": "городов"
+  },
+  "bento": [
+    {
+      "id": "slots",
+      "size": "large",
+      "kicker": "Онлайн-запись",
+      "title": "Слоты на аренах",
+      "body": "Выставляете окна в расписании — ученик видит «Свободно» и записывается без звонков.",
+      "icon": "calendar"
+    },
+    {
+      "id": "stats",
+      "size": "stat",
+      "kicker": "Платформа",
+      "title": "Уже в Ice Studio",
+      "body": "Тренеры, арены и города — ликвидность каталога растёт."
+    },
+    {
+      "id": "catalog",
+      "size": "medium",
+      "kicker": "Ice Studio",
+      "title": "Публичная карточка",
+      "body": "Вас находят в каталоге — город, арена, специализация и кнопка записи.",
+      "icon": "discover"
+    },
+    {
+      "id": "analytics",
+      "size": "medium",
+      "kicker": "Без Excel",
+      "title": "Аналитика практики",
+      "body": "Записи, выручка и новые клиенты — сводка за неделю в одном экране.",
+      "icon": "chart"
+    },
+    {
+      "id": "notes",
+      "size": "wide",
+      "kicker": "Досье клиента",
+      "title": "Заметки, цели и история",
+      "body": "Чипы, профиль с целями сезона и лента заметок после каждого занятия — вместо блокнота и хаоса в чатах.",
+      "icon": "notes"
+    },
+    {
+      "id": "community",
+      "size": "quote",
+      "body": "Сделано людьми из ледового комьюнити — не обезличенный SaaS для букинга салонов."
+    }
+  ],
+  "steps": [
+    {
+      "title": "Начать в Telegram",
+      "body": "Откроется Ice Pro — без установки и регистрации на сайте."
+    },
+    {
+      "title": "Ссылка и расписание",
+      "body": "Слоты на аренах + персональная ссылка для записи."
+    },
+    {
+      "title": "Клиенты сами",
+      "body": "Записываются по ссылке или из каталога — вы подтверждаете в боте."
+    }
+  ],
+  "cta": {
+    "band_title": "Готовы выйти на лёд с Ice Pro?",
+    "band_subtitle": "14 дней бесплатно · без карты · только Telegram"
+  },
+  "visual": {
+    "hero_image": "/landing/assets/hero-ice-macro.webp",
+    "hero_image_alt": "Макро-текстура льда катка",
+    "hero_image_credit": "Photo: Getty Images / Unsplash",
+    "bento_texture": "/landing/assets/bento-ice-grain.webp"
+  },
+  "footer": {
+    "geo": "Беларусь",
+    "powered_by": "Ice Studio",
+    "credit_key": "hero_image_credit"
+  }
+}

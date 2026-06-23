@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,8 @@ from src.application.brand_presentation import (
     brand_presentation_to_public_dict,
     resolve_brand_from_collective_row,
 )
+from src.application.landing_manifest import public_landing_config
+from src.application.landing_trainer_start_use_cases import issue_trainer_start_from_landing
 from src.application.catalog_use_cases import (
     get_platform_stats,
     list_arenas,
@@ -41,6 +44,8 @@ from src.infrastructure import s3
 from src.infrastructure.db.models import DEMAND_SOURCE_CATALOG, DEMAND_SOURCE_DIRECT_LINK
 from src.shared.config import Settings
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+from src.shared.audit import ACTOR_API, audit_log
+from src.shared.rate_limit import RateLimiter
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +54,30 @@ logger = logging.getLogger(__name__)
 _TELEGRAM_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,64}$")
 # Cap to avoid log/hash blowups from rogue clients.
 _UA_MAX_LEN = 512
+
+_trainer_start_limiter: RateLimiter | None = None
+
+
+class TrainerStartBody(BaseModel):
+    referral_code: str | None = Field(default=None, max_length=64)
+    website: str | None = Field(default=None, max_length=200)  # honeypot — must stay empty
+
+
+def reset_trainer_start_limiter_for_tests() -> None:
+    """Tests only — rebuild limiter from current env."""
+    global _trainer_start_limiter
+    _trainer_start_limiter = None
+
+
+def _get_trainer_start_limiter() -> RateLimiter:
+    global _trainer_start_limiter
+    if _trainer_start_limiter is None:
+        s = Settings()
+        _trainer_start_limiter = RateLimiter(
+            s.landing_trainer_start_max_requests,
+            s.landing_trainer_start_window_sec,
+        )
+    return _trainer_start_limiter
 
 
 def _build_contact_telegram_url(trainer_id: int, telegram_username: str | None) -> str | None:
@@ -221,6 +250,67 @@ async def platform_stats(
     # Numbers move slowly; small CDN-edge cache OK, but per-request DB read keeps it fresh enough.
     response.headers["Cache-Control"] = "public, max-age=120"
     return await get_platform_stats(session)
+
+
+@router.get("/landing-config")
+async def landing_config() -> dict:
+    """Public manifest slice for Ice Pro landing (copy, bento, visual assets)."""
+    return public_landing_config()
+
+
+@router.post("/trainer-start")
+async def trainer_start_from_landing(
+    request: Request,
+    body: TrainerStartBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Create trainer draft + one-time Ice Pro bot link (site CTA).
+
+    Replaces manual /trainer_welcome_link for organic traffic.
+    """
+    settings = Settings()
+    if not settings.landing_trainer_registration_enabled:
+        raise HTTPException(status_code=503, detail="Registration temporarily unavailable")
+
+    # Honeypot: bots fill hidden fields; silently reject without hinting.
+    if body.website and str(body.website).strip():
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    ip = client_ip_from_request(request)
+    limiter = _get_trainer_start_limiter()
+    if not limiter.check_and_consume(ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
+    try:
+        result = await issue_trainer_start_from_landing(
+            session,
+            referral_code=body.referral_code,
+            settings=settings,
+        )
+    except ValueError as exc:
+        if str(exc) == "trainer_bot_username_missing":
+            raise HTTPException(
+                status_code=503,
+                detail="Telegram bot is not configured yet. Please try again later.",
+            ) from exc
+        raise
+
+    audit_log(
+        "landing.trainer_start_issued",
+        ACTOR_API,
+        ip,
+        {
+            "trainer_id": result["trainer_id"],
+            "vertical": settings.landing_vertical,
+            "market": settings.landing_market,
+            "has_referral": bool(result.get("referral_code")),
+        },
+    )
+    return {
+        "trainer_id": result["trainer_id"],
+        "redirect_url": result["redirect_url"],
+    }
 
 
 @router.get("/arenas")
