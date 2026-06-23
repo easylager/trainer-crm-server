@@ -36,7 +36,14 @@ from src.shared.sentry_init import init_sentry
 _settings_for_bench = Settings()
 init_sentry(_settings_for_bench, "api")
 
-app = FastAPI(title="Trainer CRM API")
+# OpenAPI UI exposes route surface area — dev only (DEBUG=true).
+_api_docs_enabled = bool(_settings_for_bench.debug)
+app = FastAPI(
+    title="Trainer CRM API",
+    docs_url="/docs" if _api_docs_enabled else None,
+    redoc_url="/redoc" if _api_docs_enabled else None,
+    openapi_url="/openapi.json" if _api_docs_enabled else None,
+)
 
 if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.trainer_webapp_benchmark_slow_ms is not None:
     logger.info(
