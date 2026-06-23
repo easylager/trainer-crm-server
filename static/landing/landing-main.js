@@ -48,10 +48,12 @@
     text('footerGeo', footer.geo);
 
     var primaryLabel = hero.cta_primary || 'Начать в Telegram';
-    ['heroCta', 'headerCta', 'bandCta', 'stickyCtaBtn'].forEach(function (id) {
+    ['heroCta', 'bandCta', 'stickyCtaBtn'].forEach(function (id) {
       var btn = document.getElementById(id);
       if (btn) btn.textContent = primaryLabel;
     });
+    var headerBtn = document.getElementById('headerCta');
+    if (headerBtn) headerBtn.textContent = hero.cta_header || 'Telegram';
 
     if (visual.hero_image) {
       var photo = document.getElementById('heroPhoto');
@@ -540,12 +542,40 @@
 
   function setupStickyCta() {
     var sticky = document.getElementById('stickyCta');
+    var heroCta = document.getElementById('heroCta');
+    var bandCta = document.getElementById('bandCta');
     if (!sticky || window.matchMedia('(min-width: 860px)').matches) return;
-    function onScroll() {
-      sticky.hidden = window.scrollY < window.innerHeight * 0.4;
+
+    var heroVisible = true;
+    var bandVisible = false;
+
+    function syncSticky() {
+      // One primary CTA on screen: hide sticky when hero or closing band CTA is visible.
+      var show = !heroVisible && !bandVisible && window.scrollY > 48;
+      sticky.hidden = !show;
+      document.body.classList.toggle('landing--sticky-cta', show);
     }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+
+    if (typeof IntersectionObserver === 'function') {
+      var io = new IntersectionObserver(
+        function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.target === heroCta) heroVisible = entry.isIntersecting;
+            if (entry.target === bandCta) bandVisible = entry.isIntersecting;
+          });
+          syncSticky();
+        },
+        {
+          threshold: 0.15,
+          rootMargin: '-56px 0px -72px 0px',
+        }
+      );
+      if (heroCta) io.observe(heroCta);
+      if (bandCta) io.observe(bandCta);
+    }
+
+    window.addEventListener('scroll', syncSticky, { passive: true });
+    syncSticky();
   }
 
   function setupPhoneTilt() {

@@ -685,6 +685,14 @@ body.landing {
 }
 .landing-sticky-cta[hidden] { display: none !important; }
 
+/* Mobile: header compact link on desktop only; hero + sticky + band never overlap. */
+@media (max-width: 859px) {
+  .landing-header__cta { display: none; }
+  body.landing--sticky-cta .landing-footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .landing-error {
   position: fixed;
   left: 50%;
