@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606199';
+  var SHELL_VERSION = '202606200';
 
   /** Prod default: off until TRAINER_COLLECTIVE_ENABLED=1 on API + hub bootstrap / access flag. */
   function isCollectiveFeatureEnabled() {
@@ -24,6 +24,19 @@
 
   function applyCollectiveFeatureFlag(enabled) {
     global.TRAINER_COLLECTIVE_ENABLED = !!enabled;
+    if (!enabled) removeCollectiveMoreItem();
+  }
+
+  /** Collective menu only when API/bootstrap returned a real studio slug. */
+  function hasCollectiveMembershipPayload(data) {
+    return !!(data && data.slug && String(data.slug).trim());
+  }
+
+  function removeCollectiveMoreItem() {
+    var link = document.querySelector('[data-shell-path="trainer-collective"]');
+    var item = link && link.closest('.trainer-more-sheet__item');
+    if (item) item.remove();
+    state.collectiveMenuVisible = false;
   }
 
   var TAB_ICONS = {
@@ -1209,6 +1222,10 @@
   }
 
   function ensureCollectiveMoreItem() {
+    if (!isCollectiveFeatureEnabled()) {
+      removeCollectiveMoreItem();
+      return false;
+    }
     var list = document.querySelector('.trainer-more-sheet__list');
     if (!list) return false;
     if (list.querySelector('[data-shell-path="trainer-collective"]')) {
@@ -1239,6 +1256,7 @@
 
   function fetchCollectiveMenuVisibility(forceRefresh) {
     if (!isCollectiveFeatureEnabled()) {
+      removeCollectiveMoreItem();
       state.collectiveMenuChecked = true;
       state.collectiveMenuVisible = false;
       return Promise.resolve(false);
@@ -1262,11 +1280,13 @@
       .then(function (r) {
         state.collectiveMenuChecked = true;
         if (!r.ok) {
+          removeCollectiveMoreItem();
           state.collectiveMenuVisible = false;
           return false;
         }
         return r.json().then(function (data) {
-          if (data && data.enabled === false) {
+          if (!hasCollectiveMembershipPayload(data) || (data && data.enabled === false)) {
+            removeCollectiveMoreItem();
             state.collectiveMenuVisible = false;
             return false;
           }
@@ -1275,6 +1295,7 @@
         });
       })
       .catch(function () {
+        removeCollectiveMoreItem();
         state.collectiveMenuChecked = true;
         state.collectiveMenuVisible = false;
         return false;
@@ -1283,8 +1304,14 @@
 
   /** Hub bootstrap already resolved membership — skip extra round-trip. */
   function syncCollectiveMenuFromBootstrap(collectivePayload) {
-    if (!isCollectiveFeatureEnabled()) return;
-    if (!collectivePayload || !collectivePayload.slug) return;
+    if (!isCollectiveFeatureEnabled()) {
+      removeCollectiveMoreItem();
+      return;
+    }
+    if (!hasCollectiveMembershipPayload(collectivePayload)) {
+      removeCollectiveMoreItem();
+      return;
+    }
     state.collectiveBootstrap = collectivePayload;
     state.collectiveMenuChecked = true;
     if (!document.querySelector('.trainer-more-sheet__list')) {

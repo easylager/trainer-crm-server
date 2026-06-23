@@ -91,12 +91,13 @@ async def upload_and_register(
 @router.post("/upload/legal")
 async def upload_legal_document(
     file: UploadFile = File(...),
+    _auth: None = Depends(_require_internal_upload_key),
 ) -> dict[str, str]:
     """
     Admin: upload legal document file (HTML/PDF/text) to S3/local under 'legal/' prefix.
     Returns file_key that can be used in legal_documents.file_key.
 
-    NOTE: auth for admin is expected at API gateway / infra level.
+    Requires INTERNAL_UPLOAD_API_KEY (dev/scripts only; unset in production).
     """
     content_type = file.content_type or "application/octet-stream"
     body = await file.read()

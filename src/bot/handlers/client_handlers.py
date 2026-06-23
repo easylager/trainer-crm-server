@@ -1795,6 +1795,21 @@ async def _finish_booking(
             last_name=last_name,
             telegram_username=username,
         )
+        from src.application.client_booking_abuse_guard import (
+            client_booking_attempt_allowed,
+            client_booking_quota_error,
+        )
+
+        if not client_booking_attempt_allowed(telegram_id):
+            await message.answer(
+                "Слишком много попыток записи. Подождите несколько минут.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return
+        quota_err = await client_booking_quota_error(db_session, client_id, trainer_id)
+        if quota_err:
+            await message.answer(quota_err, reply_markup=ReplyKeyboardRemove())
+            return
         booking_id, _ = await create_booking(
             db_session, slot_id, trainer_id, client_id, service_id=service_id, client_comment=comment,
             client_request_id=client_request_id,

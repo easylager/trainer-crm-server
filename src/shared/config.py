@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     api_rate_limit_upload_window_sec: float = 60.0
     api_rate_limit_default_max_requests: int = 200
     api_rate_limit_default_window_sec: float = 60.0
+    # Client self-booking anti-spam (per Telegram user + pending quotas).
+    client_booking_rate_max_requests: int = 8
+    client_booking_rate_window_sec: float = 600.0
+    client_booking_max_pending_per_trainer: int = 3
+    client_booking_max_pending_global: int = 8
     # Max request body when Content-Length is set (multipart without length passes through; use reverse proxy limits in prod).
     api_max_body_bytes_default: int = 1_048_576  # 1 MiB JSON / small bodies
     api_max_body_bytes_upload: int = 26_214_400  # ~25 MiB (trainer/client photo uploads)
@@ -105,6 +110,8 @@ class Settings(BaseSettings):
     photo_upload_presign_expires_sec: int = 600
     # If unset, POST /api/upload/photo and related legacy routes are disabled (use Web App initData flows).
     internal_upload_api_key: str | None = None
+    # Dev/test REST /api/trainers/* without initData — must stay false in production.
+    legacy_trainers_api_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # CDN base URL for photos (e.g. https://cdn.yourdomain.com or R2 public URL). When set, API returns photo URLs as {photo_cdn_base_url}/{file_key} instead of presigned S3; client loads from CDN.
     photo_cdn_base_url: str | None = None
     # Optional: Telegram ID to send test notifications (e.g. "inactive client" push scripts)

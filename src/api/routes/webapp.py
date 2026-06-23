@@ -54,6 +54,10 @@ from src.application.booking_no_show_use_cases import (
     get_trainer_booking_client_no_show_options,
     submit_trainer_booking_client_no_show,
 )
+from src.application.client_booking_abuse_guard import (
+    client_booking_attempt_allowed,
+    client_booking_quota_error,
+)
 from src.application.booking_use_cases import (
     ServicePriceVariantRequired,
     active_booking_summaries_by_slot_for_trainer_range,
@@ -1608,6 +1612,15 @@ async def post_client_booking(
         first_name=body.first_name,
         last_name=body.last_name,
     )
+
+    if not client_booking_attempt_allowed(telegram_id):
+        raise HTTPException(
+            status_code=429,
+            detail="Слишком много попыток записи. Подождите несколько минут.",
+        )
+    quota_err = await client_booking_quota_error(session, client_id, trainer_id)
+    if quota_err:
+        raise HTTPException(status_code=429, detail=quota_err)
 
     slot_cap = max(1, int(slot.get("capacity") or 1))
     arena_for_booking: int | None = None

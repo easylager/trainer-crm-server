@@ -1,0 +1,34 @@
+"""Production hardening: legacy REST and upload surfaces."""
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from src.api.app import app
+
+
+@pytest.mark.asyncio
+async def test_trainers_api_404_when_legacy_disabled(app_use_test_db, monkeypatch) -> None:
+    class _LegacyOff:
+        legacy_trainers_api_enabled = False
+
+    monkeypatch.setattr("src.api.legacy_api_gate.Settings", _LegacyOff)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/trainers")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_upload_legal_403_when_internal_key_not_configured(
+    app_use_test_db,
+    monkeypatch,
+) -> None:
+    class _NoKey:
+        internal_upload_api_key = None
+
+    monkeypatch.setattr("src.api.routes.upload.Settings", _NoKey)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/upload/legal",
+            files={"file": ("terms.html", b"<html></html>", "text/html")},
+        )
+    assert resp.status_code == 403
+    assert "disabled" in resp.json()["detail"].lower()

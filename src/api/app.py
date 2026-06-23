@@ -1243,10 +1243,8 @@ async def health() -> dict[str, str]:
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
     except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"database unavailable: {e!s}",
-        )
+        logger.warning("health check: database unavailable: %s", e)
+        raise HTTPException(status_code=503, detail="database unavailable")
 
     settings = Settings()
     if settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key:

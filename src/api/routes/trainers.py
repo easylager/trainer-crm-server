@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.legacy_api_gate import require_legacy_trainers_api
 from src.shared.audit import ACTOR_API, audit_log
 from src.api.schemas import (
     TRAINER_EDUCATION_OPTIONS,
@@ -34,7 +35,11 @@ from src.application.legal_use_cases import (
     get_trainer_terms_status,
 )
 
-router = APIRouter(prefix="/api/trainers", tags=["trainers"])
+router = APIRouter(
+    prefix="/api/trainers",
+    tags=["trainers"],
+    dependencies=[Depends(require_legacy_trainers_api)],
+)
 
 _NOT_FOUND = HTTPException(status_code=404, detail="Trainer not found")
 

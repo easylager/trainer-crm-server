@@ -36,6 +36,11 @@ from src.shared.config import Settings
 _TEST_DB_NAME = "trainer_crm_test"
 
 
+def pytest_configure(config) -> None:
+    # Legacy REST is off in production; enable for the integration test suite.
+    os.environ.setdefault("LEGACY_TRAINERS_API_ENABLED", "1")
+
+
 def _normalize_database_url_for_parse(url: str) -> str:
     u = url.strip()
     for prefix in ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://"):
