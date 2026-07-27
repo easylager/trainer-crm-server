@@ -35,6 +35,17 @@ def _format_time_hhmm(t: object) -> str:
     return s[:5] if len(s) >= 5 else s
 
 
+def _parse_hhmm_string(s: object) -> time | None:
+    raw = str(s or "").strip()
+    if len(raw) >= 4 and ":" in raw:
+        try:
+            parts = raw.split(":")
+            return time(int(parts[0]), int(parts[1]))
+        except (TypeError, ValueError, IndexError):
+            return None
+    return _coerce_to_time(s)
+
+
 def _coerce_to_time(v: object) -> time | None:
     """Normalize DB/ORM time-like values for recurring rule lookup."""
     if isinstance(v, time):
@@ -159,7 +170,7 @@ async def list_upcoming_recurring_bookings_for_trainer_client(
     r = await session.execute(
         text(
             """
-            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id
+            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id, b.status
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.client_id = :cid
@@ -181,9 +192,81 @@ async def list_upcoming_recurring_bookings_for_trainer_client(
                 "slot_date": sd.isoformat() if hasattr(sd, "isoformat") else str(sd),
                 "start_time": _format_time_hhmm(row[2]),
                 "recurring_slot_id": int(row[3]) if row[3] is not None else None,
+                "status": (row[4] or "").strip().lower() or None,
+                "kind": "real",
             }
         )
     return rows
+
+
+async def list_recurring_schedule_preview_for_trainer_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    from_date: date,
+    horizon_weeks: int,
+    preview_weeks: int,
+) -> list[dict[str, Any]]:
+    """
+    Hybrid schedule for the client card: real auto-bookings inside the materialization window,
+    plus virtual projected dates from active rules (no DB rows) further out / for gaps.
+
+    Sorted ascending by date+time. Virtual rows have ``kind='virtual'`` and ``booking_id=None``.
+    """
+    h = max(1, min(52, int(horizon_weeks)))
+    preview = max(h, min(52, int(preview_weeks)))
+    mono = this_week_monday()
+    window_end = mono + timedelta(days=7 * h)
+    preview_end = mono + timedelta(days=7 * preview)
+
+    real = await list_upcoming_recurring_bookings_for_trainer_client(
+        session, trainer_id, client_id, from_date=from_date, limit=50
+    )
+    real_keys: set[tuple[str, str]] = set()
+    for u in real:
+        real_keys.add((str(u["slot_date"]), str(u["start_time"])))
+
+    slots = await list_active_recurring_slots_for_trainer_client(session, trainer_id, client_id)
+    virtual: list[dict[str, Any]] = []
+    for rule in slots:
+        rid = int(rule["id"])
+        dow = int(rule["day_of_week"])
+        st_s = str(rule["start_time"])
+        # Walk preview weeks from current Monday
+        for i in range(0, preview):
+            ws = mono + timedelta(days=7 * i)
+            slot_date = ws + timedelta(days=dow)
+            if slot_date < from_date:
+                continue
+            if slot_date >= preview_end:
+                break
+            key = (slot_date.isoformat(), st_s)
+            if key in real_keys:
+                continue
+            if await _recurring_week_is_skipped(session, rid, ws):
+                continue
+            st = _parse_hhmm_string(st_s)
+            if st is not None and is_slot_start_in_past_local(slot_date, st):
+                continue
+            # Inside materialization window without a real booking → gap (conflict / not yet filled)
+            in_window = slot_date < window_end
+            virtual.append(
+                {
+                    "booking_id": None,
+                    "slot_date": slot_date.isoformat(),
+                    "start_time": st_s,
+                    "recurring_slot_id": rid,
+                    "status": None,
+                    "kind": "virtual",
+                    "in_horizon": in_window,
+                    "label_hint": "по правилу" if not in_window else "ожидает автозапись",
+                }
+            )
+
+    merged = list(real) + virtual
+    merged.sort(key=lambda x: (str(x.get("slot_date") or ""), str(x.get("start_time") or "")))
+    return merged[: max(8, min(40, preview * max(1, len(slots) or 1)))]
 
 
 async def create_recurring_client_slot(
@@ -675,18 +758,13 @@ async def materialize_recurring_horizon(
     min_week_index: int = 0,
 ) -> int:
     """
-    Ensures up to ``horizon_weeks`` forward auto-bookings per active rule by walking ISO weeks forward,
-    skipping weeks where the slot is already in the past or blocked.
+    Fill missing auto-bookings **inside** a rolling window of ``horizon_weeks`` from this Monday.
 
-    Does **not** call ``generate_slots_for_week``: recurring materialization must not expand the trainer's
-    week template without an explicit «apply template» action. Bookings use an existing ``available`` slot
-    at the rule's time or, if none, a single individual interval for that session (see
-    ``materialize_recurring_rule_for_week``).
+    For each active rule, walks only weeks ``[min_week_index, min_week_index + horizon)`` —
+    does **not** keep creating further out when near weeks already have bookings (that was the
+    bug that piled up ~year of futures).
 
-    ``min_week_index`` (0 = current ISO week): use 1 to skip this calendar week entirely (e.g. recurring
-    starts «со следующей» even when this week's slot is still in the future).
-
-    Safe to run repeatedly. Only trainers with CRM access. Returns count of newly created bookings.
+    Does **not** call ``generate_slots_for_week``. Returns count of newly created bookings.
     """
     from src.application.subscription_tier_use_cases import trainer_has_crm_access
 
@@ -703,19 +781,100 @@ async def materialize_recurring_horizon(
     mono = this_week_monday()
     start_i = max(0, int(min_week_index))
     created = 0
-    max_scan_weeks = min(64, h + 52)
     for rec in recs:
-        i = start_i
-        got = 0
-        scanned = 0
-        while got < h and scanned < max_scan_weeks:
+        for i in range(start_i, start_i + h):
             ws = mono + timedelta(days=7 * i)
-            i += 1
-            scanned += 1
             if await materialize_recurring_rule_for_week(session, trainer_id, rec, ws, service_id):
-                got += 1
-        created += got
+                created += 1
     return created
+
+
+async def prune_recurring_bookings_beyond_horizon(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    horizon_weeks: int,
+    recurring_ids: list[int] | None = None,
+) -> int:
+    """
+    Silently cancel future auto-bookings linked to active rules that fall **outside** the
+    rolling horizon window (slot_date >= this_monday + horizon_weeks).
+
+    Past sessions and weeks inside the window are kept. No week-skip rows (these were
+    over-materialized, not trainer «skip this week»).
+    """
+    from src.application.booking_use_cases import (
+        BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
+        cancel_booking,
+    )
+
+    h = max(1, min(52, int(horizon_weeks)))
+    cutoff = this_week_monday() + timedelta(days=7 * h)
+    wanted: set[int] | None = None
+    if recurring_ids is not None:
+        wanted = {int(x) for x in recurring_ids}
+        if not wanted:
+            return 0
+
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN recurring_client_slots r ON r.id = b.recurring_client_slot_id
+            WHERE b.trainer_id = :tid
+              AND r.trainer_id = :tid
+              AND r.status = 'active'
+              AND b.status IN ('pending', 'confirmed')
+              AND s.slot_date >= :cutoff
+            ORDER BY s.slot_date, s.start_time
+            """
+        ),
+        {"tid": trainer_id, "cutoff": cutoff},
+    )
+    removed = 0
+    for row in r.fetchall():
+        bid, sd, st0, rid = int(row[0]), row[1], row[2], int(row[3])
+        if wanted is not None and rid not in wanted:
+            continue
+        if is_slot_start_in_past_local(sd, st0):
+            continue
+        if await cancel_booking(
+            session,
+            bid,
+            trainer_id,
+            notify_client=False,
+            record_recurring_week_skip=False,
+            cancellation_source=BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
+        ):
+            removed += 1
+    return removed
+
+
+async def maintain_recurring_horizon(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    horizon_weeks: int,
+    recurring_ids: list[int] | None = None,
+    min_week_index: int = 0,
+) -> dict[str, int]:
+    """Prune over-materialized futures, then fill gaps inside the window."""
+    pruned = await prune_recurring_bookings_beyond_horizon(
+        session,
+        trainer_id,
+        horizon_weeks=horizon_weeks,
+        recurring_ids=recurring_ids,
+    )
+    created = await materialize_recurring_horizon(
+        session,
+        trainer_id,
+        horizon_weeks=horizon_weeks,
+        recurring_ids=recurring_ids,
+        min_week_index=min_week_index,
+    )
+    return {"pruned": pruned, "created": created}
 
 
 async def apply_recurring_bookings_for_week(

@@ -123,11 +123,14 @@ class TrainerLinkToken(Base):
     __tablename__ = "trainer_link_tokens"
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
-    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
+    # NULL for public landing tokens — trainer row is created when the user opens the bot link.
+    trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=True
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    trainer: Mapped["Trainer"] = relationship(back_populates="link_tokens", lazy="raise")
+    trainer: Mapped[Optional["Trainer"]] = relationship(back_populates="link_tokens", lazy="raise")
 
 
 class City(Base):

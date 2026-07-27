@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 from src.shared.trainer_status import normalize_trainer_status_value
 
 
@@ -30,13 +31,10 @@ async def consume_link_token(
     telegram_username: str | None = None,
 ) -> ConsumeLinkTokenResult:
     """
-    Find valid token, set trainer.telegram_id and telegram_username, mark token used.
+    Find valid token, bind Telegram to trainer, mark token used.
 
-    If this Telegram is already linked to the same trainer (repeat welcome link), refreshes username
-    and consumes the token without touching telegram_id (idempotent).
-
-    If Telegram is already linked to another trainer row, returns telegram_other_trainer (no
-    partial updates; token may remain unused for support to reissue).
+    Landing tokens may have trainer_id=NULL — trainer row is created on first open.
+    If Telegram is already linked, consumes the token and returns the existing trainer (repeat CTA).
     """
     now = datetime.now(timezone.utc)
     r = await session.execute(
@@ -49,7 +47,7 @@ async def consume_link_token(
     row = r.fetchone()
     if not row:
         return ConsumeLinkTokenResult(error="invalid_token")
-    trainer_id = int(row[0])
+    token_trainer_id = row[0]
     username_val = (telegram_username or "").strip()[:64] or None
 
     r_existing = await session.execute(
@@ -58,21 +56,66 @@ async def consume_link_token(
     )
     existing = r_existing.scalar()
     if existing is not None:
-        if int(existing) == trainer_id:
-            # Same profile: repeat link — only refresh username and burn token.
+        existing_id = int(existing)
+        if token_trainer_id is None or existing_id == int(token_trainer_id):
             await session.execute(
                 text("UPDATE trainers SET telegram_username = :tuname WHERE id = :id"),
-                {"tuname": username_val, "id": trainer_id},
+                {"tuname": username_val, "id": existing_id},
             )
             await session.execute(
                 text("UPDATE trainer_link_tokens SET used_at = :now WHERE token = :token"),
                 {"now": now, "token": token},
             )
             await session.commit()
-            return ConsumeLinkTokenResult(trainer_id=trainer_id)
+            return ConsumeLinkTokenResult(trainer_id=existing_id)
         await session.rollback()
         return ConsumeLinkTokenResult(error="telegram_other_trainer")
 
+    if token_trainer_id is None:
+        try:
+            created = await session.execute(
+                text(
+                    """
+                    INSERT INTO trainers (status, telegram_id, telegram_username, created_at)
+                    VALUES (:st, :tid, :tuname, :now)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "st": TRAINER_STATUS_PENDING_PROFILE,
+                    "tid": telegram_id,
+                    "tuname": username_val,
+                    "now": now,
+                },
+            )
+            new_row = created.fetchone()
+            if new_row is None:
+                await session.rollback()
+                return ConsumeLinkTokenResult(error="invalid_token")
+            trainer_id = int(new_row[0])
+            await session.execute(
+                text("UPDATE trainer_link_tokens SET used_at = :now WHERE token = :token"),
+                {"now": now, "token": token},
+            )
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            retry = await session.execute(
+                text("SELECT id FROM trainers WHERE telegram_id = :tid LIMIT 1"),
+                {"tid": telegram_id},
+            )
+            retry_id = retry.scalar()
+            if retry_id is not None:
+                await session.execute(
+                    text("UPDATE trainer_link_tokens SET used_at = :now WHERE token = :token"),
+                    {"now": now, "token": token},
+                )
+                await session.commit()
+                return ConsumeLinkTokenResult(trainer_id=int(retry_id))
+            return ConsumeLinkTokenResult(error="telegram_other_trainer")
+        return ConsumeLinkTokenResult(trainer_id=trainer_id)
+
+    trainer_id = int(token_trainer_id)
     try:
         await session.execute(
             text("UPDATE trainers SET telegram_id = :tid, telegram_username = :tuname WHERE id = :id"),

@@ -2514,6 +2514,14 @@
       font-size: 14px;
       line-height: 1.35;
     }
+    .tc-recurring-up-item--virtual {
+      color: var(--tg-theme-hint-color, #8a8a8e);
+    }
+    .tc-recurring-virt {
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.9;
+    }
     .tc-recurring-add {
       margin-top: 4px;
     }

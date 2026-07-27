@@ -2,6 +2,7 @@
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
 import json
+import logging
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from collections.abc import Sequence
@@ -11,6 +12,8 @@ from urllib.parse import quote
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
@@ -3817,12 +3820,34 @@ async def list_trainer_client_history(
     trainer_id: int,
     client_id: int,
     limit: int = 20,
+    *,
+    past_only: bool = True,
+    today: date | None = None,
 ) -> list[dict]:
     """
-    Last N non-cancelled bookings for this trainer and client (by slot date desc — includes upcoming).
-    Includes date, time, arena (best-effort), duration, service_name, tariff label, status,
-    and ``recurring_client_slot_id`` when the booking was created from a weekly recurring rule.
+    Last N non-cancelled bookings for this trainer and client (by slot date desc).
+
+    ``past_only`` (default True): exclude future pending/confirmed so the client card history
+    is not flooded by recurring auto-bookings months ahead. Pass ``today`` in NOTIFICATION_TZ.
     """
+    lim = max(1, min(100, int(limit)))
+    params: dict[str, Any] = {"tid": trainer_id, "cid": client_id, "lim": lim}
+    future_filter = ""
+    if past_only:
+        day = today
+        if day is None:
+            try:
+                from zoneinfo import ZoneInfo
+            except ImportError:  # pragma: no cover
+                from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+            day = datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
+        params["today"] = day
+        future_filter = """
+              AND NOT (
+                    b.status IN ('pending', 'confirmed')
+                AND s.slot_date >= :today
+              )
+        """
     r = await session.execute(
         text(
             """
@@ -3851,11 +3876,14 @@ async def list_trainer_client_history(
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            """
+            + future_filter
+            + """
             ORDER BY s.slot_date DESC, s.start_time DESC
             LIMIT :lim
             """
         ),
-        {"tid": trainer_id, "cid": client_id, "lim": limit},
+        params,
     )
     rows = r.fetchall()
     items: list[dict] = []
@@ -3885,18 +3913,43 @@ async def count_trainer_client_sessions(
     session: AsyncSession,
     trainer_id: int,
     client_id: int,
+    *,
+    past_only: bool = True,
+    today: date | None = None,
 ) -> int:
-    """Total number of non-cancelled bookings for this trainer and client (for stats in client card)."""
+    """Total non-cancelled bookings for this trainer and client (client card stats).
+
+    ``past_only`` excludes future pending/confirmed (same idea as history list).
+    """
+    params: dict[str, Any] = {"tid": trainer_id, "cid": client_id}
+    future_filter = ""
+    if past_only:
+        day = today
+        if day is None:
+            try:
+                from zoneinfo import ZoneInfo
+            except ImportError:  # pragma: no cover
+                from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+            day = datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
+        params["today"] = day
+        future_filter = """
+              AND NOT (
+                    b.status IN ('pending', 'confirmed')
+                AND s.slot_date >= :today
+              )
+        """
     r = await session.execute(
         text(
             """
             SELECT COUNT(*) FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             """
+            + future_filter
         ),
-        {"tid": trainer_id, "cid": client_id},
+        params,
     )
     row = r.fetchone()
     return row[0] if row else 0
@@ -4191,12 +4244,17 @@ async def cancel_booking_by_client(
     booking_id: int,
     client_telegram_id: int,
     reason: str | None = None,
+    *,
+    notify_client_confirm: bool = True,
 ) -> dict | None:
     """
     Cancel booking by client: slot freed, status cancelled, reminders cancelled, reason stored.
     Idempotent: if this client already cancelled the booking, returns the same notification payload
     with ``already_cancelled=True`` (no duplicate UPDATE).
     Returns payload for party notifications or None if booking not found / not owned by client.
+
+    ``notify_client_confirm``: enqueue Telegram self-confirm for the client (False for MAX Mini App —
+    client has no Telegram chat for that catalog key).
     """
     from src.application.booking_party_notifications import (
         KIND_CLIENT_CANCEL_CONFIRM,
@@ -4275,14 +4333,21 @@ async def cancel_booking_by_client(
                 recipient_telegram_id=int(trainer_tid),
                 payload=notify_payload,
             )
-        await enqueue_booking_party_notification(
-            session,
-            booking_id=int(booking_id),
-            kind=KIND_CLIENT_CANCEL_CONFIRM,
-            recipient_role=ROLE_CLIENT,
-            recipient_telegram_id=int(client_telegram_id),
-            payload=notify_payload,
-        )
+        else:
+            logger.warning(
+                "client cancel: trainer has no telegram_id booking_id=%s trainer_id=%s — trainer notify skipped",
+                booking_id,
+                payload.get("trainer_id"),
+            )
+        if notify_client_confirm:
+            await enqueue_booking_party_notification(
+                session,
+                booking_id=int(booking_id),
+                kind=KIND_CLIENT_CANCEL_CONFIRM,
+                recipient_role=ROLE_CLIENT,
+                recipient_telegram_id=int(client_telegram_id),
+                payload=notify_payload,
+            )
 
     # Load trainer + slot + client for notification before updating
     r = await session.execute(

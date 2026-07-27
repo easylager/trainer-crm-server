@@ -8,6 +8,7 @@ Used by trainer Mini App, client catalog, redemption on completed bookings.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -21,6 +22,8 @@ from src.shared.price_tier_kind import (
     PRICE_TIER_ORDER,
     normalize_price_tier_kind,
 )
+
+logger = logging.getLogger(__name__)
 
 # SQL predicate: does pass product 'p' cover this booking's service AND tier?
 # Params required: :booking_service_id (int), :booking_tier_kind (str | NULL)
@@ -889,6 +892,8 @@ async def redeem_pass_session_for_booking(
       - service scope: pass unrestricted OR booking.service_id in junction
       - tier scope:    pass unrestricted OR (booking.price_tier_kind IS NOT NULL AND in junction)
     A booking without a price_tier_kind cannot satisfy a tier-restricted pass — financially correct.
+
+    Idempotent: if ``pass_redemptions`` already has this booking, returns True without a second debit.
     """
     allowed = allow_booking_statuses if allow_booking_statuses is not None else frozenset({"completed"})
     r = await session.execute(
@@ -901,6 +906,21 @@ async def redeem_pass_session_for_booking(
     row = r.fetchone()
     if not row or (row[4] or "").strip().lower() not in allowed:
         return False
+
+    already = await session.execute(
+        text("SELECT 1 FROM pass_redemptions WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    if already.fetchone():
+        return True
+
+    cert = await session.execute(
+        text("SELECT 1 FROM certificate_booking_credits WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    if cert.fetchone():
+        return False
+
     client_id, trainer_id, service_id = row[1], row[2], row[3]
     # price_tier_kind may be NULL for bookings made without a tier variant
     tier_kind: str | None = row[5] if row[5] else None
@@ -915,6 +935,7 @@ async def redeem_pass_session_for_booking(
               AND {SQL_PASS_PRODUCT_COVERS_BOOKING}
             ORDER BY pi.expires_at ASC NULLS LAST, pi.sessions_remaining ASC
             LIMIT 1
+            FOR UPDATE OF pi
             """
         ),
         {
@@ -926,23 +947,43 @@ async def redeem_pass_session_for_booking(
     )
     inst = r.fetchone()
     if not inst:
+        logger.info(
+            "pass redeem skipped booking_id=%s client_id=%s trainer_id=%s service_id=%s "
+            "tier_kind=%s status=%s — no eligible active pass",
+            booking_id,
+            client_id,
+            trainer_id,
+            service_id,
+            tier_kind,
+            row[4],
+        )
         return False
-    inst_id, rem = inst[0], inst[1]
+    inst_id, rem = int(inst[0]), int(inst[1])
     new_rem = rem - 1
     new_status = "used_up" if new_rem <= 0 else "active"
-    await session.execute(
-        text("UPDATE pass_instances SET sessions_remaining = :rem, status = :st WHERE id = :id"),
-        {"rem": new_rem, "st": new_status, "id": inst_id},
-    )
-    await session.execute(
+    inserted = await session.execute(
         text(
             """
             INSERT INTO pass_redemptions (booking_id, pass_instance_id)
             VALUES (:bid, :inst_id)
             ON CONFLICT (booking_id) DO NOTHING
+            RETURNING id
             """
         ),
         {"bid": booking_id, "inst_id": inst_id},
+    )
+    if inserted.fetchone() is None:
+        # Concurrent redeem won; do not double-debit remaining.
+        return True
+    await session.execute(
+        text("UPDATE pass_instances SET sessions_remaining = :rem, status = :st WHERE id = :id"),
+        {"rem": new_rem, "st": new_status, "id": inst_id},
+    )
+    logger.info(
+        "pass redeem ok booking_id=%s pass_instance_id=%s remaining=%s",
+        booking_id,
+        inst_id,
+        new_rem,
     )
     return True
 
@@ -1077,8 +1118,11 @@ async def list_redeemable_bookings_for_pass_instance(
     limit: int = 30,
 ) -> dict:
     """
-    Completed past sessions of the pass owner without pass/cert payment,
-    matching pass product scope — candidates for retroactive debit.
+    Sessions of the pass owner without pass/cert payment, matching product scope.
+
+    Includes:
+      - ``completed`` bookings (even if the trainer marked them done before slot end)
+      - ``confirmed`` / ``pending`` bookings whose slot has already ended (can complete+redeem)
     """
     detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
     if detail is None:
@@ -1097,7 +1141,8 @@ async def list_redeemable_bookings_for_pass_instance(
                 s.end_time,
                 COALESCE(NULLIF(TRIM(srv.name), ''), 'Занятие') AS service_name,
                 b.price_tier_kind,
-                COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents, 0) AS price_cents
+                COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents, 0) AS price_cents,
+                b.status
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN pass_instances pi ON pi.id = :pid
@@ -1107,12 +1152,18 @@ async def list_redeemable_bookings_for_pass_instance(
             LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
             WHERE b.trainer_id = :tid
               AND b.client_id = pi.client_id
-              AND b.status = 'completed'
+              AND b.status IN ('completed', 'confirmed', 'pending')
               AND NOT b.is_sandbox
-              AND {_SQL_SLOT_END_TS} < CURRENT_TIMESTAMP
+              AND (
+                    b.status = 'completed'
+                    OR {_SQL_SLOT_END_TS} < CURRENT_TIMESTAMP
+              )
               AND NOT EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id)
               AND NOT EXISTS (
                   SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM booking_problem_reports bpr WHERE bpr.booking_id = b.id
               )
               AND {SQL_PASS_PRODUCT_COVERS_BOOKING_ROW}
             ORDER BY s.slot_date DESC, s.start_time DESC
@@ -1125,6 +1176,7 @@ async def list_redeemable_bookings_for_pass_instance(
     for row in r.fetchall():
         st = row[2]
         et = row[3]
+        status = (row[7] or "").strip().lower()
         items.append(
             {
                 "booking_id": int(row[0]),
@@ -1134,6 +1186,8 @@ async def list_redeemable_bookings_for_pass_instance(
                 "service_name": (row[4] or "").strip() or "Занятие",
                 "price_tier_kind": row[5],
                 "price_cents": int(row[6] or 0),
+                "booking_status": status,
+                "needs_complete": status in ("confirmed", "pending"),
             }
         )
     return {"pass": detail, "items": items}
@@ -1146,8 +1200,11 @@ async def manual_redeem_pass_for_booking(
     booking_id: int,
 ) -> dict:
     """
-    Trainer applies a specific pass to a completed past session (retroactive debit).
-    Writes pass_redemptions so trainer stats treat the visit as pass-covered, not cash.
+    Trainer applies a specific pass to a session (retroactive debit).
+
+    Accepts ``completed`` bookings, and ``confirmed``/``pending`` whose slot has already ended
+    (marks them completed first, then debits). Writes ``pass_redemptions`` so stats treat the
+    visit as pass-covered.
     """
     r = await session.execute(
         text(
@@ -1199,10 +1256,29 @@ async def manual_redeem_pass_for_booking(
         raise ValueError("Запись не найдена")
     if int(booking[1]) != client_id:
         raise ValueError("Запись принадлежит другому клиенту")
-    if str(booking[4]).strip().lower() != "completed":
-        raise ValueError("Списать можно только с проведённого занятия")
-    if booking[6] is not None and booking[6] >= datetime.now(timezone.utc):
-        raise ValueError("Занятие ещё не завершилось")
+
+    status = str(booking[4] or "").strip().lower()
+    slot_end = booking[6]
+    now_utc = datetime.now(timezone.utc)
+    if status == "completed":
+        # Trainer may have marked the session done before wall-clock end — allow debit.
+        pass
+    elif status in ("confirmed", "pending"):
+        if slot_end is not None and slot_end >= now_utc:
+            raise ValueError("Занятие ещё не завершилось — дождитесь окончания или отметьте проведённым в расписании")
+        pr = await session.execute(
+            text("SELECT 1 FROM booking_problem_reports WHERE booking_id = :bid"),
+            {"bid": int(booking_id)},
+        )
+        if pr.fetchone():
+            raise ValueError("По записи есть отчёт о проблеме — сначала разберите его в расписании")
+        await session.execute(
+            text("UPDATE bookings SET status = 'completed' WHERE id = :bid"),
+            {"bid": int(booking_id)},
+        )
+        status = "completed"
+    else:
+        raise ValueError("Списать можно только с проведённого или уже прошедшего занятия")
 
     chk_pr = await session.execute(
         text(
@@ -1248,10 +1324,29 @@ async def manual_redeem_pass_for_booking(
         },
     )
     if r_scope.fetchone() is None:
-        raise ValueError("Абонемент не покрывает эту услугу или тариф")
+        raise ValueError(
+            "Абонемент не покрывает эту услугу или тариф. "
+            "Если абонемент ограничен тарифом (взрослый/детский), в записи должен быть тот же тариф."
+        )
 
     new_rem = rem - 1
     new_status = "used_up" if new_rem <= 0 else "active"
+    inserted = await session.execute(
+        text(
+            """
+            INSERT INTO pass_redemptions (booking_id, pass_instance_id)
+            VALUES (:bid, :inst_id)
+            ON CONFLICT (booking_id) DO NOTHING
+            RETURNING id
+            """
+        ),
+        {"bid": int(booking_id), "inst_id": int(pass_instance_id)},
+    )
+    if inserted.fetchone() is None:
+        await session.commit()
+        detail = await get_trainer_pass_instance_detail(session, trainer_id, pass_instance_id)
+        return {"pass": detail, "already_redeemed": True}
+
     await session.execute(
         text(
             """
@@ -1261,16 +1356,6 @@ async def manual_redeem_pass_for_booking(
             """
         ),
         {"rem": new_rem, "st": new_status, "id": int(pass_instance_id)},
-    )
-    await session.execute(
-        text(
-            """
-            INSERT INTO pass_redemptions (booking_id, pass_instance_id)
-            VALUES (:bid, :inst_id)
-            ON CONFLICT (booking_id) DO NOTHING
-            """
-        ),
-        {"bid": int(booking_id), "inst_id": int(pass_instance_id)},
     )
     await session.commit()
 

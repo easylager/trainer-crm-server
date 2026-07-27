@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
-# Generates PDF from docs/cv-max-vasilenko-fintech-2026.html using Chrome/Chromium headless.
-# Requires Google Chrome (macOS default path below) or chromium in PATH.
+# Generates PDFs from the four canonical CV HTML files using Chrome headless.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="${SCRIPT_DIR}/cv-max-vasilenko-fintech-2026.html"
-OUT="${SCRIPT_DIR}/cv-max-vasilenko-fintech-2026.pdf"
 
-if [[ ! -f "$SRC" ]]; then
-  echo "Source not found: $SRC" >&2
-  exit 1
-fi
-
-# file:// URL must be absolute
-SRC_URL="file://${SRC}"
+CVS=(
+  "cv-max-vasilenko-techlead-python-ru-2026"
+  "cv-max-vasilenko-techlead-python-en-2026"
+  "cv-max-vasilenko-senior-python-ru-2026"
+  "cv-max-vasilenko-senior-python-en-2026"
+)
 
 pick_chrome() {
   if [[ "$(uname)" == "Darwin" ]]; then
@@ -45,13 +41,21 @@ CHROME="$(pick_chrome)" || {
 }
 
 echo "Using: $CHROME"
-echo "Writing: $OUT"
 
-exec "$CHROME" \
-  --headless=new \
-  --disable-gpu \
-  --no-pdf-header-footer \
-  --print-to-pdf="$OUT" \
-  "$SRC_URL"
+for base in "${CVS[@]}"; do
+  SRC="${SCRIPT_DIR}/${base}.html"
+  OUT="${SCRIPT_DIR}/${base}.pdf"
+  if [[ ! -f "$SRC" ]]; then
+    echo "Source not found: $SRC" >&2
+    exit 1
+  fi
+  echo "Writing: $OUT"
+  "$CHROME" \
+    --headless=new \
+    --disable-gpu \
+    --no-pdf-header-footer \
+    --print-to-pdf="$OUT" \
+    "file://${SRC}"
+done
 
 echo "Done."

@@ -27,6 +27,48 @@ from src.shared.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def _is_telegram_markup_rejected(exc: BaseException) -> bool:
+    """Telegram rejected reply_markup (tg://user privacy / invalid button URL)."""
+    blob = str(exc).lower()
+    return any(
+        token in blob
+        for token in (
+            "button_user_invalid",
+            "button_user_privacy_restricted",
+            "button_url_invalid",
+            "reply_markup_invalid",
+            "inline_keyboard_invalid",
+            "keyboard",
+            "reply_markup",
+        )
+    )
+
+
+def _cancel_trainer_keyboard_without_write(reply_markup: Any) -> Any:
+    """Drop tg://user write button; keep WebApp invite if present."""
+    if reply_markup is None:
+        return None
+    try:
+        rows = getattr(reply_markup, "inline_keyboard", None) or []
+        kept = []
+        for row in rows:
+            filtered = []
+            for btn in row:
+                url = getattr(btn, "url", None) or ""
+                if str(url).startswith("tg://user"):
+                    continue
+                filtered.append(btn)
+            if filtered:
+                kept.append(filtered)
+        if not kept:
+            return None
+        from aiogram.types import InlineKeyboardMarkup
+
+        return InlineKeyboardMarkup(inline_keyboard=kept)
+    except Exception:
+        return None
+
+
 async def _send_client_cancel_trainer(bot: Bot, row: dict[str, Any]) -> None:
     pl = row.get("payload") or {}
     client_name = html.escape(str(pl.get("client_name") or "Клиент"))
@@ -53,18 +95,41 @@ async def _send_client_cancel_trainer(bot: Bot, row: dict[str, Any]) -> None:
     slot_id = pl.get("slot_id")
     exclude_client_id = pl.get("client_id")
     client_tid = pl.get("client_telegram_id")
+    trainer_tid = row.get("recipient_telegram_id")
     if slot_id is not None and exclude_client_id is not None:
         reply_markup = msg.build_trainer_client_cancel_notification_keyboard(
             webapp_base_url=Settings().webapp_base_url,
             slot_id=int(slot_id),
             exclude_client_id=int(exclude_client_id),
             client_telegram_id=int(client_tid) if client_tid else None,
+            trainer_telegram_id=int(trainer_tid) if trainer_tid else None,
         )
-    await bot.send_message(
-        chat_id=int(row["recipient_telegram_id"]),
-        text=text,
-        reply_markup=reply_markup,
-    )
+    chat_id = int(row["recipient_telegram_id"])
+    try:
+        await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+    except Exception as e:
+        if not reply_markup or not _is_telegram_markup_rejected(e):
+            raise
+        # Privacy-restricted / invalid tg://user button: retry without write, then plain text.
+        slim = _cancel_trainer_keyboard_without_write(reply_markup)
+        logger.warning(
+            "client_cancel_trainer markup rejected chat_id=%s; retry without write button err=%s",
+            chat_id,
+            e,
+        )
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=slim)
+        except Exception as e2:
+            if slim and _is_telegram_markup_rejected(e2):
+                logger.warning(
+                    "client_cancel_trainer markup still rejected chat_id=%s; send plain err=%s",
+                    chat_id,
+                    e2,
+                )
+                await bot.send_message(chat_id=chat_id, text=text)
+                return
+            raise
+
 
 
 async def _send_client_cancel_confirm(bot: Bot, row: dict[str, Any]) -> None:
@@ -240,12 +305,18 @@ async def try_deliver_booking_party_notifications_for_booking(
     *,
     trainer_bot: Bot | None = None,
     client_bot: Bot | None = None,
+    kinds: set[str] | frozenset[str] | None = None,
 ) -> dict[str, str]:
-    """Immediate delivery pass for all pending rows of one booking; returns per-kind status labels."""
+    """Immediate delivery pass for pending rows of one booking; returns per-kind status labels.
+
+    When ``kinds`` is set, only those outbox kinds are attempted (others stay pending).
+    """
     rows = await list_pending_booking_party_notifications_for_booking(session, int(booking_id))
     by_kind: dict[str, str] = {}
     for row in rows:
         kind = str(row.get("kind") or "")
+        if kinds is not None and kind not in kinds:
+            continue
         ok = await deliver_booking_party_notification_row(
             session, row, trainer_bot=trainer_bot, client_bot=client_bot
         )

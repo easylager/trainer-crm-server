@@ -1828,13 +1828,13 @@
 
       /** One-line teaser for collapsed history accordion (count + latest visit). */
       function buildHistorySummaryValue(total, items) {
-        if (!total) return 'Пока нет занятий';
+        if (!total) return 'Пока нет прошедших';
         var label = formatHistoryCountLabel(total);
         var latest = items && items[0];
         if (!latest) return label;
         var dateStr = formatDate(latest.slot_date);
         var timeStr = latest.start_time ? formatTime(latest.start_time) : '';
-        return label + ' · ' + dateStr + (timeStr ? ' ' + timeStr : '');
+        return label + ' · последнее ' + dateStr + (timeStr ? ' ' + timeStr : '');
       }
 
       function buildHistoryDetailsShell(summaryValue, bodyHtml, opts) {
@@ -1846,7 +1846,7 @@
         return (
           '<details class="tc-history-details' + loadingCls + '" id="tcClientHistoryDetails"' + openAttr + '>' +
           '<summary class="tc-history-summary">' +
-          '<span class="tc-history-summary__title">История занятий</span>' +
+          '<span class="tc-history-summary__title">Прошедшие занятия</span>' +
           '<span class="' + valueCls + '" id="tcHistorySummaryValue">' +
           valueInner +
           '</span>' +
@@ -2104,7 +2104,7 @@
           };
           var bodyHtml = '';
           if (!items.length) {
-            bodyHtml = '<div class="history-list history-list--empty">Пока нет занятий с этим клиентом.</div>';
+            bodyHtml = '<div class="history-list history-list--empty">Пока нет прошедших занятий с этим клиентом.</div>';
           } else {
             var first = items.slice(0, 5);
             var rest = items.slice(5);
@@ -2704,15 +2704,26 @@
               : '';
             var upHtml = upcoming.length
               ? (
-                '<div class="tc-recurring-upcoming"><div class="tc-recurring-subtitle">Ближайшие автозаписи</div><ul class="tc-recurring-up-list">' +
+                '<div class="tc-recurring-upcoming"><div class="tc-recurring-subtitle">Ближайшие занятия</div><ul class="tc-recurring-up-list">' +
                 upcoming
-                  .slice(0, 8)
+                  .slice(0, 12)
                   .map(function(u) {
+                    var kind = (u.kind || 'real');
+                    var hint = '';
+                    if (kind === 'virtual') {
+                      hint =
+                        ' <span class="tc-recurring-virt">' +
+                        escapeHtml(u.label_hint || 'по правилу') +
+                        '</span>';
+                    }
                     return (
-                      '<li>' +
+                      '<li class="tc-recurring-up-item' +
+                      (kind === 'virtual' ? ' tc-recurring-up-item--virtual' : '') +
+                      '">' +
                       escapeHtml(formatDate(u.slot_date)) +
                       ' · ' +
                       escapeHtml(formatTime(u.start_time)) +
+                      hint +
                       '</li>'
                     );
                   })
@@ -2761,7 +2772,7 @@
               '</summary>' +
               '<div class="tc-recurring-body">' +
               '<p class="tc-recurring-help">' +
-              'На ближайшие <strong>' +
+              'В расписании держим реальные записи на ближайшие <strong>' +
               String(hw) +
               '</strong> ' +
               (hw % 10 === 1 && hw % 100 !== 11
@@ -2769,7 +2780,7 @@
                 : hw % 10 >= 2 && hw % 10 <= 4 && (hw % 100 < 10 || hw % 100 >= 20)
                   ? 'недели'
                   : 'недель') +
-              ' ставим запись в тот же день недели и время. График из шаблона сами не накатываем — только эти брони. Если ближайший раз ещё впереди, при «Применить» выберите: с этой недели или со следующей.' +
+              '. Дальше в списке — даты <em>по правилу</em> без лишних строк в базе; они появятся сами, когда подойдёт неделя. Шаблон сами не накатываем. Если ближайший раз ещё впереди, при «Применить» выберите: с этой недели или со следующей.' +
               suggBlock +
               orphanHtml +
               upHtml +

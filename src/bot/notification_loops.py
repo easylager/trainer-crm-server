@@ -154,6 +154,7 @@ def _is_telegram_inline_keyboard_bad_request(exc: BaseException) -> bool:
         token in blob
         for token in (
             "button_user_invalid",
+            "button_user_privacy_restricted",
             "button_url_invalid",
             "reply_markup_invalid",
             "inline_keyboard_invalid",
@@ -166,6 +167,7 @@ def _telegram_markup_rejection_tag(exc: BaseException) -> str:
     blob = _telegram_error_blob(exc)
     for tag in (
         "button_user_invalid",
+        "button_user_privacy_restricted",
         "button_url_invalid",
         "reply_markup_invalid",
         "inline_keyboard_invalid",
@@ -2257,12 +2259,12 @@ async def run_lead_mode_recovery_loop(trainer_bot: Bot) -> None:
 
 async def run_recurring_materialization_loop() -> None:
     """
-    Periodically tops up recurring auto-bookings toward ``recurring_materialization_horizon_weeks``
-    (rolling from the current week; CRM tier only). Re-run extends the window as calendar moves forward.
+    Periodically prune over-materialized futures and fill gaps inside
+    ``recurring_materialization_horizon_weeks`` (rolling from this Monday; CRM tier only).
     """
     from sqlalchemy import text
 
-    from src.application.recurring_use_cases import materialize_recurring_horizon
+    from src.application.recurring_use_cases import maintain_recurring_horizon
 
     while True:
         await asyncio.sleep(_recurring_materialization_loop_interval_sec())
@@ -2277,17 +2279,23 @@ async def run_recurring_materialization_loop() -> None:
                     )
                 )
                 tids = [int(row[0]) for row in r.fetchall()]
-                total = 0
+                created_total = 0
+                pruned_total = 0
                 for tid in tids:
-                    n = await materialize_recurring_horizon(
+                    out = await maintain_recurring_horizon(
                         session,
                         tid,
                         horizon_weeks=Settings().recurring_materialization_horizon_weeks,
                         recurring_ids=None,
                     )
-                    total += n
-                if total:
-                    logger.info("Recurring materialization: created %d booking(s)", total)
+                    created_total += int(out.get("created") or 0)
+                    pruned_total += int(out.get("pruned") or 0)
+                if created_total or pruned_total:
+                    logger.info(
+                        "Recurring horizon: created=%s pruned=%s",
+                        created_total,
+                        pruned_total,
+                    )
         except asyncio.CancelledError:
             break
         except Exception as e:

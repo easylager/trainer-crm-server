@@ -52,7 +52,7 @@ from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
     create_recurring_client_slot,
     get_active_recurring_for_booking,
-    materialize_recurring_horizon,
+    maintain_recurring_horizon,
 )
 from src.application.client_request_use_cases import (
     add_trainer_pending_request_booking,
@@ -2066,13 +2066,14 @@ async def on_make_recurring_trainer(callback: CallbackQuery) -> None:
         )
         if recurring_id:
             hw = max(1, int(Settings().recurring_materialization_horizon_weeks))
-            materialized = await materialize_recurring_horizon(
+            maintained = await maintain_recurring_horizon(
                 session,
                 trainer_id,
                 horizon_weeks=hw,
                 recurring_ids=[recurring_id],
             )
-            if materialized < hw:
+            materialized = int(maintained.get("created") or 0)
+            if materialized <= 0:
                 await cancel_recurring_client_slot(session, trainer_id, recurring_id)
                 await callback.message.answer(msg.TRAINER_RECURRING_MATERIALIZE_INCOMPLETE)
                 return

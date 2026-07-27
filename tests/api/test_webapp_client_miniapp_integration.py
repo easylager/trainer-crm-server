@@ -53,11 +53,33 @@ _CLIENT_MINIAPP_VERIFY_PATCH = "src.api.miniapp_auth.deps.verify_telegram_init_d
 
 
 @contextmanager
-def patch_client_init_auth(telegram_id: int) -> Iterator[None]:
-    """Клиентский webapp валидирует initData токеном client-бота."""
-    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
-    with patch(_CLIENT_MINIAPP_VERIFY_PATCH, return_value=fake):
+def patch_client_init_auth(
+    user_id: int,
+    *,
+    platform: MiniAppPlatform = MiniAppPlatform.TELEGRAM,
+) -> Iterator[None]:
+    """Клиентский webapp: Telegram initData или MAX principal (dependency override)."""
+    fake = MiniAppPrincipal(platform=platform, user_id=user_id)
+    if platform == MiniAppPlatform.TELEGRAM:
+        with patch(_CLIENT_MINIAPP_VERIFY_PATCH, return_value=fake):
+            yield
+        return
+    from src.api.miniapp_auth.deps import get_client_miniapp_principal
+
+    app.dependency_overrides[get_client_miniapp_principal] = lambda: fake
+    try:
         yield
+    finally:
+        app.dependency_overrides.pop(get_client_miniapp_principal, None)
+
+
+def _client_auth_headers(platform: MiniAppPlatform = MiniAppPlatform.TELEGRAM) -> dict[str, str]:
+    if platform == MiniAppPlatform.MAX:
+        return {
+            "X-Mini-App-Platform": "max",
+            "X-VK-Launch-Params": "mock",
+        }
+    return {"X-Telegram-Init-Data": "mock"}
 
 
 async def _require_seed_ids(db_session) -> tuple[int, int, int | None]:
@@ -981,13 +1003,13 @@ async def test_cancel_booking_returns_200_when_trainer_bot_push_fails(
                             "service_id": service_id,
                             "first_name": "Алина",
                         },
-                        headers={"X-Telegram-Init-Data": "mock"},
+                        headers=_client_auth_headers(),
                     )
                 bid = int(book.json()["booking_id"])
                 cancel = await client.post(
                     f"/api/webapp/client/bookings/{bid}/cancel",
                     json={"reason": None},
-                    headers={"X-Telegram-Init-Data": "mock"},
+                    headers=_client_auth_headers(),
                 )
     assert book.status_code == 200
     assert cancel.status_code == 200
@@ -999,6 +1021,155 @@ async def test_cancel_booking_returns_200_when_trainer_bot_push_fails(
         )
     ).one()
     assert row[0] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_notifies_trainer_immediately_from_max(
+    app_use_test_db, db_session
+) -> None:
+    """MAX cancel must still push trainer Telegram immediately (not wait for retry loop only)."""
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    trainer_tg = _fresh_client_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :tid"),
+        {"tg": trainer_tg, "tid": trainer_id},
+    )
+    await db_session.commit()
+
+    vk_uid = 100_000 + (uuid.uuid4().int % 800_000)
+    phone, _ = belarus_test_phone(vk_uid)
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock()
+    mock_bot.session = MagicMock()
+    mock_bot.session.close = AsyncMock()
+
+    headers = _client_auth_headers(MiniAppPlatform.MAX)
+    with patch_client_init_auth(vk_uid, platform=MiniAppPlatform.MAX):
+        with patch("src.api.routes.webapp.Bot", return_value=mock_bot):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                    "src.api.routes.webapp.date"
+                ) as mock_date:
+                    mock_date.today.return_value = ref_day
+                    mock_dt.now.return_value = ref_now
+                    mock_dt.combine = datetime.combine
+                    book = await client.post(
+                        "/api/webapp/client/booking",
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Макс",
+                        },
+                        headers=headers,
+                    )
+                assert book.status_code == 200, book.text
+                bid = int(book.json()["booking_id"])
+                cancel = await client.post(
+                    f"/api/webapp/client/bookings/{bid}/cancel",
+                    json={"reason": "не успеваю"},
+                    headers=headers,
+                )
+    assert cancel.status_code == 200, cancel.text
+    body = cancel.json()
+    assert body.get("success") is True
+    assert body.get("notifications", {}).get("trainer") == "sent"
+    assert body.get("notifications", {}).get("client") == "skipped"
+
+    trainer_chats = [
+        c.kwargs.get("chat_id")
+        for c in mock_bot.send_message.await_args_list
+        if c.kwargs.get("chat_id") == trainer_tg
+    ]
+    assert trainer_chats, "trainer bot must send cancel notify immediately on MAX cancel"
+
+    outbox = (
+        await db_session.execute(
+            text(
+                """
+                SELECT kind, sent_at IS NOT NULL AS delivered
+                FROM booking_party_notifications
+                WHERE booking_id = :bid
+                ORDER BY kind
+                """
+            ),
+            {"bid": bid},
+        )
+    ).fetchall()
+    kinds = {str(r[0]): bool(r[1]) for r in outbox}
+    assert kinds.get("client_cancel_trainer") is True
+    assert "client_cancel_confirm" not in kinds
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_skips_trainer_notify_without_telegram_id(
+    app_use_test_db, db_session
+) -> None:
+    """Trainer without telegram_id: cancel succeeds, trainer notify skipped (not failed silently later)."""
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = NULL WHERE id = :tid"),
+        {"tid": trainer_id},
+    )
+    await db_session.commit()
+
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock()
+    mock_bot.session = MagicMock()
+    mock_bot.session.close = AsyncMock()
+
+    with patch_client_init_auth(ctg):
+        with patch("src.api.routes.webapp.Bot", return_value=mock_bot):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                    "src.api.routes.webapp.date"
+                ) as mock_date:
+                    mock_date.today.return_value = ref_day
+                    mock_dt.now.return_value = ref_now
+                    mock_dt.combine = datetime.combine
+                    book = await client.post(
+                        "/api/webapp/client/booking",
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Клиент",
+                        },
+                        headers=_client_auth_headers(),
+                    )
+                bid = int(book.json()["booking_id"])
+                cancel = await client.post(
+                    f"/api/webapp/client/bookings/{bid}/cancel",
+                    json={"reason": "занят"},
+                    headers=_client_auth_headers(),
+                )
+    assert book.status_code == 200
+    assert cancel.status_code == 200
+    assert cancel.json().get("notifications", {}).get("trainer") == "skipped"
+    outbox_trainer = (
+        await db_session.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM booking_party_notifications
+                WHERE booking_id = :bid AND kind = 'client_cancel_trainer'
+                """
+            ),
+            {"bid": bid},
+        )
+    ).scalar()
+    assert int(outbox_trainer or 0) == 0
 
 
 @pytest.mark.asyncio

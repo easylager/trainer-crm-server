@@ -265,7 +265,7 @@ async def trainer_start_from_landing(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
-    Create trainer draft + one-time Ice Pro bot link (site CTA).
+    Issue one-time Ice Pro bot link for site CTA (trainer row created when user opens Telegram).
 
     Replaces manual /trainer_welcome_link for organic traffic.
     """
@@ -308,8 +308,9 @@ async def trainer_start_from_landing(
         },
     )
     return {
-        "trainer_id": result["trainer_id"],
+        "trainer_id": result.get("trainer_id"),
         "redirect_url": result["redirect_url"],
+        "expires_at": result.get("expires_at"),
     }
 
 

@@ -207,8 +207,8 @@ from src.application.recurring_use_cases import (
     has_other_active_recurring,
     list_active_recurring_slots_for_trainer_client,
     list_recurring_booking_suggestions_for_trainer_client,
-    list_upcoming_recurring_bookings_for_trainer_client,
-    materialize_recurring_horizon,
+    list_recurring_schedule_preview_for_trainer_client,
+    maintain_recurring_horizon,
 )
 from src.application.trainer_access_state import (
     TrainerAccessState,
@@ -2707,8 +2707,15 @@ async def post_client_booking_cancel(
     from src.shared.audit import ACTOR_API, audit_log
 
     telegram_id = client_catalog_telegram_key(principal)
+    # Trainer Telegram notify always; client self-confirm only when cancel is from Telegram Mini App
+    # (MAX clients use a synthetic catalog key — no Telegram chat to confirm into).
+    send_client_confirm = principal.platform == MiniAppPlatform.TELEGRAM
     payload = await cancel_booking_by_client(
-        session, booking_id, telegram_id, reason=body.reason
+        session,
+        booking_id,
+        telegram_id,
+        reason=body.reason,
+        notify_client_confirm=send_client_confirm,
     )
     if not payload:
         raise HTTPException(status_code=400, detail="Booking not found or already cancelled")
@@ -2742,21 +2749,25 @@ async def post_client_booking_cancel(
                 notifications["trainer"] = delivery_status_label(skipped=False, sent=False, queued=True)
             else:
                 notifications["trainer"] = delivery_status_label(skipped=True, sent=False, queued=False)
-            if principal.platform == MiniAppPlatform.TELEGRAM:
-                delivered = await try_deliver_booking_party_notifications_for_booking(
-                    session,
-                    int(booking_id),
-                    trainer_bot=trainer_bot,
-                    client_bot=client_bot,
-                )
-                if KIND_CLIENT_CANCEL_TRAINER in delivered:
-                    notifications["trainer"] = delivered[KIND_CLIENT_CANCEL_TRAINER]
-                if KIND_CLIENT_CANCEL_CONFIRM in delivered:
-                    notifications["client"] = delivered[KIND_CLIENT_CANCEL_CONFIRM]
-                elif principal.platform == MiniAppPlatform.TELEGRAM:
-                    notifications["client"] = delivery_status_label(skipped=False, sent=False, queued=True)
+            if send_client_confirm:
+                notifications["client"] = delivery_status_label(skipped=False, sent=False, queued=True)
             else:
                 notifications["client"] = delivery_status_label(skipped=True, sent=False, queued=False)
+
+            deliver_kinds = {KIND_CLIENT_CANCEL_TRAINER}
+            if send_client_confirm:
+                deliver_kinds.add(KIND_CLIENT_CANCEL_CONFIRM)
+            delivered = await try_deliver_booking_party_notifications_for_booking(
+                session,
+                int(booking_id),
+                trainer_bot=trainer_bot,
+                client_bot=client_bot if send_client_confirm else None,
+                kinds=deliver_kinds,
+            )
+            if KIND_CLIENT_CANCEL_TRAINER in delivered:
+                notifications["trainer"] = delivered[KIND_CLIENT_CANCEL_TRAINER]
+            if send_client_confirm and KIND_CLIENT_CANCEL_CONFIRM in delivered:
+                notifications["client"] = delivered[KIND_CLIENT_CANCEL_CONFIRM]
         else:
             notifications = await deliver_client_cancel_notifications_immediate(
                 session,
@@ -2765,7 +2776,7 @@ async def post_client_booking_cancel(
                 trainer_bot=trainer_bot,
                 client_bot=client_bot,
                 client_telegram_id=int(telegram_id),
-                send_client_confirm=principal.platform == MiniAppPlatform.TELEGRAM,
+                send_client_confirm=send_client_confirm,
             )
     finally:
         await trainer_bot.session.close()
@@ -6352,18 +6363,21 @@ async def _rollback_recurring_unless_full_materialization(
     horizon_weeks: int,
 ) -> None:
     """
-    Trainer-facing flows are all-or-nothing: if we could not place the full forward window,
-    drop the new rule and any bookings created for it, then surface a conflict error.
+    Trainer-facing create flows: keep the rule if at least one auto-booking landed in the window.
+    (Partial windows are normal — past weekdays / skips / one conflict week.)
+    Roll back only when nothing could be placed at all.
     """
-    hw = max(1, int(horizon_weeks))
-    if materialized >= hw:
+    if int(materialized) > 0:
         return
+    hw = max(1, int(horizon_weeks))
     await cancel_recurring_client_slot(session, trainer_id, recurring_id)
     raise HTTPException(
         status_code=409,
         detail=(
-            f"Создано только {materialized} из {hw} автозаписей: на часть недель это время занято "
-            "или пересекается с другим слотом. Закрепление не сохранено — освободите интервалы и попробуйте снова."
+            f"Не удалось создать автозаписи на ближайшие {hw} "
+            f"{'неделю' if hw == 1 else 'недели' if 2 <= hw <= 4 else 'недель'}: "
+            "время занято или пересекается с другим слотом. "
+            "Закрепление не сохранено — освободите интервалы и попробуйте снова."
         ),
     )
 
@@ -6395,18 +6409,26 @@ async def get_trainer_client_recurring(
         from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
     today = datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
     slots = await list_active_recurring_slots_for_trainer_client(session, trainer_id, client_id)
-    upcoming = await list_upcoming_recurring_bookings_for_trainer_client(
-        session, trainer_id, client_id, from_date=today, limit=20
+    settings = Settings()
+    hw = int(settings.recurring_materialization_horizon_weeks)
+    preview_w = int(settings.recurring_virtual_preview_weeks)
+    upcoming = await list_recurring_schedule_preview_for_trainer_client(
+        session,
+        trainer_id,
+        client_id,
+        from_date=today,
+        horizon_weeks=hw,
+        preview_weeks=preview_w,
     )
     booking_suggestions = await list_recurring_booking_suggestions_for_trainer_client(
         session, trainer_id, client_id, limit=10
     )
-    settings = Settings()
     return {
         "slots": slots,
         "upcoming_bookings": upcoming,
         "booking_suggestions": booking_suggestions,
-        "materialization_horizon_weeks": int(settings.recurring_materialization_horizon_weeks),
+        "materialization_horizon_weeks": hw,
+        "virtual_preview_weeks": preview_w,
     }
 
 
@@ -6448,12 +6470,13 @@ async def post_trainer_client_recurring(
         raise HTTPException(status_code=409, detail="Этот слот уже закреплён для клиента.")
     settings = Settings()
     hw = int(settings.recurring_materialization_horizon_weeks)
-    materialized = await materialize_recurring_horizon(
+    maintained = await maintain_recurring_horizon(
         session,
         trainer_id,
         horizon_weeks=hw,
         recurring_ids=[recurring_id],
     )
+    materialized = int(maintained.get("created") or 0)
     await _rollback_recurring_unless_full_materialization(
         session,
         trainer_id,
@@ -6528,13 +6551,14 @@ async def post_trainer_client_recurring_from_booking(
 
     settings = Settings()
     hw = int(settings.recurring_materialization_horizon_weeks)
-    materialized = await materialize_recurring_horizon(
+    maintained = await maintain_recurring_horizon(
         session,
         trainer_id,
         horizon_weeks=hw,
         recurring_ids=[recurring_id],
         min_week_index=min_week_index,
     )
+    materialized = int(maintained.get("created") or 0)
     await _rollback_recurring_unless_full_materialization(
         session,
         trainer_id,
@@ -7638,12 +7662,13 @@ async def post_trainer_booking_make_regular(
     settings = Settings()
     hw = int(settings.recurring_materialization_horizon_weeks)
     if recurring_id:
-        materialized = await materialize_recurring_horizon(
+        maintained = await maintain_recurring_horizon(
             session,
             trainer_id,
             horizon_weeks=hw,
             recurring_ids=[recurring_id],
         )
+        materialized = int(maintained.get("created") or 0)
         await _rollback_recurring_unless_full_materialization(
             session,
             trainer_id,

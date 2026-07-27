@@ -153,3 +153,73 @@ async def test_manual_redeem_updates_pass_and_stats_ledger(db_session: AsyncSess
     )
     assert dup["already_redeemed"] is True
     assert dup["pass"]["sessions_remaining"] == 9
+
+
+@pytest.mark.asyncio
+async def test_manual_redeem_completes_past_confirmed_booking(db_session: AsyncSession) -> None:
+    """Past confirmed booking (not yet auto-completed) must appear and redeemable in one step."""
+    yesterday = date.today() - timedelta(days=2)
+    trainer_id, client_id, booking_id, pass_product_id = await _seed_completed_booking_without_pass(
+        db_session, slot_date=yesterday
+    )
+    await db_session.execute(
+        text("UPDATE bookings SET status = 'confirmed' WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+    await db_session.commit()
+
+    issued = await issue_pass_to_client(db_session, trainer_id, client_id, pass_product_id)
+    pass_instance_id = int(issued["id"])
+
+    listed = await list_redeemable_bookings_for_pass_instance(
+        db_session, trainer_id, pass_instance_id
+    )
+    assert "error" not in listed
+    match = next(x for x in listed["items"] if int(x["booking_id"]) == booking_id)
+    assert match.get("needs_complete") is True
+
+    out = await manual_redeem_pass_for_booking(
+        db_session, trainer_id, pass_instance_id, booking_id
+    )
+    assert out["already_redeemed"] is False
+    assert out["pass"]["sessions_remaining"] == 9
+
+    status = (
+        await db_session.execute(
+            text("SELECT status FROM bookings WHERE id = :bid"),
+            {"bid": booking_id},
+        )
+    ).scalar()
+    assert status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_redeem_pass_session_idempotent_no_double_debit(db_session: AsyncSession) -> None:
+    from src.application.pass_product_use_cases import redeem_pass_session_for_booking
+
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, client_id, booking_id, pass_product_id = await _seed_completed_booking_without_pass(
+        db_session, slot_date=yesterday
+    )
+    issued = await issue_pass_to_client(db_session, trainer_id, client_id, pass_product_id)
+    pass_instance_id = int(issued["id"])
+
+    assert await redeem_pass_session_for_booking(db_session, booking_id) is True
+    await db_session.commit()
+    rem1 = (
+        await db_session.execute(
+            text("SELECT sessions_remaining FROM pass_instances WHERE id = :id"),
+            {"id": pass_instance_id},
+        )
+    ).scalar()
+    assert int(rem1) == 9
+
+    assert await redeem_pass_session_for_booking(db_session, booking_id) is True
+    await db_session.commit()
+    rem2 = (
+        await db_session.execute(
+            text("SELECT sessions_remaining FROM pass_instances WHERE id = :id"),
+            {"id": pass_instance_id},
+        )
+    ).scalar()
+    assert int(rem2) == 9

@@ -154,9 +154,11 @@ class Settings(BaseSettings):
     notification_lead_mode_recovery_interval_sec: int = 86400
     # notification_service: poll for slot end → auto-complete booking + client completion push. Clamped to 15–600 s in worker.
     booking_complete_poll_interval_sec: int = 60
-    # Recurring «постоянный клиент»: ISO weeks ahead to keep filled (rolling window from this Monday).
-    # Background loop + on «Сделать постоянным» top up toward this horizon; as weeks pass, new weeks enter the window.
+    # Recurring «постоянный клиент»: ISO weeks ahead to keep as real bookings (rolling window from this Monday).
+    # Background loop + on «Сделать постоянным» fill missing weeks inside this window only — never beyond it.
     recurring_materialization_horizon_weeks: int = 3
+    # How many weeks ahead to show as projected «по правилу» dates in the client card (includes the real window).
+    recurring_virtual_preview_weeks: int = 8
     # notification_service: top up recurring auto-bookings toward the horizon (seconds). Default 6h.
     recurring_materialization_loop_interval_sec: int = 21600
 

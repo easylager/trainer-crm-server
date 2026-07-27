@@ -64,6 +64,48 @@ async def issue_trainer_welcome_link_token(
     }
 
 
+async def issue_landing_trainer_link_token(
+    session: AsyncSession,
+    *,
+    expire_days: int = DEFAULT_TRAINER_LINK_EXPIRE_DAYS,
+) -> dict:
+    """
+    Public landing CTA: issue a one-time bot token without creating a trainer row.
+
+    The trainer profile is created lazily in consume_link_token when Telegram opens the link.
+    """
+    days = max(1, min(int(expire_days), 365))
+    raw = secrets.token_urlsafe(32)
+    token = raw[:64] if len(raw) > 64 else raw
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=days)
+
+    await session.execute(
+        text(
+            """
+            INSERT INTO trainer_link_tokens (token, trainer_id, expires_at)
+            VALUES (:token, NULL, :exp)
+            """
+        ),
+        {"token": token, "exp": expires_at},
+    )
+    await session.commit()
+
+    settings = Settings()
+    uname = (settings.trainer_bot_username or "").strip().lstrip("@")
+    deep_link = f"https://t.me/{uname}?start=link_{token}" if uname else ""
+
+    return {
+        "trainer_id": None,
+        "token": token,
+        "start_payload": f"link_{token}",
+        "expires_at": expires_at,
+        "deep_link": deep_link or None,
+        "trainer_bot_username_configured": bool(uname),
+        "created_new_trainer": False,
+    }
+
+
 async def create_trainer_and_issue_welcome_link_token(
     session: AsyncSession,
     *,

@@ -88,6 +88,10 @@ async def test_trainer_start_happy_path(db_session, monkeypatch):
     monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)
     monkeypatch.setattr("src.application.landing_trainer_start_use_cases.Settings", lambda: s)
     monkeypatch.setattr("src.application.trainer_link_token_use_cases.Settings", lambda: s)
+
+    before = await db_session.execute(text("SELECT COUNT(*) FROM trainers"))
+    trainers_before = int(before.scalar() or 0)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/api/public/trainer-start",
@@ -95,15 +99,23 @@ async def test_trainer_start_happy_path(db_session, monkeypatch):
         )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["trainer_id"] > 0
+    assert data["trainer_id"] is None
     assert data["redirect_url"].startswith("https://t.me/IceProTestBot?start=link_")
     assert "_ref_REF9" in data["redirect_url"]
+    assert data.get("expires_at")
 
+    after = await db_session.execute(text("SELECT COUNT(*) FROM trainers"))
+    assert int(after.scalar() or 0) == trainers_before
+
+    token = data["redirect_url"].split("start=link_", 1)[1].split("_ref_", 1)[0]
     row = await db_session.execute(
-        text("SELECT 1 FROM trainer_link_tokens WHERE trainer_id = :tid"),
-        {"tid": data["trainer_id"]},
+        text("SELECT trainer_id, used_at FROM trainer_link_tokens WHERE token = :tok"),
+        {"tok": token},
     )
-    assert row.fetchone() is not None
+    tok_row = row.fetchone()
+    assert tok_row is not None
+    assert tok_row[0] is None
+    assert tok_row[1] is None
 
 
 @pytest.mark.asyncio

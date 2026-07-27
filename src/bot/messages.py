@@ -1007,9 +1007,13 @@ def build_trainer_client_cancel_notification_keyboard(
     slot_id: int,
     exclude_client_id: int,
     client_telegram_id: int | None,
+    trainer_telegram_id: int | None = None,
 ):
     """
     After client self-cancel: offer mass invite (Mini App) + direct DM to the client.
+
+    Skip ``tg://user?id=`` when the id is unusable or equals the trainer (Telegram rejects
+    BUTTON_USER_INVALID / privacy-restricted and drops the whole message).
     """
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
@@ -1028,7 +1032,15 @@ def build_trainer_client_cancel_notification_keyboard(
                 )
             ]
         )
-    if client_telegram_id:
+    write_ok = False
+    if client_telegram_id is not None:
+        try:
+            cid = int(client_telegram_id)
+            tid = int(trainer_telegram_id) if trainer_telegram_id is not None else None
+            write_ok = cid > 0 and (tid is None or cid != tid)
+        except (TypeError, ValueError):
+            write_ok = False
+    if write_ok:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2724,7 +2736,7 @@ TRAINER_RECURRING_NEEDS_SERVICE = (
     "Не удалось закрепить: в профиле нет ни одной услуги. Добавьте услугу в каталоге — автозапись привязывается к ней."
 )
 TRAINER_RECURRING_MATERIALIZE_INCOMPLETE = (
-    "Не удалось создать все будущие записи: часть окон в расписании занята или пересекается с другим слотом. "
+    "Не удалось создать ближайшие автозаписи: окна в расписании заняты или пересекаются с другим слотом. "
     "Освободите время и попробуйте снова."
 )
 TRAINER_BOOKINGS_CHOOSE_WRITE = "Выбери запись, чтобы написать клиенту:"

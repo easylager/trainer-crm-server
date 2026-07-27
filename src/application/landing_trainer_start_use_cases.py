@@ -5,7 +5,7 @@ import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.trainer_link_token_use_cases import create_trainer_and_issue_welcome_link_token
+from src.application.trainer_link_token_use_cases import issue_landing_trainer_link_token
 from src.shared.config import Settings
 
 _REFERRAL_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,32}$")
@@ -46,7 +46,7 @@ async def issue_trainer_start_from_landing(
     settings: Settings | None = None,
 ) -> dict:
     """
-    Create pending trainer + one-time token; return redirect URL for Ice Pro bot.
+    Issue a one-time bot token (no trainer row yet) and return redirect URL for Ice Pro bot.
 
     Raises ValueError with a short code when bot username is not configured.
     """
@@ -55,14 +55,15 @@ async def issue_trainer_start_from_landing(
     if not uname:
         raise ValueError("trainer_bot_username_missing")
 
-    issued = await create_trainer_and_issue_welcome_link_token(session)
+    issued = await issue_landing_trainer_link_token(session)
     token = str(issued["token"])
     redirect_url = build_trainer_bot_deep_link(token, referral_code=referral_code, settings=s)
     if not redirect_url:
         raise ValueError("trainer_bot_username_missing")
     return {
-        "trainer_id": int(issued["trainer_id"]),
+        "trainer_id": issued.get("trainer_id"),
         "redirect_url": redirect_url,
         "start_payload": issued["start_payload"],
+        "expires_at": issued["expires_at"].isoformat(),
         "referral_code": sanitize_referral_code(referral_code),
     }

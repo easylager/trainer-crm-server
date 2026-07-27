@@ -381,6 +381,40 @@
     setTimeout(function () { el.hidden = true; }, 6000);
   }
 
+  var TRAINER_START_CACHE_KEY = 'ice_pro_trainer_start_v1';
+
+  function readCachedTrainerStartUrl() {
+    try {
+      var raw = sessionStorage.getItem(TRAINER_START_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.redirect_url) return null;
+      if (parsed.expires_at) {
+        var exp = Date.parse(parsed.expires_at);
+        if (!isNaN(exp) && exp <= Date.now()) {
+          sessionStorage.removeItem(TRAINER_START_CACHE_KEY);
+          return null;
+        }
+      }
+      return parsed.redirect_url;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function cacheTrainerStartUrl(data) {
+    if (!data || !data.redirect_url) return;
+    try {
+      sessionStorage.setItem(
+        TRAINER_START_CACHE_KEY,
+        JSON.stringify({
+          redirect_url: data.redirect_url,
+          expires_at: data.expires_at || null,
+        })
+      );
+    } catch (e) { /* private mode / quota */ }
+  }
+
   function startTelegram(btn) {
     var cfg = window.__landingCfg || {};
     var hero = cfg.hero || {};
@@ -389,6 +423,12 @@
 
     if (cfg.registration_enabled === false) {
       showError('Регистрация временно недоступна. Попробуйте позже.');
+      return;
+    }
+
+    var cachedUrl = readCachedTrainerStartUrl();
+    if (cachedUrl) {
+      window.location.href = cachedUrl;
       return;
     }
 
@@ -411,6 +451,7 @@
       })
       .then(function (res) {
         if (res.ok && res.data && res.data.redirect_url) {
+          cacheTrainerStartUrl(res.data);
           window.location.href = res.data.redirect_url;
           return;
         }

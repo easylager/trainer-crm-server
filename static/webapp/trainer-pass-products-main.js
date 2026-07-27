@@ -478,8 +478,9 @@
           if (!state.passDetailRedeemable.length) {
             redeemList.innerHTML =
               '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">✓</div>' +
-              '<p class="pp-state-title">Всё учтено</p>' +
-              '<p class="pp-state-text">Нет прошедших занятий без абонемента, которые можно включить в этот абонемент.</p></div>';
+              '<p class="pp-state-title">Нечего списать</p>' +
+              '<p class="pp-state-text">Нет подходящих занятий: либо всё уже учтено, либо запись ещё не завершилась, ' +
+              'либо абонемент не покрывает услугу/тариф этой записи. Проверьте карточку клиента и расписание.</p></div>';
           } else {
             var html = '<div class="bd-rows">';
             state.passDetailRedeemable.forEach(function(b) {
@@ -489,7 +490,11 @@
               html += '<div class="pp-redeem-booking-row__date">' + escapeHtml(formatBookingSlotLabel(b)) + '</div>';
               html += '<div class="pp-redeem-booking-row__meta">' +
                 escapeHtml(b.service_name || 'Занятие') + ' · ' +
-                escapeHtml(formatBookingPriceHint(b.price_cents)) + '</div>';
+                escapeHtml(formatBookingPriceHint(b.price_cents));
+              if (b.needs_complete) {
+                html += ' · спишется и отметит проведённым';
+              }
+              html += '</div>';
               html += '</span>';
               html += '<span class="pp-redeem-booking-row__chip">−1</span>';
               html += '</button>';
@@ -502,8 +507,11 @@
                 if (!bid || !state.passDetailId || btn.disabled) return;
                 var booking = state.passDetailRedeemable.find(function(x) { return x.booking_id === bid; }) || {};
                 var label = formatBookingSlotLabel(booking);
+                var confirmExtra = booking.needs_complete
+                  ? '\n\nЗапись ещё не отмечена проведённой — при списании отметим её как проведённую.'
+                  : '';
                 showAppConfirm(
-                  'Списать 1 занятие с абонемента?\n\n' + label +
+                  'Списать 1 занятие с абонемента?\n\n' + label + confirmExtra +
                     '\n\nВ статистике визит будет учтён как оплаченный абонементом.',
                   { okText: 'Списать', cancelText: 'Отмена' }
                 ).then(function(ok) {
