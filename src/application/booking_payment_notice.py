@@ -317,6 +317,72 @@ async def classify_booking_expected_payment_class(
     return pc_map.get(int(booking_id))
 
 
+async def load_pass_sessions_remaining_after_booking(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+) -> int | None:
+    """
+    If this booking is expected to use a pass, return total active pass sessions remaining
+    for the client+trainer **after** this visit is consumed (current almost-finished session
+    is excluded from the count).
+
+    Returns None when the booking is not PASS (caller should leave wrap-up text unchanged).
+    """
+    bid = int(booking_id)
+    tid = int(trainer_id)
+    r = await session.execute(
+        text(
+            """
+            SELECT b.client_id,
+                   EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id) AS has_pass
+            FROM bookings b
+            WHERE b.id = :bid AND b.trainer_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"bid": bid, "tid": tid},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None:
+        return None
+    client_id = int(row[0])
+    already_redeemed = bool(row[1])
+
+    pool = await _load_pass_pool_for_client_trainer(session, client_id, tid)
+    if already_redeemed:
+        # DB remaining is already post-redemption for this booking.
+        return sum(int(e.remaining) for e in pool) if pool else 0
+
+    rows = await _load_upcoming_payment_queue_for_client_trainer(session, client_id, tid)
+    if not any(int(x.booking_id) == bid for x in rows):
+        return None
+    cert_balance = await _load_cert_balance_cents_for_client_trainer(session, client_id, tid)
+    virtual_cert = int(cert_balance)
+    for pay_row in rows:
+        if pay_row.has_pass_redemption:
+            if int(pay_row.booking_id) == bid:
+                return sum(int(e.remaining) for e in pool)
+            continue
+        if pay_row.has_cert_credit:
+            if int(pay_row.booking_id) == bid:
+                return None
+            continue
+        if _allocate_pass_for_booking(pool, pay_row.service_id, pay_row.price_tier_kind):
+            if int(pay_row.booking_id) == bid:
+                return sum(int(e.remaining) for e in pool)
+            continue
+        price = int(pay_row.booking_price_cents or 0)
+        if virtual_cert > 0 and price > 0:
+            virtual_cert -= min(virtual_cert, price)
+            if int(pay_row.booking_id) == bid:
+                return None
+            continue
+        if int(pay_row.booking_id) == bid:
+            return None
+    return None
+
+
 async def resolve_bookings_expected_payment_class_map(
     session: AsyncSession,
     booking_trainer_pairs: list[tuple[int, int]],

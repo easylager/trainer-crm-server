@@ -1814,6 +1814,11 @@ def format_session_payment_notice_html(
                 line += f" Осталось: <b>{int(pass_sessions_remaining)}</b>."
         else:
             line = "💳 <b>Оплата: абонемент.</b> При завершении спишется 1 занятие."
+            if pass_sessions_remaining is not None:
+                rem = int(pass_sessions_remaining)
+                line += (
+                    f" Остаток по абонементу: <b>{rem} {_ru_sessions_word(rem)}</b>."
+                )
         return line + "\n"
 
     if oc == "cert":
@@ -1940,6 +1945,7 @@ def format_trainer_booking_session_wrapup_html(
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
     expected_payment_class: str | None = None,
+    pass_sessions_remaining: int | None = None,
 ) -> str:
     """Telegram HTML for trainer push before slot end (repeat booking CTA). Timing: notification_service adaptive pre-end window + fast poll."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -1975,6 +1981,7 @@ def format_trainer_booking_session_wrapup_html(
             phase="upcoming",
             outcome=payment_outcome,
             booking_price_cents=booking_price_cents,
+            pass_sessions_remaining=pass_sessions_remaining,
             for_client=False,
         )
     elif booking_price_cents is not None:

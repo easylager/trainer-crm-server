@@ -8,7 +8,10 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.booking_payment_notice import resolve_bookings_expected_payment_class_map
+from src.application.booking_payment_notice import (
+    load_pass_sessions_remaining_after_booking,
+    resolve_bookings_expected_payment_class_map,
+)
 from src.application.booking_use_cases import cancel_booking, create_booking
 from src.application.pass_product_use_cases import issue_pass_to_client
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
@@ -213,3 +216,144 @@ async def test_cancel_middle_visit_rebalances_remaining_queue(db_session: AsyncS
     assert pc_map[booking_ids[1]] is None
     assert pc_map[booking_ids[2]] == "PASS"
     assert pc_map[booking_ids[3]] == "PASS"
+
+
+@pytest.mark.asyncio
+async def test_pass_remaining_after_booking_excludes_current_session(
+    db_session: AsyncSession,
+) -> None:
+    """Wrap-up count: current almost-finished visit is already subtracted."""
+    trainer_id, client_id, service_id, _ = await _seed_trainer_client_pass(
+        db_session, sessions_total=5
+    )
+    today = date.today()
+    slot_id = await _create_slot(
+        db_session,
+        trainer_id=trainer_id,
+        slot_date=today,
+        start=time(10, 0),
+        end=time(11, 0),
+    )
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert booking_id is not None
+
+    rem = await load_pass_sessions_remaining_after_booking(
+        db_session, int(booking_id), trainer_id
+    )
+    assert rem == 4
+
+
+@pytest.mark.asyncio
+async def test_pass_remaining_after_booking_none_without_pass(
+    db_session: AsyncSession,
+) -> None:
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'No', 'Pass', 30)"
+        ),
+        {"tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) "
+            "VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    tg = unique_test_telegram_id()
+    phone, phone_normalized = belarus_test_phone(tg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tid, 'No', 'Pass', :phone, :phone_normalized)
+            RETURNING id
+            """
+        ),
+        {"tid": tg, "phone": phone, "phone_normalized": phone_normalized},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+    today = date.today()
+    slot_id = await _create_slot(
+        db_session,
+        trainer_id=trainer_id,
+        slot_date=today,
+        start=time(12, 0),
+        end=time(13, 0),
+    )
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert booking_id is not None
+    rem = await load_pass_sessions_remaining_after_booking(
+        db_session, int(booking_id), trainer_id
+    )
+    assert rem is None
+
+
+@pytest.mark.asyncio
+async def test_pass_remaining_after_second_booking_accounts_for_earlier(
+    db_session: AsyncSession,
+) -> None:
+    """Two upcoming on a 5-pass: after 2nd booking remaining is 3 (both current+earlier excluded)."""
+    trainer_id, client_id, service_id, _ = await _seed_trainer_client_pass(
+        db_session, sessions_total=5
+    )
+    today = date.today()
+    first_slot = await _create_slot(
+        db_session,
+        trainer_id=trainer_id,
+        slot_date=today,
+        start=time(9, 0),
+        end=time(10, 0),
+    )
+    second_slot = await _create_slot(
+        db_session,
+        trainer_id=trainer_id,
+        slot_date=today,
+        start=time(11, 0),
+        end=time(12, 0),
+    )
+    first_id, _ = await create_booking(
+        db_session,
+        slot_id=first_slot,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    second_id, _ = await create_booking(
+        db_session,
+        slot_id=second_slot,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert first_id is not None and second_id is not None
+
+    rem_first = await load_pass_sessions_remaining_after_booking(
+        db_session, int(first_id), trainer_id
+    )
+    rem_second = await load_pass_sessions_remaining_after_booking(
+        db_session, int(second_id), trainer_id
+    )
+    assert rem_first == 4
+    assert rem_second == 3

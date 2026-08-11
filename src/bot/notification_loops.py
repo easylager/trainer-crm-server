@@ -20,6 +20,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.application.booking_payment_notice import load_booking_deduction_snapshot
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
+from src.application.booking_payment_notice import load_pass_sessions_remaining_after_booking
 from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_use_cases import (
     can_trainer_repeat_booking_same_time_next_week,
@@ -1344,6 +1345,11 @@ async def process_trainer_session_wrapup_round(
             payment_class = await classify_booking_expected_payment_class(
                 session, int(p["booking_id"]), int(p["trainer_id"])
             )
+            pass_remaining: int | None = None
+            if (payment_class or "").strip().upper() == "PASS":
+                pass_remaining = await load_pass_sessions_remaining_after_booking(
+                    session, int(p["booking_id"]), int(p["trainer_id"])
+                )
             text = msg.format_trainer_booking_session_wrapup_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
@@ -1356,6 +1362,7 @@ async def process_trainer_session_wrapup_round(
                 arena_display=p.get("arenas_str"),
                 include_quick_rebook_line=can_quick_rebook,
                 expected_payment_class=payment_class,
+                pass_sessions_remaining=pass_remaining,
             )
             kb = await _build_trainer_post_session_keyboard(
                 session,

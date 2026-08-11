@@ -71,6 +71,34 @@ def test_trainer_wrapup_pass_expected() -> None:
     )
     assert "Оплата: абонемент" in text
     assert "спишется 1 занятие" in text
+    assert "Остаток по абонементу" not in text
+
+
+def test_trainer_wrapup_pass_expected_with_remaining_after_current() -> None:
+    text = msg.format_trainer_booking_session_wrapup_html(
+        client_name="Иван",
+        date="01.05",
+        day="Чт",
+        time="10:00",
+        duration_minutes=60,
+        service_name="Персональная",
+        price_tier_label=None,
+        arena_display=None,
+        expected_payment_class="PASS",
+        pass_sessions_remaining=4,
+    )
+    assert "Оплата: абонемент" in text
+    assert "Остаток по абонементу: <b>4 занятия</b>" in text
+
+
+def test_trainer_wrapup_pass_remaining_plural_forms() -> None:
+    for n, word in ((1, "занятие"), (2, "занятия"), (5, "занятий"), (21, "занятие"), (11, "занятий")):
+        text = msg.format_session_payment_notice_html(
+            phase="upcoming",
+            outcome="pass",
+            pass_sessions_remaining=n,
+        )
+        assert f"Остаток по абонементу: <b>{n} {word}</b>" in text
 
 
 def test_trainer_wrapup_none_expected() -> None:
