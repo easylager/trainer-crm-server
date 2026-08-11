@@ -20,9 +20,14 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.application.booking_payment_notice import load_booking_deduction_snapshot
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
+from src.application.booking_payment_notice import load_pass_sessions_remaining_after_booking
 from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_use_cases import (
     can_trainer_repeat_booking_same_time_next_week,
+    claim_client_booking_completion_push_sent,
+    claim_trainer_completed_sent,
+    clear_client_booking_completion_push_sent,
+    clear_trainer_completed_sent,
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     get_pending_booking_cancel_notifications,
@@ -160,6 +165,81 @@ def _is_telegram_inline_keyboard_bad_request(exc: BaseException) -> bool:
             "inline_keyboard_invalid",
         )
     )
+
+
+def _is_telegram_timeout(exc: BaseException) -> bool:
+    """True when the HTTP client timed out (message may already be delivered)."""
+    blob = _telegram_error_blob(exc)
+    return "timeout" in blob or "timed out" in blob
+
+
+def _inline_keyboard_without_tg_user_urls(
+    markup: InlineKeyboardMarkup | None,
+) -> InlineKeyboardMarkup | None:
+    """Drop tg://user buttons; keep callbacks / web_app / other urls."""
+    if markup is None:
+        return None
+    try:
+        kept: list[list[InlineKeyboardButton]] = []
+        for row in markup.inline_keyboard or []:
+            filtered = [
+                btn
+                for btn in row
+                if not str(getattr(btn, "url", None) or "").startswith("tg://user")
+            ]
+            if filtered:
+                kept.append(filtered)
+        if not kept:
+            return None
+        return InlineKeyboardMarkup(inline_keyboard=kept)
+    except Exception:
+        return None
+
+
+async def _send_message_with_markup_fallback(
+    bot: Bot,
+    *,
+    chat_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None,
+    parse_mode: str | None = None,
+) -> None:
+    """
+    Send Telegram message; on markup BadRequest retry without tg://user, then plain text.
+    Raises the last non-markup error (or plain-text failure).
+    """
+    kwargs: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        kwargs["parse_mode"] = parse_mode
+
+    stripped: InlineKeyboardMarkup | None = None
+    try:
+        await bot.send_message(**kwargs, reply_markup=reply_markup)
+        return
+    except Exception as first_exc:
+        if not _is_telegram_inline_keyboard_bad_request(first_exc):
+            raise
+        stripped = _inline_keyboard_without_tg_user_urls(reply_markup)
+        logger.warning(
+            "telegram markup rejected chat_id=%s tag=%s; retrying without tg://user buttons",
+            chat_id,
+            _telegram_markup_rejection_tag(first_exc),
+        )
+
+    if stripped is not None:
+        try:
+            await bot.send_message(**kwargs, reply_markup=stripped)
+            return
+        except Exception as second_exc:
+            if not _is_telegram_inline_keyboard_bad_request(second_exc):
+                raise
+            logger.warning(
+                "telegram markup still rejected chat_id=%s tag=%s; retrying without keyboard",
+                chat_id,
+                _telegram_markup_rejection_tag(second_exc),
+            )
+
+    await bot.send_message(**kwargs, reply_markup=None)
 
 
 def _telegram_markup_rejection_tag(exc: BaseException) -> str:
@@ -643,13 +723,16 @@ async def _send_client_booking_completed_push(
     b: dict,
 ) -> None:
     """
-    Send completion notice; mark client_booking_completed_push_sent_at only after Telegram OK.
+    Send completion notice. Claim client_booking_completed_push_sent_at before Telegram send
+    so timeouts / poison markup cannot retry forever (message may already be delivered).
     No telegram_id: mark sent so we do not spin on retries.
     """
     chat_id = b.get("client_telegram_id")
     booking_id = b["id"]
     if not chat_id:
         await mark_client_booking_completion_push_sent(session, booking_id)
+        return
+    if not await claim_client_booking_completion_push_sent(session, booking_id):
         return
     date_str, day_str, time_str = _slot_display_strings(
         b.get("slot_date"), b.get("start_time")
@@ -684,15 +767,28 @@ async def _send_client_booking_completed_push(
         trainer_id=b["trainer_id"],
         booking_id=booking_id,
         trainer_telegram_id=b.get("trainer_telegram_id"),
+        recipient_telegram_id=int(chat_id),
         show_repeat_row=True,
     )
     try:
-        await client_bot.send_message(
-            chat_id=chat_id, text=text, reply_markup=kb, parse_mode="HTML"
+        await _send_message_with_markup_fallback(
+            client_bot,
+            chat_id=int(chat_id),
+            text=text,
+            reply_markup=kb,
+            parse_mode="HTML",
         )
-        await mark_client_booking_completion_push_sent(session, booking_id)
         await _maybe_send_session_milestone_pushes(client_bot, session, chat_id=int(chat_id))
     except Exception as e:
+        if _is_telegram_timeout(e):
+            logger.warning(
+                "Completed notifier timeout to client %s (booking_id=%s); keeping claim to avoid duplicates: %s",
+                chat_id,
+                booking_id,
+                e,
+            )
+            return
+        await clear_client_booking_completion_push_sent(session, booking_id)
         logger.warning(
             "Completed notifier send to client %s (booking_id=%s): %s",
             chat_id,
@@ -1099,6 +1195,7 @@ async def _build_trainer_post_session_keyboard(
     base: str,
     webapp_https: bool,
     include_client_dm: bool = True,
+    recipient_telegram_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, note to client card, optional DM, client card."""
     client_id = p.get("client_id")
@@ -1153,14 +1250,24 @@ async def _build_trainer_post_session_keyboard(
         ],
     )
     if include_client_dm and p.get("client_telegram_id"):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
-                    url=f"tg://user?id={int(p['client_telegram_id'])}",
-                ),
-            ],
-        )
+        recipient = recipient_telegram_id
+        if recipient is None:
+            raw = p.get("trainer_telegram_id")
+            try:
+                recipient = int(raw) if raw is not None else None
+            except (TypeError, ValueError):
+                recipient = None
+        if recipient is not None and _client_telegram_ok_for_write_button(
+            p["client_telegram_id"], int(recipient)
+        ):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                        url=f"tg://user?id={int(p['client_telegram_id'])}",
+                    ),
+                ],
+            )
     if can_quick_rebook:
         rows.append(
             [
@@ -1238,6 +1345,11 @@ async def process_trainer_session_wrapup_round(
             payment_class = await classify_booking_expected_payment_class(
                 session, int(p["booking_id"]), int(p["trainer_id"])
             )
+            pass_remaining: int | None = None
+            if (payment_class or "").strip().upper() == "PASS":
+                pass_remaining = await load_pass_sessions_remaining_after_booking(
+                    session, int(p["booking_id"]), int(p["trainer_id"])
+                )
             text = msg.format_trainer_booking_session_wrapup_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
@@ -1250,6 +1362,7 @@ async def process_trainer_session_wrapup_round(
                 arena_display=p.get("arenas_str"),
                 include_quick_rebook_line=can_quick_rebook,
                 expected_payment_class=payment_class,
+                pass_sessions_remaining=pass_remaining,
             )
             kb = await _build_trainer_post_session_keyboard(
                 session,
@@ -1310,6 +1423,8 @@ async def process_completed_feedback_batch(
         if not trainer_tid:
             await mark_trainer_completed_sent(session, p["id"])
             continue
+        if not await claim_trainer_completed_sent(session, p["id"]):
+            continue
         slot_date = p.get("slot_date")
         start_time = p.get("start_time")
         date_str = (
@@ -1352,14 +1467,30 @@ async def process_completed_feedback_batch(
             cert_remaining_cents=deduction.cert_remaining_cents,
         )
         kb = await _build_trainer_post_session_keyboard(
-            session, p, base=base, webapp_https=webapp_https
+            session,
+            p,
+            base=base,
+            webapp_https=webapp_https,
+            recipient_telegram_id=int(trainer_tid),
         )
         try:
-            await trainer_bot.send_message(
-                chat_id=trainer_tid, text=text, reply_markup=kb
+            await _send_message_with_markup_fallback(
+                trainer_bot,
+                chat_id=int(trainer_tid),
+                text=text,
+                reply_markup=kb,
             )
-            await mark_trainer_completed_sent(session, p["id"])
         except Exception as e:
+            if _is_telegram_timeout(e):
+                logger.warning(
+                    "Completed feedback timeout to trainer %s (notif_id=%s); "
+                    "keeping claim to avoid duplicates: %s",
+                    trainer_tid,
+                    p["id"],
+                    e,
+                )
+                continue
+            await clear_trainer_completed_sent(session, p["id"])
             logger.warning(
                 "Completed feedback send to trainer %s: %s",
                 trainer_tid,

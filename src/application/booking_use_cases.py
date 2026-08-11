@@ -5114,6 +5114,36 @@ async def mark_client_booking_completion_push_sent(
     await session.commit()
 
 
+async def claim_client_booking_completion_push_sent(
+    session: AsyncSession, booking_id: int
+) -> bool:
+    """Atomically claim client completion push. True if this worker owns the send."""
+    r = await session.execute(
+        text(
+            "UPDATE bookings SET client_booking_completed_push_sent_at = CURRENT_TIMESTAMP "
+            "WHERE id = :bid AND client_booking_completed_push_sent_at IS NULL "
+            "RETURNING id"
+        ),
+        {"bid": booking_id},
+    )
+    await session.commit()
+    return r.fetchone() is not None
+
+
+async def clear_client_booking_completion_push_sent(
+    session: AsyncSession, booking_id: int
+) -> None:
+    """Allow another retry after a clear pre-delivery failure (not used after timeout)."""
+    await session.execute(
+        text(
+            "UPDATE bookings SET client_booking_completed_push_sent_at = NULL "
+            "WHERE id = :bid"
+        ),
+        {"bid": booking_id},
+    )
+    await session.commit()
+
+
 async def list_bookings_for_trainer_session_wrapup(
     session: AsyncSession,
     *,
@@ -5361,6 +5391,32 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
 async def mark_trainer_completed_sent(session: AsyncSession, notification_id: int) -> None:
     await session.execute(
         text("UPDATE booking_completed_notifications SET trainer_sent_at = CURRENT_TIMESTAMP WHERE id = :id"),
+        {"id": notification_id},
+    )
+    await session.commit()
+
+
+async def claim_trainer_completed_sent(session: AsyncSession, notification_id: int) -> bool:
+    """Atomically claim trainer completion push. True if this worker owns the send."""
+    r = await session.execute(
+        text(
+            "UPDATE booking_completed_notifications "
+            "SET trainer_sent_at = CURRENT_TIMESTAMP "
+            "WHERE id = :id AND trainer_sent_at IS NULL "
+            "RETURNING id"
+        ),
+        {"id": notification_id},
+    )
+    await session.commit()
+    return r.fetchone() is not None
+
+
+async def clear_trainer_completed_sent(session: AsyncSession, notification_id: int) -> None:
+    """Allow retry after a clear pre-delivery failure (not used after timeout)."""
+    await session.execute(
+        text(
+            "UPDATE booking_completed_notifications SET trainer_sent_at = NULL WHERE id = :id"
+        ),
         {"id": notification_id},
     )
     await session.commit()
