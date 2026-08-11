@@ -485,3 +485,123 @@ async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_s
     )
     assert r.scalar() is not None
     assert client_bot.send_message.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_client_completed_push_timeout_keeps_claim_no_retry(db_session, monkeypatch) -> None:
+    """Client completion timeout must keep sent_at so the loop does not spam."""
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, yesterday, time(10, 0), time(11, 0), status="available"
+    )
+    tid = unique_test_telegram_id()
+    client_id = await _create_client(db_session, tid)
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+    )
+    assert booking_id is not None
+    await mark_booking_completed_and_notify(db_session, booking_id)
+    await db_session.execute(
+        text(
+            "UPDATE bookings SET client_booking_completed_push_sent_at = NULL WHERE id = :id"
+        ),
+        {"id": booking_id},
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr("src.bot.notification_loops.is_within_notification_hours", lambda: True)
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "src.bot.notification_loops._maybe_send_session_milestone_pushes",
+        AsyncMock(return_value=None),
+    )
+
+    client_bot = MagicMock()
+    client_bot.send_message = AsyncMock(
+        side_effect=RuntimeError("HTTP Client says - Request timeout error")
+    )
+    trainer_bot = MagicMock()
+    trainer_bot.send_message = AsyncMock(return_value=None)
+
+    await process_booking_complete_round(client_bot, trainer_bot)
+    r = await db_session.execute(
+        text(
+            "SELECT client_booking_completed_push_sent_at FROM bookings WHERE id = :id"
+        ),
+        {"id": booking_id},
+    )
+    assert r.scalar() is not None
+
+    client_bot.send_message.reset_mock()
+    await process_booking_complete_round(client_bot, trainer_bot)
+    client_bot.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_client_completed_push_button_user_invalid_retries_without_markup(
+    db_session, monkeypatch
+) -> None:
+    """Client BUTTON_USER_INVALID must not leave completion push pending forever."""
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, yesterday, time(10, 0), time(11, 0), status="available"
+    )
+    tid = unique_test_telegram_id()
+    client_id = await _create_client(db_session, tid)
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+    )
+    assert booking_id is not None
+    await mark_booking_completed_and_notify(db_session, booking_id)
+    await db_session.execute(
+        text(
+            "UPDATE bookings SET client_booking_completed_push_sent_at = NULL WHERE id = :id"
+        ),
+        {"id": booking_id},
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr("src.bot.notification_loops.is_within_notification_hours", lambda: True)
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "src.bot.notification_loops._maybe_send_session_milestone_pushes",
+        AsyncMock(return_value=None),
+    )
+
+    calls: list[object] = []
+
+    async def _send(**kwargs):
+        calls.append(kwargs.get("reply_markup"))
+        if kwargs.get("reply_markup") is not None:
+            raise RuntimeError("Telegram server says - Bad Request: BUTTON_USER_INVALID")
+        return None
+
+    client_bot = MagicMock()
+    client_bot.send_message = AsyncMock(side_effect=_send)
+    trainer_bot = MagicMock()
+    trainer_bot.send_message = AsyncMock(return_value=None)
+
+    await process_booking_complete_round(client_bot, trainer_bot)
+    assert len(calls) >= 2
+    assert calls[-1] is None
+    r = await db_session.execute(
+        text(
+            "SELECT client_booking_completed_push_sent_at FROM bookings WHERE id = :id"
+        ),
+        {"id": booking_id},
+    )
+    assert r.scalar() is not None
