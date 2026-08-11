@@ -1548,6 +1548,7 @@ def build_client_booking_completed_inline_keyboard(
     booking_id: int,
     trainer_telegram_id: int | None,
     show_repeat_row: bool,
+    recipient_telegram_id: int | None = None,
 ):
     """After session completed: feedback, optional DM trainer, optional repeat same slot next week, and book again."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -1562,14 +1563,22 @@ def build_client_booking_completed_inline_keyboard(
         ],
     ]
     if trainer_telegram_id:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
-                    url=f"tg://user?id={int(trainer_telegram_id)}",
-                ),
-            ],
-        )
+        try:
+            tid = int(trainer_telegram_id)
+        except (TypeError, ValueError):
+            tid = 0
+        # tg://user?id=self (or unusable id) → BUTTON_USER_INVALID
+        if tid > 0 and (
+            recipient_telegram_id is None or tid != int(recipient_telegram_id)
+        ):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
+                        url=f"tg://user?id={tid}",
+                    ),
+                ],
+            )
     if show_repeat_row:
         rows.append(
             [
