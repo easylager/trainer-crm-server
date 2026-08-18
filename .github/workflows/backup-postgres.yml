@@ -55,6 +55,8 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          command -v pg_dump
           pg_dump --version
 
       - name: Install Python deps (boto3)
@@ -62,6 +64,7 @@ jobs:
 
       - name: Run backup upload
         env:
+          BACKUP_PG_MAJOR: "18"
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
           BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
           BACKUP_S3_ACCESS_KEY: ${{ secrets.BACKUP_S3_ACCESS_KEY }}
@@ -70,7 +73,11 @@ jobs:
           BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
           BACKUP_S3_PATH_STYLE: ${{ secrets.BACKUP_S3_PATH_STYLE }}
           BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
-        run: python scripts/ops/backup_postgres.py
+        run: |
+          echo "PATH=$PATH"
+          command -v pg_dump
+          pg_dump --version
+          python scripts/ops/backup_postgres.py
 
       - name: Alert Telegram on failure
         if: failure()

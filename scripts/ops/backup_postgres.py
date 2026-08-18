@@ -91,10 +91,54 @@ def _assert_pg_dump_looks_valid(sql_path: Path) -> None:
         raise SystemExit("pg_dump output does not look like a PostgreSQL dump. Aborting upload.")
 
 
+def _resolve_pg_dump() -> str:
+    """
+    Pick pg_dump binary. Ubuntu runners ship PG 16 in /usr/bin; Railway prod is PG 18+.
+    Prefer BACKUP_PG_DUMP, then /usr/lib/postgresql/<major>/bin (PGDG), then highest major found.
+    """
+    explicit = _env("BACKUP_PG_DUMP")
+    if explicit:
+        path = Path(explicit)
+        if path.is_file():
+            return str(path)
+        raise SystemExit(f"BACKUP_PG_DUMP not found: {explicit}")
+
+    preferred_major = (_env("BACKUP_PG_MAJOR", "18") or "18").strip()
+    if preferred_major.isdigit():
+        candidate = Path(f"/usr/lib/postgresql/{preferred_major}/bin/pg_dump")
+        if candidate.is_file():
+            return str(candidate)
+
+    best: tuple[int, str] | None = None
+    pg_root = Path("/usr/lib/postgresql")
+    if pg_root.is_dir():
+        for path in pg_root.glob("*/bin/pg_dump"):
+            if not path.is_file():
+                continue
+            try:
+                major = int(path.parent.parent.name)
+            except ValueError:
+                continue
+            if best is None or major > best[0]:
+                best = (major, str(path))
+    if best:
+        return best[1]
+
+    found = shutil.which("pg_dump")
+    if found:
+        return found
+    raise SystemExit(
+        "pg_dump not found — install postgresql-client matching prod major "
+        "(e.g. postgresql-client-18 on CI)."
+    )
+
+
 def _run_pg_dump(db_url: str, out_path: Path) -> None:
-    pg_dump = shutil.which("pg_dump")
-    if not pg_dump:
-        raise SystemExit("pg_dump not found — install postgresql-client (apt/brew).")
+    pg_dump = _resolve_pg_dump()
+    print(f"Using pg_dump: {pg_dump}")
+    proc_version = subprocess.run([pg_dump, "--version"], capture_output=True, text=True)
+    if proc_version.stdout:
+        print(proc_version.stdout.strip())
     cmd = [
         pg_dump,
         "--no-owner",
