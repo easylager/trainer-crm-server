@@ -196,7 +196,11 @@ async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -
     After first Telegram link: create trial with full modules if missing.
 
     If trial already exists, normalize row(s): canonical CRM tier + all modules (online, analytics, groups).
+    Skips creating a trial when an active paid subscription already exists (e.g. prepaid welcome grant).
     """
+    paid = await get_active_paid_subscription_for_merge(session, trainer_id)
+    if paid is not None:
+        return
     created = await create_trial_subscription(session, trainer_id)
     if created is not None:
         return

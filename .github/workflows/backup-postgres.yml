@@ -19,6 +19,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check required secrets
+        env:
+          HAS_DB: ${{ secrets.BACKUP_DATABASE_URL != '' }}
+          HAS_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT != '' }}
+          HAS_ACCESS: ${{ secrets.BACKUP_S3_ACCESS_KEY != '' }}
+          HAS_SECRET: ${{ secrets.BACKUP_S3_SECRET_KEY != '' }}
+          HAS_BUCKET: ${{ secrets.BACKUP_S3_BUCKET != '' }}
+        run: |
+          missing=""
+          [ "$HAS_DB" = "true" ] || missing="$missing BACKUP_DATABASE_URL"
+          [ "$HAS_ENDPOINT" = "true" ] || missing="$missing BACKUP_S3_ENDPOINT"
+          [ "$HAS_ACCESS" = "true" ] || missing="$missing BACKUP_S3_ACCESS_KEY"
+          [ "$HAS_SECRET" = "true" ] || missing="$missing BACKUP_S3_SECRET_KEY"
+          [ "$HAS_BUCKET" = "true" ] || missing="$missing BACKUP_S3_BUCKET"
+          if [ -n "$missing" ]; then
+            echo "::error::Off-site backup is not configured. Add GitHub Actions secrets:$missing. See docs/ops/BACKUPS.md"
+            exit 1
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -41,3 +60,19 @@ jobs:
           BACKUP_S3_PATH_STYLE: ${{ secrets.BACKUP_S3_PATH_STYLE }}
           BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
         run: python scripts/ops/backup_postgres.py
+
+      - name: Alert Telegram on failure
+        if: failure()
+        env:
+          TOKEN: ${{ secrets.BACKUP_ALERT_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.BACKUP_ALERT_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "BACKUP_ALERT_BOT_TOKEN / BACKUP_ALERT_CHAT_ID not set — skipping Telegram alert"
+            exit 0
+          fi
+          curl -sS -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=Ice Studio: nightly Postgres off-site backup FAILED. ${RUN_URL}" \
+            >/dev/null

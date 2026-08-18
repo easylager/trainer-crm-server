@@ -8,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy.exc import InterfaceError, OperationalError, TimeoutError as SATimeoutError
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
@@ -27,7 +28,12 @@ from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profi
 from src.application.landing_manifest import inject_landing_html
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
+from src.api.middleware.maintenance import MaintenanceModeMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
+from src.shared.outage import (
+    SERVICE_UNAVAILABLE_CODE,
+    service_unavailable_payload,
+)
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER
 from src.shared.config import Settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
@@ -57,6 +63,8 @@ if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.train
 # Epic D: rate limit /api (except webhooks), body size when Content-Length is set (inner runs first on request).
 app.add_middleware(ApiRateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
+# Planned maintenance: inside CORS so Mini Apps can read the 503 body.
+app.add_middleware(MaintenanceModeMiddleware)
 
 # Mini Apps open in Telegram WebView; origin may be tunnel URL or telegram.org. Allow all so fetch() works.
 # SEC-G3: keep allow_credentials=False with allow_origins=["*"] — combining True + "*" is invalid per spec and unsafe.
@@ -66,7 +74,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=[MINIAPP_AUTH_ERROR_HEADER],
+    expose_headers=[MINIAPP_AUTH_ERROR_HEADER, "X-Ice-Studio-Outage"],
 )
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
@@ -82,6 +90,27 @@ async def _validation_exception_handler(_request, exc: RequestValidationError):
     logger.warning("Request validation failed: %s", sanitize_validation_errors_for_log(errs))
     # ctx may hold Exception instances (e.g. ValueError from Pydantic) — not JSON-serializable raw.
     return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errs}))
+
+
+def _service_unavailable_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content=service_unavailable_payload(),
+        headers={
+            "Retry-After": "60",
+            "X-Ice-Studio-Outage": SERVICE_UNAVAILABLE_CODE,
+        },
+    )
+
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(InterfaceError)
+@app.exception_handler(SATimeoutError)
+@app.exception_handler(ConnectionRefusedError)
+async def _db_unavailable_exception_handler(_request: Request, exc: Exception):
+    """Postgres down / pool exhausted → stable 503 so Mini Apps show maintenance, not empty lists."""
+    logger.warning("database unavailable: %s", exc)
+    return _service_unavailable_response()
 
 
 # Telegram Web App: trainer schedule (Mini App)
@@ -266,7 +295,7 @@ def webapp_trainer_stats_page():
 
 @app.get("/webapp/admin-stats")
 def webapp_admin_stats_page():
-    """Serve the admin dashboard Mini App (platform metrics, alerts, support count)."""
+    """Serve the admin pulse Mini App (today, money, action queue, live trainers)."""
     path = _WEBAPP_DIR / "admin-stats.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
@@ -286,6 +315,15 @@ def webapp_admin_dicts_page():
 def webapp_admin_money_page():
     """Serve the admin Money tab Mini App (MRR/ARR, GMV, top payers, pending invoices, subscription mix)."""
     path = _WEBAPP_DIR / "admin-money.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-trainers")
+def webapp_admin_trainers_page():
+    """Admin trainers hub — paying / trial / live / sleeping, not the empty roster dump."""
+    path = _WEBAPP_DIR / "admin-trainers.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
@@ -1231,12 +1269,35 @@ def landing_asset(asset_path: str, request: Request):
     return FileResponse(path, media_type=media, headers=cache)
 
 
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    """
+    Process liveness only — no Postgres.
+
+    Point the Railway HTTP healthcheck here. If the probe stays on ``/health``
+    (which requires DB), a Postgres outage takes the API out of rotation and
+    Mini Apps cannot even load the maintenance screen.
+    """
+    return {"status": "live"}
+
+
 @app.get("/health")
-async def health() -> dict[str, str]:
+@app.get("/health/ready")
+async def health():
     """
-    Liveness + readiness: DB must be reachable for 200.
-    Optional S3: reported as ok/skip/error; 503 only on DB failure.
+    Readiness: DB must be reachable for 200.
+    Optional S3: reported as ok/skip/error; 503 only on DB failure or MAINTENANCE_MODE.
     """
+    if Settings().maintenance_mode:
+        payload = service_unavailable_payload(db="skip")
+        payload["status"] = "maintenance"
+        payload["s3"] = "skip"
+        return JSONResponse(
+            status_code=503,
+            content=payload,
+            headers={"Retry-After": "60", "X-Ice-Studio-Outage": SERVICE_UNAVAILABLE_CODE},
+        )
+
     result: dict[str, str] = {"status": "ok", "db": "ok"}
 
     try:
@@ -1244,7 +1305,13 @@ async def health() -> dict[str, str]:
             await session.execute(text("SELECT 1"))
     except Exception as e:
         logger.warning("health check: database unavailable: %s", e)
-        raise HTTPException(status_code=503, detail="database unavailable")
+        payload = service_unavailable_payload(db="error")
+        payload["s3"] = "skip"
+        return JSONResponse(
+            status_code=503,
+            content=payload,
+            headers={"Retry-After": "60", "X-Ice-Studio-Outage": SERVICE_UNAVAILABLE_CODE},
+        )
 
     settings = Settings()
     if settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key:

@@ -22,8 +22,9 @@ fi
 : >"$LOG_FILE"
 echo "cloudflared log: $LOG_FILE"
 
-nohup cloudflared tunnel --url http://localhost:8000 >>"$LOG_FILE" 2>&1 &
+nohup cloudflared tunnel --url http://127.0.0.1:8000 >>"$LOG_FILE" 2>&1 &
 CF_PID=$!
+disown "$CF_PID" 2>/dev/null || true
 echo "$CF_PID" >"$PID_FILE"
 echo "cloudflared pid ${CF_PID} (saved to .cursor-dev-cloudflared.pid)"
 

@@ -3,256 +3,145 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Панель админа</title>
+  <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: var(--app-font-sans);
-      background: var(--tg-theme-bg-color, #1a1a1a);
-      color: var(--tg-theme-text-color, #f5f5f5);
-      min-height: 100vh;
-      padding: 16px;
-      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
-    }
-    .header { margin-bottom: 16px; }
-    .header h1 { margin: 0 0 12px; font-size: 22px; font-weight: 700; }
-    .north-star-banner {
-      border-radius: 14px;
-      padding: 14px 16px;
-      border: 1px solid rgba(250, 204, 21, 0.35);
-      background: rgba(250, 204, 21, 0.1);
-    }
-    .north-star-banner .ns-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #fde68a; margin-bottom: 6px; }
-    .north-star-banner .ns-value { font-size: 28px; font-weight: 800; line-height: 1.1; }
-    .north-star-banner .ns-sub { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 6px; line-height: 1.35; }
-    .act-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .act-table th, .act-table td { padding: 8px 10px; text-align: left; vertical-align: top; }
-    .act-table th { background: rgba(0,0,0,0.12); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tg-theme-hint-color); }
-    .act-table td { border-top: 1px solid rgba(255,255,255,0.06); }
-    .act-table td.num { text-align: right; white-space: nowrap; }
-    .act-table td.center { text-align: center; }
-    .act-scroll { max-height: min(52vh, 320px); overflow: auto; -webkit-overflow-scrolling: touch; }
-    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
-    .error { color: var(--app-danger); }
-    .section { margin-bottom: 20px; }
-    .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin-bottom: 10px; }
-    .card {
-      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 10px;
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .kpi-card {
-      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
-      border-radius: 12px;
-      padding: 14px;
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
-    .kpi-value { font-size: 24px; font-weight: 700; }
-    .kpi-sub { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px; }
-    .alert-card {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-bottom: 10px;
-    }
-    .alert-card.support { background: rgba(247, 166, 0, 0.2); border-color: rgba(247, 166, 0, 0.5); }
-    .alert-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-    .alert-desc { font-size: 13px; color: var(--tg-theme-hint-color); }
-    .alerts-empty { font-size: 13px; color: var(--tg-theme-hint-color); padding: 12px 0; }
-    .row-list { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-    .row-list span:first-child { color: var(--tg-theme-hint-color); }
-    .row-list span:last-child { font-weight: 600; }
+    .pulse-action { border-color: rgba(247, 166, 0, 0.45); background: rgba(247, 166, 0, 0.12); }
+    .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
+    .pulse-ok { font-size: 13px; color: var(--tg-theme-hint-color); padding: 8px 0 4px; }
+    .plan-paid { color: #86efac; }
+    .plan-trial { color: #fde68a; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>📊 Панель админа</h1>
-    <div id="north-star-slot"></div>
+  <div class="adm-header">
+    <h1>Сейчас</h1>
+    <div class="adm-sub">Что происходит с системой сегодня</div>
   </div>
   <div id="content">
-    <div class="loading">Загрузка…</div>
+    <div class="adm-loading">Загрузка…</div>
   </div>
+  <script src="admin-analytics-shared.js"></script>
   <script>
-    (function() {
-      var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
-      var initData = tg ? tg.initData : '';
-      function apiUrl(path) {
-        if (path.indexOf('/api') === 0) return path;
-        return ((tg && tg.initData) ? '' : '/api/webapp') + path;
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function deltaLine(cur, prev) {
+        cur = +cur || 0;
+        prev = +prev || 0;
+        if (prev === 0 && cur === 0) return 'как неделю назад';
+        if (prev === 0) return 'неделю назад было 0';
+        var pct = Math.round((cur - prev) * 1000 / prev) / 10;
+        var cls = A.deltaClass(pct);
+        var arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '•';
+        return arrow + ' ' + A.formatPct(pct) + ' к прошлой неделе (' + A.formatNum(prev) + ')';
       }
-      function fetchWithTimeout(url, opts, ms) {
-        ms = ms || 15000;
-        var c = new AbortController();
-        var t = setTimeout(function() { c.abort(); }, ms);
-        return fetch(url, Object.assign({}, opts, { signal: c.signal }))
-          .then(function(r) { clearTimeout(t); return r; })
-          .catch(function(e) { clearTimeout(t); throw e; });
+
+      function planLabel(plan) {
+        if (plan === 'paid') return '<span class="plan-paid">платный</span>';
+        if (plan === 'trial') return '<span class="plan-trial">триал</span>';
+        return '—';
       }
-      function getJson(path) {
-        var url = apiUrl(path);
-        var sep = url.indexOf('?') >= 0 ? '&' : '?';
-        if (initData) url += sep + 'init_data=' + encodeURIComponent(initData);
-        return fetchWithTimeout(url).then(function(r) {
-          if (!r.ok) throw new Error(r.statusText);
-          return r.json();
-        });
-      }
-      function escapeHtml(s) {
-        if (s == null) return '';
-        return String(s)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;');
-      }
-      function renderNorthStar(d) {
-        var cur = d.north_star_completed_booking_cycles_week != null ? d.north_star_completed_booking_cycles_week : 0;
-        var prev = d.north_star_completed_booking_cycles_prev_week != null ? d.north_star_completed_booking_cycles_prev_week : 0;
-        var ws = escapeHtml(d.week_start || '');
-        var we = escapeHtml(d.week_end || '');
-        var pws = escapeHtml(d.prev_week_start || '');
-        var pwe = escapeHtml(d.prev_week_end || '');
-        var h = '';
-        h += '<div class="north-star-banner">';
-        h += '<div class="ns-title">North Star · завершённых циклов записи</div>';
-        h += '<div class="ns-value">' + cur + '</div>';
-        h += '<div class="ns-sub">Неделя слота: ' + ws + ' — ' + we + '</div>';
-        h += '<div class="ns-sub">Прошлая неделя (' + pws + ' — ' + pwe + '): ' + prev + '</div>';
-        h += '<div class="ns-sub">Подтверждённые или завершённые записи по дате слота (включая созданные тренером).</div>';
-        h += '</div>';
-        return h;
-      }
+
       function render(d) {
         var html = '';
-        html += '<div class="section"><div class="section-title">Активация тренеров</div>';
-        html += '<div class="card">';
-        html += '<div class="row-list">';
-        var order = d.activation_stage_order || [];
-        var labels = d.activation_stage_labels_ru || {};
-        var counts = d.activation_stage_counts || {};
-        order.forEach(function(key) {
-          var lbl = labels[key] || key;
-          html += '<div><span>' + escapeHtml(lbl) + ':</span> <span>' + (counts[key] || 0) + '</span></div>';
-        });
-        html += '</div></div>';
-        html += '<div class="card" style="margin-top:10px;padding:0;">';
-        html += '<div class="act-scroll">';
-        html += '<table class="act-table"><thead><tr>';
-        html += '<th>Тренер</th><th>Этап</th><th class="num">Шаблоны</th><th class="center">Приглашение</th><th class="center">Была запись</th>';
-        html += '</tr></thead><tbody>';
-        (d.trainers_activation || []).forEach(function(row) {
-          var hb = row.has_booking ? 'да' : 'нет';
-          var inv = row.client_invite_link_first_copied_at;
-          var invCell = inv ? escapeHtml(String(inv).slice(0, 10)) : 'нет';
-          html += '<tr>';
-          html += '<td>' + escapeHtml(row.display_name || '') + ' <span style="opacity:.55">#' + row.trainer_id + '</span></td>';
-          html += '<td>' + escapeHtml(row.stage_label_ru || '') + '</td>';
-          html += '<td class="num">' + (row.weekly_template_count != null ? row.weekly_template_count : 0) + '</td>';
-          html += '<td class="center">' + invCell + '</td>';
-          html += '<td class="center">' + hb + '</td>';
-          html += '</tr>';
-        });
-        html += '</tbody></table></div></div></div>';
-        html += '<div class="section"><div class="section-title">Сейчас</div>';
-        html += '<div class="kpi-grid">';
-        html += '<div class="kpi-card"><div class="kpi-label">Записей сегодня</div><div class="kpi-value">' + (d.bookings_today || 0) + '</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">На эту неделю</div><div class="kpi-value">' + (d.bookings_upcoming_week || 0) + '</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Заявок открыто</div><div class="kpi-value">' + (d.requests_open_now || 0) + '</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">На модерации</div><div class="kpi-value">' + (d.trainers_pending_moderation || 0) + '</div></div>';
-        html += '</div></div>';
-        html += '<div class="section"><div class="section-title">За 7 и 30 дней</div>';
-        html += '<div class="card">';
-        html += '<div class="row-list">';
-        html += '<div><span>Записей (7д / 30д):</span> <span>' + (d.bookings_7d || 0) + ' / ' + (d.bookings_30d || 0) + '</span></div>';
-        html += '<div><span>Отмен (7д / 30д):</span> <span>' + (d.cancelled_7d || 0) + ' / ' + (d.cancelled_30d || 0) + '</span></div>';
-        html += '<div><span>Заявок (7д / 30д):</span> <span>' + (d.requests_7d || 0) + ' / ' + (d.requests_30d || 0) + '</span></div>';
-        html += '<div><span>Откликов (7д / 30д):</span> <span>' + (d.responses_7d || 0) + ' / ' + (d.responses_30d || 0) + '</span></div>';
-        html += '<div><span>Конверсия заявок (30д):</span> <span>' + (d.conversion_pct != null ? d.conversion_pct + '%' : '—') + '</span></div>';
-        html += '<div><span>Новых тренеров (7д / 30д):</span> <span>' + (d.trainers_created_7d || 0) + ' / ' + (d.trainers_created_30d || 0) + '</span></div>';
-        html += '</div></div>';
-        html += '<div class="section"><div class="section-title">Тренеры</div>';
-        html += '<div class="card">';
-        html += '<div class="row-list">';
-        var byStatus = d.trainers_by_status || {};
-        Object.keys(byStatus).sort().forEach(function(k) {
-          var label = k === 'pending_profile' ? 'На модерации' : k === 'active' ? 'Активные' : k;
-          html += '<div><span>' + label + ':</span> <span>' + byStatus[k] + '</span></div>';
-        });
-        html += '<div><span>Всего / с Telegram:</span> <span>' + (d.trainers_total || 0) + ' / ' + (d.trainers_with_telegram || 0) + '</span></div>';
-        html += '</div></div>';
-        html += '<div class="section"><div class="section-title">💳 Подписки (тарифы)</div>';
-        html += '<div class="card">';
-        html += '<div class="row-list">';
-        html += '<div><span>Тир CRM:</span> <span>' + (d.subscription_tier_crm || 0) + '</span></div>';
-        html += '<div><span>Онлайн-запись:</span> <span>' + (d.subscription_tier_online || 0) + '</span></div>';
-        html += '<div><span>Аналитика:</span> <span>' + (d.subscription_tier_analytics || 0) + '</span></div>';
-        html += '<div><span>Всего с тиром:</span> <span>' + (d.subscription_trainers_with_tier || 0) + '</span></div>';
-        html += '<div><span>Истекает ≤7 дн.:</span> <span>' + (d.subscription_expiring_7d || 0) + '</span></div>';
-        html += '<div><span>Активных без tier:</span> <span>' + (d.subscription_active_trainers_no_tier || 0) + '</span></div>';
-        html += '</div></div></div>';
-        html += '<div class="section"><div class="section-title">📦 Абонементы и сертификаты</div>';
-        html += '<div class="card">';
-        html += '<div class="row-list">';
-        html += '<div><span>Абонементов активно:</span> <span>' + (d.passes_active_total || 0) + '</span></div>';
-        html += '<div><span>Абонементов выдано (30 дн.):</span> <span>' + (d.passes_issued_30d_total || 0) + '</span></div>';
-        html += '<div><span>Сертификатов выдано:</span> <span>' + (d.certs_issued_total || 0) + '</span></div>';
-        html += '<div><span>Сертификатов с остатком:</span> <span>' + (d.certs_with_balance_total || 0) + '</span></div>';
-        var certByn = (d.cert_balance_cents_total || 0) / 100;
-        html += '<div><span>Остаток по сертификатам:</span> <span>' + (certByn % 1 === 0 ? certByn.toFixed(0) : certByn.toFixed(2)) + ' BYN</span></div>';
-        html += '<div><span>Сертификатов погашено (30 дн.):</span> <span>' + (d.certs_redeemed_30d_total || 0) + '</span></div>';
-        html += '</div></div></div>';
-        html += '<div class="section"><div class="section-title">⚠️ Тревожные звоночки</div>';
-        var alerts = d.alerts || [];
-        if (alerts.length === 0) {
-          html += '<div class="alerts-empty">Всё спокойно. Поводов для действий нет.</div>';
-        } else {
-          alerts.forEach(function(a) {
-            var cls = a.type === 'support' ? 'alert-card support' : 'alert-card';
-            html += '<div class="' + cls + '"><div class="alert-title">' + escapeHtml(a.title || '') + '</div><div class="alert-desc">' + escapeHtml(a.description || '') + '</div></div>';
-          });
+        var actionCount = d.action_count || 0;
+        html += '<div class="adm-kpi-grid">';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Занятия сегодня</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.bookings_today) + '</div>' +
+          '<div class="adm-kpi-sub">на неделю впереди: ' + A.formatNum(d.bookings_upcoming_week) + '</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Живые тренеры (7 дн)</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.trainers_live_7d) + '</div>' +
+          '<div class="adm-kpi-sub">' + deltaLine(d.trainers_live_7d, d.trainers_live_prev_7d) + '</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Занятия за 7 дн</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.sessions_7d) + '</div>' +
+          '<div class="adm-kpi-sub">' + deltaLine(d.sessions_7d, d.sessions_prev_7d) + '</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">MRR</div>' +
+          '<div class="adm-kpi-value">' + A.formatBYN(d.mrr_cents, { compact: true }) + '</div>' +
+          '<div class="adm-kpi-sub">оплат за 7 дн: ' + A.formatBYN(d.revenue_paid_7d_cents, { compact: true }) +
+          ' · платных: ' + A.formatNum(d.active_paid_subscriptions) + '</div></div>';
+        html += '</div>';
+
+        html += '<div class="adm-section"><div class="adm-section-title">Сделать сегодня';
+        if (actionCount) html += ' · ' + A.formatNum(actionCount);
+        html += '</div>';
+
+        var hasAction = false;
+        var mods = d.action_moderation || [];
+        if (mods.length) {
+          hasAction = true;
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Модерация · ' + mods.length + '</div>';
+          html += '<div class="adm-list-meta">Очередь /pending в боте</div>';
+          html += mods.map(function (t) {
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id +
+              (t.submitted_at ? ' · ' + A.formatDate(t.submitted_at) : '') + '</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        if ((d.support_new_count || 0) > 0) {
+          hasAction = true;
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Поддержка · ' +
+            A.formatNum(d.support_new_count) + '</div>' +
+            '<div class="adm-list-meta">Ответить командой /support</div></div>';
+        }
+        var exp = d.action_expiring_paid || [];
+        if (exp.length) {
+          hasAction = true;
+          html += '<div class="adm-card pulse-action tight"><div class="adm-list-title">Истекают платные ≤7 дн · ' + exp.length + '</div>';
+          html += exp.map(function (t) {
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id + ' · осталось ' + t.days_left + ' дн.</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        var sleep = d.action_sleeping_paid || [];
+        if (sleep.length) {
+          hasAction = true;
+          html += '<div class="adm-card pulse-action danger tight"><div class="adm-list-title">Платящие без записи >14 дн · ' + sleep.length + '</div>';
+          html += sleep.map(function (t) {
+            var since = t.days_since != null ? t.days_since + ' дн. назад' : 'записей не было';
+            return '<div style="margin-top:8px"><b>' + A.escapeHtml(t.display_name) + '</b>' +
+              ' <span class="adm-list-meta">#' + t.trainer_id + ' · ' + since + '</span></div>';
+          }).join('');
+          html += '</div>';
+        }
+        if (!hasAction) {
+          html += '<div class="pulse-ok">Очереди нет: модерация, поддержка и платящие в порядке.</div>';
         }
         html += '</div>';
-        html += '<div class="section"><div class="section-title">Поддержка</div>';
-        html += '<div class="card">';
-        html += '<div class="kpi-value">' + (d.support_new_count || 0) + '</div>';
-        html += '<div class="kpi-sub">новых обращений. Ответы — в боте (команда /support).</div>';
-        html += '</div></div>';
 
-        html += '<div class="section">';
-        html += '<div class="section-title">История и аналитика</div>';
-        html += '<a href="/webapp/admin-activity" style="display:block;text-decoration:none;margin-bottom:10px">';
-        html += '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px">';
-        html += '<div><div style="font-size:14px;font-weight:700;margin-bottom:4px">🕓 История действий</div>';
-        html += '<div style="font-size:12px;color:var(--tg-theme-hint-color)">Кто что делал: записи, модерация, профиль, ссылки</div></div>';
-        html += '<div style="font-size:20px;opacity:0.6">›</div></div></a>';
-        html += '<a href="/webapp/admin-product-analytics" style="display:block;text-decoration:none">';
-        html += '<div class="card" style="background:linear-gradient(135deg,rgba(88,86,214,0.18),rgba(56,132,255,0.1));border-color:rgba(88,86,214,0.3);display:flex;justify-content:space-between;align-items:center;gap:12px">';
-        html += '<div>';
-        html += '<div style="font-size:14px;font-weight:700;margin-bottom:4px">🔬 Аналитика платформы</div>';
-        html += '<div style="font-size:12px;color:var(--tg-theme-hint-color)">Где ломается активация · что предсказывает оплату · корреляция поведений</div>';
+        html += '<div class="adm-section"><div class="adm-section-title">Кто реально работает</div>';
+        var live = d.live_trainers || [];
+        if (!live.length) {
+          html += '<div class="adm-card"><div class="adm-empty">За 30 дней нет активных тренеров с записями или подпиской</div></div>';
+        } else {
+          html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
+          html += '<th>Тренер</th><th class="num">7 дн</th><th>Последняя</th><th>План</th>';
+          html += '</tr></thead><tbody>';
+          live.forEach(function (t) {
+            html += '<tr>';
+            html += '<td>' + A.escapeHtml(t.display_name) + ' <span style="opacity:.5">#' + t.trainer_id + '</span></td>';
+            html += '<td class="num">' + A.formatNum(t.bookings_7d) + '</td>';
+            html += '<td>' + A.formatDate(t.last_booking_date) + '</td>';
+            html += '<td>' + planLabel(t.plan) + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table></div></div>';
+        }
+        var ghosts = d.ghost_trainers_count || 0;
+        if (ghosts) {
+          html += '<div class="adm-hint">Пустых регистраций без Telegram и профиля: ' + A.formatNum(ghosts) + ' — в список не входят.</div>';
+        }
         html += '</div>';
-        html += '<div style="font-size:20px;opacity:0.6">›</div>';
-        html += '</div></a>';
-        html += '</div>';
+
         return html;
       }
-      getJson('/api/webapp/admin/stats').then(function(data) {
-        document.getElementById('north-star-slot').innerHTML = renderNorthStar(data);
-        document.getElementById('content').innerHTML = render(data);
-      }).catch(function(e) {
-        var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
-        document.getElementById('content').innerHTML = '<div class="error">' + msg + '</div>';
-      });
+
+      A.mount({ endpoint: '/admin/stats', render: render });
     })();
   </script>
 </body>

@@ -8,6 +8,7 @@ Uses a dedicated BACKUP_S3_* bucket — not the app photo bucket.
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import shutil
 import subprocess
@@ -77,6 +78,17 @@ def _s3_client():
         region_name=region,
         config=cfg,
     )
+
+
+def _assert_pg_dump_looks_valid(sql_path: Path) -> None:
+    """Refuse to upload an empty or truncated dump (pg_dump can exit 0 and still write almost nothing)."""
+    size = sql_path.stat().st_size
+    if size < 1024:
+        raise SystemExit("pg_dump output suspiciously small (<1 KB). Aborting upload.")
+    head = sql_path.read_bytes()[:800].decode("utf-8", errors="replace")
+    lowered = head.lower()
+    if "postgresql database dump" not in lowered and "pg_dump" not in lowered:
+        raise SystemExit("pg_dump output does not look like a PostgreSQL dump. Aborting upload.")
 
 
 def _run_pg_dump(db_url: str, out_path: Path) -> None:
@@ -163,8 +175,7 @@ def main() -> None:
 
         print(f"Running pg_dump → {gz_path.name} …")
         _run_pg_dump(db_url, sql_path)
-        if sql_path.stat().st_size < 1024:
-            raise SystemExit("pg_dump output suspiciously small (<1 KB). Aborting upload.")
+        _assert_pg_dump_looks_valid(sql_path)
         _gzip_file(sql_path, gz_path)
         raw_mb = sql_path.stat().st_size / (1024 * 1024)
         gz_mb = gz_path.stat().st_size / (1024 * 1024)
@@ -173,6 +184,20 @@ def main() -> None:
         client = _s3_client()
         uploaded = _upload(client, bucket, key, gz_path)
         print(f"Uploaded s3://{bucket}/{key} ({uploaded / (1024 * 1024):.2f} MB)")
+
+        latest_body = {
+            "key": key,
+            "uploaded_at": now.isoformat(),
+            "bytes": uploaded,
+            "retention_days": retention,
+        }
+        client.put_object(
+            Bucket=bucket,
+            Key=f"{prefix}latest.json",
+            Body=json.dumps(latest_body, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json",
+        )
+        print(f"Wrote s3://{bucket}/{prefix}latest.json")
 
         removed = _prune_old_backups(client, bucket, prefix, retention)
         if removed:

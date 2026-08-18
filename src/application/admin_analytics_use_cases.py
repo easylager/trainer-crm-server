@@ -1866,3 +1866,263 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
         "habit": habit,
         "correlation": correlation,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 👥 TRAINERS HUB — one screen instead of growth / retention / engagement
+# ──────────────────────────────────────────────────────────────────────────
+
+async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
+    """Segments, trial→paid, expiring paid, top by bookings, sleeping payers."""
+    paying = 0
+    trial = 0
+    live_7d = 0
+    sleeping_paid = 0
+    onboarding = 0
+    ghosts = 0
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT
+                    COUNT(DISTINCT ts.trainer_id) FILTER (WHERE ts.status = :s_active)::int AS paying,
+                    COUNT(DISTINCT ts.trainer_id) FILTER (WHERE ts.status = :s_trial)::int AS trial
+                FROM trainer_subscriptions ts
+                JOIN trainers t ON t.id = ts.trainer_id AND t.status = 'active'
+                WHERE ts.expires_at > CURRENT_TIMESTAMP
+                  AND ts.started_at <= CURRENT_TIMESTAMP
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE, "s_trial": SUBSCRIPTION_STATUS_TRIAL},
+        )
+        row = r.fetchone() or (0, 0)
+        paying = int(row[0] or 0)
+        trial = int(row[1] or 0)
+    except ProgrammingError:
+        pass
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT b.trainer_id)::int
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN trainers t ON t.id = b.trainer_id AND t.status = 'active'
+            WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+              AND NOT b.is_sandbox
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
+              AND s.slot_date <= CURRENT_DATE
+            """
+        ),
+    )
+    live_7d = int((r.scalar() or 0) or 0)
+
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT COUNT(DISTINCT t.id)::int
+                FROM trainers t
+                JOIN trainer_subscriptions ts
+                  ON ts.trainer_id = t.id
+                 AND ts.status = :s_active
+                 AND ts.expires_at > CURRENT_TIMESTAMP
+                WHERE t.status = 'active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = t.id
+                      AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                      AND NOT b.is_sandbox
+                      AND s.slot_date >= CURRENT_DATE - INTERVAL '14 days'
+                  )
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        sleeping_paid = int((r.scalar() or 0) or 0)
+    except ProgrammingError:
+        pass
+
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE telegram_id IS NOT NULL)::int AS onboarding,
+                COUNT(*) FILTER (
+                    WHERE telegram_id IS NULL
+                      AND moderation_submitted_at IS NULL
+                )::int AS ghosts
+            FROM trainers
+            WHERE status = 'pending_profile'
+            """
+        ),
+    )
+    row = r.fetchone() or (0, 0)
+    onboarding = int(row[0] or 0)
+    ghosts = int(row[1] or 0)
+
+    trial_starts_90d = 0
+    trial_paid_90d = 0
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH first_sub AS (
+                    SELECT DISTINCT ON (trainer_id) trainer_id, status, started_at
+                    FROM trainer_subscriptions
+                    ORDER BY trainer_id, started_at ASC
+                ),
+                cohort AS (
+                    SELECT trainer_id FROM first_sub
+                    WHERE status = :s_trial
+                      AND started_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
+                )
+                SELECT
+                    (SELECT COUNT(*) FROM cohort)::int,
+                    (SELECT COUNT(*) FROM cohort c
+                     WHERE EXISTS (
+                         SELECT 1 FROM trainer_invoices inv
+                         WHERE inv.trainer_id = c.trainer_id AND inv.status = 'paid'
+                     ))::int
+                """
+            ),
+            {"s_trial": SUBSCRIPTION_STATUS_TRIAL},
+        )
+        row = r.fetchone() or (0, 0)
+        trial_starts_90d = int(row[0] or 0)
+        trial_paid_90d = int(row[1] or 0)
+    except ProgrammingError:
+        pass
+
+    expiring_paid: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT DISTINCT ON (ts.trainer_id)
+                    ts.trainer_id,
+                    NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '') AS name,
+                    ts.expires_at,
+                    EXTRACT(EPOCH FROM (ts.expires_at - CURRENT_TIMESTAMP))::bigint AS seconds_left
+                FROM trainer_subscriptions ts
+                LEFT JOIN trainer_profiles p ON p.trainer_id = ts.trainer_id
+                WHERE ts.status = :s_active
+                  AND ts.expires_at > CURRENT_TIMESTAMP
+                  AND ts.expires_at <= CURRENT_TIMESTAMP + INTERVAL '14 days'
+                ORDER BY ts.trainer_id, ts.expires_at ASC
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        rows = sorted(r.fetchall(), key=lambda x: x[2])
+        for tid, name, expires_at, seconds_left in rows[:20]:
+            expiring_paid.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "expires_at": _iso(expires_at),
+                    "days_left": max(0, int((seconds_left or 0) // 86400)),
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    top_by_bookings: list[dict] = []
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                b.trainer_id,
+                NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '') AS name,
+                COUNT(*) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
+                      AND s.slot_date <= CURRENT_DATE
+                )::int AS bookings_7d,
+                COUNT(*) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '29 days'
+                      AND s.slot_date <= CURRENT_DATE
+                )::int AS bookings_30d,
+                MAX(s.slot_date) AS last_slot
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
+            WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+              AND NOT b.is_sandbox
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '29 days'
+            GROUP BY b.trainer_id, p.first_name, p.last_name
+            ORDER BY bookings_7d DESC, bookings_30d DESC
+            LIMIT 20
+            """
+        ),
+    )
+    for tid, name, b7, b30, last_slot in r.fetchall():
+        top_by_bookings.append(
+            {
+                "trainer_id": int(tid),
+                "display_name": (name or f"Тренер #{tid}").strip(),
+                "bookings_7d": int(b7 or 0),
+                "bookings_30d": int(b30 or 0),
+                "last_booking_date": last_slot.isoformat() if last_slot else None,
+            }
+        )
+
+    sleeping_paid_list: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT
+                    t.id,
+                    NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '') AS name,
+                    lb.last_slot
+                FROM trainers t
+                JOIN trainer_subscriptions ts
+                  ON ts.trainer_id = t.id
+                 AND ts.status = :s_active
+                 AND ts.expires_at > CURRENT_TIMESTAMP
+                LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+                LEFT JOIN LATERAL (
+                    SELECT MAX(s.slot_date) AS last_slot
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = t.id
+                      AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                      AND NOT b.is_sandbox
+                ) lb ON true
+                WHERE t.status = 'active'
+                  AND (lb.last_slot IS NULL OR lb.last_slot < CURRENT_DATE - INTERVAL '14 days')
+                ORDER BY lb.last_slot ASC NULLS FIRST, t.id
+                LIMIT 20
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        today = date.today()
+        for tid, name, last_slot in r.fetchall():
+            sleeping_paid_list.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "last_booking_date": last_slot.isoformat() if last_slot else None,
+                    "days_since": (today - last_slot).days if last_slot else None,
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    return {
+        "today": date.today().isoformat(),
+        "paying_count": paying,
+        "trial_count": trial,
+        "live_7d_count": live_7d,
+        "sleeping_paid_count": sleeping_paid,
+        "onboarding_count": onboarding,
+        "ghost_count": ghosts,
+        "trial_starts_90d": trial_starts_90d,
+        "trial_paid_90d": trial_paid_90d,
+        "trial_to_paid_pct": _pct(trial_paid_90d, trial_starts_90d),
+        "expiring_paid": expiring_paid,
+        "top_by_bookings": top_by_bookings,
+        "sleeping_paid": sleeping_paid_list,
+    }

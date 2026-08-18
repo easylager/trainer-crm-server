@@ -14,7 +14,15 @@ _settings = Settings()
 _db_url = _settings.database_url
 if _db_url.startswith("postgresql://") and "+asyncpg" not in _db_url:
     _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-engine = create_async_engine(_db_url, echo=_settings.debug)
+# Fail fast when Postgres is down (hardware outage) instead of hanging Mini Apps
+# until the reverse-proxy timeout. pool_pre_ping drops stale connections after failover.
+engine = create_async_engine(
+    _db_url,
+    echo=_settings.debug,
+    pool_pre_ping=True,
+    pool_timeout=8,
+    connect_args={"timeout": 8},
+)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

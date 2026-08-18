@@ -5,7 +5,6 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from dotenv import load_dotenv
 
-print(f"🔗 Migrating to: {context.config.get_main_option('sqlalchemy.url')}")
 config = context.config
 
 if config.config_file_name is not None:
@@ -28,6 +27,7 @@ def get_database_url() -> str:
 
 def run_migrations_offline() -> None:
     url = get_database_url()
+    print(f"🔗 Migrating to: {url.split('@')[-1] if '@' in url else url}")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -40,8 +40,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    url = get_database_url()
+    print(f"🔗 Migrating to: {url.split('@')[-1] if '@' in url else url}")
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_database_url()
+    configuration["sqlalchemy.url"] = url
 
     connectable = engine_from_config(
         configuration,

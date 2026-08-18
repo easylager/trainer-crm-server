@@ -19,6 +19,7 @@ from src.bot.schedule_notifications import set_client_bot
 from src.bot.handlers.trainer_handlers import router as trainer_router
 from src.bot.middlewares.trainer_benchmark_middleware import TrainerBenchmarkMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
+from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
 from src.bot.middlewares.trainer_gate_middleware import TrainerGateMiddleware
 from src.bot.middlewares.trainer_menu_sync_middleware import TrainerMenuSyncMiddleware
 from src.bot.trainer_menu_commands import set_default_trainer_commands_without_stats
@@ -83,6 +84,8 @@ async def main() -> None:
     trainer_router.message.middleware(TrainerMenuSyncMiddleware())
     trainer_router.callback_query.middleware(TrainerMenuSyncMiddleware())
     dp.include_router(trainer_router)
+    # Outermost catch: DB down / MAINTENANCE_MODE → user-facing «технические работы».
+    dp.update.outer_middleware(ServiceUnavailableMiddleware())
     logger.info("Trainer bot polling started (notifications run in notification_service)")
     try:
         await dp.start_polling(bot)

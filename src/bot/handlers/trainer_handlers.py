@@ -66,6 +66,7 @@ from src.application.client_request_use_cases import (
 from src.application.stats_use_cases import get_trainer_stats
 from src.application.subscription_use_cases import ensure_trainer_welcome_trial
 from src.application.subscription_tier_use_cases import (
+    format_subscription_label,
     get_trainer_subscription_status,
     trainer_has_analytics_access,
     trainer_has_crm_access,
@@ -652,12 +653,45 @@ async def cmd_start(message: Message) -> None:
                 if pending_referrer_id:
                     await record_referral_attribution(session, pending_referrer_id, trainer_id)
                 state, trainer = await get_trainer_access_state(session, user_id)
+                grant_kind = "trial"
+                grant_result: dict | None = None
+                paid_ok = False
                 async with async_session_factory() as s2:
-                    await ensure_trainer_welcome_trial(s2, trainer_id)
+                    from src.application.trainer_link_token_use_cases import (
+                        WELCOME_GRANT_KIND_PAID,
+                        apply_pending_welcome_grant_for_token,
+                    )
+
+                    grant_result = await apply_pending_welcome_grant_for_token(s2, token, trainer_id)
+                    grant_kind = str(grant_result.get("kind") or "trial")
+                    paid_ok = grant_kind == WELCOME_GRANT_KIND_PAID and not grant_result.get("error")
+                    if not paid_ok:
+                        await ensure_trainer_welcome_trial(s2, trainer_id)
                 if state == TrainerAccessState.ACTIVE:
                     async with async_session_factory() as s2:
                         sub_st = await get_trainer_subscription_status(s2, trainer_id)
-                    if (
+                    if paid_ok:
+                        label = html.escape(
+                            format_subscription_label(
+                                grant_result.get("modules") or {},
+                                has_base_crm=True,
+                                is_trial=False,
+                            )
+                        )
+                        exp_fmt = _format_expires_ru_from_iso(
+                            grant_result.get("period_end").isoformat()
+                            if hasattr(grant_result.get("period_end"), "isoformat")
+                            else (grant_result.get("period_end") or sub_st.get("expires_at"))
+                        )
+                        await message.answer(
+                            msg.TRAINER_WELCOME_PAID_GRANT_ACTIVATED.format(
+                                label=label,
+                                expires_date=html.escape(exp_fmt),
+                            ),
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                        )
+                    elif (
                         sub_st.get("is_active")
                         and sub_st.get("is_trial")
                         and (sub_st.get("effective_tier") or "none") != "none"

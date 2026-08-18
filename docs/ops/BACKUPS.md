@@ -20,8 +20,9 @@
 
 1. GitHub Actions [`.github/workflows/backup-postgres.yml`](../../.github/workflows/backup-postgres.yml) — cron 02:15 UTC + ручной запуск.
 2. Скрипт [`scripts/ops/backup_postgres.py`](../../scripts/ops/backup_postgres.py):
-   - `pg_dump` → gzip
+   - `pg_dump` → gzip (отклоняет дамп без заголовка PostgreSQL)
    - upload `s3://<BACKUP_S3_BUCKET>/postgres/YYYY/MM/DD/trainer_crm_*.sql.gz`
+   - пишет `postgres/latest.json` (ключ, время, размер)
    - удаляет объекты старше `BACKUP_RETENTION_DAYS` (по умолчанию 35)
 
 ## Настройка (один раз)
@@ -45,6 +46,8 @@
 | `BACKUP_S3_ACCESS_KEY` | access key id |
 | `BACKUP_S3_SECRET_KEY` | secret |
 | `BACKUP_S3_BUCKET` | `ice-studio-backups` |
+| `BACKUP_ALERT_BOT_TOKEN` | токен любого бота (удобно admin) — алерт в Telegram, если ночной dump упал |
+| `BACKUP_ALERT_CHAT_ID` | ваш Telegram user id (как в `ADMIN_TELEGRAM_IDS`) |
 
 Опционально (Repository variables):
 
@@ -54,13 +57,15 @@
 | `BACKUP_S3_PATH_STYLE` | `true` |
 | `BACKUP_RETENTION_DAYS` | `35` |
 
-`BACKUP_DATABASE_URL` возьмите из Railway Postgres → Connect (URL **без** `+asyncpg`).  
+`BACKUP_DATABASE_URL` возьмите из Railway Postgres → Connect (URL **без** `+asyncpg`, лучше **public** TCP URL: `*.proxy.rlwy.net` или `*.railway.app`, не внутренний `postgres.railway.internal` — GitHub Actions с него не достучится).  
 Лучше создать отдельного пользователя только с `SELECT` + `pg_dump` (или использовать основной URL, если read-only пока не настроен).
+
+Без этих секретов workflow **падает сразу** с понятной ошибкой — так и задумано, чтобы «забыли настроить» было видно в Actions, а не молча.
 
 ### 3. Проверка
 
-Actions → **Backup Postgres** → **Run workflow**.  
-В логе должны быть размер dump и `Uploaded s3://...`.
+После добавления секретов: Actions → **Backup Postgres** → **Run workflow**.  
+В логе — размер dump, `Uploaded s3://...` и `latest.json`.
 
 ### 4. Локальный прогон (опционально)
 

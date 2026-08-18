@@ -15,7 +15,7 @@ from src.application.referral_use_cases import (
     get_referral_credit_balance,
     get_referral_stats_for_trainer,
 )
-from src.application.stats_use_cases import ACTIVATION_STAGE_LABEL_RU, ACTIVATION_STAGE_ORDER, get_platform_stats
+from src.application.stats_use_cases import get_platform_stats
 from src.application.support_use_cases import (
     get_support_message,
     list_support_messages,
@@ -61,6 +61,8 @@ from src.application.subscription_use_cases import (
 )
 from src.application.trainer_link_token_use_cases import (
     DEFAULT_TRAINER_LINK_EXPIRE_DAYS,
+    WELCOME_GRANT_KIND_PAID,
+    WELCOME_GRANT_KIND_TRIAL,
     create_trainer_and_issue_welcome_link_token,
     issue_trainer_welcome_link_token,
 )
@@ -119,15 +121,6 @@ logger = logging.getLogger(__name__)
 ADMIN_APPROVE_PREFIX = "admin:approve:"
 ADMIN_REJECT_PREFIX = "admin:reject:"
 ADMIN_NEEDS_EDIT_PREFIX = "admin:needs_edit:"
-
-# Human-readable trainer status for stats
-TRAINER_STATUS_LABELS = {
-    "pending_profile": "На модерации",
-    "pending_contract": "Ожидает договор",
-    "pending_payment": "Ожидает оплату",
-    "active": "Активные",
-    "deactivated": "Деактивированы",
-}
 
 # In-memory state: admin user_id -> trainer_id (awaiting moderation feedback text)
 _admin_awaiting_feedback: dict[int, int] = {}
@@ -335,109 +328,31 @@ async def cmd_start(message: Message) -> None:
 
 
 def _admin_stats_message(s: dict) -> str:
-    """Build full admin stats message: current state, 7d, 30d, trainers, signals."""
-    parts = [msg.ADMIN_STATS_TITLE]
-
-    ws, we = s["week_start"], s["week_end"]
-    d0 = ws.isoformat() if hasattr(ws, "isoformat") else str(ws)
-    d1 = we.isoformat() if hasattr(we, "isoformat") else str(we)
-    ns_lines = [
-        msg.ADMIN_STATS_NORTH_STAR_CURRENT.format(
-            d0=d0,
-            d1=d1,
-            n=s.get("north_star_completed_booking_cycles_week", 0),
-        ),
-        msg.ADMIN_STATS_NORTH_STAR_PREV.format(n=s.get("north_star_completed_booking_cycles_prev_week", 0)),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_NORTH_STAR.format(lines="\n".join(ns_lines)))
-
-    # Section: Сейчас
-    now_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_NOW_BOOKINGS_TODAY, value=s["bookings_today"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_NOW_BOOKINGS_WEEK, value=s["bookings_upcoming_week"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_NOW_REQUESTS_OPEN, value=s["requests_open_now"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_NOW_PENDING_MOD, value=s["trainers_pending_moderation"]),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_NOW.format(lines="\n".join(now_lines)))
-
-    # Section: За 7 дней
-    week_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_7D_BOOKINGS, value=s["bookings_7d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_7D_REQUESTS, value=s["requests_7d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_7D_RESPONSES, value=s["responses_7d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_7D_TRAINERS, value=s["trainers_created_7d"]),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_7D.format(lines="\n".join(week_lines)))
-
-    # Section: За 30 дней
-    conv_str = f"{s['requests_with_response_30d']} ({int(s['conversion_pct'])}%)" if s["conversion_pct"] is not None else str(s["requests_with_response_30d"])
-    month_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_BOOKINGS, value=s["bookings_30d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_REQUESTS, value=s["requests_30d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_REQUESTS_NEW, value=s["requests_new_30d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_RESPONSES, value=s["responses_30d"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_CONVERSION, value=conv_str),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_30D_TRAINERS, value=s["trainers_created_30d"]),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_30D.format(lines="\n".join(month_lines)))
-
-    # Section: Тренеры
-    by_status = s["trainers_by_status"]
-    status_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_TRAINERS_TOTAL, value=s["trainers_total"]),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_TRAINERS_ACTIVE_LINKED, value=s["trainers_with_telegram"]),
-    ]
-    status_lines += [msg.ADMIN_STATS_ROW.format(label=TRAINER_STATUS_LABELS.get(k, k), value=v) for k, v in sorted(by_status.items())]
-    parts.append(msg.ADMIN_STATS_SECTION_TRAINERS.format(lines="\n".join(status_lines)))
-
-    act_counts = s.get("activation_stage_counts") or {}
-    labels = s.get("activation_stage_labels_ru") or ACTIVATION_STAGE_LABEL_RU
-    act_lines = [
-        msg.ADMIN_STATS_ACTIVATION_STAGE.format(label=labels.get(k, k), n=int(act_counts.get(k, 0) or 0))
-        for k in ACTIVATION_STAGE_ORDER
-    ]
-    act_lines.append(msg.ADMIN_STATS_ACTIVATION_HINT)
-    parts.append(msg.ADMIN_STATS_SECTION_ACTIVATION.format(lines="\n".join(act_lines)))
-
-    # Section: Абонементы и сертификаты
-    cert_byn = (s.get("cert_balance_cents_total") or 0) / 100
-    cert_byn_str = f"{cert_byn:.0f}" if cert_byn == int(cert_byn) else f"{cert_byn:.2f}"
-    pass_cert_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_PASSES_ACTIVE, value=s.get("passes_active_total", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_PASSES_ISSUED_30D, value=s.get("passes_issued_30d_total", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_ISSUED, value=s.get("certs_issued_total", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_WITH_BALANCE, value=s.get("certs_with_balance_total", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_BALANCE_BYN, value=cert_byn_str),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_REDEEMED_30D, value=s.get("certs_redeemed_30d_total", 0)),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_PASSES_CERTS.format(lines="\n".join(pass_cert_lines)))
-
-    # Section: Подписки (tier)
-    sub_lines = [
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_CRM, value=s.get("subscription_tier_crm", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_ONLINE, value=s.get("subscription_tier_online", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_ANALYTICS, value=s.get("subscription_tier_analytics", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TOTAL_WITH_TIER, value=s.get("subscription_trainers_with_tier", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_EXPIRING_7D, value=s.get("subscription_expiring_7d", 0)),
-        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_ACTIVE_NO_TIER, value=s.get("subscription_active_trainers_no_tier", 0)),
-    ]
-    parts.append(msg.ADMIN_STATS_SECTION_SUBSCRIPTIONS.format(lines="\n".join(sub_lines)))
-
-    # Section: Сигналы (что проверить)
-    signal_lines = []
-    if s["trainers_pending_moderation"] > 0:
-        signal_lines.append(msg.ADMIN_STATS_SIGNAL_PENDING.format(n=s["trainers_pending_moderation"]))
-    if s["requests_open_now"] > 0:
-        signal_lines.append(msg.ADMIN_STATS_SIGNAL_REQUESTS_OPEN.format(n=s["requests_open_now"]))
-    if s["requests_stale"] > 0:
-        signal_lines.append(msg.ADMIN_STATS_SIGNAL_REQUESTS_STALE.format(n=s["requests_stale"]))
-    if s["bookings_7d"] == 0 and s["trainers_active"] > 0:
-        signal_lines.append(msg.ADMIN_STATS_SIGNAL_NO_BOOKINGS.format(active=s["trainers_active"]))
-    if s["conversion_pct"] is not None and s["requests_30d"] >= 3 and s["conversion_pct"] < 50:
-        signal_lines.append(msg.ADMIN_STATS_SIGNAL_LOW_CONVERSION.format(pct=int(s["conversion_pct"])))
-    if signal_lines:
-        parts.append(msg.ADMIN_STATS_SECTION_SIGNALS.format(lines="\n".join(signal_lines)))
-
+    """Short founder pulse when Mini App URL is not configured."""
+    parts = ["📊 <b>Сейчас</b>\n"]
+    parts.append(f"• Занятия сегодня: <b>{s.get('bookings_today', 0)}</b>")
+    parts.append(f"• На неделю впереди: <b>{s.get('bookings_upcoming_week', 0)}</b>")
+    parts.append(f"• Живые тренеры за 7 дн: <b>{s.get('trainers_live_7d', 0)}</b>")
+    parts.append(f"• Занятия за 7 дн: <b>{s.get('sessions_7d', 0)}</b>")
+    mrr = (s.get("mrr_cents") or 0) / 100
+    mrr_s = f"{mrr:.0f}" if mrr == int(mrr) else f"{mrr:.2f}"
+    parts.append(f"• MRR: <b>{mrr_s}</b> · платных подписок: <b>{s.get('active_paid_subscriptions', 0)}</b>")
+    action = int(s.get("action_count") or 0)
+    parts.append("")
+    parts.append(f"Сделать сегодня: <b>{action}</b>")
+    if s.get("trainers_pending_moderation"):
+        parts.append(f"• модерация: {s['trainers_pending_moderation']} — /pending")
+    if s.get("support_new_count"):
+        parts.append(f"• поддержка: {s['support_new_count']} — /support")
+    exp = s.get("action_expiring_paid") or []
+    if exp:
+        parts.append(f"• истекают платные ≤7 дн: {len(exp)}")
+    sleep = s.get("action_sleeping_paid") or []
+    if sleep:
+        parts.append(f"• платящие без записи >14 дн: {len(sleep)}")
+    ghosts = s.get("ghost_trainers_count") or 0
+    if ghosts:
+        parts.append(f"\n<i>Пустых регистраций без Telegram: {ghosts}</i>")
     return "\n".join(parts)
 
 
@@ -637,11 +552,7 @@ async def cmd_problem_reports(message: Message) -> None:
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
-    """Open platform analytics — menu of Mini Apps (overview + five dashboards).
-
-    Each button opens a focused dashboard. Drilldown happens inside each app
-    (tap a card to expand details about a specific trainer/invoice/request).
-    """
+    """Open platform analytics: pulse, money, trainers, history."""
     if not _is_admin(message.from_user.id if message.from_user else 0):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
@@ -656,15 +567,15 @@ async def cmd_stats(message: Message) -> None:
         return InlineKeyboardButton(text=label, web_app=WebAppInfo(url=f"{base}/webapp/{slug}"))
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [_wa("📊 Обзор", "admin-stats"),       _wa("💰 Деньги", "admin-money")],
-        [_wa("📈 Рост", "admin-growth"),       _wa("🔁 Удержание", "admin-retention")],
-        [_wa("🎯 Активность", "admin-engagement"), _wa("👥 Клиенты", "admin-clients")],
-        [_wa("🕓 История", "admin-activity")],
+        [_wa("📊 Сейчас", "admin-stats"), _wa("💰 Деньги", "admin-money")],
+        [_wa("👥 Тренеры", "admin-trainers"), _wa("🕓 История", "admin-activity")],
     ])
     await message.answer(
-        "📊 <b>Аналитика платформы</b>\n\n"
-        "Выберите раздел — каждый открывается отдельным мини-приложением.\n"
-        "Внутри карточки можно тапнуть, чтобы развернуть детали по конкретному тренеру/счёту.",
+        "📊 <b>Что происходит с системой</b>\n\n"
+        "<b>Сейчас</b> — пульс дня и кому ответить.\n"
+        "<b>Деньги</b> — MRR, оплаты, висящие счета.\n"
+        "<b>Тренеры</b> — кто платит, кто работает, кто молчит.\n"
+        "<b>История</b> — лог действий.",
         parse_mode=ParseMode.HTML,
         reply_markup=keyboard,
     )
@@ -1479,7 +1390,7 @@ async def cmd_welcome_trial_days(message: Message) -> None:
 
 @router.message(Command("trainer_welcome_link"))
 async def cmd_trainer_welcome_link(message: Message) -> None:
-    """Issue a one-time trainer bot deep link; without args creates a new trainer draft + link."""
+    """Open welcome-link constructor: trial or prepaid subscription on first open."""
     user_id = message.from_user.id if message.from_user else 0
     if not _is_admin(user_id):
         await message.answer(msg.ADMIN_NO_ACCESS)
@@ -1524,15 +1435,147 @@ async def cmd_trainer_welcome_link(message: Message) -> None:
             if expire_days < 1 or expire_days > 365:
                 await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
                 return
-
-    async with async_session_factory() as session:
-        if new_trainer_flow:
-            result = await create_trainer_and_issue_welcome_link_token(session, expire_days=expire_days)
-        else:
-            assert trainer_id is not None
-            result = await issue_trainer_welcome_link_token(session, trainer_id, expire_days=expire_days)
-            if result is None:
+        async with async_session_factory() as session:
+            trainer = await get_trainer(session, int(trainer_id))
+            if not trainer:
                 await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_NO_TRAINER)
+                return
+
+    flow = "n" if new_trainer_flow else "e"
+    tid = 0 if new_trainer_flow else int(trainer_id or 0)
+    trial_days = 14
+    async with async_session_factory() as session:
+        trial_days = await get_resolved_welcome_trial_days_for_display(session)
+
+    target = (
+        msg.ADMIN_TRAINER_WELCOME_LINK_TARGET_NEW
+        if new_trainer_flow
+        else msg.ADMIN_TRAINER_WELCOME_LINK_TARGET_EXISTING.format(trainer_id=tid)
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🎁 Пробный период ({trial_days} дн.)",
+                    callback_data=f"tw:issue:{flow}:{tid}:{expire_days}:t:0:0",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 Выдать подписку",
+                    callback_data=f"tw:edit:{flow}:{tid}:{expire_days}:0:1",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="tw:cancel",
+                )
+            ],
+        ]
+    )
+    await message.answer(
+        msg.ADMIN_TRAINER_WELCOME_LINK_CHOOSE.format(target=target, expire_days=expire_days),
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML,
+    )
+
+
+def _tw_target_html(*, flow: str, trainer_id: int) -> str:
+    if flow == "n":
+        return msg.ADMIN_TRAINER_WELCOME_LINK_TARGET_NEW
+    return msg.ADMIN_TRAINER_WELCOME_LINK_TARGET_EXISTING.format(trainer_id=trainer_id)
+
+
+async def _tw_paid_editor_body(session, *, flow: str, trainer_id: int, flags: int, months: int) -> str:
+    total, _ = await _calc_total_byn(session, flags, months)
+    mods = _flags_to_modules(flags)
+    parts = ["CRM"]
+    for code in SUBSCRIPTION_MODULES:
+        if mods.get(code):
+            parts.append(_MODULE_LABELS[code])
+    return msg.ADMIN_TRAINER_WELCOME_LINK_PAID_EDITOR.format(
+        target=_tw_target_html(flow=flow, trainer_id=trainer_id),
+        modules_line=html.escape(", ".join(parts)),
+        months=int(months),
+        amount_byn=_fmt_amount_byn(total),
+    )
+
+
+def _tw_paid_editor_keyboard(
+    *, flow: str, trainer_id: int, expire_days: int, flags: int, months: int
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="✅ CRM (база — всегда включена)", callback_data="tw:noop")],
+    ]
+    for code in SUBSCRIPTION_MODULES:
+        bit = _MODULE_BITS[code]
+        is_on = bool(int(flags) & bit)
+        prefix = "✅" if is_on else "➕"
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{prefix} {_MODULE_LABELS[code]}",
+                callback_data=f"tw:tog:{flow}:{trainer_id}:{expire_days}:{int(flags)}:{int(months)}:{code}",
+            )
+        ])
+    period_row: list[InlineKeyboardButton] = []
+    for m in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        marker = "✅ " if int(months) == m else ""
+        period_row.append(
+            InlineKeyboardButton(
+                text=f"{marker}{m} мес.",
+                callback_data=f"tw:setper:{flow}:{trainer_id}:{expire_days}:{int(flags)}:{m}",
+            )
+        )
+    rows.append(period_row)
+    rows.append([
+        InlineKeyboardButton(
+            text=f"✅ Создать ссылку · {int(months)} мес.",
+            callback_data=f"tw:issue:{flow}:{trainer_id}:{expire_days}:p:{int(flags)}:{int(months)}",
+        )
+    ])
+    rows.append([
+        InlineKeyboardButton(text="◀️ Назад", callback_data=f"tw:back:{flow}:{trainer_id}:{expire_days}"),
+        InlineKeyboardButton(text="❌ Отмена", callback_data="tw:cancel"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _tw_issue_and_reply(
+    callback: CallbackQuery,
+    *,
+    flow: str,
+    trainer_id: int,
+    expire_days: int,
+    grant_kind: str,
+    flags: int,
+    months: int,
+) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    modules = _flags_to_modules(flags) if grant_kind == WELCOME_GRANT_KIND_PAID else None
+    period_months = int(months) if grant_kind == WELCOME_GRANT_KIND_PAID else None
+    async with async_session_factory() as session:
+        if flow == "n":
+            result = await create_trainer_and_issue_welcome_link_token(
+                session,
+                expire_days=expire_days,
+                welcome_grant_kind=grant_kind,
+                welcome_grant_modules=modules,
+                welcome_grant_period_months=period_months,
+                welcome_grant_admin_id=user_id,
+            )
+        else:
+            result = await issue_trainer_welcome_link_token(
+                session,
+                trainer_id,
+                expire_days=expire_days,
+                welcome_grant_kind=grant_kind,
+                welcome_grant_modules=modules,
+                welcome_grant_period_months=period_months,
+                welcome_grant_admin_id=user_id,
+            )
+            if result is None:
+                await callback.answer(msg.ADMIN_TRAINER_WELCOME_LINK_NO_TRAINER, show_alert=True)
                 return
 
     tid = int(result["trainer_id"])
@@ -1544,6 +1587,9 @@ async def cmd_trainer_welcome_link(message: Message) -> None:
             "trainer_id": tid,
             "expire_days": expire_days,
             "new_trainer": bool(result.get("created_new_trainer")),
+            "welcome_grant_kind": grant_kind,
+            "welcome_grant_period_months": period_months,
+            "welcome_grant_modules": modules,
         },
     )
     exp = result["expires_at"]
@@ -1558,18 +1604,258 @@ async def cmd_trainer_welcome_link(message: Message) -> None:
         link_block = msg.ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME.format(
             start_payload=html.escape(result["start_payload"]),
         )
+    if grant_kind == WELCOME_GRANT_KIND_PAID:
+        grant_label = (
+            f"подписка · {format_subscription_label(modules or default_modules_dict())} · {int(months)} мес."
+        )
+    else:
+        async with async_session_factory() as session:
+            trial_days = await get_resolved_welcome_trial_days_for_display(session)
+        grant_label = f"пробный период · {trial_days} дн."
+
     intro = ""
     if result.get("created_new_trainer"):
         intro = msg.ADMIN_TRAINER_WELCOME_LINK_NEW_INTRO.format(trainer_id=tid)
-    await message.answer(
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(
         intro
         + msg.ADMIN_TRAINER_WELCOME_LINK_ISSUED.format(
             trainer_id=tid,
+            grant_label=html.escape(grant_label),
             expires=expires_str,
             link_block=link_block,
         ),
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
+    )
+    await callback.answer("Ссылка создана")
+
+
+@router.callback_query(lambda c: c.data == "tw:noop")
+async def on_tw_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "tw:cancel")
+async def on_tw_cancel(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_CANCELLED)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("tw:back:"))
+async def on_tw_back(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 5:
+        await callback.answer()
+        return
+    flow, tid_s, expire_s = parts[2], parts[3], parts[4]
+    try:
+        tid = int(tid_s)
+        expire_days = int(expire_s)
+    except ValueError:
+        await callback.answer()
+        return
+    trial_days = 14
+    async with async_session_factory() as session:
+        trial_days = await get_resolved_welcome_trial_days_for_display(session)
+    target = _tw_target_html(flow=flow, trainer_id=tid)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"🎁 Пробный период ({trial_days} дн.)",
+                    callback_data=f"tw:issue:{flow}:{tid}:{expire_days}:t:0:0",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💳 Выдать подписку",
+                    callback_data=f"tw:edit:{flow}:{tid}:{expire_days}:0:1",
+                )
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="tw:cancel")],
+        ]
+    )
+    try:
+        await callback.message.edit_text(
+            msg.ADMIN_TRAINER_WELCOME_LINK_CHOOSE.format(target=target, expire_days=expire_days),
+            reply_markup=kb,
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception:
+        await callback.message.answer(
+            msg.ADMIN_TRAINER_WELCOME_LINK_CHOOSE.format(target=target, expire_days=expire_days),
+            reply_markup=kb,
+            parse_mode=ParseMode.HTML,
+        )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("tw:edit:"))
+async def on_tw_edit(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 7:
+        await callback.answer()
+        return
+    flow = parts[2]
+    try:
+        tid = int(parts[3])
+        expire_days = int(parts[4])
+        flags = int(parts[5])
+        months = int(parts[6])
+    except ValueError:
+        await callback.answer()
+        return
+    if months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        months = SUBSCRIPTION_BILLING_PERIOD_MONTHS[0]
+    async with async_session_factory() as session:
+        body = await _tw_paid_editor_body(
+            session, flow=flow, trainer_id=tid, flags=flags, months=months
+        )
+    kb = _tw_paid_editor_keyboard(
+        flow=flow, trainer_id=tid, expire_days=expire_days, flags=flags, months=months
+    )
+    try:
+        await callback.message.edit_text(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    except Exception:
+        await callback.message.answer(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("tw:tog:"))
+async def on_tw_tog(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 8:
+        await callback.answer()
+        return
+    flow = parts[2]
+    try:
+        tid = int(parts[3])
+        expire_days = int(parts[4])
+        flags = int(parts[5])
+        months = int(parts[6])
+    except ValueError:
+        await callback.answer()
+        return
+    code = parts[7]
+    bit = _MODULE_BITS.get(code)
+    if bit is None:
+        await callback.answer()
+        return
+    flags ^= bit
+    async with async_session_factory() as session:
+        body = await _tw_paid_editor_body(
+            session, flow=flow, trainer_id=tid, flags=flags, months=months
+        )
+    kb = _tw_paid_editor_keyboard(
+        flow=flow, trainer_id=tid, expire_days=expire_days, flags=flags, months=months
+    )
+    try:
+        await callback.message.edit_text(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("tw:setper:"))
+async def on_tw_setper(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 7:
+        await callback.answer()
+        return
+    flow = parts[2]
+    try:
+        tid = int(parts[3])
+        expire_days = int(parts[4])
+        flags = int(parts[5])
+        months = int(parts[6])
+    except ValueError:
+        await callback.answer()
+        return
+    if months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        body = await _tw_paid_editor_body(
+            session, flow=flow, trainer_id=tid, flags=flags, months=months
+        )
+    kb = _tw_paid_editor_keyboard(
+        flow=flow, trainer_id=tid, expire_days=expire_days, flags=flags, months=months
+    )
+    try:
+        await callback.message.edit_text(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("tw:issue:"))
+async def on_tw_issue(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 8:
+        await callback.answer()
+        return
+    flow = parts[2]
+    try:
+        tid = int(parts[3])
+        expire_days = int(parts[4])
+        kind_code = parts[5]
+        flags = int(parts[6])
+        months = int(parts[7])
+    except ValueError:
+        await callback.answer()
+        return
+    if flow not in ("n", "e"):
+        await callback.answer()
+        return
+    if kind_code == "p":
+        grant_kind = WELCOME_GRANT_KIND_PAID
+        if months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+            await callback.answer("Неверный срок", show_alert=True)
+            return
+    else:
+        grant_kind = WELCOME_GRANT_KIND_TRIAL
+        flags = 0
+        months = 0
+    await _tw_issue_and_reply(
+        callback,
+        flow=flow,
+        trainer_id=tid,
+        expire_days=expire_days,
+        grant_kind=grant_kind,
+        flags=flags,
+        months=months,
     )
 
 

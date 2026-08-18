@@ -28,6 +28,7 @@ from src.application.admin_analytics_use_cases import (
     get_admin_growth_stats,
     get_admin_money_stats,
     get_admin_retention_stats,
+    get_admin_trainers_hub_stats,
 )
 
 
@@ -85,6 +86,14 @@ _CLIENTS_KEYS = {
     "requests_30d", "requests_with_response_30d", "requests_with_booking_30d",
     "request_response_pct", "request_booking_pct",
     "top_cities", "top_trainers_by_clients", "recent_requests",
+}
+
+_TRAINERS_HUB_KEYS = {
+    "today",
+    "paying_count", "trial_count", "live_7d_count", "sleeping_paid_count",
+    "onboarding_count", "ghost_count",
+    "trial_starts_90d", "trial_paid_90d", "trial_to_paid_pct",
+    "expiring_paid", "top_by_bookings", "sleeping_paid",
 }
 
 
@@ -146,6 +155,16 @@ async def test_clients_shape(db_session: AsyncSession) -> None:
     assert isinstance(data["top_cities"], list)
     assert isinstance(data["top_trainers_by_clients"], list)
     assert isinstance(data["recent_requests"], list)
+
+
+@pytest.mark.asyncio
+async def test_trainers_hub_shape(db_session: AsyncSession) -> None:
+    data = await get_admin_trainers_hub_stats(db_session)
+    missing = _TRAINERS_HUB_KEYS - set(data.keys())
+    assert not missing, f"missing trainers hub keys: {missing}"
+    assert isinstance(data["expiring_paid"], list)
+    assert isinstance(data["top_by_bookings"], list)
+    assert isinstance(data["sleeping_paid"], list)
 
 
 # ──────────────────────────────────────────────────────────────────────────

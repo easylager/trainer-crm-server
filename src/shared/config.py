@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "INFO"
+    # Planned maintenance: /api/* returns 503 with a user-facing message; Mini Apps and static
+    # /webapp HTML still load so clients see «технические работы», not an empty shell.
+    # Unplanned DB outages are detected automatically (no flag needed).
+    maintenance_mode: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # HTTP API (FastAPI): sliding-window rate limit per client IP for /api/* (webhooks excluded).
     api_rate_limit_enabled: bool = True
     api_rate_limit_public_max_requests: int = 120

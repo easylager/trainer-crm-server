@@ -240,6 +240,7 @@ from src.application.admin_analytics_use_cases import (
     get_admin_money_stats,
     get_admin_product_analytics,
     get_admin_retention_stats,
+    get_admin_trainers_hub_stats,
 )
 from src.application.platform_audit_use_cases import list_platform_audit_events_for_admin
 from src.application.support_use_cases import (
@@ -3654,6 +3655,15 @@ async def get_admin_stats_money(
 ):
     """Money tab: MRR/ARR, GMV trend, revenue, top paying trainers, pending invoices, subscription mix."""
     return await get_admin_money_stats(session)
+
+
+@router.get("/admin/stats/trainers")
+async def get_admin_stats_trainers(
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Trainers hub: paying vs trial vs sleeping vs onboarding, top by bookings."""
+    return await get_admin_trainers_hub_stats(session)
 
 
 @router.get("/admin/stats/growth")

@@ -28,9 +28,16 @@ async def fetch_api_health() -> dict[str, Any] | str:
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url) as resp:
+                try:
+                    data = await resp.json()
+                except Exception:
+                    data = None
+                if resp.status == 200 and isinstance(data, dict):
+                    return data
+                if isinstance(data, dict) and (data.get("db") or data.get("code") or data.get("status")):
+                    return data
                 if resp.status != 200:
                     return f"HTTP {resp.status}"
-                data = await resp.json()
                 return data if isinstance(data, dict) else {}
     except TimeoutError:
         return "таймаут"

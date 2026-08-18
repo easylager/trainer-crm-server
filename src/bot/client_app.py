@@ -19,6 +19,7 @@ from src.shared.mini_app_https import mini_app_https_base
 from src.shared.sentry_init import init_sentry
 from src.bot.handlers.client_handlers import router as client_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
+from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
 from src.shared.rate_limit import RateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
@@ -65,6 +66,7 @@ async def main() -> None:
         window_sec=settings.rate_limit_window_sec,
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
+    dp.update.outer_middleware(ServiceUnavailableMiddleware())
     dp.include_router(client_router)
     logger.info("Client bot polling started (notifications run in notification_service)")
     await dp.start_polling(bot)

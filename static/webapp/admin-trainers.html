@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Тренеры · Админ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+</head>
+<body>
+  <div class="adm-header">
+    <h1>Тренеры</h1>
+    <div class="adm-sub">платят · триал · работают · молчат</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function render(d) {
+        var html = '';
+        html += '<div class="adm-kpi-grid">';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Платят</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.paying_count) + '</div>' +
+          '<div class="adm-kpi-sub">активная платная подписка</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Триал</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.trial_count) + '</div>' +
+          '<div class="adm-kpi-sub">сейчас на пробном периоде</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">С записью за 7 дн</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.live_7d_count) + '</div>' +
+          '<div class="adm-kpi-sub">реальная нагрузка, не статус в БД</div></div>';
+        html += '<div class="adm-kpi"><div class="adm-kpi-label">Платящие спят</div>' +
+          '<div class="adm-kpi-value">' + A.formatNum(d.sleeping_paid_count) + '</div>' +
+          '<div class="adm-kpi-sub">нет записи >14 дней</div></div>';
+        html += '</div>';
+
+        html += '<div class="adm-section"><div class="adm-section-title">Trial → paid (90 дн)</div>';
+        html += '<div class="adm-card tight"><div class="adm-kpi-value">' +
+          (d.trial_to_paid_pct != null ? d.trial_to_paid_pct + '%' : '—') + '</div>';
+        html += '<div class="adm-kpi-sub">' + A.formatNum(d.trial_paid_90d) +
+          ' оплатили из ' + A.formatNum(d.trial_starts_90d) + ' стартов триала</div></div></div>';
+
+        html += '<div class="adm-section"><div class="adm-section-title">Топ по занятиям</div>';
+        var top = d.top_by_bookings || [];
+        if (!top.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет записей за 30 дней</div></div>';
+        } else {
+          html += A.drilldown(top.map(function (t, i) {
+            return {
+              title: (i + 1) + '. ' + A.escapeHtml(t.display_name),
+              meta: '30 дн: ' + A.formatNum(t.bookings_30d) + ' · последняя ' + A.formatDate(t.last_booking_date),
+              value: A.formatNum(t.bookings_7d) + ' / 7д',
+              extra: '<div class="adm-row-list"><div><span>ID:</span><span>#' + t.trainer_id + '</span></div></div>',
+            };
+          }));
+        }
+        html += '</div>';
+
+        html += '<div class="adm-section"><div class="adm-section-title">Платные истекают ≤14 дн</div>';
+        var exp = d.expiring_paid || [];
+        if (!exp.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Ближайших окончаний нет</div></div>';
+        } else {
+          html += A.drilldown(exp.map(function (t) {
+            return {
+              title: A.escapeHtml(t.display_name),
+              meta: 'до ' + A.formatDate(t.expires_at),
+              value: t.days_left + ' дн.',
+              extra: '<div class="adm-row-list"><div><span>ID:</span><span>#' + t.trainer_id + '</span></div></div>',
+            };
+          }));
+        }
+        html += '</div>';
+
+        html += '<div class="adm-section"><div class="adm-section-title">Платящие без записи</div>';
+        var sleep = d.sleeping_paid || [];
+        if (!sleep.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Все платящие недавно вели записи</div></div>';
+        } else {
+          html += A.drilldown(sleep.map(function (t) {
+            var since = t.days_since != null ? t.days_since + ' дн. назад' : 'записей не было';
+            return {
+              title: A.escapeHtml(t.display_name),
+              meta: since,
+              value: A.formatDate(t.last_booking_date),
+              extra: '<div class="adm-row-list"><div><span>ID:</span><span>#' + t.trainer_id + '</span></div></div>',
+            };
+          }));
+        }
+        html += '</div>';
+
+        html += '<div class="adm-hint">Онбординг с Telegram, ещё не active: ' +
+          A.formatNum(d.onboarding_count) +
+          '. Пустых регистраций без Telegram: ' + A.formatNum(d.ghost_count) + '.</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/trainers', render: render });
+    })();
+  </script>
+</body>
+</html>

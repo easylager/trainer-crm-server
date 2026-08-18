@@ -4,7 +4,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, MenuButton
 
 ADMIN_BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="pending", description="Тренеры на модерацию"),
-    BotCommand(command="trainer_welcome_link", description="Ссылка новому тренеру"),
+    BotCommand(command="trainer_welcome_link", description="Ссылка тренеру (trial / подписка)"),
     BotCommand(command="stats", description="Статистика платформы"),
     BotCommand(command="support", description="Обращения в поддержку"),
     BotCommand(command="dicts", description="Города и арены"),

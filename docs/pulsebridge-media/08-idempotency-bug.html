@@ -1,0 +1,153 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: #12212b;
+  background: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+.card {
+  width: 1600px;
+  height: 900px;
+  padding: 64px 76px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.card::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 10px;
+  background: #0f766e;
+}
+.kicker {
+  font-size: 19px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #0f766e;
+  font-weight: 700;
+}
+h1 { font-size: 50px; line-height: 1.08; margin-top: 12px; font-weight: 800; }
+h1.big { font-size: 78px; }
+.sub { font-size: 23px; color: #5b6b76; margin-top: 14px; max-width: 1240px; line-height: 1.45; }
+.muted { color: #5b6b76; }
+.accent { color: #0f766e; }
+.mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; }
+.pill {
+  display: inline-block;
+  padding: 7px 16px;
+  border: 1px solid #d8e0e3;
+  border-radius: 999px;
+  font-size: 17px;
+  background: #fbfdfd;
+}
+.pill-accent { background: #e6f2f0; border-color: #e6f2f0; color: #0f766e; font-weight: 600; }
+.foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 19px;
+  color: #5b6b76;
+  border-top: 1px solid #d8e0e3;
+  padding-top: 20px;
+}
+.stack { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.flow { display: flex; align-items: stretch; gap: 16px; margin-top: 44px; }
+.node {
+  flex: 1;
+  border: 2px solid #d8e0e3;
+  border-radius: 16px;
+  padding: 20px 18px;
+  background: #fbfdfd;
+}
+.node .n-title { font-size: 21px; font-weight: 700; }
+.node .n-body { font-size: 16px; color: #5b6b76; margin-top: 8px; line-height: 1.4; }
+.node.hl { border-color: #0f766e; background: #e6f2f0; }
+.node.hl .n-body { color: #24564f; }
+.arrow { align-self: center; font-size: 28px; color: #0f766e; font-weight: 700; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 32px; }
+th, td { text-align: left; padding: 15px 18px; font-size: 21px; border-bottom: 1px solid #d8e0e3; }
+th { font-size: 16px; text-transform: uppercase; letter-spacing: 1.4px; color: #5b6b76; font-weight: 700; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.hl td { background: #e6f2f0; font-weight: 700; }
+td.k { font-weight: 700; width: 34%; }
+
+.shot {
+  margin-top: 30px;
+  border: 1px solid #d8e0e3;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0f1116;
+  line-height: 0;
+}
+.shot img { width: 100%; display: block; }
+.caps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: 26px; }
+.mid { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.mid > :first-child { margin-top: 0; }
+.cap { font-size: 19px; line-height: 1.4; padding-left: 22px; position: relative; color: #5b6b76; }
+.cap b { color: #12212b; }
+.cap::before {
+  content: ""; position: absolute; left: 0; top: 9px;
+  width: 9px; height: 9px; border-radius: 3px; background: #0f766e;
+}
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; margin-top: 34px; }
+.box { border: 2px solid #d8e0e3; border-radius: 16px; padding: 26px 28px; }
+.box.bad { border-color: #e7c9a9; background: #fdf7f0; }
+.box.good { border-color: #0f766e; background: #e6f2f0; }
+.box h3 { font-size: 22px; margin-bottom: 14px; }
+.box.bad h3 { color: #b45309; }
+.box.good h3 { color: #0f766e; }
+.box p { font-size: 19px; line-height: 1.5; color: #5b6b76; }
+.box code { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 17px; color: #12212b; }
+.term {
+  margin-top: 30px;
+  background: #0f1116;
+  border-radius: 14px;
+  padding: 28px 32px;
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 20px;
+  line-height: 1.65;
+  color: #d7dee7;
+}
+.term .c { color: #7f8c9b; }
+.term .g { color: #4ade80; }
+.term .y { color: #fbbf24; }
+.term .t { color: #2dd4bf; }
+.big-num { display: flex; gap: 54px; margin-top: 34px; }
+.bn { flex: 1; }
+.bn .v { font-size: 56px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bn .l { font-size: 18px; color: #5b6b76; margin-top: 6px; line-height: 1.4; }
+.bn.ok .v { color: #0f766e; }
+</style></head><body><div class="card">
+  <div class="kicker">A bug the rewrite found</div>
+  <h1>The duplicate that was never written</h1>
+  <div class="sub">The gateway claimed the idempotency key before publishing, and kept the claim
+  when the publish failed. Every retry then answered <span class="mono">200 duplicate</span> &mdash;
+  for an event that does not exist. Silent loss, for the full 24-hour TTL, with no error anywhere.</div>
+  <div class="mid">
+  <div class="split">
+    <div class="box bad">
+      <h3>Before</h3>
+      <p><code>claim(event_id)</code> &rarr; <code>XADD</code> raises &rarr; claim survives.<br/><br/>
+      The retry is mistaken for a replay. The caller is told the event was accepted.
+      Nothing in the logs disagrees.</p>
+    </div>
+    <div class="box good">
+      <h3>After</h3>
+      <p>The claim still comes first &mdash; two concurrent requests with the same id must not both publish.
+      So the fix is a rollback on failure, plus a <code>503</code> that says honestly that nothing was accepted.</p>
+    </div>
+  </div>
+  <div class="caps">
+    <div class="cap"><b>ADR 0006</b> records why the ordering cannot simply be reversed</div>
+    <div class="cap"><b>The test</b> is named <span class="mono">test_failed_publish_releases_the_idempotency_claim</span></div>
+    <div class="cap"><b>At-least-once</b> is stated out loud &mdash; no exactly-once claim</div>
+  </div>
+  </div>
+  <div class="foot"><div class="stack"><span class="pill">Python · asyncio</span><span class="pill">Go</span><span class="pill">Redis Streams</span><span class="pill">OpenTelemetry</span><span class="pill">Prometheus · Grafana</span></div><div class="mono">github.com/easylager/pulsebridge</div></div>
+</div></body></html>

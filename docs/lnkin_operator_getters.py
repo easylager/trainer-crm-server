@@ -1,32 +1,53 @@
-"""Four small callable factories from Python's operator module."""
+"""Four useful callable factories from Python's operator module."""
 
-from operator import attrgetter, itemgetter, methodcaller
+from dataclasses import dataclass
+from operator import attrgetter, itemgetter
 
-
-# 1. Sort objects by one attribute
-# attrgetter makes the key explicit: read created_at.
-newest_users = sorted(
-    users,
-    key=attrgetter("created_at"),
-    reverse=True,
-)
+# 1. Sort objects by an attribute
+@dataclass
+class User:
+    name: str
+    score: int
 
 
-# 2. Sort dictionaries by multiple fields
-# Tuple ordering means priority first, created_at second.
-rows.sort(
-    key=itemgetter("priority", "created_at"),
-)
+users = [User("Ada", 98), User("Linus", 91)]
+leaders = sorted(users, key=attrgetter("score"), reverse=True)
+# attrgetter("score") → user.score
 
 
-# 3. Reach through nested objects
-# Dotted paths traverse attributes — not dictionary keys.
-employees.sort(
-    key=attrgetter("department.name", "last_name"),
-)
+# 2. Sort dictionaries by two fields
+tasks = [
+    {"id": "A", "priority": 2, "created_at": "09:00"},
+    {"id": "B", "priority": 1, "created_at": "11:00"},
+    {"id": "C", "priority": 1, "created_at": "08:00"},
+]
+ordered = sorted(tasks, key=itemgetter("priority", "created_at"))
+# Order: C, B, A — priority first, then created_at
 
 
-# 4. Turn a method call into a reusable callable
-# strip(line) now means line.strip().
-strip = methodcaller("strip")
-cleaned_lines = list(map(strip, lines))
+# 3. Pick and unpack fields from a dictionary
+payload = {"id": 42, "email": "ada@example.com", "role": "admin"}
+get_identity = itemgetter("id", "email")
+user_id, email = get_identity(payload)
+# → (42, "ada@example.com")
+
+
+# 4. Reach a nested attribute without a lambda
+@dataclass
+class Department:
+    name: str
+
+
+@dataclass
+class Employee:
+    name: str
+    department: Department
+
+
+staff = [
+    Employee("Linus", Department("Infra")),
+    Employee("Ada", Department("Platform")),
+]
+by_team = sorted(staff, key=attrgetter("department.name"))
+# attrgetter("department.name") → employee.department.name
+# Order: Infra (Linus), Platform (Ada)

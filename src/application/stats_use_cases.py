@@ -6,11 +6,11 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.admin_moderation_queue import count_trainers_eligible_for_admin_moderation
+from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
 from src.application.demand_signals_use_cases import get_signals_lifetime_totals
 from src.application.trainer_client_invite_tracking import sql_trainer_shared_client_invite
 from src.application.trainer_schedule_use_cases import this_week_monday
@@ -79,6 +79,329 @@ ACTIVATION_STAGE_ORDER: tuple[str, ...] = (
     "deactivated",
     "other",
 )
+
+_SQL_TRAINER_DISPLAY_NAME = (
+    "NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '')"
+)
+_SQL_REAL_BOOKING = (
+    "b.status NOT IN ('cancelled', 'declined', 'trainer_removed') AND NOT b.is_sandbox"
+)
+
+
+def _pulse_iso(value: datetime | date | None) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+async def _admin_overview_pulse(session: AsyncSession) -> dict:
+    """Founder pulse: live usage, money, and rows that need a human today."""
+    sessions_7d = 0
+    sessions_prev_7d = 0
+    trainers_live_7d = 0
+    trainers_live_prev_7d = 0
+    r = await session.execute(
+        text(
+            f"""
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
+                      AND s.slot_date <= CURRENT_DATE
+                )::int AS sessions_7d,
+                COUNT(*) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '13 days'
+                      AND s.slot_date < CURRENT_DATE - INTERVAL '6 days'
+                )::int AS sessions_prev_7d,
+                COUNT(DISTINCT b.trainer_id) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
+                      AND s.slot_date <= CURRENT_DATE
+                )::int AS trainers_live_7d,
+                COUNT(DISTINCT b.trainer_id) FILTER (
+                    WHERE s.slot_date >= CURRENT_DATE - INTERVAL '13 days'
+                      AND s.slot_date < CURRENT_DATE - INTERVAL '6 days'
+                )::int AS trainers_live_prev_7d
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE {_SQL_REAL_BOOKING}
+            """
+        ),
+    )
+    row = r.fetchone() or (0, 0, 0, 0)
+    sessions_7d = int(row[0] or 0)
+    sessions_prev_7d = int(row[1] or 0)
+    trainers_live_7d = int(row[2] or 0)
+    trainers_live_prev_7d = int(row[3] or 0)
+
+    mrr_cents = 0
+    paid_subs = 0
+    revenue_7d_cents = 0
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH active_paid AS (
+                    SELECT id, trainer_id, plan_id, billing_period_months, started_at, expires_at
+                    FROM trainer_subscriptions
+                    WHERE status = :s_active
+                      AND expires_at > CURRENT_TIMESTAMP
+                      AND started_at <= CURRENT_TIMESTAMP
+                ),
+                latest_inv AS (
+                    SELECT DISTINCT ON (ap.id)
+                        ap.id AS sub_id,
+                        inv.amount_cents,
+                        COALESCE(
+                            NULLIF(inv.checkout_billing_period_months, 0),
+                            NULLIF(ap.billing_period_months, 0),
+                            1
+                        ) AS months
+                    FROM active_paid ap
+                    JOIN trainer_invoices inv
+                      ON inv.trainer_id = ap.trainer_id
+                     AND inv.subscription_plan_id = ap.plan_id
+                     AND inv.status = 'paid'
+                     AND inv.paid_at IS NOT NULL
+                     AND inv.paid_at <= ap.started_at + INTERVAL '2 days'
+                    ORDER BY ap.id, inv.paid_at DESC
+                )
+                SELECT
+                    COALESCE(SUM(amount_cents::numeric / NULLIF(months, 0)), 0)::bigint,
+                    COUNT(*)::int
+                FROM latest_inv
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        row = r.fetchone() or (0, 0)
+        mrr_cents = int(row[0] or 0)
+        paid_subs = int(row[1] or 0)
+        r = await session.execute(
+            text(
+                """
+                SELECT COALESCE(SUM(amount_cents), 0)::bigint
+                FROM trainer_invoices
+                WHERE status = 'paid'
+                  AND paid_at IS NOT NULL
+                  AND paid_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                """
+            ),
+        )
+        revenue_7d_cents = int((r.scalar() or 0) or 0)
+    except ProgrammingError:
+        pass
+
+    ghost_trainers_count = 0
+    r = await session.execute(
+        text(
+            f"""
+            SELECT COUNT(*)::int
+            FROM trainers t
+            LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+            WHERE t.status = 'pending_profile'
+              AND t.telegram_id IS NULL
+              AND t.moderation_submitted_at IS NULL
+              AND {_SQL_TRAINER_DISPLAY_NAME} IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id
+              )
+            """
+        ),
+    )
+    ghost_trainers_count = int((r.scalar() or 0) or 0)
+
+    action_moderation: list[dict] = []
+    mod_ids = await list_trainer_ids_eligible_for_admin_moderation(session)
+    if mod_ids:
+        r = await session.execute(
+            text(
+                f"""
+                SELECT t.id, {_SQL_TRAINER_DISPLAY_NAME} AS name, t.moderation_submitted_at
+                FROM trainers t
+                LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+                WHERE t.id IN :ids
+                ORDER BY t.moderation_submitted_at DESC NULLS LAST, t.id DESC
+                """
+            ).bindparams(bindparam("ids", expanding=True)),
+            {"ids": tuple(int(i) for i in mod_ids)},
+        )
+        for tid, name, submitted_at in r.fetchall():
+            action_moderation.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "submitted_at": _pulse_iso(submitted_at),
+                }
+            )
+
+    action_expiring_paid: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                f"""
+                SELECT DISTINCT ON (ts.trainer_id)
+                    ts.trainer_id,
+                    {_SQL_TRAINER_DISPLAY_NAME} AS name,
+                    ts.expires_at,
+                    EXTRACT(EPOCH FROM (ts.expires_at - CURRENT_TIMESTAMP))::bigint AS seconds_left
+                FROM trainer_subscriptions ts
+                LEFT JOIN trainer_profiles p ON p.trainer_id = ts.trainer_id
+                WHERE ts.status = :s_active
+                  AND ts.expires_at > CURRENT_TIMESTAMP
+                  AND ts.expires_at <= CURRENT_TIMESTAMP + INTERVAL '7 days'
+                ORDER BY ts.trainer_id, ts.expires_at ASC
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        rows = sorted(r.fetchall(), key=lambda x: x[2])
+        for tid, name, expires_at, seconds_left in rows[:10]:
+            action_expiring_paid.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "expires_at": _pulse_iso(expires_at),
+                    "days_left": max(0, int((seconds_left or 0) // 86400)),
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    action_sleeping_paid: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                f"""
+                SELECT
+                    t.id,
+                    {_SQL_TRAINER_DISPLAY_NAME} AS name,
+                    lb.last_slot
+                FROM trainers t
+                JOIN trainer_subscriptions ts
+                  ON ts.trainer_id = t.id
+                 AND ts.status = :s_active
+                 AND ts.expires_at > CURRENT_TIMESTAMP
+                 AND ts.started_at <= CURRENT_TIMESTAMP
+                LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+                LEFT JOIN LATERAL (
+                    SELECT MAX(s.slot_date) AS last_slot
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = t.id AND {_SQL_REAL_BOOKING}
+                ) lb ON true
+                WHERE t.status = 'active'
+                  AND (lb.last_slot IS NULL OR lb.last_slot < CURRENT_DATE - INTERVAL '14 days')
+                ORDER BY lb.last_slot ASC NULLS FIRST, t.id
+                LIMIT 10
+                """
+            ),
+            {"s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        today = date.today()
+        for tid, name, last_slot in r.fetchall():
+            days_since = None
+            if last_slot is not None:
+                days_since = max(0, (today - last_slot).days)
+            action_sleeping_paid.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "last_booking_date": last_slot.isoformat() if last_slot else None,
+                    "days_since": days_since,
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    live_trainers: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                f"""
+                SELECT
+                    t.id,
+                    {_SQL_TRAINER_DISPLAY_NAME} AS name,
+                    COALESCE(rb.bookings_7d, 0)::int AS bookings_7d,
+                    rb.last_slot,
+                    sub.status AS plan_status,
+                    sub.expires_at
+                FROM trainers t
+                LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+                LEFT JOIN LATERAL (
+                    SELECT
+                        COUNT(*) FILTER (
+                            WHERE s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
+                              AND s.slot_date <= CURRENT_DATE
+                        )::int AS bookings_7d,
+                        MAX(s.slot_date) AS last_slot
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = t.id AND {_SQL_REAL_BOOKING}
+                ) rb ON true
+                LEFT JOIN LATERAL (
+                    SELECT ts.status, ts.expires_at
+                    FROM trainer_subscriptions ts
+                    WHERE ts.trainer_id = t.id
+                      AND ts.expires_at > CURRENT_TIMESTAMP
+                      AND ts.status IN (:s_trial, :s_active)
+                    ORDER BY CASE ts.status WHEN 'active' THEN 0 ELSE 1 END, ts.expires_at DESC
+                    LIMIT 1
+                ) sub ON true
+                WHERE t.status = 'active'
+                  AND (
+                      COALESCE(rb.bookings_7d, 0) > 0
+                      OR rb.last_slot >= CURRENT_DATE - INTERVAL '30 days'
+                      OR sub.status IS NOT NULL
+                  )
+                ORDER BY COALESCE(rb.bookings_7d, 0) DESC, rb.last_slot DESC NULLS LAST, t.id DESC
+                LIMIT 15
+                """
+            ),
+            {"s_trial": SUBSCRIPTION_STATUS_TRIAL, "s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        for tid, name, bookings_7d, last_slot, plan_status, expires_at in r.fetchall():
+            live_trainers.append(
+                {
+                    "trainer_id": int(tid),
+                    "display_name": (name or f"Тренер #{tid}").strip(),
+                    "bookings_7d": int(bookings_7d or 0),
+                    "last_booking_date": last_slot.isoformat() if last_slot else None,
+                    "plan": "paid" if plan_status == SUBSCRIPTION_STATUS_ACTIVE else (
+                        "trial" if plan_status == SUBSCRIPTION_STATUS_TRIAL else "none"
+                    ),
+                    "expires_at": _pulse_iso(expires_at),
+                    "has_booking": int(bookings_7d or 0) > 0 or last_slot is not None,
+                    "stage_label_ru": "Активен",
+                    "weekly_template_count": 0,
+                    "client_invite_link_first_copied_at": None,
+                    "status": "active",
+                    "stage_key": "active",
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    action_count = (
+        len(action_moderation)
+        + len(action_expiring_paid)
+        + len(action_sleeping_paid)
+    )
+    return {
+        "sessions_7d": sessions_7d,
+        "sessions_prev_7d": sessions_prev_7d,
+        "trainers_live_7d": trainers_live_7d,
+        "trainers_live_prev_7d": trainers_live_prev_7d,
+        "mrr_cents": mrr_cents,
+        "revenue_paid_7d_cents": revenue_7d_cents,
+        "active_paid_subscriptions": paid_subs,
+        "ghost_trainers_count": ghost_trainers_count,
+        "action_moderation": action_moderation,
+        "action_expiring_paid": action_expiring_paid,
+        "action_sleeping_paid": action_sleeping_paid,
+        "action_count": action_count,
+        "live_trainers": live_trainers,
+    }
 
 # Align hub MTD «today» with slot_date / trainer-facing calendar (Belarus).
 HUB_REVENUE_TZ = ZoneInfo("Europe/Minsk")
@@ -988,7 +1311,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     trainers_by_status = {row[0]: row[1] for row in r.fetchall()}
     trainers_total = sum(trainers_by_status.values())
     # Same eligibility as admin /pending — not every pending_profile row is in the queue.
-    trainers_pending_moderation = await count_trainers_eligible_for_admin_moderation(session)
+    trainers_pending_moderation = 0
     trainers_active = trainers_by_status.get("active", 0)
     trainers_with_telegram = 0  # active and linked
     if trainers_active:
@@ -1186,34 +1509,19 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     alerts: list[dict] = []
     # High cancellation rate (as signal, not strict error)
     cancel_rate_7d = round(100 * cancelled_7d / bookings_7d, 0) if bookings_7d else None
-    cancel_rate_30d = round(100 * cancelled_30d / bookings_30d, 0) if bookings_30d else None
 
     if trainers_pending_moderation > 0:
         alerts.append({"type": "moderation", "title": "Модерация", "description": f"{trainers_pending_moderation} тренеров ждут проверки"})
-    if requests_open_now > 0:
-        alerts.append({"type": "requests", "title": "Заявки", "description": f"{requests_open_now} заявок без отклика"})
-    if requests_stale > 0:
-        alerts.append({"type": "stale", "title": "Старые заявки", "description": f"{requests_stale} заявок без ответа более 7 дней"})
     if support_new > 0:
         alerts.append({"type": "support", "title": "Поддержка", "description": f"{support_new} новых обращений"})
     if bookings_7d == 0 and trainers_active > 0:
         alerts.append({"type": "no_bookings", "title": "Нет записей", "description": "За 7 дней ни одной записи при активных тренерах"})
-    if conversion_pct is not None and requests_30d >= 3 and conversion_pct < 50:
-        alerts.append({"type": "conversion", "title": "Низкая конверсия", "description": f"Заявки → отклик: {int(conversion_pct)}%"})
     if cancel_rate_7d is not None and bookings_7d >= 5 and cancel_rate_7d >= 30:
         alerts.append(
             {
                 "type": "cancellations_high_7d",
                 "title": "Много отмен/отказов (7 дней)",
                 "description": f"{cancelled_7d} за 7 дней по дате слота ({int(cancel_rate_7d)}% записей в окне)",
-            }
-        )
-    if cancel_rate_30d is not None and bookings_30d >= 10 and cancel_rate_30d >= 30:
-        alerts.append(
-            {
-                "type": "cancellations_high_30d",
-                "title": "Много отмен/отказов (30 дней)",
-                "description": f"{cancelled_30d} за 30 дней по дате слота ({int(cancel_rate_30d)}%)",
             }
         )
 
@@ -1339,57 +1647,38 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         activation_stage_counts[k] = int(cnt or 0)
 
     trainers_activation: list[dict] = []
-    r_rows = await session.execute(
-        text(
-            f"""
-            SELECT
-                t.id,
-                t.status,
-                NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '')
-                    AS display_name,
-                (SELECT COUNT(*)::int FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id) AS template_count,
-                EXISTS(
-                    SELECT 1 FROM bookings b
-                    WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
-                      AND NOT b.is_sandbox
-                ) AS has_booking,
-                t.client_invite_link_first_copied_at AS invite_copied_at,
-                {_SHARED_INVITE_SQL} AS shared_client_invite,
-                ({_TRAINER_ACTIVATION_STAGE_CASE.strip()}) AS stage_key
-            FROM trainers t
-            LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
-            ORDER BY t.id DESC
-            LIMIT 400
-            """
-        ),
+    pulse = await _admin_overview_pulse(session)
+    trainers_pending_moderation = len(pulse["action_moderation"])
+    trainers_activation = pulse["live_trainers"]
+    pulse["action_count"] = (
+        len(pulse["action_moderation"])
+        + int(support_new or 0)
+        + len(pulse["action_expiring_paid"])
+        + len(pulse["action_sleeping_paid"])
     )
-    for row in r_rows.fetchall():
-        tid, st, name, tpl_cnt, has_book, invite_at, shared_invite, stage_key = (
-            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
-        )
-        sk = str(stage_key or "other")
-        invite_iso = invite_at.isoformat() if invite_at is not None else None
-        base_label = ACTIVATION_STAGE_LABEL_RU.get(sk, ACTIVATION_STAGE_LABEL_RU["other"])
-        if sk == "active":
-            if invite_iso or shared_invite:
-                base_label = (
-                    f"{base_label} · ссылку для клиентов копировали или клиенты уже в боте"
-                    if invite_iso
-                    else f"{base_label} · клиенты в боте (копирование в приложении не зафиксировано)"
-                )
-            else:
-                base_label = f"{base_label} · копирование ссылки и клиенты в боте не зафиксированы"
-        trainers_activation.append(
+    if trainers_pending_moderation > 0:
+        alerts.insert(
+            0,
             {
-                "trainer_id": int(tid),
-                "status": str(st or ""),
-                "display_name": (name or f"Тренер #{tid}").strip(),
-                "stage_key": sk,
-                "stage_label_ru": base_label,
-                "weekly_template_count": int(tpl_cnt or 0),
-                "has_booking": bool(has_book),
-                "client_invite_link_first_copied_at": invite_iso,
-                "shared_client_invite": bool(shared_invite),
+                "type": "moderation",
+                "title": "Модерация",
+                "description": f"{trainers_pending_moderation} тренеров ждут проверки",
+            },
+        )
+    if pulse["action_expiring_paid"]:
+        alerts.append(
+            {
+                "type": "expiring",
+                "title": "Истекают платные",
+                "description": f"{len(pulse['action_expiring_paid'])} подписок ≤7 дней",
+            }
+        )
+    if pulse["action_sleeping_paid"]:
+        alerts.append(
+            {
+                "type": "sleeping_paid",
+                "title": "Платящие молчат",
+                "description": f"{len(pulse['action_sleeping_paid'])} без записи >14 дней",
             }
         )
 
@@ -1441,4 +1730,17 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "trainers_activation": trainers_activation,
         "activation_stage_labels_ru": ACTIVATION_STAGE_LABEL_RU,
         "activation_stage_order": list(ACTIVATION_STAGE_ORDER),
+        "sessions_7d": pulse["sessions_7d"],
+        "sessions_prev_7d": pulse["sessions_prev_7d"],
+        "trainers_live_7d": pulse["trainers_live_7d"],
+        "trainers_live_prev_7d": pulse["trainers_live_prev_7d"],
+        "mrr_cents": pulse["mrr_cents"],
+        "revenue_paid_7d_cents": pulse["revenue_paid_7d_cents"],
+        "active_paid_subscriptions": pulse["active_paid_subscriptions"],
+        "ghost_trainers_count": pulse["ghost_trainers_count"],
+        "action_moderation": pulse["action_moderation"],
+        "action_expiring_paid": pulse["action_expiring_paid"],
+        "action_sleeping_paid": pulse["action_sleeping_paid"],
+        "action_count": pulse["action_count"],
+        "live_trainers": pulse["live_trainers"],
     }

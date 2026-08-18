@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: #12212b;
+  background: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+.muted { color: #5b6b76; }
+.accent { color: #0f766e; }
+strong { font-weight: 700; }
+.rule { height: 3px; width: 64px; background: #0f766e; border-radius: 2px; }
+.pill {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 1px solid #d8e0e3;
+  border-radius: 999px;
+  font-size: 15px;
+  color: #12212b;
+  background: #fbfdfd;
+}
+.pill-accent {
+  background: #e6f2f0;
+  border-color: #e6f2f0;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.card {
+  width: 1600px;
+  height: 900px;
+  padding: 72px 80px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.card::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 10px;
+  background: #0f766e;
+}
+.kicker {
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #0f766e;
+  font-weight: 700;
+}
+h1 { font-size: 54px; line-height: 1.1; margin-top: 14px; font-weight: 800; }
+.sub { font-size: 24px; color: #5b6b76; margin-top: 14px; max-width: 1180px; line-height: 1.45; }
+.flow {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  margin-top: 46px;
+}
+.node {
+  flex: 1;
+  border: 2px solid #d8e0e3;
+  border-radius: 16px;
+  padding: 22px 20px;
+  background: #fbfdfd;
+}
+.node .n-title { font-size: 22px; font-weight: 700; }
+.node .n-body { font-size: 17px; color: #5b6b76; margin-top: 10px; line-height: 1.45; }
+.node.hl { border-color: #0f766e; background: #e6f2f0; }
+.node.hl .n-body { color: #24564f; }
+.arrow {
+  align-self: center;
+  font-size: 30px;
+  color: #0f766e;
+  font-weight: 700;
+}
+.bullets {
+  margin-top: 46px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 44px;
+}
+.bullet { font-size: 21px; line-height: 1.45; padding-left: 26px; position: relative; }
+.bullet::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 11px;
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  background: #0f766e;
+}
+.foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 19px;
+  color: #5b6b76;
+  border-top: 1px solid #d8e0e3;
+  padding-top: 22px;
+}
+.stack { display: flex; gap: 10px; flex-wrap: wrap; }
+</style></head>
+<body><div class="card">
+  <div class="kicker">Service · Backend architecture &amp; APIs</div>
+  <h1>Async Python services built for real traffic</h1>
+  <div class="sub">FastAPI and Django/DRF services with clear boundaries, async I/O where it actually helps, and migrations performed on live systems without downtime.</div>
+  <div class="flow"><div class="node hl"><div class="n-title">API layer</div><div class="n-body">FastAPI, OpenAPI contracts, validation with Pydantic</div></div><div class="arrow">&rarr;</div><div class="node"><div class="n-title">Domain</div><div class="n-body">Use cases isolated from frameworks and vendors</div></div><div class="arrow">&rarr;</div><div class="node"><div class="n-title">Adapters</div><div class="n-body">PostgreSQL, Redis, external APIs behind ports</div></div><div class="arrow">&rarr;</div><div class="node hl"><div class="n-title">Workers</div><div class="n-body">Async and background processing off the request path</div></div></div>
+  <div class="bullets"><div class="bullet">Hexagonal boundaries so vendors and databases stay replaceable</div><div class="bullet">Idempotent write paths on money, status and compliance flows</div><div class="bullet">Django &rarr; FastAPI migration executed on a live product</div><div class="bullet">SQL and schema tuning on hot paths, cached read models in Redis</div><div class="bullet">pytest coverage on domain and integration scenarios</div><div class="bullet">CI/CD, containerised releases and health probes from day one</div></div>
+  <div class="foot">
+    <div class="stack"><span class="pill">Python</span><span class="pill">FastAPI</span><span class="pill">Django / DRF</span><span class="pill">Pydantic</span><span class="pill">SQLAlchemy</span><span class="pill">PostgreSQL</span><span class="pill">Redis</span><span class="pill">pytest</span><span class="pill">Docker</span><span class="pill">GitLab CI</span></div>
+    <div>6+ years &middot; regulated and high-load products</div>
+  </div>
+</div></body></html>

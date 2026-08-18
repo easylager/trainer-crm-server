@@ -12,6 +12,7 @@ from aiogram.enums import ParseMode
 from src.bot.admin_bot_commands import register_admin_bot_commands
 from src.bot.handlers.admin_handlers import router as admin_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
+from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
 from src.shared.config import Settings
 from src.shared.sentry_init import init_sentry
 from src.shared.rate_limit import RateLimiter
@@ -43,6 +44,7 @@ async def main() -> None:
         window_sec=settings.rate_limit_window_sec,
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
+    dp.update.outer_middleware(ServiceUnavailableMiddleware())
     dp.include_router(admin_router)
     logger.info("Admin bot polling started")
     await dp.start_polling(bot)

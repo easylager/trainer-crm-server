@@ -2275,6 +2275,11 @@ TRAINER_WELCOME_TRIAL_ACTIVATED = (
     "Когда пробный период закончится, собери свой план в разделе "
     "<b>«Подписка»</b> в «Обзор» — оставь только то, что реально используешь."
 )
+TRAINER_WELCOME_PAID_GRANT_ACTIVATED = (
+    "💳 <b>Подписка активирована — {label}</b>\n\n"
+    "Доступ открыт до <b>{expires_date}</b>. Срок считается с момента открытия этой ссылки.\n\n"
+    "Управлять модулями и продлением можно в разделе <b>«Подписка»</b> в «Обзор»."
+)
 TRAINER_FALLBACK = "Нажми «Обзор» слева от поля ввода — там все разделы. Помощь: /guide"
 
 # Trainer: errors and hints
@@ -2456,6 +2461,7 @@ ADMIN_START = (
     "/dicts — города и арены\n"
     "/subscription_invoices — заявки на подписку (ERIP)\n"
     "/grant_subscription — выдать подписку тренеру\n"
+    "/trainer_welcome_link — ссылка тренеру (trial или подписка)\n"
     "/collective_draft — студия: черновик + claim-ссылка owner\n"
     "/collective_sub — студия: pool-подписка (grant / status)\n"
     "/problem_reports — аудит отчётов «проблема с клиентом»\n\n"
@@ -3693,21 +3699,38 @@ ADMIN_WELCOME_TRIAL_DAYS_INVALID = "Укажите целое число дне�
 
 ADMIN_TRAINER_WELCOME_LINK_HELP = (
     "<b>Welcome-ссылка в тренерский бот</b>\n\n"
-    "• <b>Новый тренер</b> — отправьте команду одну: <code>/trainer_welcome_link</code> "
+    "Команда открывает <b>конструктор</b>: пробный период или готовая подписка.\n\n"
+    "• <b>Новый тренер</b> — <code>/trainer_welcome_link</code> "
     "(создаётся черновик профиля и одноразовая ссылка; срок токена по умолчанию 14 дн.).\n"
     "• <b>Новый тренер, свой срок токена</b> — "
     "<code>/trainer_welcome_link new 30</code> (1–365 дней).\n"
     "• <b>Уже есть профиль</b> — повторная ссылка: "
-    "<code>/trainer_welcome_link 42</code> или <code>/trainer_welcome_link 42 60</code> "
-    "(id из базы / карточки модерации).\n\n"
-    "<b>Зачем id:</b> только если тренер уже заведён в системе, а ссылка сгорела или истекла — "
-    "новому человеку id не нужен."
+    "<code>/trainer_welcome_link 42</code> или <code>/trainer_welcome_link 42 60</code>.\n\n"
+    "Подписка из конструктора активируется <b>при первом открытии</b> ссылки "
+    "(срок не тикает заранее). Пробный период — стандартный welcome trial "
+    "(длительность: <code>/welcome_trial_days</code>)."
 )
 ADMIN_TRAINER_WELCOME_LINK_NO_TRAINER = "Тренер с таким id не найден."
 ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS = (
     "Нужен числовой id тренера или формат <code>/trainer_welcome_link new 30</code>. "
     "Справка: <code>/trainer_welcome_link help</code>"
 )
+ADMIN_TRAINER_WELCOME_LINK_CHOOSE = (
+    "🔗 <b>Welcome-ссылка</b>{target}\n\n"
+    "Срок действия самой ссылки: <b>{expire_days}</b> дн.\n\n"
+    "Что выдать тренеру при первом открытии?"
+)
+ADMIN_TRAINER_WELCOME_LINK_TARGET_NEW = " для <b>нового</b> тренера"
+ADMIN_TRAINER_WELCOME_LINK_TARGET_EXISTING = " для тренера <code>#{trainer_id}</code>"
+ADMIN_TRAINER_WELCOME_LINK_PAID_EDITOR = (
+    "💳 <b>Подписка для welcome-ссылки</b>{target}\n\n"
+    "CRM (база) всегда включена. Отметьте модули и срок — "
+    "подписка активируется, когда тренер откроет ссылку.\n\n"
+    "<b>Модули:</b> {modules_line}\n"
+    "<b>Срок:</b> {months} мес.\n"
+    "<b>Ориентир цены:</b> {amount_byn} BYN"
+)
+ADMIN_TRAINER_WELCOME_LINK_CANCELLED = "Выдача welcome-ссылки отменена."
 ADMIN_TRAINER_WELCOME_LINK_NEW_INTRO = (
     "✨ <b>Новый тренер в системе</b>\n"
     "Профиль (черновик): <code>#{trainer_id}</code> — id для вас в админке и поиске; "
@@ -3715,7 +3738,8 @@ ADMIN_TRAINER_WELCOME_LINK_NEW_INTRO = (
 )
 ADMIN_TRAINER_WELCOME_LINK_ISSUED = (
     "🔗 <b>Welcome-ссылка для тренера #{trainer_id}</b>\n\n"
-    "Действует до: <b>{expires}</b> (одноразовая)\n\n"
+    "При открытии: <b>{grant_label}</b>\n"
+    "Ссылка действует до: <b>{expires}</b> (одноразовая)\n\n"
     "{link_block}"
 )
 ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME = (
@@ -3888,3 +3912,9 @@ ADMIN_SUPPORT_REPLY_CANCELLED = "Отменено."
 
 # Shared (rate limit)
 RATE_LIMIT_MESSAGE = "Слишком много запросов. Подождите минуту и попробуйте снова."
+
+# DB / platform outage — bots (not Mini App). Same meaning as API code=service_unavailable.
+SERVICE_UNAVAILABLE_USER = (
+    "Сейчас ведутся технические работы. Попробуйте через несколько минут — "
+    "записи и расписание на месте."
+)

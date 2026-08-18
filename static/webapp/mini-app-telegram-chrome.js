@@ -520,6 +520,139 @@ window.wireHubSlotMessageButtons = function (root) {
       .catch(function () {});
   }
 
+  var OUTAGE_OVERLAY_ID = 'miniAppOutageOverlay';
+  var outageOverlayShown = false;
+  var outagePollTimer = 0;
+
+  function isAppApiUrl(url) {
+    var s = String(url || '');
+    return s.indexOf('/api/webapp') >= 0 || s.indexOf('/api/public') >= 0 || s.indexOf('/api/admin') >= 0;
+  }
+
+  function hideHubSkeleton() {
+    try {
+      var sk = document.getElementById('skeleton');
+      if (sk) sk.style.display = 'none';
+      var body = document.body;
+      if (body && body.classList) body.classList.remove('hub-body--loading');
+    } catch (e2) {}
+  }
+
+  function ensureOutageStyles() {
+    if (document.getElementById('miniAppOutageStyles')) return;
+    var css = document.createElement('style');
+    css.id = 'miniAppOutageStyles';
+    css.textContent =
+      '#miniAppOutageOverlay{position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-start;justify-content:center;' +
+      'padding:max(20px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));overflow-y:auto;' +
+      'background:var(--tg-theme-bg-color,var(--miniapp-bg,#0b1220));color:var(--tg-theme-text-color,var(--miniapp-text,#e8eef7));' +
+      'font-family:var(--app-font-sans,system-ui,-apple-system,sans-serif);box-sizing:border-box}' +
+      '#miniAppOutageOverlay .mini-app-outage__card{width:100%;max-width:400px;margin:12vh auto 0;padding:22px 18px 20px;' +
+      'border-radius:16px;background:var(--tg-theme-secondary-bg-color,var(--miniapp-secondary-bg,#152033));' +
+      'box-shadow:0 2px 12px rgba(0,0,0,.12);box-sizing:border-box}' +
+      '#miniAppOutageOverlay .mini-app-outage__icon{font-size:32px;line-height:1;text-align:center;margin-bottom:10px}' +
+      '#miniAppOutageOverlay .mini-app-outage__title{margin:0 0 10px;font-size:18px;font-weight:700;text-align:center}' +
+      '#miniAppOutageOverlay .mini-app-outage__hint{margin:0 0 16px;font-size:14px;line-height:1.45;opacity:.88;text-align:center}' +
+      '#miniAppOutageOverlay .mini-app-outage__btn{display:block;width:100%;border:0;border-radius:12px;padding:12px 16px;' +
+      'font-size:15px;font-weight:600;cursor:pointer;background:var(--tg-theme-button-color,var(--miniapp-button,#3390ec));' +
+      'color:var(--tg-theme-button-text-color,var(--miniapp-button-text,#fff))}';
+    (document.head || document.documentElement).appendChild(css);
+  }
+
+  function pollUntilReady(origFetch) {
+    if (outagePollTimer) return;
+    outagePollTimer = global.setTimeout(function tick() {
+      outagePollTimer = 0;
+      origFetch('/health/ready', { cache: 'no-store' })
+        .then(function (r) {
+          if (r && r.ok) {
+            try { global.location.reload(); } catch (e) { global.location.href = global.location.href.split('#')[0]; }
+            return;
+          }
+          outagePollTimer = global.setTimeout(tick, 15000);
+        })
+        .catch(function () {
+          outagePollTimer = global.setTimeout(tick, 15000);
+        });
+    }, 15000);
+  }
+
+  function showOutageOverlay(origFetch) {
+    if (outageOverlayShown) return;
+    outageOverlayShown = true;
+    overlayShown = true;
+    ensureOutageStyles();
+    hideHubSkeleton();
+    var existing = document.getElementById(OUTAGE_OVERLAY_ID);
+    var el = existing || document.createElement('div');
+    el.id = OUTAGE_OVERLAY_ID;
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-live', 'assertive');
+    el.innerHTML =
+      '<div class="mini-app-outage__card">' +
+      '<div class="mini-app-outage__icon" aria-hidden="true">🛠️</div>' +
+      '<h2 class="mini-app-outage__title">Ведутся технические работы</h2>' +
+      '<p class="mini-app-outage__hint">Записи и расписание на месте. Обычно это занимает несколько минут — нажмите «Обновить» или подождите, приложение откроется само.</p>' +
+      '<button type="button" class="mini-app-outage__btn" data-miniapp-outage="reload">Обновить</button>' +
+      '</div>';
+    if (!existing) {
+      var mount = document.body || document.documentElement;
+      mount.appendChild(el);
+    }
+    var btn = el.querySelector('[data-miniapp-outage="reload"]');
+    if (btn) {
+      btn.onclick = function () {
+        try { global.location.reload(); } catch (e) { global.location.href = global.location.href.split('#')[0]; }
+      };
+    }
+    if (typeof origFetch === 'function') pollUntilReady(origFetch);
+  }
+
+  function inspectOutage(url, res, origFetch) {
+    if (!res || !isAppApiUrl(url)) return;
+    var status = res.status;
+    if (status === 502 || status === 504) {
+      showOutageOverlay(origFetch);
+      return;
+    }
+    if (status !== 503) return;
+    var marked = '';
+    try {
+      marked = res.headers.get('X-Ice-Studio-Outage') || '';
+    } catch (eH) {
+      marked = '';
+    }
+    if (marked === 'service_unavailable') {
+      showOutageOverlay(origFetch);
+      return;
+    }
+    var ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.indexOf('application/json') === -1) {
+      showOutageOverlay(origFetch);
+      return;
+    }
+    res
+      .clone()
+      .json()
+      .then(function (body) {
+        var code = body && body.code ? String(body.code) : '';
+        var det = body && body.detail;
+        var ds = typeof det === 'string' ? det : '';
+        var msg = body && body.message ? String(body.message) : '';
+        if (
+          code === 'service_unavailable' ||
+          /database unavailable|техническ/i.test(ds) ||
+          /техническ/i.test(msg)
+        ) {
+          showOutageOverlay(origFetch);
+        }
+      })
+      .catch(function () {
+        showOutageOverlay(origFetch);
+      });
+  }
+
   function installFetchGuard() {
     if (fetchGuardInstalled) return;
     fetchGuardInstalled = true;
@@ -534,7 +667,12 @@ window.wireHubSlotMessageButtons = function (root) {
       }
       return orig.apply(this, arguments).then(function (res) {
         inspectUnauthorized(url, res);
+        inspectOutage(url, res, orig);
         return res;
+      }).catch(function (err) {
+        if (err && err.name === 'AbortError') throw err;
+        if (isAppApiUrl(url)) showOutageOverlay(orig);
+        throw err;
       });
     };
   }
@@ -542,6 +680,7 @@ window.wireHubSlotMessageButtons = function (root) {
   global.MiniAppErrorUi = {
     humanizeDetail: humanizeDetail,
     showRecoverableOverlay: showRecoverableOverlay,
+    showOutageOverlay: function () { showOutageOverlay(global.fetch); },
     installFetchGuard: installFetchGuard,
   };
 

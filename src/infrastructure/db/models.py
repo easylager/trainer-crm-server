@@ -129,6 +129,15 @@ class TrainerLinkToken(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optional entitlement attached by admin constructor at issue time; applied on first open.
+    # welcome_grant_kind: 'trial' | 'paid' | NULL (legacy → trial on open).
+    welcome_grant_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    welcome_grant_modules: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    welcome_grant_period_months: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    welcome_grant_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    welcome_grant_applied_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     trainer: Mapped[Optional["Trainer"]] = relationship(back_populates="link_tokens", lazy="raise")
 
