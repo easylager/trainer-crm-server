@@ -71,8 +71,8 @@
 
 ```bash
 # В .env задайте BACKUP_* (не коммитьте)
-sudo apt-get install postgresql-client   # или brew install libpq
-pip install boto3
+# pg_dump major must match prod Postgres (Railway PG 18 → postgresql-client-18)
+brew install libpq@18   # macOS
 python scripts/ops/backup_postgres.py
 ```
 
