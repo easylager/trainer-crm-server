@@ -102,12 +102,19 @@ from src.application.lead_mode_recovery_use_cases import (
     compute_due_nudges,
     mark_nudge_sent,
 )
+from src.application.care_pulse_use_cases import (
+    claim_care_pulse,
+    is_within_care_pulse_window,
+    list_due_care_pulses,
+)
 from src.application.trial_roi_recap_use_cases import (
     get_trial_roi_recap,
     list_trial_roi_recap_due,
     mark_trial_roi_recap_sent,
 )
 from src.infrastructure.db.models import (
+    CARE_PULSE_AUDIENCE_CLIENT,
+    CARE_PULSE_AUDIENCE_TRAINER,
     RECOVERY_STEP_D0,
     RECOVERY_STEP_D3,
     RECOVERY_STEP_D14,
@@ -617,6 +624,8 @@ DIGEST_LOOP_INTERVAL_SEC = 60
 # Grace window after a trainer's send_at during which we may still fire today's digest
 # (covers service restarts, short outages). After this we skip until tomorrow.
 DIGEST_SEND_GRACE_MIN = 120
+# Care pulse: lunch window only; 5 min tick is enough for a 2-hour slot.
+CARE_PULSE_INTERVAL_SEC = 5 * 60
 
 
 def _slot_display_strings(slot_date, start_time):
@@ -2726,5 +2735,113 @@ async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
 
         try:
             await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
+
+
+def _care_pulse_trainer_keyboard() -> InlineKeyboardMarkup | None:
+    """Single CTA into trainer hub. None if webapp is not HTTPS."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_MENU_BUTTON_HUB,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home"),
+                )
+            ]
+        ]
+    )
+
+
+def _care_pulse_client_keyboard(kind: str) -> InlineKeyboardMarkup | None:
+    from src.infrastructure.db.models import CARE_PULSE_KIND_INVITE_BACK
+
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    if kind == CARE_PULSE_KIND_INVITE_BACK:
+        url = f"{base}/webapp/catalog"
+        label = msg.CARE_PULSE_CLIENT_BTN_CATALOG
+    else:
+        url = f"{base}/webapp/client-bookings"
+        label = msg.CARE_PULSE_CLIENT_BTN_BOOKINGS
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]
+        ]
+    )
+
+
+async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
+    """
+    Lunch-window presence check-in. Fills the quiet gap so bots stay in the chat
+    without competing with digest / reminders / booking pushes.
+    """
+    from src.application.trainer_digest_use_cases import now_minsk
+    from src.bot.care_pulse_format import format_care_pulse_html
+
+    logger.info("[care_pulse_loop] started")
+    while True:
+        try:
+            now = now_minsk()
+            if is_within_care_pulse_window(now):
+                async with async_session_factory() as session:
+                    due = await list_due_care_pulses(session, now)
+                    for pulse in due:
+                        if pulse.audience == CARE_PULSE_AUDIENCE_TRAINER:
+                            if not await is_trainer_push_allowed_now(session, pulse.recipient_id):
+                                continue
+                            bot = trainer_bot
+                            kb = _care_pulse_trainer_keyboard()
+                        elif pulse.audience == CARE_PULSE_AUDIENCE_CLIENT:
+                            if not is_within_notification_hours():
+                                continue
+                            bot = client_bot
+                            kb = _care_pulse_client_keyboard(pulse.kind)
+                        else:
+                            continue
+                        text_body = format_care_pulse_html(
+                            audience=pulse.audience,
+                            kind=pulse.kind,
+                            payload=pulse.payload,
+                        )
+                        if not text_body:
+                            continue
+                        claimed = await claim_care_pulse(
+                            session,
+                            audience=pulse.audience,
+                            recipient_id=pulse.recipient_id,
+                            kind=pulse.kind,
+                            context_key=pulse.context_key,
+                        )
+                        if not claimed:
+                            continue
+                        try:
+                            await bot.send_message(
+                                chat_id=pulse.telegram_id,
+                                text=text_body,
+                                parse_mode="HTML",
+                                reply_markup=kb,
+                                disable_web_page_preview=True,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Care pulse %s to %s %s: %s",
+                                pulse.kind,
+                                pulse.audience,
+                                pulse.telegram_id,
+                                e,
+                            )
+        except asyncio.CancelledError:
+            logger.info("[care_pulse_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Care pulse loop: %s", e)
+
+        try:
+            await asyncio.sleep(CARE_PULSE_INTERVAL_SEC)
         except asyncio.CancelledError:
             break

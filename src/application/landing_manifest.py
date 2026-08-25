@@ -46,8 +46,9 @@ def load_landing_manifest(settings: Settings | None = None) -> dict[str, Any]:
 
 def public_landing_config(settings: Settings | None = None) -> dict[str, Any]:
     """Public slice for API and client hydration — no secrets."""
-    m = load_landing_manifest(settings)
-    return {
+    s = settings or Settings()
+    m = load_landing_manifest(s)
+    out: dict[str, Any] = {
         "vertical": m.get("vertical"),
         "market": m.get("market"),
         "brand": m.get("brand"),
@@ -63,6 +64,12 @@ def public_landing_config(settings: Settings | None = None) -> dict[str, Any]:
         "footer": m.get("footer"),
         "registration_enabled": m.get("registration_enabled"),
     }
+    if m.get("registration_enabled"):
+        uname = (s.trainer_bot_username or "").strip().lstrip("@")
+        if uname:
+            out["join_url"] = "/join"
+            out["telegram_join_url"] = f"https://t.me/{uname}?start=join"
+    return out
 
 
 def inject_landing_html(html: str, settings: Settings | None = None) -> str:

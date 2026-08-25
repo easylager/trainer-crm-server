@@ -6,6 +6,7 @@ import re
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trainer_link_token_use_cases import issue_landing_trainer_link_token
+from src.application.trainer_start_payload import START_JOIN_PAYLOAD
 from src.shared.config import Settings
 
 _REFERRAL_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,32}$")
@@ -19,6 +20,15 @@ def sanitize_referral_code(raw: str | None) -> str | None:
     if not code or not _REFERRAL_CODE_RE.fullmatch(code):
         return None
     return code
+
+
+def build_trainer_bot_join_deep_link(*, settings: Settings | None = None) -> str | None:
+    """Permanent public entry: t.me/<bot>?start=join (shareable in Telegram)."""
+    s = settings or Settings()
+    uname = (s.trainer_bot_username or "").strip().lstrip("@")
+    if not uname:
+        return None
+    return f"https://t.me/{uname}?start={START_JOIN_PAYLOAD}"
 
 
 def build_trainer_bot_deep_link(

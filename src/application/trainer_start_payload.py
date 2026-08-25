@@ -7,6 +7,8 @@ from enum import StrEnum
 
 START_LINK_PREFIX = "link_"
 START_REF_PREFIX = "ref_"
+START_JOIN_PAYLOAD = "join"
+START_JOIN_REF_PREFIX = "join_ref_"
 START_COLLECTIVE_CLAIM_PREFIX = "col_claim_"
 START_COLLECTIVE_INVITE_PREFIX = "col_inv_"
 START_COLLECTIVE_OPEN_PREFIX = "col_"
@@ -15,6 +17,7 @@ START_COLLECTIVE_OPEN_PREFIX = "col_"
 class TrainerStartKind(StrEnum):
     LINK = "link"
     REF = "ref"
+    JOIN = "join"
     COLLECTIVE_CLAIM = "col_claim"
     COLLECTIVE_INVITE = "col_inv"
     COLLECTIVE_OPEN = "col_open"
@@ -59,6 +62,17 @@ def parse_trainer_start_payload(payload: str | None) -> ParsedTrainerStart:
             kind=TrainerStartKind.COLLECTIVE_OPEN,
             raw_payload=raw,
             collective_slug=slug or None,
+        )
+
+    if raw == START_JOIN_PAYLOAD:
+        return ParsedTrainerStart(kind=TrainerStartKind.JOIN, raw_payload=raw)
+
+    if raw.startswith(START_JOIN_REF_PREFIX):
+        ref_code = raw.removeprefix(START_JOIN_REF_PREFIX).split("_")[0]
+        return ParsedTrainerStart(
+            kind=TrainerStartKind.JOIN,
+            raw_payload=raw,
+            ref_code=ref_code or None,
         )
 
     if raw.startswith(START_REF_PREFIX) and not raw.startswith(START_LINK_PREFIX):

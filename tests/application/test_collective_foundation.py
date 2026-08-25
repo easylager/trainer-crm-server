@@ -48,6 +48,16 @@ class TestTrainerStartPayload:
         assert parsed.kind == TrainerStartKind.LINK
         assert parsed.link_token == "secret"
 
+    def test_join_payload(self) -> None:
+        parsed = parse_trainer_start_payload("join")
+        assert parsed.kind == TrainerStartKind.JOIN
+        assert parsed.ref_code is None
+
+    def test_join_with_referral(self) -> None:
+        parsed = parse_trainer_start_payload("join_ref_REF9")
+        assert parsed.kind == TrainerStartKind.JOIN
+        assert parsed.ref_code == "REF9"
+
 
 class TestNormalizeCollectiveSlug:
     def test_valid_slug(self) -> None:

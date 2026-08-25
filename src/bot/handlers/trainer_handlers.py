@@ -610,6 +610,20 @@ async def cmd_start(message: Message) -> None:
             if parsed_start.kind == TrainerStartKind.COLLECTIVE_INVITE:
                 await _cmd_collective_invite(message, session, parsed_start.collective_token or "")
                 return
+            if parsed_start.kind == TrainerStartKind.JOIN:
+                if not Settings().landing_trainer_registration_enabled:
+                    await message.answer(msg.TRAINER_REGISTRATION_UNAVAILABLE)
+                    return
+                join_state, _join_trainer = await get_trainer_access_state(session, user_id)
+                if join_state == TrainerAccessState.NOT_LINKED:
+                    if parsed_start.ref_code:
+                        pending_referrer_id = await get_trainer_id_by_referral_code(
+                            session, parsed_start.ref_code
+                        )
+                    from src.application.trainer_link_token_use_cases import issue_landing_trainer_link_token
+
+                    issued = await issue_landing_trainer_link_token(session)
+                    args[1] = START_LINK_PREFIX + str(issued["token"])
         # Parse referral code from payload (ref_<CODE> or link_<token>_ref_<CODE>)
         if len(args) > 1:
             payload = args[1]

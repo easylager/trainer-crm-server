@@ -37,6 +37,8 @@ bench_log = logging.getLogger("trainer_bot.bench")
 
 _START_LINK_PREFIX = "link_"
 _START_REF_PREFIX = "ref_"
+_START_JOIN_PAYLOAD = "join"
+_START_JOIN_REF_PREFIX = "join_ref_"
 
 
 def _command_root(text: str | None) -> str | None:
@@ -64,6 +66,8 @@ def _is_welcome_link_start(text: str | None) -> bool:
     if payload.startswith(_START_LINK_PREFIX):
         return True
     if payload.startswith(_START_REF_PREFIX):
+        return True
+    if payload == _START_JOIN_PAYLOAD or payload.startswith(_START_JOIN_REF_PREFIX):
         return True
     return False
 

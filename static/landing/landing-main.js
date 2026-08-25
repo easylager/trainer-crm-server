@@ -381,91 +381,23 @@
     setTimeout(function () { el.hidden = true; }, 6000);
   }
 
-  var TRAINER_START_CACHE_KEY = 'ice_pro_trainer_start_v1';
-
-  function readCachedTrainerStartUrl() {
-    try {
-      var raw = sessionStorage.getItem(TRAINER_START_CACHE_KEY);
-      if (!raw) return null;
-      var parsed = JSON.parse(raw);
-      if (!parsed || !parsed.redirect_url) return null;
-      if (parsed.expires_at) {
-        var exp = Date.parse(parsed.expires_at);
-        if (!isNaN(exp) && exp <= Date.now()) {
-          sessionStorage.removeItem(TRAINER_START_CACHE_KEY);
-          return null;
-        }
-      }
-      return parsed.redirect_url;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function cacheTrainerStartUrl(data) {
-    if (!data || !data.redirect_url) return;
-    try {
-      sessionStorage.setItem(
-        TRAINER_START_CACHE_KEY,
-        JSON.stringify({
-          redirect_url: data.redirect_url,
-          expires_at: data.expires_at || null,
-        })
-      );
-    } catch (e) { /* private mode / quota */ }
-  }
-
   function startTelegram(btn) {
     var cfg = window.__landingCfg || {};
     var hero = cfg.hero || {};
-    var loading = hero.cta_loading || 'Открываем Telegram…';
-    var original = btn.textContent;
 
     if (cfg.registration_enabled === false) {
       showError('Регистрация временно недоступна. Попробуйте позже.');
       return;
     }
 
-    var cachedUrl = readCachedTrainerStartUrl();
-    if (cachedUrl) {
-      window.location.href = cachedUrl;
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = loading;
-
     var ref = new URLSearchParams(window.location.search).get('ref') || '';
-    var hp = document.getElementById('hpWebsite');
-    var body = { referral_code: ref || undefined, website: hp ? hp.value : undefined };
-
-    fetch('/api/public/trainer-start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-      .then(function (r) {
-        return r.json().then(function (data) {
-          return { ok: r.ok, status: r.status, data: data };
-        });
-      })
-      .then(function (res) {
-        if (res.ok && res.data && res.data.redirect_url) {
-          cacheTrainerStartUrl(res.data);
-          window.location.href = res.data.redirect_url;
-          return;
-        }
-        var detail = (res.data && res.data.detail) ? res.data.detail : 'Не удалось открыть Telegram. Попробуйте позже.';
-        if (typeof detail !== 'string' && detail.message) detail = detail.message;
-        showError(typeof detail === 'string' ? detail : 'Ошибка. Попробуйте позже.');
-        btn.disabled = false;
-        btn.textContent = original;
-      })
-      .catch(function () {
-        showError('Нет связи с сервером. Проверьте интернет и попробуйте снова.');
-        btn.disabled = false;
-        btn.textContent = original;
-      });
+    var joinPath = (cfg.join_url || '/join') + (ref ? ('?ref=' + encodeURIComponent(ref)) : '');
+    if (btn) {
+      var loading = hero.cta_loading || 'Открываем Telegram…';
+      btn.disabled = true;
+      btn.textContent = loading;
+    }
+    window.location.href = joinPath;
   }
 
   function bindCtas() {

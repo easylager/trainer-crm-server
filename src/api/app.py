@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +15,9 @@ from starlette.staticfiles import StaticFiles
 logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.deps import get_session
 from src.api.routes import (
     public_router,
     redirects_router,
@@ -25,6 +27,7 @@ from src.api.routes import (
     webhooks_router,
 )
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
+from src.api.routes.public import issue_trainer_join_redirect
 from src.application.landing_manifest import inject_landing_html
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
@@ -1249,6 +1252,16 @@ def landing_page():
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return HTMLResponse(content=html, media_type="text/html", headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
+@app.get("/join")
+async def trainer_public_join(
+    request: Request,
+    ref: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    """Shareable public entry for trainers (social bio, QR). Mints one-time token → Telegram."""
+    return await issue_trainer_join_redirect(request, session, referral_code=ref)
 
 
 @app.get("/landing/{asset_path:path}")

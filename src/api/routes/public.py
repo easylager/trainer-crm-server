@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,6 +78,77 @@ def _get_trainer_start_limiter() -> RateLimiter:
             s.landing_trainer_start_window_sec,
         )
     return _trainer_start_limiter
+
+
+async def issue_trainer_join_from_request(
+    session: AsyncSession,
+    request: Request,
+    *,
+    referral_code: str | None = None,
+    audit_event: str = "landing.trainer_start_issued",
+) -> dict:
+    """
+    Mint a one-time landing welcome token and return redirect metadata.
+
+    Shared by POST /api/public/trainer-start and GET /join.
+    """
+    settings = Settings()
+    if not settings.landing_trainer_registration_enabled:
+        raise HTTPException(status_code=503, detail="Registration temporarily unavailable")
+
+    ip = client_ip_from_request(request)
+    limiter = _get_trainer_start_limiter()
+    if not limiter.check_and_consume(ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
+    try:
+        result = await issue_trainer_start_from_landing(
+            session,
+            referral_code=referral_code,
+            settings=settings,
+        )
+    except ValueError as exc:
+        if str(exc) == "trainer_bot_username_missing":
+            raise HTTPException(
+                status_code=503,
+                detail="Telegram bot is not configured yet. Please try again later.",
+            ) from exc
+        raise
+
+    audit_log(
+        audit_event,
+        ACTOR_API,
+        ip,
+        {
+            "trainer_id": result.get("trainer_id"),
+            "vertical": settings.landing_vertical,
+            "market": settings.landing_market,
+            "has_referral": bool(result.get("referral_code")),
+        },
+    )
+    return result
+
+
+async def issue_trainer_join_redirect(
+    request: Request,
+    session: AsyncSession,
+    *,
+    referral_code: str | None = None,
+) -> RedirectResponse:
+    """Public shareable entry: mint token and 302 to Telegram bot."""
+    result = await issue_trainer_join_from_request(
+        session,
+        request,
+        referral_code=referral_code,
+        audit_event="landing.trainer_join_redirect",
+    )
+    redirect_url = result.get("redirect_url")
+    if not redirect_url:
+        raise HTTPException(
+            status_code=503,
+            detail="Telegram bot is not configured yet. Please try again later.",
+        )
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 
 def _build_contact_telegram_url(trainer_id: int, telegram_username: str | None) -> str | None:
@@ -269,43 +340,14 @@ async def trainer_start_from_landing(
 
     Replaces manual /trainer_welcome_link for organic traffic.
     """
-    settings = Settings()
-    if not settings.landing_trainer_registration_enabled:
-        raise HTTPException(status_code=503, detail="Registration temporarily unavailable")
-
     # Honeypot: bots fill hidden fields; silently reject without hinting.
     if body.website and str(body.website).strip():
         raise HTTPException(status_code=400, detail="Invalid request")
 
-    ip = client_ip_from_request(request)
-    limiter = _get_trainer_start_limiter()
-    if not limiter.check_and_consume(ip):
-        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
-
-    try:
-        result = await issue_trainer_start_from_landing(
-            session,
-            referral_code=body.referral_code,
-            settings=settings,
-        )
-    except ValueError as exc:
-        if str(exc) == "trainer_bot_username_missing":
-            raise HTTPException(
-                status_code=503,
-                detail="Telegram bot is not configured yet. Please try again later.",
-            ) from exc
-        raise
-
-    audit_log(
-        "landing.trainer_start_issued",
-        ACTOR_API,
-        ip,
-        {
-            "trainer_id": result["trainer_id"],
-            "vertical": settings.landing_vertical,
-            "market": settings.landing_market,
-            "has_referral": bool(result.get("referral_code")),
-        },
+    result = await issue_trainer_join_from_request(
+        session,
+        request,
+        referral_code=body.referral_code,
     )
     return {
         "trainer_id": result.get("trainer_id"),

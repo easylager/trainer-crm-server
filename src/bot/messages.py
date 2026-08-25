@@ -594,6 +594,41 @@ TRAINER_DIGEST_DROUGHT_NO_TEMPLATE = (
     "🗓 Пусто. Недельный шаблон расписания пока не настроен — "
     "с ним слоты появляются автоматически."
 )
+
+# --- Care pulse (silence-aware presence). Voice: calm, specific, one fact, no guilt. ---
+CARE_PULSE_TRAINER_TOMORROW = (
+    "🌿 <b>Завтра расписание на месте.</b>\n\n"
+    "<b>{count}</b> {word}{detail}\n\n"
+    "Если что-то изменится — напишем сразу."
+)
+CARE_PULSE_TRAINER_OPEN_SLOTS = (
+    "🌿 <b>Клиенты могут записаться сами.</b>\n\n"
+    "На ближайшую неделю свободно: <b>{count}</b> {word}. "
+    "Ссылка у них уже есть — писать тебе в личку не нужно."
+)
+CARE_PULSE_TRAINER_INVITE_BACK = (
+    "🌿 <b>Тихий день — хороший момент написать первым.</b>\n\n"
+    "<b>{name}</b> — уже {days} {word} без занятия. "
+    "Короткого сообщения «как дела» часто достаточно, чтобы человек вернулся."
+)
+CARE_PULSE_TRAINER_QUIET = (
+    "🌿 <b>Сегодня без тренировок.</b>\n\n"
+    "Расписание на месте. Если появится запись или отмена — напишем сразу. "
+    "Ничего не потеряется."
+)
+CARE_PULSE_CLIENT_CONFIRMED = (
+    "🌿 <b>Запись на месте.</b>\n\n"
+    "{when} в {time}{trainer_bit}{arena_bit}\n\n"
+    "Напоминание придёт накануне. Если планы изменятся — напишите тренеру."
+)
+CARE_PULSE_CLIENT_INVITE_BACK = (
+    "🌿 <b>Можно записаться снова.</b>\n\n"
+    "{trainer_line}"
+    "Удобное время — в каталоге, без переписки."
+)
+CARE_PULSE_CLIENT_BTN_BOOKINGS = "Мои записи"
+CARE_PULSE_CLIENT_BTN_CATALOG = "Записаться"
+
 TRAINER_REQUEST_NOTIFICATION = (
     "📩 <b>Новая заявка</b>\n\n"
     "<b>{city}</b> · {service}\n"
@@ -2212,6 +2247,7 @@ TRAINER_START_WELCOME = (
     "Коротко по разделам: /guide"
 )
 TRAINER_ONLY_VIA_SITE = "Этот бот только для тренеров. Подключение по ссылке с сайта."
+TRAINER_REGISTRATION_UNAVAILABLE = "Регистрация временно недоступна. Попробуйте позже."
 # После привязки по ссылке: без обещания полного меню (гейт может быть закрыт).
 TRAINER_LINK_SUCCESS = (
     "Аккаунт привязан к этому Telegram.\n\n"

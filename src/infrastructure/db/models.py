@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -1313,6 +1314,50 @@ RECOVERY_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
 )
 
 RECOVERY_STEP_KEYS = tuple(s for s, _ in RECOVERY_STEPS_ORDERED)
+
+
+# ---------------------------------------------------------------------------
+# Care pulse — silence-aware presence check-in (trainers + clients).
+# ---------------------------------------------------------------------------
+
+CARE_PULSE_AUDIENCE_TRAINER = "trainer"
+CARE_PULSE_AUDIENCE_CLIENT = "client"
+
+CARE_PULSE_KIND_TOMORROW_PLAN = "tomorrow_plan"
+CARE_PULSE_KIND_OPEN_SLOTS = "open_slots"
+CARE_PULSE_KIND_INVITE_BACK = "invite_back"
+CARE_PULSE_KIND_QUIET_CHECKIN = "quiet_checkin"
+CARE_PULSE_KIND_CONFIRMED_BOOKING = "confirmed_booking"
+
+
+class CarePulse(Base):
+    """One honest Telegram check-in. Cooldown + unique (audience, recipient, kind, context)."""
+
+    __tablename__ = "care_pulses"
+    __table_args__ = (
+        UniqueConstraint(
+            "audience",
+            "recipient_id",
+            "kind",
+            "context_key",
+            name="uq_care_pulses_audience_recipient_kind_ctx",
+        ),
+        Index(
+            "ix_care_pulses_audience_recipient_sent",
+            "audience",
+            "recipient_id",
+            "sent_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    audience: Mapped[str] = mapped_column(String(16), nullable=False)
+    recipient_id: Mapped[int] = mapped_column(Integer(), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    context_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class TrainerRecoveryNudge(Base):

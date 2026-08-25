@@ -12,6 +12,7 @@ from src.api.routes.public import reset_trainer_start_limiter_for_tests
 from src.application.landing_manifest import clear_landing_manifest_cache_for_tests
 from src.application.landing_trainer_start_use_cases import (
     build_trainer_bot_deep_link,
+    build_trainer_bot_join_deep_link,
     sanitize_referral_code,
 )
 from src.shared.config import Settings
@@ -47,6 +48,12 @@ def test_build_trainer_bot_deep_link_with_referral():
     assert url == "https://t.me/IceProTestBot?start=link_tok123_ref_REF1"
 
 
+def test_build_trainer_bot_join_deep_link():
+    s = _landing_settings(trainer_bot_username="IceProTestBot")
+    assert build_trainer_bot_join_deep_link(settings=s) == "https://t.me/IceProTestBot?start=join"
+    assert build_trainer_bot_join_deep_link(settings=_landing_settings(trainer_bot_username=None)) is None
+
+
 @pytest.mark.asyncio
 async def test_landing_config_public(monkeypatch):
     s = _landing_settings(trainer_bot_username="IceProTestBot")
@@ -66,6 +73,8 @@ async def test_landing_config_public(monkeypatch):
     assert data.get("sections", {}).get("bento_heading")
     assert data.get("sections", {}).get("arc_heading")
     assert data.get("sections", {}).get("steps_heading")
+    assert data.get("join_url") == "/join"
+    assert data.get("telegram_join_url") == "https://t.me/IceProTestBot?start=join"
 
 
 @pytest.mark.asyncio
@@ -116,6 +125,30 @@ async def test_trainer_start_happy_path(db_session, monkeypatch):
     assert tok_row is not None
     assert tok_row[0] is None
     assert tok_row[1] is None
+
+
+@pytest.mark.asyncio
+async def test_trainer_join_get_redirect(db_session, monkeypatch):
+    s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_start_max_requests=20)
+    monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)
+    monkeypatch.setattr("src.application.landing_trainer_start_use_cases.Settings", lambda: s)
+    monkeypatch.setattr("src.application.trainer_link_token_use_cases.Settings", lambda: s)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False) as client:
+        resp = await client.get("/join?ref=REF9")
+    assert resp.status_code == 302
+    location = resp.headers.get("location") or ""
+    assert location.startswith("https://t.me/IceProTestBot?start=link_")
+    assert "_ref_REF9" in location
+
+
+@pytest.mark.asyncio
+async def test_trainer_join_get_disabled(monkeypatch):
+    s = _landing_settings(trainer_bot_username="IceProTestBot", landing_trainer_registration_enabled=False)
+    monkeypatch.setattr("src.api.routes.public.Settings", lambda: s)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/join")
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio

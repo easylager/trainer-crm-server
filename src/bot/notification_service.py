@@ -33,6 +33,7 @@ from src.bot.notification_loops import (
     run_subscription_expire_and_reminder_loop,
     run_trainer_booked_notifier_loop,
     run_weekly_sunday_digest_loop,
+    run_care_pulse_loop,
 )
 from src.shared.config import get_settings, Settings
 from src.shared.notification_hours import set_notification_quiet_hours_bypass
@@ -100,6 +101,7 @@ async def main() -> None:
         asyncio.create_task(run_weekly_sunday_digest_loop(trainer_bot), name="weekly_sunday_digest"),
         asyncio.create_task(run_subscription_expire_and_reminder_loop(trainer_bot), name="subscription_expire_reminder"),
         asyncio.create_task(run_lead_mode_recovery_loop(trainer_bot), name="lead_mode_recovery"),
+        asyncio.create_task(run_care_pulse_loop(trainer_bot, client_bot), name="care_pulse"),
     ]
     # Background jobs (no bot)
     other_tasks = [
