@@ -88,17 +88,11 @@ def _format_trainer(kind: str, payload: dict[str, Any]) -> str | None:
         n = int(payload.get("sessions_count") or 0)
         first = _fmt_time(payload.get("first_time"))
         name = _short_name(str(payload.get("first_name") or ""))
-        who = f" — {_h(name)}" if name else ""
-        if first and n == 1:
-            detail = f" в <b>{_h(first)}</b>{who}."
-        elif first:
-            detail = f". Первая в <b>{_h(first)}</b>{who}."
-        else:
-            detail = "."
         return msg.CARE_PULSE_TRAINER_TOMORROW.format(
             count=n,
             word=_sessions_word(n),
-            detail=detail,
+            first_time=_h(first) if first else "—",
+            first_name=_h(name) if name else "—",
         )
     if kind == CARE_PULSE_KIND_OPEN_SLOTS:
         n = int(payload.get("open_slots") or 0)
@@ -122,20 +116,28 @@ def _format_trainer(kind: str, payload: dict[str, Any]) -> str | None:
 def _format_client(kind: str, payload: dict[str, Any]) -> str | None:
     if kind == CARE_PULSE_KIND_CONFIRMED_BOOKING:
         slot_date = payload.get("slot_date")
-        when = _weekday_in(slot_date if isinstance(slot_date, date) else None)
+        day_name = _weekday_in(slot_date if isinstance(slot_date, date) else None)
+        date_str = slot_date.strftime("%d.%m") if isinstance(slot_date, date) else ""
+        when = f"{date_str}" if date_str else "Скоро"
+        # Remove "В " prefix for day name (e.g. "В пятницу" -> "пятницу")
+        day_display = day_name.replace("В ", "").lower() if day_name else ""
         clock = _fmt_time(payload.get("start_time"))
         trainer = str(payload.get("trainer_name") or "").strip()
         arena = str(payload.get("arena_name") or "").strip()
-        trainer_bit = f" · тренер {_h(trainer)}" if trainer else ""
-        arena_bit = f" · {_h(arena)}" if arena else ""
+        arena_line = f"📍 {_h(arena)}\n" if arena else ""
+        duration = payload.get("duration_minutes", 45)
+
         return msg.CARE_PULSE_CLIENT_CONFIRMED.format(
-            when=_h(when) if when else "Скоро",
-            time=_h(clock) if clock else "",
-            trainer_bit=trainer_bit,
-            arena_bit=arena_bit,
+            when=_h(when),
+            day_name=_h(day_display),
+            time=_h(clock) if clock else "—",
+            duration=int(duration) if duration else 45,
+            trainer_name=_h(trainer) if trainer else "Тренер",
+            arena_line=arena_line,
         )
     if kind == CARE_PULSE_KIND_INVITE_BACK:
         trainer = str(payload.get("trainer_name") or "").strip()
-        trainer_line = f"Тренер: <b>{_h(trainer)}</b>.\n\n" if trainer else ""
-        return msg.CARE_PULSE_CLIENT_INVITE_BACK.format(trainer_line=trainer_line)
+        return msg.CARE_PULSE_CLIENT_INVITE_BACK.format(
+            trainer_name=_h(trainer) if trainer else "Тренер"
+        )
     return None

@@ -164,6 +164,7 @@ def pick_client_pulse(
     upcoming_booking_id: Optional[int],
     upcoming_date: Optional[date],
     upcoming_time: Optional[time],
+    upcoming_duration_minutes: Optional[int],
     upcoming_trainer_name: str,
     upcoming_arena_name: str,
     has_future_booking: bool,
@@ -187,6 +188,7 @@ def pick_client_pulse(
             payload={
                 "slot_date": upcoming_date,
                 "start_time": upcoming_time,
+                "duration_minutes": upcoming_duration_minutes,
                 "trainer_name": (upcoming_trainer_name or "").strip(),
                 "arena_name": (upcoming_arena_name or "").strip(),
             },
@@ -285,6 +287,7 @@ async def list_due_care_pulses(
             upcoming_booking_id=row["upcoming_booking_id"],
             upcoming_date=upcoming_date,
             upcoming_time=row["upcoming_time"],
+            upcoming_duration_minutes=row["upcoming_duration_minutes"],
             upcoming_trainer_name=str(row["upcoming_trainer_name"] or ""),
             upcoming_arena_name=str(row["upcoming_arena_name"] or ""),
             has_future_booking=bool(row["has_future_booking"]),
@@ -479,6 +482,7 @@ async def _list_client_facts(
                     b.id AS booking_id,
                     s.slot_date,
                     s.start_time,
+                    s.duration_minutes,
                     TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')) AS trainer_name,
                     a.name AS arena_name
                 FROM bookings b
@@ -519,6 +523,7 @@ async def _list_client_facts(
                    u.booking_id,
                    u.slot_date,
                    u.start_time,
+                   u.duration_minutes,
                    u.trainer_name,
                    u.arena_name,
                    ld.last_date,
@@ -561,11 +566,12 @@ async def _list_client_facts(
                 "upcoming_booking_id": int(row[4]) if row[4] is not None else None,
                 "upcoming_date": _as_date(row[5]),
                 "upcoming_time": _as_time(row[6]),
-                "upcoming_trainer_name": (row[7] or "").strip(),
-                "upcoming_arena_name": (row[8] or "").strip(),
-                "last_completed_date": _as_date(row[9]),
-                "last_trainer_name": (row[10] or "").strip(),
-                "has_future_booking": bool(row[11]),
+                "upcoming_duration_minutes": int(row[7]) if row[7] is not None else None,
+                "upcoming_trainer_name": (row[8] or "").strip(),
+                "upcoming_arena_name": (row[9] or "").strip(),
+                "last_completed_date": _as_date(row[10]),
+                "last_trainer_name": (row[11] or "").strip(),
+                "has_future_booking": bool(row[12]),
             }
         )
     return out
