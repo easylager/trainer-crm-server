@@ -54,14 +54,14 @@
 }
 
 .trainer-mini-nav > button.btn-app-home {
-  border: 2px solid rgba(245, 166, 35, 0.42) !important;
+  border: 1px solid rgba(52, 198, 196, 0.34) !important;
   background: transparent !important;
-  color: var(--app-cta-fill) !important;
+  color: #34C6C4 !important;
   box-shadow: none !important;
 }
 
 .trainer-mini-nav > button.btn-app-back {
-  border: 1px solid rgba(245, 166, 35, 0.22) !important;
+  border: 1px solid rgba(102, 102, 102, 0.22) !important;
   background: var(--tg-theme-secondary-bg-color) !important;
   color: var(--tg-theme-text-color) !important;
   box-shadow: var(--app-btn-shadow-surface) !important;

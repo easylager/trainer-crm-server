@@ -563,7 +563,7 @@ async def _send_trainer_post_booking_feedback(
                 card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
             else:
                 card_html = (
-                    "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
+                    "🎉 <b>Старт засчитан: это ваша первая запись в Glide!</b>\n\n"
                     + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
                 )
             has_crm_push = await trainer_has_crm_access(session, trainer_id)
@@ -2971,7 +2971,7 @@ async def get_trainer_stats_api(
     session: AsyncSession = Depends(get_session),
 ):
     """Full stats dashboard for trainer Mini App: KPIs, trends, by-day, insights. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_analytics_access(session, trainer_id):
@@ -2988,7 +2988,7 @@ async def get_trainer_revenue_range_api(
     session: AsyncSession = Depends(get_session),
 ):
     """Accrual revenue breakdown for an arbitrary inclusive date range (Mini App «Бухгалтерия»)."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_analytics_access(session, trainer_id):
@@ -3065,7 +3065,7 @@ async def get_trainer_hub_revenue_mtd(
     session: AsyncSession = Depends(get_session),
 ):
     """Hub KPI: accrual revenue from the 1st of the current month through today (Europe/Minsk). No analytics module gate."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
@@ -9497,9 +9497,9 @@ async def get_trainer_referral_info(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Get referral info for trainer: code, link, stats, balance."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     code = await ensure_trainer_referral_code(session, trainer_id)
     if not code:
         raise HTTPException(status_code=500, detail="Failed to generate referral code")
@@ -9522,9 +9522,9 @@ async def get_trainer_referred_list(
     limit: int = Query(50, ge=1, le=100),
 ) -> list[dict[str, Any]]:
     """List trainers referred by this trainer."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     return await list_referred_trainers(session, trainer_id, limit=limit)
 
 

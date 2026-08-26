@@ -28,8 +28,8 @@ body.trainer-shell-has-suspended-banner {
   line-height: 1.35;
   text-align: center;
   color: #5c4a00;
-  background: color-mix(in srgb, #f7a600 22%, var(--tg-theme-bg-color, #fffbec));
-  border-bottom: 1px solid color-mix(in srgb, #f7a600 35%, transparent);
+  background: color-mix(in srgb, #34C6C4 22%, var(--tg-theme-bg-color, #FBFAF7));
+  border-bottom: 1px solid color-mix(in srgb, #34C6C4 35%, transparent);
 }
 
 body.trainer-shell-body.trainer-shell-tabs-hidden {
@@ -125,9 +125,9 @@ body.trainer-shell-body .trainer-mini-nav:empty {
 }
 
 .trainer-tab-bar__btn--active .trainer-tab-bar__icon-wrap {
-  background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
-  color: #1a1a1a;
-  box-shadow: 0 4px 14px rgba(245, 166, 35, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  box-shadow: var(--app-btn-shadow-surface);
 }
 
 .trainer-tab-bar__btn--active .trainer-tab-bar__icon-wrap svg {

@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Превью: Расписание и «Записать клиента»</title>
-  <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260477" />
+  <link rel="stylesheet" href="theme.css?v=20260826" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260826" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260826" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -16,8 +16,8 @@
   <script>
     (function () {
       var d = document.documentElement;
-      d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
-      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-button-color', '#34C6C4', 'important');
+      d.style.setProperty('--tg-theme-button-text-color', '#062A29', 'important');
       d.style.setProperty('--tg-theme-bg-color', '#1c1c1c', 'important');
       d.style.setProperty('--tg-theme-text-color', '#ffffff', 'important');
       d.style.setProperty('--tg-theme-secondary-bg-color', '#2c2c2e', 'important');
@@ -70,39 +70,39 @@
 
     /* Вариант A — явная обводка и лёгкое «свечение» с акцентом, фон карточки базовый */
     .hub-pv--outline .hub-quick-action {
-      border: 1.5px solid rgba(245, 166, 35, 0.5);
+      border: 1.5px solid rgba(var(--accent-rgb), 0.5);
       box-shadow:
         0 4px 18px rgba(0, 0, 0, 0.28),
-        0 0 0 1px rgba(245, 166, 35, 0.1) inset;
+        0 0 0 1px rgba(var(--accent-rgb), 0.1) inset;
       background: var(--tg-theme-secondary-bg-color);
     }
     .hub-pv--outline .hub-quick-action::before {
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, transparent 55%);
+      background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.12) 0%, transparent 55%);
     }
     .hub-pv--outline .hub-quick-action:hover {
-      border-color: rgba(245, 166, 35, 0.7);
+      border-color: rgba(var(--accent-rgb), 0.7);
       box-shadow:
         0 6px 22px rgba(0, 0, 0, 0.32),
-        0 0 28px rgba(245, 166, 35, 0.18);
+        0 0 28px rgba(var(--accent-rgb), 0.18);
     }
 
     /* Вариант B — заливка: тёплый градиент поверх поверхности + тонкая янтарная кромка */
     .hub-pv--fill .hub-quick-action {
-      border: 1px solid rgba(245, 166, 35, 0.38);
+      border: 1px solid rgba(var(--accent-rgb), 0.38);
       background:
-        linear-gradient(152deg, rgba(245, 166, 35, 0.2) 0%, rgba(245, 166, 35, 0.07) 48%, var(--tg-theme-secondary-bg-color) 100%);
-      box-shadow: 0 6px 22px rgba(245, 166, 35, 0.14), 0 2px 8px rgba(0, 0, 0, 0.2);
+        linear-gradient(152deg, rgba(var(--accent-rgb), 0.2) 0%, rgba(var(--accent-rgb), 0.07) 48%, var(--tg-theme-secondary-bg-color) 100%);
+      box-shadow: 0 6px 22px rgba(var(--accent-rgb), 0.14), 0 2px 8px rgba(0, 0, 0, 0.2);
     }
     .hub-pv--fill .hub-quick-action::before {
       opacity: 0;
     }
     .hub-pv--fill .hub-quick-action:hover {
-      border-color: rgba(245, 166, 35, 0.52);
-      box-shadow: 0 8px 26px rgba(245, 166, 35, 0.2), 0 2px 10px rgba(0, 0, 0, 0.22);
+      border-color: rgba(var(--accent-rgb), 0.52);
+      box-shadow: 0 8px 26px rgba(var(--accent-rgb), 0.2), 0 2px 10px rgba(0, 0, 0, 0.22);
     }
     .hub-pv--fill .hub-quick-action:hover::before {
       opacity: 1;
-      background: linear-gradient(152deg, rgba(245, 166, 35, 0.12) 0%, transparent 60%);
+      background: linear-gradient(152deg, rgba(var(--accent-rgb), 0.12) 0%, transparent 60%);
     }
 
     /* Вариант C — полная заливка CTA-оранжевым, тёмный текст и иконки (как основная кнопка) */
@@ -110,7 +110,7 @@
       background: var(--app-cta-fill);
       border: 1px solid rgba(0, 0, 0, 0.14);
       box-shadow:
-        0 4px 18px rgba(245, 166, 35, 0.38),
+        0 4px 18px rgba(var(--accent-rgb), 0.38),
         0 2px 8px rgba(0, 0, 0, 0.22);
     }
     .hub-pv--cta .hub-quick-action::before {
@@ -120,7 +120,7 @@
     .hub-pv--cta .hub-quick-action:hover {
       border-color: rgba(0, 0, 0, 0.2);
       box-shadow:
-        0 6px 24px rgba(245, 166, 35, 0.45),
+        0 6px 24px rgba(var(--accent-rgb), 0.45),
         0 2px 10px rgba(0, 0, 0, 0.24);
     }
     .hub-pv--cta .hub-quick-action:hover::before {
@@ -142,7 +142,7 @@
     <h1>Превью акцентов (тёмная тема)</h1>
     <p>
       Три варианта для блока «Расписание» / «Записать клиента» на главной тренера. Цвета из
-      <code style="color: var(--app-cta-fill)">theme.css</code> (янтарь <code>#f5a623</code>). Выберите вариант —
+      <code style="color: var(--app-cta-fill)">theme.css</code> (янтарь <code>#34C6C4</code>). Выберите вариант —
       подключим его в прод.
     </p>
   </div>

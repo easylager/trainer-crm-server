@@ -49,7 +49,7 @@
       font-family: var(--app-font-sans);
     }
     .request-card:hover {
-      border-color: rgba(247, 166, 0, 0.28);
+      border-color: rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
       transform: translateY(-1px);
     }
@@ -148,7 +148,7 @@
     }
     .cr-detail-toolbar button:active { transform: scale(0.98); opacity: 0.9; }
     .cr-detail-toolbar button:focus-visible {
-      outline: 2px solid rgba(245, 166, 35, 0.45);
+      outline: 2px solid rgba(var(--accent-rgb), 0.45);
       outline-offset: 2px;
     }
     .cr-detail-toolbar button svg {
@@ -197,7 +197,7 @@
       padding: 12px 14px;
       border-radius: 14px;
       background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(245, 166, 35, 0.22);
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
       font-size: 14px;
       line-height: 1.5;
       color: var(--tg-theme-text-color);
@@ -233,7 +233,7 @@
       font-family: var(--app-font-sans);
     }
     .responder-row:hover {
-      border-color: rgba(247, 166, 0, 0.28);
+      border-color: rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
       transform: translateY(-1px);
     }
@@ -283,10 +283,13 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
-      background-size: 200% 100%;
-      animation: photo-shimmer 1.2s ease-in-out infinite;
+      background: transparent;
+      animation: photo-pulse 1.2s ease-in-out infinite;
       border-radius: 50%;
+    }
+    @keyframes photo-pulse {
+      0%, 100% { opacity: 0.55; }
+      50% { opacity: 0.9; }
     }
     .responder-row .row-avatar-wrap .row-avatar {
       position: absolute;
@@ -383,20 +386,20 @@
       max-height: 320px;
       border-radius: 0 0 20px 20px;
       overflow: hidden;
-      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.1) 100%);
+      background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     .trainer-card-full .tcf-photo-placeholder {
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.1) 100%);
+      background: var(--tg-theme-secondary-bg-color);
       border-radius: 0 0 20px 20px;
     }
     .trainer-card-full .tcf-photo-placeholder.tcf-photo-loading::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(247, 166, 0, 0.15) 50%, transparent 100%);
+      background: none;
       background-size: 200% 100%;
       animation: photo-shimmer 1.5s ease-in-out infinite;
       border-radius: 0 0 20px 20px;
@@ -445,7 +448,7 @@
       line-height: 1.5;
       margin-bottom: 20px;
       padding: 16px 50px 16px 16px;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
+      background: none;
       border-radius: 16px;
       border-left: 4px solid var(--tg-theme-button-color);
       text-align: left;
@@ -479,7 +482,7 @@
       box-sizing: border-box;
     }
     .trainer-card-full .trainer-detail-stat:hover {
-      border-color: rgba(245, 166, 35, 0.3);
+      border-color: rgba(var(--accent-rgb), 0.3);
     }
     .trainer-card-full .trainer-detail-stat-label {
       font-size: 11px;
@@ -521,10 +524,10 @@
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14) 0%, rgba(245, 166, 35, 0.06) 100%);
+      background: none;
       padding: 3px 7px;
       border-radius: 8px;
-      border: 1px solid rgba(245, 166, 35, 0.28);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
     }
     .trainer-card-full .trainer-detail-arena-others {
       display: flex;
@@ -553,7 +556,7 @@
       align-items: center;
       gap: 8px;
       padding: 8px 12px;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
+      background: none;
       border-radius: 12px;
       font-size: 14px;
       font-weight: 600;
@@ -871,7 +874,7 @@
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .pagination button:hover {
-      border-color: rgba(247, 166, 0, 0.28);
+      border-color: rgba(var(--accent-rgb), 0.28);
     }
     .pagination button:active {
       transform: scale(0.96);
@@ -884,7 +887,7 @@
       gap: var(--app-btn-stack-gap);
       margin-top: 8px;
     }
-    @media (prefers-color-scheme: dark) {
+    html.client-mini-dark {
       .request-card,
       .responder-row {
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);

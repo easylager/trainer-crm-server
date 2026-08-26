@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202608265"></script>
   <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
   <script>
     (function () {
@@ -17,14 +18,13 @@
       } catch (e) { /* */ }
     })();
   </script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
-  <!-- Bump ?v= when theme.css / mini-app-components.css change (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
+  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- DM Sans: non-blocking (media=print → all) + display=optional to reduce render contention vs swap. -->
   <link
     rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
@@ -37,35 +37,9 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <script>
-    (function () {
-      function isAppDark() {
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-      function applyTrainerHomeTheme() {
-        var d = document.documentElement;
-        var dark = isAppDark();
-        d.classList.toggle('hub-is-dark', dark);
-        /* Align with theme.css dark/light — not pure #000 (matches schedule + constitution) */
-        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
-        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
-        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec', 'important');
-        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a', 'important');
-        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1', 'important');
-        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
-      }
-      applyTrainerHomeTheme();
-      if (window.matchMedia) {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTrainerHomeTheme);
-      }
-      window.__applyTrainerHomeTheme = applyTrainerHomeTheme;
-    })();
-  </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606306" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606200" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608262" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608262" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
   <link rel="preload" href="trainer-home-main.js?v=202606306" as="script" />
@@ -78,8 +52,8 @@
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       background:
-        radial-gradient(ellipse 130% 80% at 50% 38%, rgba(247,166,0,.22) 0%, rgba(247,166,0,.08) 45%, transparent 68%),
-        var(--tg-theme-bg-color, #fffbec);
+        radial-gradient(ellipse 130% 80% at 50% 38%, rgba(52, 198, 196, 0.18) 0%, rgba(52, 198, 196, 0.06) 45%, transparent 68%),
+        var(--tg-theme-bg-color, #FBFAF7);
       will-change: opacity, transform;
     }
     #hubSplash.hub-splash--out {
@@ -100,22 +74,22 @@
     }
     .hub-splash-ring-1 {
       inset: 0;
-      border: 1.5px solid rgba(247,166,0,.55);
+      border: 1.5px solid rgba(52, 198, 196, 0.45);
     }
     .hub-splash-ring-2 {
       inset: 13px;
-      border: 1.5px solid rgba(247,166,0,.35);
+      border: 1.5px solid rgba(52, 198, 196, 0.28);
       animation-delay: -.87s;
     }
     .hub-splash-ring-3 {
       inset: 26px;
-      border: 1px solid rgba(247,166,0,.2);
+      border: 1px solid rgba(52, 198, 196, 0.16);
       animation-delay: -1.73s;
     }
-    /* Amber glow in the center */
+    /* Brand glow in the center */
     .hub-splash-ring-glow {
       position: absolute; inset: 32px; border-radius: 50%;
-      background: radial-gradient(ellipse, rgba(247,166,0,.18) 0%, transparent 70%);
+      background: radial-gradient(ellipse, rgba(52, 198, 196, 0.14) 0%, transparent 70%);
       animation: hub-splash-breathe 2.6s ease-in-out infinite;
       animation-delay: -1.3s;
       will-change: opacity;
@@ -136,9 +110,8 @@
     }
     .hub-splash-icon {
       display: block;
-      color: #f5a623;
-      /* amber glow shadow */
-      filter: drop-shadow(0 0 10px rgba(247,166,0,.45)) drop-shadow(0 2px 4px rgba(0,0,0,.12));
+      color: var(--app-cta-fill, #34C6C4);
+      filter: drop-shadow(0 0 10px rgba(52, 198, 196, 0.35)) drop-shadow(0 2px 4px rgba(0,0,0,.12));
     }
     /* Text block fades up after 180ms */
     .hub-splash-text {
@@ -187,7 +160,7 @@
     }
     .hub-splash-bar {
       height: 100%; transform-origin: left;
-      background: linear-gradient(90deg, rgba(247,166,0,.4) 0%, #f5a623 100%);
+      background: var(--app-cta-fill, #34C6C4);
       animation: hub-splash-bar-fill .72s cubic-bezier(.22,1,.36,1) both;
       will-change: transform;
     }
@@ -292,9 +265,10 @@
         if (typeof tg.expand  === 'function') tg.expand();
         /* Sync header/bg color with our splash bg — prevents color flash on app open */
         var isDark = document.documentElement.classList.contains('hub-is-dark');
-        var bgHex  = isDark ? '#1c1c1c' : '#fffbec';
-        try { if (typeof tg.setHeaderColor    === 'function') tg.setHeaderColor(bgHex);    } catch(e) {}
+        var bgHex  = isDark ? '#1c1c1c' : '#FBFAF7';
+        try { if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex); } catch(e) {}
         try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
+        try { if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex); } catch(e) {}
         window.__tgReadyCalled = true;
       } catch(e) {}
     })();

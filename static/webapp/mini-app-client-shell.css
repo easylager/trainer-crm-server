@@ -129,13 +129,10 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
-  background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
-  color: #1a1a1a;
-  box-shadow: 0 4px 14px rgba(245, 166, 35, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-
-.client-tab-bar__btn--active .client-tab-bar__icon-wrap svg {
-  transform: scale(1.04);
+  background: #34C6C4 !important;
+  background-image: none !important;
+  color: #062A29 !important;
+  box-shadow: var(--app-btn-shadow-surface) !important;
 }
 
 .client-tab-bar__icon-wrap {
@@ -146,7 +143,12 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   height: 30px;
   border-radius: 12px;
   color: inherit;
+  background-image: none !important;
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.client-tab-bar__btn--active .client-tab-bar__icon-wrap svg {
+  transform: scale(1.04);
 }
 
 .client-tab-bar__icon-wrap svg {
@@ -384,18 +386,13 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   content: '';
   position: absolute;
   inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--tg-theme-bg-color) 55%, transparent),
-    transparent
-  );
-  animation: client-skel-shimmer 1.2s ease-in-out infinite;
+  background: transparent;
+  animation: client-skel-pulse 1.2s ease-in-out infinite;
 }
 
-@keyframes client-skel-shimmer {
-  100% { transform: translateX(100%); }
+@keyframes client-skel-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
 }
 
 /* Toast above tab bar */

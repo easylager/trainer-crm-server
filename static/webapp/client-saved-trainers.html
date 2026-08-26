@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои тренеры</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
-  <link rel="stylesheet" href="mini-app-client-nav.css" />
+  <script src="client-mini-app-theme.js?v=202608267"></script>
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
   <link rel="preload" href="client-saved-trainers-main.js?v=202605301" as="script" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" />
-  <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
 
@@ -130,17 +131,8 @@
     }
     .st-primary:active { transform: scale(0.992); }
 
-    /* Soft amber glow accent */
     .st-primary::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background:
-        radial-gradient(140% 60% at 50% -10%,
-          color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent) 0%,
-          transparent 60%);
-      z-index: 1;
+      display: none;
     }
 
     .st-primary-photo {
@@ -172,7 +164,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(to bottom, transparent 30%, rgba(0, 0, 0, 0.55) 100%);
+      background: rgba(0, 0, 0, 0.45);
       z-index: 1;
     }
 
@@ -373,7 +365,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.55) 100%);
+      background: rgba(0, 0, 0, 0.45);
       z-index: 1;
     }
     .st-saved-photo-ph {
@@ -628,9 +620,7 @@
       border-radius: 50%;
       display: grid;
       place-items: center;
-      background: radial-gradient(circle,
-        color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent) 0%,
-        transparent 70%);
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
       position: relative;
     }
     .st-empty-icon-wrap::before {
@@ -762,16 +752,10 @@
     .st-skel::after {
       content: '';
       position: absolute; inset: 0;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent) 50%,
-        transparent 100%);
-      animation: stShimmer 1.4s linear infinite;
+      background: transparent;
+      animation: stSkelPulse 1.4s ease-in-out infinite;
     }
-    .st-skel-primary { aspect-ratio: 16/11; height: auto; margin-bottom: 16px; }
-    .st-skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .st-skel-card { aspect-ratio: 1/1.3; }
-    @keyframes stShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+    @keyframes stSkelPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
   </style>
 </head>
 <body>

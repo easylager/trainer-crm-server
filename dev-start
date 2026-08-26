@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# One-command local dev stack: tunnel + API + 3 bots + notification service,
+# each visible in its own tmux window inside a single terminal tab. Postgres
+# runs as a docker-compose daemon (nothing to watch there, so no window).
+#
+# Usage:
+#   ./dev-start          start (or attach to) the dev session
+#   ./dev-start status    list the tmux windows and whether they're alive
+#   ./dev-start stop      kill the whole session (leaves postgres running)
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+SESSION="crm-dev"
+export TMUX_SESSION="$SESSION"
+
+log() { printf '[dev-start] %s\n' "$1"; }
+die() { printf '[dev-start] ERROR: %s\n' "$1" >&2; exit 1; }
+require() { command -v "$1" >/dev/null 2>&1 || die "'$1' not found (brew install $1)."; }
+
+cmd="${1:-up}"
+
+case "$cmd" in
+  up|start) ;;
+  stop|down)
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      log "killing tmux session '$SESSION' (postgres container keeps running)"
+      tmux kill-session -t "$SESSION"
+    else
+      log "no tmux session '$SESSION' running"
+    fi
+    exit 0
+    ;;
+  status)
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      tmux list-windows -t "$SESSION"
+    else
+      log "no tmux session '$SESSION' running"
+    fi
+    exit 0
+    ;;
+  *)
+    die "unknown command '$cmd' (use: up | stop | status)"
+    ;;
+esac
+
+require tmux
+require cloudflared
+require python3
+[[ -f "$ROOT/.env" ]] || die "no .env at $ROOT/.env -- create it from .env.example first."
+
+# --- already running? just hop into it, don't touch anything ---------------
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  log "session '$SESSION' already running -- attaching"
+  if [[ -n "${TMUX:-}" ]]; then
+    exec tmux switch-client -t "$SESSION"
+  else
+    exec tmux attach-session -t "$SESSION"
+  fi
+fi
+
+# --- postgres: daemon, not a tmux window ------------------------------------
+COMPOSE=(docker compose)
+docker compose version >/dev/null 2>&1 || COMPOSE=(docker-compose)
+
+log "starting postgres (docker compose)..."
+"${COMPOSE[@]}" up -d postgres
+
+log "waiting for postgres to report healthy..."
+for _ in $(seq 1 30); do
+  status="$(docker inspect -f '{{.State.Health.Status}}' trainer-crm-server-postgres-1 2>/dev/null || echo unknown)"
+  [[ "$status" == "healthy" ]] && break
+  sleep 1
+done
+
+PY="$ROOT/.venv/bin/python"
+[[ -x "$PY" ]] || PY="python3"
+
+log "running migrations (alembic upgrade head)..."
+"$PY" -m alembic upgrade head || log "alembic upgrade failed -- check migration state manually."
+
+# --- clear stray processes left over from a non-tmux run --------------------
+lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+pkill -f "src.bot.client_app" 2>/dev/null || true
+pkill -f "src.bot.trainer_app" 2>/dev/null || true
+pkill -f "src.bot.admin_app" 2>/dev/null || true
+pkill -f "src.bot.notification_service" 2>/dev/null || true
+pkill -f "cloudflared tunnel --url http://127.0.0.1:8000" 2>/dev/null || true
+
+# --- build the tmux session --------------------------------------------------
+log "creating tmux session '$SESSION'"
+tmux new-session -d -s "$SESSION" -n tunnel "bash scripts/dev_tunnel_loop.sh"
+tmux new-window  -t "$SESSION" -n api         "$PY -m uvicorn src.api.app:app --reload --port 8000"
+tmux new-window  -t "$SESSION" -n bot-client  "$PY -m src.bot.client_app"
+tmux new-window  -t "$SESSION" -n bot-trainer "$PY -m src.bot.trainer_app"
+tmux new-window  -t "$SESSION" -n bot-admin   "$PY -m src.bot.admin_app"
+tmux new-window  -t "$SESSION" -n notify      "$PY -m src.bot.notification_service"
+
+for w in tunnel api bot-client bot-trainer bot-admin notify; do
+  tmux set-window-option -t "$SESSION:$w" remain-on-exit on
+done
+
+tmux new-window -t "$SESSION" -n monitor "bash scripts/dev_service_monitor.sh"
+tmux set-window-option -t "$SESSION:monitor" remain-on-exit on
+
+tmux select-window -t "$SESSION:tunnel"
+
+log "windows: tunnel, api, bot-client, bot-trainer, bot-admin, notify, monitor"
+log "• monitor window auto-respawns crashed services"
+log "• tunnel window auto-restarts cloudflared and respawns api/bots on URL change"
+log "• all windows stay open on crash (remain-on-exit) -- check logs in each window"
+log "attaching to '$SESSION'..."
+
+if [[ -n "${TMUX:-}" ]]; then
+  exec tmux switch-client -t "$SESSION"
+else
+  exec tmux attach-session -t "$SESSION"
+fi

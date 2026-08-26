@@ -98,19 +98,54 @@
     } catch (e) { /* noop */ }
   }
 
+  function syncTelegramChromeColors() {
+    if (typeof global.__applyTelegramChromeColors === 'function') {
+      global.__applyTelegramChromeColors();
+      return;
+    }
+    if (typeof global.__applyTrainerMiniAppTheme === 'function') {
+      global.__applyTrainerMiniAppTheme();
+      return;
+    }
+    if (typeof global.__applyClientMiniAppTheme === 'function') {
+      global.__applyClientMiniAppTheme();
+      return;
+    }
+    var tg = getTg();
+    if (!tg) return;
+    var dark = tg.colorScheme === 'dark';
+    var bgHex = dark ? '#1c1c1c' : '#FBFAF7';
+    try {
+      if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+      if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+      if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+    } catch (e) { /* noop */ }
+  }
+
   function runtimeReady() {
     var tg = getTg();
     if (tg) {
       if (typeof tg.ready === 'function') tg.ready();
     }
     applyThemeAliases();
+    syncTelegramChromeColors();
     if (tg && typeof tg.onEvent === 'function') {
       try {
         tg.onEvent('themeChanged', function () {
           applyThemeAliases();
+          syncTelegramChromeColors();
+          if (typeof global.__applyTrainerMiniAppTheme === 'function') {
+            global.__applyTrainerMiniAppTheme();
+          }
+          if (typeof global.__applyClientMiniAppTheme === 'function') {
+            global.__applyClientMiniAppTheme();
+          }
         });
       } catch (e1) { /* noop */ }
     }
+    [0, 50, 120, 300, 800].forEach(function (ms) {
+      setTimeout(syncTelegramChromeColors, ms);
+    });
   }
 
   /**

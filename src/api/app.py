@@ -1242,7 +1242,7 @@ _LANDING_ASSET_MEDIA = {
 
 @app.get("/")
 def landing_page():
-    """Ice Pro marketing landing — vertical entry for trainers."""
+    """Glide marketing landing — vertical entry for trainers."""
     path = _LANDING_DIR / "index.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Landing not found")
@@ -1266,7 +1266,7 @@ async def trainer_public_join(
 
 @app.get("/landing/{asset_path:path}")
 def landing_asset(asset_path: str, request: Request):
-    """Static assets for Ice Pro landing (CSS/JS/images). Use ``?v=`` for long cache."""
+    """Static assets for Glide landing (CSS/JS/images). Use ``?v=`` for long cache."""
     if ".." in asset_path or asset_path.startswith("/"):
         raise HTTPException(status_code=404, detail="Not found")
     path = (_LANDING_DIR / asset_path).resolve()

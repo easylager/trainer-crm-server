@@ -1,28 +1,47 @@
 /**
- * Ice Pro landing — layout & vertical tokens (marketing canvas).
+ * Glide landing — layout & vertical tokens (marketing canvas).
  * Motion lives in landing-motion.css; palette aligned with static/webapp/theme.css.
  */
 :root {
-  --tg-theme-bg-color: #fffbec;
-  --tg-theme-text-color: #1a1a1a;
-  --tg-theme-hint-color: #666;
-  --tg-theme-button-color: #f5a623;
-  --tg-theme-secondary-bg-color: #fff5e1;
-  --app-cta-fill: #f5a623;
-  --app-cta-text: #1a1a1a;
-  --ice-frost: #cfe8ff;
-  --ice-mist: #eaf4ff;
-  --ice-glow: #6db7ff;
-  --ice-blue: #1f6bd6;
-  --ice-deep: #0e3a76;
-  --ice-night: #0a1f3d;
+  --tg-theme-bg-color: #FBFAF7;
+  --tg-theme-text-color: #16292A;
+  --tg-theme-hint-color: #5F6B6A;
+  --tg-theme-button-color: #34c6c4;
+  --tg-theme-secondary-bg-color: #FFFFFF;
+
+  /*
+   * GLIDE brand ramp — mirrors static/webapp/theme.css's --glide-* tokens (same hex values).
+   * No shared build step between the landing bundle and the mini-app, so keep these two in sync
+   * by hand if the ramp ever changes.
+   */
+  --glide-50:  #effafa;
+  --glide-100: #d5f2f1;
+  --glide-300: #6fd8d5;
+  --glide-500: #34c6c4;
+  --glide-700: #0f6f6d;
+  --glide-900: #073f3e;
+  --glide-950: #04262a;
+  --glide-on-fill: #062a29;
+  /* --glide-500 is a FILL color (2.0:1 on light bg) — not for text. Use --glide-700 for text/links. */
+  --glide-ink: var(--glide-700);
+
+  --app-cta-fill: var(--glide-500);
+  --app-cta-text: var(--glide-on-fill);
+
+  /* Ice-vertical aliases now resolve to GLIDE teal instead of the old blue palette. */
+  --ice-frost: var(--glide-100);
+  --ice-mist: var(--glide-50);
+  --ice-glow: var(--glide-300);
+  --ice-blue: var(--glide-500);
+  --ice-deep: var(--glide-900);
+  --ice-night: var(--glide-950);
   --vertical-brand-frost: var(--ice-frost);
   --vertical-brand-mist: var(--ice-mist);
   --vertical-brand-glow: var(--ice-glow);
   --vertical-brand-primary: var(--ice-blue);
   --vertical-brand-deep: var(--ice-deep);
-  --shadow-card: 0 2px 4px rgba(14, 58, 118, 0.06), 0 12px 32px rgba(14, 58, 118, 0.1);
-  --shadow-amber: 0 12px 32px rgba(245, 166, 35, 0.28), 0 4px 12px rgba(245, 166, 35, 0.18);
+  --shadow-card: 0 2px 4px rgba(7, 63, 62, 0.06), 0 12px 32px rgba(7, 63, 62, 0.1);
+  --shadow-brand: 0 12px 32px rgba(52, 198, 196, 0.28), 0 4px 12px rgba(52, 198, 196, 0.18);
   --landing-max: 960px;
   --landing-text-max: 680px;
   --landing-gutter: 20px;
@@ -108,7 +127,7 @@ body.landing {
 .landing-btn--primary {
   background: var(--app-cta-fill);
   color: var(--app-cta-text);
-  box-shadow: var(--shadow-amber);
+  box-shadow: var(--app-btn-shadow-cta, 0 2px 10px rgba(0, 0, 0, 0.1));
 }
 .landing-btn--ghost {
   background: transparent;
@@ -613,7 +632,7 @@ body.landing {
     linear-gradient(145deg,
       color-mix(in srgb, var(--app-cta-fill) 18%, var(--tg-theme-bg-color)),
       color-mix(in srgb, var(--vertical-brand-mist) 50%, var(--tg-theme-bg-color)));
-  box-shadow: var(--shadow-amber);
+  box-shadow: var(--shadow-brand);
   text-align: center;
 }
 .landing-cta-band__inner {

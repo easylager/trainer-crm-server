@@ -72,7 +72,7 @@ class TestCollectiveClientLandingPayload:
         payload = build_collective_client_landing_payload(
             {
                 "slug": "ice-studio",
-                "display_name": "Ice Studio",
+                "display_name": "Glide Arena",
                 "tagline": "Йога для всех",
                 "organization_format": ORG_FORMAT_STUDIO,
                 "brand_tokens": {"default_city_id": 3},
@@ -81,7 +81,7 @@ class TestCollectiveClientLandingPayload:
         )
         assert payload is not None
         assert payload["landing_variant"] == "studio"
-        assert payload["display_name"] == "Ice Studio"
+        assert payload["display_name"] == "Glide Arena"
         assert payload["tagline"] == "Йога для всех"
         assert "collective=ice-studio" in payload["catalog_url"]
         assert "city_id=3" in payload["catalog_url"]

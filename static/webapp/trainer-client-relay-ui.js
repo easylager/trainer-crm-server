@@ -86,7 +86,7 @@
       '.trainer-relay-overlay[aria-hidden="true"]{display:none !important}' +
       '#' +
       MODAL_ID +
-      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#fffbec);' +
+      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#FBFAF7);' +
       'color:var(--tg-theme-text-color,#1a1a1a);padding:18px 16px 16px;margin:0;box-sizing:border-box;' +
       'box-shadow:0 -12px 40px rgba(0,0,0,.22)}' +
       '@media(min-width:520px){#' +
@@ -102,7 +102,7 @@
       MODAL_ID +
       ' .trainer-relay-callout{margin:12px 0 10px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;' +
       'background:color-mix(in srgb,var(--tg-theme-secondary-bg-color,#f0f0f0) 88%,transparent);' +
-      'border-left:3px solid var(--tg-theme-button-color,#f5a623);color:var(--tg-theme-text-color,#1a1a1a)}' +
+      'border-left:3px solid var(--tg-theme-button-color,#34C6C4);color:var(--tg-theme-text-color,#1a1a1a)}' +
       '#' +
       MODAL_ID +
       ' .trainer-relay-callout strong{font-weight:700}' +
@@ -122,7 +122,7 @@
       MODAL_ID +
       ' .trainer-relay-ta{width:100%;box-sizing:border-box;border-radius:10px;' +
       'border:1px solid color-mix(in srgb,var(--tg-theme-hint-color,#888) 40%,transparent);' +
-      'background:var(--tg-theme-secondary-bg-color,#fff3cc);color:inherit;padding:11px 12px;' +
+      'background:var(--tg-theme-secondary-bg-color,#FFFFFF);color:inherit;padding:11px 12px;' +
       'font:inherit;font-size:16px;line-height:1.45;resize:vertical;min-height:120px}' +
       '#' +
       MODAL_ID +
@@ -155,7 +155,7 @@
       'color:var(--tg-theme-text-color)}' +
       '#' +
       MODAL_ID +
-      ' .trainer-relay-btn-primary{background:var(--tg-theme-button-color,#f5a623);' +
+      ' .trainer-relay-btn-primary{background:var(--tg-theme-button-color,#34C6C4);' +
       'color:var(--tg-theme-button-text-color,#1a1a1a)}' +
       '#' +
       MODAL_ID +

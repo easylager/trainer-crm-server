@@ -52,10 +52,8 @@
       margin: -4px 0 14px;
       padding: 16px;
       border-radius: 18px;
-      background:
-        linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.05) 48%, transparent 100%),
-        var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.24);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(var(--accent-rgb), 0.24);
       box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);
       position: relative;
       overflow: hidden;
@@ -67,7 +65,7 @@
       right: -26%;
       width: 60%;
       height: 145%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 72%);
+      background: none;
       pointer-events: none;
     }
     .tg-groups-intro__kicker {
@@ -119,8 +117,8 @@
       transition: border-color 0.16s ease, box-shadow 0.16s ease;
     }
     .tg-search:focus-within {
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .tg-search__icon {
       color: var(--tg-theme-hint-color);
@@ -266,8 +264,8 @@
       cursor: pointer;
     }
     .tg-chip-toggle.is-on {
-      border-color: rgba(247, 166, 0, 0.45);
-      background: rgba(247, 166, 0, 0.1);
+      border-color: rgba(var(--accent-rgb), 0.45);
+      background: rgba(var(--accent-rgb), 0.1);
     }
     .tg-chip-select {
       position: relative;
@@ -312,7 +310,7 @@
       top: 0;
       bottom: 0;
       width: 4px;
-      background: rgba(247, 166, 0, 0.72);
+      background: rgba(var(--accent-rgb), 0.72);
     }
     .group-card-tg[data-status="active"]::before {
       background: rgba(52, 199, 89, 0.75);
@@ -327,14 +325,13 @@
       background: rgba(128, 128, 128, 0.68);
     }
     .group-card-tg:hover {
-      border-color: rgba(247, 166, 0, 0.22);
+      border-color: rgba(var(--accent-rgb), 0.22);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
     }
-    @media (prefers-color-scheme: dark) {
-      .group-card-tg:hover {
+    html.trainer-theme-dark .group-card-tg:hover {
         box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
       }
-    }
+
     .group-card-tg:active {
       transform: scale(0.992);
       opacity: 0.96;
@@ -369,9 +366,9 @@
       line-height: 1.2;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      background: rgba(247, 166, 0, 0.18);
+      background: rgba(var(--accent-rgb), 0.18);
       color: var(--tg-theme-text-color);
-      border: 1px solid rgba(247, 166, 0, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -387,7 +384,7 @@
       opacity: 0.74;
       flex-shrink: 0;
     }
-    .tg-status-pill--recruiting { background: rgba(247, 166, 0, 0.22); border-color: rgba(247, 166, 0, 0.4); }
+    .tg-status-pill--recruiting { background: rgba(var(--accent-rgb), 0.22); border-color: rgba(var(--accent-rgb), 0.4); }
     .tg-status-pill--active { background: rgba(52, 199, 89, 0.18); border-color: rgba(52, 199, 89, 0.35); color: var(--tg-theme-text-color); }
     .tg-status-pill--archived { background: rgba(142, 142, 147, 0.15); border-color: rgba(142, 142, 147, 0.25); color: var(--tg-theme-hint-color); }
     .tg-status-pill--paused { background: rgba(255, 149, 0, 0.15); border-color: rgba(255, 149, 0, 0.3); }
@@ -446,8 +443,8 @@
       min-height: 26px;
     }
     .group-chip--catalog {
-      border-color: rgba(247, 166, 0, 0.34);
-      background: rgba(247, 166, 0, 0.16);
+      border-color: rgba(var(--accent-rgb), 0.34);
+      background: rgba(var(--accent-rgb), 0.16);
     }
     .group-chip--season {
       border-color: rgba(52, 199, 89, 0.34);
@@ -512,11 +509,11 @@
       display: block;
       height: 100%;
       border-radius: 6px;
-      background: linear-gradient(90deg, #ffc23d 0%, var(--app-cta-fill) 100%);
+      background: var(--app-cta-fill);
       transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .group-card-tg__meter > span.is-high {
-      background: linear-gradient(90deg, rgba(245, 166, 35, 0.96) 0%, rgba(255, 149, 0, 0.95) 100%);
+      background: var(--app-cta-fill, #34C6C4);
     }
     .group-card-tg__meter > span.is-full {
       background: linear-gradient(90deg, rgba(255, 149, 0, 0.95) 0%, rgba(255, 59, 48, 0.95) 100%);
@@ -820,8 +817,8 @@
     }
     .tg-slot-pill--busy {
       color: var(--tg-theme-button-color);
-      border-color: rgba(245, 166, 35, 0.32);
-      background: rgba(245, 166, 35, 0.14);
+      border-color: rgba(var(--accent-rgb), 0.32);
+      background: rgba(var(--accent-rgb), 0.14);
     }
     .tg-slot-pill--full {
       color: var(--app-danger);
@@ -981,7 +978,7 @@
       outline: none;
       box-shadow:
         inset 0 1px 3px rgba(0, 0, 0, 0.06),
-        0 0 0 2px rgba(245, 166, 35, 0.35);
+        0 0 0 2px rgba(var(--accent-rgb), 0.35);
     }
     .tg-catalog-pitch-save {
       margin-top: 4px !important;
@@ -1087,11 +1084,10 @@
       border: 1px solid rgba(128, 128, 128, 0.12);
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
     }
-    @media (prefers-color-scheme: dark) {
-      .tg-form-card {
+    html.trainer-theme-dark .tg-form-card {
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
       }
-    }
+
     .tg-form-card .bd-section-label {
       margin: 0 0 8px 2px;
     }
@@ -1134,8 +1130,8 @@
     }
     .tg-form-card .form-block input:focus {
       outline: none;
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     /* Selects: avoid one field looking "active" while the sibling looks flat (WebKit focus ring). */
     .tg-form-card .form-block select.tg-select:focus {
@@ -1144,14 +1140,14 @@
       box-shadow: none;
     }
     .tg-form-card .form-block select.tg-select:focus-visible {
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .tg-form-card .form-block select.tg-select {
       appearance: none;
       -webkit-appearance: none;
       padding-right: 36px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2334C6C4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 10px center;
       background-size: 16px;
@@ -1170,8 +1166,8 @@
     }
     .tg-form-card .form-block textarea:focus {
       outline: none;
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .tg-form-card .form-block .form-label {
       margin-bottom: 5px;
@@ -1228,8 +1224,8 @@
     }
     .tg-chip-btn:focus-visible {
       outline: none;
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .tg-weekday {
       display: grid;
@@ -1264,28 +1260,27 @@
     }
     .tg-weekday .wd:focus-visible {
       outline: none;
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .tg-weekday .wd:active {
       transform: scale(0.94);
     }
     .tg-weekday .wd.on {
-      border-color: rgba(247, 166, 0, 0.65);
-      background: linear-gradient(145deg, rgba(255, 194, 61, 0.22) 0%, rgba(247, 166, 0, 0.12) 100%);
+      border-color: rgba(var(--accent-rgb), 0.6);
+      background: rgba(var(--accent-rgb), 0.12);
       color: var(--tg-theme-text-color);
-      box-shadow: 0 2px 12px rgba(247, 166, 0, 0.2);
+      box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.2);
     }
-    @media (prefers-color-scheme: dark) {
-      .tg-weekday .wd:not(.on) {
+    html.trainer-theme-dark .tg-weekday .wd:not(.on) {
         background: color-mix(in srgb, var(--tg-theme-bg-color) 55%, var(--tg-theme-secondary-bg-color));
         color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color));
         border-color: color-mix(in srgb, var(--tg-theme-text-color) 16%, transparent);
       }
-      .tg-weekday .wd.on {
-        box-shadow: 0 4px 16px rgba(247, 166, 0, 0.18);
+html.trainer-theme-dark .tg-weekday .wd.on {
+        box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.18);
       }
-    }
+
     .tg-req-actions {
       display: flex;
       flex-wrap: wrap;
@@ -1340,8 +1335,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.05) 100%);
-      border: 1px solid rgba(247, 166, 0, 0.28);
+      background: none;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
       color: var(--app-cta-fill);
     }
@@ -1369,18 +1364,17 @@
     .tg-empty-state__action {
       margin-top: 14px;
     }
-    @media (prefers-color-scheme: dark) {
-      .list-err {
+    html.trainer-theme-dark .list-err {
         background: rgba(255, 59, 48, 0.12);
         border-color: rgba(255, 100, 90, 0.28);
       }
-      .tg-groups-toolbar {
+html.trainer-theme-dark .tg-groups-toolbar {
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
       }
-      .tg-groups-intro {
+html.trainer-theme-dark .tg-groups-intro {
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       }
-    }
+
     @media (max-width: 380px) {
       .tg-toolbar-row {
         gap: 6px;
@@ -1474,7 +1468,7 @@
       overflow-x: hidden;
       background: var(--tg-theme-bg-color);
       box-shadow:
-        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 0 0 1px rgba(var(--accent-rgb), 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
     #modalEditSchedule .modal.book-flow-modal::before,
@@ -1484,7 +1478,7 @@
       inset: 0;
       border-radius: inherit;
       pointer-events: none;
-      background: linear-gradient(165deg, rgba(247, 166, 0, 0.07) 0%, transparent 42%);
+      background: none;
     }
     #modalEditSchedule .modal.book-flow-modal > *,
     #modalSlotActions .modal.book-flow-modal > * {
@@ -1532,7 +1526,7 @@
       overflow-x: hidden;
       background: var(--tg-theme-bg-color);
       box-shadow:
-        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 0 0 1px rgba(var(--accent-rgb), 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
     #modalAddMember .modal.book-flow-modal::before {
@@ -1541,7 +1535,7 @@
       inset: 0;
       border-radius: inherit;
       pointer-events: none;
-      background: linear-gradient(165deg, rgba(247, 166, 0, 0.07) 0%, transparent 42%);
+      background: none;
     }
     #modalAddMember .modal.book-flow-modal h3.book-modal-title {
       margin: 0 0 4px;
@@ -1597,11 +1591,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(145deg, rgba(247, 166, 0, 0.28), rgba(247, 166, 0, 0.09));
-      color: #c77800;
-    }
-    @media (prefers-color-scheme: dark) {
-      .btn-book-option-media { color: #f7a600; }
+      background: rgba(var(--accent-rgb), 0.12);
+      color: var(--app-cta-fill);
     }
     .btn-book-option-media svg {
       width: 22px;
@@ -1736,11 +1727,11 @@
       margin: 12px 0 0;
       padding: 4px 4px 4px 0;
       scrollbar-width: thin;
-      scrollbar-color: rgba(247, 166, 0, 0.45) transparent;
+      scrollbar-color: rgba(var(--accent-rgb), 0.45) transparent;
     }
     .book-client-list::-webkit-scrollbar { width: 5px; }
     .book-client-list::-webkit-scrollbar-thumb {
-      background: rgba(247, 166, 0, 0.4);
+      background: rgba(var(--accent-rgb), 0.4);
       border-radius: 99px;
     }
     #modalAddMember .book-client-list .client-row {
@@ -1827,9 +1818,9 @@
       text-align: center;
       color: var(--tg-theme-text-color);
       background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.38);
+      border: 1px solid rgba(var(--accent-rgb), 0.38);
       box-shadow:
-        0 0 0 1px rgba(247, 166, 0, 0.1),
+        0 0 0 1px rgba(var(--accent-rgb), 0.1),
         0 12px 36px rgba(0, 0, 0, 0.22);
       z-index: 20050;
       opacity: 0;
@@ -1841,13 +1832,12 @@
       opacity: 1;
       transform: translateY(0);
     }
-    @media (prefers-color-scheme: dark) {
-      .tg-app-toast {
+    html.trainer-theme-dark .tg-app-toast {
         box-shadow:
-          0 0 0 1px rgba(247, 166, 0, 0.12),
+          0 0 0 1px rgba(var(--accent-rgb), 0.12),
           0 16px 40px rgba(0, 0, 0, 0.45);
       }
-    }
+
 
     /*
      * Create group / edit schedule: WebKit date input has intrinsic width > viewport — clips past card edge.

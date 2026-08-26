@@ -132,8 +132,6 @@
         profileBlockTourHubRedirectScheduled: false,
         /** Wizard shows this step instead of-canonical first gap (rewind via «Назад»). */
         profileBlockTourDisplayedStepOverride: null,
-        /** Completed steps rewound with FIFO pop inside the block tour («Назад»). */
-        profileBlockTourBackwardStack: [],
         /**
          * Canonical order of TTV steps for this tour session (fixed at entry).
          * Last key = must be left via explicit «Далее» before hub / moderation auto-submit.
@@ -172,53 +170,32 @@
         arenas: 'арены',
       };
 
-      /** Previous step in TTV wizard (mandatory profile blocks only — not settings). */
-      function profileBlockTourCanonicalPrevStepKey(stepKey) {
-        if (!stepKey) return null;
-        var ix = PROFILE_TT_MINIMAL_WIZARD_ORDER.indexOf(stepKey);
-        if (ix <= 0) return null;
-        return PROFILE_TT_MINIMAL_WIZARD_ORDER[ix - 1];
-      }
-
       /**
-       * Contiguous segment of PROFILE_TT_MINIMAL_WIZARD_ORDER covering all current TTV UI gaps
-       * (so «Назад/Далее» never skip phone between анкетой and услугами).
-       * `missingUiOrdered` = profileBlockTourMissingInCanonicalOrder(profileBlockTourMissingStepKeys(...)).
+       * Рельс визарда — ВСЕГДА все шаги минимальной анкеты, а не только текущие зазоры.
+       *
+       * Раньше рельс строился из незаполненных блоков: у тренера, которому оставалось закрыть
+       * один блок, визард писал «Шаг 1 из 1», но рисовал «Назад» (предыдущий шаг существует
+       * в каноне) — счётчик, точки и навигация противоречили друг другу. Теперь путь один и
+       * тот же для всех: 4 шага, «Шаг X из 4» совпадает с точками, «Назад» — со второго шага.
        */
-      function profileBlockTourBuildMinimalContiguousRail(missingUiOrdered) {
-        var order = PROFILE_TT_MINIMAL_WIZARD_ORDER;
-        var ixes = [];
-        var i;
-        for (i = 0; i < missingUiOrdered.length; i++) {
-          var ix = order.indexOf(missingUiOrdered[i]);
-          if (ix >= 0) ixes.push(ix);
-        }
-        if (!ixes.length) return [];
-        ixes.sort(function(a, b) {
-          return a - b;
-        });
-        return order.slice(ixes[0], ixes[ixes.length - 1] + 1);
+      function profileBlockTourBuildWizardRail() {
+        return PROFILE_TT_MINIMAL_WIZARD_ORDER.slice();
       }
 
-      /** Grow session rail so it includes `stepKey` (user rewound / forward within minimal order). */
-      function profileBlockTourExpandMinimalRailToInclude(stepKey) {
-        var order = PROFILE_TT_MINIMAL_WIZARD_ORDER;
-        var ik = order.indexOf(stepKey);
-        if (ik < 0) return;
+      /** Рельс сессии всегда полон — вызывать перед любым чтением (в т.ч. после reload страницы). */
+      function profileBlockTourEnsureRail() {
         var rail = state.profileBlockTourSessionSealOrder;
-        if (!rail || !rail.length) {
-          state.profileBlockTourSessionSealOrder = order.slice(ik, ik + 1);
-          return;
+        if (!rail || rail.length !== PROFILE_TT_MINIMAL_WIZARD_ORDER.length) {
+          rail = profileBlockTourBuildWizardRail();
+          state.profileBlockTourSessionSealOrder = rail;
         }
-        var i0 = order.indexOf(rail[0]);
-        var i1 = order.indexOf(rail[rail.length - 1]);
-        if (i0 < 0 || i1 < 0) {
-          state.profileBlockTourSessionSealOrder = order.slice(ik, ik + 1);
-          return;
-        }
-        var lo = Math.min(i0, i1, ik);
-        var hi = Math.max(i0, i1, ik);
-        state.profileBlockTourSessionSealOrder = order.slice(lo, hi + 1);
+        return rail;
+      }
+
+      /** Индекс шага в рельсе (-1 — шаг не входит в минимальный путь, напр. блоки «Настроек»). */
+      function profileBlockTourRailIndex(stepKey) {
+        if (!stepKey) return -1;
+        return profileBlockTourEnsureRail().indexOf(stepKey);
       }
 
       /** Первое незаполненное поле в блоке «Основное» (имя → фамилия → город). */
@@ -253,17 +230,13 @@
 
       /** Visible tour step — override rewinds to an already-complete block («Назад»). */
       function profileBlockTourEffectiveStepKey() {
-        if (state.profileBlockTourDisplayedStepOverride != null) {
-          return state.profileBlockTourDisplayedStepOverride;
-        }
+        var rail = profileBlockTourEnsureRail();
+        var ov = state.profileBlockTourDisplayedStepOverride;
+        if (ov != null && rail.indexOf(ov) >= 0) return ov;
         var canon = profileBlockTourCanonicalFirstMissing();
-        if (canon != null) return canon;
-        /* Сервер уже не шлёт зазоры, но финальный seal-шаг ещё нужно явно покинуть «Далее». */
-        if (state.profileBlockTourActive && !state.profileBlockTourSessionVisitedLastForward) {
-          var fs = profileBlockTourFinalSealStepKey();
-          if (fs) return fs;
-        }
-        return null;
+        if (canon != null && rail.indexOf(canon) >= 0) return canon;
+        /* Зазоров нет: держим последний шаг — его нужно покинуть явным «Далее». */
+        return rail[rail.length - 1] || null;
       }
 
       /** Whether this UI wizard key is still listed as missing server-side gaps. */
@@ -274,67 +247,14 @@
 
       function profileBlockTourResetWizardStacks() {
         state.profileBlockTourDisplayedStepOverride = null;
-        state.profileBlockTourBackwardStack = [];
         state.profileBlockTourSessionSealOrder = null;
         state.profileBlockTourSessionVisitedLastForward = false;
       }
 
-      /** Dots и «Шаг X из Y» когда показываем completed шаг после «Назад». */
-      function profileBlockTourProgressContext(displayOverrideKey) {
-        var rawMissing =
-          (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
-        var stepKeysUi = profileBlockTourMissingStepKeys(rawMissing);
-        var orderedMiss = profileBlockTourMissingInCanonicalOrder(stepKeysUi);
-        var canon =
-          displayOverrideKey != null ? displayOverrideKey : profileBlockTourCanonicalFirstMissing();
-
-        if (!orderedMiss.length) {
-          var t = canon ? 1 : 0;
-          return { keys: canon ? [canon] : [], currKey: canon, idx: 0, total: t };
-        }
-
-        if (!displayOverrideKey || orderedMiss.indexOf(displayOverrideKey) >= 0) {
-          var ck = canon || orderedMiss[0];
-          var ix = ck ? orderedMiss.indexOf(ck) : 0;
-          if (ix < 0) ix = 0;
-          return { keys: orderedMiss, currKey: ck, idx: ix, total: orderedMiss.length };
-        }
-
-        var merged = [];
-        PROFILE_TT_BLOCK_ORDER.forEach(function(k) {
-          if (k === displayOverrideKey) merged.push(k);
-          else if (orderedMiss.indexOf(k) >= 0) merged.push(k);
-        });
-        var ix2 = displayOverrideKey ? merged.indexOf(displayOverrideKey) : 0;
-        if (ix2 < 0) ix2 = 0;
-        return { keys: merged, currKey: displayOverrideKey, idx: ix2, total: merged.length };
-      }
-
       /** Last key of the fixed session seal list (explicit «Далее» required before hub / moderation path). */
       function profileBlockTourFinalSealStepKey() {
-        var seal = state.profileBlockTourSessionSealOrder;
-        if (!seal || !seal.length) return null;
-        return seal[seal.length - 1];
-      }
-
-      /** Dots / «Шаг X из Y» using fixed seal order (when server gaps are empty but tour not finished). */
-      function profileBlockTourSealProgress(activeKey) {
-        var seal = state.profileBlockTourSessionSealOrder || [];
-        var fk =
-          activeKey != null ? activeKey : profileBlockTourFinalSealStepKey();
-        if (!seal.length) {
-          return fk
-            ? { keys: [fk], currKey: fk, idx: 0, total: 1 }
-            : { keys: [], currKey: null, idx: 0, total: 0 };
-        }
-        var ix = fk ? seal.indexOf(fk) : seal.length - 1;
-        if (ix < 0) ix = seal.length - 1;
-        return {
-          keys: seal.slice(),
-          currKey: fk || seal[ix],
-          idx: ix < 0 ? 0 : ix,
-          total: seal.length,
-        };
+        var rail = profileBlockTourEnsureRail();
+        return rail[rail.length - 1] || null;
       }
 
       /** After PATCH + loadProfile: mark tour complete only if this save closed gaps leaving the seal's last UI step. */
@@ -356,16 +276,10 @@
           if (ae && ae.blur) ae.blur();
         } catch (eBk) {}
         var currKey = profileBlockTourEffectiveStepKey();
-        if (!currKey) return;
-        profileBlockTourExpandMinimalRailToInclude(currKey);
-        var rail = state.profileBlockTourSessionSealOrder || [];
-        var ix = rail.indexOf(currKey);
-        var prevKey = null;
-        if (ix > 0) prevKey = rail[ix - 1];
-        if (!prevKey) prevKey = profileBlockTourCanonicalPrevStepKey(currKey);
-        if (!prevKey) return;
-        profileBlockTourExpandMinimalRailToInclude(prevKey);
-        state.profileBlockTourDisplayedStepOverride = prevKey;
+        var rail = profileBlockTourEnsureRail();
+        var ix = profileBlockTourRailIndex(currKey);
+        if (ix <= 0) return;
+        state.profileBlockTourDisplayedStepOverride = rail[ix - 1];
         syncProfileBlockTourBar();
       }
 
@@ -584,7 +498,7 @@
         if (st === 'pending_contract' || st === 'pending_payment') return 'pending';
         if (st === 'pending_profile') {
           if (d.already_submitted_for_moderation) return 'pending';
-          if (d.tt_minimal_complete && !d.complete) return 'pending';
+          if (d.tt_minimal_complete && !d.complete) return 'warn';
           if (!d.complete) return 'warn';
           return 'pending';
         }
@@ -1008,7 +922,7 @@
             minHint.style.color = '#34c759';
           } else if (trimLen > 0) {
             minHint.textContent = 'ещё ' + (MIN_DESCRIPTION_CHARS - trimLen) + ' симв.';
-            minHint.style.color = '#f59e0b';
+            minHint.style.color = 'var(--glide-ink-teal, #0C6F6C)';
           } else {
             minHint.textContent = 'мин. ' + MIN_DESCRIPTION_CHARS + ' символов';
             minHint.style.color = '';
@@ -2311,37 +2225,37 @@
           containerId: 'anketaStart',
           tabId: 'form',
           title: 'Познакомимся',
-          subtitle: 'Имя, фамилия и город — это то, что клиенты увидят в первую очередь.',
+          subtitle: 'Имя и город — первое, что видят клиенты в каталоге.',
         },
         phone: {
           containerId: 'profileNavContacts',
           tabId: 'form',
           title: 'Как с вами связаться',
-          subtitle: 'Телефон нужен для подтверждения записи. Остальные контакты — по желанию.',
+          subtitle: 'Телефон нужен, чтобы подтверждать записи. Остальные контакты — по желанию.',
         },
         session_duration_minutes: {
           containerId: 'obSessionDurationWrap',
           tabId: 'settings',
-          title: 'Длительность занятия',
-          subtitle: 'Сколько минут идёт обычная тренировка — станет значением по умолчанию для новых слотов.',
+          title: 'Сколько идёт тренировка',
+          subtitle: 'Станет длительностью по умолчанию для новых слотов. Поменять можно в любой момент.',
         },
         min_hours_before_booking: {
           containerId: 'obMinHoursWrap',
           tabId: 'settings',
           title: 'Окно записи',
-          subtitle: 'За сколько часов до занятия вы готовы принять запись.',
+          subtitle: 'За сколько часов до старта вы готовы принять запись.',
         },
         services: {
           containerId: 'profileServicesCollapse',
           tabId: 'form',
           title: 'Услуги и цены',
-          subtitle: 'Отметьте услуги, которые проводите, и укажите стоимость — так клиенты сразу видят ваш прайс.',
+          subtitle: 'Отметьте, что проводите, и поставьте цену — клиенты увидят прайс сразу.',
         },
         arenas: {
           containerId: 'profileNavArenas',
           tabId: 'form',
           title: 'Где вы тренируете',
-          subtitle: 'Выберите арены и отметьте основную — она появится в карточке тренера.',
+          subtitle: 'Выберите арены и отметьте основную — она попадёт в карточку.',
         },
       };
 
@@ -2377,10 +2291,25 @@
         obFlowReturnHome(el);
       }
 
+      /**
+       * Инлайн-подсказка шага (#obFlowError) — прямо над футером, внутри карточки визарда.
+       * Тост живёт вне визарда и на маленьком экране может уехать; инлайн-строка видна всегда,
+       * поэтому «Далее» никогда не выглядит как «кнопка ничего не сделала».
+       */
+      function setObFlowError(msg) {
+        var el = document.getElementById('obFlowError');
+        if (!el) return;
+        var text = msg ? String(msg) : '';
+        el.textContent = text;
+        el.hidden = !text;
+      }
+
       function obFlowMountStep(key) {
         var def = OB_FLOW_STEP_DEFS[key];
         if (!def) return;
         if (obFlowCurrentMountKey === key) return;
+        /* Новый шаг — старая претензия неактуальна. */
+        setObFlowError('');
         /* Переключить вкладку, чтобы блок «жил» там, где к нему привязаны другие обработчики. */
         if (def.tabId) {
           try { setTab(def.tabId); } catch (eTab) {}
@@ -2495,29 +2424,15 @@
         var d = state.moderation_readiness || {};
         var rawKeys = d.tt_minimal_missing_fields || [];
         var stepKeys = profileBlockTourMissingStepKeys(rawKeys);
-        /* Reload mid-session: infer seal once from current gaps so «force last step» UX can work. */
-        if (
-          state.profileBlockTourActive &&
-          !state.profileBlockTourSessionSealOrder &&
-          stepKeys.length
-        ) {
-          state.profileBlockTourSessionSealOrder = profileBlockTourBuildMinimalContiguousRail(
-            profileBlockTourMissingInCanonicalOrder(stepKeys.slice())
-          );
-        }
+        var rail = profileBlockTourEnsureRail();
         if (stepKeys.length) state.profileBlockTourHubRedirectScheduled = false;
-        var syntheticTailStep = false;
-        var finalSealK = null;
-        if (!stepKeys.length) {
-          finalSealK = profileBlockTourFinalSealStepKey();
-          syntheticTailStep = !!(
-            finalSealK &&
-            !state.profileBlockTourSessionVisitedLastForward &&
-            state.profileBlockTourActive
-          );
-        }
 
-        if (!stepKeys.length && !syntheticTailStep) {
+        /*
+         * Финал онбординга — только когда зазоров нет И последний шаг покинут явным «Далее».
+         * Иначе визард закрывался бы сам в момент, когда сервер перестал видеть пробелы,
+         * и пользователь не успевал бы увидеть последний экран.
+         */
+        if (!stepKeys.length && state.profileBlockTourSessionVisitedLastForward) {
           /* Все шаги TTV закрыты — не показываем полный профиль: оверлей + popup, затем хаб. */
           if (state.profileBlockTourHubRedirectScheduled) {
             return;
@@ -2557,43 +2472,20 @@
           return;
         }
         obFlowOpen();
-        var canonKey = syntheticTailStep
-          ? finalSealK
-          : profileBlockTourCanonicalFirstMissing() || stepKeys[0];
-        var rawOv = state.profileBlockTourDisplayedStepOverride;
-        var currKey = canonKey;
-        if (syntheticTailStep) {
-          state.profileBlockTourDisplayedStepOverride = null;
-        } else if (rawOv != null && OB_FLOW_STEP_DEFS[rawOv]) {
-          currKey = rawOv;
-        } else if (rawOv != null) {
+        /* Забываем протухший override (шаг вне рельса) — иначе визард завис бы на нём. */
+        if (
+          state.profileBlockTourDisplayedStepOverride != null &&
+          rail.indexOf(state.profileBlockTourDisplayedStepOverride) < 0
+        ) {
           state.profileBlockTourDisplayedStepOverride = null;
         }
-        var prog = syntheticTailStep
-          ? profileBlockTourSealProgress(finalSealK)
-          : null;
-        var orderedForDots;
-        var idx;
-        var totalDots;
-        if (syntheticTailStep) {
-          orderedForDots = prog.keys;
-          idx = prog.idx;
-          totalDots = orderedForDots.length;
-        } else {
-          profileBlockTourExpandMinimalRailToInclude(currKey);
-          var rail = state.profileBlockTourSessionSealOrder || [];
-          if (rail.length) {
-            orderedForDots = rail;
-            idx = rail.indexOf(currKey);
-            if (idx < 0) idx = 0;
-            totalDots = rail.length;
-          } else {
-            var progFb = profileBlockTourProgressContext(state.profileBlockTourDisplayedStepOverride);
-            orderedForDots = progFb.keys;
-            idx = progFb.idx;
-            totalDots = orderedForDots.length;
-          }
+        var currKey = profileBlockTourEffectiveStepKey();
+        var idx = rail.indexOf(currKey);
+        if (idx < 0) {
+          idx = 0;
+          currKey = rail[0];
         }
+        var totalDots = rail.length;
         var def = OB_FLOW_STEP_DEFS[currKey] || {};
         /* Заголовок шага. */
         var titleEl = document.getElementById('obFlowTitle');
@@ -2614,8 +2506,9 @@
           for (di = 0; di < totalDots; di++) {
             var dot = document.createElement('span');
             var cls = 'ob-flow__dot';
-            if (di < idx) cls += ' ob-flow__dot--done';
-            else if (di === idx) cls += ' ob-flow__dot--current';
+            /* «Готов» = у шага нет зазоров (а не «левее текущего»): после «Назад» точки не врут. */
+            if (di === idx) cls += ' ob-flow__dot--current';
+            else if (stepKeys.indexOf(rail[di]) < 0) cls += ' ob-flow__dot--done';
             dot.className = cls;
             dots.appendChild(dot);
           }
@@ -2624,10 +2517,8 @@
         }
         var backBtnEl = document.getElementById('obFlowBack');
         if (backBtnEl) {
-          profileBlockTourExpandMinimalRailToInclude(currKey);
-          var railBack = state.profileBlockTourSessionSealOrder || [];
-          var ixBack = railBack.indexOf(currKey);
-          var canBack = ixBack > 0 || (ixBack === 0 && !!profileBlockTourCanonicalPrevStepKey(currKey));
+          /* «Назад» ровно тогда, когда слева по рельсу есть шаг — как показывают точки. */
+          var canBack = idx > 0;
           backBtnEl.hidden = !canBack;
           backBtnEl.setAttribute('aria-hidden', canBack ? 'false' : 'true');
         }
@@ -2635,20 +2526,6 @@
         obFlowMountStep(currKey);
         syncProfileBlockTourNextCta();
         syncProfileTourBarInset();
-      }
-
-      function profileBlockTourMissingInCanonicalOrder(missingKeys) {
-        var keys = Array.isArray(missingKeys) ? missingKeys.slice() : [];
-        if (!keys.length) return [];
-        var out = [];
-        var i;
-        for (i = 0; i < PROFILE_TT_BLOCK_ORDER.length; i++) {
-          if (keys.indexOf(PROFILE_TT_BLOCK_ORDER[i]) >= 0) out.push(PROFILE_TT_BLOCK_ORDER[i]);
-        }
-        keys.forEach(function(k) {
-          if (out.indexOf(k) < 0) out.push(k);
-        });
-        return out;
       }
 
       function profileBlockTourNeedsSave() {
@@ -2665,7 +2542,14 @@
         var textEl = document.getElementById('obFlowNextText');
         var label = 'Далее';
         if (state.profileBlockTourActive) {
-          label = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Далее';
+          /* На последнем шаге кнопка обещает финал, а не ещё один экран. */
+          var rail = profileBlockTourEnsureRail();
+          var isLast = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === rail.length - 1;
+          if (profileBlockTourNeedsSave()) {
+            label = isLast ? 'Сохранить и завершить' : 'Сохранить и дальше';
+          } else {
+            label = isLast ? 'Завершить' : 'Далее';
+          }
         }
         if (textEl) textEl.textContent = label;
         else nx.textContent = label;
@@ -2712,7 +2596,6 @@
           .then(parseJsonResponse)
           .then(function(o) {
             if (!o.ok) return Promise.reject(new Error('bootstrap'));
-            var prev = JSON.stringify((state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || []);
             state.moderation_readiness = o.data.moderation_readiness;
             state.trainer = o.data.trainer;
             state.scheduleSettings = o.data.schedule_settings || null;
@@ -2722,21 +2605,35 @@
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
-              var next = JSON.stringify((state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || []);
-              if (prev === next && next !== '[]') {
-                haptic('warning');
-                showSaveToast(
-                  'Этот шаг ещё не готов',
-                  'Дополните поля шага и нажмите «Сохранить и дальше».',
-                  'warning'
-                );
-              }
+              /*
+               * Здесь предупреждений нет: «зазоры не изменились» — норма при проходе вперёд
+               * по уже заполненным шагам. Ругается только вызывающий, и только если незакрыт
+               * именно текущий шаг (см. profileBlockTourOnNextClickBody).
+               */
               syncProfileBlockTourBar();
             });
           })
           .catch(function() {
             return Promise.reject();
           });
+      }
+
+      /**
+       * Шаг закрыт — сдвигаем визард ровно на одну позицию вправо по рельсу.
+       * На последнем шаге сдвигаться некуда: помечаем, что пользователь покинул его вперёд —
+       * это единственный вход в завершение онбординга (см. syncProfileBlockTourBar).
+       */
+      function profileBlockTourAdvanceOneStep(fromKey, missingUiKeys) {
+        var rail = profileBlockTourEnsureRail();
+        var ix = rail.indexOf(fromKey);
+        if (ix >= 0 && ix + 1 < rail.length) {
+          state.profileBlockTourDisplayedStepOverride = rail[ix + 1];
+          return;
+        }
+        state.profileBlockTourDisplayedStepOverride = null;
+        if (ix === rail.length - 1 && !(missingUiKeys && missingUiKeys.length)) {
+          state.profileBlockTourSessionVisitedLastForward = true;
+        }
       }
 
       /**
@@ -2751,18 +2648,24 @@
         var nxGate = document.getElementById('obFlowNext');
         if (nxGate && nxGate.classList.contains('is-saving')) return;
         var flow = document.getElementById('onboardingFlow');
-        var curHead = profileBlockTourEffectiveStepKey();
-        /* Всегда откладываем на macrotask: цены/описание могут догружаться в снимок после blur или ввода. */
-        if (curHead === 'services' && flow && !flow.hidden) {
-          var ae0 = document.activeElement;
-          if (ae0 && ae0.closest && ae0.closest('#onboardingFlow')) {
-            var tg0 = ae0.tagName;
-            if (tg0 === 'INPUT' || tg0 === 'TEXTAREA' || tg0 === 'SELECT') {
-              try {
-                ae0.blur();
-              } catch (eBl) {}
-            }
+        /*
+         * Правило для ВСЕХ шагов (раньше только для «Услуг»): сначала снять фокус с поля,
+         * затем решать на следующем макротаске. Маска телефона, цены и описания дописывают
+         * значение по blur/change — без этого первый тап читал устаревший снимок формы
+         * и «Далее» срабатывало только со второго раза.
+         */
+        var ae0 = document.activeElement;
+        var deferred = false;
+        if (flow && !flow.hidden && ae0 && ae0.closest && ae0.closest('#onboardingFlow')) {
+          var tg0 = ae0.tagName;
+          if (tg0 === 'INPUT' || tg0 === 'TEXTAREA' || tg0 === 'SELECT') {
+            try {
+              ae0.blur();
+            } catch (eBl) {}
+            deferred = true;
           }
+        }
+        if (deferred) {
           setTimeout(profileBlockTourOnNextClickBody, 0);
           return;
         }
@@ -2776,6 +2679,7 @@
         var stepAtClick = profileBlockTourEffectiveStepKey();
         if (stepAtClick === 'services' && !domServicesPricesCoherent()) {
           haptic('warning');
+          setObFlowError(SERVICES_PRICE_HINT_RU);
           showSaveToast('Укажите цену', SERVICES_PRICE_HINT_RU, 'warning');
           try {
             syncServicesValidationUi();
@@ -2801,10 +2705,13 @@
         if (dirty) {
           var btnSv = document.getElementById('btnSave');
           if (!btnSv || btnSv.disabled) {
+            var whyBlocked = profileBlockTourExplainSaveBlocked();
             haptic('warning');
-            showSaveToast('Сначала дополните шаг', profileBlockTourExplainSaveBlocked(), 'warning');
+            setObFlowError(whyBlocked);
+            showSaveToast('Сначала дополните шаг', whyBlocked, 'warning');
             return;
           }
+          setObFlowError('');
           state.profileBlockTourAdvanceFromKey = stepAtClick;
           /* Synthetic click is unreliable in some WebViews; call save() directly. */
           save();
@@ -2817,27 +2724,14 @@
             if (!state.profileBlockTourActive) return;
             var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
             var missing = profileBlockTourMissingStepKeys(missingRaw);
-            if (
-              !missing.length &&
-              stepAtClick &&
-              profileBlockTourFinalSealStepKey() === stepAtClick
-            ) {
-              state.profileBlockTourSessionVisitedLastForward = true;
-            }
             if (!profileBlockTourUiStepStillMissing(stepAtClick, missing)) {
-              profileBlockTourExpandMinimalRailToInclude(stepAtClick);
-              var railN = state.profileBlockTourSessionSealOrder || [];
-              var ixN = railN.indexOf(stepAtClick);
-              if (ixN >= 0 && ixN + 1 < railN.length) {
-                state.profileBlockTourDisplayedStepOverride = railN[ixN + 1];
-              } else {
-                state.profileBlockTourDisplayedStepOverride = null;
-              }
+              profileBlockTourAdvanceOneStep(stepAtClick, missing);
             }
             syncProfileBlockTourBar();
             if (!missing.length) return;
             if (missing.indexOf(stepAtClick) >= 0) {
               haptic('warning');
+              setObFlowError('Заполните поля шага и нажмите «Сохранить и дальше».');
               showSaveToast(
                 'Сначала закончите этот шаг',
                 'Заполните поля шага и нажмите «Сохранить и дальше».',
@@ -2870,14 +2764,7 @@
         var stillMissingAdv =
           advanceKey != null && profileBlockTourUiStepStillMissing(advanceKey, missing);
         if (!stillMissingAdv && advanceKey != null) {
-          profileBlockTourExpandMinimalRailToInclude(advanceKey);
-          var railA = state.profileBlockTourSessionSealOrder || [];
-          var ixA = railA.indexOf(advanceKey);
-          if (ixA >= 0 && ixA + 1 < railA.length) {
-            state.profileBlockTourDisplayedStepOverride = railA[ixA + 1];
-          } else {
-            state.profileBlockTourDisplayedStepOverride = null;
-          }
+          profileBlockTourAdvanceOneStep(advanceKey, missing);
         }
 
         syncProfileBlockTourBar();
@@ -2917,9 +2804,7 @@
         state.profileBlockTourActive = true;
         state.profileBlockTourHubRedirectScheduled = false;
         profileBlockTourResetWizardStacks();
-        state.profileBlockTourSessionSealOrder = profileBlockTourBuildMinimalContiguousRail(
-          profileBlockTourMissingInCanonicalOrder(keys.slice())
-        );
+        state.profileBlockTourSessionSealOrder = profileBlockTourBuildWizardRail();
         state.profileBlockTourSessionVisitedLastForward = false;
         syncProfileBlockTourBar();
         var k0 = profileBlockTourCanonicalFirstMissing();
@@ -2949,6 +2834,17 @@
         el.dataset.tourTapBound = '1';
         var last = 0;
         var debounceMs = 120;
+        /*
+         * Кнопке футера фокус не нужен. Отменяя дефолт mousedown, мы не даём снять фокус
+         * с поля ДО click: иначе iOS/Telegram закрывают клавиатуру, visualViewport ужимается,
+         * футер уезжает из-под пальца — и первый тап уходит в пустоту («срабатывает со второго раза»).
+         * Сам handler снимает фокус сам (см. profileBlockTourOnNextClick).
+         */
+        el.addEventListener('mousedown', function(ev) {
+          try {
+            ev.preventDefault();
+          } catch (eMd) {}
+        });
         el.addEventListener(
           'click',
           function(ev) {
@@ -3003,6 +2899,13 @@
           /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
           flow.addEventListener('focusin', scheduleProfileTourBarInsetSync);
           flow.addEventListener('focusout', scheduleProfileTourBarInsetSync);
+          /* Пользователь начал править поле — снимаем претензию шага, не дожидаясь «Далее». */
+          flow.addEventListener('input', function() {
+            setObFlowError('');
+          });
+          flow.addEventListener('change', function() {
+            setObFlowError('');
+          });
           /*
            * Two-pass focused-field scroll: first pass (80ms) handles fields already near the
            * bottom before keyboard opens; second pass (420ms) fires after iOS keyboard finishes
@@ -5241,7 +5144,7 @@
         heroPhotoDropZone.addEventListener('dragover', function(e) {
           e.preventDefault();
           e.stopPropagation();
-          heroPhotoDropZone.style.boxShadow = '0 0 0 2px rgba(247, 166, 0, 0.85)';
+          heroPhotoDropZone.style.boxShadow = '0 0 0 2px rgba(var(--accent-rgb), 0.85)';
         });
         heroPhotoDropZone.addEventListener('dragleave', function(e) {
           e.preventDefault();

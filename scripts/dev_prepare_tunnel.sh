@@ -22,7 +22,10 @@ fi
 : >"$LOG_FILE"
 echo "cloudflared log: $LOG_FILE"
 
-nohup cloudflared tunnel --url http://127.0.0.1:8000 >>"$LOG_FILE" 2>&1 &
+# Force HTTP/2: QUIC (UDP/7844) often fails on local Wi-Fi/VPN and leaves a
+# trycloudflare URL that returns Cloudflare 530 while localhost:8000 is fine.
+# cloudflared 2026.x reads TUNNEL_TRANSPORT_PROTOCOL (not --protocol).
+nohup env TUNNEL_TRANSPORT_PROTOCOL=http2 cloudflared tunnel --url http://127.0.0.1:8000 >>"$LOG_FILE" 2>&1 &
 CF_PID=$!
 disown "$CF_PID" 2>/dev/null || true
 echo "$CF_PID" >"$PID_FILE"

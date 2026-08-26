@@ -37,10 +37,10 @@
     }
     .filter-btn:active { transform: scale(0.97); }
     .filter-btn.active {
-      background: #F7A600 !important;
+      background: var(--app-cta-fill) !important;
       color: #1a1a1a !important;
       font-weight: 600;
-      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.3);
+      box-shadow: var(--app-btn-shadow-surface);
     }
     /* One-line model: анкета vs настройки CRM */
     .profile-tab-explainer {
@@ -105,7 +105,7 @@
       content: '';
       flex: 0 0 3px;
       height: 14px;
-      background: #F7A600;
+      background: var(--app-cta-fill);
       border-radius: 2px;
     }
     /* Collapsible profile blocks (education, services) — same visual rhythm as .section-title */
@@ -136,7 +136,7 @@
       content: '';
       flex: 0 0 3px;
       height: 14px;
-      background: #F7A600;
+      background: var(--app-cta-fill);
       border-radius: 2px;
     }
     .profile-collapse__title {
@@ -168,7 +168,7 @@
       transition: box-shadow 0.2s;
     }
     .card:focus-within {
-      box-shadow: 0 2px 12px rgba(247, 166, 0, 0.12);
+      box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.12);
     }
     .field { margin-bottom: 16px; position: relative; scroll-margin-top: 140px; }
     /*
@@ -233,7 +233,7 @@
     .field label .required-dot {
       width: 5px;
       height: 5px;
-      background: #F7A600;
+      background: rgb(var(--accent-rgb));
       border-radius: 50%;
       flex-shrink: 0;
     }
@@ -253,8 +253,8 @@
     .field input:not(.crm-phone-national-input):focus,
     .field select:focus,
     .field textarea:focus {
-      border-color: rgba(247, 166, 0, 0.5);
-      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.1);
+      border-color: rgba(var(--accent-rgb), 0.5);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
     }
     .field input.field-valid {
       border-color: rgba(52, 199, 89, 0.5);
@@ -298,12 +298,12 @@
       padding: 20px;
       border-radius: 16px;
       background: var(--tg-theme-bg-color);
-      border: 2px dashed rgba(247, 166, 0, 0.3);
+      border: 2px dashed rgba(var(--accent-rgb), 0.3);
       transition: border-color 0.2s, background 0.2s;
     }
     .photo-upload-controls:hover {
-      border-color: rgba(247, 166, 0, 0.6);
-      background: rgba(247, 166, 0, 0.04);
+      border-color: rgba(var(--accent-rgb), 0.6);
+      background: rgba(var(--accent-rgb), 0.04);
     }
     .photo-upload-label {
       position: relative;
@@ -330,7 +330,7 @@
       gap: 8px;
       padding: 12px 20px;
       border-radius: 12px;
-      background: #F7A600;
+      background: var(--app-cta-fill);
       color: #1a1a1a;
       font-size: 14px;
       font-weight: 600;
@@ -368,14 +368,14 @@
     .service-block:last-child { margin-bottom: 0; }
     .service-row:last-child { margin-bottom: 0; }
     .service-row.service-active {
-      background: rgba(247, 166, 0, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
     .service-row input[type="checkbox"] {
       width: 22px;
       height: 22px;
       flex-shrink: 0;
       margin-top: 2px;
-      accent-color: #F7A600;
+      accent-color: rgb(var(--accent-rgb));
       cursor: pointer;
     }
     /* flex: 1 1 0 + min-width: 0 so long names wrap instead of overlapping the price column */
@@ -536,7 +536,7 @@
       transition: border-color 0.15s ease;
     }
     .svc-tier-row input[type="number"]:focus {
-      border-color: rgba(247, 166, 0, 0.55);
+      border-color: rgba(var(--accent-rgb), 0.55);
     }
     .svc-desc-wrap {
       width: 100%;
@@ -659,12 +659,12 @@
     }
     .arena-row:last-child { margin-bottom: 0; }
     .arena-row.arena-active {
-      background: rgba(247, 166, 0, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
     .arena-row input {
       width: 22px;
       height: 22px;
-      accent-color: #F7A600;
+      accent-color: rgb(var(--accent-rgb));
       cursor: pointer;
     }
     .arena-row label {
@@ -737,7 +737,7 @@
       border: none;
       font-size: 14px;
       font-weight: 600;
-      background: #F7A600;
+      background: var(--app-cta-fill);
       color: #1a1a1a;
       cursor: pointer;
       transition: transform 0.15s;
@@ -891,7 +891,7 @@
       align-items: center;
       gap: 8px;
     }
-    #descriptionMeta.description-warn { color: #f59e0b; }
+    #descriptionMeta.description-warn { color: var(--glide-ink-teal, #0C6F6C); }
     #descriptionMeta.description-ok { color: #34c759; }
     .char-progress {
       flex: 1;
@@ -907,7 +907,7 @@
       border-radius: 2px;
       transition: width 0.2s, background 0.2s;
     }
-    .char-progress-bar.warn { background: #f59e0b; }
+    .char-progress-bar.warn { background: var(--app-cta-fill, #34C6C4); }
     .char-progress-bar.ok { background: #34c759; }
     .field-error {
       font-size: 13px;
@@ -967,8 +967,8 @@
     .mod-feedback-banner {
       margin-bottom: 14px;
       border-radius: 14px;
-      border: 1px solid rgba(247, 166, 0, 0.45);
-      background: rgba(247, 166, 0, 0.1);
+      border: 1px solid rgba(var(--accent-rgb), 0.45);
+      background: rgba(var(--accent-rgb), 0.1);
       padding: 14px 16px;
       box-sizing: border-box;
     }
@@ -1016,7 +1016,7 @@
       flex-direction: column;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
-      border: 1px solid rgba(247, 166, 0, 0.25);
+      border: 1px solid rgba(var(--accent-rgb), 0.25);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
       overflow: hidden;
     }
@@ -1066,25 +1066,25 @@
       color: var(--tg-theme-hint-color);
     }
     .photo-crop-confirm {
-      background: var(--app-cta-fill, #f5a623);
+      background: var(--app-cta-fill, #34C6C4);
       color: var(--app-cta-text, #1a1a1a);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     }
     .photo-crop-confirm:active {
       opacity: 0.94;
     }
-    /* Cropper.js defaults to Telegram-blue handles; brand amber for trainer CRM */
+    /* Cropper.js defaults to Telegram-blue handles; GLIDE teal for trainer CRM */
     .photo-crop-stage .cropper-view-box {
-      outline: 2px solid var(--app-cta-fill, #f5a623) !important;
+      outline: 2px solid var(--app-cta-fill, #34C6C4) !important;
       outline-offset: -1px;
     }
     .photo-crop-stage .cropper-point {
-      background-color: var(--app-cta-fill, #f5a623) !important;
+      background-color: var(--app-cta-fill, #34C6C4) !important;
       border: 1px solid rgba(26, 26, 26, 0.35) !important;
       opacity: 1 !important;
     }
     .photo-crop-stage .cropper-line {
-      background-color: rgba(245, 166, 35, 0.45) !important;
+      background-color: rgba(var(--accent-rgb), 0.45) !important;
     }
     
     /* Визуальная подсказка для позиционирования лица */
@@ -1124,20 +1124,18 @@
       background: rgba(52, 199, 89, 0.15) !important;
       color: #22c55e !important;
     }
-    .status-pill.warn {
-      background: rgba(247, 166, 0, 0.15) !important;
-      color: #F7A600 !important;
-    }
+    .status-pill.warn,
     .status-pill.pending {
-      background: rgba(255, 149, 0, 0.15) !important;
-      color: #f97316 !important;
+      background: rgba(52, 198, 196, 0.14) !important;
+      color: var(--glide-ink-teal, #0C6F6C) !important;
+      border: 1px solid rgba(52, 198, 196, 0.28);
     }
     .profile-hero {
       margin-bottom: 20px;
       padding: 20px 16px 16px;
       border-radius: 20px;
-      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.08) 100%) !important;
-      border: 1px solid rgba(247, 166, 0, 0.15);
+      background: var(--tg-theme-secondary-bg-color) !important;
+      border: 1px solid rgba(var(--accent-rgb), 0.15);
       position: relative;
       overflow: hidden;
     }
@@ -1148,7 +1146,7 @@
       right: -30%;
       width: 200px;
       height: 200px;
-      background: radial-gradient(circle, rgba(247, 166, 0, 0.1) 0%, transparent 70%);
+      background: none;
       pointer-events: none;
     }
     .hero-photo-wrap {
@@ -1175,7 +1173,7 @@
       transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
     .hero-photo-tap:focus-visible {
-      box-shadow: 0 0 0 3px var(--tg-theme-bg-color), 0 0 0 5px rgba(247, 166, 0, 0.85);
+      box-shadow: 0 0 0 3px var(--tg-theme-bg-color), 0 0 0 5px rgba(var(--accent-rgb), 0.85);
     }
     .hero-photo-tap:active {
       transform: scale(0.98);
@@ -1190,7 +1188,7 @@
       height: clamp(120px, 36vw, 150px);
       border-radius: 24px;
       overflow: hidden;
-      border: 3px solid rgba(247, 166, 0, 0.22);
+      border: 3px solid rgba(var(--accent-rgb), 0.22);
       background: var(--tg-theme-bg-color);
     }
     .hero-photo {
@@ -1213,7 +1211,7 @@
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      background: linear-gradient(160deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      background: var(--tg-theme-secondary-bg-color);
     }
     .hero-photo.placeholder::before {
       content: '';
@@ -1371,7 +1369,7 @@
     }
     .progress-ring-bg circle { stroke: rgba(128, 128, 128, 0.15); }
     .progress-ring-fill circle {
-      stroke: #F7A600;
+      stroke: var(--app-cta-fill);
       stroke-linecap: round;
       transform: rotate(-90deg);
       transform-origin: center;
@@ -1430,7 +1428,7 @@
       border-color: rgba(34, 197, 94, 0.28);
     }
     .save-toast.save-toast--warning {
-      border-color: rgba(245, 158, 11, 0.55);
+      border-color: rgba(52, 198, 196, 0.35);
     }
     .save-toast.save-toast--error {
       border-color: rgba(239, 68, 68, 0.45);
@@ -1464,8 +1462,8 @@
       color: #16a34a;
     }
     .save-toast--warning .save-toast-mark {
-      background: linear-gradient(135deg, rgba(245, 158, 11, 0.28) 0%, rgba(245, 158, 11, 0.12) 100%);
-      color: #b45309;
+      background: linear-gradient(135deg, rgba(52, 198, 196, 0.24) 0%, rgba(52, 198, 196, 0.1) 100%);
+      color: var(--glide-ink-teal, #0C6F6C);
     }
     .save-toast--error .save-toast-mark {
       background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(239, 68, 68, 0.1) 100%);
@@ -1537,11 +1535,11 @@
       border: none;
       font-size: 16px;
       font-weight: 600;
-      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%) !important;
-      color: #1a1a1a !important;
+      background: var(--app-cta-fill) !important;
+      color: var(--app-cta-text) !important;
       cursor: pointer;
       transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(247, 166, 0, 0.3);
+      box-shadow: var(--app-btn-shadow-cta);
     }
     .save-bar-hint {
       margin: 0 0 12px;
@@ -1559,11 +1557,11 @@
       box-shadow: none;
     }
     .btn-save:not(:disabled):hover {
-      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.4);
+      box-shadow: var(--app-btn-shadow-cta);
     }
     .btn-save:not(:disabled):active {
       transform: scale(0.98);
-      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.3);
+      box-shadow: var(--app-btn-shadow-surface);
     }
     .btn-save.saving {
       pointer-events: none;
@@ -1590,7 +1588,7 @@
     .skeleton-hero {
       height: 280px;
       border-radius: 20px;
-      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(247, 166, 0, 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
+      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(var(--accent-rgb), 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
       margin-bottom: 16px;
@@ -1598,7 +1596,7 @@
     .skeleton-line {
       height: 16px;
       border-radius: 8px;
-      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(247, 166, 0, 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
+      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(var(--accent-rgb), 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
       margin-bottom: 12px;
@@ -1706,11 +1704,10 @@
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
       box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
     }
-    @media (prefers-color-scheme: dark) {
-      .settings-format-icon {
+    html.trainer-theme-dark .settings-format-icon {
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
       }
-    }
+
     .settings-format-svg {
       width: 22px;
       height: 22px;
@@ -1877,11 +1874,7 @@
       transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .settings-group-toggle__input:checked + .settings-group-toggle__label .settings-group-toggle__switch {
-      background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--tg-theme-button-color) 92%, #fff) 0%,
-        color-mix(in srgb, var(--tg-theme-button-color) 72%, #1a1a1a) 100%
-      );
+      background: var(--app-cta-fill);
     }
     .settings-group-toggle__input:checked + .settings-group-toggle__label .settings-group-toggle__switch::after {
       transform: translateX(20px);
@@ -1919,14 +1912,10 @@
       transform: scale(0.98);
     }
     .grid-step-chip.selected {
-      background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--tg-theme-button-color) 88%, var(--tg-theme-bg-color)) 0%,
-        color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-bg-color)) 100%
-      );
-      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
-      color: #1a1a1a;
-      box-shadow: 0 2px 10px color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+      background: var(--app-cta-fill);
+      border-color: color-mix(in srgb, var(--app-cta-fill) 55%, transparent);
+      color: var(--app-cta-text);
+      box-shadow: var(--app-btn-shadow-cta);
     }
     .grid-step-preview-wrap {
       display: grid;
@@ -1987,130 +1976,129 @@
       width: 100%;
     }
 
-    /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
+    /* GLIDE — перебиваем themeParams Telegram там, где страница задаёт свои токены */
+    body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-text-color) !important; }
     .filter-btn, .card, .edu-readonly, .profile-hero, .grid-step-preview-card, .schedule-grid-arena-only, .settings-format-card {
-      background: #fff5e1 !important;
-      color: #1a1a1a !important;
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
     }
     .settings-format-icon {
-      background: #fffbec !important;
-      color: #f5a623 !important;
-      border-color: rgba(245, 166, 35, 0.45) !important;
+      background: var(--tg-theme-bg-color) !important;
+      color: rgb(var(--accent-rgb-alt)) !important;
+      border-color: rgba(var(--accent-rgb-alt), 0.45) !important;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
     }
-    .filters { background: #fff5e1 !important; }
+    .filters { background: var(--tg-theme-secondary-bg-color) !important; }
     .profile-form-nav__chip {
-      background: #fffbec !important;
-      border-color: rgba(245, 166, 35, 0.4) !important;
-      color: #1a1a1a !important;
+      background: var(--tg-theme-bg-color) !important;
+      border-color: rgba(var(--accent-rgb), 0.4) !important;
+      color: var(--tg-theme-text-color) !important;
     }
     .settings-group-toggle__label {
-      background: #fffbec !important;
-      border-color: rgba(245, 166, 35, 0.38) !important;
+      background: var(--tg-theme-bg-color) !important;
+      border-color: rgba(var(--accent-rgb-alt), 0.38) !important;
     }
     .settings-group-toggle__input:checked + .settings-group-toggle__label {
-      background: rgba(247, 166, 0, 0.12) !important;
-      border-color: rgba(245, 166, 35, 0.55) !important;
-      box-shadow: 0 2px 12px rgba(247, 166, 0, 0.2) !important;
+      background: rgba(var(--accent-rgb), 0.12) !important;
+      border-color: rgba(var(--accent-rgb-alt), 0.55) !important;
+      box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.2) !important;
     }
-    .profile-hero { background: linear-gradient(135deg, #fff5e1 0%, rgba(245, 166, 35, 0.12) 100%) !important; }
+    .profile-hero { background: var(--glide-brand-wash, rgba(var(--accent-rgb), 0.1)) !important; }
     .field input, .field textarea, .field select, .settings-format-num {
-      background: #FFFBEB !important;
+      background: var(--tg-theme-bg-color) !important;
       color: #1a1a1a !important;
     }
     .service-row, .arena-row, .progress-ring, .edu-card {
-      background: #FFFBEB !important;
+      background: var(--tg-theme-bg-color) !important;
     }
     .service-row.service-active, .arena-row.arena-active {
-      background: rgba(247, 166, 0, 0.12) !important;
+      background: rgba(var(--accent-rgb), 0.12) !important;
     }
     .service-row input[type="number"] {
       background: #fff !important;
       color: #1a1a1a !important;
-      border: 1px solid rgba(247, 166, 0, 0.4) !important;
+      border: 1px solid rgba(var(--accent-rgb), 0.4) !important;
     }
     .service-row input[type="number"].field-invalid {
       border-color: rgba(239, 68, 68, 0.6) !important;
       background: rgba(239, 68, 68, 0.04) !important;
     }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .filter-btn, .card, .edu-readonly, .grid-step-preview-card, .schedule-grid-arena-only, .settings-format-card {
+    html.trainer-theme-dark body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+html.trainer-theme-dark .filter-btn, html.trainer-theme-dark .card, html.trainer-theme-dark .edu-readonly, html.trainer-theme-dark .grid-step-preview-card, html.trainer-theme-dark .schedule-grid-arena-only, html.trainer-theme-dark .settings-format-card {
         background: #2a2a2a !important;
         color: #f5f5f5 !important;
       }
-      .settings-format-icon {
+html.trainer-theme-dark .settings-format-icon {
         background: #1c1c1e !important;
-        color: #f7a600 !important;
-        border-color: rgba(247, 166, 0, 0.42) !important;
+        color: rgb(var(--accent-rgb)) !important;
+        border-color: rgba(var(--accent-rgb), 0.42) !important;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
       }
-      .schedule-grid-arena-only__sub {
+html.trainer-theme-dark .schedule-grid-arena-only__sub {
         color: #a8a8a8 !important;
       }
-      .filters { background: #252525 !important; }
-      .profile-form-nav__chip {
+html.trainer-theme-dark .filters { background: #252525 !important; }
+html.trainer-theme-dark .profile-form-nav__chip {
         background: #1c1c1e !important;
-        border-color: rgba(247, 166, 0, 0.42) !important;
+        border-color: rgba(var(--accent-rgb), 0.42) !important;
         color: #f5f5f5 !important;
       }
-      .settings-group-toggle__label {
+html.trainer-theme-dark .settings-group-toggle__label {
         background: #1c1c1e !important;
-        border-color: rgba(247, 166, 0, 0.35) !important;
+        border-color: rgba(var(--accent-rgb), 0.35) !important;
       }
-      .settings-group-toggle__input:checked + .settings-group-toggle__label {
-        background: rgba(247, 166, 0, 0.14) !important;
-        border-color: rgba(247, 166, 0, 0.52) !important;
+html.trainer-theme-dark .settings-group-toggle__input:checked + .settings-group-toggle__label {
+        background: rgba(var(--accent-rgb), 0.14) !important;
+        border-color: rgba(var(--accent-rgb), 0.52) !important;
         box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35) !important;
       }
-      .profile-hero {
-        background: linear-gradient(135deg, #2a2a2a 0%, rgba(247, 166, 0, 0.1) 100%) !important;
+html.trainer-theme-dark .profile-hero {
+        background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, rgba(var(--accent-rgb), 0.12)) !important;
         color: #f5f5f5 !important;
       }
-      .field input, .field textarea, .field select, .settings-format-num {
+html.trainer-theme-dark .field input, html.trainer-theme-dark .field textarea, html.trainer-theme-dark .field select, html.trainer-theme-dark .settings-format-num {
         background: #1a1a1a !important;
         color: #f5f5f5 !important;
       }
-      .service-row, .arena-row, .progress-ring, .edu-card {
+html.trainer-theme-dark .service-row, html.trainer-theme-dark .arena-row, html.trainer-theme-dark .progress-ring, html.trainer-theme-dark .edu-card {
         background: #222 !important;
       }
-      .service-row.service-active, .arena-row.arena-active {
-        background: rgba(247, 166, 0, 0.15) !important;
+html.trainer-theme-dark .service-row.service-active, html.trainer-theme-dark .arena-row.arena-active {
+        background: rgba(var(--accent-rgb), 0.15) !important;
       }
-      .service-row input[type="number"] {
+html.trainer-theme-dark .service-row input[type="number"] {
         background: #1a1a1a !important;
-        color: #F7A600 !important;
-        border: 1px solid rgba(247, 166, 0, 0.5) !important;
+        color: rgb(var(--accent-rgb)) !important;
+        border: 1px solid rgba(var(--accent-rgb), 0.5) !important;
       }
-      .settings-duration-chip {
-        background: rgba(247, 166, 0, 0.12) !important;
-        border-color: rgba(247, 166, 0, 0.45) !important;
+html.trainer-theme-dark .settings-duration-chip {
+        background: rgba(var(--accent-rgb), 0.12) !important;
+        border-color: rgba(var(--accent-rgb), 0.45) !important;
         color: #f5f5f5 !important;
       }
-      .save-toast {
+html.trainer-theme-dark .save-toast {
         background: rgba(42, 42, 42, 0.98) !important;
         border-color: rgba(34, 197, 94, 0.3) !important;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.3) !important;
       }
-      .save-toast-title { color: #f8fafc !important; }
-      .save-toast-desc { color: #94a3b8 !important; }
-      .save-toast--success .save-toast-mark {
+html.trainer-theme-dark .save-toast-title { color: #f8fafc !important; }
+html.trainer-theme-dark .save-toast-desc { color: #94a3b8 !important; }
+html.trainer-theme-dark .save-toast--success .save-toast-mark {
         background: rgba(34, 197, 94, 0.2) !important;
         color: #4ade80 !important;
       }
-      .save-toast--warning .save-toast-mark {
-        background: rgba(245, 158, 11, 0.22) !important;
-        color: #fbbf24 !important;
+html.trainer-theme-dark .save-toast--warning .save-toast-mark {
+        background: rgba(52, 198, 196, 0.2) !important;
+        color: #6FD8D5 !important;
       }
-      .save-toast--error .save-toast-mark {
+html.trainer-theme-dark .save-toast--error .save-toast-mark {
         background: rgba(239, 68, 68, 0.22) !important;
         color: #f87171 !important;
       }
-      .hero-photo-tap { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
-      .hero-photo-frame { border-color: rgba(247, 166, 0, 0.35); }
-      .quick-action-btn { background: #252525 !important; }
-    }
+html.trainer-theme-dark .hero-photo-tap { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+html.trainer-theme-dark .hero-photo-frame { border-color: rgba(var(--accent-rgb), 0.35); }
+html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
+
 
     /* TTV tour: десктоп/планшет — в потоке и sticky сверху при длинной анкете.
        Узкий экран: см. @media (max-width: 560px) — бар снизу, без перекрытия полей. */
@@ -2140,7 +2128,7 @@
       padding: 12px 14px;
       border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     }
     .profile-block-tour-bar__title {
@@ -2177,14 +2165,14 @@
       color: var(--tg-theme-hint-color);
     }
     .profile-block-tour-bar__btn--secondary {
-      background: rgba(247, 166, 0, 0.12);
+      background: rgba(var(--accent-rgb), 0.12);
       color: var(--tg-theme-text-color);
     }
     .profile-block-tour-bar__btn--primary {
-      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%);
-      color: #1a1a1a;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
       margin-left: auto;
-      box-shadow: 0 6px 16px rgba(247, 166, 0, 0.26);
+      box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.26);
     }
     @media (max-width: 420px) {
       .profile-block-tour-bar__actions {
@@ -2211,7 +2199,7 @@
         padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0));
         background: var(--tg-theme-bg-color);
         box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.14);
-        border-top: 1px solid rgba(247, 166, 0, 0.22);
+        border-top: 1px solid rgba(var(--accent-rgb), 0.22);
       }
       body.profile-block-tour--on .profile-block-tour-bar__hint {
         display: none;
@@ -2374,7 +2362,6 @@
     }
     body.ob-flow-open #mainContent,
     body.ob-flow-open .save-bar,
-    body.ob-flow-open #saveToast,
     body.ob-flow-open #skeleton {
       visibility: hidden;
       /* visibility:hidden may still participate in hit-testing in some WebViews — clicks «просачиваются» */
@@ -2382,6 +2369,17 @@
     }
     body.ob-flow-open .ob-flow {
       pointer-events: auto;
+    }
+    /*
+     * Тост в визарде был скрыт вместе с остальной обвязкой — и все ответы на «Далее»
+     * («Укажите цену», «Сначала закончите шаг», «Сохранено») уходили в невидимый слой:
+     * тап выглядел как «кнопка не сработала». Показываем поверх визарда и сверху,
+     * чтобы не спорить с футером и клавиатурой.
+     */
+    body.ob-flow-open #saveToast {
+      z-index: 240;
+      top: calc(env(safe-area-inset-top, 0px) + 68px);
+      bottom: auto;
     }
     /* Старый sticky-бар больше не используется; прячем на всякий случай. */
     #profileBlockTourBar {
@@ -2391,21 +2389,87 @@
     .ob-flow[hidden] {
       display: none !important;
     }
-    /* Фон визарда — брендовый (крем/графит), не «telegram-синий» из themeParams. */
+    /*
+     * ВИЗАРД — «бумага и белое с одним бирюзовым акцентом».
+     *
+     * Референсы (бренды с таким же бирюзовым логотипом): Perplexity — бумажный холст, offblack,
+     * ОДИН тил на навигацию и активные состояния, волосяные разделители вместо серых плашек;
+     * Deliveroo — насыщенный тил только как заливка действия поверх «полного белого»;
+     * Tiffany — бирюза микродозами на белом плюс тёплый нейтральный компаньон.
+     *
+     * Отсюда три правила этого экрана:
+     *   1. Холст — бумага, карточки — чистое белое, подъём тенью, а не заливкой.
+     *   2. Тил живёт только в акценте: кнопка, прогресс, фокус, выбранная строка. Никаких
+     *      тёмных плашек — прежняя графитовая шапка и серо-тиловые карточки делали экран
+     *      «тёмным и скучным» даже в светлой теме.
+     *   3. Цвет сверху даёт мягкая бирюзовая аврора на бумаге — присутствие бренда без тьмы.
+     *
+     * СВЕТЛЫЙ В ЛЮБОЙ ТЕМЕ. Переопределяем здесь и --glide-*, и --tg-theme-*: онбординг —
+     * фирменная «белая коробка», а не системная поверхность. Заодно это чинит наследование:
+     * любой перенесённый блок, который читает --tg-theme-text-color / --tg-theme-bg-color,
+     * получает наши светлые значения и в тёмной теме Telegram.
+     * Вернуть тёмную тему визарду = убрать этот блок токенов.
+     *
+     * --accent-rgb здесь тиловый: все унаследованные rgba(var(--accent-rgb), α) у перенесённых
+     * блоков (услуги, арены, чипы, тумблеры, код страны) становятся бирюзовыми внутри визарда
+     * и остаются янтарными за его пределами.
+     */
     .ob-flow {
+      --accent-rgb: 52, 198, 196;
+      --accent-rgb-alt: 52, 198, 196;
+      --glide-paper: #FBFAF7;
+      --glide-bg: #FBFAF7;
+      --glide-surface: #FFFFFF;
+      --glide-card: #FFFFFF;
+      --glide-line: #ECEBE6;
+      --glide-line-strong: #DDDCD4;
+      --glide-text: #16292A;
+      --glide-hint: #5F6B6A;
+      --glide-ink: #0C6F6C;
+      --glide-ink-teal: #0C6F6C;
+      --glide-shadow-card: 0 1px 2px rgba(20, 40, 40, 0.04), 0 10px 28px -18px rgba(20, 40, 40, 0.35);
+      --glide-shadow-cta: 0 6px 18px -8px rgba(52, 198, 196, 0.75);
+      --app-brand-root-bg: #FBFAF7;
+      --app-brand-surface: #FFFFFF;
+      /* Ошибка шага — единственная «тревожная» краска визарда; 6.0:1 на карточке. */
+      --ob-flow-danger-text: #a8322f;
+      --ob-flow-danger-bg: rgba(209, 67, 67, 0.08);
+      --ob-flow-danger-line: rgba(209, 67, 67, 0.28);
+      --tg-theme-text-color: var(--glide-text);
+      --tg-theme-hint-color: var(--glide-hint);
+      --tg-theme-bg-color: var(--glide-card);
+      --tg-theme-secondary-bg-color: var(--glide-paper);
+      --tg-theme-button-color: var(--glide-brand);
+      --tg-theme-button-text-color: var(--glide-on-fill);
       position: fixed;
       inset: 0;
       z-index: 210;
       display: grid;
       grid-template-rows: auto 1fr auto;
-      background: var(--app-brand-root-bg);
-      color: var(--tg-theme-text-color);
-      accent-color: var(--app-cta-fill, var(--tg-theme-button-color));
+      /* Аврора: бренд присутствует цветом, а не темнотой. Текст на ней — 13:1. */
+      background:
+        radial-gradient(125% 55% at 50% 0%, rgba(52, 198, 196, 0.16) 0%, rgba(52, 198, 196, 0.05) 45%, rgba(52, 198, 196, 0) 72%),
+        var(--glide-paper);
+      color: var(--glide-text);
+      accent-color: var(--glide-brand);
       height: 100vh;
       height: 100dvh;
       max-height: 100dvh;
       overscroll-behavior: contain;
     }
+    /*
+     * Ночью бумага не должна слепить: приглушаем холст на пару процентов и гасим аврору.
+     * Это по-прежнему светлый экран — просто менее яркий.
+     */
+    html.trainer-theme-dark .ob-flow {
+        --glide-paper: #F2F1EC;
+        --glide-bg: #F2F1EC;
+        --app-brand-root-bg: #F2F1EC;
+        background:
+          radial-gradient(125% 55% at 50% 0%, rgba(52, 198, 196, 0.12) 0%, rgba(52, 198, 196, 0.04) 45%, rgba(52, 198, 196, 0) 72%),
+          var(--glide-paper);
+      }
+
 
     /*
      * JS ставит inline height/top от visualViewport (клавиатура). На телефоне отключаем transition —
@@ -2425,22 +2489,28 @@
       }
     }
 
+    /*
+     * Шапка прозрачная — сквозь неё видно аврору. Прогресс и счётчик несут бренд цветом,
+     * а не тёмной плашкой (её убрали: она задавала всему экрану «тёмный» характер).
+     */
     .ob-flow__header {
       display: grid;
       grid-template-columns: auto 1fr;
       align-items: center;
       gap: 12px;
-      padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
-      border-bottom: 1px solid rgba(128, 128, 128, 0.12);
-      background: var(--app-brand-root-bg);
+      padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 14px;
+      border-bottom: none;
+      background: transparent;
+      color: var(--glide-text);
     }
     .ob-flow__close {
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      border: none;
-      background: var(--app-brand-surface);
-      color: var(--tg-theme-text-color);
+      border: 1px solid var(--glide-line);
+      background: var(--glide-card);
+      color: var(--glide-text);
+      box-shadow: var(--glide-shadow-card);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -2455,29 +2525,36 @@
       gap: 6px;
       min-width: 0;
     }
+    /* Сегментированный рельс: та же DOM-структура точек из JS, узкий зазор вместо круглых точек. */
     .ob-flow__dots {
       display: flex;
-      gap: 6px;
+      gap: 3px;
     }
     .ob-flow__dot {
       flex: 1 1 0;
       min-width: 6px;
-      height: 6px;
+      height: 5px;
       border-radius: 3px;
-      background: rgba(128, 128, 128, 0.22);
-      transition: background 0.18s ease;
+      background: rgba(22, 41, 42, 0.1);
+      transition: background 0.18s ease, box-shadow 0.18s ease;
     }
     .ob-flow__dot--done {
-      background: color-mix(in srgb, #F7A600 55%, transparent);
+      background: rgba(var(--accent-rgb), 0.45);
     }
     .ob-flow__dot--current {
-      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%);
+      background: var(--glide-brand);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
     }
+    /*
+     * Счётчик шага — не капслок: заглавная кириллица в мелком кегле читается по контуру хуже
+     * строчной, а строка тут служебная и попадается на каждом экране визарда.
+     */
     .ob-flow__step-label {
       font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.02em;
-      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.01em;
+      font-variant-numeric: tabular-nums;
+      color: var(--glide-ink-teal);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -2486,7 +2563,7 @@
     .ob-flow__body {
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 20px 16px 24px;
+      padding: 24px 16px 28px;
       /* scroll-padding чтобы фокус input не прилипал к верху/низу под клавиатурой */
       scroll-padding-top: 20px;
       scroll-padding-bottom: 80px;
@@ -2496,21 +2573,21 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
     }
     .ob-flow__title {
       margin: 0;
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 700;
-      line-height: 1.2;
-      letter-spacing: -0.01em;
-      color: var(--tg-theme-text-color);
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      color: var(--glide-text);
     }
     .ob-flow__subtitle {
       margin: 0 0 6px;
       font-size: 14px;
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
+      line-height: 1.5;
+      color: var(--glide-hint);
     }
     .ob-flow__slot {
       display: flex;
@@ -2531,12 +2608,16 @@
     }
     .ob-flow__slot .card {
       margin-bottom: 0;
-      box-shadow: none;
-      background: var(--app-brand-surface);
+      border-radius: 20px;
+      padding: 18px 16px;
+      background: var(--glide-card);
+      border: 1px solid var(--glide-line);
+      box-shadow: var(--glide-shadow-card);
     }
     /*
-     * Поля ввода внутри визарда: не брать «холодный» --tg-theme-bg-color из Telegram,
-     * а слой canvas (--app-brand-root-bg) поверх карточки surface — как в основной анкете.
+     * Поля ввода внутри визарда: белые, как карточка, границу держит рамка (outlined).
+     * Прежняя серо-тиловая подложка под каждым полем и была основным источником ощущения
+     * «мало белого»: на экране из шести полей она съедала половину площади.
      */
     .ob-flow .field input,
     .ob-flow .field select,
@@ -2544,12 +2625,48 @@
     .ob-flow input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
     .ob-flow select,
     .ob-flow textarea {
-      background: var(--app-brand-root-bg);
-      color: var(--tg-theme-text-color);
+      background: var(--glide-card);
+      color: var(--glide-text);
+      border-color: var(--glide-line-strong);
+      border-radius: 14px;
+    }
+    /*
+     * Фокус: снимаем системный outline только вместе с заменой — кольцо бренда.
+     * Без кольца поле «теряется» при навигации с клавиатуры и на скринридере.
+     */
+    .ob-flow .field input:focus,
+    .ob-flow .field select:focus,
+    .ob-flow .field textarea:focus,
+    .ob-flow input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+    .ob-flow select:focus,
+    .ob-flow textarea:focus {
+      border-color: var(--glide-brand);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
+      outline: none;
+    }
+    .ob-flow button:focus-visible,
+    .ob-flow summary:focus-visible,
+    .ob-flow [tabindex]:focus-visible {
+      outline: 2px solid var(--glide-brand);
+      outline-offset: 2px;
+    }
+    /* Метка обязательного поля: бренд, а не «внимание». */
+    .ob-flow .field label .required-dot,
+    .ob-flow .required-dot {
+      background: var(--glide-brand);
+    }
+    .ob-flow .field label,
+    .ob-flow .settings-format-label {
+      color: var(--glide-text);
+    }
+    .ob-flow .field-hint,
+    .ob-flow .hint,
+    .ob-flow .settings-format-micro {
+      color: var(--glide-hint);
     }
     .ob-flow .svc-tier-row input[type="number"],
     .ob-flow .svc-group-price-wrap input[type="number"] {
-      background: var(--app-brand-root-bg);
+      background: var(--glide-card);
     }
     /* В онбординге дата рождения не требуется — показываем только имя, фамилию и город. */
     .ob-flow__slot .field--birth-date {
@@ -2572,7 +2689,8 @@
     /* Обёртки шагов настроек: без встроенных отступов. */
     .ob-flow__slot #obSessionDurationWrap,
     .ob-flow__slot #obMinHoursWrap {
-      background: var(--app-brand-surface);
+      background: var(--glide-card);
+      border: 1px solid var(--glide-line);
       border-radius: 16px;
       padding: 16px;
       margin: 0;
@@ -2583,21 +2701,46 @@
     }
     .ob-flow__slot .err-general {
       font-size: 13px;
-      color: #d14343;
+      color: var(--ob-flow-danger-text);
     }
+    /*
+     * Ответ визарда на «Далее», когда шаг не готов. Живёт в карточке над футером,
+     * поэтому виден и с открытой клавиатурой — в отличие от общего тоста страницы.
+     */
     .ob-flow__error {
       margin: 0;
+      padding: 10px 12px;
+      border-radius: 12px;
       font-size: 13px;
-      line-height: 1.4;
-      color: #d14343;
+      line-height: 1.45;
+      color: var(--ob-flow-danger-text);
+      background: var(--ob-flow-danger-bg);
+      border: 1px solid var(--ob-flow-danger-line);
     }
+    .ob-flow__error[hidden] {
+      display: none;
+    }
+    html.trainer-theme-dark .ob-flow {
+        --ob-flow-danger-text: #ff9b96;
+        --ob-flow-danger-bg: rgba(255, 107, 99, 0.12);
+        --ob-flow-danger-line: rgba(255, 107, 99, 0.3);
+      }
 
+
+    /* Футер «плывёт» над бумагой: полупрозрачная подложка + размытие вместо глухой плашки. */
     .ob-flow__footer {
       display: flex;
       gap: 10px;
-      padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 14px);
-      background: var(--app-brand-root-bg);
-      border-top: 1px solid rgba(128, 128, 128, 0.12);
+      padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+      background: var(--glide-paper);
+      border-top: 1px solid var(--glide-line);
+    }
+    @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
+      .ob-flow__footer {
+        background: rgba(251, 250, 247, 0.86);
+        -webkit-backdrop-filter: blur(14px) saturate(1.4);
+        backdrop-filter: blur(14px) saturate(1.4);
+      }
     }
     .ob-flow__btn--ghost { flex: 0 0 auto; }
     .ob-flow__btn--primary { flex: 1 1 auto; }
@@ -2623,8 +2766,8 @@
     .ob-flow__btn-spinner {
       width: 20px;
       height: 20px;
-      border: 2px solid rgba(26, 26, 26, 0.22);
-      border-top-color: #1a1a1a;
+      border: 2px solid rgba(6, 42, 41, 0.22);
+      border-top-color: var(--glide-on-fill);
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
       display: none;
@@ -2641,17 +2784,25 @@
       cursor: not-allowed;
     }
     .ob-flow__btn--ghost {
-      background: var(--app-brand-surface);
-      color: var(--tg-theme-text-color);
+      background: var(--glide-card);
+      color: var(--glide-ink-teal);
+      border: 1px solid var(--glide-line-strong);
     }
+    /*
+     * Главная кнопка — насыщенная бирюза логотипа поверх белого (ход Deliveroo/Tiffany).
+     * Текст только тёмный: --glide-on-fill на --glide-brand даёт 7.3:1, белый дал бы 2.1:1.
+     * Мягкий брендовый ореол под кнопкой — единственная тень с цветом: на бумаге он читается
+     * как подъём, а не как декор.
+     */
     .ob-flow__btn--primary {
-      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%);
-      color: #1a1a1a;
-      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.32);
+      background: var(--glide-brand);
+      color: var(--glide-on-fill);
+      box-shadow: var(--app-btn-shadow-cta);
     }
     .ob-flow__btn--primary:not(:disabled):active {
       transform: scale(0.98);
-      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.35);
+      background: var(--glide-brand-pressed);
+      box-shadow: none;
     }
     .ob-flow__btn--primary.is-saving {
       pointer-events: none;
@@ -2660,7 +2811,7 @@
     @media (prefers-reduced-motion: reduce) {
       .ob-flow__btn-spinner {
         animation: none;
-        border-top-color: rgba(26, 26, 26, 0.45);
+        border-top-color: rgba(6, 42, 41, 0.45);
         opacity: 0.85;
       }
     }
@@ -2693,6 +2844,99 @@
         from { opacity: 0; transform: translateY(6px); }
         to   { opacity: 1; transform: translateY(0); }
       }
+    }
+
+    /*
+     * Визард против legacy-блока «JUSTSKATE.BY» (см. ниже по файлу): тот красит страницу
+     * кремом через !important по глобальным селекторам (.card, .field input, .service-row,
+     * .arena-row, .settings-format-card), и обычная специфичность против него не работает.
+     * Перебиваем ровно эти поверхности и только внутри .ob-flow — за пределами визарда
+     * страница остаётся какой была. Акценты сюда не входят: они уже идут через --accent-rgb
+     * и становятся тиловыми сами.
+     *
+     * Иерархия поверхностей визарда: фон --glide-bg → карточка --glide-surface → поле --glide-card.
+     */
+    .ob-flow__slot .card,
+    .ob-flow .settings-format-card,
+    .ob-flow .filter-btn {
+      background: var(--glide-card) !important;
+      color: var(--glide-text) !important;
+    }
+    /*
+     * Поля — «outlined на белом»: и карточка, и поле белые, границу держит рамка.
+     * Так экран остаётся белым, а поле всё равно читается как поле (заливка-подложка
+     * серым делала бы ровно то, из-за чего интерфейс выглядел тусклым).
+     */
+    .ob-flow .field input,
+    .ob-flow .field textarea,
+    .ob-flow .field select,
+    .ob-flow .settings-format-num,
+    .ob-flow .service-row input[type="number"],
+    .ob-flow .svc-desc-textarea {
+      background: var(--glide-card) !important;
+      color: var(--glide-text) !important;
+      border-color: var(--glide-line-strong) !important;
+    }
+    .ob-flow .service-row,
+    .ob-flow .arena-row {
+      background: var(--glide-card) !important;
+      border: 1px solid var(--glide-line);
+      border-radius: 14px;
+    }
+    /* Выбранное — бирюзовая подсветка 10%, а не серая плашка. */
+    .ob-flow .service-row.service-active,
+    .ob-flow .arena-row.arena-active {
+      background: rgba(var(--accent-rgb), 0.1) !important;
+      border-color: rgba(var(--accent-rgb), 0.5);
+    }
+    .ob-flow .settings-format-icon {
+      background: var(--glide-50) !important;
+      color: var(--glide-ink) !important;
+    }
+    .ob-flow .settings-group-toggle__label {
+      background: var(--glide-card) !important;
+    }
+    /* Выбранная страна в меню телефонного кода — бренд, а не янтарь. */
+    .ob-flow .crm-phone-country-option[aria-selected='true'] {
+      background: rgba(var(--accent-rgb), 0.14);
+      color: var(--glide-text);
+    }
+    .ob-flow .svc-tier-toggle,
+    .ob-flow .price-suffix,
+    .ob-flow .svc-desc-label {
+      color: var(--glide-ink);
+    }
+    .ob-flow .svc-tier-toggle {
+      background: var(--glide-50);
+      border-color: var(--glide-line);
+    }
+    .ob-flow .crm-phone-country-btn,
+    .ob-flow .crm-phone-country-menu {
+      background: var(--glide-card);
+      border-color: var(--glide-line);
+    }
+    /*
+     * Строка телефона — одно поле визарда, а не два: рамка и фон живут на .crm-phone-field-row,
+     * сам input внутри прозрачный. Иначе поверх карточки видно «поле в поле»
+     * (у row по умолчанию --tg-theme-bg-color из Telegram — холодный и чужой).
+     */
+    .ob-flow .crm-phone-field-row {
+      background: var(--glide-card);
+      border-color: var(--glide-line);
+    }
+    .ob-flow .crm-phone-field:focus-within .crm-phone-field-row {
+      border-color: var(--glide-brand);
+    }
+    .ob-flow .crm-phone-national-input {
+      background: transparent !important;
+      color: var(--glide-text) !important;
+    }
+    .ob-flow .crm-phone-national-input:focus {
+      box-shadow: none;
+    }
+    .ob-flow .crm-phone-country-dial,
+    .ob-flow .crm-phone-country-option {
+      color: var(--glide-text);
     }
 
     /* Fullscreen veil after last TTV block: hides main profile shell before hub navigation. */

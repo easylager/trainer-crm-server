@@ -1,5 +1,5 @@
 /**
- * Ice Pro landing — phone product showcase (Hub + Schedule).
+ * Glide landing — phone product showcase (Hub + Schedule).
  * Scoped under .landing-showcase; mirrors trainer-home / schedule-editor patterns.
  */
 
@@ -152,7 +152,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--app-cta-fill), color-mix(in srgb, var(--app-cta-fill) 40%, transparent));
+  background: var(--app-cta-fill);
 }
 
 .ls-stat__val {
@@ -234,7 +234,7 @@
 }
 
 .ls-sched-row--sky { border-left-color: #0ea5e9; }
-.ls-sched-row--amber { border-left-color: #ea580c; }
+.ls-sched-row--amber { border-left-color: var(--app-cta-fill); }
 .ls-sched-row--free { border-left-color: var(--app-cta-fill); }
 
 .ls-sched-row__time {
@@ -273,7 +273,7 @@
   font-weight: 600;
   color: var(--app-cta-text);
   background: var(--app-cta-fill);
-  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.25);
+  box-shadow: 0 4px 12px rgba(52, 198, 196, 0.25);
 }
 
 .landing-showcase__screen--schedule {

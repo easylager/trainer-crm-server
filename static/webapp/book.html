@@ -5,19 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <script src="client-mini-app-theme.js?v=202608267"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
   <link rel="stylesheet" href="booking-client.css?v=202605305" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202606281" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202608267" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <script src="booking-client.js?v=202605305"></script>
   <script src="booking-deeplink.js?v=202606166"></script>
-  <script src="mini-app-client-shell.js?v=202606281"></script>
+  <script src="mini-app-client-shell.js?v=202608267"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -71,7 +72,7 @@
       height: 40px;
       border-radius: 50%;
       border: none;
-      background: rgba(247, 166, 0, 0.12);
+      background: rgba(var(--accent-rgb), 0.12);
       color: var(--tg-theme-button-color);
       font-size: 18px;
       cursor: pointer;
@@ -82,7 +83,7 @@
       font-weight: 600;
     }
     .week-nav button:hover {
-      background: rgba(247, 166, 0, 0.2);
+      background: rgba(var(--accent-rgb), 0.2);
       transform: scale(1.05);
     }
     .week-nav button:active {
@@ -135,7 +136,7 @@
     }
     @supports not (color: color-mix(in srgb, red, blue)) {
       .slot-spots-pill {
-        border-color: rgba(245, 166, 35, 0.45);
+        border-color: rgba(var(--accent-rgb), 0.45);
       }
     }
     .slot-card:hover {
@@ -183,7 +184,7 @@
       padding: 16px 18px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
-      border: 1px solid rgba(247, 166, 0, 0.28);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       text-align: center;
     }
@@ -298,7 +299,7 @@
       color: var(--tg-theme-text-color);
       white-space: pre-wrap;
     }
-    @media (prefers-color-scheme: dark) {
+    html.client-mini-dark {
       .slot-card {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
       }
@@ -362,8 +363,8 @@
     .form-block input:not([type="radio"]):not([type="checkbox"]):not(.crm-phone-national-input):focus,
     .form-block textarea:focus {
       outline: none;
-      border-color: rgba(247, 166, 0, 0.45);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(247, 166, 0, 0.1);
+      border-color: rgba(var(--accent-rgb), 0.45);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(var(--accent-rgb), 0.1);
     }
     .form-block textarea {
       min-height: 100px;
@@ -468,8 +469,8 @@
       margin: 20px 0 0;
       padding: 16px 18px;
       border-radius: 14px;
-      background: var(--tg-theme-secondary-bg-color, rgba(247, 166, 0, 0.07));
-      border: 1px solid rgba(247, 166, 0, 0.18);
+      background: var(--tg-theme-secondary-bg-color, rgba(var(--accent-rgb), 0.07));
+      border: 1px solid rgba(var(--accent-rgb), 0.18);
       display: flex;
       align-items: center;
       gap: 14px;
@@ -497,7 +498,7 @@
       padding: 9px 16px;
       border-radius: 20px;
       border: none;
-      background: var(--tg-theme-button-color, #f7a600);
+      background: var(--tg-theme-button-color, #34C6C4);
       color: var(--tg-theme-button-text-color, #fff);
       font-size: 14px;
       font-weight: 600;
@@ -571,7 +572,7 @@
       padding: 12px 14px;
       border-radius: 14px;
       background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.22);
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
       font-size: 14px;
       line-height: 1.45;
       color: var(--tg-theme-text-color);
@@ -710,21 +711,15 @@
       height: 14px;
       border-radius: 8px;
       margin-bottom: 14px;
-      background: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 0%,
-        color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent) 50%,
-        color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 100%
-      );
-      background-size: 200% 100%;
-      animation: book-form-shimmer 1.2s ease-in-out infinite;
+      background: var(--tg-theme-secondary-bg-color);
+      animation: book-form-pulse 1.2s ease-in-out infinite;
     }
     .book-form-loading__line--short { width: 62%; }
     .book-form-loading__line--field { height: 44px; border-radius: 12px; margin-bottom: 18px; }
     .book-form-loading__line--btn { height: 48px; border-radius: 14px; margin-top: 8px; margin-bottom: 0; }
-    @keyframes book-form-shimmer {
-      0% { background-position: 100% 0; }
-      100% { background-position: -100% 0; }
+    @keyframes book-form-pulse {
+      0%, 100% { opacity: 0.55; }
+      50% { opacity: 0.9; }
     }
     @media (prefers-reduced-motion: reduce) {
       .book-form-loading__line { animation: none; }
@@ -741,7 +736,7 @@
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <link rel="stylesheet" href="mini-app-client-nav.css" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
 </head>
 <body>
   <div class="header">
@@ -868,9 +863,8 @@
         }
         function syncTelegramChromeColors() {
           try {
-            var darkUi = tg.colorScheme === 'dark' ||
-              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            var darkUi = tg.colorScheme === 'dark';
+            var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
             if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
             if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
             if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);

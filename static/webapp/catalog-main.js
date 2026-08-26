@@ -8,9 +8,8 @@
         }
         function syncTelegramChromeColors() {
           try {
-            var darkUi = tg.colorScheme === 'dark' ||
-              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            var darkUi = tg.colorScheme === 'dark';
+            var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
             if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
             if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
             if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
@@ -1357,7 +1356,7 @@
         if (poweredEl) {
           if (state.collectiveSlug) {
             poweredEl.hidden = false;
-            poweredEl.textContent = 'Powered by ' + (brand.powered_by || 'ICE STUDIO');
+            poweredEl.textContent = 'Powered by ' + (brand.powered_by || 'Glide');
           } else {
             poweredEl.hidden = true;
             poweredEl.textContent = '';

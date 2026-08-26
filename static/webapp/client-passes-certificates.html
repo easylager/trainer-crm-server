@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы и сертификаты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="client-mini-app-theme.js?v=202608267"></script>
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <style>
     body {
       font-family: var(--app-font-sans);
@@ -54,7 +55,7 @@
     .tab.active {
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
-      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.22);
+      box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.22);
     }
     .tab:active { opacity: 0.9; }
     .panel { display: none; }
@@ -67,12 +68,8 @@
       margin-bottom: 20px;
       padding: 18px 16px 20px;
       border-radius: 20px;
-      background: linear-gradient(
-        160deg,
-        rgba(247, 166, 0, 0.14) 0%,
-        var(--tg-theme-secondary-bg-color) 38%
-      );
-      border: 1px solid rgba(247, 166, 0, 0.26);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(var(--accent-rgb), 0.26);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
     }
     .pass-shop-kicker {
@@ -148,9 +145,9 @@
       border-radius: 999px;
       font-size: 13px;
       font-weight: 700;
-      background: rgba(247, 166, 0, 0.22);
+      background: rgba(var(--accent-rgb), 0.22);
       color: var(--tg-theme-text-color);
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       white-space: nowrap;
     }
     .pass-offer-meta-row {
@@ -181,7 +178,7 @@
       cursor: pointer;
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
-      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.28);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.28);
     }
     .pass-offer-actions .btn-order-pass:disabled {
       opacity: 0.65;
@@ -217,12 +214,8 @@
       padding: 16px 16px 16px 18px;
       margin-bottom: 12px;
       border-radius: 18px;
-      background: linear-gradient(
-        165deg,
-        rgba(247, 166, 0, 0.1) 0%,
-        var(--tg-theme-secondary-bg-color) 42%
-      );
-      border: 1px solid rgba(247, 166, 0, 0.22);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
       width: 100%;
       font: inherit;
@@ -291,7 +284,7 @@
     .pass-card-mini-fill {
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #ffc23d 0%, #f5a623 100%);
+      background: var(--app-cta-fill);
       min-width: 4px;
       transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     }
@@ -314,7 +307,7 @@
       border-radius: 999px;
       background: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-secondary-bg-color));
       color: var(--tg-theme-text-color);
-      border: 1px solid rgba(245, 166, 35, 0.28);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
     }
     .pass-card .arrow {
       align-self: center;
@@ -339,8 +332,8 @@
       padding: 20px 20px 22px;
       margin-bottom: 14px;
       overflow: hidden;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
-      border: 1px solid rgba(247, 166, 0, 0.28);
+      background: rgba(var(--accent-rgb), 0.08);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     .pass-detail-hero::before {
@@ -350,7 +343,7 @@
       right: -20%;
       width: 55%;
       height: 120%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      background: color-mix(in srgb, var(--app-cta-fill) 12%, var(--tg-theme-secondary-bg-color));
       pointer-events: none;
     }
     .pass-detail-hero-inner { position: relative; z-index: 1; }
@@ -414,7 +407,7 @@
     .pass-detail-progress-fill {
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #ffc23d 0%, #f5a623 100%);
+      background: var(--app-cta-fill);
       width: 0%;
       transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
     }
@@ -462,12 +455,8 @@
     .cert-card.cert-card--hero {
       padding: 18px 16px;
       border-radius: 18px;
-      border: 2px solid rgba(247, 166, 0, 0.42);
-      background: linear-gradient(
-        160deg,
-        rgba(247, 166, 0, 0.14) 0%,
-        var(--tg-theme-bg-color) 52%
-      );
+      border: 2px solid rgba(var(--accent-rgb), 0.42);
+      background: var(--tg-theme-bg-color);
       box-shadow: 0 6px 22px rgba(0, 0, 0, 0.07);
     }
     .cert-primary-kicker {
@@ -604,7 +593,7 @@
     .pass-order-modal-btn.primary {
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
-      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.28);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.28);
     }
     .cert-order-field {
       margin-bottom: 14px;
@@ -637,12 +626,8 @@
       color: var(--tg-theme-hint-color);
     }
     .pass-shop-section.cert-tone {
-      background: linear-gradient(
-        160deg,
-        rgba(16, 185, 129, 0.12) 0%,
-        var(--tg-theme-secondary-bg-color) 38%
-      );
-      border: 1px solid rgba(16, 185, 129, 0.28);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(52, 198, 196, 0.28);
     }
     .cert-offer-price-pill {
       background: rgba(16, 185, 129, 0.2);
@@ -691,7 +676,7 @@
       opacity: 0.92;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
 </head>
 <body>
   <div class="header">

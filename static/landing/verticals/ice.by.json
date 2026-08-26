@@ -1,19 +1,19 @@
 {
   "brand": {
-    "name": "Ice Pro",
+    "name": "Glide",
     "tagline": "Расписание, которое не тает",
-    "eyebrow": "Ice Pro · solo-тренеры · Беларусь"
+    "eyebrow": "Glide · тренерам на льду · Беларусь"
   },
   "hero": {
     "title": "CRM для тренера на льду",
-    "subtitle": "Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог Ice Studio и аналитика — в одном боте. 14 дней бесплатно.",
+    "subtitle": "Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог Glide и аналитика — в одном боте. 14 дней бесплатно.",
     "cta_primary": "Начать в Telegram",
     "cta_loading": "Открываем Telegram…"
   },
   "value_pillars": [
     { "id": "telegram", "label": "Telegram — без установки", "icon": "telegram" },
     { "id": "link", "label": "Ссылка → клиент записался сам", "icon": "link" },
-    { "id": "growth", "label": "Каталог Ice Studio", "icon": "discover" },
+    { "id": "growth", "label": "Каталог Glide", "icon": "discover" },
     { "id": "practice", "label": "Заметки, слоты, аналитика", "icon": "notes" }
   ],
   "sections": {
@@ -47,7 +47,7 @@
     {
       "id": "grow",
       "title": "Рост",
-      "body": "Новые клиенты из каталога Ice Studio — пока вы на льду.",
+      "body": "Новые клиенты из каталога Glide — пока вы на льду.",
       "icon": "discover"
     }
   ],
@@ -69,13 +69,13 @@
       "id": "stats",
       "size": "stat",
       "kicker": "Платформа",
-      "title": "Уже в Ice Studio",
+      "title": "Уже в Glide",
       "body": "Тренеры, арены и города — ликвидность каталога растёт."
     },
     {
       "id": "catalog",
       "size": "medium",
-      "kicker": "Ice Studio",
+      "kicker": "Glide",
       "title": "Публичная карточка",
       "body": "Вас находят в каталоге — город, арена, специализация и кнопка записи.",
       "icon": "discover"
@@ -105,7 +105,7 @@
   "steps": [
     {
       "title": "Начать в Telegram",
-      "body": "Откроется Ice Pro — без установки и регистрации на сайте."
+      "body": "Откроется Glide — без установки и регистрации на сайте."
     },
     {
       "title": "Ссылка и расписание",
@@ -117,7 +117,7 @@
     }
   ],
   "cta": {
-    "band_title": "Готовы выйти на лёд с Ice Pro?",
+    "band_title": "Готовы выйти на лёд с Glide?",
     "band_subtitle": "14 дней бесплатно · без карты · только Telegram"
   },
   "visual": {
@@ -128,7 +128,7 @@
   },
   "footer": {
     "geo": "Беларусь",
-    "powered_by": "Ice Studio",
+    "powered_by": "Glide",
     "credit_key": "hero_image_credit"
   }
 }

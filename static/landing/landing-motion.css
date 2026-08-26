@@ -1,5 +1,5 @@
 /**
- * Ice Pro landing — cinematic motion (richer than Mini App; same easing DNA).
+ * Glide landing — cinematic motion (richer than Mini App; same easing DNA).
  */
 
 /* ─── Intro timeline ─── */
@@ -14,8 +14,8 @@
 }
 
 @keyframes landing-cta-glow {
-  0%, 100% { box-shadow: var(--shadow-amber); }
-  50%      { box-shadow: 0 16px 40px rgba(245, 166, 35, 0.38), 0 6px 16px rgba(245, 166, 35, 0.22); }
+  0%, 100% { box-shadow: var(--shadow-brand); }
+  50%      { box-shadow: 0 16px 40px rgba(52, 198, 196, 0.38), 0 6px 16px rgba(52, 198, 196, 0.22); }
 }
 
 @keyframes landing-slot-shimmer {
@@ -138,10 +138,6 @@ body.landing--ready .landing-hero__visual  { animation-delay: 0.32s; }
 
 body.landing--ready .landing-phone {
   animation: landing-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.38s both;
-}
-
-body.landing--ready .landing-btn--primary#heroCta {
-  animation: landing-cta-glow 3s ease-in-out 1.2s infinite;
 }
 
 body.landing--ready .ls-inbox {

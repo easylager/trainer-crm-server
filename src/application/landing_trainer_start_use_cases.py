@@ -56,7 +56,7 @@ async def issue_trainer_start_from_landing(
     settings: Settings | None = None,
 ) -> dict:
     """
-    Issue a one-time bot token (no trainer row yet) and return redirect URL for Ice Pro bot.
+    Issue a one-time bot token (no trainer row yet) and return redirect URL for Glide bot.
 
     Raises ValueError with a short code when bot username is not configured.
     """

@@ -184,7 +184,7 @@
         var link = (o && o.invite_url) || '';
         if (!link) throw new Error('Нет ссылки');
         var msg =
-          'Привет! Подключайся к нашему семейному доступу в приложении Ice Studio — общие записи и абонементы:\n' +
+          'Привет! Подключайся к нашему семейному доступу в приложении Glide — общие записи и абонементы:\n' +
           link;
         if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
           window.openTelegramShareUrlFromMiniApp({ fullMessage: msg });

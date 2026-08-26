@@ -65,7 +65,7 @@ body {
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
-.adm-list-item:hover { border-color: rgba(245, 166, 35, 0.4); }
+.adm-list-item:hover { border-color: rgba(var(--accent-rgb), 0.4); }
 .adm-list-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 .adm-list-title { font-size: 14px; font-weight: 600; }
 .adm-list-meta  { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
@@ -86,14 +86,14 @@ body {
 }
 .adm-pill.success { background: rgba(52, 199, 89, 0.15); color: #34c759; }
 .adm-pill.danger  { background: rgba(255, 59, 48, 0.15); color: #ff6b60; }
-.adm-pill.warn    { background: rgba(247, 166, 0, 0.18); color: #f7a600; }
+.adm-pill.warn    { background: rgba(var(--accent-rgb), 0.18); color: #34C6C4; }
 .adm-pill.info    { background: rgba(56, 132, 255, 0.18); color: #6ea8ff; }
 
 .adm-banner {
   border-radius: 14px;
   padding: 14px 16px;
-  border: 1px solid rgba(245, 166, 35, 0.3);
-  background: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.08);
   margin-bottom: 14px;
 }
 .adm-banner-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #fde68a; margin-bottom: 6px; }
@@ -106,7 +106,7 @@ body {
 }
 .adm-spark-bar {
   flex: 1; min-width: 6px;
-  background: rgba(245, 166, 35, 0.6);
+  background: rgba(var(--accent-rgb), 0.6);
   border-radius: 3px 3px 0 0;
   position: relative;
   min-height: 4px;

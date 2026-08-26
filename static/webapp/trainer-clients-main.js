@@ -7,9 +7,8 @@
           window.__applyTrainerClientsTheme();
         }
         try {
-          var darkUi = tg.colorScheme === 'dark' ||
-            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          var darkUi = tg.colorScheme === 'dark';
+          var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) { /* older clients */ }
@@ -19,9 +18,8 @@
               window.__applyTrainerClientsTheme();
             }
             try {
-              var du = tg.colorScheme === 'dark' ||
-                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-              var bg = du ? '#1a1a1a' : '#fffbeb';
+              var du = tg.colorScheme === 'dark';
+              var bg = du ? '#1c1c1c' : '#FBFAF7';
               if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
               if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
             } catch (err) { /* ignore */ }

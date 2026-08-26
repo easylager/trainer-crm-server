@@ -1,4 +1,4 @@
-"""Public Ice Pro landing API and SSR entry."""
+"""Public Glide landing API and SSR entry."""
 from __future__ import annotations
 
 import json
@@ -65,7 +65,7 @@ async def test_landing_config_public(monkeypatch):
     data = resp.json()
     assert data["vertical"] == "ice"
     assert data["market"] == "by"
-    assert data["brand"]["name"] == "Ice Pro"
+    assert data["brand"]["name"] == "Glide"
     assert data["registration_enabled"] is True
     assert "hero" in data and "bento" in data
     assert "value_pillars" in data and len(data["value_pillars"]) == 4
@@ -88,7 +88,7 @@ async def test_landing_root_injects_config_script(monkeypatch):
     body = resp.text
     assert 'data-vertical="ice"' in body
     assert 'id="landing-config"' in body
-    assert "Ice Pro" in body
+    assert "Glide" in body
 
 
 @pytest.mark.asyncio

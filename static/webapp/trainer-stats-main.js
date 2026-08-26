@@ -2,31 +2,94 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
 
-      var initData = tg ? tg.initData : '';
+      var qs = new URLSearchParams(window.location.search || '');
+      function initFromUrl() {
+        return qs.get('init_data') || qs.get('initData') || '';
+      }
+      var initData = (tg && tg.initData) ? tg.initData : initFromUrl();
+
+      function currentInit() {
+        if (tg && tg.initData) initData = tg.initData;
+        return initData || initFromUrl() || '';
+      }
+
+      var STATS_FETCH_TIMEOUT_MS = 22000;
+
       function fetchWithTimeout(url, opts, ms) {
-        ms = ms || 15000;
+        ms = ms || STATS_FETCH_TIMEOUT_MS;
         var c = new AbortController();
         var t = setTimeout(function() { c.abort(); }, ms);
         return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }))
           .then(function(r) { clearTimeout(t); return r; })
           .catch(function(e) { clearTimeout(t); throw e; });
       }
+
+      function apiHeaders() {
+        var h = { Accept: 'application/json' };
+        var raw = currentInit();
+        if (raw) h['X-Telegram-Init-Data'] = raw;
+        return h;
+      }
+
       function withInitData(url) {
-        if (!initData) return url;
+        var raw = currentInit();
+        if (!raw) return url;
         var sep = url.indexOf('?') >= 0 ? '&' : '?';
-        return url + sep + 'init_data=' + encodeURIComponent(initData);
+        return url + sep + 'init_data=' + encodeURIComponent(raw);
       }
+
+      function parseApiErrorMessage(r, data) {
+        if (data && data.detail) {
+          if (typeof data.detail === 'string') return data.detail;
+          if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) {
+            return String(data.detail[0].msg);
+          }
+        }
+        if (r.status === 401) {
+          return 'Сессия Telegram не передана. Закройте mini-app и откройте «Статистику» снова из бота.';
+        }
+        if (r.status === 403) {
+          return 'Раздел недоступен по подписке. Проверьте тариф в «Подписке».';
+        }
+        if (r.status >= 500) {
+          return 'Ошибка сервера (' + r.status + '). Попробуйте позже.';
+        }
+        return r.statusText || ('Ошибка ' + r.status);
+      }
+
+      function fetchJsonPath(path) {
+        var raw = currentInit();
+        if (!raw) {
+          return Promise.reject(new Error(
+            'Откройте статистику из Telegram-бота — без init_data экран не может загрузить данные.'
+          ));
+        }
+        return fetchWithTimeout(withInitData(path), {
+          method: 'GET',
+          cache: 'no-store',
+          headers: apiHeaders(),
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(parseApiErrorMessage(r, data));
+            return data;
+          });
+        }).catch(function(e) {
+          if (e && e.name === 'AbortError') {
+            throw new Error('Таймаут загрузки. Проверьте tunnel/сеть и откройте экран снова из бота.');
+          }
+          if (e && e.message === 'Failed to fetch') {
+            throw new Error('Ошибка сети. Проверьте tunnel и откройте из бота снова.');
+          }
+          throw e;
+        });
+      }
+
       function getJson(url) {
-        return fetchWithTimeout(withInitData(url)).then(function(r) {
-          if (!r.ok) throw new Error(r.statusText);
-          return r.json();
-        });
+        return fetchJsonPath(url);
       }
+
       function getJsonPath(path) {
-        return fetchWithTimeout(withInitData(path)).then(function(r) {
-          if (!r.ok) throw new Error(r.statusText || String(r.status));
-          return r.json();
-        });
+        return fetchJsonPath(path);
       }
 
       /** % of fixed cap; height is applied inside .chart-bar-track / .trend-bar-track (explicit px — bare % on flex column was collapsing). */
@@ -816,8 +879,8 @@
           });
       }
 
-      if (initData && window.TrainerMiniAppGate) {
-        window.TrainerMiniAppGate.fetchAccess(initData)
+      if (currentInit() && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(currentInit())
           .then(function (a) {
             if (a && !window.TrainerMiniAppGate.isActive(a)) {
               contentEl.innerHTML = '';

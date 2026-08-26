@@ -36,7 +36,7 @@ def build_certificate_pdf(
     Branding: explicit args, else ``Settings.certificate_pdf_brand_*``.
     """
     cfg = Settings()
-    brand = (brand_display or cfg.certificate_pdf_brand_display_name or "ICE STUDIO").strip()
+    brand = (brand_display or cfg.certificate_pdf_brand_display_name or "GLIDE").strip()
     tagline = (brand_tagline if brand_tagline is not None else (cfg.certificate_pdf_brand_tagline_ru or "")).strip()
 
     html = build_certificate_issue_html(

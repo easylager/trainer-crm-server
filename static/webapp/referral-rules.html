@@ -23,10 +23,10 @@
       padding: 16px;
       padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 40px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-bg-color: #FBFAF7;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
-      --tg-theme-secondary-bg-color: #fff5e1;
+      --tg-theme-secondary-bg-color: #FFFFFF;
     }
     body.rules-page.rules-theme-dark {
       --tg-theme-bg-color: #1a1a1a;
@@ -63,7 +63,7 @@
       border-radius: 12px;
       padding: 14px 16px;
       margin: 16px 0;
-      border-left: 3px solid #F7A600;
+      border-left: 3px solid #34C6C4;
     }
     .rules-highlight p { margin: 0; }
     /* Same header row as trainer-referral.html */
@@ -86,7 +86,7 @@
       min-width: 0;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
 </head>
 <body class="rules-page">
   <div class="rules-shell">
@@ -166,7 +166,7 @@
       var isDark = tg && tg.colorScheme === 'dark';
       if (isDark) document.body.classList.add('rules-theme-dark');
       try {
-        var bgHex = isDark ? '#1a1a1a' : '#FFFBEB';
+        var bgHex = isDark ? '#1a1a1a' : '#FBFAF7';
         if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
         if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
       } catch (e) {}

@@ -10,11 +10,8 @@ body.hub-body {
   /* Bottom inset from client-shell when data-client-shell=tabs; fallback for legacy */
   padding: 0 0 calc(36px + env(safe-area-inset-bottom)) 0;
   overflow-x: hidden;
-  /* Soft morning light — warm cream + a breath of ice mist, not a sales spotlight */
-  background:
-    radial-gradient(70% 50% at 100% -8%, color-mix(in srgb, var(--ice-glow) 14%, transparent) 0%, transparent 62%),
-    radial-gradient(140% 80% at 50% -10%, rgba(247, 196, 120, 0.07) 0%, rgba(247, 196, 120, 0.02) 45%, transparent 70%),
-    var(--tg-theme-bg-color) !important;
+  /* Soft morning light — flat paper canvas */
+  background: var(--tg-theme-bg-color) !important;
 }
 
 .hub-shell {
@@ -168,17 +165,13 @@ body.hub-body {
   border-radius: 28px;
   overflow: hidden;
   position: relative;
-  color: color-mix(in srgb, var(--tg-theme-text-color) 90%, #4a3828);
-  /* Warm invitation card — soft, joyful bubbly background */
-  background:
-    radial-gradient(ellipse 90% 70% at 96% 8%, rgba(200, 235, 255, 0.45) 0%, transparent 58%),
-    radial-gradient(ellipse 60% 50% at 8% 92%, rgba(255, 230, 180, 0.4) 0%, transparent 52%),
-    linear-gradient(152deg, #ffffff 0%, #fffbfa 32%, #fff5e6 68%, #ffefd0 100%);
+  color: var(--tg-theme-text-color);
+  background: var(--glide-surface, #ffffff);
   box-shadow:
-    0 12px 32px rgba(240, 180, 80, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.06),
     0 2px 8px rgba(0, 0, 0, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(52, 198, 196, 0.12);
   cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
   -webkit-tap-highlight-color: transparent;
@@ -186,40 +179,30 @@ body.hub-body {
 }
 
 .hub-next-card--confirmed {
-  background:
-    radial-gradient(ellipse 88% 72% at 94% 6%, rgba(160, 230, 190, 0.35) 0%, transparent 56%),
-    radial-gradient(ellipse 52% 42% at 10% 88%, rgba(120, 220, 160, 0.15) 0%, transparent 52%),
-    radial-gradient(ellipse 60% 50% at 8% 92%, rgba(255, 240, 200, 0.35) 0%, transparent 52%),
-    linear-gradient(152deg, #ffffff 0%, #f8fcf9 32%, #eef8f2 68%, #e3f2ea 100%);
+  background: var(--glide-surface, #ffffff);
+  border-color: rgba(52, 198, 196, 0.22);
 }
 
 .hub-next-card--pending {
-  background:
-    radial-gradient(ellipse 88% 72% at 94% 6%, rgba(240, 210, 160, 0.3) 0%, transparent 56%),
-    radial-gradient(ellipse 60% 50% at 8% 92%, rgba(255, 220, 170, 0.35) 0%, transparent 52%),
-    linear-gradient(152deg, #ffffff 0%, #fff9f0 38%, #ffeed0 100%);
+  background: var(--glide-surface, #ffffff);
+  border-color: rgba(52, 198, 196, 0.14);
 }
 
 .hub-is-dark .hub-next-card {
   color: rgba(255, 255, 255, 0.96);
-  background:
-    radial-gradient(ellipse 90% 70% at 96% 8%, rgba(140, 200, 255, 0.15) 0%, transparent 58%),
-    radial-gradient(ellipse 60% 50% at 8% 92%, rgba(255, 200, 100, 0.12) 0%, transparent 52%),
-    linear-gradient(152deg, #2a2a2d 0%, #252528 38%, #202022 100%);
+  background: #2c2c2e;
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .hub-is-dark .hub-next-card--confirmed {
-  background:
-    radial-gradient(ellipse 88% 72% at 94% 6%, rgba(100, 220, 160, 0.15) 0%, transparent 56%),
-    linear-gradient(152deg, #262c28 0%, #202422 100%);
+  background: #2c2c2e;
+  border-color: rgba(52, 198, 196, 0.28);
 }
 
 .hub-is-dark .hub-next-card--pending {
-  background:
-    radial-gradient(ellipse 88% 72% at 94% 6%, rgba(255, 180, 80, 0.12) 0%, transparent 56%),
-    linear-gradient(152deg, #2c2824 0%, #24211e 100%);
+  background: #2c2c2e;
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .hub-is-dark .hub-next-card-date,
@@ -256,29 +239,14 @@ body.hub-body {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
-.hub-next-card::before {
-  content: '';
-  position: absolute;
-  top: -28%;
-  right: -12%;
-  width: 72%;
-  height: 128%;
-  background: radial-gradient(ellipse, rgba(210, 230, 238, 0.12) 0%, transparent 68%);
-  pointer-events: none;
-}
-
+.hub-next-card::before,
 .hub-next-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(125deg, transparent 62%, rgba(186, 220, 238, 0.12) 100%);
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .hub-next-card:active {
   transform: scale(0.99);
-  box-shadow: 0 6px 20px rgba(200, 160, 80, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .hub-next-card-go {
@@ -494,7 +462,7 @@ body.hub-body {
   margin: 0 16px 20px;
   border-radius: 20px;
   background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(247, 166, 0, 0.25);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.25);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
@@ -520,8 +488,8 @@ body.hub-body {
   width: 100%;
   padding: 11px 14px;
   border-radius: 14px;
-  border: 1.5px solid rgba(247, 166, 0, 0.35);
-  background: rgba(247, 166, 0, 0.12);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--app-cta-fill);
   font: inherit;
   font-size: 14px;
@@ -532,8 +500,8 @@ body.hub-body {
 }
 
 .hub-trainer-contact-btn:hover {
-  background: rgba(247, 166, 0, 0.2);
-  border-color: rgba(247, 166, 0, 0.55);
+  background: rgba(var(--accent-rgb), 0.2);
+  border-color: rgba(var(--accent-rgb), 0.55);
 }
 
 .hub-trainer-contact-btn:active {
@@ -553,12 +521,12 @@ body.hub-body {
 
 .hub-is-dark .hub-trainer-card {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
-  border-color: rgba(247, 166, 0, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .hub-trainer-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(247, 166, 0, 0.5);
+  border-color: rgba(var(--accent-rgb), 0.5);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
 }
 
@@ -570,8 +538,8 @@ body.hub-body {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 100%);
-  border: 2px solid rgba(247, 166, 0, 0.35);
+  background: none;
+  border: 2px solid rgba(var(--accent-rgb), 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -631,8 +599,8 @@ body.hub-body {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  border: 1.5px solid rgba(247, 166, 0, 0.35);
-  background: rgba(247, 166, 0, 0.1);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--app-cta-fill);
   cursor: pointer;
   font-family: inherit;
@@ -643,8 +611,8 @@ body.hub-body {
 }
 
 .hub-trainer-msg-btn:hover {
-  background: rgba(247, 166, 0, 0.2);
-  border-color: rgba(247, 166, 0, 0.6);
+  background: rgba(var(--accent-rgb), 0.2);
+  border-color: rgba(var(--accent-rgb), 0.6);
 }
 
 .hub-trainer-msg-btn:active {
@@ -668,8 +636,8 @@ body.hub-body {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  border: 1.5px solid rgba(247, 166, 0, 0.35);
-  background: rgba(247, 166, 0, 0.1);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--app-cta-fill);
   cursor: pointer;
   font-family: inherit;
@@ -680,8 +648,8 @@ body.hub-body {
 }
 
 .hub-trainer-share-btn:hover {
-  background: rgba(247, 166, 0, 0.2);
-  border-color: rgba(247, 166, 0, 0.6);
+  background: rgba(var(--accent-rgb), 0.2);
+  border-color: rgba(var(--accent-rgb), 0.6);
 }
 
 .hub-trainer-share-btn:active {
@@ -827,14 +795,14 @@ body.hub-body {
   letter-spacing: 0.02em;
   line-height: 1.2;
   white-space: nowrap;
-  background: linear-gradient(135deg, rgba(245, 166, 35, 0.22), rgba(245, 166, 35, 0.08));
-  color: var(--tg-theme-button-color, #f5a623);
-  border: 1px solid rgba(245, 166, 35, 0.35);
+  background: none;
+  color: var(--tg-theme-button-color, #34C6C4);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
 .hub-is-dark .hub-booking-time-block .hub-session-now-pill {
-  background: linear-gradient(135deg, rgba(245, 166, 35, 0.18), rgba(245, 166, 35, 0.06));
-  border-color: rgba(245, 166, 35, 0.42);
+  background: none;
+  border-color: rgba(var(--accent-rgb), 0.42);
 }
 
 .hub-booking-time {
@@ -927,8 +895,8 @@ body.hub-body {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px solid rgba(247, 166, 0, 0.3);
-  background: rgba(247, 166, 0, 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--app-cta-fill);
   cursor: pointer;
   font-family: inherit;
@@ -938,7 +906,7 @@ body.hub-body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.hub-booking-msg-btn:hover { background: rgba(247, 166, 0, 0.18); }
+.hub-booking-msg-btn:hover { background: rgba(var(--accent-rgb), 0.18); }
 .hub-booking-msg-btn:active { transform: scale(0.88); }
 
 .hub-booking-msg-btn svg {
@@ -1080,16 +1048,9 @@ body.hub-body {
   padding: 12px 14px 12px 16px;
   min-width: 132px;
   border-radius: 16px;
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color)) 0%,
-      var(--tg-theme-secondary-bg-color) 58%
-    );
+  background: color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color));
   border: 1.5px solid color-mix(in srgb, var(--app-cta-fill) 24%, rgba(128, 128, 128, 0.14));
-  box-shadow:
-    0 2px 10px color-mix(in srgb, var(--app-cta-fill) 10%, transparent),
-    0 1px 0 color-mix(in srgb, var(--app-cta-fill) 8%, transparent) inset;
+  box-shadow: var(--app-btn-shadow-surface);
   font: inherit;
   color: var(--tg-theme-text-color);
   cursor: pointer;
@@ -1108,29 +1069,18 @@ body.hub-body {
   bottom: 10px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--app-cta-fill) 88%, #fff) 0%,
-    var(--app-cta-fill) 100%
-  );
+  background: var(--app-cta-fill);
   opacity: 0.92;
 }
 
 .hub-primary-panel__slot:hover {
   border-color: color-mix(in srgb, var(--app-cta-fill) 42%, transparent);
-  box-shadow:
-    0 4px 14px color-mix(in srgb, var(--app-cta-fill) 16%, transparent),
-    0 1px 0 color-mix(in srgb, var(--app-cta-fill) 10%, transparent) inset;
+  box-shadow: var(--app-btn-shadow-surface);
 }
 
 .hub-primary-panel__slot:active {
   transform: scale(0.97);
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--app-cta-fill) 16%, var(--tg-theme-secondary-bg-color)) 0%,
-      var(--tg-theme-secondary-bg-color) 62%
-    );
+  background: color-mix(in srgb, var(--app-cta-fill) 16%, var(--tg-theme-secondary-bg-color));
 }
 
 .hub-primary-panel__slot-day {
@@ -1172,23 +1122,14 @@ body.hub-body {
 }
 
 .hub-is-dark .hub-primary-panel__slot {
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--app-cta-fill) 14%, #1c1c1e) 0%,
-      #1c1c1e 62%
-    );
+  background: color-mix(in srgb, var(--app-cta-fill) 14%, #1c1c1e);
   border-color: color-mix(in srgb, var(--app-cta-fill) 32%, rgba(255, 255, 255, 0.08));
-  box-shadow:
-    0 3px 14px rgba(0, 0, 0, 0.28),
-    0 1px 0 color-mix(in srgb, var(--app-cta-fill) 12%, transparent) inset;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
 }
 
 .hub-is-dark .hub-primary-panel__slot:hover {
   border-color: color-mix(in srgb, var(--app-cta-fill) 48%, transparent);
-  box-shadow:
-    0 5px 18px rgba(0, 0, 0, 0.34),
-    0 1px 0 color-mix(in srgb, var(--app-cta-fill) 14%, transparent) inset;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 }
 
 .hub-is-dark .hub-primary-panel__slot-time {
@@ -1521,20 +1462,20 @@ body.hub-body {
 }
 
 .hub-quick-pill:hover {
-  border-color: rgba(247, 166, 0, 0.4);
-  background: rgba(247, 166, 0, 0.06);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 
 .hub-quick-pill:active {
   transform: scale(0.94);
-  background: rgba(247, 166, 0, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .hub-quick-pill--primary {
   background: var(--app-cta-fill);
   color: var(--app-cta-text, #fff);
   border-color: transparent;
-  box-shadow: 0 4px 16px rgba(247, 166, 0, 0.35);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
 }
 
 .hub-quick-pill--primary svg { color: var(--app-cta-text, #fff); }
@@ -1563,7 +1504,7 @@ body.hub-body {
   padding: 18px 16px 16px;
   border-radius: 20px;
   overflow: hidden;
-  border: 1.5px solid rgba(245, 166, 35, 0.18);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.18);
   font: inherit;
   cursor: pointer;
   text-align: left;
@@ -1575,13 +1516,13 @@ body.hub-body {
 }
 
 html:not(.hub-is-dark) .hub-explore-tile {
-  background: linear-gradient(165deg, rgba(255, 243, 204, 0.55) 0%, var(--tg-theme-secondary-bg-color) 100%);
+  background: var(--tg-theme-secondary-bg-color);
 }
 
 .hub-is-dark .hub-explore-tile {
-  background: linear-gradient(165deg, rgba(255, 251, 235, 0.93) 0%, rgba(255, 243, 214, 0.88) 100%);
+  background: var(--tg-theme-secondary-bg-color);
   color: #1a1a1a;
-  border-color: rgba(245, 166, 35, 0.35);
+  border-color: rgba(var(--accent-rgb), 0.35);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
 }
 
@@ -1592,14 +1533,14 @@ html:not(.hub-is-dark) .hub-explore-tile {
   right: -15%;
   width: 55%;
   height: 85%;
-  background: radial-gradient(ellipse, rgba(247, 166, 0, 0.14) 0%, transparent 75%);
+  background: none;
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
 
 .hub-explore-tile:hover {
   transform: translateY(-3px) scale(1.015);
-  border-color: rgba(247, 166, 0, 0.45);
+  border-color: rgba(var(--accent-rgb), 0.45);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
 }
 
@@ -1622,7 +1563,7 @@ html:not(.hub-is-dark) .hub-explore-tile {
   z-index: 1;
 }
 
-.hub-is-dark .hub-explore-icon { color: #c27800; }
+.hub-is-dark .hub-explore-icon { color: var(--app-cta-fill); }
 
 .hub-explore-badge {
   position: absolute;
@@ -1632,13 +1573,13 @@ html:not(.hub-is-dark) .hub-explore-tile {
   font-weight: 700;
   padding: 3px 7px;
   border-radius: 7px;
-  background: rgba(247, 166, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   color: var(--app-cta-fill);
   line-height: 1;
   z-index: 2;
 }
 
-.hub-is-dark .hub-explore-badge { color: #c27800; }
+.hub-is-dark .hub-explore-badge { color: var(--app-cta-fill); }
 
 .hub-explore-label {
   font-weight: 700;
@@ -1667,7 +1608,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   margin: 0 16px 20px;
   border-radius: 24px;
   background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(247, 166, 0, 0.2);
+  border: 1.5px solid rgba(var(--accent-rgb), 0.2);
   padding: 22px 20px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
   position: relative;
@@ -1676,7 +1617,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-is-dark .hub-acq-hero {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  border-color: rgba(247, 166, 0, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .hub-acq-hero::before {
@@ -1686,7 +1627,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   right: -10%;
   width: 50%;
   height: 80%;
-  background: radial-gradient(ellipse, rgba(247, 166, 0, 0.12) 0%, transparent 70%);
+  background: none;
   pointer-events: none;
 }
 
@@ -1709,7 +1650,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(247, 166, 0, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   color: var(--app-cta-fill);
   font-size: 12px;
   font-weight: 700;
@@ -2009,20 +1950,14 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 /* ─── Skeleton loading ───────────────────────────────────────────────── */
 
 .hub-skel-shimmer {
-  background: linear-gradient(
-    110deg,
-    var(--tg-theme-secondary-bg-color) 0%,
-    color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
-    var(--tg-theme-secondary-bg-color) 100%
-  );
-  background-size: 200% 100%;
-  animation: client-hub-skel-shimmer 1.2s ease-in-out infinite;
+  background: var(--tg-theme-secondary-bg-color);
+  animation: client-hub-skel-pulse 1.2s ease-in-out infinite;
   border-radius: 8px;
 }
 
-@keyframes client-hub-skel-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+@keyframes client-hub-skel-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
 }
 
 /* Card-shaped skeleton for next-booking hero */
@@ -2344,13 +2279,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 .ice-lane__line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--app-cta-fill) 45%, transparent) 40%,
-    color-mix(in srgb, var(--app-cta-fill) 45%, transparent) 60%,
-    transparent 100%
-  );
+  background: color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
   border-radius: 1px;
 }
 
@@ -2412,17 +2341,16 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
   padding: 14px 20px 14px 18px;
   border: none;
   border-radius: 18px;
-  background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
-  color: #1a1200;
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
   font: inherit;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow:
-    0 8px 28px color-mix(in srgb, var(--app-cta-fill) 44%, transparent),
-    0 2px 8px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.14),
+        0 2px 8px rgba(0, 0, 0, 0.1);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   animation: client-hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -2439,9 +2367,8 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
 .client-hub-book-fab.hub-book-fab:active {
   transform: scale(0.95);
   box-shadow:
-    0 4px 16px color-mix(in srgb, var(--app-cta-fill) 38%, transparent),
-    0 1px 4px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 4px 16px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .client-hub-book-fab.hub-book-fab:focus-visible {

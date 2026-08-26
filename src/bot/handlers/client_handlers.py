@@ -363,7 +363,7 @@ def _trainer_invite_welcome_markup(
 
 
 def _welcome_pass_invite_body(trainer: dict | None) -> str:
-    """Единый текст после welcome-токена / ref / share_ref: тренер + контекст Ice Studio."""
+    """Единый текст после welcome-токена / ref / share_ref: тренер + контекст Glide."""
     name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
     return msg.CLIENT_PASS_WELCOME.format(name=name)
 

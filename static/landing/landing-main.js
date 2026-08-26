@@ -194,7 +194,7 @@
     if (id === 'catalog') {
       return (
         '<div class="landing-bento__viz bv-catalog" aria-hidden="true">' +
-        '<span class="bv-catalog__pill">Ice Studio · Минск</span>' +
+        '<span class="bv-catalog__pill">Glide · Минск</span>' +
         '<div class="bv-catalog__row">' +
         '<div class="bv-catalog__avatar"></div>' +
         '<div class="bv-catalog__main">' +

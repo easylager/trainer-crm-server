@@ -325,7 +325,7 @@ async def platform_stats(
 
 @router.get("/landing-config")
 async def landing_config() -> dict:
-    """Public manifest slice for Ice Pro landing (copy, bento, visual assets)."""
+    """Public manifest slice for Glide landing (copy, bento, visual assets)."""
     return public_landing_config()
 
 
@@ -336,7 +336,7 @@ async def trainer_start_from_landing(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
-    Issue one-time Ice Pro bot link for site CTA (trainer row created when user opens Telegram).
+    Issue one-time Glide bot link for site CTA (trainer row created when user opens Telegram).
 
     Replaces manual /trainer_welcome_link for organic traffic.
     """

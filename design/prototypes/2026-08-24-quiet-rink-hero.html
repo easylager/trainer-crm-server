@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLIDE — The Quiet Rink (prototype)</title>
+<style>
+  /* Brand tokens: GLIDE — Digital Skating Ecosystem.
+     Source: static/logos/README.md (brand name, mark, ~#47B6B9) +
+     explicit correction: primary accent #45B9BB, brand font Avenir.
+     Avenir isn't shipped in this repo (no self-hosted font, no free web
+     equivalent) — declared by name with sane system fallbacks rather than
+     substituted with an invented identity. */
+  :root {
+    --brand-50:  #eef9f8;
+    --brand-100: #d3efec;
+    --brand-300: #7fcfc9;
+    --brand-500: #45b9bb; /* official accent */
+    --brand-700: #227b7a;
+    --brand-900: #0c3e3d;
+    --brand-950: #052322;
+    --brand-on-fill: #062a29;
+
+    --ice-frost: var(--brand-100);
+    --ice-mist: var(--brand-50);
+    --ice-glow: var(--brand-300);
+    --ice-blue: var(--brand-500);
+    --ice-deep: var(--brand-900);
+    --ice-night: var(--brand-950);
+    --app-cta-fill: var(--brand-500);
+    --app-cta-text: var(--brand-on-fill);
+
+    --brand-font: "Avenir Next", Avenir, "Century Gothic", "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bg-page: #fffbec; /* warm ivory, unchanged — not a brand-color conflict */
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg-page);
+    color: var(--brand-900);
+    font-family: var(--brand-font);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2 { font-family: var(--brand-font); font-weight: 750; margin: 0; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  .qr-tag {
+    position: fixed; bottom: 10px; left: 10px; z-index: 999;
+    font: 500 11px/1 var(--brand-font); letter-spacing: .04em;
+    background: var(--brand-950); color: var(--brand-100);
+    padding: 6px 10px; border-radius: 999px; opacity: .55;
+    pointer-events: none;
+  }
+
+  /* ============ PERSISTENT BRAND NAV ============ */
+  .qr-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px clamp(20px, 5vw, 56px);
+    background: linear-gradient(180deg, rgba(5,35,34,.55), rgba(5,35,34,0));
+    backdrop-filter: blur(6px);
+  }
+  .qr-brand { display: flex; align-items: center; gap: 10px; }
+  .qr-brand__mark {
+    height: 22px; width: auto; display: block;
+    mix-blend-mode: screen; /* flat "-on-black" export files: screen makes the black canvas disappear */
+    filter: brightness(1.08);
+  }
+  .qr-brand__word {
+    font: 800 15px/1 var(--brand-font); letter-spacing: .03em;
+    color: var(--brand-50);
+  }
+  .qr-eyebrow {
+    font: 600 11px/1 var(--brand-font); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--brand-100); opacity: .7;
+  }
+
+  /* ============ ACT 1 — HERO: silence ============ */
+  .qr-hero {
+    position: relative;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .qr-hero__photo {
+    position: absolute; inset: 0;
+    background-image: url("../../static/landing/assets/hero-ice-macro.webp");
+    background-size: cover;
+    background-position: center;
+    filter: grayscale(0.25) brightness(1.05) contrast(1.04);
+    transform: scale(1.06);
+    animation: qr-drift 34s ease-in-out infinite alternate;
+    z-index: -3;
+  }
+  /* dawn/blue-hour wash: brighter near the top so the photo texture reads,
+     darkening toward the bottom so the hero flows into the dark Care Pulse
+     section below instead of cutting to it. Plain alpha, not multiply —
+     multiply against a dark hue was crushing the photo to solid black. */
+  .qr-hero__wash {
+    position: absolute; inset: 0; z-index: -2;
+    background: linear-gradient(180deg,
+      rgba(5,35,34,.32) 0%,
+      rgba(5,35,34,.22) 30%,
+      rgba(5,35,34,.55) 68%,
+      rgba(5,35,34,.92) 100%);
+  }
+  .qr-hero__grain {
+    position: absolute; inset: 0; z-index: -1;
+    background: repeating-radial-gradient(circle at 30% 20%, rgba(255,255,255,.03) 0 1px, transparent 1px 3px);
+    opacity: .5;
+  }
+  @keyframes qr-drift {
+    from { transform: scale(1.06) translate(0, 0); }
+    to   { transform: scale(1.12) translate(-1.2%, -1%); }
+  }
+
+  /* one faint trace line — connective motif borrowed from the "Trace" concept,
+     used sparingly here rather than as the page's primary spine */
+  .qr-trace { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+  .qr-trace__path {
+    fill: none; stroke: var(--brand-100); stroke-width: 1.4; opacity: .34;
+    stroke-dasharray: 900; stroke-dashoffset: 900;
+    animation: qr-trace-draw 3.6s 0.5s cubic-bezier(.4,0,.2,1) forwards;
+  }
+  @keyframes qr-trace-draw { to { stroke-dashoffset: 0; } }
+
+  .qr-hero__center {
+    position: relative; z-index: 2;
+    flex: 1;
+    display: flex; align-items: center;
+    padding: 90px clamp(20px, 5vw, 56px) 0;
+  }
+  .qr-hero__copy { max-width: 680px; }
+  .qr-tagline {
+    display: inline-block;
+    font: 600 13px/1 var(--brand-font); letter-spacing: .04em;
+    color: var(--brand-300); margin-bottom: 18px;
+    opacity: 0; animation: qr-rise-in .9s .5s ease forwards;
+  }
+  .qr-h1 {
+    font-size: clamp(34px, 6vw, 58px); line-height: 1.1; color: var(--brand-50);
+    max-width: 13ch;
+    opacity: 0; animation: qr-rise-in 1s .7s ease forwards;
+  }
+  .qr-h1 em { font-style: italic; font-weight: 750; color: var(--brand-300); }
+  .qr-sub {
+    margin-top: 22px; max-width: 46ch;
+    font-size: 16px; line-height: 1.6; color: var(--brand-100); opacity: .85;
+    font-weight: 400;
+    opacity: 0; animation: qr-rise-in 1s .95s ease forwards;
+  }
+  .qr-hero__actions { margin-top: 32px; opacity: 0; animation: qr-rise-in 1s 1.15s ease forwards; }
+  .qr-btn {
+    appearance: none; border: none; cursor: pointer;
+    font: 700 15px/1 var(--brand-font);
+    background: var(--app-cta-fill); color: var(--app-cta-text);
+    padding: 14px 26px; border-radius: 999px;
+    box-shadow: 0 12px 32px rgba(69,185,187,.32), 0 4px 12px rgba(69,185,187,.2);
+  }
+
+  .qr-hero__bottom {
+    position: relative; z-index: 2;
+    display: flex; justify-content: center; padding: 26px 0 34px;
+    opacity: 0; animation: qr-fade-in 1s 1.6s ease forwards;
+  }
+  .qr-scrollcue {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    font: 600 11px/1 var(--brand-font); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--brand-100); opacity: .7;
+  }
+  .qr-scrollcue__line { width: 1px; height: 30px; background: linear-gradient(var(--brand-100), transparent); animation: qr-cue-pulse 2.2s ease-in-out infinite; }
+  @keyframes qr-cue-pulse { 0%,100% { opacity: .25; } 50% { opacity: .9; } }
+
+  @keyframes qr-fade-in { to { opacity: 1; } }
+  @keyframes qr-rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ============ ACT 2 — THE PULSE (representative section) ============ */
+  .qr-pulse {
+    position: relative;
+    background: var(--ice-night);
+    color: var(--brand-50);
+    padding: clamp(80px, 12vw, 150px) clamp(20px, 6vw, 56px) clamp(64px, 10vw, 120px);
+    min-height: 92svh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    overflow: hidden;
+  }
+  .qr-pulse__ambient {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(69,185,187,.14), transparent 70%);
+    pointer-events: none;
+  }
+  .qr-pulse__eyebrow {
+    font: 700 12px/1 var(--brand-font); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--brand-300); margin-bottom: 20px;
+    opacity: 0; transform: translateY(10px); transition: opacity .8s ease, transform .8s ease;
+  }
+  .qr-pulse__title {
+    font-size: clamp(26px, 4.4vw, 42px); line-height: 1.18; max-width: 18ch; color: var(--brand-50);
+    font-weight: 750;
+    opacity: 0; transform: translateY(10px); transition: opacity .8s .1s ease, transform .8s .1s ease;
+  }
+
+  .qr-ring { position: relative; width: 64px; height: 64px; margin: 40px auto 0; }
+  .qr-ring__core {
+    position: absolute; inset: 22px; border-radius: 999px;
+    background: var(--brand-500);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    box-shadow: 0 0 0 0 rgba(69,185,187,.55);
+  }
+  .qr-ring.qr-play .qr-ring__core { animation: qr-ring-pop .5s .2s cubic-bezier(.34,1.56,.64,1) both; }
+  .qr-ring__wave { position: absolute; inset: 0; border-radius: 999px; border: 1px solid var(--brand-500); opacity: 0; }
+  .qr-ring.qr-play .qr-ring__wave { animation: qr-ring-wave 1.8s .3s cubic-bezier(.2,.6,.3,1) 1 both; }
+  .qr-ring.qr-play .qr-ring__wave--2 { animation-delay: .55s; }
+  @keyframes qr-ring-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes qr-ring-wave { from { transform: scale(.5); opacity: .6; } to { transform: scale(2.4); opacity: 0; } }
+
+  .qr-bubble {
+    margin: 34px auto 0; max-width: 420px; text-align: left;
+    background: var(--brand-950); border: 1px solid rgba(127,207,201,.22);
+    border-radius: 18px 18px 18px 4px;
+    padding: 20px 22px;
+    opacity: 0; transform: translateY(16px) scale(.98);
+    transition: opacity .9s .5s cubic-bezier(.2,.6,.3,1), transform .9s .5s cubic-bezier(.2,.6,.3,1);
+  }
+  .qr-bubble__head { font-weight: 700; color: var(--brand-50); font-size: 15px; margin-bottom: 8px; }
+  .qr-bubble__body { color: var(--brand-100); opacity: .88; font-size: 14.5px; line-height: 1.55; font-weight: 400; }
+  .qr-bubble__meta { margin-top: 10px; font-size: 11px; letter-spacing: .03em; color: var(--brand-300); opacity: .65; }
+
+  .qr-rule {
+    margin-top: 30px; max-width: 480px;
+    font-size: 14px; line-height: 1.7; color: var(--brand-100); opacity: 0; font-weight: 400;
+    transition: opacity 1s .9s ease;
+  }
+  .qr-rule strong { color: var(--brand-50); font-weight: 700; }
+
+  .qr-pulse.qr-inview .qr-pulse__eyebrow,
+  .qr-pulse.qr-inview .qr-pulse__title { opacity: 1; transform: none; }
+  .qr-pulse.qr-inview .qr-bubble { opacity: 1; transform: none; }
+  .qr-pulse.qr-inview .qr-rule { opacity: .82; }
+
+  .qr-pulse__next {
+    margin-top: 56px; font: 600 12px/1 var(--brand-font); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--brand-300); opacity: 0; transition: opacity 1s 1.3s ease;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .qr-pulse.qr-inview .qr-pulse__next { opacity: .55; }
+  .qr-pulse__next::before { content: ""; width: 22px; height: 1px; background: var(--brand-300); }
+
+  @media (max-width: 600px) {
+    .qr-h1 { max-width: 100%; }
+    .qr-nav { padding-top: 14px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .qr-hero__photo { animation: none; }
+    .qr-trace__path { animation: none; stroke-dashoffset: 0; }
+    .qr-scrollcue__line { animation: none; }
+    * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="qr-tag">Prototype — Quiet Rink — GLIDE brand pass</div>
+
+  <header class="qr-nav">
+    <div class="qr-brand">
+      <img class="qr-brand__mark" src="../../static/logos/01-icon/glide-icon-teal-on-black.png" alt="Glide">
+      <span class="qr-brand__word">GLIDE</span>
+    </div>
+    <span class="qr-eyebrow">тренерам без студии · Беларусь</span>
+  </header>
+
+  <!-- ============ ACT 1 — HERO ============ -->
+  <section class="qr-hero">
+    <div class="qr-hero__photo" aria-hidden="true"></div>
+    <div class="qr-hero__wash" aria-hidden="true"></div>
+    <div class="qr-hero__grain" aria-hidden="true"></div>
+    <svg class="qr-trace" viewBox="0 0 1200 700" preserveAspectRatio="none" aria-hidden="true">
+      <path class="qr-trace__path" d="M -40 520 C 260 420, 420 620, 680 480 S 1100 300, 1260 360"/>
+    </svg>
+
+    <div class="qr-hero__center">
+      <div class="qr-hero__copy">
+        <span class="qr-tagline">Расписание, которое не тает</span>
+        <h1 class="qr-h1">Каток ещё <em>молчит</em>.<br>А у вас — уже всё на месте.</h1>
+        <p class="qr-sub">Ссылка — вместо переписки «когда можно?». Каталог — чтобы клиенты находили вас не только по сарафану. А когда добавить нечего — GLIDE молчит вместе с катком.</p>
+        <div class="qr-hero__actions">
+          <button type="button" class="qr-btn">Начать в Telegram</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="qr-hero__bottom">
+      <div class="qr-scrollcue"><span>Дальше — без лишнего шума</span><span class="qr-scrollcue__line"></span></div>
+    </div>
+  </section>
+
+  <!-- ============ ACT 2 — THE PULSE (representative section) ============ -->
+  <section class="qr-pulse" id="qrPulse">
+    <div class="qr-pulse__ambient" aria-hidden="true"></div>
+    <span class="qr-pulse__eyebrow">Тихий режим</span>
+    <h2 class="qr-pulse__title">Мы пишем не для галочки — только когда есть что сказать.</h2>
+
+    <div class="qr-ring" id="qrRing">
+      <div class="qr-ring__wave"></div>
+      <div class="qr-ring__wave qr-ring__wave--2"></div>
+      <div class="qr-ring__core">🌿</div>
+    </div>
+
+    <div class="qr-bubble">
+      <div class="qr-bubble__head">🌿 Сегодня без тренировок.</div>
+      <div class="qr-bubble__body">Расписание на месте. Если появится запись или отмена — напишем сразу. Ничего не потеряется.</div>
+      <div class="qr-bubble__meta">GLIDE · пришло тихо</div>
+    </div>
+
+    <p class="qr-rule"><strong>Одно сообщение</strong> — и то не каждый день. Никогда — поверх дайджеста. Нечего сказать — <strong>мы молчим</strong>.</p>
+
+    <div class="qr-pulse__next">Дальше — расписание, каталог, заметки о клиентах</div>
+  </section>
+
+  <script>
+    (function () {
+      var pulse = document.getElementById('qrPulse');
+      var ring = document.getElementById('qrRing');
+      var played = false;
+
+      var io2 = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting && !played) {
+            played = true;
+            pulse.classList.add('qr-inview');
+            requestAnimationFrame(function () { ring.classList.add('qr-play'); });
+          }
+        });
+      }, { threshold: 0.35 });
+      io2.observe(pulse);
+    })();
+  </script>
+</body>
+</html>

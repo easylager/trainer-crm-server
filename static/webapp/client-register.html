@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Профиль</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <script src="client-mini-app-theme.js?v=202608267"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -20,7 +21,7 @@
   <noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" />
   </noscript>
-  <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <style>
     html, body {
       height: 100%;
@@ -96,8 +97,8 @@
       border-radius: 50%;
       margin-right: 6px;
       vertical-align: 0.1em;
-      background: var(--tg-theme-button-color, #f5a623);
-      box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.22);
+      background: var(--tg-theme-button-color, #34C6C4);
+      box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.22);
     }
 
     /* ── Text input ── */
@@ -124,8 +125,8 @@
     .cr-input:focus {
       outline: none;
       box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
+        inset 0 0 0 1px rgba(var(--accent-rgb), 0.55),
+        0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     .cr-input::placeholder {
       opacity: 0.45;

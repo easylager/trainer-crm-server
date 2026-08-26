@@ -12,25 +12,89 @@
  * подставлять значения из Telegram.WebApp.themeParams в inline-скрипте на :root.
  */
 :root {
-  /* Светлая тема (крем / янтарь, как клиентские экраны) */
-  --tg-theme-bg-color: #fffbec;
-  --tg-theme-text-color: #1a1a1a;
-  --tg-theme-hint-color: #666;
-  --tg-theme-button-color: #f5a623;
-  --tg-theme-button-text-color: #1a1a1a;
-  --tg-theme-secondary-bg-color: #fff5e1;
+  /* Светлая тема (GLIDE paper + teal accent) */
+  --tg-theme-bg-color: var(--glide-paper);
+  --tg-theme-text-color: var(--glide-text);
+  --tg-theme-hint-color: var(--glide-hint);
+  --tg-theme-button-color: var(--glide-brand);
+  --tg-theme-button-text-color: var(--glide-on-fill);
+  --tg-theme-secondary-bg-color: var(--glide-surface);
 
   /*
-   * Фон и поверхности Trainer CRM (крем / тёплый графит).
+   * GLIDE brand palette. --glide-500 снят с логотипа попиксельно (медиана rgb(53, 198, 196)).
+   *
+   * ДОСТУПНОСТЬ: --glide-500 — цвет ЗАЛИВКИ, не текста. На светлом фоне он даёт 2.0:1
+   * и для текста непригоден. Для текста и ссылок берите --glide-ink (5.7:1 на --glide-bg, AA).
+   * Текст поверх заливки — только тёмный --glide-on-fill (7.3:1). Белый на тиле (2.1:1) не использовать.
+   *
+   * УТОМЛЯЕМОСТЬ ГЛАЗ. Насыщенный тил (высокая хрома) — точечный акцент: кнопка, точки прогресса,
+   * фокус, выбранные строки. Крупные плоскости держим на почти нейтральных тонах, чуть сведённых
+   * в сторону бренда, — цвет читается, но не «звенит» на всю площадь экрана.
+   *
+   * Числовая рампа одинакова в обеих темах; на тему реагируют только role-токены ниже.
+   */
+  --glide-50:  #EFFAFA;
+  --glide-100: #D5F2F1;
+  --glide-300: #6FD8D5;
+  --glide-500: #34C6C4;
+  --glide-600: #1FA5A3;
+  --glide-700: #0F6F6D;
+  --glide-900: #073F3E;
+  --glide-950: #04262A;
+
+  /* Role-токены: используйте в компонентах именно их, не номера рампы. */
+  --glide-brand: var(--glide-500);
+  --glide-brand-pressed: var(--glide-600);
+  --glide-ink: var(--glide-700);
+  --glide-deep: var(--glide-900);
+  --glide-on-fill: #062A29;
+  --glide-on-deep: #EAF9F8;
+  --glide-on-deep-hint: #8FC4C3;
+
+  /*
+   * НЕЙТРАЛИ: «бумага + белое», а не серо-тиловые плашки.
+   *
+   * Модель взята у брендов с таким же бирюзовым логотипом: Perplexity (Paper White + Offblack +
+   * единственный тил-акцент), Deliveroo (neon teal на «полном белом»), Tiffany (бирюза
+   * микродозами на белом и тёплом нейтральном компаньоне). Общее правило у всех:
+   * ХОЛСТ — бумага, КАРТОЧКА — чистое белое, границы — волосяные линии, цвет живёт только
+   * в акцентах. Прошлая схема делала наоборот (карточка ТЕМНЕЕ холста) — экран читался
+   * как «серый и тёмный», хотя формально был светлым.
+   *
+   * Бумага чуть тёплая (#FBFAF7): холодная бирюза на нейтрально-тёплой бумаге не выглядит
+   * клинически — это тот самый «champagne + turquoise», на котором держится Tiffany.
+   *
+   * --glide-text намеренно НЕ чёрный: #16292A на белом даёт 15.2:1, на бумаге 14.5:1.
+   * Максимальный контраст (~19–21:1) на просвет мобильного экрана даёт ореол вокруг букв.
+   */
+  --glide-paper:   #FBFAF7;
+  --glide-bg:      var(--glide-paper);
+  --glide-surface: #FFFFFF;
+  --glide-card:    #FFFFFF;
+  --glide-line:    #ECEBE6;
+  --glide-line-strong: #DDDCD4;
+  --glide-text:    #16292A;
+  --glide-hint:    #5F6B6A;
+  /* Тил для ТЕКСТА и иконок (6.0:1 на белом). Заливка — это --glide-brand, не он. */
+  --glide-ink-teal: #0C6F6C;
+  --glide-brand-wash: rgba(52, 198, 196, 0.1);
+  /* Подъём карточки — тенью, а не заливкой: белое на бумаге отделяется мягко. */
+  --glide-shadow-card: 0 1px 2px rgba(20, 40, 40, 0.04), 0 10px 28px -18px rgba(20, 40, 40, 0.35);
+  --glide-shadow-cta: 0 6px 18px -8px rgba(52, 198, 196, 0.75);
+
+  /*
+   * Фон и поверхности Trainer CRM.
    * Не задавайте эти переменные из themeParams — Telegram часто подсовывает холодный «сине-серый»
    * в --tg-theme-bg-color; для оболочек модалок/визарда и полей используйте именно --app-brand-*.
+   * Потребитель сегодня один — секция .ob-flow в mini-app-trainer-profile.css (онбординг-визард),
+   * поэтому перевод на нейтрали GLIDE перекрашивает визард и не задевает остальные экраны.
    */
-  --app-brand-root-bg: #fffbec;
-  --app-brand-surface: #fff5e1;
+  --app-brand-root-bg: var(--glide-bg);
+  --app-brand-surface: var(--glide-surface);
 
-  /* Brand CTA (янтарь) — не подменяется themeParams Telegram; кнопки/ссылки/фокус в мини-приложении */
-  --app-cta-fill: #f5a623;
-  --app-cta-text: #1a1a1a;
+  /* Brand CTA (GLIDE teal) — не подменяется themeParams Telegram; кнопки/ссылки/фокус в мини-приложении */
+  --app-cta-fill: var(--glide-brand);
+  --app-cta-text: var(--glide-on-fill);
 
   --app-bg: var(--tg-theme-bg-color);
   --app-text: var(--tg-theme-text-color);
@@ -40,11 +104,29 @@
   --app-accent-text: var(--app-cta-text);
   --app-danger: #ff3b30;
   --app-success: #34c759;
+  /*
+   * Янтарь больше не бренд-цвет (бренд — GLIDE тил), а семантика «требует внимания»:
+   * ждёт подтверждения, просрочено, предупреждение.
+   */
+  --app-warning: #f5a623;
+
+  /*
+   * Канал акцента для rgba()-литералов: rgba(var(--accent-rgb), α) вместо rgba(var(--accent-rgb), α).
+   * В :root равен текущему янтарю — значение в значение, визуально ноль изменений.
+   * Любой контейнер переопределяет акцент для своего поддерева одной строкой; так .ob-flow
+   * делает тиловыми унаследованные акценты перенесённых блоков, не трогая их за пределами визарда.
+   */
+  --accent-rgb: 52, 198, 196;
+  /*
+   * Второй янтарь: исторически в коде живут два близких значения — #34C6C4 и #34C6C4.
+   * Держим оба канала, чтобы конвертация литералов была значение-в-значение.
+   * Этап 4 сводит их в один.
+   */
+  --accent-rgb-alt: 52, 198, 196;
 
   /*
    * Ice-vertical brand palette (premium, used in hero / trust / brand marks).
-   * Amber остаётся primary CTA — тёплое действие;
-   * ice-* — глубина и доверие (ассоциация с льдом / ареной).
+   * GLIDE teal is primary CTA; ice-* — глубина и доверие (ассоциация с льдом / ареной).
    * Не подменяются themeParams Telegram.
    */
   --ice-frost: #cfe8ff;
@@ -65,7 +147,7 @@
   --shadow-soft:    0 1px 2px rgba(14, 58, 118, 0.06), 0 4px 12px rgba(14, 58, 118, 0.07);
   --shadow-card:    0 2px 4px rgba(14, 58, 118, 0.06), 0 12px 32px rgba(14, 58, 118, 0.1);
   --shadow-floating:0 6px 16px rgba(14, 58, 118, 0.12), 0 22px 48px rgba(14, 58, 118, 0.14);
-  --shadow-amber:   0 12px 32px rgba(245, 166, 35, 0.28), 0 4px 12px rgba(245, 166, 35, 0.18);
+  --shadow-amber:   0 12px 32px rgba(var(--accent-rgb), 0.28), 0 4px 12px rgba(var(--accent-rgb), 0.18);
   /* Service-specific row accent (left rail) — hub + schedule */
   --svc-accent-sky: #0ea5e9;
   --svc-accent-amber: #ea580c;
@@ -94,18 +176,55 @@
   accent-color: var(--app-cta-fill);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Тёмная тема: графитово-темный фон #1c1c1c, карточки #2c2c2e, янтарь */
+/*
+ * GLIDE recolor: CTA/nav-active accent only — surfaces (bg/secondary-bg), text and hint stay
+ * neutral (untouched) per product direction; teal is dosed as accent, not a canvas color.
+ * Telegram's WebApp SDK sets --tg-theme-* via inline style on <html>, which beats any :root
+ * rule here. A descendant selector still wins the cascade for everything it contains — same
+ * technique .ob-flow already uses locally (see mini-app-trainer-profile.css), applied on body
+ * so it reaches every screen's buttons/nav without touching per-component CSS.
+ */
+body {
+  --tg-theme-button-color: var(--glide-brand);
+  --tg-theme-button-text-color: var(--glide-on-fill);
+}
+
+/*
+ * Dark palette — only when Mini App JS sets html.trainer-theme-dark / html.hub-is-dark
+ * (Telegram WebApp.colorScheme). Do NOT use prefers-color-scheme: OS theme ≠ Telegram theme.
+ */
+html.trainer-theme-dark,
+html.hub-is-dark,
+html.client-mini-dark,
+html.sub-root-dark {
+    /* Тёмная тема: графит + GLIDE teal CTA */
     --tg-theme-bg-color: #1c1c1c;
     --tg-theme-text-color: #ffffff;
     --tg-theme-hint-color: #8e8e93;
-    --tg-theme-button-color: #f5a623;
-    --tg-theme-button-text-color: #1a1a1a;
+    --tg-theme-button-color: var(--glide-brand);
+    --tg-theme-button-text-color: var(--glide-on-fill);
     --tg-theme-secondary-bg-color: #2c2c2e;
 
-    --app-brand-root-bg: #1c1c1c;
-    --app-brand-surface: #2c2c2e;
+    /*
+     * Тёмные GLIDE-нейтрали — для будущих экранов, которые честно живут в тёмной теме.
+     * Онбординг-визард ими НЕ пользуется: он светлый в любой теме (см. .ob-flow — «бумажная»
+     * поверхность бренда, как белая коробка Tiffany), там переопределены собственные значения.
+     * Фон не уводим в чёрный, а текст — в белый: светлые буквы на почти чёрном «расплываются».
+     */
+    --glide-ink: var(--glide-300);
+    --glide-ink-teal: var(--glide-300);
+    --glide-paper:   #101B1C;
+    --glide-bg:      var(--glide-paper);
+    --glide-surface: #172425;
+    --glide-card:    #1D2C2D;
+    --glide-line:    #26393B;
+    --glide-line-strong: #34494B;
+    --glide-text:    #DCE8E8;
+    --glide-hint:    #90A8A8;
+    --glide-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.7);
+
+    --app-brand-root-bg: var(--glide-bg);
+    --app-brand-surface: var(--glide-surface);
 
     --app-chip-bg: #3c3c3e;
     --app-chip-text: #f5f5f5;
@@ -128,16 +247,30 @@
     --shadow-soft:    0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
     --shadow-card:    0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
     --shadow-floating:0 6px 16px rgba(0, 0, 0, 0.5), 0 22px 48px rgba(0, 0, 0, 0.55);
-  }
+}
+
+/* Light palette lock — beats stale Telegram themeParams (often amber/blue button_color). */
+html.trainer-theme-light,
+html:not(.trainer-theme-dark):not(.hub-is-dark):not(.client-mini-dark):not(.sub-root-dark) {
+  --tg-theme-bg-color: #FBFAF7;
+  --tg-theme-text-color: #16292A;
+  --tg-theme-hint-color: #666666;
+  --tg-theme-button-color: #34C6C4;
+  --tg-theme-button-text-color: #062A29;
+  --tg-theme-secondary-bg-color: #FFFFFF;
+  --accent-rgb: 52, 198, 196;
+  --accent-rgb-alt: 52, 198, 196;
+  --app-cta-fill: #34C6C4;
+  --app-cta-text: #062A29;
 }
 
 /* No default blue: links, focus ring, form accent, text caret, selection, iOS tap */
 html {
-  -webkit-tap-highlight-color: rgba(245, 166, 35, 0.28);
+  -webkit-tap-highlight-color: rgba(var(--accent-rgb), 0.28);
 }
 
 ::selection {
-  background: rgba(245, 166, 35, 0.38);
+  background: rgba(var(--accent-rgb), 0.32);
   color: var(--tg-theme-text-color);
 }
 

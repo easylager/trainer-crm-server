@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Full dev stack restart: kill tmux session, cleanup stray processes, start fresh
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SESSION="crm-dev"
+
+log() { printf '[dev-restart] %s\n' "$1"; }
+
+# Kill tmux session
+log "stopping tmux session '$SESSION'..."
+tmux kill-session -t "$SESSION" 2>/dev/null || log "  (not running)"
+
+# Cleanup stray processes
+log "killing stray processes..."
+lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+pkill -f "src.bot.client_app" 2>/dev/null || true
+pkill -f "src.bot.trainer_app" 2>/dev/null || true
+pkill -f "src.bot.admin_app" 2>/dev/null || true
+pkill -f "src.bot.notification_service" 2>/dev/null || true
+pkill -f "cloudflared tunnel" 2>/dev/null || true
+pkill -f "dev_service_monitor" 2>/dev/null || true
+pkill -f "dev_tunnel_loop" 2>/dev/null || true
+
+log "waiting 2s for processes to die..."
+sleep 2
+
+# Start fresh
+log "starting dev stack..."
+exec "$ROOT/dev-start"

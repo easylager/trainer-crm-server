@@ -10,9 +10,10 @@
         if (typeof window.__applyTrainerHomeTheme === 'function') window.__applyTrainerHomeTheme();
         try {
           var darkUi = document.documentElement.classList.contains('hub-is-dark');
-          var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+          var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+          if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
         } catch (e) {}
       }
 

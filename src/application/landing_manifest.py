@@ -1,4 +1,4 @@
-"""Load vertical/market landing manifest for Ice Pro public site."""
+"""Load vertical/market landing manifest for Glide public site."""
 from __future__ import annotations
 
 import json

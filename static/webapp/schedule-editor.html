@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
   <script src="mini-app-phone-field.js?v=202606283"></script>
-  <link rel="stylesheet" href="theme.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202606283" />
+  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
   <script src="mini-app-confirm.js"></script>
   <script src="mini-app-trainer-gate.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -28,9 +29,10 @@
   <link rel="preload" href="schedule-editor-main.js?v=202606316" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202606200" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202606314" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606200" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202608262" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608262" />
 </head>
 <body data-trainer-shell="tabs">
   <!-- Covers main UI until quick-book modal opens (flow=book) or booking detail loads (open_booking=) — avoids calendar flash -->
@@ -40,32 +42,6 @@
       <p class="se-flow-book-boot-overlay__text">Быстрая запись</p>
     </div>
   </div>
-  <script>
-  (function(){
-    window.__applyScheduleEditorTheme = function() {
-      var d = document.documentElement;
-      var tg = window.Telegram && window.Telegram.WebApp;
-      var dark = tg && tg.colorScheme ? tg.colorScheme === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      d.style.setProperty('--app-cta-fill', '#f5a623', 'important');
-      d.style.setProperty('--app-cta-text', '#1a1a1a', 'important');
-      d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
-      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
-      d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbec', 'important');
-      d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
-      d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
-      d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
-      /* Telegram dark + OS light: @media (prefers-color-scheme: dark) in theme.css does not run — chips must not equal secondary (#2a2a2a). */
-      if (dark) {
-        d.style.setProperty('--app-chip-bg', '#3c3c3e', 'important');
-        d.style.setProperty('--app-chip-text', '#f5f5f5', 'important');
-      } else {
-        d.style.setProperty('--app-chip-bg', '#fff5e1', 'important');
-        d.style.setProperty('--app-chip-text', '#1a1a1a', 'important');
-      }
-    };
-    window.__applyScheduleEditorTheme();
-  })();
-  </script>
   <script>
   /* Before first paint: quick-book or deep link to booking detail must not flash the calendar. */
   (function () {

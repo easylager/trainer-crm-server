@@ -41,14 +41,14 @@
 }
 
 .client-mini-nav > button.btn-app-home {
-  border: 2px solid rgba(245, 166, 35, 0.42) !important;
+  border: 2px solid rgba(var(--accent-rgb), 0.42) !important;
   background: transparent !important;
   color: var(--app-cta-fill) !important;
   box-shadow: none !important;
 }
 
 .client-mini-nav > button.btn-app-back {
-  border: 1px solid rgba(245, 166, 35, 0.22) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.22) !important;
   background: var(--tg-theme-secondary-bg-color) !important;
   color: var(--tg-theme-text-color) !important;
   box-shadow: var(--app-btn-shadow-surface) !important;

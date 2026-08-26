@@ -1,0 +1,28 @@
+/**
+ * Trainer theme overrides — load after theme.css + mini-app-trainer-nav.css.
+ * Hard-coded GLIDE teal on nav buttons (Telegram themeParams often inject amber button_color).
+ */
+button.btn-app-home,
+.trainer-mini-nav > button.btn-app-home {
+  border: 1px solid rgba(52, 198, 196, 0.34) !important;
+  background: transparent !important;
+  color: #34C6C4 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+button.btn-app-back,
+.trainer-mini-nav > button.btn-app-back {
+  border: 1px solid rgba(102, 102, 102, 0.22) !important;
+}
+
+html.trainer-theme-dark button.btn-app-back,
+html.trainer-theme-dark .trainer-mini-nav > button.btn-app-back {
+  border-color: rgba(142, 142, 147, 0.28) !important;
+}
+
+/* Light canvas lock — beats stale Telegram themeParams + old @media dark CSS in WebView cache. */
+html.trainer-theme-light body {
+  background-color: #FBFAF7 !important;
+  color: #16292A !important;
+}

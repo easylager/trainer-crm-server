@@ -2,7 +2,7 @@
 Care pulse — silence-aware presence check-in for trainers and clients.
 
 Operational pushes (booking, reminder, digest) already keep the bot in the chat
-when there is real work. This module fills the *quiet* gap so Ice Pro does not
+when there is real work. This module fills the *quiet* gap so Glide does not
 disappear in Telegram — without competing with those messages.
 
 Rules (keep this small):

@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="client-mini-app-theme.js?v=202608267"></script>
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <style>
     /* Page-specific layout only; tokens & bd-* from theme + mini-app-components */
     #screenChoose {
@@ -59,9 +60,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
-      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.35);
-      color: #1a1a1a;
+      background: var(--app-cta-fill, #34C6C4);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.28);
+      color: var(--app-cta-text, #062A29);
     }
     .bp-intro-icon svg { width: 24px; height: 24px; }
     .bp-intro-body { min-width: 0; }
@@ -109,12 +110,12 @@
       animation-delay: var(--bp-delay);
     }
     .bp-pass-card--best {
-      border-color: rgba(247, 166, 0, 0.35);
+      border-color: rgba(var(--accent-rgb), 0.35);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
     }
     .bp-pass-card--from-link {
-      border-color: rgba(247, 166, 0, 0.55);
-      box-shadow: 0 4px 20px rgba(247, 166, 0, 0.2);
+      border-color: rgba(var(--accent-rgb), 0.55);
+      box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.2);
     }
     .bp-pass-card--from-link::after {
       content: '';
@@ -123,7 +124,7 @@
       left: 0;
       right: 0;
       height: 3px;
-      background: linear-gradient(90deg, #ffc23d, #f7a600);
+      background: var(--app-cta-fill, #34C6C4);
       pointer-events: none;
     }
     .bp-pass-card--best::after {
@@ -133,7 +134,7 @@
       left: 0;
       right: 0;
       height: 3px;
-      background: linear-gradient(90deg, #ffc23d, #f7a600, #e89400);
+      background: var(--app-cta-fill, #34C6C4);
       pointer-events: none;
     }
     .bp-pass-inner {
@@ -153,7 +154,7 @@
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      background: rgba(247, 166, 0, 0.18);
+      background: rgba(var(--accent-rgb), 0.18);
       color: var(--tg-theme-button-color);
       flex-shrink: 0;
     }
@@ -165,9 +166,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(247, 166, 0, 0.12);
-      border: 1px solid rgba(247, 166, 0, 0.2);
-      color: #f7a600;
+      background: rgba(var(--accent-rgb), 0.12);
+      border: 1px solid rgba(var(--accent-rgb), 0.2);
+      color: var(--app-cta-fill, #34C6C4);
     }
     .bp-pass-ico svg { width: 22px; height: 22px; opacity: 0.95; }
     .bp-pass-body { flex: 1; min-width: 0; }
@@ -186,7 +187,7 @@
     .bp-nudge {
       margin: -8px 0 20px;
       padding-left: 12px;
-      border-left: 2px solid rgba(247, 166, 0, 0.28);
+      border-left: 2px solid rgba(var(--accent-rgb), 0.28);
       font-size: 13px;
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
@@ -232,8 +233,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(247, 166, 0, 0.1);
-      color: #f7a600;
+      background: rgba(var(--accent-rgb), 0.1);
+      color: var(--app-cta-fill, #34C6C4);
     }
     .bp-cert-ico svg { width: 22px; height: 22px; }
     .bp-cert-title { font-weight: 600; font-size: 16px; margin: 0 0 6px; }
@@ -243,7 +244,7 @@
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
 </head>
 <body>
   <div id="screenChoose" data-screen class="active">

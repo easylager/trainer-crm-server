@@ -5,44 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Студия</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606200" />
-  <script>
-    (function () {
-      function isColDark() {
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-      function applyCollectiveTheme() {
-        var d = document.documentElement;
-        var dark = isColDark();
-        d.classList.toggle('col-is-dark', dark);
-        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
-        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
-        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec', 'important');
-        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a', 'important');
-        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1', 'important');
-        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
-        d.style.setProperty('--app-chip-bg', dark ? '#3c3c3e' : '#fff5e1', 'important');
-        d.style.setProperty('--app-chip-text', dark ? '#f5f5f5' : '#1a1a1a', 'important');
-      }
-      applyCollectiveTheme();
-      if (window.matchMedia) {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyCollectiveTheme);
-      }
-      var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg && typeof tg.onEvent === 'function') {
-        try {
-          tg.onEvent('themeChanged', applyCollectiveTheme);
-        } catch (e) { /* noop */ }
-      }
-      window.__applyCollectiveTheme = applyCollectiveTheme;
-    })();
-  </script>
+  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
+  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608261" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -57,7 +26,7 @@
       padding: 12px;
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 24px);
       -webkit-font-smoothing: antialiased;
-      --col-accent: #F7A600;
+      --col-accent: #34C6C4;
     }
     body.col-page.trainer-shell-body {
       padding-bottom: calc(var(--trainer-shell-tab-inset, 80px) + 12px);
@@ -71,8 +40,8 @@
       border-radius: 20px;
       padding: 22px 18px;
       margin-bottom: 14px;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.12) 0%, transparent 70%);
-      border: 1px solid rgba(247, 166, 0, 0.22);
+      background: rgba(var(--accent-rgb), 0.1);
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
     }
     .col-hero__eyebrow {
       font-size: 11px;
@@ -96,7 +65,7 @@
       margin: 0 0 12px;
     }
     .col-studio-switch {
-      border: 1px solid rgba(247, 166, 0, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       border-radius: 999px;
@@ -106,8 +75,8 @@
       cursor: pointer;
     }
     .col-studio-switch.is-active {
-      background: rgba(247, 166, 0, 0.18);
-      border-color: var(--col-accent, #F7A600);
+      background: rgba(var(--accent-rgb), 0.18);
+      border-color: var(--col-accent, #34C6C4);
       color: var(--tg-theme-text-color);
     }
     .col-card {
@@ -132,7 +101,7 @@
       background: var(--tg-theme-bg-color);
       border-radius: 12px;
       padding: 12px;
-      border: 1px solid rgba(247, 166, 0, 0.18);
+      border: 1px solid rgba(var(--accent-rgb), 0.18);
     }
     .col-link-text {
       flex: 1;
@@ -442,7 +411,7 @@
       text-transform: uppercase;
       padding: 4px 8px;
       border-radius: 999px;
-      background: rgba(247, 166, 0, 0.15);
+      background: rgba(var(--accent-rgb), 0.15);
       color: #a66b00;
       white-space: nowrap;
     }
@@ -468,7 +437,7 @@
       font-weight: 600;
       padding: 5px 10px;
       border-radius: 999px;
-      background: rgba(247, 166, 0, 0.12);
+      background: rgba(var(--accent-rgb), 0.12);
       color: var(--tg-theme-text-color);
     }
     .col-subs-status {
@@ -738,8 +707,8 @@
     }
     .col-preview-hero {
       border-radius: 16px; padding: 16px; margin-bottom: 12px;
-      background: var(--preview-accent-soft, rgba(247,166,0,0.12));
-      border: 1px solid var(--preview-accent-border, rgba(247,166,0,0.22));
+      background: var(--preview-accent-soft, rgba(var(--accent-rgb), 0.12));
+      border: 1px solid var(--preview-accent-border, rgba(var(--accent-rgb), 0.22));
       background-size: cover; background-position: center;
     }
     .col-preview-hero--cover {
@@ -1149,7 +1118,7 @@
       var catalogCities = [];
       var catalogCitiesPromise = null;
       var ACCENT_PRESET_COLORS = {
-        amber: '#F7A600',
+        amber: '#34C6C4',
         slate: '#5C6370',
         forest: '#2F6B4F',
         rose: '#B85C72',
@@ -1239,7 +1208,7 @@
       }
 
       function applyStudioAccent(data) {
-        var accent = (data && data.accent && data.accent.accent) || '#F7A600';
+        var accent = (data && data.accent && data.accent.accent) || '#34C6C4';
         document.documentElement.style.setProperty('--col-accent', accent);
       }
 

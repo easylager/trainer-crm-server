@@ -12,7 +12,7 @@
     .heat-row { display: flex; gap: 4px; align-items: flex-end; height: 80px; margin-top: 6px; }
     .heat-cell {
       flex: 1; min-width: 22px;
-      background: rgba(245, 166, 35, 0.65);
+      background: rgba(var(--accent-rgb), 0.65);
       border-radius: 4px 4px 0 0;
       position: relative;
       min-height: 6px;
@@ -75,7 +75,7 @@
                 '<div class="adm-list-value">' + pct(f.share_pct) + '</div>' +
               '</div>' +
               '<div style="margin-top:8px;height:6px;background:rgba(255,255,255,0.07);border-radius:4px;overflow:hidden;">' +
-                '<div style="width:' + widthPct + '%;height:100%;background:rgba(245, 166, 35, 0.7);"></div>' +
+                '<div style="width:' + widthPct + '%;height:100%;background:rgba(var(--accent-rgb), 0.7);"></div>' +
               '</div>' +
             '</div>';
           }).join('');

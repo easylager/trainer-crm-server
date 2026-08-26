@@ -126,7 +126,7 @@ def normalize_gallery_keys(raw: Any) -> list[str]:
 
 def platform_default_brand() -> BrandPresentation:
     settings = Settings()
-    display = (settings.certificate_pdf_brand_display_name or "ICE STUDIO").strip() or "ICE STUDIO"
+    display = (settings.certificate_pdf_brand_display_name or "GLIDE").strip() or "GLIDE"
     accent = resolve_accent_preset(DEFAULT_ACCENT_PRESET)
     return BrandPresentation(
         display_name=display,

@@ -4,13 +4,16 @@
       min-height: 100vh;
       font-family: var(--app-font-sans);
       color: var(--tg-theme-text-color);
-      /* Ice morning: breath of arena air, not an amber spotlight */
+      /* Light: subtle ice breath at top. Dark: flat neutral — no teal wash over the whole screen. */
       background:
         radial-gradient(70% 50% at 100% -8%, color-mix(in srgb, var(--ice-glow) 12%, transparent) 0%, transparent 62%),
-        radial-gradient(140% 80% at 50% -12%, rgba(247, 196, 120, 0.055) 0%, rgba(247, 196, 120, 0.018) 45%, transparent 70%),
+        radial-gradient(140% 80% at 50% -12%, rgba(111, 216, 214, 0.055) 0%, rgba(111, 216, 214, 0.018) 45%, transparent 70%),
         var(--tg-theme-bg-color) !important;
       padding: 16px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
       overflow-x: hidden;
+    }
+    html.hub-is-dark body.hub-body {
+      background: var(--tg-theme-bg-color) !important;
     }
     .hub-shell {
       /* Opacity-only: translate/scale on the whole shell caused visible layout jump vs async content. */
@@ -166,9 +169,7 @@
     }
     .hub-week-pulse__day--today {
       border-color: color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
-      background:
-        linear-gradient(160deg, color-mix(in srgb, var(--app-cta-fill) 10%, transparent) 0%, transparent 70%),
-        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill) 10%, var(--tg-theme-secondary-bg-color));
     }
     .hub-week-pulse__day--has:not(.hub-week-pulse__day--today) {
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
@@ -246,12 +247,7 @@
     .hub-bookings-stack .slot-row.hub-booking-ghost {
       opacity: 0.88;
       border: 1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
-      background:
-        linear-gradient(
-          135deg,
-          color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent) 0%,
-          color-mix(in srgb, var(--app-cta-fill) 6%, var(--tg-theme-secondary-bg-color)) 100%
-        );
+      background: color-mix(in srgb, var(--app-cta-fill) 6%, var(--tg-theme-secondary-bg-color));
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
@@ -325,7 +321,7 @@
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
+      background: var(--app-cta-fill);
       opacity: 0;
     }
     
@@ -441,8 +437,8 @@
       transform: scale(0.99);
     }
     .hub-summary-hint--urgent {
-      border-color: rgba(245, 166, 35, 0.45);
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14), var(--tg-theme-secondary-bg-color));
+      border-color: rgba(var(--accent-rgb), 0.45);
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-secondary-bg-color));
     }
     .hub-summary-hint--info {
       border-color: rgba(90, 160, 255, 0.28);
@@ -465,7 +461,7 @@
       gap: 12px;
       padding: 12px 12px 12px 14px;
       border-radius: 14px;
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
       transform: translateY(14px);
@@ -480,13 +476,11 @@
       pointer-events: auto;
     }
     .hub-inline-toast--success {
-      border-color: rgba(245, 166, 35, 0.38);
-      background:
-        linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, transparent 100%),
-        var(--tg-theme-secondary-bg-color);
+      border-color: rgba(var(--accent-rgb), 0.38);
+      background: color-mix(in srgb, var(--app-cta-fill) 12%, var(--tg-theme-secondary-bg-color));
     }
     .hub-inline-toast--warning {
-      border-color: rgba(255, 164, 0, 0.45);
+      border-color: color-mix(in srgb, var(--app-warning) 38%, transparent);
     }
     .hub-inline-toast__body {
       flex: 1;
@@ -511,7 +505,7 @@
       flex-shrink: 0;
     }
     .hub-inline-toast__action {
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       background: color-mix(in srgb, var(--tg-theme-bg-color) 75%, var(--tg-theme-button-color) 25%);
       color: var(--tg-theme-text-color);
       border-radius: 9px;
@@ -576,13 +570,8 @@
       line-height: 1.35;
       letter-spacing: 0.01em;
       color: var(--tg-theme-text-color);
-      background: linear-gradient(
-        135deg,
-        rgba(247, 166, 0, 0.22) 0%,
-        rgba(247, 166, 0, 0.06) 55%,
-        rgba(255, 255, 255, 0.04) 100%
-      );
-      border: 1px solid rgba(247, 166, 0, 0.35);
+      background: rgba(var(--accent-rgb), 0.12);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
       animation: hub-first-online-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
@@ -597,7 +586,7 @@
       }
     }
     .hub-is-dark .hub-first-online-hint {
-      border-color: rgba(247, 166, 0, 0.28);
+      border-color: rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 4px 22px rgba(0, 0, 0, 0.2);
     }
 
@@ -622,7 +611,7 @@
     }
 
     .hub-day-label:first-child { margin-top: 0; }
-    /* Same slot row model as schedule-editor (calendar list) — cream/dark chip + green/amber border */
+    /* Same slot row model as schedule-editor — GLIDE card on paper/surface, teal hairline when booked */
     .hub-bookings-stack {
       display: flex;
       flex-direction: column;
@@ -638,46 +627,43 @@
       margin: 0 0 6px;
       padding: 12px 14px;
       border-radius: 12px;
-      border: 2px solid transparent;
-      background: #fff3cc !important;
-      color: #1a1a1a !important;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
       text-align: left;
       font: inherit;
       cursor: pointer;
       -webkit-appearance: none;
       appearance: none;
-    }
-    .hub-is-dark .hub-bookings-stack .slot-row {
-      background: #2a2a2a !important;
-      color: #f5f5f5 !important;
+      box-shadow: var(--glide-shadow-card, 0 1px 2px rgba(20, 40, 40, 0.04));
     }
     .hub-bookings-stack .slot-row:last-child { margin-bottom: 0; }
     .hub-bookings-stack .slot-row.slot-booked-click {
-      border-color: rgba(247, 166, 0, 0.45);
+      border-color: rgba(var(--accent-rgb), 0.34);
     }
     .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-pending {
-      border-color: rgba(255, 159, 10, 0.55);
+      border-color: color-mix(in srgb, var(--app-warning) 42%, transparent);
     }
     .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
-      border-color: rgba(52, 199, 89, 0.45);
+      border-color: rgba(var(--accent-rgb), 0.38);
     }
     .hub-bookings-stack .slot-row.hub-booking-row--new {
       animation: hub-booking-row-new 1.8s ease;
-      border-color: rgba(245, 166, 35, 0.62);
-      box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.18);
+      border-color: rgba(var(--accent-rgb), 0.62);
+      box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.18);
     }
     @keyframes hub-booking-row-new {
       0% {
         transform: scale(0.992);
-        box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.36);
+        box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.36);
       }
       50% {
         transform: scale(1.004);
-        box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.28);
+        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.28);
       }
       100% {
         transform: scale(1);
-        box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.18);
+        box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.18);
       }
     }
     .hub-bookings-stack .slot-row:active { opacity: 0.92; }
@@ -735,13 +721,13 @@
       font-weight: 700;
       letter-spacing: 0.02em;
       vertical-align: middle;
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.22), rgba(245, 166, 35, 0.08));
-      color: var(--tg-theme-button-color, #f5a623);
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      background: rgba(var(--accent-rgb), 0.14);
+      color: var(--tg-theme-button-color, #34C6C4);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
     }
     .hub-is-dark .hub-bookings-stack .hub-session-now-pill {
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.18), rgba(245, 166, 35, 0.06));
-      border-color: rgba(245, 166, 35, 0.42);
+      background: rgba(var(--accent-rgb), 0.12);
+      border-color: rgba(var(--accent-rgb), 0.42);
     }
     .hub-bookings-stack .hub-problem-pill {
       display: inline-block;
@@ -831,7 +817,7 @@
       height: 5px;
       border-radius: 50%;
       flex-shrink: 0;
-      background: var(--tg-theme-button-color, #f5a623);
+      background: var(--tg-theme-button-color, #34C6C4);
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
     }
     .hub-is-dark .hub-bookings-stack .hub-new-client-pill {
@@ -907,12 +893,16 @@
       flex-shrink: 0;
     }
     .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
-      background: rgba(52, 199, 89, 0.2);
-      color: #34c759;
+      background: rgba(var(--accent-rgb), 0.14);
+      color: var(--glide-ink-teal, #0c6f6c);
+    }
+    .hub-is-dark .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
+      background: rgba(var(--accent-rgb), 0.18);
+      color: var(--app-cta-fill);
     }
     .hub-bookings-stack .slot-row .slot-status.booked-pending {
-      background: rgba(255, 159, 10, 0.22);
-      color: #ff9500;
+      background: color-mix(in srgb, var(--app-warning) 16%, transparent);
+      color: var(--app-warning);
     }
     /* Group slot preview — same language as schedule-editor (no client name in list) */
     .hub-bookings-stack .slot-row.slot-group-hub-preview {
@@ -944,7 +934,7 @@
     .hub-bookings-stack .slot-group-meter-fill {
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-button-color) 75%, transparent), var(--tg-theme-button-color));
+      background: var(--tg-theme-button-color);
       min-width: 6%;
       transition: width 0.2s ease;
     }
@@ -1140,7 +1130,7 @@
       height: 18px;
       border-radius: 50%;
       border: 2px solid color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
-      border-top-color: var(--tg-theme-button-color, #f5a623);
+      border-top-color: var(--tg-theme-button-color, #34C6C4);
       animation: hubBookingSpin 0.65s linear infinite;
     }
     @keyframes hubBookingSpin {
@@ -1166,7 +1156,7 @@
       overscroll-behavior-y: contain;
       background: var(--tg-theme-bg-color);
       box-shadow:
-        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 0 0 1px rgba(var(--accent-rgb), 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
     /*
@@ -1319,7 +1309,7 @@
       padding: 16px 14px 14px;
       border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.1);
     }
     .hub-fill-slots-empty-state .hub-fill-slots-empty {
       margin: 0;
@@ -1354,7 +1344,7 @@
       flex-shrink: 0;
       width: 18px;
       height: 18px;
-      accent-color: var(--tg-theme-button-color, #f5a623);
+      accent-color: var(--tg-theme-button-color, #34C6C4);
     }
     .hub-fill-slots-pick-label {
       flex: 1;
@@ -1424,7 +1414,7 @@
       flex-shrink: 0;
     }
     .hub-fill-slots-status-badge--free {
-      background: color-mix(in srgb, var(--tg-theme-button-color, #f5a623) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 22%, transparent);
       color: color-mix(in srgb, var(--tg-theme-button-color, #c77800) 90%, var(--tg-theme-text-color));
     }
     .hub-fill-slots-status-badge--busy {
@@ -1467,7 +1457,7 @@
       border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
       box-sizing: border-box;
-      box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.06);
+      box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.06);
     }
     .hub-fill-slots-skel-pick {
       display: flex;
@@ -1533,7 +1523,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(145deg, rgba(247, 166, 0, 0.28), rgba(247, 166, 0, 0.09));
+      background: none;
       color: #c77800;
     }
     #hubModalBookGroupSlot .btn-book-option-media svg {
@@ -1592,13 +1582,13 @@
     }
     #hubModalBookGroupSlot .hub-book-service-pick.is-selected {
       box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
+        inset 0 0 0 1px rgba(var(--accent-rgb), 0.55),
+        0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     #hubModalBookGroupSlot .hub-book-service-pick:focus-visible {
       box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
+        inset 0 0 0 1px rgba(var(--accent-rgb), 0.55),
+        0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     #hubModalBookGroupSlot .btn-book-cancel {
       margin-top: 16px !important;
@@ -2069,8 +2059,8 @@
     #hubModalQuickBookDatetime .input:focus,
     #hubModalQuickBookDatetime .input:focus-visible {
       box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
+        inset 0 0 0 1px rgba(var(--accent-rgb), 0.55),
+        0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     /*
      * WebKit (iOS / Telegram): date input intrinsic width blows past modal — shell clips;
@@ -2092,8 +2082,8 @@
     }
     #hubModalQuickBookDatetime .hub-modal-date-wrap:focus-within {
       box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
+        inset 0 0 0 1px rgba(var(--accent-rgb), 0.55),
+        0 0 0 3px rgba(var(--accent-rgb), 0.12);
     }
     #hubModalQuickBookDatetime .hub-qb-date-input {
       position: relative;
@@ -2433,14 +2423,13 @@
       margin: 0;
       padding: 12px 14px;
       border-radius: 12px;
-      border: 2px solid rgba(247, 166, 0, 0.32);
-      background: #fff3cc !important;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      background: var(--tg-theme-secondary-bg-color) !important;
       box-sizing: border-box;
       pointer-events: none;
     }
     .hub-is-dark .hub-skel-booking-row {
-      background: #2a2a2a !important;
-      border-color: rgba(245, 166, 35, 0.38);
+      border-color: rgba(var(--accent-rgb), 0.32);
     }
     .hub-skel-booking-left {
       flex: 1;
@@ -2577,9 +2566,7 @@
       padding: 14px 14px 14px 15px;
       border-radius: 18px;
       border: 1px solid color-mix(in srgb, var(--app-cta-fill) 32%, transparent);
-      background:
-        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 11%, transparent) 0%, transparent 62%),
-        var(--tg-theme-secondary-bg-color);
+      background: color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color));
       box-shadow: 0 4px 18px color-mix(in srgb, var(--app-cta-fill) 13%, transparent);
       font: inherit;
       text-align: left;
@@ -2603,7 +2590,7 @@
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      background: var(--app-cta-fill);
       color: #1a1200;
       box-shadow: 0 4px 12px color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
     }
@@ -2748,7 +2735,7 @@
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background: var(--app-success);
+      background: var(--app-cta-fill);
       flex-shrink: 0;
     }
 
@@ -2789,8 +2776,8 @@
       line-height: 1.55;
       color: var(--tg-theme-hint-color);
       background: 
-        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
-      border: 1px solid rgba(245, 166, 35, 0.2);
+        var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(var(--accent-rgb), 0.2);
       box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
       position: relative;
       overflow: hidden;
@@ -2885,13 +2872,13 @@
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
+      background: var(--app-cta-fill);
     }
     
     .hub-is-dark .hub-footnote {
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
       background: 
-        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+        var(--tg-theme-secondary-bg-color);
     }
     
     .hub-footnote strong { 
@@ -3077,7 +3064,7 @@
       align-self: center;
       padding: 7px 10px;
       border-radius: 10px;
-      border: 1px solid rgba(245, 166, 35, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       font-size: 11px;
       font-weight: 600;
       font-family: inherit;
@@ -3118,20 +3105,16 @@
       align-items: center;
       padding: 14px 14px 16px;
       border-radius: 16px;
-      background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--tg-theme-bg-color) 86%, var(--app-cta-fill) 14%) 0%,
-        var(--tg-theme-bg-color) 70%
-      );
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-bg-color));
       border: 1px solid color-mix(in srgb, var(--app-cta-fill) 30%, transparent);
     }
     .onboarding-step:not(.done):not(.locked) .onboarding-step-icon {
       width: 28px;
       height: 28px;
       font-size: 14px;
-      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      background: var(--app-cta-fill);
       color: #1a1a1a;
-      box-shadow: 0 3px 10px rgba(245, 166, 35, 0.4);
+      box-shadow: 0 3px 10px rgba(var(--accent-rgb), 0.4);
     }
     .onboarding-step:not(.done):not(.locked) .onboarding-step-name {
       font-size: 16px;
@@ -3158,8 +3141,8 @@
       letter-spacing: -0.01em;
       text-align: center;
       color: #1a1a1a;
-      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
-      box-shadow: 0 6px 18px rgba(245, 166, 35, 0.34);
+      background: var(--app-cta-fill);
+      box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.34);
       transition: transform 0.16s ease, opacity 0.16s ease;
     }
     .onboarding-step:not(.done):not(.locked) > .onboarding-step-cta:active,
@@ -3355,8 +3338,8 @@
       position: relative;
       border-radius: 22px;
       overflow: hidden;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.06) 42%, transparent 100%);
-      border: 1px solid rgba(247, 166, 0, 0.3);
+      background: none;
+      border: 1px solid rgba(var(--accent-rgb), 0.3);
       box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.1),
         0 0 0 1px rgba(255, 255, 255, 0.04) inset;
@@ -3392,7 +3375,7 @@
       right: -12%;
       width: 58%;
       height: 115%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 68%);
+      background: none;
       pointer-events: none;
     }
     .hub-sub-celebration::after {
@@ -3402,7 +3385,7 @@
       left: 0;
       right: 0;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(247, 166, 0, 0.35), transparent);
+      background: rgba(var(--accent-rgb), 0.35);
       pointer-events: none;
     }
     .hub-sub-celebration__inner {
@@ -3505,8 +3488,8 @@
       border: 1px solid rgba(128, 128, 128, 0.12);
     }
     .hub-sub-celebration__chip--accent {
-      border-color: rgba(247, 166, 0, 0.35);
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, rgba(247, 166, 0, 0.12));
+      border-color: rgba(var(--accent-rgb), 0.35);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, rgba(var(--accent-rgb), 0.12));
     }
     .hub-sub-celebration__section-label {
       margin: 0 0 10px;
@@ -3551,8 +3534,8 @@
       align-items: center;
       justify-content: center;
       font-size: 18px;
-      background: linear-gradient(145deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.06) 100%);
-      border: 1px solid rgba(247, 166, 0, 0.22);
+      background: none;
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
     }
     .hub-sub-celebration__hint {
       margin: 16px 0 0;
@@ -3608,19 +3591,15 @@
       position: relative;
       border-radius: 22px;
       overflow: hidden;
-      background:
-        linear-gradient(155deg, rgba(247, 166, 0, 0.1) 0%, rgba(247, 166, 0, 0.03) 38%, transparent 62%),
-        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 52%, var(--tg-theme-bg-color));
-      border: 1px solid rgba(247, 166, 0, 0.15);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 52%, var(--tg-theme-bg-color));
+      border: 1px solid rgba(var(--accent-rgb), 0.15);
       box-shadow:
         0 4px 18px rgba(0, 0, 0, 0.07),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
     html.hub-is-dark .hub-lead-banner {
-      background:
-        linear-gradient(155deg, rgba(247, 166, 0, 0.11) 0%, rgba(247, 166, 0, 0.04) 40%, transparent 65%),
-        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 52%, var(--tg-theme-bg-color));
-      border-color: rgba(247, 166, 0, 0.2);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 52%, var(--tg-theme-bg-color));
+      border-color: rgba(var(--accent-rgb), 0.2);
       box-shadow:
         0 4px 22px rgba(0, 0, 0, 0.32),
         inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -3647,14 +3626,14 @@
       text-transform: uppercase;
       padding: 4px 10px;
       border-radius: 999px;
-      background: linear-gradient(180deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.08) 100%);
-      border: 1px solid rgba(247, 166, 0, 0.28);
-      color: #6b4506;
+      background: rgba(var(--accent-rgb), 0.14);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      color: var(--glide-ink-teal, #0C6F6C);
     }
     html.hub-is-dark .hub-lead-banner__chip {
-      color: #e8b05a;
-      background: linear-gradient(180deg, rgba(247, 166, 0, 0.22) 0%, rgba(247, 166, 0, 0.09) 100%);
-      border-color: rgba(255, 200, 112, 0.28);
+      color: var(--glide-on-deep-hint, #8FC4C3);
+      background: rgba(var(--accent-rgb), 0.18);
+      border-color: rgba(var(--accent-rgb), 0.28);
     }
     .hub-lead-banner__title {
       margin: 4px 0 0;
@@ -3703,19 +3682,15 @@
       padding: 10px 12px;
       border-radius: 12px;
       /* Slightly warmer than signal tiles — draws the eye without a second “CTA color”. */
-      background:
-        linear-gradient(0deg, rgba(247, 166, 0, 0.08), rgba(247, 166, 0, 0.08)),
-        color-mix(in srgb, var(--tg-theme-bg-color) 72%, var(--tg-theme-secondary-bg-color));
-      border: 1px solid rgba(247, 166, 0, 0.14);
+      background: color-mix(in srgb, var(--app-cta-fill) 8%, var(--tg-theme-bg-color));
+      border: 1px solid rgba(var(--accent-rgb), 0.14);
       color: color-mix(in srgb, var(--tg-theme-text-color) 93%, var(--tg-theme-hint-color));
       font-size: 12px;
       line-height: 1.45;
     }
     html.hub-is-dark .hub-lead-banner__loss {
-      background:
-        linear-gradient(0deg, rgba(247, 166, 0, 0.1), rgba(247, 166, 0, 0.1)),
-        color-mix(in srgb, var(--tg-theme-bg-color) 72%, var(--tg-theme-secondary-bg-color));
-      border-color: rgba(255, 200, 112, 0.16);
+      background: color-mix(in srgb, var(--app-cta-fill) 10%, var(--tg-theme-bg-color));
+      border-color: rgba(var(--accent-rgb), 0.16);
     }
     .hub-lead-banner__loss[hidden] {
       display: none !important;
@@ -3806,9 +3781,7 @@
 
     .hub-stat-card.stat-highlight {
       border-color: color-mix(in srgb, var(--app-cta-fill) 28%, transparent) !important;
-      background:
-        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 8%, transparent), transparent 70%),
-        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent) !important;
+      background: color-mix(in srgb, var(--app-cta-fill) 8%, var(--tg-theme-secondary-bg-color)) !important;
     }
 
     .hub-stat-value {
@@ -3868,9 +3841,7 @@
       padding: 13px 14px;
       border-radius: 16px;
       border: 1px solid color-mix(in srgb, var(--app-cta-fill) 32%, transparent);
-      background:
-        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 11%, transparent) 0%, transparent 62%),
-        var(--tg-theme-secondary-bg-color);
+      background: color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color));
       box-shadow: 0 2px 12px color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
       font: inherit;
       text-align: left;
@@ -3895,7 +3866,7 @@
       width: 38px;
       height: 38px;
       border-radius: 11px;
-      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      background: var(--app-cta-fill);
       color: #1a1200;
       box-shadow: 0 4px 12px color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
     }
@@ -4263,17 +4234,16 @@
       padding: 14px 20px 14px 18px;
       border: none;
       border-radius: 18px;
-      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
-      color: #1a1200;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
       font: inherit;
       font-size: 15px;
       font-weight: 700;
       letter-spacing: -0.01em;
       cursor: pointer;
       box-shadow:
-        0 8px 28px color-mix(in srgb, var(--app-cta-fill) 44%, transparent),
-        0 2px 8px rgba(0, 0, 0, 0.18),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        0 8px 28px rgba(0, 0, 0, 0.14),
+        0 2px 8px rgba(0, 0, 0, 0.1);
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
       /* Entrance: rise + fade once mounted */
@@ -4302,9 +4272,8 @@
     .hub-book-fab:active {
       transform: scale(0.95);
       box-shadow:
-        0 4px 16px color-mix(in srgb, var(--app-cta-fill) 38%, transparent),
-        0 1px 4px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        0 4px 16px rgba(0, 0, 0, 0.12),
+        0 1px 4px rgba(0, 0, 0, 0.1);
     }
     .hub-book-fab:focus-visible {
       outline: 2px solid color-mix(in srgb, var(--app-cta-fill) 70%, #000);

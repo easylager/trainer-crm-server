@@ -212,7 +212,7 @@ def _sheet_foot_line(
     purchased_by_name: Optional[str],
     powered_by: Optional[str] = None,
 ) -> str:
-    foot = f"{(brand or '').strip() or 'ICE STUDIO'} · выдан {_format_date(issued_at)}"
+    foot = f"{(brand or '').strip() or 'GLIDE'} · выдан {_format_date(issued_at)}"
     if (purchased_by_name or "").strip():
         foot += f" · {(purchased_by_name or '').strip()}"
     platform = (powered_by or "").strip()
@@ -265,7 +265,7 @@ def build_certificate_issue_html(
         qr_inner = '<div class="qr-fallback">QR недоступен — откройте ссылку из письма.</div>'
 
     html = tpl
-    html = html.replace("__BRAND__", _esc((brand_display or "").strip() or "ICE STUDIO"))
+    html = html.replace("__BRAND__", _esc((brand_display or "").strip() or "GLIDE"))
     html = html.replace("__TAGLINE_HTML__", _nl2br_html(brand_tagline))
     html = html.replace("__RECIPIENT__", _esc((recipient_name or "").strip() or "Получатель"))
     html = html.replace("__AMOUNT_ROW__", _amount_row_html(amount_cents))
@@ -277,7 +277,7 @@ def build_certificate_issue_html(
     html = html.replace(
         "__SHEET_FOOT__",
         _sheet_foot_line(
-            brand=(brand_display or "").strip() or "ICE STUDIO",
+            brand=(brand_display or "").strip() or "GLIDE",
             issued_at=issued_at,
             purchased_by_name=purchased_by_name,
             powered_by=brand_powered_by,

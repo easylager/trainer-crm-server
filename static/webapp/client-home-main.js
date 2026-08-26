@@ -6,7 +6,7 @@
         if (typeof window.__applyClientHubTheme === 'function') window.__applyClientHubTheme();
         try {
           var darkUi = document.documentElement.classList.contains('hub-is-dark');
-          var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+          var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) {}

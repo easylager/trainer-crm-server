@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glide — «Живая ссылка» · Hero + Рабочее пространство</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* =========================================================================
+   Glide landing — «Живая ссылка».
+   Hero (working booking loop) + Section 2 (progressive roadmap).
+
+   Product surfaces render in the TARGET brand system, not legacy cream/amber:
+   neutral surfaces + teal accents + dark readable text.
+   No ribbon / loop / arc / 3D / decorative brand geometry anywhere.
+   ========================================================================= */
+:root{
+  /* Landing ground — one step deeper than the product's paper, so a
+     product surface reads as a surface rather than dissolving into the page. */
+  --paper:#F4F2EC;
+  --surface:#FFFFFF;
+  --line:#E4E2DA;
+  --line-strong:#D6D3C9;
+  --ink:#16292A;
+  --hint:#5F6B6A;
+  --teal:#45B9BB;
+  --teal-ink:#0C6F6C;
+  --on-teal:#062A29;
+  --teal-wash:rgba(69,185,187,.12);
+  --shadow-surface:0 1px 3px rgba(20,40,40,.05), 0 20px 44px -28px rgba(20,40,40,.45);
+  --sans:'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --slow:cubic-bezier(.33,.9,.28,1);
+}
+/* Product tokens — the target Glide system (theme.css neutrals + brand teal),
+   scoped to anything that represents real app UI. */
+.surface,.frag{
+  --p-bg:#FBFAF7;
+  --p-card:#FFFFFF;
+  --p-line:#ECEBE6;
+  --p-line-2:#DDDCD4;
+  --p-text:#16292A;
+  --p-hint:#5F6B6A;
+  --p-accent:#45B9BB;
+  --p-on-accent:#062A29;
+  --p-accent-ink:#0C6F6C;
+  --p-wash:rgba(69,185,187,.10);
+  /* categorical service rails — cool + quiet, so teal stays the only accent */
+  --svc-a:#6E9CB8;
+  --svc-b:#8A9A9E;
+  --svc-c:#45B9BB;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;font-family:var(--sans);
+  background:var(--paper);color:var(--ink);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+
+/* ── Masthead ───────────────────────────────────────────────────────────── */
+.masthead{
+  position:sticky;top:0;z-index:800;
+  background:#FFFFFF;border-bottom:1px solid var(--line);
+  padding:0 clamp(20px,4vw,56px);height:76px;
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+}
+.logo{position:relative;overflow:hidden;width:114px;height:34px;flex-shrink:0}
+.logo img{position:absolute;width:170px;height:auto;left:-31px;top:-29px}
+.logo--fallback{width:auto;height:auto;overflow:visible;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--hint)}
+
+.cta{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--teal);color:var(--on-teal);
+  border:none;border-radius:999px;font:inherit;font-weight:700;letter-spacing:-.01em;
+  cursor:pointer;text-decoration:none;
+  transition:transform .16s var(--ease),box-shadow .16s var(--ease);
+  box-shadow:0 1px 2px rgba(20,40,40,.08);
+}
+.cta:hover{transform:translateY(-1px);box-shadow:0 6px 18px -8px rgba(69,185,187,.8)}
+.cta:active{transform:translateY(0) scale(.985)}
+.cta--sm{padding:10px 18px;font-size:14px}
+.cta--lg{padding:15px 26px;font-size:16px}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.hero{
+  --wClient:318px; --wTrainer:384px; --gapS:30px;
+  padding:clamp(34px,5vh,64px) clamp(20px,4vw,56px) clamp(44px,7vh,80px);
+  display:grid;
+  /* Two honest columns. The surfaces column is exactly one surface wide and the
+     trainer sits flush to the page's right margin — so the space between the
+     text and the screen is bounded margin, not reserved emptiness. */
+  grid-template-columns:minmax(300px,1fr) var(--wTrainer);
+  gap:clamp(24px,3vw,56px);
+  align-items:start;max-width:1560px;margin:0 auto;
+  perspective:2200px;
+  perspective-origin:70% 45%;
+}
+.surfaces{position:relative;transform-style:preserve-3d}
+.col--trainer{position:relative;z-index:2}
+
+/* Physical continuity: the client's screen is not inserted next to the
+   trainer's — it is drawn out from behind it, like a second card off a stack.
+   At rest it has zero footprint and is literally hidden behind the surface. */
+/* Resting position is fully behind the trainer's surface (it is narrower, so
+   it hides completely). It settles into a clean gap beside it — the overlap
+   belongs to the movement, not to the final composition. */
+.col--client{
+  position:absolute;top:0;right:calc(var(--wTrainer) + var(--gapS));
+  width:var(--wClient);z-index:1;
+  transform:translate3d(calc(var(--wClient) + var(--gapS) + 30px), 14px, -100px) scale(.93);
+  opacity:0;pointer-events:none;
+  transition:transform 1.05s var(--slow),opacity .6s var(--slow);
+}
+.hero.is-live .col--client{
+  transform:none;opacity:1;pointer-events:auto;
+  transition:transform 1.05s var(--slow),opacity .55s var(--slow);
+}
+.eyebrow{margin:0 0 22px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight:700;letter-spacing:-.035em;max-width:11ch}
+.lede{margin:0 0 30px;max-width:44ch;font-size:clamp(15px,1.1vw,17px);line-height:1.62;color:var(--hint)}
+.invite{margin:18px 0 0;max-width:34ch;font-size:14px;line-height:1.55;color:var(--hint)}
+.invite b{color:var(--ink);font-weight:600}
+
+/* At rest the dots would be five unexplained grey marks in a finished
+   composition — they only exist once there is a sequence to track. */
+.beats{
+  display:flex;align-items:center;gap:9px;margin-top:36px;min-height:22px;
+  opacity:0;transition:opacity .6s var(--slow);
+}
+.hero.is-running .beats{opacity:1}
+.beat{width:7px;height:7px;border-radius:50%;background:var(--line-strong);transition:background .3s var(--ease),transform .3s var(--ease)}
+.beat.is-done{background:var(--teal-ink);opacity:.35}
+.beat.is-on{background:var(--teal);transform:scale(1.5)}
+.replay{
+  margin-left:8px;border:none;background:none;padding:4px 2px;font:inherit;font-size:13px;font-weight:600;
+  color:var(--teal-ink);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s var(--ease);
+  text-decoration:underline;text-underline-offset:3px;
+}
+.replay.is-shown{opacity:1;pointer-events:auto}
+
+/* ══ THE PHYSICAL LAYER ═══════════════════════════════════════════════════
+   The 3D here is not a new object — it is the product screens given real
+   mass: perspective, weight, a light source, and a contact shadow on the
+   paper. It performs once on arrival, then settles flat and stays quiet.
+   Two nested transforms so they never fight:
+     .col     → arrival + pointer parallax (the object in the room)
+     .surface → focus depth during beats (which object is acting)
+   ═════════════════════════════════════════════════════════════════════════ */
+.col{display:flex;flex-direction:column;min-width:0}
+
+/* The stage is the physical object. The label above it is page chrome and
+   never rotates with it — that was what threw the heading across the surface. */
+.col__stage{
+  position:relative;transform-style:preserve-3d;
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  will-change:transform;
+}
+
+/* Arrival — the whole surface enters as one object. Restrained on purpose:
+   enough depth to read as physical, never enough to make the UI unreadable
+   in flight. Copy resolves as one block, not as six fragments. */
+@keyframes land{
+  from{ opacity:0; transform:translate3d(0,34px,-190px) rotateX(6.5deg); }
+  to  { opacity:1; transform:translate3d(0,0,0) rotateX(0deg); }
+}
+@keyframes rise{ from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
+
+.hero--enter .col--trainer .col__stage{ animation:land 1.15s var(--slow) .22s both }
+.hero--enter .hero__copy{ animation:rise 1s var(--slow) .04s both }
+
+/* Contact shadow: sits in the same plane as the surface so it can never
+   detach from it. Scales and softens with focus depth. */
+.col__stage::after{
+  content:'';position:absolute;left:7%;right:7%;bottom:-14px;height:26px;
+  border-radius:50%;
+  background:radial-gradient(closest-side, rgba(20,40,40,.22), transparent 76%);
+  filter:blur(10px);
+  opacity:var(--csh,.5);transform:scale(var(--cshs,1));
+  transition:opacity .7s var(--slow),transform .7s var(--slow);
+  pointer-events:none;z-index:-1;
+}
+.col__label{display:block;margin:0 0 10px 2px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--hint)}
+.surface{
+  margin:0;position:relative;background:var(--p-bg);
+  border:1px solid var(--line-strong);border-radius:18px;
+  box-shadow:var(--shadow-surface);overflow:hidden;
+  height:min(592px,74vh);display:flex;flex-direction:column;
+  font-size:14px;color:var(--p-text);
+  transform:translateZ(var(--tz,0px)) scale(var(--sc,1));
+  transition:transform .7s var(--slow),box-shadow .7s var(--slow),opacity .7s var(--slow);
+}
+/* Specular sheen — one light source, moving with the pointer. Very low
+   opacity: this should be felt as material, never seen as an effect. */
+.surface::after{
+  content:'';position:absolute;inset:0;z-index:70;pointer-events:none;
+  border-radius:inherit;
+  background:radial-gradient(
+    62% 46% at var(--lx,30%) var(--ly,8%),
+    rgba(255,255,255,.55) 0%,
+    rgba(255,255,255,.13) 38%,
+    transparent 72%);
+  opacity:var(--sheen,.42);
+  mix-blend-mode:soft-light;
+  transition:opacity .7s var(--slow);
+}
+/* (The former "lit rim" hairline was removed — in flight it detached from the
+   surface and read as a stray connector line. Material now comes from the
+   sheen and the contact shadow alone.) */
+/* Cinematography, not spectacle: during a beat the surface that isn't acting
+   recedes a little, so the eye is led to where the product is doing something.
+   Depth of field by weight and scale — no blur, no glass, no parallax. */
+.col{transition:opacity .7s var(--slow)}
+.col--rest{opacity:.78}
+/* Focus is depth, not scale: the acting surface comes forward in the room and
+   its contact shadow spreads; the other sinks back and its shadow tightens. */
+.col--rest .surface{
+  --tz:-26px;--sheen:.22;
+  box-shadow:0 1px 2px rgba(20,40,40,.04), 0 12px 26px -20px rgba(20,40,40,.4);
+}
+.col--rest .col__stage{--csh:.32;--cshs:.95}
+.col--lead .surface{
+  --tz:24px;--sheen:.5;
+  box-shadow:0 3px 8px rgba(20,40,40,.06), 0 44px 72px -34px rgba(20,40,40,.55);
+}
+.col--lead .col__stage{--csh:.72;--cshs:1.06}
+.col__label{transition:color .7s var(--slow)}
+.col--lead .col__label{color:var(--teal-ink)}
+.demo-pill{
+  position:absolute;top:10px;right:10px;z-index:60;
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--p-hint);background:rgba(255,255,255,.86);
+  border:1px solid var(--p-line-2);border-radius:999px;padding:3px 8px;
+}
+
+/* ══ CLIENT SURFACE — bot chat with the booking mini-app over it ══════════ */
+.chat{flex:1;min-height:0;overflow:hidden;background:#EEEDE8;display:flex;flex-direction:column}
+.chat__head{
+  flex-shrink:0;background:#FFFFFF;border-bottom:1px solid var(--p-line);
+  padding:11px 62px 11px 14px;display:flex;align-items:center;gap:10px;
+}
+.chat__av{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  background:var(--p-wash);border:1px solid var(--p-line-2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:var(--p-accent-ink);
+}
+.chat__who{display:flex;flex-direction:column;min-width:0}
+.chat__name{font-size:14px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat__sub{font-size:11px;color:var(--p-hint);line-height:1.25;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat__body{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 16px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}
+.chat__body::-webkit-scrollbar{width:0}
+.chat__body > :first-child{margin-top:auto}
+.divider{
+  align-self:center;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--p-hint);background:rgba(255,255,255,.8);border-radius:999px;padding:3px 10px;margin:2px 0;
+}
+.bubble{
+  align-self:flex-start;max-width:92%;background:var(--p-card);border-radius:12px;
+  border:1px solid var(--p-line);box-shadow:0 1px 1px rgba(20,40,40,.04);
+  padding:9px 12px 8px;font-size:13px;line-height:1.45;color:var(--p-text);
+}
+.bubble b{font-weight:700}
+.bubble__meta{display:block;margin-top:5px;font-size:10px;color:var(--p-hint);opacity:.75;text-align:right}
+.bubble__rows{display:block;margin-top:6px;font-size:12.5px;line-height:1.55}
+.bubble--ok{border-left:2px solid var(--p-accent)}
+.enterable{opacity:0;transform:translateY(10px)}
+.enterable.is-in{opacity:1;transform:none;transition:opacity .34s var(--ease),transform .34s var(--ease)}
+
+.mini{
+  position:absolute;inset:0;z-index:40;background:var(--p-bg);
+  display:flex;flex-direction:column;transform:translateY(0);
+  transition:transform .5s var(--slow);
+}
+.mini.is-closed{transform:translateY(101%)}
+.mini__grab{flex-shrink:0;padding:8px 0 4px;display:flex;justify-content:center}
+.mini__grab i{display:block;width:36px;height:4px;border-radius:3px;background:var(--p-line-2)}
+.mini__head{flex-shrink:0;padding:6px 14px 12px}
+.mini__title{margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em;line-height:1.25}
+.mini__sub{margin:4px 0 0;font-size:12.5px;color:var(--p-hint)}
+.mini__body{flex:1;min-height:0;overflow-y:auto;padding:0 12px 14px}
+.mini__body::-webkit-scrollbar{width:0}
+
+/* real book.html slot list */
+.day-title{
+  font-size:12px;font-weight:700;color:var(--p-hint);
+  margin:10px 0 10px 2px;text-transform:uppercase;letter-spacing:.07em;
+}
+.slot-card{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:13px 14px;margin-bottom:8px;border-radius:12px;
+  background:var(--p-card);border:1px solid var(--p-line);
+  width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  transition:border-color .2s var(--ease),transform .2s var(--ease),box-shadow .2s var(--ease);
+}
+.slot-card:hover{border-color:var(--p-accent);transform:translateY(-1px);box-shadow:0 4px 14px -8px rgba(69,185,187,.9)}
+.slot-card:active{transform:scale(.985)}
+.slot-card[disabled]{opacity:.5;cursor:default;pointer-events:none;background:transparent}
+/* the slot the client just chose */
+.slot-card--taken{
+  border-color:var(--p-accent);background:var(--p-wash);
+  transform:scale(.985);
+}
+.slot-card-body{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0}
+.slot-time{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--p-text)}
+.slot-venue-pill{font-size:12px;font-weight:500;line-height:1.35;color:var(--p-hint)}
+.slot-arrow{font-size:15px;color:var(--p-accent-ink);flex-shrink:0}
+.slot-taken{font-size:11px;font-weight:600;color:var(--p-hint);letter-spacing:.03em}
+
+/* ══ TRAINER SURFACE — real schedule screen ═══════════════════════════════ */
+.sched{
+  flex:1;min-height:0;overflow-y:auto;padding:14px 14px 18px;background:var(--p-bg);
+  display:flex;flex-direction:column;
+}
+.sched::-webkit-scrollbar{width:0}
+/* the week summary always rests on the base of the surface */
+.s-foot{margin-top:auto}
+.sched__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sched__title{margin:0;font-size:18px;font-weight:600;letter-spacing:-.02em}
+.sched__week{font-size:11.5px;color:var(--p-hint)}
+/* Real hub affordance: trainer-home.html:332, title «Поделиться ссылкой на
+   онлайн-запись» → opens the «Пригласительная ссылка» sheet. */
+.sched__share{
+  flex-shrink:0;display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--p-accent);border-radius:999px;
+  background:var(--p-wash);color:var(--p-accent-ink);
+  padding:7px 13px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;
+  transition:transform .16s var(--ease),filter .16s var(--ease),box-shadow .16s var(--ease);
+}
+.sched__share:hover{transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(69,185,187,.85)}
+.sched__share:active{transform:scale(.97)}
+.sched__share svg{width:14px;height:14px;flex-shrink:0}
+
+/* «Пригласительная ссылка» — real modal (trainer-home.html:732-749), shown
+   docked over the surface for the length of one beat. */
+.invite-sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:80;
+  background:var(--p-card);
+  border-top:1px solid var(--p-line-2);
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -12px 34px -18px rgba(20,40,40,.45);
+  padding:10px 16px 18px;
+  transform:translateY(101%);opacity:0;
+  transition:transform .5s var(--slow),opacity .3s var(--ease);
+}
+.invite-sheet.is-up{transform:translateY(0);opacity:1}
+.invite-sheet__grab{width:38px;height:4px;border-radius:3px;background:var(--p-line-2);margin:0 auto 12px}
+.invite-sheet__title{margin:0 0 10px;font-size:16px;font-weight:600;letter-spacing:-.02em}
+.invite-sheet__link{
+  font-size:12.5px;color:var(--p-hint);background:var(--p-bg);
+  border:1px solid var(--p-line);border-radius:10px;padding:10px 12px;margin-bottom:10px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.invite-sheet__btn{
+  width:100%;border:none;border-radius:12px;padding:12px;
+  font:inherit;font-size:14px;font-weight:700;
+  background:var(--p-accent);color:var(--p-on-accent);
+  transition:filter .3s var(--ease);
+}
+.invite-sheet__btn.is-done{filter:saturate(.55) brightness(1.06)}
+.sched__chips{display:flex;gap:6px;margin-bottom:14px}
+.chip{
+  font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--p-line-2);background:var(--p-card);color:var(--p-hint);
+}
+.chip--on{background:var(--p-wash);border-color:var(--p-accent);color:var(--p-accent-ink)}
+
+/* real schedule.html slot card: .slot-main / .slot-time / .slot-venue / .slot-client-hint / .slot-status */
+.s-card{
+  position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 14px 12px 19px;margin-bottom:8px;border-radius:13px;
+  background:var(--p-card);border:1px solid var(--p-line);
+  transition:background .5s var(--slow),border-color .5s var(--slow),box-shadow .5s var(--slow);
+}
+.s-card::before{content:'';position:absolute;left:8px;top:11px;bottom:11px;width:3px;border-radius:2px;background:var(--svc-b);transition:background .5s var(--slow)}
+.s-card--a::before{background:var(--svc-a)}
+.s-card--free::before{background:var(--p-line-2)}
+.s-card--free{background:transparent;border-style:dashed;border-color:var(--p-line-2)}
+.s-card--new{background:var(--p-wash);border-color:var(--p-accent)}
+.s-card--new::before{background:var(--svc-c)}
+/* One slow pass of light across the row at the moment it fills — the single
+   most important state change in the whole page gets one deliberate accent. */
+.s-card--sweep{overflow:hidden}
+.s-card--sweep::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.85) 50%,transparent 80%);
+  transform:translateX(-110%);
+  animation:sweep 1.15s var(--slow) .05s 1;
+}
+@keyframes sweep{ to{ transform:translateX(110%); } }
+.s-main{min-width:0;flex:1}
+.s-time{font-size:14.5px;font-weight:700;letter-spacing:-.02em;color:var(--p-text);line-height:1.2}
+.s-client{font-size:13.5px;font-weight:600;color:var(--p-text);margin-top:3px;line-height:1.25}
+.s-client--muted{color:var(--p-hint);font-weight:600}
+.s-venue{font-size:11.5px;color:var(--p-hint);margin-top:3px;line-height:1.3}
+.s-status{
+  flex-shrink:0;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  padding:4px 9px;border-radius:999px;border:1px solid var(--p-line-2);
+  color:var(--p-hint);background:var(--p-bg);
+  transition:background .5s var(--slow),color .5s var(--slow),border-color .5s var(--slow);
+}
+.s-status--free{color:var(--p-accent-ink);border-color:var(--p-accent);background:var(--p-wash)}
+.s-foot{
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--p-line);
+  font-size:12px;color:var(--p-hint);display:flex;justify-content:space-between;gap:10px;
+}
+.s-foot b{color:var(--p-text);font-weight:700;transition:color .4s var(--ease)}
+.s-foot b.is-tick{color:var(--p-accent-ink)}
+
+/* action inbox — «Сейчас важно» */
+.inbox{overflow:hidden;max-height:0;opacity:0;margin-bottom:0;transition:max-height .48s var(--slow),opacity .34s var(--ease),margin .48s var(--slow)}
+.inbox.is-shown{max-height:190px;opacity:1;margin-bottom:14px}
+.inbox__card{border-radius:15px;border:1px solid var(--p-accent);background:var(--p-card);box-shadow:0 4px 16px -10px rgba(69,185,187,.9);overflow:hidden}
+.inbox__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px 7px}
+.inbox__title{margin:0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--p-hint)}
+.inbox__count{font-size:11.5px;font-weight:700;color:var(--p-on-accent);padding:2px 8px;border-radius:999px;background:var(--p-wash)}
+.inbox__list{list-style:none;margin:0;padding:0 7px 8px}
+.inbox__item{display:flex;align-items:flex-start;gap:10px;padding:9px 7px}
+.inbox__dot{flex-shrink:0;width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--p-accent);box-shadow:0 0 0 3px var(--p-wash)}
+.inbox__body{flex:1;min-width:0}
+.inbox__itemTitle{margin:0 0 3px;font-size:13.5px;font-weight:650;line-height:1.35;letter-spacing:-.02em;color:var(--p-text)}
+.inbox__itemSub{margin:0;font-size:11.5px;line-height:1.4;color:var(--p-hint)}
+.inbox__btn{
+  flex-shrink:0;border:none;border-radius:999px;padding:7px 13px;font:inherit;font-size:12px;font-weight:700;
+  background:var(--p-accent);color:var(--p-on-accent);cursor:pointer;white-space:nowrap;
+  transition:transform .14s var(--ease),filter .14s var(--ease);
+}
+.inbox__btn:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.inbox__btn:active{transform:scale(.97)}
+
+/* Telegram notification over the schedule */
+.notif{
+  position:absolute;left:8px;right:8px;top:8px;z-index:50;
+  background:rgba(255,255,255,.98);border:1px solid var(--p-line-2);border-radius:14px;
+  box-shadow:0 12px 32px -14px rgba(20,40,40,.5);padding:11px 13px;
+  transform:translateY(calc(-100% - 16px));opacity:0;
+  transition:transform .5s var(--slow),opacity .3s var(--ease);
+}
+.notif.is-in{transform:translateY(0);opacity:1}
+.notif__title{margin:0 0 5px;font-size:13px;font-weight:700;line-height:1.3;color:var(--p-text)}
+.notif__rows{margin:0;font-size:12px;line-height:1.5;color:var(--p-text)}
+.notif__note{margin:7px 0 0;font-size:11.5px;font-style:italic;line-height:1.45;color:var(--p-hint)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SECTION 2 — «Всё рабочее пространство тренера — в одном месте»
+   Progressive roadmap: scroll advances one capability at a time.
+   ══════════════════════════════════════════════════════════════════════════ */
+.rm{position:relative;background:var(--paper);border-top:1px solid var(--line)}
+.rm__sticky{position:sticky;top:76px;height:calc(100vh - 76px);min-height:600px;display:flex;align-items:center;overflow:hidden}
+.rm__inner{
+  width:100%;max-width:1560px;margin:0 auto;
+  padding:0 clamp(20px,4vw,56px);
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,470px);
+  gap:clamp(32px,5vw,84px);align-items:center;
+}
+.rm__eyebrow{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+.rm__title{margin:0 0 26px;font-size:clamp(24px,2vw,31px);line-height:1.16;font-weight:700;letter-spacing:-.03em;max-width:24ch}
+
+/* roadmap rail */
+.rm__list{list-style:none;margin:0;padding:0;position:relative}
+.rm__track{position:absolute;left:11px;top:9px;bottom:50px;width:2px;background:var(--line-strong);border-radius:2px}
+.rm__fill{position:absolute;left:0;top:0;width:100%;height:0;background:var(--teal);border-radius:2px;transition:height .5s var(--slow)}
+/* Fixed height per item: the description reveals in place, so the list never
+   reflows and neighbours never shift. Movement is the enemy of "clean" here. */
+.rm__item{
+  position:relative;padding:0 0 0 40px;height:64px;
+  opacity:.3;transition:opacity .55s var(--slow);
+}
+.rm__item.is-past{opacity:.42}
+.rm__item.is-on{opacity:1}
+.rm__dot{
+  position:absolute;left:5px;top:4px;width:14px;height:14px;border-radius:50%;
+  background:var(--paper);border:2px solid var(--line-strong);
+  transition:border-color .5s var(--slow),background .5s var(--slow),transform .5s var(--slow);
+}
+.rm__item.is-past .rm__dot{border-color:var(--teal);background:var(--teal)}
+.rm__item.is-on .rm__dot{border-color:var(--teal);background:var(--paper);transform:scale(1.25)}
+.rm__name{
+  margin:0;font-size:16px;font-weight:700;letter-spacing:-.02em;line-height:1.3;color:var(--ink);
+  transition:color .5s var(--slow);
+}
+/* Absolute: the description can never push a neighbour, at any copy length. */
+.rm__desc{
+  position:absolute;left:40px;right:8px;top:25px;margin:0;
+  font-size:12.5px;line-height:1.42;color:var(--hint);max-width:52ch;
+  opacity:0;transform:translateY(-3px);
+  transition:opacity .45s var(--ease),transform .45s var(--slow);
+}
+.rm__item.is-on .rm__desc{opacity:1;transform:none}
+
+/* fragment viewport */
+.rm__stage{
+  position:relative;
+  height:clamp(400px,60vh,530px);
+  border-radius:18px;border:1px solid var(--line-strong);
+  background:var(--p-bg);box-shadow:var(--shadow-surface);overflow:hidden;
+}
+.frag{
+  position:absolute;inset:0;padding:18px 18px 20px;overflow:hidden;
+  background:var(--p-bg);color:var(--p-text);font-size:14px;
+  opacity:0;transform:translateY(10px);pointer-events:none;
+  transition:opacity .55s var(--slow),transform .55s var(--slow);
+}
+.frag.is-on{opacity:1;transform:none}
+.frag__cap{
+  font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--p-hint);margin:0 0 12px;
+}
+.frag__screen{font-size:16px;font-weight:600;letter-spacing:-.02em;margin:0 0 12px}
+
+/* — clients list (real .client-card) — */
+.c-card{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:8px;
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;
+}
+.c-av{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  background:var(--p-wash);color:var(--p-accent-ink);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+}
+.c-main{flex:1;min-width:0}
+.c-nameRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.c-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.c-pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+.c-pill--gray{background:var(--p-bg);color:var(--p-hint);border:1px solid var(--p-line-2)}
+.c-meta{font-size:11.5px;color:var(--p-hint);margin-top:2px}
+.c-arrow{color:var(--p-hint);font-size:14px;flex-shrink:0}
+
+/* — dossier (real fields) — */
+.d-sec{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:13px 14px;margin-bottom:9px}
+.d-secTitle{font-size:12.5px;font-weight:700;letter-spacing:-.01em;margin:0 0 11px}
+.d-field{margin-bottom:11px}
+.d-field:last-child{margin-bottom:0}
+.d-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p-hint);margin:0 0 3px}
+.d-val{font-size:13px;line-height:1.4;margin:0}
+.d-val--empty{color:var(--p-hint);opacity:.7}
+.d-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.d-tag{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+
+/* — catalog card (real .trainer-list-card) — */
+.t-card{display:flex;align-items:center;gap:12px;padding:11px;background:var(--p-card);border:1px solid var(--p-line);border-radius:14px;margin-bottom:9px}
+.t-photo{width:56px;height:56px;border-radius:12px;flex-shrink:0;background:linear-gradient(150deg,var(--p-wash),var(--p-line));border:1px solid var(--p-line-2)}
+.t-info{flex:1;min-width:0}
+.t-name{font-size:14.5px;font-weight:700;letter-spacing:-.02em}
+.t-meta{font-size:11.5px;color:var(--p-hint);margin-top:3px;line-height:1.35}
+.t-badge{display:inline-block;margin-top:6px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+
+/* — passes & certificates (real trainer-pass-products / client-passes) — */
+.p-card{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:13px 14px;margin-bottom:9px}
+.p-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.p-name{font-size:14px;font-weight:700;letter-spacing:-.02em}
+.p-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+.p-meta{font-size:11.5px;color:var(--p-hint);margin-top:4px}
+.p-left{display:flex;align-items:baseline;gap:7px;margin-top:10px}
+.p-leftNum{font-size:22px;font-weight:700;letter-spacing:-.03em;color:var(--p-accent-ink);line-height:1}
+.p-leftLbl{font-size:11.5px;color:var(--p-hint)}
+.p-bar{display:block;margin-top:9px;height:5px;border-radius:3px;background:var(--p-line);overflow:hidden}
+.p-barFill{display:block;height:100%;border-radius:inherit;background:var(--p-accent)}
+.p-nom{font-size:19px;font-weight:700;letter-spacing:-.03em;margin-top:8px}
+
+/* — referral (real trainer-referral) — */
+.r-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.r-tile{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:12px 10px;text-align:center}
+.r-val{display:block;font-size:20px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.r-val--accent{color:var(--p-accent-ink)}
+.r-lbl{display:block;font-size:11px;color:var(--p-hint);margin-top:4px}
+.r-link{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;
+  padding:11px 13px;margin-bottom:10px;
+}
+.r-linkVal{font-size:12.5px;color:var(--p-hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-copy{flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--p-accent-ink)}
+.r-rules{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:12px 14px}
+.r-rule{display:flex;gap:9px;font-size:12px;line-height:1.45;margin-bottom:7px}
+.r-rule:last-child{margin-bottom:0}
+.r-ruleN{flex-shrink:0;font-weight:700;color:var(--p-accent-ink)}
+
+/* — analytics (real trend bars + load ring) — */
+.a-title{font-size:12px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px;color:var(--p-text)}
+.a-card{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:14px;margin-bottom:9px}
+.a-bars{display:flex;align-items:flex-end;gap:9px;height:88px}
+.a-barWrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
+.a-barTrack{flex:1;width:100%;display:flex;align-items:flex-end}
+.a-bar{width:100%;border-radius:5px 5px 0 0;background:var(--p-line-2);transition:height .8s var(--slow)}
+.a-bar.is-active{background:var(--p-accent)}
+.a-barLbl{font-size:10px;color:var(--p-hint)}
+.a-foot{font-size:11px;color:var(--p-hint);margin:9px 0 0}
+.a-load{display:flex;align-items:center;gap:16px}
+.a-ring{
+  width:74px;height:74px;border-radius:50%;flex-shrink:0;
+  background:conic-gradient(var(--p-accent) calc(var(--pct,0) * 1%), var(--p-line) 0);
+  display:flex;align-items:center;justify-content:center;
+}
+.a-ringIn{
+  width:56px;height:56px;border-radius:50%;background:var(--p-card);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;letter-spacing:-.02em;
+}
+.a-loadCopy{min-width:0}
+.a-kLabel{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p-hint);margin:0 0 4px}
+.a-kVal{font-size:17px;font-weight:700;letter-spacing:-.02em;margin:0}
+.a-kSub{font-size:11.5px;color:var(--p-hint);margin:4px 0 0}
+
+/* closing assembly */
+.rm__done{
+  margin-top:18px;display:flex;flex-wrap:wrap;gap:6px;
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .6s var(--slow),transform .6s var(--slow);
+}
+.rm__done.is-on{opacity:1;transform:none;pointer-events:auto}
+.rm__doneChip{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--teal-wash);color:var(--teal-ink)}
+.rm__doneLine{
+  margin:16px 0 0;font-size:14.5px;line-height:1.5;color:var(--ink);max-width:40ch;font-weight:500;
+  opacity:0;transform:translateY(8px);transition:opacity .6s var(--slow) .1s,transform .6s var(--slow) .1s;
+}
+.rm__doneLine.is-on{opacity:1;transform:none}
+
+/* mobile-only roadmap story */
+.rmm{display:none}
+
+/* ── Планируемые обновления ────────────────────────────────────────────────
+   Deliberately quiet: hairlines, no fills, no product UI. None of this ships
+   yet, so it must not carry the visual weight of something that does.        */
+.soon{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,8vh,84px) clamp(20px,4vw,56px) clamp(60px,9vh,96px);
+}
+.soon__inner{max-width:1560px;margin:0 auto;display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:clamp(28px,5vw,72px)}
+.soon__eyebrow{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+.soon__title{margin:0;font-size:clamp(21px,1.7vw,26px);line-height:1.24;font-weight:700;letter-spacing:-.02em;max-width:16ch}
+.soon__list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line);max-width:760px}
+.soon__item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:17px 0;border-bottom:1px solid var(--line);
+  opacity:0;transform:translateY(8px);
+  transition:opacity .6s var(--slow),transform .6s var(--slow);
+}
+.soon.is-in .soon__item{opacity:1;transform:none}
+.soon.is-in .soon__item:nth-child(2){transition-delay:.06s}
+.soon.is-in .soon__item:nth-child(3){transition-delay:.12s}
+.soon.is-in .soon__item:nth-child(4){transition-delay:.18s}
+.soon__name{margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em;color:var(--ink)}
+.soon__desc{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:var(--hint);max-width:56ch}
+.soon__mark{
+  font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--hint);border:1px solid var(--line-strong);border-radius:999px;
+  padding:4px 10px;white-space:nowrap;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width:1180px){
+  .hero{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:34px}
+  .hero__copy{grid-column:1/-1}
+  h1{max-width:16ch}
+  .lede{max-width:56ch}
+  .rm__inner{grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:36px}
+  .rm__title{margin-bottom:28px;max-width:18ch}
+}
+@media (max-width:860px){
+  .masthead{height:64px;padding:0 18px}
+  .masthead .cta--sm{padding:9px 15px;font-size:13px}
+  .hero{grid-template-columns:1fr;padding:26px 18px 36px;row-gap:0}
+  .hero__copy{grid-column:auto}
+  /* One surface at a time; the client column is a normal block that simply
+     isn't rendered until the flow brings it in. */
+  .surfaces{display:block;position:static}
+  .col--client{
+    position:static;width:auto;right:auto;top:auto;
+    transform:none;opacity:1;pointer-events:auto;transition:none;
+  }
+  .hero:not(.is-live) .col--client{display:none}
+  h1{max-width:none;font-size:clamp(32px,8.5vw,44px)}
+  .lede{max-width:none;margin-bottom:24px}
+  .cta--lg{width:100%;padding:16px 22px}
+  /* the row is invisible at rest, so its reserved space must read as ordinary
+     rhythm rather than a hole above the surface */
+  .beats{margin-top:22px;margin-bottom:8px;min-height:18px}
+  .surface{height:min(548px,66vh)}
+  .hero[data-side="client"]  .col--trainer{display:none}
+  .hero[data-side="trainer"] .col--client{display:none}
+  /* One surface at a time, so there is nothing to be deeper *than*. Keep the
+     arrival, drop the parallax and the focus depth. */
+  .hero{perspective:1400px;perspective-origin:50% 30%}
+  .col--rest .surface,.col--lead .surface{--tz:0px}
+  .col--rest{opacity:1}
+  .col__stage::after{--csh:.4;--cshs:1}
+  .surface::after{opacity:.3}
+  .notif--mobile{position:fixed;left:12px;right:12px;top:72px;z-index:900;cursor:pointer}
+
+  /* Section 2 becomes a linear vertical story — no sticky, no cross-fade. */
+  .rm__sticky{display:none}
+  .rmm{display:block;padding:40px 18px 52px}
+  .rmm__eyebrow{margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+  .rmm__title{margin:0 0 30px;font-size:clamp(26px,7.5vw,34px);line-height:1.12;font-weight:700;letter-spacing:-.03em}
+  .rmm__list{list-style:none;margin:0;padding:0;position:relative}
+  .rmm__track{position:absolute;left:7px;top:10px;bottom:10px;width:2px;background:var(--line-strong);border-radius:2px}
+  .rmm__fill{position:absolute;left:0;top:0;width:100%;height:0;background:var(--teal);border-radius:2px;transition:height .6s var(--slow)}
+  .rmm__item{position:relative;padding:0 0 0 30px;margin-bottom:34px}
+  .rmm__dot{position:absolute;left:1px;top:5px;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--line-strong);transition:border-color .5s var(--slow),background .5s var(--slow)}
+  .rmm__item.is-in .rmm__dot{border-color:var(--teal);background:var(--teal)}
+  .rmm__name{margin:0;font-size:17px;font-weight:700;letter-spacing:-.02em}
+  .rmm__desc{margin:5px 0 0;font-size:13.5px;line-height:1.5;color:var(--hint)}
+  /* Auto-height: a mobile fragment must never be clipped — the whole point is
+     that the visitor can read the real screen. */
+  .rmm__stage{
+    margin-top:14px;border-radius:16px;border:1px solid var(--line-strong);
+    background:var(--p-bg);box-shadow:var(--shadow-surface);overflow:hidden;
+    position:relative;
+    opacity:0;transform:translateY(12px);
+    transition:opacity .6s var(--slow),transform .6s var(--slow);
+  }
+  .rmm__item.is-in .rmm__stage{opacity:1;transform:none}
+  .rmm__stage .frag{opacity:1;transform:none;position:relative;inset:auto;padding:16px}
+  .soon{padding:44px 18px 56px}
+  .soon__inner{grid-template-columns:1fr;gap:22px}
+  .soon__title{max-width:none}
+  .soon__item{grid-template-columns:1fr;gap:8px}
+  .soon__mark{justify-self:start}
+  .rmm__done{margin-top:8px;padding-left:30px}
+  .rmm__doneChips{display:flex;flex-wrap:wrap;gap:7px}
+  .rmm__doneLine{margin:18px 0 0;font-size:15px;line-height:1.55;font-weight:500}
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    transition-duration:.01ms !important;animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;scroll-behavior:auto !important;
+  }
+  .enterable{opacity:1;transform:none}
+  /* the roadmap must stay readable with no motion at all */
+  .rm__item{opacity:1}
+  .rm__desc{opacity:1;transform:none}
+  .rmm__stage{opacity:1;transform:none}
+  .soon__item{opacity:1;transform:none}
+  .s-card--sweep::after{display:none}
+  /* No perspective, no tilt, no arrival, no moving light. */
+  .hero{perspective:none}
+  .col__stage{transform:none !important;animation:none !important}
+  .hero__copy{animation:none !important}
+  .col--rest{opacity:1}
+  .col--rest .surface,.col--lead .surface{--tz:0px;--sc:1}
+  .surface::after{opacity:.28}
+  .col__stage::after{--csh:.45;--cshs:1}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="logo" id="logoBox">
+    <img id="logoImg"
+         src="../../static/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
+         alt="Glide">
+  </div>
+  <button type="button" class="cta cta--sm">Начать в Telegram</button>
+</header>
+
+<!-- ══════════════════════════ HERO ══════════════════════════════════════ -->
+<main class="hero" id="hero" data-side="client">
+
+  <div class="hero__copy">
+    <p class="eyebrow">Glide · тренерам на льду · Беларусь</p>
+    <h1>CRM для тренера на льду</h1>
+    <p class="lede">Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог&nbsp;Glide и аналитика — в одном боте. 14 дней бесплатно.</p>
+    <button type="button" class="cta cta--lg">Начать в Telegram</button>
+    <p class="invite"><b>Отправьте ссылку</b> — дальше ученик сам.</p>
+
+    <div class="beats" aria-hidden="true">
+      <span class="beat" data-beat="1"></span>
+      <span class="beat" data-beat="2"></span>
+      <span class="beat" data-beat="3"></span>
+      <span class="beat" data-beat="4"></span>
+      <span class="beat" data-beat="5"></span>
+      <button type="button" class="replay" id="replay">Показать ещё раз</button>
+    </div>
+  </div>
+
+  <!-- ── Client ── -->
+  <div class="surfaces" id="surfaces">
+
+  <div class="col col--client">
+  <span class="col__label">Ваш ученик</span>
+  <div class="col__stage">
+  <figure class="surface surface--client" id="surfClient">
+    <span class="demo-pill">демо</span>
+
+    <div class="chat">
+      <div class="chat__head">
+        <span class="chat__av">А</span>
+        <span class="chat__who">
+          <span class="chat__name">Алексей · тренер</span>
+          <span class="chat__sub">фигурное катание · Minsk Arena</span>
+        </span>
+      </div>
+      <div class="chat__body" id="chatBody"></div>
+    </div>
+
+    <div class="mini" id="mini">
+      <div class="mini__grab"><i></i></div>
+      <div class="mini__head">
+        <h2 class="mini__title">Выберите время</h2>
+        <p class="mini__sub">Фигурное катание · Minsk Arena</p>
+      </div>
+      <div class="mini__body">
+        <div class="day-title">Среда, 18 июня</div>
+
+        <button type="button" class="slot-card" disabled>
+          <span class="slot-card-body">
+            <span class="slot-time">16:00–17:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-taken">Занято</span>
+        </button>
+
+        <button type="button" class="slot-card" id="slotPick" data-time="18:00–19:00">
+          <span class="slot-card-body">
+            <span class="slot-time">18:00–19:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <button type="button" class="slot-card" data-time="19:00–20:00">
+          <span class="slot-card-body">
+            <span class="slot-time">19:00–20:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <div class="day-title">Четверг, 19 июня</div>
+
+        <button type="button" class="slot-card" data-time="07:30–08:30">
+          <span class="slot-card-body">
+            <span class="slot-time">07:30–08:30</span>
+            <span class="slot-venue-pill">Чижовка-Арена</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <button type="button" class="slot-card" disabled>
+          <span class="slot-card-body">
+            <span class="slot-time">17:00–18:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-taken">Занято</span>
+        </button>
+      </div>
+    </div>
+  </figure>
+  </div>
+  </div>
+
+  <!-- ── Trainer: real schedule screen ── -->
+  <div class="col col--trainer">
+  <span class="col__label">Тренер — в Telegram</span>
+  <div class="col__stage">
+  <figure class="surface surface--trainer" id="surfTrainer">
+
+    <!-- messages.py:2815 TRAINER_BOOKING_NOTIFICATION -->
+    <div class="notif" id="notif" role="status">
+      <p class="notif__title">🔔 Новая запись — нужно ваше решение</p>
+      <p class="notif__rows">
+        👤 <b>ФИО:</b> Анна К.<br>
+        📅 <b>18 июня (ср) 18:00</b> — 60 мин.<br>
+        🎯 Фигурное катание<br>
+        📍 Минск · 🏟 Minsk Arena
+      </p>
+      <p class="notif__note">Слот занят; клиент получит напоминания автоматически.</p>
+    </div>
+
+    <div class="sched">
+      <div class="sched__head">
+        <div>
+          <h2 class="sched__title">Моё расписание</h2>
+          <span class="sched__week">16–22 июня</span>
+        </div>
+        <button type="button" class="sched__share" id="shareBtn"
+                title="Поделиться ссылкой на онлайн-запись">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93"/>
+            <path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41"/>
+          </svg>
+          Ссылка
+        </button>
+      </div>
+      <div class="sched__chips">
+        <span class="chip chip--on">Все</span>
+        <span class="chip">Свободны</span>
+        <span class="chip">Заняты</span>
+      </div>
+
+      <section class="inbox" id="inbox" aria-live="polite">
+        <div class="inbox__card">
+          <div class="inbox__head">
+            <h3 class="inbox__title">Сейчас важно</h3>
+            <span class="inbox__count">1</span>
+          </div>
+          <ul class="inbox__list">
+            <li class="inbox__item">
+              <span class="inbox__dot"></span>
+              <div class="inbox__body">
+                <p class="inbox__itemTitle">1 запись ждёт подтверждения</p>
+                <p class="inbox__itemSub">До подтверждения клиент не увидит занятие как согласованное</p>
+              </div>
+              <button type="button" class="inbox__btn" id="confirmBtn">Подтвердить</button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="day-title">Среда, 18 июня</div>
+
+      <div class="s-card s-card--a">
+        <div class="s-main">
+          <div class="s-time">16:00–17:00</div>
+          <div class="s-client">Максим</div>
+          <div class="s-venue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <!-- the slot the visitor books -->
+      <div class="s-card s-card--free" id="targetSlot">
+        <div class="s-main">
+          <div class="s-time">18:00–19:00</div>
+          <div class="s-client s-client--muted" id="targetName">Свободно</div>
+          <div class="s-venue" id="targetVenue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status s-status--free" id="targetStatus">свободен</span>
+      </div>
+
+      <div class="s-card">
+        <div class="s-main">
+          <div class="s-time">19:00–20:00</div>
+          <div class="s-client">Дарья</div>
+          <div class="s-venue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <div class="day-title">Четверг, 19 июня</div>
+
+      <div class="s-card s-card--a">
+        <div class="s-main">
+          <div class="s-time">07:30–08:30</div>
+          <div class="s-client">Кирилл</div>
+          <div class="s-venue">Фигурное катание · 📍 Чижовка-Арена</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <!-- Week summary. Both labels verbatim from trainer-stats-main.js:255-256
+           («Эта неделя», «N из M», «Свободно слотов: N»). -->
+      <div class="s-foot">
+        <span>Эта неделя: <b id="bookedCount">13 из 17</b></span>
+        <span>Свободно слотов: <b id="freeCount">4</b></span>
+      </div>
+    </div>
+
+    <!-- real modal content, trainer-home.html:732-749 -->
+    <div class="invite-sheet" id="inviteSheet" aria-hidden="true">
+      <div class="invite-sheet__grab"></div>
+      <h3 class="invite-sheet__title">Пригласительная ссылка</h3>
+      <div class="invite-sheet__link">t.me/glide_bot?start=b_alexey_mnsk</div>
+      <div class="invite-sheet__btn" id="inviteCopy">Скопировать ссылку</div>
+    </div>
+  </figure>
+  </div>
+
+  </div>
+
+</main>
+
+<!-- ══════════════════ SECTION 2 — ROADMAP (desktop) ═══════════════════════ -->
+<section class="rm" id="rm" aria-labelledby="rmTitle">
+  <div class="rm__sticky">
+    <div class="rm__inner">
+
+      <div>
+        <p class="rm__eyebrow">Рабочее пространство</p>
+        <h2 class="rm__title" id="rmTitle">Всё рабочее пространство тренера — в одном месте</h2>
+
+        <ol class="rm__list" id="rmList">
+          <div class="rm__track"><span class="rm__fill" id="rmFill"></span></div>
+
+          <li class="rm__item" data-i="0">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Запись</p>
+            <p class="rm__desc">Кидаете в чат родителю или ученику — он сам выбирает слот.</p>
+          </li>
+          <li class="rm__item" data-i="1">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Расписание</p>
+            <p class="rm__desc">Выставляете окна в расписании — ученик видит «Свободно» и записывается без звонков.</p>
+          </li>
+          <li class="rm__item" data-i="2">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Клиенты</p>
+            <p class="rm__desc">Постоянные, с абонементом, ещё не в боте — и быстрая запись прямо из карточки.</p>
+          </li>
+          <li class="rm__item" data-i="3">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Заметки</p>
+            <p class="rm__desc">Чипы, профиль с целями сезона и лента заметок после каждого занятия — вместо блокнота и хаоса в чатах.</p>
+          </li>
+          <li class="rm__item" data-i="4">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Абонементы и сертификаты</p>
+            <p class="rm__desc">Каталог и выдача клиентам — в одном месте. Списания и остаток занятий считаются сами.</p>
+          </li>
+          <li class="rm__item" data-i="5">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Каталог Glide</p>
+            <p class="rm__desc">Вас находят в каталоге — город, арена, специализация и кнопка записи.</p>
+          </li>
+          <li class="rm__item" data-i="6">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Реферальная программа</p>
+            <p class="rm__desc">Пригласи коллегу — бонусные дни подписки за тех, кто дошёл до первой записи и оплаты.</p>
+          </li>
+          <li class="rm__item" data-i="7">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Аналитика</p>
+            <p class="rm__desc">Записи, выручка и новые клиенты — сводка за неделю в одном экране.</p>
+          </li>
+        </ol>
+
+        <div class="rm__done" id="rmDone" aria-hidden="true">
+          <span class="rm__doneChip">Запись</span>
+          <span class="rm__doneChip">Расписание</span>
+          <span class="rm__doneChip">Клиенты</span>
+          <span class="rm__doneChip">Заметки</span>
+          <span class="rm__doneChip">Абонементы и сертификаты</span>
+          <span class="rm__doneChip">Каталог Glide</span>
+          <span class="rm__doneChip">Реферальная программа</span>
+          <span class="rm__doneChip">Аналитика</span>
+        </div>
+        <p class="rm__doneLine" id="rmDoneLine">Один бот в Telegram — без установки и настройки CRM.</p>
+      </div>
+
+      <!-- fragment viewport -->
+      <div class="rm__stage" id="rmStage"></div>
+
+    </div>
+  </div>
+
+  <!-- scroll distance driving the sticky sequence -->
+  <div id="rmSpacer" aria-hidden="true"></div>
+</section>
+
+<!-- ══════════════════ SECTION 2 — ROADMAP (mobile story) ══════════════════ -->
+<section class="rmm" id="rmm" aria-hidden="true">
+  <p class="rmm__eyebrow">Рабочее пространство</p>
+  <h2 class="rmm__title">Всё рабочее пространство тренера — в одном месте</h2>
+  <ol class="rmm__list" id="rmmList">
+    <div class="rmm__track"><span class="rmm__fill" id="rmmFill"></span></div>
+  </ol>
+  <div class="rmm__done">
+    <div class="rmm__doneChips" id="rmmChips"></div>
+    <p class="rmm__doneLine">Один бот в Telegram — без установки и настройки CRM.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ ПЛАНИРУЕМЫЕ ОБНОВЛЕНИЯ ══════════════════════════════
+     No product UI here on purpose — none of this ships yet.                  -->
+<section class="soon" id="soon" aria-labelledby="soonTitle">
+  <div class="soon__inner">
+    <div>
+      <p class="soon__eyebrow">Планируем</p>
+      <h2 class="soon__title" id="soonTitle">Над чем работаем сейчас</h2>
+    </div>
+    <ul class="soon__list">
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">Онбординг и перенос записей</p>
+          <p class="soon__desc">Переносим ваше расписание и клиентов в Glide в пару кликов — без ручного заполнения.</p>
+        </div>
+        <span class="soon__mark">в работе</span>
+      </li>
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">AI-ассистент</p>
+          <p class="soon__desc">Перенос записей и заметки по клиентам голосом — сказали после занятия, ассистент разложил по карточкам.</p>
+        </div>
+        <span class="soon__mark">в работе</span>
+      </li>
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">Скидки у партнёров</p>
+          <p class="soon__desc">Программы скидок для тренеров и клиентов Glide у партнёров индустрии.</p>
+        </div>
+        <span class="soon__mark">планируем</span>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<script>
+(function(){
+'use strict';
+
+var reduce   = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var isMobile = function(){ return window.matchMedia('(max-width: 860px)').matches; };
+
+/* ══════════════════════════ HERO ═══════════════════════════════════════ */
+var mini       = document.getElementById('mini');
+var chatBody   = document.getElementById('chatBody');
+var notif      = document.getElementById('notif');
+var inbox      = document.getElementById('inbox');
+var hero       = document.getElementById('hero');
+var replay     = document.getElementById('replay');
+var confirmBtn = document.getElementById('confirmBtn');
+var shareBtn    = document.getElementById('shareBtn');
+var inviteSheet = document.getElementById('inviteSheet');
+var inviteCopy  = document.getElementById('inviteCopy');
+var beats      = [].slice.call(document.querySelectorAll('.beat'));
+
+var targetSlot   = document.getElementById('targetSlot');
+var targetName   = document.getElementById('targetName');
+var targetStatus = document.getElementById('targetStatus');
+var freeCount    = document.getElementById('freeCount');
+var bookedCount  = document.getElementById('bookedCount');
+
+var timers = [], idleTimer = null, engaged = false, state = 0;
+
+function after(ms, fn){ var t = setTimeout(fn, reduce ? Math.min(ms,40) : ms); timers.push(t); return t; }
+function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+function setBeat(n){
+  hero.classList.toggle('is-running', n > 0);
+  beats.forEach(function(b,i){
+    b.classList.toggle('is-done', i < n-1);
+    b.classList.toggle('is-on',  i === n-1);
+  });
+}
+var colClient     = document.querySelector('.col--client');
+var colTrainer    = document.querySelector('.col--trainer');
+var surfClientEl  = document.getElementById('surfClient');
+var surfTrainerEl = document.getElementById('surfTrainer');
+
+/* Directs the eye: `w` leads, the other recedes. 'none' returns both to rest. */
+function side(w){
+  hero.setAttribute('data-side', w);           /* only has effect at <=860px */
+  if (isMobile()){
+    colClient.classList.remove('col--lead','col--rest');
+    colTrainer.classList.remove('col--lead','col--rest');
+    return;
+  }
+  var lead = w === 'trainer' ? colTrainer : (w === 'client' ? colClient : null);
+  var rest = w === 'trainer' ? colClient  : (w === 'client' ? colTrainer : null);
+  [colClient, colTrainer].forEach(function(c){ c.classList.remove('col--lead','col--rest'); });
+  if (lead){ lead.classList.add('col--lead'); rest.classList.add('col--rest'); }
+}
+
+function bubble(html, meta, ok){
+  var el = document.createElement('div');
+  el.className = 'bubble enterable' + (ok ? ' bubble--ok' : '');
+  el.innerHTML = html + (meta ? '<span class="bubble__meta">' + meta + '</span>' : '');
+  chatBody.appendChild(el);
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    el.classList.add('is-in');
+    chatBody.scrollTop = chatBody.scrollHeight;
+  });});
+}
+function divider(text){
+  var el = document.createElement('span');
+  el.className = 'divider enterable';
+  el.textContent = text;
+  chatBody.appendChild(el);
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ el.classList.add('is-in'); });});
+}
+function tick(el, val){
+  el.textContent = val;
+  el.classList.add('is-tick');
+  after(1500, function(){ el.classList.remove('is-tick'); });
+}
+
+/* Beat 1 — you send the link. The client does not exist in the story yet;
+   this is the beat that brings them in. Real sheet: trainer-home.html:732. */
+function beat1(){
+  state = 1; setBeat(1);
+  side('trainer');
+  inviteSheet.classList.add('is-up');
+  /* Deliberately unhurried: the sheet has to be read, not glimpsed. */
+  after(reduce ? 20 : 1150, function(){
+    inviteCopy.classList.add('is-done');
+    after(reduce ? 20 : 780, function(){
+      inviteSheet.classList.remove('is-up');
+      /* the client's screen is drawn out from behind the trainer's */
+      after(reduce ? 20 : 260, function(){
+        hero.classList.add('is-live');
+        side('client');
+        after(reduce ? 20 : 1350, beat2);
+      });
+    });
+  });
+}
+
+/* Beat 2 — the client picks a time. Deliberately automatic: the whole promise
+   is that this happens without you. booking-client.js:217 */
+function beat2(){
+  state = 2; setBeat(2);
+  var pick = document.getElementById('slotPick');
+  /* the client's choice registers before the sheet closes */
+  pick.classList.add('slot-card--taken');
+  after(reduce ? 20 : 620, function(){ mini.classList.add('is-closed'); });
+  after(reduce ? 20 : 980, function(){
+    bubble('✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.', '18:42', true);
+    /* The slot is blocked immediately — this is what the real notification
+       means by «Слот занят». schedule.html statusLabel: booked → «занят».
+       The lead moves to the trainer on the same frame the row fills; this is
+       the beat that has to land, so it gets its own breathing room. */
+    after(reduce ? 20 : 1050, function(){
+      side('trainer');
+      targetSlot.classList.remove('s-card--free');
+      targetSlot.classList.add('s-card--new','s-card--sweep');
+      targetName.textContent = 'Анна К.';
+      targetName.classList.remove('s-client--muted');
+      targetStatus.textContent = 'занят';
+      targetStatus.classList.remove('s-status--free');
+      tick(freeCount, '3');
+      tick(bookedCount, '14 из 17');
+      after(1400, function(){ targetSlot.classList.remove('s-card--sweep'); });
+    });
+    after(reduce ? 20 : (isMobile() ? 2200 : 1900), beat3);
+  });
+}
+
+/* Beat 3 — the request reaches you. messages.py:2815 + trainer-home-main.js:2354 */
+function beat3(){
+  state = 3; setBeat(3);
+  side('trainer');
+  if (isMobile()){ notif.classList.add('notif--mobile'); document.body.appendChild(notif); }
+  notif.classList.add('is-in');
+  after(reduce ? 20 : 2600, function(){
+    notif.classList.remove('is-in');
+    inbox.classList.add('is-shown');
+    if (!engaged) after(reduce ? 20 : 1600, beat4);
+  });
+}
+
+/* Beat 4 — one tap. */
+function beat4(){
+  if (state >= 4) return;
+  state = 4; setBeat(4);
+  inbox.classList.remove('is-shown');
+  after(reduce ? 20 : 500, beat5);
+}
+
+/* Beat 5 — both sides settle, then the reminder. messages.py:1119 / :1372 */
+function beat5(){
+  state = 5; setBeat(5);
+  targetSlot.classList.remove('s-card--new');
+  after(reduce ? 20 : 560, function(){
+    side('client');
+    bubble('✅ <b>Ваша запись подтверждена!</b>' +
+           '<div class="bubble__rows">' +
+           '📅 <b>18 июня (ср) 18:00</b> — 60 мин.<br>' +
+           '🎯 Фигурное катание<br>' +
+           '📍 Минск · 🏟 Minsk Arena' +
+           '</div>', '18:44', true);
+    after(reduce ? 20 : 1800, reminder);
+  });
+}
+
+/* Tail of beat 5 — later, on its own. messages.py:1372 CLIENT_REMINDER_24H */
+function reminder(){
+  divider('накануне');
+  after(reduce ? 20 : 440, function(){
+    bubble('⏰ <b>Напоминание о занятии</b>' +
+           '<div class="bubble__rows">' +
+           '📅 <b>18 июня</b> (ср) · 18:00<br>' +
+           '⏱ Длительность: 60 мин.' +
+           '</div>' +
+           'Адрес и детали — в <b>«Мои записи»</b> (меню бота).', '17:00');
+    replay.classList.add('is-shown');
+  });
+}
+
+function reset(){
+  clearTimers();
+  state = 0; setBeat(0);
+  /* back to one surface: the client is not in the story yet */
+  hero.classList.remove('is-live');
+  inviteSheet.classList.remove('is-up');
+  inviteCopy.classList.remove('is-done');
+  document.getElementById('slotPick').classList.remove('slot-card--taken');
+  mini.classList.remove('is-closed');
+  notif.classList.remove('is-in');
+  inbox.classList.remove('is-shown');
+  targetSlot.classList.add('s-card--free');
+  targetSlot.classList.remove('s-card--new');
+  targetName.textContent = 'Свободно';
+  targetName.classList.add('s-client--muted');
+  targetStatus.textContent = 'свободен';
+  targetStatus.classList.add('s-status--free');
+  freeCount.textContent = '4';          freeCount.classList.remove('is-tick');
+  bookedCount.textContent = '13 из 17'; bookedCount.classList.remove('is-tick');
+  /* prior history — messages.py:20 CLIENT_START_WELCOME, verbatim */
+  chatBody.innerHTML =
+    '<span class="divider is-in">сегодня</span>' +
+    '<div class="bubble enterable is-in">👋 Привет! Здесь можно найти тренера и записаться на занятие. ' +
+    'Нажмите кнопку <b>Главная</b> слева от поля ввода — там каталог, записи и заявки. Помощь: /guide' +
+    '<span class="bubble__meta">18:39</span></div>';
+  replay.classList.remove('is-shown');
+  side('none');   /* at rest neither surface leads — the page is calm */
+}
+
+function engage(){ engaged = true; clearTimeout(idleTimer); }
+
+/* Tap 1 — send the link. */
+[shareBtn, inviteCopy].forEach(function(el){
+  el.addEventListener('click', function(){
+    if (state !== 0) return;
+    engage(); clearTimers(); beat1();
+  });
+});
+/* Tap 2 — confirm. */
+confirmBtn.addEventListener('click', function(){ engage(); clearTimers(); beat4(); });
+notif.addEventListener('click', function(){
+  if (!isMobile() || state !== 3) return;
+  engage(); clearTimers();
+  notif.classList.remove('is-in');
+  side('trainer');
+  inbox.classList.add('is-shown');
+});
+replay.addEventListener('click', function(){ reset(); after(280, beat1); });
+
+function armIdle(){
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(function(){
+    if (engaged || state !== 0) return;
+    beat1();
+  }, 4600);
+}
+if ('IntersectionObserver' in window){
+  var io = new IntersectionObserver(function(en){
+    en.forEach(function(e){ if (e.isIntersecting){ armIdle(); io.disconnect(); } });
+  }, { threshold:.4 });
+  io.observe(document.getElementById('surfClient'));
+} else { armIdle(); }
+
+document.getElementById('logoImg').addEventListener('error', function(){
+  var box = document.getElementById('logoBox');
+  box.classList.add('logo--fallback');
+  box.textContent = '';
+});
+
+reset();
+
+/* ══════════════════ SECTION 2 — real UI fragments ══════════════════════ */
+/* Each fragment is a small piece of a real screen — real markup, real labels,
+   real field names. Nothing here is a capability the product doesn't have. */
+var FRAGS = [
+  /* 0 — Запись · book.html */
+  { cap:'Экран клиента · запись',
+    html:
+      '<p class="frag__screen">Выберите время</p>' +
+      '<div class="day-title">Среда, 18 июня</div>' +
+      '<div class="slot-card" style="cursor:default">' +
+        '<span class="slot-card-body"><span class="slot-time">18:00–19:00</span>' +
+        '<span class="slot-venue-pill">Minsk Arena</span></span>' +
+        '<span class="slot-arrow">›</span></div>' +
+      '<div class="slot-card" style="cursor:default">' +
+        '<span class="slot-card-body"><span class="slot-time">19:00–20:00</span>' +
+        '<span class="slot-venue-pill">Minsk Arena</span></span>' +
+        '<span class="slot-arrow">›</span></div>' +
+      '<div class="day-title">Четверг, 19 июня</div>' +
+      '<div class="slot-card" style="cursor:default">' +
+        '<span class="slot-card-body"><span class="slot-time">07:30–08:30</span>' +
+        '<span class="slot-venue-pill">Чижовка-Арена</span></span>' +
+        '<span class="slot-arrow">›</span></div>'
+  },
+  /* 1 — Расписание · schedule.html */
+  { cap:'Экран тренера · расписание',
+    html:
+      '<p class="frag__screen">Моё расписание</p>' +
+      '<div class="sched__chips" style="margin-bottom:12px">' +
+        '<span class="chip chip--on">Все</span><span class="chip">Свободны</span><span class="chip">Заняты</span></div>' +
+      '<div class="day-title">Среда, 18 июня</div>' +
+      '<div class="s-card s-card--a"><div class="s-main">' +
+        '<div class="s-time">16:00–17:00</div><div class="s-client">Максим</div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<span class="s-status">занят</span></div>' +
+      '<div class="s-card s-card--free"><div class="s-main">' +
+        '<div class="s-time">18:00–19:00</div><div class="s-client s-client--muted">Свободно</div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<span class="s-status s-status--free">свободен</span></div>' +
+      '<div class="s-card"><div class="s-main">' +
+        '<div class="s-time">19:00–20:00</div><div class="s-client">Дарья</div>' +
+        '<div class="s-venue">Фигурное катание · 📍 Minsk Arena</div></div>' +
+        '<span class="s-status">занят</span></div>'
+  },
+  /* 2 — Клиенты · trainer-clients.html */
+  { cap:'Экран тренера · клиенты',
+    html:
+      '<p class="frag__screen">Мои клиенты</p>' +
+      '<div class="sched__chips" style="margin-bottom:12px">' +
+        '<span class="chip chip--on">Все</span><span class="chip">Постоянные</span>' +
+        '<span class="chip">С абонементом</span></div>' +
+      '<div class="c-card"><span class="c-av">АК</span><div class="c-main">' +
+        '<div class="c-nameRow"><span class="c-name">Анна К.</span>' +
+        '<span class="c-pill">Постоянный</span></div>' +
+        '<div class="c-meta">+375 29 ··· 41 07</div>' +
+        '<div class="c-meta">Последнее занятие: 11 июня</div></div>' +
+        '<span class="c-arrow">→</span></div>' +
+      '<div class="c-card"><span class="c-av">МД</span><div class="c-main">' +
+        '<div class="c-nameRow"><span class="c-name">Максим Д.</span>' +
+        '<span class="c-pill">Абонемент · 6</span></div>' +
+        '<div class="c-meta">+375 33 ··· 12 88</div>' +
+        '<div class="c-meta">Последнее занятие: вчера</div></div>' +
+        '<span class="c-arrow">→</span></div>' +
+      '<div class="c-card"><span class="c-av">ДС</span><div class="c-main">' +
+        '<div class="c-nameRow"><span class="c-name">Дарья С.</span>' +
+        '<span class="c-pill c-pill--gray">Нет в боте</span></div>' +
+        '<div class="c-meta">+375 44 ··· 90 33</div>' +
+        '<div class="c-meta">Последнее занятие: 3 июня</div></div>' +
+        '<span class="c-arrow">→</span></div>'
+  },
+  /* 3 — Заметки · dossier (trainer-clients-main.js:2321) */
+  { cap:'Досье клиента · Анна К.',
+    html:
+      '<p class="frag__screen">Профиль клиента</p>' +
+      '<div class="d-sec">' +
+        '<div class="d-field"><p class="d-label">Цель сезона</p>' +
+          '<p class="d-val">Чисто откатать короткую программу к декабрю</p></div>' +
+        '<div class="d-field"><p class="d-label">Цели</p>' +
+          '<p class="d-val">Стабильный двойной аксель</p></div>' +
+        '<div class="d-field"><p class="d-label">Ограничения / Травмы</p>' +
+          '<p class="d-val d-val--empty">Нажмите, чтобы добавить</p></div>' +
+      '</div>' +
+      '<div class="d-sec"><p class="d-secTitle">Метки</p>' +
+        '<div class="d-tags">' +
+          '<span class="d-tag">2-й разряд</span><span class="d-tag">Соревнования</span>' +
+          '<span class="d-tag">Утро</span><span class="d-tag">Прыжки</span></div></div>'
+  },
+  /* 4 — Абонементы и сертификаты · trainer-pass-products.html + client-passes.html.
+         Backed by real tables: TrainerPassProduct / PassInstance / PassRedemption /
+         TrainerCertificateProduct (src/infrastructure/db/models.py). */
+  { cap:'Экран тренера · продажи',
+    html:
+      '<p class="frag__screen">Абонементы и сертификаты</p>' +
+      '<div class="sched__chips" style="margin-bottom:12px">' +
+        '<span class="chip chip--on">Абонементы</span><span class="chip">Сертификаты</span>' +
+        '<span class="chip">Выданы</span></div>' +
+      '<div class="p-card">' +
+        '<div class="p-head"><span class="p-name">Абонемент · 8 занятий</span>' +
+        '<span class="p-tag">Активен</span></div>' +
+        '<p class="p-meta">🎯 Фигурное катание · срок действия 60 дней</p>' +
+        '<div class="p-left"><span class="p-leftNum">5</span>' +
+        '<span class="p-leftLbl">осталось занятий из 8</span></div>' +
+        '<span class="p-bar"><span class="p-barFill" style="width:62%"></span></span>' +
+      '</div>' +
+      '<div class="p-card">' +
+        '<div class="p-head"><span class="p-name">Подарочный сертификат</span>' +
+        '<span class="p-tag">Выдан</span></div>' +
+        '<p class="p-meta">Активируется кодом в боте</p>' +
+        '<p class="p-nom">Номинал: 120 BYN</p>' +
+      '</div>'
+  },
+  /* 5 — Каталог Glide · catalog.html */
+  { cap:'Каталог Glide · как вас видят',
+    html:
+      '<p class="frag__screen">Найдите тренера</p>' +
+      '<div class="sched__chips" style="margin-bottom:12px">' +
+        '<span class="chip chip--on">Минск</span><span class="chip">Фигурное катание</span></div>' +
+      '<div class="t-card"><span class="t-photo"></span><div class="t-info">' +
+        '<div class="t-name">Алексей</div>' +
+        '<div class="t-meta">Минск · фигурное катание</div>' +
+        '<div class="t-meta">Minsk Arena, Чижовка-Арена</div>' +
+        '<span class="t-badge">Набор в группу</span></div>' +
+        '<span class="c-arrow">→</span></div>' +
+      '<div class="t-card"><span class="t-photo"></span><div class="t-info">' +
+        '<div class="t-name">Ирина</div>' +
+        '<div class="t-meta">Минск · фигурное катание</div>' +
+        '<div class="t-meta">Чижовка-Арена</div></div>' +
+        '<span class="c-arrow">→</span></div>'
+  },
+  /* 6 — Реферальная программа · trainer-referral.html (labels verbatim) */
+  { cap:'Экран тренера · рефералы',
+    html:
+      '<p class="frag__screen">Пригласи коллегу</p>' +
+      '<div class="r-link"><span class="r-linkVal">t.me/glide_bot?start=ref_a4f2</span>' +
+        '<span class="r-copy">Копировать</span></div>' +
+      '<div class="r-grid">' +
+        '<div class="r-tile"><span class="r-val r-val--accent">14</span>' +
+          '<span class="r-lbl">Бонусных дней</span></div>' +
+        '<div class="r-tile"><span class="r-val">6</span>' +
+          '<span class="r-lbl">Приглашено</span></div>' +
+        '<div class="r-tile"><span class="r-val">3</span>' +
+          '<span class="r-lbl">Оплатили</span></div>' +
+      '</div>' +
+      '<div class="r-rules">' +
+        '<div class="r-rule"><span class="r-ruleN">+2</span>' +
+          '<span>дня — коллега заполнил базовый профиль</span></div>' +
+        '<div class="r-rule"><span class="r-ruleN">+3</span>' +
+          '<span>дня — первая подтверждённая или проведённая запись</span></div>' +
+        '<div class="r-rule"><span class="r-ruleN">+7</span>' +
+          '<span>дней — первая оплата подписки</span></div>' +
+      '</div>'
+  },
+  /* 7 — Аналитика · trainer-stats.html */
+  { cap:'Экран тренера · аналитика',
+    html:
+      '<p class="frag__screen">Статистика и выручка</p>' +
+      '<p class="a-title">6 недель · занятия</p>' +
+      '<div class="a-card"><div class="a-bars">' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar" style="height:44%"></div></div><div class="a-barLbl">12.05</div></div>' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar" style="height:58%"></div></div><div class="a-barLbl">19.05</div></div>' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar" style="height:38%"></div></div><div class="a-barLbl">26.05</div></div>' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar" style="height:66%"></div></div><div class="a-barLbl">02.06</div></div>' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar" style="height:72%"></div></div><div class="a-barLbl">09.06</div></div>' +
+        '<div class="a-barWrap"><div class="a-barTrack"><div class="a-bar is-active" style="height:88%"></div></div><div class="a-barLbl">16.06</div></div>' +
+      '</div><p class="a-foot">Последний столбец — текущая неделя</p></div>' +
+      '<p class="a-title">Загрузка слотов</p>' +
+      '<div class="a-card"><div class="a-load">' +
+        '<div class="a-ring" style="--pct:76"><div class="a-ringIn">76%</div></div>' +
+        '<div class="a-loadCopy"><p class="a-kLabel">Эта неделя</p>' +
+        '<p class="a-kVal">13 из 17</p>' +
+        '<p class="a-kSub">Свободно слотов: <strong>4</strong></p></div>' +
+      '</div></div>'
+  }
+];
+
+var COUNT = FRAGS.length;
+
+/* ── Desktop: sticky, scroll-driven ─────────────────────────────────────── */
+var rm       = document.getElementById('rm');
+var rmSpacer = document.getElementById('rmSpacer');
+var rmStage  = document.getElementById('rmStage');
+var rmFill   = document.getElementById('rmFill');
+var rmItems  = [].slice.call(document.querySelectorAll('.rm__item'));
+var rmDone   = document.getElementById('rmDone');
+var rmDoneLn = document.getElementById('rmDoneLine');
+
+/* build fragment nodes once */
+var fragNodes = FRAGS.map(function(f){
+  var d = document.createElement('div');
+  d.className = 'frag';
+  d.innerHTML = '<p class="frag__cap">' + f.cap + '</p>' + f.html;
+  rmStage.appendChild(d);
+  return d;
+});
+
+/* scroll distance: one screen per stage + a tail for the assembly */
+rmSpacer.style.height = (COUNT * 58 + 55) + 'vh';
+
+var current = -1, currentAsm = null;
+function setStage(i, assembled){
+  /* Both index and assembled-ness gate the update — keying on index alone
+     left the last item stuck "active" once the chain assembled. */
+  if (i === current && assembled === currentAsm) return;
+  current = i; currentAsm = assembled;
+  fragNodes.forEach(function(n,k){ n.classList.toggle('is-on', k === i); });
+  rmItems.forEach(function(it,k){
+    it.classList.toggle('is-on',   k === i && !assembled);
+    it.classList.toggle('is-past', assembled || k < i);
+  });
+  rmDone.classList.toggle('is-on', !!assembled);
+  rmDoneLn.classList.toggle('is-on', !!assembled);
+}
+
+function onScroll(){
+  if (isMobile()) return;
+  var r = rm.getBoundingClientRect();
+  var total = rm.offsetHeight - window.innerHeight;
+  if (total <= 0) return;
+  var p = Math.min(1, Math.max(0, -r.top / total));
+  /* reserve the last 12% for the assembled state */
+  var assembled = p > 0.88;
+  var idx = Math.min(COUNT - 1, Math.floor((p / 0.88) * COUNT));
+  setStage(idx, assembled);
+  rmFill.style.height = (assembled ? 100 : ((idx + 0.5) / COUNT) * 100) + '%';
+}
+
+/* ── Mobile: linear story, scroll reveals but never hides ───────────────── */
+var rmmList  = document.getElementById('rmmList');
+var rmmFill  = document.getElementById('rmmFill');
+var rmmChips = document.getElementById('rmmChips');
+var NAMES = ['Запись','Расписание','Клиенты','Заметки',
+             'Абонементы и сертификаты','Каталог Glide','Реферальная программа','Аналитика'];
+
+function buildMobile(){
+  if (rmmList.dataset.built) return;
+  rmmList.dataset.built = '1';
+  rmItems.forEach(function(src, i){
+    var li = document.createElement('li');
+    li.className = 'rmm__item';
+    li.innerHTML =
+      '<span class="rmm__dot"></span>' +
+      '<p class="rmm__name">' + NAMES[i] + '</p>' +
+      '<p class="rmm__desc">' + src.querySelector('.rm__desc').textContent + '</p>' +
+      '<div class="rmm__stage"><div class="frag is-on">' +
+        '<p class="frag__cap">' + FRAGS[i].cap + '</p>' + FRAGS[i].html +
+      '</div></div>';
+    rmmList.appendChild(li);
+  });
+  NAMES.forEach(function(n){
+    var s = document.createElement('span');
+    s.className = 'rm__doneChip';
+    s.textContent = n;
+    rmmChips.appendChild(s);
+  });
+
+  var items = [].slice.call(rmmList.querySelectorAll('.rmm__item'));
+  if ('IntersectionObserver' in window && !reduce){
+    var mo = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){
+          e.target.classList.add('is-in');
+          var seen = items.filter(function(x){ return x.classList.contains('is-in'); }).length;
+          rmmFill.style.height = (seen / items.length) * 100 + '%';
+        }
+      });
+    }, { threshold:.25, rootMargin:'0px 0px -12% 0px' });
+    items.forEach(function(it){ mo.observe(it); });
+  } else {
+    /* no observer / reduced motion — everything visible, rail full */
+    items.forEach(function(it){ it.classList.add('is-in'); });
+    rmmFill.style.height = '100%';
+  }
+}
+
+function syncMode(){
+  if (isMobile()){
+    buildMobile();
+    document.getElementById('rmm').setAttribute('aria-hidden','false');
+  } else {
+    onScroll();
+  }
+}
+
+var ticking = false;
+window.addEventListener('scroll', function(){
+  if (ticking) return;
+  ticking = true;
+  requestAnimationFrame(function(){ onScroll(); ticking = false; });
+}, { passive:true });
+window.addEventListener('resize', syncMode);
+
+/* ══ THE PHYSICAL LAYER ══════════════════════════════════════════════════
+   Arrival plays once. Then a weighted pointer parallax keeps the surfaces
+   feeling like objects under a light, rather than pictures on a page.
+   Both are desktop-only and both are off under reduced motion.
+   ═════════════════════════════════════════════════════════════════════════ */
+var canPhysical = !reduce && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+/* Arrival — added before first paint, removed once done so it never replays
+   and never competes with the pointer transform. */
+if (!reduce){
+  hero.classList.add('hero--enter');
+  var ENTER_MS = 1500 + 260 + 60;
+  setTimeout(function(){ hero.classList.remove('hero--enter'); }, ENTER_MS);
+}
+
+if (canPhysical){
+  var pTargetX = 0, pTargetY = 0, pX = 0, pY = 0, pRaf = null;
+  var MAX_RY = 1.9, MAX_RX = 1.2;   /* degrees — deliberately tiny */
+  var stages = [].slice.call(document.querySelectorAll('.col__stage'));
+
+  function pFrame(){
+    /* lerp: the surfaces carry momentum instead of snapping to the cursor */
+    pX += (pTargetX - pX) * 0.075;
+    pY += (pTargetY - pY) * 0.075;
+    var ry = (pX * MAX_RY).toFixed(3) + 'deg';
+    var rx = (-pY * MAX_RX).toFixed(3) + 'deg';
+    /* light moves opposite the tilt, as a fixed source would */
+    var lx = (30 + pX * 26).toFixed(1) + '%';
+    var ly = (8 + pY * 14).toFixed(1) + '%';
+    stages.forEach(function(c){
+      c.style.setProperty('--ry', ry);
+      c.style.setProperty('--rx', rx);
+    });
+    [surfClientEl, surfTrainerEl].forEach(function(s){
+      s.style.setProperty('--lx', lx);
+      s.style.setProperty('--ly', ly);
+    });
+    if (Math.abs(pTargetX - pX) > 0.001 || Math.abs(pTargetY - pY) > 0.001){
+      pRaf = requestAnimationFrame(pFrame);
+    } else { pRaf = null; }
+  }
+  function pWake(){ if (!pRaf) pRaf = requestAnimationFrame(pFrame); }
+
+  hero.addEventListener('pointermove', function(e){
+    var r = hero.getBoundingClientRect();
+    pTargetX = ((e.clientX - r.left) / r.width  - 0.5) * 2;   /* -1 … 1 */
+    pTargetY = ((e.clientY - r.top ) / r.height - 0.5) * 2;
+    pWake();
+  }, { passive:true });
+
+  hero.addEventListener('pointerleave', function(){
+    pTargetX = 0; pTargetY = 0; pWake();
+  }, { passive:true });
+}
+
+/* Planned-updates band reveals once, quietly. */
+if ('IntersectionObserver' in window && !reduce){
+  var soonEl = document.getElementById('soon');
+  var so = new IntersectionObserver(function(en){
+    en.forEach(function(e){ if (e.isIntersecting){ soonEl.classList.add('is-in'); so.disconnect(); } });
+  }, { threshold:.2 });
+  so.observe(soonEl);
+} else {
+  document.getElementById('soon').classList.add('is-in');
+}
+
+setStage(0, false);
+syncMode();
+})();
+</script>
+</body>
+</html>

@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Реферальная программа</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
+  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -23,11 +24,11 @@
       padding: 12px;
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 80px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-bg-color: #FBFAF7;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
-      --tg-theme-secondary-bg-color: #fff5e1;
-      --ref-accent: #F7A600;
+      --tg-theme-secondary-bg-color: #FFFFFF;
+      --ref-accent: #34C6C4;
       --ref-success: #34c759;
     }
     body.ref-page.ref-theme-dark {
@@ -49,13 +50,13 @@
       margin-bottom: 18px;
       overflow: hidden;
       text-align: center;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
-      border: 1px solid rgba(247, 166, 0, 0.28);
+      background: rgba(var(--accent-rgb), 0.08);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     }
     body.ref-page.ref-theme-dark .ref-hero {
       background: linear-gradient(155deg, rgba(20, 22, 26, 0.98) 0%, rgba(12, 14, 18, 0.99) 55%, #0a0c10 100%);
-      border: 1px solid rgba(247, 166, 0, 0.25);
+      border: 1px solid rgba(var(--accent-rgb), 0.25);
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
     }
     .ref-hero::before {
@@ -65,7 +66,7 @@
       right: -20%;
       width: 55%;
       height: 120%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      background: radial-gradient(ellipse, rgba(var(--accent-rgb), 0.22) 0%, transparent 70%);
       pointer-events: none;
     }
     .ref-hero-icon {
@@ -73,11 +74,11 @@
       height: 56px;
       margin: 0 auto 12px;
       border-radius: 16px;
-      background: linear-gradient(135deg, var(--ref-accent) 0%, #e69500 100%);
+      background: var(--ref-accent);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.35);
+      box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
     }
     .ref-hero-icon svg { width: 28px; height: 28px; color: #1a1a1a; }
     .ref-hero-title { font-size: 22px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
@@ -106,7 +107,7 @@
       background: var(--tg-theme-bg-color);
       border-radius: 12px;
       padding: 12px 14px;
-      border: 1px solid rgba(247, 166, 0, 0.2);
+      border: 1px solid rgba(var(--accent-rgb), 0.2);
     }
     .ref-link-text {
       flex: 1;
@@ -180,7 +181,7 @@
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.08) 100%);
+      background: rgba(var(--accent-rgb), 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -210,8 +211,8 @@
       border-radius: 8px;
     }
     .ref-invited-status.pending {
-      background: rgba(255, 159, 10, 0.18);
-      color: #ff9500;
+      background: color-mix(in srgb, var(--app-warning) 14%, transparent);
+      color: var(--app-warning);
     }
     .ref-invited-status.credited {
       background: rgba(52, 199, 89, 0.18);
@@ -257,7 +258,8 @@
       min-width: 0;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
 </head>
 <body class="ref-page">
   <div class="ref-shell">
@@ -350,18 +352,62 @@
       }
       var isDark = tg && tg.colorScheme === 'dark';
       if (isDark) document.body.classList.add('ref-theme-dark');
-      try {
-        var bgHex = isDark ? '#1a1a1a' : '#FFFBEB';
-        if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
-        if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
-      } catch (e) {}
+        try {
+          var bgHex = isDark ? '#1c1c1c' : '#FBFAF7';
+          if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+          if (tg && typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+        } catch (e) {}
 
-      var initData = tg && tg.initData ? tg.initData : '';
+      var qs = new URLSearchParams(window.location.search || '');
+      function initFromUrl() {
+        return qs.get('init_data') || qs.get('initData') || '';
+      }
+      var initData = (tg && tg.initData) ? tg.initData : initFromUrl();
+
+      function currentInit() {
+        if (tg && tg.initData) initData = tg.initData;
+        return initData || initFromUrl() || '';
+      }
 
       function headersJson() {
-        var h = { 'Content-Type': 'application/json' };
-        if (initData) h['X-Telegram-Init-Data'] = initData;
+        var h = { Accept: 'application/json' };
+        var raw = currentInit();
+        if (raw) h['X-Telegram-Init-Data'] = raw;
         return h;
+      }
+
+      function apiUrl(path) {
+        var url = path;
+        var raw = currentInit();
+        if (raw) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
+        return url;
+      }
+
+      function parseApiError(r, data) {
+        if (data && data.detail) {
+          return typeof data.detail === 'string' ? data.detail : 'Ошибка загрузки';
+        }
+        if (r.status === 401) {
+          return 'Откройте рефералы из Telegram-бота — сессия не передана.';
+        }
+        return r.statusText || ('Ошибка ' + r.status);
+      }
+
+      function fetchJson(path) {
+        return fetch(apiUrl(path), { headers: headersJson(), cache: 'no-store' })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              if (!r.ok) throw new Error(parseApiError(r, data));
+              return data;
+            });
+          })
+          .catch(function(e) {
+            if (e && e.message === 'Failed to fetch') {
+              throw new Error('Ошибка сети. Проверьте tunnel и откройте из бота снова.');
+            }
+            throw e;
+          });
       }
 
       function escapeHtml(s) {
@@ -410,15 +456,11 @@
       }
 
       function loadReferralInfo() {
-        if (!initData) {
+        if (!currentInit()) {
           showError('Откройте через Telegram Mini App');
           return;
         }
-        fetch('/api/webapp/trainer/referral', { headers: headersJson() })
-          .then(function(r) {
-            if (!r.ok) throw new Error('Ошибка загрузки');
-            return r.json();
-          })
+        fetchJson('/api/webapp/trainer/referral')
           .then(function(data) {
             referralLink = data.referral_link || '';
             linkTextEl.textContent = referralLink;
@@ -440,8 +482,7 @@
       }
 
       function loadInvitedList() {
-        fetch('/api/webapp/trainer/referral/referred?limit=20', { headers: headersJson() })
-          .then(function(r) { return r.ok ? r.json() : []; })
+        fetchJson('/api/webapp/trainer/referral/referred?limit=20')
           .then(function(list) {
             if (!list || !list.length) {
               invitedCardEl.style.display = 'none';

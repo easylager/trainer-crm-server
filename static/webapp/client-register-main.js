@@ -6,13 +6,11 @@
     if (typeof tg.ready === 'function') tg.ready();
     if (typeof tg.expand === 'function') tg.expand();
     try {
-      var dark = tg.colorScheme === 'dark' ||
-        (tg.colorScheme !== 'light' &&
-          window.matchMedia &&
-          window.matchMedia('(prefers-color-scheme: dark)').matches);
-      var bg = dark ? '#1c1c1e' : '#f2f2f7';
+      var dark = tg.colorScheme === 'dark';
+      var bg = dark ? '#1c1c1c' : '#FBFAF7';
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+      if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bg);
     } catch (e) {
       /* older clients */
     }

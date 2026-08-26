@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Ваша активность</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
-  <script src="client-mini-app-theme.js"></script>
+  <script src="client-mini-app-theme.js?v=202608267"></script>
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" rel="stylesheet" />
@@ -51,26 +52,21 @@
       overflow: hidden;
     }
     .st-widget::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0.12;
-      background: radial-gradient(120% 80% at 100% 0%, var(--tg-theme-button-color), transparent 55%);
+      display: none;
     }
     .st-widget > * { position: relative; z-index: 1; }
     .st-widget--sessions {
-      background: linear-gradient(145deg, rgba(245, 166, 35, 0.24) 0%, var(--tg-theme-secondary-bg-color) 52%);
+      background: var(--tg-theme-secondary-bg-color);
     }
     .st-widget--time {
-      background: linear-gradient(155deg, color-mix(in srgb, var(--tg-theme-link-color, #3390ec) 18%, var(--tg-theme-secondary-bg-color)) 0%, var(--tg-theme-secondary-bg-color) 60%);
-      border-color: color-mix(in srgb, var(--tg-theme-link-color, #3390ec) 35%, var(--tg-theme-button-color) 25%, transparent);
+      background: var(--tg-theme-secondary-bg-color);
+      border-color: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
     }
     .st-widget--streak {
-      background: linear-gradient(160deg, color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent) 0%, var(--tg-theme-secondary-bg-color) 58%);
+      background: var(--tg-theme-secondary-bg-color);
     }
     .st-widget--welcome {
-      background: linear-gradient(152deg, rgba(245, 166, 35, 0.2) 0%, var(--tg-theme-secondary-bg-color) 55%);
+      background: var(--tg-theme-secondary-bg-color);
     }
     .st-widget-kicker {
       font-size: 11px;
@@ -138,16 +134,12 @@
     .st-progress-fill {
       height: 100%;
       border-radius: 99px;
-      background: linear-gradient(
-        90deg,
-        var(--tg-theme-button-color),
-        color-mix(in srgb, var(--tg-theme-button-color) 62%, var(--tg-theme-bg-color))
-      );
+      background: var(--app-cta-fill);
       min-width: 4%;
       transition: width 0.35s ease-out;
     }
     .st-widget--time .st-progress-fill {
-      background: linear-gradient(90deg, var(--tg-theme-link-color, #3390ec), color-mix(in srgb, var(--tg-theme-link-color, #3390ec) 55%, var(--tg-theme-button-color)));
+      background: var(--app-cta-fill);
     }
     .st-progress-cap {
       display: flex;
@@ -206,7 +198,7 @@
       line-height: 1.45;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
 </head>
 <body>
   <div class="header">

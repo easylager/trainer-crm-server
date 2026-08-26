@@ -5,37 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Главная</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
+  <script src="client-mini-app-theme.js?v=202608267"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" /></noscript>
-  <link rel="stylesheet" href="theme.css?v=20260424" />
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
   <link rel="preload" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" as="style" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260424" />
-  <script src="client-mini-app-theme.js"></script>
-  <script>
-    (function () {
-      function applyClientHubTheme() {
-        if (typeof window.__applyClientMiniAppTheme === 'function') window.__applyClientMiniAppTheme();
-      }
-      applyClientHubTheme();
-      if (window.matchMedia) {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyClientHubTheme);
-      }
-      var tg0 = window.Telegram && window.Telegram.WebApp;
-      if (tg0 && typeof tg0.onEvent === 'function') {
-        try { tg0.onEvent('themeChanged', applyClientHubTheme); } catch (e) {}
-      }
-      window.__applyClientHubTheme = applyClientHubTheme;
-    })();
-  </script>
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
   <link rel="preload" href="client-home-main.js?v=202606169" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202606165" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202606281" />
-  <script src="mini-app-client-shell.js?v=202606281"></script>
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202608267" />
+  <script src="mini-app-client-shell.js?v=202608267"></script>
   <script defer src="mini-app-client-home.js"></script>
 </head>
 <body class="hub-body hub-body--loading" data-client-shell="tabs">

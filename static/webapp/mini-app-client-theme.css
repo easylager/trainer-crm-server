@@ -1,0 +1,77 @@
+/**
+ * Client theme overrides — load after theme.css + mini-app-client-nav.css.
+ * Flat GLIDE teal — no Telegram amber gradients on chrome / tab bar / nav.
+ */
+html.trainer-theme-light body,
+html.trainer-theme-light body.hub-body,
+html.trainer-theme-light body.client-shell-body {
+  background-color: #FBFAF7 !important;
+  color: #16292A !important;
+}
+
+html.trainer-theme-dark body,
+html.trainer-theme-dark body.hub-body,
+html.trainer-theme-dark body.client-shell-body {
+  background-color: #1c1c1c !important;
+}
+
+/* Bottom tab bar — active «Главная» icon (was linear-gradient → #f48a0c in cache) */
+.client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+  background: #34C6C4 !important;
+  background-image: none !important;
+  color: #062A29 !important;
+  box-shadow: var(--app-btn-shadow-surface) !important;
+}
+
+.client-tab-bar__icon-wrap,
+.client-tab-bar__btn,
+.client-more-sheet__link {
+  background-image: none !important;
+}
+
+button.btn-app-home,
+.client-mini-nav > button.btn-app-home {
+  border: 2px solid rgba(52, 198, 196, 0.42) !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: #34C6C4 !important;
+  box-shadow: none !important;
+}
+
+.client-mini-nav > button.btn-app-back {
+  background-image: none !important;
+}
+
+/* Flat fill contract for client interactive UI */
+.btn-primary,
+.btn-secondary,
+.btn-soft,
+.hub-book-fab,
+.client-hub-book-fab,
+.hub-primary-panel__slot,
+.hub-explore-tile,
+.hub-next-card,
+.pass-card,
+.pass-shop-section,
+.st-widget,
+.filter-btn.active,
+.catalog-find-btn {
+  background-image: none !important;
+}
+
+.catalog-hero__title {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--tg-theme-text-color) !important;
+}
+
+.st-progress-fill {
+  background: var(--app-cta-fill) !important;
+  background-image: none !important;
+}
+
+.st-widget--time .st-progress-fill {
+  background: var(--app-cta-fill) !important;
+}

@@ -1598,7 +1598,7 @@ async def resolve_certificate_brand_for_trainer(
     Foot line may include platform powered-by attribution.
     """
     settings = Settings()
-    platform = (settings.certificate_pdf_brand_display_name or "ICE STUDIO").strip() or "ICE STUDIO"
+    platform = (settings.certificate_pdf_brand_display_name or "GLIDE").strip() or "GLIDE"
     platform_tagline = (settings.certificate_pdf_brand_tagline_ru or "").strip()
 
     membership = await get_active_collective_membership(session, trainer_id)

@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Семейный доступ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css?v=20260424" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260424" />
+  <script src="client-mini-app-theme.js?v=202608267"></script>
+  <link rel="stylesheet" href="theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
-  <script src="client-mini-app-theme.js"></script>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=20260424" />
+  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
   <style>
     .cfa-wrap { padding: 16px 18px 28px; max-width: 520px; margin: 0 auto; box-sizing: border-box; }
     .cfa-title { font-size: 22px; font-weight: 700; margin: 0 0 10px; line-height: 1.2; }
@@ -27,7 +28,7 @@
     }
     .cfa-member__avatar {
       width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
-      background: rgba(245, 166, 35, 0.25); color: var(--app-cta-fill, #c26e00);
+      background: rgba(var(--accent-rgb), 0.25); color: var(--app-cta-fill, #c26e00);
       display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px;
     }
     .cfa-member__meta { flex: 1; min-width: 0; }
@@ -39,8 +40,8 @@
       display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit;
     }
     .cfa-btn--primary {
-      background: var(--app-cta-fill, #f5a623); color: #1a1206;
-      box-shadow: var(--app-btn-shadow-cta, 0 4px 14px rgba(245, 166, 35, 0.35));
+      background: var(--app-cta-fill, #34C6C4); color: #1a1206;
+      box-shadow: var(--app-btn-shadow-cta, 0 4px 14px rgba(var(--accent-rgb), 0.35));
     }
     .cfa-btn--primary svg { flex-shrink: 0; }
     .cfa-btn--danger {
