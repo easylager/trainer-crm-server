@@ -42,6 +42,7 @@ def _client_kwargs(**overrides):
         "upcoming_booking_id": None,
         "upcoming_date": None,
         "upcoming_time": None,
+        "upcoming_duration_minutes": None,
         "upcoming_trainer_name": "",
         "upcoming_arena_name": "",
         "has_future_booking": False,

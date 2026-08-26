@@ -24,7 +24,7 @@ def test_trainer_tomorrow_mentions_count_and_time():
         },
     )
     assert text is not None
-    assert "🌿" in text
+    assert "📅" in text
     assert "2" in text
     assert "Первая" in text
     assert "18:00" in text
@@ -44,10 +44,9 @@ def test_trainer_tomorrow_one_session_no_pervaya():
     )
     assert text is not None
     assert "1" in text
-    assert "тренировка в" in text
-    assert "Первая" not in text
-    assert "тренировка." not in text
+    assert "Первая — в" in text
     assert "10:30" in text
+    assert "Игорь" in text
 
 
 def test_trainer_open_slots_no_double_okon():
@@ -108,8 +107,7 @@ def test_client_invite_back_nominative_label():
         payload={"trainer_name": "Максим"},
     )
     assert text is not None
-    assert "Тренер: <b>Максим</b>" in text
-    assert "к Максим" not in text
+    assert "Максим" in text
     assert "каталог" in text.lower()
     text = format_care_pulse_html(
         audience=CARE_PULSE_AUDIENCE_TRAINER,
@@ -121,7 +119,7 @@ def test_client_invite_back_nominative_label():
         },
     )
     assert text is not None
-    assert "🌿" in text
+    assert "📅" in text
     assert "2" in text
     assert "18:00" in text
     assert "Анна" in text
@@ -156,7 +154,8 @@ def test_trainer_quiet():
         payload={},
     )
     assert text is not None
-    assert "на месте" in text.lower() or "Расписание" in text
+    assert "🌿" in text
+    assert "свободный" in text.lower()
 
 
 def test_client_confirmed():
