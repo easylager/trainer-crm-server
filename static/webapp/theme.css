@@ -1,5 +1,5 @@
 /**
- * Mini App design tokens — Trainer CRM Belarus (constitution § VIII).
+ * Mini App design tokens — GLIDE (constitution § VIII).
  *
  * Глобальная гамма: правьте только этот файл. Все HTML мини-приложений должны:
  *   <link rel="stylesheet" href="theme.css" /> — для долгого кэша в проде: theme.css?v=… (см. app.py).
@@ -10,9 +10,30 @@
  *
  * Имена --tg-theme-* совместимы с Telegram Mini Apps; при желании можно
  * подставлять значения из Telegram.WebApp.themeParams в inline-скрипте на :root.
+ *
+ * ============================================================================
+ * РЕВИЗИЯ 26.08.2026 — ARENA (тёмная) + ICE PAPER (светлая).
+ * Концепты и обоснование: design/prototypes/2026-08-26-glide-color-concepts.html
+ *
+ * Что было не так. Нейтрали были подкрашены в бренд (#0d1515 / #172425 / #1D2C2D —
+ * это тил, сведённый в тень). Акцент — тот же тон в максимуме. Фон и акцент различались
+ * только светлотой, поэтому цвет «был везде» и не работал нигде, а экран читался
+ * как ровный гул. Плюс тил занимал семь ролей сразу (день, тег, статус, кнопка, FAB,
+ * активная вкладка, обводка карточки) — иерархии не оставалось.
+ *
+ * Правило новой системы, в одну строку:
+ *   НЕЙТРАЛИ АХРОМАТИЧНЫ. ЦВЕТ НАЗЫВАЕТ ТОЛЬКО ДЕЙСТВИЕ И СОСТОЯНИЕ.
+ *
+ * Из него следует три вещи, которые нельзя нарушать:
+ *   1. Фон, поверхность, карточка и линия не содержат тила. Разделяет их свет, не хрома.
+ *   2. Тил (--glide-brand) — первичное действие и активное состояние. Больше ничего.
+ *      Статус «всё хорошо» — это --app-ok, а не тил; «требует внимания» — --app-attention.
+ *   3. У «требует внимания» есть собственный цвет (янтарь). До ревизии его не было,
+ *      и предупреждение выглядело как обычная строка.
+ * ============================================================================
  */
 :root {
-  /* Светлая тема (GLIDE paper + teal accent) */
+  /* Светлая тема ICE PAPER — холодная бумага + тил микродозами */
   --tg-theme-bg-color: var(--glide-paper);
   --tg-theme-text-color: var(--glide-text);
   --tg-theme-hint-color: var(--glide-hint);
@@ -21,25 +42,22 @@
   --tg-theme-secondary-bg-color: var(--glide-surface);
 
   /*
-   * GLIDE brand palette. --glide-500 снят с логотипа попиксельно (медиана rgb(53, 198, 196)).
+   * GLIDE brand ramp. --glide-500 — тил логотипа, значение в значение: #45B9BB.
    *
-   * ДОСТУПНОСТЬ: --glide-500 — цвет ЗАЛИВКИ, не текста. На светлом фоне он даёт 2.0:1
-   * и для текста непригоден. Для текста и ссылок берите --glide-ink (5.7:1 на --glide-bg, AA).
-   * Текст поверх заливки — только тёмный --glide-on-fill (7.3:1). Белый на тиле (2.1:1) не использовать.
-   *
-   * УТОМЛЯЕМОСТЬ ГЛАЗ. Насыщенный тил (высокая хрома) — точечный акцент: кнопка, точки прогресса,
-   * фокус, выбранные строки. Крупные плоскости держим на почти нейтральных тонах, чуть сведённых
-   * в сторону бренда, — цвет читается, но не «звенит» на всю площадь экрана.
+   * ДОСТУПНОСТЬ: --glide-500 — цвет ЗАЛИВКИ, не текста. На белом он даёт 2.2:1
+   * и для текста непригоден. Для текста и ссылок на светлом берите --glide-ink-teal
+   * (#0B6E70, 6.0:1 на белом, AA). Текст поверх заливки — только тёмный --glide-on-fill (6.8:1).
+   * Белый на тиле (2.1:1) не использовать никогда.
    *
    * Числовая рампа одинакова в обеих темах; на тему реагируют только role-токены ниже.
    */
-  --glide-50:  #EFFAFA;
-  --glide-100: #D5F2F1;
-  --glide-300: #6FD8D5;
-  --glide-500: #34C6C4;
-  --glide-600: #1FA5A3;
-  --glide-700: #0F6F6D;
-  --glide-900: #073F3E;
+  --glide-50:  #EEF9F9;
+  --glide-100: #D3EFEF;
+  --glide-300: #7FD7D8;
+  --glide-500: #45B9BB;
+  --glide-600: #2E9A9C;
+  --glide-700: #0B6E70;
+  --glide-900: #073C3E;
   --glide-950: #04262A;
 
   /* Role-токены: используйте в компонентах именно их, не номера рампы. */
@@ -47,53 +65,46 @@
   --glide-brand-pressed: var(--glide-600);
   --glide-ink: var(--glide-700);
   --glide-deep: var(--glide-900);
-  --glide-on-fill: #062A29;
-  --glide-on-deep: #EAF9F8;
-  --glide-on-deep-hint: #8FC4C3;
+  --glide-on-fill: #04262A;
+  --glide-on-deep: #E8F7F7;
+  --glide-on-deep-hint: #8CC4C4;
 
   /*
-   * НЕЙТРАЛИ: «бумага + белое», а не серо-тиловые плашки.
+   * НЕЙТРАЛИ ICE PAPER — холодная бумага, белая карточка, волосяные линии.
    *
-   * Модель взята у брендов с таким же бирюзовым логотипом: Perplexity (Paper White + Offblack +
-   * единственный тил-акцент), Deliveroo (neon teal на «полном белом»), Tiffany (бирюза
-   * микродозами на белом и тёплом нейтральном компаньоне). Общее правило у всех:
-   * ХОЛСТ — бумага, КАРТОЧКА — чистое белое, границы — волосяные линии, цвет живёт только
-   * в акцентах. Прошлая схема делала наоборот (карточка ТЕМНЕЕ холста) — экран читался
-   * как «серый и тёмный», хотя формально был светлым.
+   * Бумага сменила кремовый #F4F2EC на холодный #F1F3F2. Кремовая подложка тянула
+   * в жёлтый, и бирюза на ней читалась «клинически»; холодная бумага — того же
+   * семейства, что и тил, и поддерживает его вместо спора с ним.
    *
-   * Бумага кремовая (#F4F2EC, сочетание с посадочной design/prototypes/2026-08-24-live-link-hero.html):
-   * холодная бирюза на нейтрально-тёплой бумаге не выглядит клинически — это тот самый
-   * «champagne + turquoise», на котором держится Tiffany.
+   * КАРТОЧКА СВЕТЛЕЕ ХОЛСТА, не темнее. Обратное — та самая ошибка, из-за которой
+   * светлая тема выглядела серой, хотя формально была светлой. Подъём — тенью.
    *
-   * --glide-text намеренно НЕ чёрный: #16292A на белом даёт 15.2:1, на бумаге 14.5:1.
-   * Максимальный контраст (~19–21:1) на просвет мобильного экрана даёт ореол вокруг букв.
+   * --glide-text намеренно не чёрный: #101617 на бумаге даёт 16.4:1.
    */
-  --glide-paper:   #F4F2EC;
+  --glide-paper:   #F1F3F2;
   --glide-bg:      var(--glide-paper);
   --glide-surface: #FFFFFF;
   --glide-card:    #FFFFFF;
-  --glide-line:    #E4E2DA;
-  --glide-line-strong: #D6D3C9;
-  --glide-text:    #16292A;
-  --glide-hint:    #5F6B6A;
+  --glide-line:    #E2E6E5;
+  --glide-line-strong: #CFD6D5;
+  --glide-text:    #101617;
+  --glide-hint:    #5E6B6B;
   /* Тил для ТЕКСТА и иконок (6.0:1 на белом). Заливка — это --glide-brand, не он. */
-  --glide-ink-teal: #0C6F6C;
-  --glide-brand-wash: rgba(52, 198, 196, 0.1);
+  --glide-ink-teal: #0B6E70;
+  --glide-brand-wash: rgba(69, 185, 187, 0.12);
   /* Подъём карточки — тенью, а не заливкой: белое на бумаге отделяется мягко. */
-  --glide-shadow-card: 0 1px 2px rgba(20, 40, 40, 0.04), 0 10px 28px -18px rgba(20, 40, 40, 0.35);
-  --glide-shadow-cta: 0 6px 18px -8px rgba(52, 198, 196, 0.75);
+  --glide-shadow-card: 0 1px 2px rgba(16, 40, 40, 0.05), 0 10px 28px -18px rgba(16, 40, 40, 0.35);
+  --glide-shadow-cta: 0 6px 18px -8px rgba(69, 185, 187, 0.7);
 
   /*
-   * Фон и поверхности Trainer CRM.
+   * Фон и поверхности мини-приложений.
    * Не задавайте эти переменные из themeParams — Telegram часто подсовывает холодный «сине-серый»
    * в --tg-theme-bg-color; для оболочек модалок/визарда и полей используйте именно --app-brand-*.
-   * Потребитель сегодня один — секция .ob-flow в mini-app-trainer-profile.css (онбординг-визард),
-   * поэтому перевод на нейтрали GLIDE перекрашивает визард и не задевает остальные экраны.
    */
   --app-brand-root-bg: var(--glide-bg);
   --app-brand-surface: var(--glide-surface);
 
-  /* Brand CTA (GLIDE teal) — не подменяется themeParams Telegram; кнопки/ссылки/фокус в мини-приложении */
+  /* Brand CTA (GLIDE teal) — не подменяется themeParams Telegram; кнопки/ссылки/фокус */
   --app-cta-fill: var(--glide-brand);
   --app-cta-text: var(--glide-on-fill);
 
@@ -103,40 +114,58 @@
   --app-muted: var(--tg-theme-hint-color);
   --app-accent: var(--app-cta-fill);
   --app-accent-text: var(--app-cta-text);
-  --app-danger: #ff3b30;
-  --app-success: #34c759;
-  /*
-   * Янтарь больше не бренд-цвет (бренд — GLIDE тил), а семантика «требует внимания»:
-   * ждёт подтверждения, просрочено, предупреждение.
-   */
-  --app-warning: #f5a623;
 
   /*
-   * Канал акцента для rgba()-литералов: rgba(var(--accent-rgb), α) вместо rgba(var(--accent-rgb), α).
-   * В :root равен текущему янтарю — значение в значение, визуально ноль изменений.
-   * Любой контейнер переопределяет акцент для своего поддерева одной строкой; так .ob-flow
-   * делает тиловыми унаследованные акценты перенесённых блоков, не трогая их за пределами визарда.
+   * СЕМАНТИКА, ОТДЕЛЬНАЯ ОТ БРЕНДА. Тил больше не обозначает «хорошо» — иначе
+   * подтверждённое занятие спорит по яркости с кнопкой «Записать».
+   *
+   * У каждой роли три токена:
+   *   --app-*         заливка и точки (для текста на светлом фоне НЕ годится),
+   *   --app-*-ink     текст и иконки (проверено на AA),
+   *   --app-*-wash    подложка бейджа.
    */
-  --accent-rgb: 52, 198, 196;
-  /*
-   * Второй янтарь: исторически в коде живут два близких значения — #34C6C4 и #34C6C4.
-   * Держим оба канала, чтобы конвертация литералов была значение-в-значение.
-   * Этап 4 сводит их в один.
-   */
-  --accent-rgb-alt: 52, 198, 196;
+  --app-danger: #C4342A;
+  --app-danger-ink: #C4342A;
+  --app-danger-wash: rgba(196, 52, 42, 0.1);
+
+  --app-ok: #0F7048;
+  --app-ok-ink: #0F7048;
+  --app-ok-wash: rgba(15, 112, 72, 0.1);
+
+  /* «Требует внимания»: ждёт подтверждения, просрочено, предупреждение. */
+  --app-attention: #C87A15;
+  --app-attention-ink: #8A5300;
+  --app-attention-on: #FFFFFF;
+  --app-attention-wash: rgba(200, 122, 21, 0.12);
+
+  /* Историческое имя — оставлено ради обратной совместимости, равно --app-attention. */
+  --app-warning: var(--app-attention);
+  /* Историческое имя: успех. Равно --app-ok. */
+  --app-success: var(--app-ok);
 
   /*
-   * Ice-vertical brand palette (premium, used in hero / trust / brand marks).
-   * GLIDE teal is primary CTA; ice-* — глубина и доверие (ассоциация с льдом / ареной).
-   * Не подменяются themeParams Telegram.
+   * Канал акцента для rgba()-литералов: rgba(var(--accent-rgb), α).
+   * Любой контейнер переопределяет акцент для своего поддерева одной строкой.
    */
-  --ice-frost: #cfe8ff;
-  --ice-mist:  #eaf4ff;
-  --ice-glow:  #6db7ff;
-  --ice-blue:  #1f6bd6;
-  --ice-deep:  #0e3a76;
-  --ice-night: #0a1f3d;
-  --ice-pure:  #f5fbff;
+  --accent-rgb: 69, 185, 187;
+  --accent-rgb-alt: 69, 185, 187;
+  --attention-rgb: 200, 122, 21;
+
+  /*
+   * AURORA — «лёд под софитами». Витринная гамма: лендинг, онбординг, hero-блоки.
+   * Намеренно НЕ используется на ежедневных рабочих экранах: градиент и стекло
+   * отлично продают и утомляют при десятом открытии за смену. Разделение языков:
+   * витрина — AURORA, рабочее место — ARENA/ICE PAPER.
+   */
+  --ice-frost: #C9E4FF;
+  --ice-mist:  #E6F1FF;
+  --ice-glow:  #6FE3C9;
+  --ice-blue:  #5AA8FF;
+  --ice-deep:  #101827;
+  --ice-night: #060A12;
+  --ice-pure:  #F4FAFF;
+  --ice-violet: #A78BFA;
+  --aurora-gradient: linear-gradient(135deg, #45B9BB 0%, #6FE3C9 55%, #5AA8FF 100%);
   /* Vertical-agnostic aliases (default ice; override per vertical_key bootstrap later) */
   --vertical-brand-frost: var(--ice-frost);
   --vertical-brand-mist: var(--ice-mist);
@@ -145,20 +174,26 @@
   --vertical-brand-deep: var(--ice-deep);
   --vertical-brand-night: var(--ice-night);
   --vertical-brand-pure: var(--ice-pure);
-  --shadow-soft:    0 1px 2px rgba(14, 58, 118, 0.06), 0 4px 12px rgba(14, 58, 118, 0.07);
-  --shadow-card:    0 2px 4px rgba(14, 58, 118, 0.06), 0 12px 32px rgba(14, 58, 118, 0.1);
-  --shadow-floating:0 6px 16px rgba(14, 58, 118, 0.12), 0 22px 48px rgba(14, 58, 118, 0.14);
-  --shadow-amber:   0 12px 32px rgba(var(--accent-rgb), 0.28), 0 4px 12px rgba(var(--accent-rgb), 0.18);
+
+  /* Тени нейтральные: подъём даёт свет, а не цветной ореол. */
+  --shadow-soft:    0 1px 2px rgba(16, 24, 28, 0.06), 0 4px 12px rgba(16, 24, 28, 0.07);
+  --shadow-card:    0 2px 4px rgba(16, 24, 28, 0.06), 0 12px 32px rgba(16, 24, 28, 0.1);
+  --shadow-floating:0 6px 16px rgba(16, 24, 28, 0.12), 0 22px 48px rgba(16, 24, 28, 0.14);
+  --shadow-amber:   0 12px 32px rgba(var(--attention-rgb), 0.24), 0 4px 12px rgba(var(--attention-rgb), 0.16);
+
   /* Service-specific row accent (left rail) — hub + schedule */
-  --svc-accent-sky: #0ea5e9;
-  --svc-accent-amber: #ea580c;
-  --svc-accent-emerald: #059669;
-  --svc-accent-violet: #7c3aed;
-  --svc-accent-rose: #e11d48;
-  --svc-accent-slate: #64748b;
-  /* Неактивные чипы / вторичные плашки (как «Свободны» / «Заняты» в расписании) */
-  --app-chip-bg: var(--tg-theme-secondary-bg-color);
-  --app-chip-text: var(--tg-theme-text-color);
+  --svc-accent-sky: #0284C7;
+  --svc-accent-amber: #C2610C;
+  --svc-accent-emerald: #047857;
+  --svc-accent-violet: #6D28D9;
+  --svc-accent-rose: #BE123C;
+  --svc-accent-slate: #5B6875;
+
+  /* Неактивные чипы / вторичные плашки — нейтральные, не тиловые */
+  --app-chip-bg: var(--glide-surface);
+  --app-chip-text: var(--glide-text);
+  --app-chip-line: var(--glide-line);
+
   --app-radius-sm: 8px;
   --app-radius-md: 12px;
   /* Full-width CTA (мини-приложения): один размер для .btn-* и .bd-btn */
@@ -178,12 +213,10 @@
 }
 
 /*
- * GLIDE recolor: CTA/nav-active accent only — surfaces (bg/secondary-bg), text and hint stay
- * neutral (untouched) per product direction; teal is dosed as accent, not a canvas color.
- * Telegram's WebApp SDK sets --tg-theme-* via inline style on <html>, which beats any :root
- * rule here. A descendant selector still wins the cascade for everything it contains — same
- * technique .ob-flow already uses locally (see mini-app-trainer-profile.css), applied on body
- * so it reaches every screen's buttons/nav without touching per-component CSS.
+ * CTA/nav-active accent lock. Telegram's WebApp SDK sets --tg-theme-* via inline style
+ * on <html>, which beats any :root rule here. A descendant selector still wins the cascade
+ * for everything it contains — поэтому бренд-кнопка фиксируется на body и достаёт до всех
+ * экранов, не трогая CSS отдельных компонентов.
  */
 body {
   --tg-theme-button-color: var(--glide-brand);
@@ -191,78 +224,105 @@ body {
 }
 
 /*
- * Dark palette — only when Mini App JS sets html.trainer-theme-dark / html.hub-is-dark
- * (Telegram WebApp.colorScheme). Do NOT use prefers-color-scheme: OS theme ≠ Telegram theme.
+ * ARENA — тёмная тема. Включается только когда Mini App JS ставит
+ * html.trainer-theme-dark / html.hub-is-dark (Telegram WebApp.colorScheme).
+ * НЕ используйте prefers-color-scheme: тема ОС ≠ тема Telegram.
+ *
+ * Нейтрали ахроматические: в #0B0C0E / #141618 / #1A1D20 / #262A2E нет зелёного.
+ * Именно это, а не оттенок тила, чинило «цветовое напряжение»: теперь фон и акцент
+ * расходятся и по светлоте, и по цвету, и тил впервые виден как акцент.
+ *
+ * Текст — мягкий белый #E6E9EA (16.0:1), а не #ffffff (18.5:1): чистый белый на почти
+ * чёрном даёт ореол вокруг букв на OLED и режет глаз вечером.
  */
 html.trainer-theme-dark,
 html.hub-is-dark,
 html.client-mini-dark,
 html.sub-root-dark {
-    /* Тёмная тема: графит + GLIDE teal CTA */
-    --tg-theme-bg-color: #0d1515;
-    --tg-theme-text-color: #ffffff;
-    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-bg-color: var(--glide-paper);
+    --tg-theme-text-color: var(--glide-text);
+    --tg-theme-hint-color: var(--glide-hint);
     --tg-theme-button-color: var(--glide-brand);
     --tg-theme-button-text-color: var(--glide-on-fill);
-    --tg-theme-secondary-bg-color: #172425;
+    --tg-theme-secondary-bg-color: var(--glide-surface);
 
-    /*
-     * Тёмные GLIDE-нейтрали — для будущих экранов, которые честно живут в тёмной теме.
-     * Онбординг-визард ими НЕ пользуется: он светлый в любой теме (см. .ob-flow — «бумажная»
-     * поверхность бренда, как белая коробка Tiffany), там переопределены собственные значения.
-     * Фон не уводим в чёрный, а текст — в белый: светлые буквы на почти чёрном «расплываются».
-     */
-    --glide-ink: var(--glide-300);
-    --glide-ink-teal: var(--glide-300);
-    --glide-paper:   #101B1C;
+    /* Тил для текста и иконок на тёмном: #57D0D2 даёт 9.2:1 на карточке. */
+    --glide-ink: #57D0D2;
+    --glide-ink-teal: #57D0D2;
+    --glide-on-deep: #E6E9EA;
+    --glide-on-deep-hint: #868D93;
+
+    --glide-paper:   #0B0C0E;
     --glide-bg:      var(--glide-paper);
-    --glide-surface: #172425;
-    --glide-card:    #1D2C2D;
-    --glide-line:    #26393B;
-    --glide-line-strong: #34494B;
-    --glide-text:    #DCE8E8;
-    --glide-hint:    #90A8A8;
+    --glide-surface: #141618;
+    --glide-card:    #1A1D20;
+    --glide-line:    #262A2E;
+    --glide-line-strong: #33383D;
+    --glide-text:    #E6E9EA;
+    --glide-hint:    #868D93;
+    --glide-brand-wash: rgba(69, 185, 187, 0.13);
     --glide-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.7);
+    --glide-shadow-cta: 0 6px 18px -10px rgba(69, 185, 187, 0.55);
 
     --app-brand-root-bg: var(--glide-bg);
     --app-brand-surface: var(--glide-surface);
 
-    --app-chip-bg: #3c3c3e;
-    --app-chip-text: #f5f5f5;
+    /* Семантика на тёмном: те же роли, поднятая светлота. */
+    --app-danger: #FF6B60;
+    --app-danger-ink: #FF6B60;
+    --app-danger-wash: rgba(255, 107, 96, 0.14);
+
+    --app-ok: #4FC98A;
+    --app-ok-ink: #5FCF94;
+    --app-ok-wash: rgba(79, 201, 138, 0.13);
+
+    --app-attention: #F0A24B;
+    --app-attention-ink: #F0A24B;
+    --app-attention-on: #2A1704;
+    --app-attention-wash: rgba(240, 162, 75, 0.14);
+    --attention-rgb: 240, 162, 75;
+
+    --app-chip-bg: var(--glide-surface);
+    --app-chip-text: var(--glide-text);
+    --app-chip-line: var(--glide-line);
+
     --app-btn-shadow-cta: 0 2px 14px rgba(0, 0, 0, 0.4);
     --app-btn-shadow-surface: 0 1px 4px rgba(0, 0, 0, 0.28);
 
-    --svc-accent-sky: #38bdf8;
-    --svc-accent-emerald: #34d399;
-    --svc-accent-slate: #94a3b8;
+    --svc-accent-sky: #45A9E8;
+    --svc-accent-amber: #E08A48;
+    --svc-accent-emerald: #4FC98A;
+    --svc-accent-violet: #A78BFA;
+    --svc-accent-rose: #F0708F;
+    --svc-accent-slate: #939BA3;
 
-    /* Ice palette — adjust for dark theme readability */
-    --ice-frost: #1c3050;
-    --ice-mist:  #15263f;
-    --ice-glow:  #4b8de0;
-    --ice-blue:  #6ea7e8;
-    --ice-deep:  #cfe2ff;
-    --ice-night: #eaf2ff;
-    --ice-pure:  #1a2940;
+    /* AURORA на тёмном — витринные токены остаются «ночными» */
+    --ice-frost: #1E2C42;
+    --ice-mist:  #141E30;
+    --ice-glow:  #6FE3C9;
+    --ice-blue:  #5AA8FF;
+    --ice-deep:  #C9E4FF;
+    --ice-night: #E9EFF7;
+    --ice-pure:  #101827;
 
     --shadow-soft:    0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
     --shadow-card:    0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
     --shadow-floating:0 6px 16px rgba(0, 0, 0, 0.5), 0 22px 48px rgba(0, 0, 0, 0.55);
 }
 
-/* Light palette lock — beats stale Telegram themeParams (often amber/blue button_color). */
+/* ICE PAPER lock — beats stale Telegram themeParams (often amber/blue button_color). */
 html.trainer-theme-light,
 html:not(.trainer-theme-dark):not(.hub-is-dark):not(.client-mini-dark):not(.sub-root-dark) {
-  --tg-theme-bg-color: #F4F2EC;
-  --tg-theme-text-color: #16292A;
-  --tg-theme-hint-color: #666666;
-  --tg-theme-button-color: #34C6C4;
-  --tg-theme-button-text-color: #062A29;
+  --tg-theme-bg-color: #F1F3F2;
+  --tg-theme-text-color: #101617;
+  --tg-theme-hint-color: #5E6B6B;
+  --tg-theme-button-color: #FFC700;
+  --tg-theme-button-text-color: #3D2F00;
+  --accent-rgb: 255, 199, 0;
+  --accent-rgb-alt: 255, 199, 0;
+  --app-cta-fill: #FFC700;
+  --app-cta-text: #3D2F00;
   --tg-theme-secondary-bg-color: #FFFFFF;
-  --accent-rgb: 52, 198, 196;
-  --accent-rgb-alt: 52, 198, 196;
-  --app-cta-fill: #34C6C4;
-  --app-cta-text: #062A29;
 }
 
 /* No default blue: links, focus ring, form accent, text caret, selection, iOS tap */
@@ -280,12 +340,16 @@ html {
   outline-offset: 2px;
 }
 
+/*
+ * Ссылки берут ТЕКСТОВЫЙ тил, а не заливочный: --app-cta-fill на белом даёт 2.2:1
+ * и как текст нечитаем. --glide-ink-teal переключается по теме (0B6E70 / 57D0D2).
+ */
 a {
-  color: var(--app-cta-fill);
+  color: var(--glide-ink-teal);
 }
 
 a:visited {
-  color: var(--app-cta-fill);
+  color: var(--glide-ink-teal);
 }
 
 input,
