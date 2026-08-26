@@ -23,6 +23,6 @@ html.trainer-theme-dark .trainer-mini-nav > button.btn-app-back {
 
 /* Light canvas lock — beats stale Telegram themeParams + old @media dark CSS in WebView cache. */
 html.trainer-theme-light body {
-  background-color: #FBFAF7 !important;
+  background-color: #F4F2EC !important;
   color: #16292A !important;
 }

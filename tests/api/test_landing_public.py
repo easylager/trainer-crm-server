@@ -89,6 +89,9 @@ async def test_landing_root_injects_config_script(monkeypatch):
     assert 'data-vertical="ice"' in body
     assert 'id="landing-config"' in body
     assert "Glide" in body
+    assert 'id="hero"' in body
+    assert "landing-live-link.css" in body
+    assert 'rel="canonical"' in body
 
 
 @pytest.mark.asyncio

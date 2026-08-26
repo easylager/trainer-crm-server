@@ -1,0 +1,740 @@
+/* =========================================================================
+   Glide landing — «Живая ссылка».
+   Hero (working booking loop) + Section 2 (progressive roadmap).
+
+   Product surfaces render in the TARGET brand system, not legacy cream/amber:
+   neutral surfaces + teal accents + dark readable text.
+   No ribbon / loop / arc / 3D / decorative brand geometry anywhere.
+   ========================================================================= */
+:root{
+  /* Landing ground — one step deeper than the product's paper, so a
+     product surface reads as a surface rather than dissolving into the page. */
+  --paper:#F4F2EC;
+  --surface:#FFFFFF;
+  --line:#E4E2DA;
+  --line-strong:#D6D3C9;
+  --ink:#16292A;
+  --hint:#5F6B6A;
+  --teal:#45B9BB;
+  --teal-ink:#0C6F6C;
+  --on-teal:#062A29;
+  --teal-wash:rgba(69,185,187,.12);
+  --shadow-surface:0 1px 3px rgba(20,40,40,.05), 0 20px 44px -28px rgba(20,40,40,.45);
+  --sans:'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --slow:cubic-bezier(.33,.9,.28,1);
+}
+/* Product tokens — the target Glide system (theme.css neutrals + brand teal),
+   scoped to anything that represents real app UI. */
+.surface,.frag{
+  --p-bg:#FBFAF7;
+  --p-card:#FFFFFF;
+  --p-line:#ECEBE6;
+  --p-line-2:#DDDCD4;
+  --p-text:#16292A;
+  --p-hint:#5F6B6A;
+  --p-accent:#45B9BB;
+  --p-on-accent:#062A29;
+  --p-accent-ink:#0C6F6C;
+  --p-wash:rgba(69,185,187,.10);
+  /* categorical service rails — cool + quiet, so teal stays the only accent */
+  --svc-a:#6E9CB8;
+  --svc-b:#8A9A9E;
+  --svc-c:#45B9BB;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;font-family:var(--sans);
+  background:var(--paper);color:var(--ink);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+
+/* ── Masthead ───────────────────────────────────────────────────────────── */
+.masthead{
+  position:sticky;top:0;z-index:800;
+  background:#FFFFFF;border-bottom:1px solid var(--line);
+  padding:0 clamp(20px,4vw,56px);height:76px;
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+}
+.logo{position:relative;overflow:hidden;width:114px;height:34px;flex-shrink:0}
+.logo img{position:absolute;width:170px;height:auto;left:-31px;top:-29px}
+.logo--fallback{width:auto;height:auto;overflow:visible;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--hint)}
+
+.cta{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--teal);color:var(--on-teal);
+  border:none;border-radius:999px;font:inherit;font-weight:700;letter-spacing:-.01em;
+  cursor:pointer;text-decoration:none;
+  transition:transform .16s var(--ease),box-shadow .16s var(--ease);
+  box-shadow:0 1px 2px rgba(20,40,40,.08);
+}
+.cta:hover{transform:translateY(-1px);box-shadow:0 6px 18px -8px rgba(69,185,187,.8)}
+.cta:active{transform:translateY(0) scale(.985)}
+.cta--sm{padding:10px 18px;font-size:14px}
+.cta--lg{padding:15px 26px;font-size:16px}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.hero{
+  --wClient:318px; --wTrainer:384px; --gapS:30px;
+  padding:clamp(34px,5vh,64px) clamp(20px,4vw,56px) clamp(44px,7vh,80px);
+  display:grid;
+  /* Two honest columns. The surfaces column is exactly one surface wide and the
+     trainer sits flush to the page's right margin — so the space between the
+     text and the screen is bounded margin, not reserved emptiness. */
+  grid-template-columns:minmax(300px,1fr) var(--wTrainer);
+  gap:clamp(24px,3vw,56px);
+  align-items:start;max-width:1560px;margin:0 auto;
+  perspective:2200px;
+  perspective-origin:70% 45%;
+}
+.surfaces{position:relative;transform-style:preserve-3d}
+.col--trainer{position:relative;z-index:2}
+
+/* Physical continuity: the client's screen is not inserted next to the
+   trainer's — it is drawn out from behind it, like a second card off a stack.
+   At rest it has zero footprint and is literally hidden behind the surface. */
+/* Resting position is fully behind the trainer's surface (it is narrower, so
+   it hides completely). It settles into a clean gap beside it — the overlap
+   belongs to the movement, not to the final composition. */
+.col--client{
+  position:absolute;top:0;right:calc(var(--wTrainer) + var(--gapS));
+  width:var(--wClient);z-index:1;
+  transform:translate3d(calc(var(--wClient) + var(--gapS) + 30px), 14px, -100px) scale(.93);
+  opacity:0;pointer-events:none;
+  transition:transform 1.05s var(--slow),opacity .6s var(--slow);
+}
+.hero.is-live .col--client{
+  transform:none;opacity:1;pointer-events:auto;
+  transition:transform 1.05s var(--slow),opacity .55s var(--slow);
+}
+.eyebrow{margin:0 0 22px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight:700;letter-spacing:-.035em;max-width:11ch}
+.lede{margin:0 0 30px;max-width:44ch;font-size:clamp(15px,1.1vw,17px);line-height:1.62;color:var(--hint)}
+.invite{margin:18px 0 0;max-width:34ch;font-size:14px;line-height:1.55;color:var(--hint)}
+.invite b{color:var(--ink);font-weight:600}
+
+/* At rest the dots would be five unexplained grey marks in a finished
+   composition — they only exist once there is a sequence to track. */
+.beats{
+  display:flex;align-items:center;gap:9px;margin-top:36px;min-height:22px;
+  opacity:0;transition:opacity .6s var(--slow);
+}
+.hero.is-running .beats{opacity:1}
+.beat{width:7px;height:7px;border-radius:50%;background:var(--line-strong);transition:background .3s var(--ease),transform .3s var(--ease)}
+.beat.is-done{background:var(--teal-ink);opacity:.35}
+.beat.is-on{background:var(--teal);transform:scale(1.5)}
+.replay{
+  margin-left:8px;border:none;background:none;padding:4px 2px;font:inherit;font-size:13px;font-weight:600;
+  color:var(--teal-ink);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s var(--ease);
+  text-decoration:underline;text-underline-offset:3px;
+}
+.replay.is-shown{opacity:1;pointer-events:auto}
+
+/* ══ THE PHYSICAL LAYER ═══════════════════════════════════════════════════
+   The 3D here is not a new object — it is the product screens given real
+   mass: perspective, weight, a light source, and a contact shadow on the
+   paper. It performs once on arrival, then settles flat and stays quiet.
+   Two nested transforms so they never fight:
+     .col     → arrival + pointer parallax (the object in the room)
+     .surface → focus depth during beats (which object is acting)
+   ═════════════════════════════════════════════════════════════════════════ */
+.col{display:flex;flex-direction:column;min-width:0}
+
+/* The stage is the physical object. The label above it is page chrome and
+   never rotates with it — that was what threw the heading across the surface. */
+.col__stage{
+  position:relative;transform-style:preserve-3d;
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));
+  will-change:transform;
+}
+
+/* Arrival — the whole surface enters as one object. Restrained on purpose:
+   enough depth to read as physical, never enough to make the UI unreadable
+   in flight. Copy resolves as one block, not as six fragments. */
+@keyframes land{
+  from{ opacity:0; transform:translate3d(0,34px,-190px) rotateX(6.5deg); }
+  to  { opacity:1; transform:translate3d(0,0,0) rotateX(0deg); }
+}
+@keyframes rise{ from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
+
+.hero--enter .col--trainer .col__stage{ animation:land 1.15s var(--slow) .22s both }
+.hero--enter .hero__copy{ animation:rise 1s var(--slow) .04s both }
+
+/* Contact shadow: sits in the same plane as the surface so it can never
+   detach from it. Scales and softens with focus depth. */
+.col__stage::after{
+  content:'';position:absolute;left:7%;right:7%;bottom:-14px;height:26px;
+  border-radius:50%;
+  background:radial-gradient(closest-side, rgba(20,40,40,.22), transparent 76%);
+  filter:blur(10px);
+  opacity:var(--csh,.5);transform:scale(var(--cshs,1));
+  transition:opacity .7s var(--slow),transform .7s var(--slow);
+  pointer-events:none;z-index:-1;
+}
+.col__label{display:block;margin:0 0 10px 2px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--hint)}
+.surface{
+  margin:0;position:relative;background:var(--p-bg);
+  border:1px solid var(--line-strong);border-radius:18px;
+  box-shadow:var(--shadow-surface);overflow:hidden;
+  height:min(592px,74vh);display:flex;flex-direction:column;
+  font-size:14px;color:var(--p-text);
+  transform:translateZ(var(--tz,0px)) scale(var(--sc,1));
+  transition:transform .7s var(--slow),box-shadow .7s var(--slow),opacity .7s var(--slow);
+}
+/* Specular sheen — one light source, moving with the pointer. Very low
+   opacity: this should be felt as material, never seen as an effect. */
+.surface::after{
+  content:'';position:absolute;inset:0;z-index:70;pointer-events:none;
+  border-radius:inherit;
+  background:radial-gradient(
+    62% 46% at var(--lx,30%) var(--ly,8%),
+    rgba(255,255,255,.55) 0%,
+    rgba(255,255,255,.13) 38%,
+    transparent 72%);
+  opacity:var(--sheen,.42);
+  mix-blend-mode:soft-light;
+  transition:opacity .7s var(--slow);
+}
+/* (The former "lit rim" hairline was removed — in flight it detached from the
+   surface and read as a stray connector line. Material now comes from the
+   sheen and the contact shadow alone.) */
+/* Cinematography, not spectacle: during a beat the surface that isn't acting
+   recedes a little, so the eye is led to where the product is doing something.
+   Depth of field by weight and scale — no blur, no glass, no parallax. */
+.col{transition:opacity .7s var(--slow)}
+.col--rest{opacity:.78}
+/* Focus is depth, not scale: the acting surface comes forward in the room and
+   its contact shadow spreads; the other sinks back and its shadow tightens. */
+.col--rest .surface{
+  --tz:-26px;--sheen:.22;
+  box-shadow:0 1px 2px rgba(20,40,40,.04), 0 12px 26px -20px rgba(20,40,40,.4);
+}
+.col--rest .col__stage{--csh:.32;--cshs:.95}
+.col--lead .surface{
+  --tz:24px;--sheen:.5;
+  box-shadow:0 3px 8px rgba(20,40,40,.06), 0 44px 72px -34px rgba(20,40,40,.55);
+}
+.col--lead .col__stage{--csh:.72;--cshs:1.06}
+.col__label{transition:color .7s var(--slow)}
+.col--lead .col__label{color:var(--teal-ink)}
+.demo-pill{
+  position:absolute;top:10px;right:10px;z-index:60;
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--p-hint);background:rgba(255,255,255,.86);
+  border:1px solid var(--p-line-2);border-radius:999px;padding:3px 8px;
+}
+
+/* ══ CLIENT SURFACE — bot chat with the booking mini-app over it ══════════ */
+.chat{flex:1;min-height:0;overflow:hidden;background:#EEEDE8;display:flex;flex-direction:column}
+.chat__head{
+  flex-shrink:0;background:#FFFFFF;border-bottom:1px solid var(--p-line);
+  padding:11px 62px 11px 14px;display:flex;align-items:center;gap:10px;
+}
+.chat__av{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  background:var(--p-wash);border:1px solid var(--p-line-2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:var(--p-accent-ink);
+}
+.chat__who{display:flex;flex-direction:column;min-width:0}
+.chat__name{font-size:14px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat__sub{font-size:11px;color:var(--p-hint);line-height:1.25;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat__body{flex:1;min-height:0;overflow-y:auto;padding:12px 12px 16px;display:flex;flex-direction:column;gap:9px;scroll-behavior:smooth}
+.chat__body::-webkit-scrollbar{width:0}
+.chat__body > :first-child{margin-top:auto}
+.divider{
+  align-self:center;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--p-hint);background:rgba(255,255,255,.8);border-radius:999px;padding:3px 10px;margin:2px 0;
+}
+.bubble{
+  align-self:flex-start;max-width:92%;background:var(--p-card);border-radius:12px;
+  border:1px solid var(--p-line);box-shadow:0 1px 1px rgba(20,40,40,.04);
+  padding:9px 12px 8px;font-size:13px;line-height:1.45;color:var(--p-text);
+}
+.bubble b{font-weight:700}
+.bubble__meta{display:block;margin-top:5px;font-size:10px;color:var(--p-hint);opacity:.75;text-align:right}
+.bubble__rows{display:block;margin-top:6px;font-size:12.5px;line-height:1.55}
+.bubble--ok{border-left:2px solid var(--p-accent)}
+.enterable{opacity:0;transform:translateY(10px)}
+.enterable.is-in{opacity:1;transform:none;transition:opacity .34s var(--ease),transform .34s var(--ease)}
+
+.mini{
+  position:absolute;inset:0;z-index:40;background:var(--p-bg);
+  display:flex;flex-direction:column;transform:translateY(0);
+  transition:transform .5s var(--slow);
+}
+.mini.is-closed{transform:translateY(101%)}
+.mini__grab{flex-shrink:0;padding:8px 0 4px;display:flex;justify-content:center}
+.mini__grab i{display:block;width:36px;height:4px;border-radius:3px;background:var(--p-line-2)}
+.mini__head{flex-shrink:0;padding:6px 14px 12px}
+.mini__title{margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em;line-height:1.25}
+.mini__sub{margin:4px 0 0;font-size:12.5px;color:var(--p-hint)}
+.mini__body{flex:1;min-height:0;overflow-y:auto;padding:0 12px 14px}
+.mini__body::-webkit-scrollbar{width:0}
+
+/* real book.html slot list */
+.day-title{
+  font-size:12px;font-weight:700;color:var(--p-hint);
+  margin:10px 0 10px 2px;text-transform:uppercase;letter-spacing:.07em;
+}
+.slot-card{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:13px 14px;margin-bottom:8px;border-radius:12px;
+  background:var(--p-card);border:1px solid var(--p-line);
+  width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;
+  transition:border-color .2s var(--ease),transform .2s var(--ease),box-shadow .2s var(--ease);
+}
+.slot-card:hover{border-color:var(--p-accent);transform:translateY(-1px);box-shadow:0 4px 14px -8px rgba(69,185,187,.9)}
+.slot-card:active{transform:scale(.985)}
+.slot-card[disabled]{opacity:.5;cursor:default;pointer-events:none;background:transparent}
+/* the slot the client just chose */
+.slot-card--taken{
+  border-color:var(--p-accent);background:var(--p-wash);
+  transform:scale(.985);
+}
+.slot-card-body{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0}
+.slot-time{font-weight:600;font-size:15px;letter-spacing:-.01em;color:var(--p-text)}
+.slot-venue-pill{font-size:12px;font-weight:500;line-height:1.35;color:var(--p-hint)}
+.slot-arrow{font-size:15px;color:var(--p-accent-ink);flex-shrink:0}
+.slot-taken{font-size:11px;font-weight:600;color:var(--p-hint);letter-spacing:.03em}
+
+/* ══ TRAINER SURFACE — real schedule screen ═══════════════════════════════ */
+.sched{
+  flex:1;min-height:0;overflow-y:auto;padding:14px 14px 18px;background:var(--p-bg);
+  display:flex;flex-direction:column;
+}
+.sched::-webkit-scrollbar{width:0}
+/* the week summary always rests on the base of the surface */
+.s-foot{margin-top:auto}
+.sched__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sched__title{margin:0;font-size:18px;font-weight:600;letter-spacing:-.02em}
+.sched__week{font-size:11.5px;color:var(--p-hint)}
+/* Real hub affordance: trainer-home.html:332, title «Поделиться ссылкой на
+   онлайн-запись» → opens the «Пригласительная ссылка» sheet. */
+.sched__share{
+  flex-shrink:0;display:inline-flex;align-items:center;gap:7px;
+  border:1px solid var(--p-accent);border-radius:999px;
+  background:var(--p-wash);color:var(--p-accent-ink);
+  padding:7px 13px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;
+  transition:transform .16s var(--ease),filter .16s var(--ease),box-shadow .16s var(--ease);
+}
+.sched__share:hover{transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(69,185,187,.85)}
+.sched__share:active{transform:scale(.97)}
+.sched__share svg{width:14px;height:14px;flex-shrink:0}
+
+/* «Пригласительная ссылка» — real modal (trainer-home.html:732-749), shown
+   docked over the surface for the length of one beat. */
+.invite-sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:80;
+  background:var(--p-card);
+  border-top:1px solid var(--p-line-2);
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -12px 34px -18px rgba(20,40,40,.45);
+  padding:10px 16px 18px;
+  transform:translateY(101%);opacity:0;
+  transition:transform .5s var(--slow),opacity .3s var(--ease);
+}
+.invite-sheet.is-up{transform:translateY(0);opacity:1}
+.invite-sheet__grab{width:38px;height:4px;border-radius:3px;background:var(--p-line-2);margin:0 auto 12px}
+.invite-sheet__title{margin:0 0 10px;font-size:16px;font-weight:600;letter-spacing:-.02em}
+.invite-sheet__link{
+  font-size:12.5px;color:var(--p-hint);background:var(--p-bg);
+  border:1px solid var(--p-line);border-radius:10px;padding:10px 12px;margin-bottom:10px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.invite-sheet__btn{
+  width:100%;border:none;border-radius:12px;padding:12px;
+  font:inherit;font-size:14px;font-weight:700;
+  background:var(--p-accent);color:var(--p-on-accent);
+  transition:filter .3s var(--ease);
+}
+.invite-sheet__btn.is-done{filter:saturate(.55) brightness(1.06)}
+.sched__chips{display:flex;gap:6px;margin-bottom:14px}
+.chip{
+  font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--p-line-2);background:var(--p-card);color:var(--p-hint);
+}
+.chip--on{background:var(--p-wash);border-color:var(--p-accent);color:var(--p-accent-ink)}
+
+/* real schedule.html slot card: .slot-main / .slot-time / .slot-venue / .slot-client-hint / .slot-status */
+.s-card{
+  position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 14px 12px 19px;margin-bottom:8px;border-radius:13px;
+  background:var(--p-card);border:1px solid var(--p-line);
+  transition:background .5s var(--slow),border-color .5s var(--slow),box-shadow .5s var(--slow);
+}
+.s-card::before{content:'';position:absolute;left:8px;top:11px;bottom:11px;width:3px;border-radius:2px;background:var(--svc-b);transition:background .5s var(--slow)}
+.s-card--a::before{background:var(--svc-a)}
+.s-card--free::before{background:var(--p-line-2)}
+.s-card--free{background:transparent;border-style:dashed;border-color:var(--p-line-2)}
+.s-card--new{background:var(--p-wash);border-color:var(--p-accent)}
+.s-card--new::before{background:var(--svc-c)}
+/* One slow pass of light across the row at the moment it fills — the single
+   most important state change in the whole page gets one deliberate accent. */
+.s-card--sweep{overflow:hidden}
+.s-card--sweep::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.85) 50%,transparent 80%);
+  transform:translateX(-110%);
+  animation:sweep 1.15s var(--slow) .05s 1;
+}
+@keyframes sweep{ to{ transform:translateX(110%); } }
+.s-main{min-width:0;flex:1}
+.s-time{font-size:14.5px;font-weight:700;letter-spacing:-.02em;color:var(--p-text);line-height:1.2}
+.s-client{font-size:13.5px;font-weight:600;color:var(--p-text);margin-top:3px;line-height:1.25}
+.s-client--muted{color:var(--p-hint);font-weight:600}
+.s-venue{font-size:11.5px;color:var(--p-hint);margin-top:3px;line-height:1.3}
+.s-status{
+  flex-shrink:0;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  padding:4px 9px;border-radius:999px;border:1px solid var(--p-line-2);
+  color:var(--p-hint);background:var(--p-bg);
+  transition:background .5s var(--slow),color .5s var(--slow),border-color .5s var(--slow);
+}
+.s-status--free{color:var(--p-accent-ink);border-color:var(--p-accent);background:var(--p-wash)}
+.s-foot{
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--p-line);
+  font-size:12px;color:var(--p-hint);display:flex;justify-content:space-between;gap:10px;
+}
+.s-foot b{color:var(--p-text);font-weight:700;transition:color .4s var(--ease)}
+.s-foot b.is-tick{color:var(--p-accent-ink)}
+
+/* action inbox — «Сейчас важно» */
+.inbox{overflow:hidden;max-height:0;opacity:0;margin-bottom:0;transition:max-height .48s var(--slow),opacity .34s var(--ease),margin .48s var(--slow)}
+.inbox.is-shown{max-height:190px;opacity:1;margin-bottom:14px}
+.inbox__card{border-radius:15px;border:1px solid var(--p-accent);background:var(--p-card);box-shadow:0 4px 16px -10px rgba(69,185,187,.9);overflow:hidden}
+.inbox__head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px 7px}
+.inbox__title{margin:0;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--p-hint)}
+.inbox__count{font-size:11.5px;font-weight:700;color:var(--p-on-accent);padding:2px 8px;border-radius:999px;background:var(--p-wash)}
+.inbox__list{list-style:none;margin:0;padding:0 7px 8px}
+.inbox__item{display:flex;align-items:flex-start;gap:10px;padding:9px 7px}
+.inbox__dot{flex-shrink:0;width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--p-accent);box-shadow:0 0 0 3px var(--p-wash)}
+.inbox__body{flex:1;min-width:0}
+.inbox__itemTitle{margin:0 0 3px;font-size:13.5px;font-weight:650;line-height:1.35;letter-spacing:-.02em;color:var(--p-text)}
+.inbox__itemSub{margin:0;font-size:11.5px;line-height:1.4;color:var(--p-hint)}
+.inbox__btn{
+  flex-shrink:0;border:none;border-radius:999px;padding:7px 13px;font:inherit;font-size:12px;font-weight:700;
+  background:var(--p-accent);color:var(--p-on-accent);cursor:pointer;white-space:nowrap;
+  transition:transform .14s var(--ease),filter .14s var(--ease);
+}
+.inbox__btn:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.inbox__btn:active{transform:scale(.97)}
+
+/* Telegram notification over the schedule */
+.notif{
+  position:absolute;left:8px;right:8px;top:8px;z-index:50;
+  background:rgba(255,255,255,.98);border:1px solid var(--p-line-2);border-radius:14px;
+  box-shadow:0 12px 32px -14px rgba(20,40,40,.5);padding:11px 13px;
+  transform:translateY(calc(-100% - 16px));opacity:0;
+  transition:transform .5s var(--slow),opacity .3s var(--ease);
+}
+.notif.is-in{transform:translateY(0);opacity:1}
+.notif__title{margin:0 0 5px;font-size:13px;font-weight:700;line-height:1.3;color:var(--p-text)}
+.notif__rows{margin:0;font-size:12px;line-height:1.5;color:var(--p-text)}
+.notif__note{margin:7px 0 0;font-size:11.5px;font-style:italic;line-height:1.45;color:var(--p-hint)}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SECTION 2 — «Всё рабочее пространство тренера — в одном месте»
+   Progressive roadmap: scroll advances one capability at a time.
+   ══════════════════════════════════════════════════════════════════════════ */
+.rm{position:relative;background:var(--paper);border-top:1px solid var(--line)}
+.rm__sticky{position:sticky;top:76px;height:calc(100vh - 76px);min-height:600px;display:flex;align-items:center;overflow:hidden}
+.rm__inner{
+  width:100%;max-width:1560px;margin:0 auto;
+  padding:0 clamp(20px,4vw,56px);
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,470px);
+  gap:clamp(32px,5vw,84px);align-items:center;
+}
+.rm__eyebrow{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+.rm__title{margin:0 0 26px;font-size:clamp(24px,2vw,31px);line-height:1.16;font-weight:700;letter-spacing:-.03em;max-width:24ch}
+
+/* roadmap rail */
+.rm__list{list-style:none;margin:0;padding:0;position:relative}
+.rm__track{position:absolute;left:11px;top:9px;bottom:50px;width:2px;background:var(--line-strong);border-radius:2px}
+.rm__fill{position:absolute;left:0;top:0;width:100%;height:0;background:var(--teal);border-radius:2px;transition:height .5s var(--slow)}
+/* Fixed height per item: the description reveals in place, so the list never
+   reflows and neighbours never shift. Movement is the enemy of "clean" here. */
+.rm__item{
+  position:relative;padding:0 0 0 40px;height:64px;
+  opacity:.3;transition:opacity .55s var(--slow);
+}
+.rm__item.is-past{opacity:.42}
+.rm__item.is-on{opacity:1}
+.rm__dot{
+  position:absolute;left:5px;top:4px;width:14px;height:14px;border-radius:50%;
+  background:var(--paper);border:2px solid var(--line-strong);
+  transition:border-color .5s var(--slow),background .5s var(--slow),transform .5s var(--slow);
+}
+.rm__item.is-past .rm__dot{border-color:var(--teal);background:var(--teal)}
+.rm__item.is-on .rm__dot{border-color:var(--teal);background:var(--paper);transform:scale(1.25)}
+.rm__name{
+  margin:0;font-size:16px;font-weight:700;letter-spacing:-.02em;line-height:1.3;color:var(--ink);
+  transition:color .5s var(--slow);
+}
+/* Absolute: the description can never push a neighbour, at any copy length. */
+.rm__desc{
+  position:absolute;left:40px;right:8px;top:25px;margin:0;
+  font-size:12.5px;line-height:1.42;color:var(--hint);max-width:52ch;
+  opacity:0;transform:translateY(-3px);
+  transition:opacity .45s var(--ease),transform .45s var(--slow);
+}
+.rm__item.is-on .rm__desc{opacity:1;transform:none}
+
+/* fragment viewport */
+.rm__stage{
+  position:relative;
+  height:clamp(400px,60vh,530px);
+  border-radius:18px;border:1px solid var(--line-strong);
+  background:var(--p-bg);box-shadow:var(--shadow-surface);overflow:hidden;
+}
+.frag{
+  position:absolute;inset:0;padding:18px 18px 20px;overflow:hidden;
+  background:var(--p-bg);color:var(--p-text);font-size:14px;
+  opacity:0;transform:translateY(10px);pointer-events:none;
+  transition:opacity .55s var(--slow),transform .55s var(--slow);
+}
+.frag.is-on{opacity:1;transform:none}
+.frag__cap{
+  font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--p-hint);margin:0 0 12px;
+}
+.frag__screen{font-size:16px;font-weight:600;letter-spacing:-.02em;margin:0 0 12px}
+
+/* — clients list (real .client-card) — */
+.c-card{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;margin-bottom:8px;
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;
+}
+.c-av{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  background:var(--p-wash);color:var(--p-accent-ink);
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+}
+.c-main{flex:1;min-width:0}
+.c-nameRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.c-name{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.c-pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+.c-pill--gray{background:var(--p-bg);color:var(--p-hint);border:1px solid var(--p-line-2)}
+.c-meta{font-size:11.5px;color:var(--p-hint);margin-top:2px}
+.c-arrow{color:var(--p-hint);font-size:14px;flex-shrink:0}
+
+/* — dossier (real fields) — */
+.d-sec{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:13px 14px;margin-bottom:9px}
+.d-secTitle{font-size:12.5px;font-weight:700;letter-spacing:-.01em;margin:0 0 11px}
+.d-field{margin-bottom:11px}
+.d-field:last-child{margin-bottom:0}
+.d-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p-hint);margin:0 0 3px}
+.d-val{font-size:13px;line-height:1.4;margin:0}
+.d-val--empty{color:var(--p-hint);opacity:.7}
+.d-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.d-tag{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+
+/* — catalog card (real .trainer-list-card) — */
+.t-card{display:flex;align-items:center;gap:12px;padding:11px;background:var(--p-card);border:1px solid var(--p-line);border-radius:14px;margin-bottom:9px}
+.t-photo{width:56px;height:56px;border-radius:12px;flex-shrink:0;background:linear-gradient(150deg,var(--p-wash),var(--p-line));border:1px solid var(--p-line-2)}
+.t-info{flex:1;min-width:0}
+.t-name{font-size:14.5px;font-weight:700;letter-spacing:-.02em}
+.t-meta{font-size:11.5px;color:var(--p-hint);margin-top:3px;line-height:1.35}
+.t-badge{display:inline-block;margin-top:6px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+
+/* — passes & certificates (real trainer-pass-products / client-passes) — */
+.p-card{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:13px 14px;margin-bottom:9px}
+.p-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.p-name{font-size:14px;font-weight:700;letter-spacing:-.02em}
+.p-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--p-wash);color:var(--p-accent-ink)}
+.p-meta{font-size:11.5px;color:var(--p-hint);margin-top:4px}
+.p-left{display:flex;align-items:baseline;gap:7px;margin-top:10px}
+.p-leftNum{font-size:22px;font-weight:700;letter-spacing:-.03em;color:var(--p-accent-ink);line-height:1}
+.p-leftLbl{font-size:11.5px;color:var(--p-hint)}
+.p-bar{display:block;margin-top:9px;height:5px;border-radius:3px;background:var(--p-line);overflow:hidden}
+.p-barFill{display:block;height:100%;border-radius:inherit;background:var(--p-accent)}
+.p-nom{font-size:19px;font-weight:700;letter-spacing:-.03em;margin-top:8px}
+
+/* — referral (real trainer-referral) — */
+.r-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.r-tile{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:12px 10px;text-align:center}
+.r-val{display:block;font-size:20px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.r-val--accent{color:var(--p-accent-ink)}
+.r-lbl{display:block;font-size:11px;color:var(--p-hint);margin-top:4px}
+.r-link{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;
+  padding:11px 13px;margin-bottom:10px;
+}
+.r-linkVal{font-size:12.5px;color:var(--p-hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-copy{flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--p-accent-ink)}
+.r-rules{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:12px 14px}
+.r-rule{display:flex;gap:9px;font-size:12px;line-height:1.45;margin-bottom:7px}
+.r-rule:last-child{margin-bottom:0}
+.r-ruleN{flex-shrink:0;font-weight:700;color:var(--p-accent-ink)}
+
+/* — analytics (real trend bars + load ring) — */
+.a-title{font-size:12px;font-weight:700;letter-spacing:-.01em;margin:0 0 10px;color:var(--p-text)}
+.a-card{background:var(--p-card);border:1px solid var(--p-line);border-radius:13px;padding:14px;margin-bottom:9px}
+.a-bars{display:flex;align-items:flex-end;gap:9px;height:88px}
+.a-barWrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
+.a-barTrack{flex:1;width:100%;display:flex;align-items:flex-end}
+.a-bar{width:100%;border-radius:5px 5px 0 0;background:var(--p-line-2);transition:height .8s var(--slow)}
+.a-bar.is-active{background:var(--p-accent)}
+.a-barLbl{font-size:10px;color:var(--p-hint)}
+.a-foot{font-size:11px;color:var(--p-hint);margin:9px 0 0}
+.a-load{display:flex;align-items:center;gap:16px}
+.a-ring{
+  width:74px;height:74px;border-radius:50%;flex-shrink:0;
+  background:conic-gradient(var(--p-accent) calc(var(--pct,0) * 1%), var(--p-line) 0);
+  display:flex;align-items:center;justify-content:center;
+}
+.a-ringIn{
+  width:56px;height:56px;border-radius:50%;background:var(--p-card);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;letter-spacing:-.02em;
+}
+.a-loadCopy{min-width:0}
+.a-kLabel{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p-hint);margin:0 0 4px}
+.a-kVal{font-size:17px;font-weight:700;letter-spacing:-.02em;margin:0}
+.a-kSub{font-size:11.5px;color:var(--p-hint);margin:4px 0 0}
+
+/* closing assembly */
+.rm__done{
+  margin-top:18px;display:flex;flex-wrap:wrap;gap:6px;
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .6s var(--slow),transform .6s var(--slow);
+}
+.rm__done.is-on{opacity:1;transform:none;pointer-events:auto}
+.rm__doneChip{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--teal-wash);color:var(--teal-ink)}
+.rm__doneLine{
+  margin:16px 0 0;font-size:14.5px;line-height:1.5;color:var(--ink);max-width:40ch;font-weight:500;
+  opacity:0;transform:translateY(8px);transition:opacity .6s var(--slow) .1s,transform .6s var(--slow) .1s;
+}
+.rm__doneLine.is-on{opacity:1;transform:none}
+
+/* mobile-only roadmap story */
+.rmm{display:none}
+
+/* ── Планируемые обновления ────────────────────────────────────────────────
+   Deliberately quiet: hairlines, no fills, no product UI. None of this ships
+   yet, so it must not carry the visual weight of something that does.        */
+.soon{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,8vh,84px) clamp(20px,4vw,56px) clamp(60px,9vh,96px);
+}
+.soon__inner{max-width:1560px;margin:0 auto;display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:clamp(28px,5vw,72px)}
+.soon__eyebrow{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+.soon__title{margin:0;font-size:clamp(21px,1.7vw,26px);line-height:1.24;font-weight:700;letter-spacing:-.02em;max-width:16ch}
+.soon__list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line);max-width:760px}
+.soon__item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:baseline;
+  padding:17px 0;border-bottom:1px solid var(--line);
+  opacity:0;transform:translateY(8px);
+  transition:opacity .6s var(--slow),transform .6s var(--slow);
+}
+.soon.is-in .soon__item{opacity:1;transform:none}
+.soon.is-in .soon__item:nth-child(2){transition-delay:.06s}
+.soon.is-in .soon__item:nth-child(3){transition-delay:.12s}
+.soon.is-in .soon__item:nth-child(4){transition-delay:.18s}
+.soon__name{margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em;color:var(--ink)}
+.soon__desc{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:var(--hint);max-width:56ch}
+.soon__mark{
+  font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--hint);border:1px solid var(--line-strong);border-radius:999px;
+  padding:4px 10px;white-space:nowrap;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width:1180px){
+  .hero{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:34px}
+  .hero__copy{grid-column:1/-1}
+  h1{max-width:16ch}
+  .lede{max-width:56ch}
+  .rm__inner{grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:36px}
+  .rm__title{margin-bottom:28px;max-width:18ch}
+}
+@media (max-width:860px){
+  .masthead{height:64px;padding:0 18px}
+  .masthead .cta--sm{padding:9px 15px;font-size:13px}
+  .hero{grid-template-columns:1fr;padding:26px 18px 36px;row-gap:0}
+  .hero__copy{grid-column:auto}
+  /* One surface at a time; the client column is a normal block that simply
+     isn't rendered until the flow brings it in. */
+  .surfaces{display:block;position:static}
+  .col--client{
+    position:static;width:auto;right:auto;top:auto;
+    transform:none;opacity:1;pointer-events:auto;transition:none;
+  }
+  .hero:not(.is-live) .col--client{display:none}
+  h1{max-width:none;font-size:clamp(32px,8.5vw,44px)}
+  .lede{max-width:none;margin-bottom:24px}
+  .cta--lg{width:100%;padding:16px 22px}
+  /* the row is invisible at rest, so its reserved space must read as ordinary
+     rhythm rather than a hole above the surface */
+  .beats{margin-top:22px;margin-bottom:8px;min-height:18px}
+  .surface{height:min(548px,66vh)}
+  .hero[data-side="client"]  .col--trainer{display:none}
+  .hero[data-side="trainer"] .col--client{display:none}
+  /* One surface at a time, so there is nothing to be deeper *than*. Keep the
+     arrival, drop the parallax and the focus depth. */
+  .hero{perspective:1400px;perspective-origin:50% 30%}
+  .col--rest .surface,.col--lead .surface{--tz:0px}
+  .col--rest{opacity:1}
+  .col__stage::after{--csh:.4;--cshs:1}
+  .surface::after{opacity:.3}
+  .notif--mobile{position:fixed;left:12px;right:12px;top:72px;z-index:900;cursor:pointer}
+
+  /* Section 2 becomes a linear vertical story — no sticky, no cross-fade. */
+  .rm__sticky{display:none}
+  .rmm{display:block;padding:40px 18px 52px}
+  .rmm__eyebrow{margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+  .rmm__title{margin:0 0 30px;font-size:clamp(26px,7.5vw,34px);line-height:1.12;font-weight:700;letter-spacing:-.03em}
+  .rmm__list{list-style:none;margin:0;padding:0;position:relative}
+  .rmm__track{position:absolute;left:7px;top:10px;bottom:10px;width:2px;background:var(--line-strong);border-radius:2px}
+  .rmm__fill{position:absolute;left:0;top:0;width:100%;height:0;background:var(--teal);border-radius:2px;transition:height .6s var(--slow)}
+  .rmm__item{position:relative;padding:0 0 0 30px;margin-bottom:34px}
+  .rmm__dot{position:absolute;left:1px;top:5px;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--line-strong);transition:border-color .5s var(--slow),background .5s var(--slow)}
+  .rmm__item.is-in .rmm__dot{border-color:var(--teal);background:var(--teal)}
+  .rmm__name{margin:0;font-size:17px;font-weight:700;letter-spacing:-.02em}
+  .rmm__desc{margin:5px 0 0;font-size:13.5px;line-height:1.5;color:var(--hint)}
+  /* Auto-height: a mobile fragment must never be clipped — the whole point is
+     that the visitor can read the real screen. */
+  .rmm__stage{
+    margin-top:14px;border-radius:16px;border:1px solid var(--line-strong);
+    background:var(--p-bg);box-shadow:var(--shadow-surface);overflow:hidden;
+    position:relative;
+    opacity:0;transform:translateY(12px);
+    transition:opacity .6s var(--slow),transform .6s var(--slow);
+  }
+  .rmm__item.is-in .rmm__stage{opacity:1;transform:none}
+  .rmm__stage .frag{opacity:1;transform:none;position:relative;inset:auto;padding:16px}
+  .soon{padding:44px 18px 56px}
+  .soon__inner{grid-template-columns:1fr;gap:22px}
+  .soon__title{max-width:none}
+  .soon__item{grid-template-columns:1fr;gap:8px}
+  .soon__mark{justify-self:start}
+  .rmm__done{margin-top:8px;padding-left:30px}
+  .rmm__doneChips{display:flex;flex-wrap:wrap;gap:7px}
+  .rmm__doneLine{margin:18px 0 0;font-size:15px;line-height:1.55;font-weight:500}
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    transition-duration:.01ms !important;animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;scroll-behavior:auto !important;
+  }
+  .enterable{opacity:1;transform:none}
+  /* the roadmap must stay readable with no motion at all */
+  .rm__item{opacity:1}
+  .rm__desc{opacity:1;transform:none}
+  .rmm__stage{opacity:1;transform:none}
+  .soon__item{opacity:1;transform:none}
+  .s-card--sweep::after{display:none}
+  /* No perspective, no tilt, no arrival, no moving light. */
+  .hero{perspective:none}
+  .col__stage{transform:none !important;animation:none !important}
+  .hero__copy{animation:none !important}
+  .col--rest{opacity:1}
+  .col--rest .surface,.col--lead .surface{--tz:0px;--sc:1}
+  .surface::after{opacity:.28}
+  .col__stage::after{--csh:.45;--cshs:1}
+}

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-trainer-theme.js?v=202608266"></script>
   <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
   <script>
     (function () {
@@ -20,9 +20,9 @@
   </script>
   <script src="mini-app-telegram-chrome.js?v=202608265"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="theme.css?v=202608269" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -53,7 +53,7 @@
       align-items: center; justify-content: center;
       background:
         radial-gradient(ellipse 130% 80% at 50% 38%, rgba(52, 198, 196, 0.18) 0%, rgba(52, 198, 196, 0.06) 45%, transparent 68%),
-        var(--tg-theme-bg-color, #FBFAF7);
+        var(--tg-theme-bg-color, #F4F2EC);
       will-change: opacity, transform;
     }
     #hubSplash.hub-splash--out {
@@ -265,7 +265,7 @@
         if (typeof tg.expand  === 'function') tg.expand();
         /* Sync header/bg color with our splash bg — prevents color flash on app open */
         var isDark = document.documentElement.classList.contains('hub-is-dark');
-        var bgHex  = isDark ? '#1c1c1c' : '#FBFAF7';
+        var bgHex  = isDark ? '#0d1515' : '#F4F2EC';
         try { if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex); } catch(e) {}
         try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
         try { if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex); } catch(e) {}

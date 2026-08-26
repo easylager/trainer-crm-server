@@ -23,13 +23,13 @@
       padding: 16px;
       padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 40px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #FBFAF7;
+      --tg-theme-bg-color: #F4F2EC;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
       --tg-theme-secondary-bg-color: #FFFFFF;
     }
     body.rules-page.rules-theme-dark {
-      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-bg-color: #0d1515;
       --tg-theme-text-color: #f5f5f5;
       --tg-theme-hint-color: #8e8e93;
       --tg-theme-secondary-bg-color: #2a2a2a;
@@ -166,7 +166,7 @@
       var isDark = tg && tg.colorScheme === 'dark';
       if (isDark) document.body.classList.add('rules-theme-dark');
       try {
-        var bgHex = isDark ? '#1a1a1a' : '#FBFAF7';
+        var bgHex = isDark ? '#0d1515' : '#F4F2EC';
         if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
         if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
       } catch (e) {}

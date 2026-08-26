@@ -2417,19 +2417,19 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
     .ob-flow {
       --accent-rgb: 52, 198, 196;
       --accent-rgb-alt: 52, 198, 196;
-      --glide-paper: #FBFAF7;
-      --glide-bg: #FBFAF7;
+      --glide-paper: #F4F2EC;
+      --glide-bg: #F4F2EC;
       --glide-surface: #FFFFFF;
       --glide-card: #FFFFFF;
-      --glide-line: #ECEBE6;
-      --glide-line-strong: #DDDCD4;
+      --glide-line: #E4E2DA;
+      --glide-line-strong: #D6D3C9;
       --glide-text: #16292A;
       --glide-hint: #5F6B6A;
       --glide-ink: #0C6F6C;
       --glide-ink-teal: #0C6F6C;
       --glide-shadow-card: 0 1px 2px rgba(20, 40, 40, 0.04), 0 10px 28px -18px rgba(20, 40, 40, 0.35);
       --glide-shadow-cta: 0 6px 18px -8px rgba(52, 198, 196, 0.75);
-      --app-brand-root-bg: #FBFAF7;
+      --app-brand-root-bg: #F4F2EC;
       --app-brand-surface: #FFFFFF;
       /* Ошибка шага — единственная «тревожная» краска визарда; 6.0:1 на карточке. */
       --ob-flow-danger-text: #a8322f;

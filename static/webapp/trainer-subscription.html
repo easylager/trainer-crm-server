@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Подписка</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-trainer-theme.js?v=202608266"></script>
   <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="theme.css?v=202608269" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <style>
-    /* Subscription: theme.css?v=202608264 tokens + local layout only (constitution). */
+    /* Subscription: theme.css?v=202608269 tokens + local layout only (constitution). */
     html { height: 100%; overflow-x: hidden; }
     body.subscription-page {
       margin: 0;
@@ -1209,7 +1209,7 @@
     }
   </style>
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
 </head>
 <body class="subscription-page">
   <header class="header" role="banner">
@@ -1336,14 +1336,14 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
 
-      /** Telegram theme + same tokens as head script (constitution #1c1c1c / #FBFAF7). */
+      /** Telegram theme + same tokens as head script (constitution #0d1515 / #F4F2EC). */
       function syncSubscriptionTheme() {
         if (typeof window.__applySubscriptionTheme === 'function') {
           window.__applySubscriptionTheme();
         }
         var dark = document.documentElement.classList.contains('sub-root-dark');
         try {
-          var bgHex = dark ? '#1c1c1c' : '#FBFAF7';
+          var bgHex = dark ? '#0d1515' : '#F4F2EC';
           if (typeof tg !== 'undefined' && tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg !== 'undefined' && tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) { /* older clients */ }

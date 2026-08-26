@@ -10,7 +10,7 @@
         if (typeof window.__applyTrainerHomeTheme === 'function') window.__applyTrainerHomeTheme();
         try {
           var darkUi = document.documentElement.classList.contains('hub-is-dark');
-          var bgHex = darkUi ? '#1c1c1c' : '#FBFAF7';
+          var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
           if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);

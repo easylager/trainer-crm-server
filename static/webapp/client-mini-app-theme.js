@@ -6,11 +6,18 @@
 (function () {
   var GLIDE_CTA_FILL = '#34C6C4';
   var GLIDE_CTA_TEXT = '#062A29';
-  var LIGHT_BG = '#FBFAF7';
+  /* Cream canvas (landing's --paper, design/prototypes/2026-08-24-live-link-hero.html) — was #FBFAF7, read as near-pure-white. Cards stay white for the paper/card contrast. */
+  var LIGHT_BG = '#F4F2EC';
   var LIGHT_SURFACE = '#FFFFFF';
   var LIGHT_TEXT = '#16292A';
-  var DARK_BG = '#1c1c1c';
-  var DARK_SURFACE = '#2c2c2e';
+  /*
+   * Dark mode: calmer near-black background + muted teal wash (was #1c1c1c bg /
+   * full-strength #34C6C4 accent everywhere — read as harsh/neon on screens with
+   * lots of cards). CTA buttons stay at full brand strength (GLIDE_CTA_FILL).
+   */
+  var DARK_BG = '#0d1515';
+  var DARK_SURFACE = '#172425';
+  var DARK_ACCENT_RGB = '42, 152, 146';
 
   function getTg() {
     return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -51,8 +58,12 @@
     d.style.setProperty('--app-cta-text', GLIDE_CTA_TEXT, 'important');
     d.style.setProperty('--tg-theme-button-color', GLIDE_CTA_FILL, 'important');
     d.style.setProperty('--tg-theme-button-text-color', GLIDE_CTA_TEXT, 'important');
-    d.style.setProperty('--accent-rgb', '52, 198, 196', 'important');
-    d.style.setProperty('--accent-rgb-alt', '52, 198, 196', 'important');
+    d.style.setProperty('--accent-rgb', dark ? DARK_ACCENT_RGB : '52, 198, 196', 'important');
+    d.style.setProperty(
+      '--accent-rgb-alt',
+      dark ? DARK_ACCENT_RGB : '52, 198, 196',
+      'important'
+    );
     d.style.setProperty('--tg-theme-bg-color', dark ? DARK_BG : LIGHT_BG, 'important');
     d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : LIGHT_TEXT, 'important');
     d.style.setProperty(

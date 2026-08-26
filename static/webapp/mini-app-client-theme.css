@@ -5,14 +5,14 @@
 html.trainer-theme-light body,
 html.trainer-theme-light body.hub-body,
 html.trainer-theme-light body.client-shell-body {
-  background-color: #FBFAF7 !important;
+  background-color: #F4F2EC !important;
   color: #16292A !important;
 }
 
 html.trainer-theme-dark body,
 html.trainer-theme-dark body.hub-body,
 html.trainer-theme-dark body.client-shell-body {
-  background-color: #1c1c1c !important;
+  background-color: #0d1515 !important;
 }
 
 /* Bottom tab bar — active «Главная» icon (was linear-gradient → #f48a0c in cache) */

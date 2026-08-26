@@ -86,7 +86,7 @@
       '.trainer-relay-overlay[aria-hidden="true"]{display:none !important}' +
       '#' +
       MODAL_ID +
-      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#FBFAF7);' +
+      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#F4F2EC);' +
       'color:var(--tg-theme-text-color,#1a1a1a);padding:18px 16px 16px;margin:0;box-sizing:border-box;' +
       'box-shadow:0 -12px 40px rgba(0,0,0,.22)}' +
       '@media(min-width:520px){#' +

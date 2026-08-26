@@ -61,18 +61,19 @@
    * в акцентах. Прошлая схема делала наоборот (карточка ТЕМНЕЕ холста) — экран читался
    * как «серый и тёмный», хотя формально был светлым.
    *
-   * Бумага чуть тёплая (#FBFAF7): холодная бирюза на нейтрально-тёплой бумаге не выглядит
-   * клинически — это тот самый «champagne + turquoise», на котором держится Tiffany.
+   * Бумага кремовая (#F4F2EC, сочетание с посадочной design/prototypes/2026-08-24-live-link-hero.html):
+   * холодная бирюза на нейтрально-тёплой бумаге не выглядит клинически — это тот самый
+   * «champagne + turquoise», на котором держится Tiffany.
    *
    * --glide-text намеренно НЕ чёрный: #16292A на белом даёт 15.2:1, на бумаге 14.5:1.
    * Максимальный контраст (~19–21:1) на просвет мобильного экрана даёт ореол вокруг букв.
    */
-  --glide-paper:   #FBFAF7;
+  --glide-paper:   #F4F2EC;
   --glide-bg:      var(--glide-paper);
   --glide-surface: #FFFFFF;
   --glide-card:    #FFFFFF;
-  --glide-line:    #ECEBE6;
-  --glide-line-strong: #DDDCD4;
+  --glide-line:    #E4E2DA;
+  --glide-line-strong: #D6D3C9;
   --glide-text:    #16292A;
   --glide-hint:    #5F6B6A;
   /* Тил для ТЕКСТА и иконок (6.0:1 на белом). Заливка — это --glide-brand, не он. */
@@ -198,12 +199,12 @@ html.hub-is-dark,
 html.client-mini-dark,
 html.sub-root-dark {
     /* Тёмная тема: графит + GLIDE teal CTA */
-    --tg-theme-bg-color: #1c1c1c;
+    --tg-theme-bg-color: #0d1515;
     --tg-theme-text-color: #ffffff;
     --tg-theme-hint-color: #8e8e93;
     --tg-theme-button-color: var(--glide-brand);
     --tg-theme-button-text-color: var(--glide-on-fill);
-    --tg-theme-secondary-bg-color: #2c2c2e;
+    --tg-theme-secondary-bg-color: #172425;
 
     /*
      * Тёмные GLIDE-нейтрали — для будущих экранов, которые честно живут в тёмной теме.
@@ -252,7 +253,7 @@ html.sub-root-dark {
 /* Light palette lock — beats stale Telegram themeParams (often amber/blue button_color). */
 html.trainer-theme-light,
 html:not(.trainer-theme-dark):not(.hub-is-dark):not(.client-mini-dark):not(.sub-root-dark) {
-  --tg-theme-bg-color: #FBFAF7;
+  --tg-theme-bg-color: #F4F2EC;
   --tg-theme-text-color: #16292A;
   --tg-theme-hint-color: #666666;
   --tg-theme-button-color: #34C6C4;

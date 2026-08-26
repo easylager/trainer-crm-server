@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Реферальная программа</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608265"></script>
+  <script src="mini-app-trainer-theme.js?v=202608266"></script>
   <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608264" />
+  <link rel="stylesheet" href="theme.css?v=202608269" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -24,7 +24,7 @@
       padding: 12px;
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 80px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #FBFAF7;
+      --tg-theme-bg-color: #F4F2EC;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
       --tg-theme-secondary-bg-color: #FFFFFF;
@@ -32,7 +32,7 @@
       --ref-success: #34c759;
     }
     body.ref-page.ref-theme-dark {
-      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-bg-color: #0d1515;
       --tg-theme-text-color: #f5f5f5;
       --tg-theme-hint-color: #8e8e93;
       --tg-theme-secondary-bg-color: #2a2a2a;
@@ -259,7 +259,7 @@
     }
   </style>
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
 </head>
 <body class="ref-page">
   <div class="ref-shell">
@@ -353,7 +353,7 @@
       var isDark = tg && tg.colorScheme === 'dark';
       if (isDark) document.body.classList.add('ref-theme-dark');
         try {
-          var bgHex = isDark ? '#1c1c1c' : '#FBFAF7';
+          var bgHex = isDark ? '#0d1515' : '#F4F2EC';
           if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
           if (tg && typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);

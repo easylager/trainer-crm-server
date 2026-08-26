@@ -3,165 +3,395 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Glide — CRM для индивидуального тренера на льду. Расписание, клиенты из каталога и аналитика в Telegram.">
+  <meta name="description" content="Glide — CRM для тренера на льду в Telegram. Ссылка на запись, расписание, клиенты и каталог. 14 дней бесплатно.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#45B9BB">
   <title>Glide — CRM для тренера на льду</title>
+  <link rel="canonical" href="__LANDING_CANONICAL__">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_BY">
+  <meta property="og:site_name" content="Glide">
+  <meta property="og:title" content="Glide — CRM для тренера на льду">
+  <meta property="og:description" content="Telegram вместо отдельного CRM. Живая ссылка на запись, расписание и каталог Glide — в одном боте.">
+  <meta property="og:url" content="__LANDING_CANONICAL__">
+  <meta property="og:image" content="__LANDING_OG_IMAGE__">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Glide — CRM для тренера на льду">
+  <meta name="twitter:description" content="Telegram вместо отдельного CRM. Живая ссылка на запись — ученик сам выбирает слот.">
+  <link rel="icon" href="/logos/01-icon/glide-icon-teal-on-black.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-on-black.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/landing/landing.css?v=20260624h">
-  <link rel="stylesheet" href="/landing/landing-bento-viz.css?v=20260624c">
-  <link rel="stylesheet" href="/landing/landing-arc.css?v=20260624f">
-  <link rel="stylesheet" href="/landing/landing-showcase.css?v=20260624">
-  <link rel="stylesheet" href="/landing/landing-motion.css?v=20260624f">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202608261">
+  <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202608261">
 </head>
-<body class="landing landing--intro">
-  <a class="landing-skip" href="#main">К содержимому</a>
+<body>
+<a class="skip" href="#hero">К содержимому</a>
+<header class="masthead">
+  <div class="logo" id="logoBox">
+    <img id="logoImg"
+         src="/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
+         alt="Glide">
+  </div>
+  <button type="button" class="cta cta--sm js-landing-cta" id="mastheadCta">Начать в Telegram</button>
+</header>
 
-  <main id="main">
-    <section class="landing-hero" aria-labelledby="heroTitle">
-      <div class="landing-hero__photo" id="heroPhoto" aria-hidden="true"></div>
-      <div class="landing-hero__frost" aria-hidden="true"></div>
-      <div class="landing-hero__ambient" aria-hidden="true"></div>
-      <div class="landing-flakes" aria-hidden="true">
-        <span class="landing-flake landing-flake--1"></span>
-        <span class="landing-flake landing-flake--2"></span>
-        <span class="landing-flake landing-flake--3"></span>
-        <span class="landing-flake landing-flake--4"></span>
-        <span class="landing-flake landing-flake--5"></span>
-        <span class="landing-flake landing-flake--6"></span>
-      </div>
+<!-- ══════════════════════════ HERO ══════════════════════════════════════ -->
+<main class="hero" id="hero" data-side="client">
 
-      <div class="landing-hero__grid">
-        <div class="landing-hero__copy">
-          <p class="landing-wordmark landing-reveal" id="brandName">Glide</p>
-          <p class="landing-eyebrow landing-reveal" id="heroEyebrow">Glide · тренерам на льду · Беларусь</p>
-          <p class="landing-tagline landing-reveal" id="heroTagline">Расписание, которое не тает</p>
-          <h1 class="landing-hero__title landing-reveal" id="heroTitle">CRM для тренера на льду</h1>
-          <p class="landing-hero__sub landing-reveal" id="heroSub"></p>
-          <ul class="landing-pillars landing-reveal" id="heroPillars" aria-label="Возможности Glide"></ul>
-          <div class="landing-hero__actions landing-reveal">
-            <button type="button" class="landing-btn landing-btn--primary" id="heroCta">Начать в Telegram</button>
-          </div>
-        </div>
+  <div class="hero__copy">
+    <p class="eyebrow" id="heroEyebrow">Glide · тренерам на льду · Беларусь</p>
+    <h1 id="heroTitle">CRM для тренера на льду</h1>
+    <p class="lede" id="heroLede">Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог&nbsp;Glide и аналитика — в одном боте. 14 дней бесплатно.</p>
+    <button type="button" class="cta cta--lg js-landing-cta" id="heroCta">Начать в Telegram</button>
+    <p class="invite"><b>Отправьте ссылку</b> — дальше ученик сам.</p>
 
-        <div class="landing-hero__visual landing-reveal" id="heroVisual">
-          <svg class="landing-trace" viewBox="0 0 400 120" aria-hidden="true">
-            <path class="landing-trace__path" d="M 20 90 Q 120 20, 220 55 T 380 35" fill="none" stroke-width="2.5"/>
-          </svg>
-          <div class="landing-phone-wrap">
-            <div class="landing-phone-glow" aria-hidden="true"></div>
-            <div class="landing-phone" id="phoneMock">
-            <div class="landing-phone__shell">
-              <div class="landing-phone__notch"></div>
-              <div class="landing-phone__screen landing-showcase" id="landingShowcase" data-screen="hub">
-                <div class="landing-showcase__viewport">
-                  <!-- Screen A: Trainer Hub -->
-                  <div class="landing-showcase__screen landing-showcase__screen--hub" aria-hidden="false">
-                    <header class="ls-hub-header">
-                      <h2 class="ls-hub-header__title">Добрый день</h2>
-                      <span class="ls-hub-header__share" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93"/><path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41"/></svg>
-                      </span>
-                    </header>
-                    <nav class="ls-week-pulse" aria-label="Неделя">
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Пн</span><span class="ls-week-pulse__num">16</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Вт</span><span class="ls-week-pulse__num">17</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--medium"></span></span></div>
-                      <div class="ls-week-pulse__day ls-week-pulse__day--today"><span class="ls-week-pulse__wd">Ср</span><span class="ls-week-pulse__num">18</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--heavy"></span></span></div>
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Чт</span><span class="ls-week-pulse__num">19</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Пт</span><span class="ls-week-pulse__num">20</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--medium"></span></span></div>
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Сб</span><span class="ls-week-pulse__num">21</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill ls-week-pulse__fill--light"></span></span></div>
-                      <div class="ls-week-pulse__day"><span class="ls-week-pulse__wd">Вс</span><span class="ls-week-pulse__num">22</span><span class="ls-week-pulse__load"><span class="ls-week-pulse__fill"></span></span></div>
-                    </nav>
-                    <div class="ls-stats">
-                      <div class="ls-stat ls-stat--highlight"><span class="ls-stat__val">12</span><span class="ls-stat__lbl">записей</span></div>
-                      <div class="ls-stat"><span class="ls-stat__val">3</span><span class="ls-stat__lbl">новых</span></div>
-                      <div class="ls-stat"><span class="ls-stat__val">4</span><span class="ls-stat__lbl">слота</span></div>
-                    </div>
-                    <article class="ls-inbox">
-                      <p class="ls-inbox__kicker">Сейчас важно</p>
-                      <p class="ls-inbox__title">Анна · 18:00</p>
-                      <p class="ls-inbox__sub">Minsk Arena — подтвердить</p>
-                    </article>
-                  </div>
-                  <!-- Screen B: Schedule -->
-                  <div class="landing-showcase__screen landing-showcase__screen--schedule" aria-hidden="true">
-                    <header class="ls-sched-head">
-                      <h2 class="ls-sched-head__title">Среда, 18 июня</h2>
-                    </header>
-                    <ul class="ls-sched-list">
-                      <li class="ls-sched-row ls-sched-row--sky"><span class="ls-sched-row__time">16:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Максим</span><span class="ls-sched-row__meta">Minsk Arena</span></span></li>
-                      <li class="ls-sched-row ls-sched-row--amber"><span class="ls-sched-row__time">17:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Анна</span><span class="ls-sched-row__meta">Фигурное</span></span></li>
-                      <li class="ls-sched-row ls-sched-row--free ls-sched-row--sky"><span class="ls-sched-row__time">18:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Свободно</span><span class="ls-sched-row__meta">Онлайн-запись</span></span></li>
-                      <li class="ls-sched-row ls-sched-row--amber"><span class="ls-sched-row__time">19:00</span><span class="ls-sched-row__body"><span class="ls-sched-row__name">Дарья</span><span class="ls-sched-row__meta">Minsk Arena</span></span></li>
-                    </ul>
-                    <div class="ls-sched-fab" aria-hidden="true">+ слот</div>
-                  </div>
-                </div>
-                <nav class="ls-tab-bar" aria-hidden="true">
-                  <span class="ls-tab ls-tab--active" data-tab="hub">Главная</span>
-                  <span class="ls-tab" data-tab="schedule">Расписание</span>
-                  <span class="ls-tab">Клиенты</span>
-                  <span class="ls-tab">Ещё</span>
-                </nav>
-              </div>
-            </div>
-          </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="landing-arc" aria-labelledby="arcHeading">
-      <div class="landing-arc__inner">
-        <header class="landing-section-header landing-reveal-scroll">
-          <p class="landing-section-eyebrow" id="arcEyebrow">Ежедневный цикл</p>
-          <h2 class="landing-section-title" id="arcHeading">Ссылка → запись → подтверждение → рост</h2>
-          <p class="landing-section-desc" id="arcSub">Вместо переписки «когда можно?» — один поток в Telegram.</p>
-        </header>
-        <ol class="landing-arc__list" id="arcList"></ol>
-      </div>
-    </section>
-
-    <section class="landing-bento" aria-labelledby="bentoHeading">
-      <header class="landing-section-header landing-reveal-scroll">
-        <p class="landing-section-eyebrow" id="bentoEyebrow">Возможности</p>
-        <h2 class="landing-section-title" id="bentoHeading">CRM и поток клиентов</h2>
-      </header>
-      <div class="landing-bento__grid" id="bentoGrid"></div>
-    </section>
-
-    <section class="landing-steps" aria-labelledby="stepsHeading">
-      <header class="landing-section-header landing-reveal-scroll">
-        <p class="landing-section-eyebrow" id="stepsEyebrow">Старт</p>
-        <h2 class="landing-section-title" id="stepsHeading">Три шага до первой записи</h2>
-      </header>
-      <ol class="landing-steps__list" id="stepsList"></ol>
-    </section>
-
-    <section class="landing-cta-band" aria-labelledby="ctaBandTitle">
-      <div class="landing-cta-band__inner landing-reveal-scroll">
-        <h2 class="landing-cta-band__title" id="ctaBandTitle"></h2>
-        <p class="landing-cta-band__sub" id="ctaBandSub"></p>
-        <button type="button" class="landing-btn landing-btn--primary landing-btn--lg" id="bandCta">Начать в Telegram</button>
-      </div>
-    </section>
-  </main>
-
-  <footer class="landing-footer">
-    <p class="landing-footer__line">
-      <span id="footerBrand">Glide</span> · <span id="footerGeo">Беларусь</span>
-    </p>
-    <p class="landing-footer__credit" id="footerCredit"></p>
-  </footer>
-
-  <div class="landing-sticky-cta" id="stickyCta" hidden>
-    <button type="button" class="landing-btn landing-btn--primary landing-btn--block" id="stickyCtaBtn">Начать в Telegram</button>
+    <div class="beats" aria-hidden="true">
+      <span class="beat" data-beat="1"></span>
+      <span class="beat" data-beat="2"></span>
+      <span class="beat" data-beat="3"></span>
+      <span class="beat" data-beat="4"></span>
+      <span class="beat" data-beat="5"></span>
+      <button type="button" class="replay" id="replay">Показать ещё раз</button>
+    </div>
   </div>
 
-  <p class="landing-error" id="landingError" role="alert" hidden></p>
+  <!-- ── Client ── -->
+  <div class="surfaces" id="surfaces">
 
-  <input type="text" name="website" id="hpWebsite" class="landing-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <div class="col col--client">
+  <span class="col__label">Ваш ученик</span>
+  <div class="col__stage">
+  <figure class="surface surface--client" id="surfClient">
+    <span class="demo-pill">демо</span>
 
-  <script defer src="/landing/landing-main.js?v=20260624i"></script>
+    <div class="chat">
+      <div class="chat__head">
+        <span class="chat__av">А</span>
+        <span class="chat__who">
+          <span class="chat__name">Алексей · тренер</span>
+          <span class="chat__sub">фигурное катание · Minsk Arena</span>
+        </span>
+      </div>
+      <div class="chat__body" id="chatBody"></div>
+    </div>
+
+    <div class="mini" id="mini">
+      <div class="mini__grab"><i></i></div>
+      <div class="mini__head">
+        <h2 class="mini__title">Выберите время</h2>
+        <p class="mini__sub">Фигурное катание · Minsk Arena</p>
+      </div>
+      <div class="mini__body">
+        <div class="day-title">Среда, 18 июня</div>
+
+        <button type="button" class="slot-card" disabled>
+          <span class="slot-card-body">
+            <span class="slot-time">16:00–17:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-taken">Занято</span>
+        </button>
+
+        <button type="button" class="slot-card" id="slotPick" data-time="18:00–19:00">
+          <span class="slot-card-body">
+            <span class="slot-time">18:00–19:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <button type="button" class="slot-card" data-time="19:00–20:00">
+          <span class="slot-card-body">
+            <span class="slot-time">19:00–20:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <div class="day-title">Четверг, 19 июня</div>
+
+        <button type="button" class="slot-card" data-time="07:30–08:30">
+          <span class="slot-card-body">
+            <span class="slot-time">07:30–08:30</span>
+            <span class="slot-venue-pill">Чижовка-Арена</span>
+          </span>
+          <span class="slot-arrow">›</span>
+        </button>
+
+        <button type="button" class="slot-card" disabled>
+          <span class="slot-card-body">
+            <span class="slot-time">17:00–18:00</span>
+            <span class="slot-venue-pill">Minsk Arena</span>
+          </span>
+          <span class="slot-taken">Занято</span>
+        </button>
+      </div>
+    </div>
+  </figure>
+  </div>
+  </div>
+
+  <!-- ── Trainer: real schedule screen ── -->
+  <div class="col col--trainer">
+  <span class="col__label">Тренер — в Telegram</span>
+  <div class="col__stage">
+  <figure class="surface surface--trainer" id="surfTrainer">
+
+    <!-- messages.py:2815 TRAINER_BOOKING_NOTIFICATION -->
+    <div class="notif" id="notif" role="status">
+      <p class="notif__title">🔔 Новая запись — нужно ваше решение</p>
+      <p class="notif__rows">
+        👤 <b>ФИО:</b> Анна К.<br>
+        📅 <b>18 июня (ср) 18:00</b> — 60 мин.<br>
+        🎯 Фигурное катание<br>
+        📍 Минск · 🏟 Minsk Arena
+      </p>
+      <p class="notif__note">Слот занят; клиент получит напоминания автоматически.</p>
+    </div>
+
+    <div class="sched">
+      <div class="sched__head">
+        <div>
+          <h2 class="sched__title">Моё расписание</h2>
+          <span class="sched__week">16–22 июня</span>
+        </div>
+        <button type="button" class="sched__share" id="shareBtn"
+                title="Поделиться ссылкой на онлайн-запись">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
+            <path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93"/>
+            <path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41"/>
+          </svg>
+          Ссылка
+        </button>
+      </div>
+      <div class="sched__chips">
+        <span class="chip chip--on">Все</span>
+        <span class="chip">Свободны</span>
+        <span class="chip">Заняты</span>
+      </div>
+
+      <section class="inbox" id="inbox" aria-live="polite">
+        <div class="inbox__card">
+          <div class="inbox__head">
+            <h3 class="inbox__title">Сейчас важно</h3>
+            <span class="inbox__count">1</span>
+          </div>
+          <ul class="inbox__list">
+            <li class="inbox__item">
+              <span class="inbox__dot"></span>
+              <div class="inbox__body">
+                <p class="inbox__itemTitle">1 запись ждёт подтверждения</p>
+                <p class="inbox__itemSub">До подтверждения клиент не увидит занятие как согласованное</p>
+              </div>
+              <button type="button" class="inbox__btn" id="confirmBtn">Подтвердить</button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="day-title">Среда, 18 июня</div>
+
+      <div class="s-card s-card--a">
+        <div class="s-main">
+          <div class="s-time">16:00–17:00</div>
+          <div class="s-client">Максим</div>
+          <div class="s-venue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <!-- the slot the visitor books -->
+      <div class="s-card s-card--free" id="targetSlot">
+        <div class="s-main">
+          <div class="s-time">18:00–19:00</div>
+          <div class="s-client s-client--muted" id="targetName">Свободно</div>
+          <div class="s-venue" id="targetVenue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status s-status--free" id="targetStatus">свободен</span>
+      </div>
+
+      <div class="s-card">
+        <div class="s-main">
+          <div class="s-time">19:00–20:00</div>
+          <div class="s-client">Дарья</div>
+          <div class="s-venue">Фигурное катание · 📍 Minsk Arena</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <div class="day-title">Четверг, 19 июня</div>
+
+      <div class="s-card s-card--a">
+        <div class="s-main">
+          <div class="s-time">07:30–08:30</div>
+          <div class="s-client">Кирилл</div>
+          <div class="s-venue">Фигурное катание · 📍 Чижовка-Арена</div>
+        </div>
+        <span class="s-status">занят</span>
+      </div>
+
+      <!-- Week summary. Both labels verbatim from trainer-stats-main.js:255-256
+           («Эта неделя», «N из M», «Свободно слотов: N»). -->
+      <div class="s-foot">
+        <span>Эта неделя: <b id="bookedCount">13 из 17</b></span>
+        <span>Свободно слотов: <b id="freeCount">4</b></span>
+      </div>
+    </div>
+
+    <!-- real modal content, trainer-home.html:732-749 -->
+    <div class="invite-sheet" id="inviteSheet" aria-hidden="true">
+      <div class="invite-sheet__grab"></div>
+      <h3 class="invite-sheet__title">Пригласительная ссылка</h3>
+      <div class="invite-sheet__link" id="demoInviteLink">t.me/…</div>
+      <div class="invite-sheet__btn" id="inviteCopy">Скопировать ссылку</div>
+    </div>
+  </figure>
+  </div>
+
+  </div>
+
+</main>
+
+<!-- ══════════════════ SECTION 2 — ROADMAP (desktop) ═══════════════════════ -->
+<section class="rm" id="rm" aria-labelledby="rmTitle">
+  <div class="rm__sticky">
+    <div class="rm__inner">
+
+      <div>
+        <p class="rm__eyebrow">Рабочее пространство</p>
+        <h2 class="rm__title" id="rmTitle">Всё рабочее пространство тренера — в одном месте</h2>
+
+        <ol class="rm__list" id="rmList">
+          <div class="rm__track"><span class="rm__fill" id="rmFill"></span></div>
+
+          <li class="rm__item" data-i="0">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Запись</p>
+            <p class="rm__desc">Кидаете в чат родителю или ученику — он сам выбирает слот.</p>
+          </li>
+          <li class="rm__item" data-i="1">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Расписание</p>
+            <p class="rm__desc">Выставляете окна в расписании — ученик видит «Свободно» и записывается без звонков.</p>
+          </li>
+          <li class="rm__item" data-i="2">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Клиенты</p>
+            <p class="rm__desc">Постоянные, с абонементом, ещё не в боте — и быстрая запись прямо из карточки.</p>
+          </li>
+          <li class="rm__item" data-i="3">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Заметки</p>
+            <p class="rm__desc">Чипы, профиль с целями сезона и лента заметок после каждого занятия — вместо блокнота и хаоса в чатах.</p>
+          </li>
+          <li class="rm__item" data-i="4">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Абонементы и сертификаты</p>
+            <p class="rm__desc">Каталог и выдача клиентам — в одном месте. Списания и остаток занятий считаются сами.</p>
+          </li>
+          <li class="rm__item" data-i="5">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Каталог Glide</p>
+            <p class="rm__desc">Вас находят в каталоге — город, арена, специализация и кнопка записи.</p>
+          </li>
+          <li class="rm__item" data-i="6">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Реферальная программа</p>
+            <p class="rm__desc">Пригласи коллегу — бонусные дни подписки за тех, кто дошёл до первой записи и оплаты.</p>
+          </li>
+          <li class="rm__item" data-i="7">
+            <span class="rm__dot"></span>
+            <p class="rm__name">Аналитика</p>
+            <p class="rm__desc">Записи, выручка и новые клиенты — сводка за неделю в одном экране.</p>
+          </li>
+        </ol>
+
+        <div class="rm__done" id="rmDone" aria-hidden="true">
+          <span class="rm__doneChip">Запись</span>
+          <span class="rm__doneChip">Расписание</span>
+          <span class="rm__doneChip">Клиенты</span>
+          <span class="rm__doneChip">Заметки</span>
+          <span class="rm__doneChip">Абонементы и сертификаты</span>
+          <span class="rm__doneChip">Каталог Glide</span>
+          <span class="rm__doneChip">Реферальная программа</span>
+          <span class="rm__doneChip">Аналитика</span>
+        </div>
+        <p class="rm__doneLine" id="rmDoneLine">Один бот в Telegram — без установки и настройки CRM.</p>
+      </div>
+
+      <!-- fragment viewport -->
+      <div class="rm__stage" id="rmStage"></div>
+
+    </div>
+  </div>
+
+  <!-- scroll distance driving the sticky sequence -->
+  <div id="rmSpacer" aria-hidden="true"></div>
+</section>
+
+<!-- ══════════════════ SECTION 2 — ROADMAP (mobile story) ══════════════════ -->
+<section class="rmm" id="rmm" aria-hidden="true">
+  <p class="rmm__eyebrow">Рабочее пространство</p>
+  <h2 class="rmm__title">Всё рабочее пространство тренера — в одном месте</h2>
+  <ol class="rmm__list" id="rmmList">
+    <div class="rmm__track"><span class="rmm__fill" id="rmmFill"></span></div>
+  </ol>
+  <div class="rmm__done">
+    <div class="rmm__doneChips" id="rmmChips"></div>
+    <p class="rmm__doneLine">Один бот в Telegram — без установки и настройки CRM.</p>
+  </div>
+</section>
+
+<!-- ══════════════════ ПЛАНИРУЕМЫЕ ОБНОВЛЕНИЯ ══════════════════════════════
+     No product UI here on purpose — none of this ships yet.                  -->
+<section class="soon" id="soon" aria-labelledby="soonTitle">
+  <div class="soon__inner">
+    <div>
+      <p class="soon__eyebrow">Планируем</p>
+      <h2 class="soon__title" id="soonTitle">Над чем работаем сейчас</h2>
+    </div>
+    <ul class="soon__list">
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">Онбординг и перенос записей</p>
+          <p class="soon__desc">Переносим ваше расписание и клиентов в Glide в пару кликов — без ручного заполнения.</p>
+        </div>
+        <span class="soon__mark">в работе</span>
+      </li>
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">AI-ассистент</p>
+          <p class="soon__desc">Перенос записей и заметки по клиентам голосом — сказали после занятия, ассистент разложил по карточкам.</p>
+        </div>
+        <span class="soon__mark">в работе</span>
+      </li>
+      <li class="soon__item">
+        <div>
+          <p class="soon__name">Скидки у партнёров</p>
+          <p class="soon__desc">Программы скидок для тренеров и клиентов Glide у партнёров индустрии.</p>
+        </div>
+        <span class="soon__mark">планируем</span>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="close" id="close" aria-labelledby="closeTitle">
+  <div class="close__inner">
+    <h2 class="close__title" id="closeTitle">Готовы выйти на лёд с Glide?</h2>
+    <p class="close__sub" id="closeSub">14 дней бесплатно · без карты · только Telegram</p>
+    <button type="button" class="cta cta--lg js-landing-cta" id="bandCta">Начать в Telegram</button>
+  </div>
+</section>
+<footer class="foot" id="footer">
+  <p class="foot__brand" id="footerBrand">Glide</p>
+  <p class="foot__geo" id="footerGeo">Беларусь</p>
+</footer>
+<p class="landing-error" id="landingError" hidden role="alert"></p>
+
+<script src="/landing/landing-live-link-main.js?v=202608261" defer></script>
+<script src="/landing/landing-live-link-demo.js?v=202608261" defer></script>
 </body>
 </html>

@@ -10,6 +10,12 @@
     "cta_primary": "Начать в Telegram",
     "cta_loading": "Открываем Telegram…"
   },
+  "seo": {
+    "title": "Glide — CRM для тренера на льду",
+    "description": "Glide — CRM для тренера на льду в Telegram. Живая ссылка на запись, расписание, клиенты и каталог. 14 дней бесплатно.",
+    "canonical_path": "/",
+    "og_image": "/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
+  },
   "value_pillars": [
     { "id": "telegram", "label": "Telegram — без установки", "icon": "telegram" },
     { "id": "link", "label": "Ссылка → клиент записался сам", "icon": "link" },
