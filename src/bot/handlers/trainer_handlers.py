@@ -643,10 +643,17 @@ async def cmd_start(message: Message) -> None:
                         await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
                     else:
                         await message.answer(trainer_gate_message(state, trainer))
+                    return
                 else:
-                    # Not linked yet: tell them to use welcome link
-                    await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-                return
+                    # Not linked yet: issue landing token for referral flow
+                    if not Settings().landing_trainer_registration_enabled:
+                        await message.answer(msg.TRAINER_REGISTRATION_UNAVAILABLE)
+                        return
+                    from src.application.trainer_link_token_use_cases import issue_landing_trainer_link_token
+
+                    issued = await issue_landing_trainer_link_token(session)
+                    args[1] = START_LINK_PREFIX + str(issued["token"])
+                    # Fall through to link token processing below
             # Check for combined payload: link_<token>_ref_<CODE>
             if "_ref_" in payload and payload.startswith(START_LINK_PREFIX):
                 parts = payload.split("_ref_", 1)
