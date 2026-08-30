@@ -2370,7 +2370,7 @@ html.trainer-theme-dark .modal { background: var(--tg-theme-bg-color) !important
       border: none;
       font-size: 14px;
       background: var(--tg-theme-secondary-bg-color) !important;
-      color: #1a1a1a !important;
+      color: var(--tg-theme-text-color) !important;
       cursor: pointer;
     }
     .filter-btn.active { background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
