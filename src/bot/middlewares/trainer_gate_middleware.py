@@ -16,7 +16,7 @@ from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.enums import ChatAction
-from aiogram.types import CallbackQuery, Message, TelegramObject
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, TelegramObject
 
 from src.application.trainer_access_state import (
     TrainerAccessState,
@@ -111,6 +111,36 @@ def _callback_allowed(data: str | None) -> bool:
     return False
 
 
+async def _respond_to_not_linked_trainer_middleware(event: Message | CallbackQuery) -> None:
+    """Send NOT_LINKED response. If registration is enabled, offer join button."""
+    from src.shared.config import Settings
+    from src.application.landing_trainer_start_use_cases import build_trainer_bot_join_deep_link
+
+    is_callback = isinstance(event, CallbackQuery)
+    if not Settings().landing_trainer_registration_enabled:
+        if is_callback:
+            await event.answer(msg.TRAINER_REGISTRATION_UNAVAILABLE, show_alert=True)
+        else:
+            await event.answer(msg.TRAINER_REGISTRATION_UNAVAILABLE)
+        return
+    join_link = build_trainer_bot_join_deep_link()
+    if join_link:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Зарегистрироваться", url=join_link)]
+            ]
+        )
+        if is_callback:
+            await event.answer(msg.TRAINER_ONLY_VIA_SITE, reply_markup=kb, show_alert=True)
+        else:
+            await event.answer(msg.TRAINER_ONLY_VIA_SITE, reply_markup=kb)
+    else:
+        if is_callback:
+            await event.answer(msg.TRAINER_ONLY_VIA_SITE, show_alert=True)
+        else:
+            await event.answer(msg.TRAINER_ONLY_VIA_SITE)
+
+
 class TrainerGateMiddleware(BaseMiddleware):
     """Pass through linked trainers who may use CRM bot flows, or allowlisted onboarding/help commands."""
 
@@ -150,7 +180,7 @@ class TrainerGateMiddleware(BaseMiddleware):
                 return await handler(event, data)
             if event.chat:
                 await event.bot.send_chat_action(chat_id=event.chat.id, action=ChatAction.TYPING)
-            await event.answer(msg.TRAINER_ONLY_VIA_SITE)
+            await _respond_to_not_linked_trainer_middleware(event)
             return None
 
         if uid and uid in trainer_support_awaiting:
@@ -185,10 +215,7 @@ class TrainerGateMiddleware(BaseMiddleware):
             )
 
         if state == TrainerAccessState.NOT_LINKED:
-            await event.answer(msg.TRAINER_ONLY_VIA_SITE, show_alert=True)
-            if event.message:
-                await event.bot.send_chat_action(chat_id=event.message.chat.id, action=ChatAction.TYPING)
-                await event.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            await _respond_to_not_linked_trainer_middleware(event)
             return None
 
         if _callback_allowed(getattr(event, "data", None)):

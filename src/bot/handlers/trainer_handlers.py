@@ -170,6 +170,7 @@ async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
 
 START_LINK_PREFIX = "link_"
 START_REF_PREFIX = "ref_"  # Referral code payload: t.me/bot?start=ref_ABC123
+START_JOIN_PAYLOAD = "join"  # Self-serve registration: t.me/bot?start=join
 SCHEDULE_CALLBACK = "schedule"
 SCHEDULE_ADD = "schedule:add"
 SCHEDULE_ADD_TEMPLATE = "schedule:template"
@@ -592,6 +593,25 @@ async def _cmd_collective_invite(message: Message, session, token: str) -> None:
     )
 
 
+async def _respond_to_not_linked_trainer(message: Message) -> None:
+    """Respond to trainer who is NOT_LINKED. If registration is enabled, offer join button."""
+    if not Settings().landing_trainer_registration_enabled:
+        await message.answer(msg.TRAINER_REGISTRATION_UNAVAILABLE)
+        return
+    from src.application.landing_trainer_start_use_cases import build_trainer_bot_join_deep_link
+
+    join_link = build_trainer_bot_join_deep_link()
+    if join_link:
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Зарегистрироваться", url=join_link)]
+            ]
+        )
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE, reply_markup=kb)
+    else:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
@@ -752,7 +772,7 @@ async def cmd_start(message: Message) -> None:
             return
         state, trainer = await get_trainer_access_state(session, user_id)
     if state == TrainerAccessState.NOT_LINKED:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        await _respond_to_not_linked_trainer(message)
         return
     if state == TrainerAccessState.ACTIVE:
         await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
