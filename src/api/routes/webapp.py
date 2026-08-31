@@ -5257,7 +5257,6 @@ async def get_trainer_hub_universal_invite_link(
         return {"link": None, "share_text": None}
     from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
     from src.shared.audit import ACTOR_API, audit_log
-    from src.shared import msg
 
     share_text = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=link)
     await record_trainer_client_invite_link_first_copy(session, int(trainer_id))
