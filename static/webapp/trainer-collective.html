@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Студия</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608261" />
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -26,7 +26,7 @@
       padding: 12px;
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 24px);
       -webkit-font-smoothing: antialiased;
-      --col-accent: #34C6C4;
+      --col-accent: #45B9BB;
     }
     body.col-page.trainer-shell-body {
       padding-bottom: calc(var(--trainer-shell-tab-inset, 80px) + 12px);
@@ -76,7 +76,7 @@
     }
     .col-studio-switch.is-active {
       background: rgba(var(--accent-rgb), 0.18);
-      border-color: var(--col-accent, #34C6C4);
+      border-color: var(--col-accent, #45B9BB);
       color: var(--tg-theme-text-color);
     }
     .col-card {
@@ -781,8 +781,9 @@
     .col-duty-item__when { font-size: 14px; font-weight: 600; }
     .col-duty-item__meta { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
   </style>
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body class="col-page" data-trainer-shell="tabs">
+<body class="col-page ar-pilot ar-pilot--trainer-collective" data-trainer-shell="tabs">
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
     <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
@@ -1118,7 +1119,7 @@
       var catalogCities = [];
       var catalogCitiesPromise = null;
       var ACCENT_PRESET_COLORS = {
-        amber: '#34C6C4',
+        amber: '#45B9BB',
         slate: '#5C6370',
         forest: '#2F6B4F',
         rose: '#B85C72',
@@ -1208,7 +1209,7 @@
       }
 
       function applyStudioAccent(data) {
-        var accent = (data && data.accent && data.accent.accent) || '#34C6C4';
+        var accent = (data && data.accent && data.accent.accent) || '#45B9BB';
         document.documentElement.style.setProperty('--col-accent', accent);
       }
 
@@ -2824,7 +2825,7 @@
         });
     })();
   </script>
-  <script defer src="mini-app-trainer-shell.js?v=202606200"></script>
-  <script src="mini-app-trainer-home.js"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202608315"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>

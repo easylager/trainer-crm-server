@@ -279,6 +279,35 @@ class TrainerRepository:
             {"tid": trainer_id, "aid": arena_id},
         )
 
+    async def set_trainer_arena_setup(
+        self,
+        trainer_id: int,
+        *,
+        work_format: str | None,
+        request_text: str | None,
+        request_at: object | None,
+    ) -> None:
+        await self._session.execute(
+            text(
+                """
+                UPDATE trainers
+                SET arena_work_format = :fmt,
+                    arena_request_text = :txt,
+                    arena_request_at = :at
+                WHERE id = :tid
+                """
+            ),
+            {"tid": trainer_id, "fmt": work_format, "txt": request_text, "at": request_at},
+        )
+
+    async def clear_trainer_arena_setup_alternative(self, trainer_id: int) -> None:
+        await self.set_trainer_arena_setup(
+            trainer_id,
+            work_format=None,
+            request_text=None,
+            request_at=None,
+        )
+
     async def set_schedule_grid_step_minutes(self, trainer_id: int, step_minutes: int) -> None:
         await self._session.execute(
             text("UPDATE trainers SET schedule_grid_step_minutes = :step WHERE id = :tid"),
@@ -337,7 +366,8 @@ class TrainerRepository:
                 "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, "
                 "profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible, "
                 "push_notification_start_hour, push_notification_end_hour, "
-                "digest_enabled, digest_send_time, telegram_username "
+                "digest_enabled, digest_send_time, telegram_username, "
+                "arena_work_format, arena_request_text, arena_request_at "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -385,6 +415,13 @@ class TrainerRepository:
                 if len(row) > 15 and row[15] is not None and str(row[15]).strip()
                 else None
             ),
+            "arena_work_format": (
+                str(row[16]).strip()
+                if len(row) > 16 and row[16] is not None and str(row[16]).strip()
+                else None
+            ),
+            "arena_request_text": row[17] if len(row) > 17 else None,
+            "arena_request_at": row[18].isoformat() if len(row) > 18 and row[18] is not None and hasattr(row[18], "isoformat") else (str(row[18]) if len(row) > 18 and row[18] is not None else None),
         }
         rp = await self._session.execute(
             text(

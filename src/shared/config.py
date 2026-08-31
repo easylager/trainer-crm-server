@@ -156,6 +156,8 @@ class Settings(BaseSettings):
     notification_subscription_loop_interval_sec: int = 86400
     # notification_service: interval between Lead Mode recovery (D+0..D+30) ticks. Default 86400. Set e.g. 10 locally; production should keep default.
     notification_lead_mode_recovery_interval_sec: int = 86400
+    # notification_service: interval between onboarding reactivation (D+1/D+3/D+7) ticks. Default 86400. Set e.g. 10 locally; production should keep default.
+    notification_onboarding_reactivation_interval_sec: int = 86400
     # notification_service: poll for slot end → auto-complete booking + client completion push. Clamped to 15–600 s in worker.
     booking_complete_poll_interval_sec: int = 60
     # Recurring «постоянный клиент»: ISO weeks ahead to keep as real bookings (rolling window from this Monday).

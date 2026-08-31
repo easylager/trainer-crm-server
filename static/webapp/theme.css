@@ -194,6 +194,29 @@
   --app-chip-text: var(--glide-text);
   --app-chip-line: var(--glide-line);
 
+  /*
+   * Arena Depth + Ribbon (TASK-017) — ось «свет» и «форма» без расширения палитры.
+   * DEC-007: полная глубина (--app-lift) только hero/empty; строки — row gradient + hairline.
+   */
+  --app-surface-row-top: #FFFFFF;
+  --app-surface-row-bot: #F4F6F5;
+  --app-surface-card-top: #FFFFFF;
+  --app-surface-card-bot: #EEF1F0;
+  --app-surface-container: var(--glide-surface);
+  --app-surface-header-top: #FFFFFF;
+  --app-surface-header-bot: #F4F6F5;
+  --app-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --app-lift: var(--glide-shadow-card);
+  --app-ribbon-cut: 18px;
+  --app-ribbon-cut-sm: 10px;
+  --app-ribbon-clip-container: polygon(0 0, calc(100% - var(--app-ribbon-cut)) 0, 100% var(--app-ribbon-cut), 100% 100%, var(--app-ribbon-cut) 100%, 0 calc(100% - var(--app-ribbon-cut)));
+  --app-ribbon-clip-btn: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  --app-ribbon-clip-sm: polygon(0 0, calc(100% - var(--app-ribbon-cut-sm)) 0, 100% var(--app-ribbon-cut-sm), 100% 100%, var(--app-ribbon-cut-sm) 100%, 0 calc(100% - var(--app-ribbon-cut-sm)));
+  --app-ribbon-clip-avatar: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+  --app-cta-inset: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  --app-cta-glow: 0 8px 22px -8px rgba(var(--accent-rgb), 0.55);
+  --glide-line-soft: #E8EDEC;
+
   --app-radius-sm: 8px;
   --app-radius-md: 12px;
   /* Full-width CTA (мини-приложения): один размер для .btn-* и .bd-btn */
@@ -289,6 +312,17 @@ html.sub-root-dark {
     --app-btn-shadow-cta: 0 2px 14px rgba(0, 0, 0, 0.4);
     --app-btn-shadow-surface: 0 1px 4px rgba(0, 0, 0, 0.28);
 
+    --app-surface-row-top: #1A1D20;
+    --app-surface-row-bot: #16191C;
+    --app-surface-card-top: #1D2125;
+    --app-surface-card-bot: #15181B;
+    --app-surface-container: #141719;
+    --app-surface-header-top: #1B1E21;
+    --app-surface-header-bot: #15181A;
+    --app-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --app-lift: 0 1px 2px rgba(0, 0, 0, 0.5), 0 14px 34px -16px rgba(0, 0, 0, 0.85);
+    --glide-line-soft: #1B1F22;
+
     --svc-accent-sky: #45A9E8;
     --svc-accent-amber: #E08A48;
     --svc-accent-emerald: #4FC98A;
@@ -310,18 +344,18 @@ html.sub-root-dark {
     --shadow-floating:0 6px 16px rgba(0, 0, 0, 0.5), 0 22px 48px rgba(0, 0, 0, 0.55);
 }
 
-/* ICE PAPER lock — beats stale Telegram themeParams (often amber/blue button_color). */
+/* ICE PAPER lock — beats stale Telegram themeParams (DEC-005: teal CTA, not amber). */
 html.trainer-theme-light,
 html:not(.trainer-theme-dark):not(.hub-is-dark):not(.client-mini-dark):not(.sub-root-dark) {
   --tg-theme-bg-color: #F1F3F2;
   --tg-theme-text-color: #101617;
   --tg-theme-hint-color: #5E6B6B;
-  --tg-theme-button-color: #FFC700;
-  --tg-theme-button-text-color: #3D2F00;
-  --accent-rgb: 255, 199, 0;
-  --accent-rgb-alt: 255, 199, 0;
-  --app-cta-fill: #FFC700;
-  --app-cta-text: #3D2F00;
+  --tg-theme-button-color: #45B9BB;
+  --tg-theme-button-text-color: #04262A;
+  --accent-rgb: 69, 185, 187;
+  --accent-rgb-alt: 69, 185, 187;
+  --app-cta-fill: #45B9BB;
+  --app-cta-text: #04262A;
   --tg-theme-secondary-bg-color: #FFFFFF;
 }
 

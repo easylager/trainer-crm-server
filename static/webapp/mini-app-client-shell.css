@@ -129,9 +129,9 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
-  background: #34C6C4 !important;
+  background: var(--app-cta-fill) !important;
   background-image: none !important;
-  color: #062A29 !important;
+  color: var(--app-cta-text) !important;
   box-shadow: var(--app-btn-shadow-surface) !important;
 }
 

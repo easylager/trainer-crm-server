@@ -9,17 +9,17 @@
 :root{
   /* Landing ground — one step deeper than the product's paper, so a
      product surface reads as a surface rather than dissolving into the page. */
-  --paper:#F4F2EC;
+  --paper:#F1F3F2;
   --surface:#FFFFFF;
-  --line:#E4E2DA;
-  --line-strong:#D6D3C9;
-  --ink:#16292A;
-  --hint:#5F6B6A;
+  --line:#E2E6E5;
+  --line-strong:#CFD6D5;
+  --ink:#101617;
+  --hint:#5E6B6B;
   --teal:#45B9BB;
-  --teal-ink:#0C6F6C;
-  --on-teal:#062A29;
+  --teal-ink:#0B6E70;
+  --on-teal:#04262A;
   --teal-wash:rgba(69,185,187,.12);
-  --shadow-surface:0 1px 3px rgba(20,40,40,.05), 0 20px 44px -28px rgba(20,40,40,.45);
+  --shadow-surface:0 1px 3px rgba(16, 24, 28,.05), 0 20px 44px -28px rgba(16, 24, 28,.45);
   --sans:'DM Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   --ease:cubic-bezier(.22,.61,.36,1);
   --slow:cubic-bezier(.33,.9,.28,1);
@@ -27,21 +27,22 @@
 /* Product tokens — the target Glide system (theme.css neutrals + brand teal),
    scoped to anything that represents real app UI. */
 .surface,.frag{
-  --p-bg:#FBFAF7;
+  --p-bg:#F1F3F2;
   --p-card:#FFFFFF;
-  --p-line:#ECEBE6;
-  --p-line-2:#DDDCD4;
-  --p-text:#16292A;
-  --p-hint:#5F6B6A;
+  --p-line:#E2E6E5;
+  --p-line-2:#CFD6D5;
+  --p-text:#101617;
+  --p-hint:#5E6B6B;
   --p-accent:#45B9BB;
-  --p-on-accent:#062A29;
-  --p-accent-ink:#0C6F6C;
+  --p-on-accent:#04262A;
+  --p-accent-ink:#0B6E70;
   --p-wash:rgba(69,185,187,.10);
   /* categorical service rails — cool + quiet, so teal stays the only accent */
   --svc-a:#6E9CB8;
   --svc-b:#8A9A9E;
   --svc-c:#45B9BB;
 }
+
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -54,7 +55,7 @@ body{
 /* ── Masthead ───────────────────────────────────────────────────────────── */
 .masthead{
   position:sticky;top:0;z-index:800;
-  background:#FFFFFF;border-bottom:1px solid var(--line);
+  background:var(--surface);border-bottom:1px solid var(--line);
   padding:0 clamp(20px,4vw,56px);height:76px;
   display:flex;align-items:center;justify-content:space-between;gap:20px;
 }
@@ -68,7 +69,7 @@ body{
   border:none;border-radius:999px;font:inherit;font-weight:700;letter-spacing:-.01em;
   cursor:pointer;text-decoration:none;
   transition:transform .16s var(--ease),box-shadow .16s var(--ease);
-  box-shadow:0 1px 2px rgba(20,40,40,.08);
+  box-shadow:0 1px 2px rgba(16, 24, 28,.08);
 }
 .cta:hover{transform:translateY(-1px);box-shadow:0 6px 18px -8px rgba(69,185,187,.8)}
 .cta:active{transform:translateY(0) scale(.985)}
@@ -167,7 +168,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 .col__stage::after{
   content:'';position:absolute;left:7%;right:7%;bottom:-14px;height:26px;
   border-radius:50%;
-  background:radial-gradient(closest-side, rgba(20,40,40,.22), transparent 76%);
+  background:radial-gradient(closest-side, rgba(16, 24, 28,.22), transparent 76%);
   filter:blur(10px);
   opacity:var(--csh,.5);transform:scale(var(--cshs,1));
   transition:opacity .7s var(--slow),transform .7s var(--slow);
@@ -209,12 +210,12 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
    its contact shadow spreads; the other sinks back and its shadow tightens. */
 .col--rest .surface{
   --tz:-26px;--sheen:.22;
-  box-shadow:0 1px 2px rgba(20,40,40,.04), 0 12px 26px -20px rgba(20,40,40,.4);
+  box-shadow:0 1px 2px rgba(16, 24, 28,.04), 0 12px 26px -20px rgba(16, 24, 28,.4);
 }
 .col--rest .col__stage{--csh:.32;--cshs:.95}
 .col--lead .surface{
   --tz:24px;--sheen:.5;
-  box-shadow:0 3px 8px rgba(20,40,40,.06), 0 44px 72px -34px rgba(20,40,40,.55);
+  box-shadow:0 3px 8px rgba(16, 24, 28,.06), 0 44px 72px -34px rgba(16, 24, 28,.55);
 }
 .col--lead .col__stage{--csh:.72;--cshs:1.06}
 .col__label{transition:color .7s var(--slow)}
@@ -227,7 +228,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 }
 
 /* ══ CLIENT SURFACE — bot chat with the booking mini-app over it ══════════ */
-.chat{flex:1;min-height:0;overflow:hidden;background:#EEEDE8;display:flex;flex-direction:column}
+.chat{flex:1;min-height:0;overflow:hidden;background:#E8ECEB;display:flex;flex-direction:column}
 .chat__head{
   flex-shrink:0;background:#FFFFFF;border-bottom:1px solid var(--p-line);
   padding:11px 62px 11px 14px;display:flex;align-items:center;gap:10px;
@@ -250,7 +251,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 }
 .bubble{
   align-self:flex-start;max-width:92%;background:var(--p-card);border-radius:12px;
-  border:1px solid var(--p-line);box-shadow:0 1px 1px rgba(20,40,40,.04);
+  border:1px solid var(--p-line);box-shadow:0 1px 1px rgba(16, 24, 28,.04);
   padding:9px 12px 8px;font-size:13px;line-height:1.45;color:var(--p-text);
 }
 .bubble b{font-weight:700}
@@ -331,7 +332,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
   background:var(--p-card);
   border-top:1px solid var(--p-line-2);
   border-radius:18px 18px 0 0;
-  box-shadow:0 -12px 34px -18px rgba(20,40,40,.45);
+  box-shadow:0 -12px 34px -18px rgba(16, 24, 28,.45);
   padding:10px 16px 18px;
   transform:translateY(101%);opacity:0;
   transition:transform .5s var(--slow),opacity .3s var(--ease);
@@ -425,7 +426,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 .notif{
   position:absolute;left:8px;right:8px;top:8px;z-index:50;
   background:rgba(255,255,255,.98);border:1px solid var(--p-line-2);border-radius:14px;
-  box-shadow:0 12px 32px -14px rgba(20,40,40,.5);padding:11px 13px;
+  box-shadow:0 12px 32px -14px rgba(16, 24, 28,.5);padding:11px 13px;
   transform:translateY(calc(-100% - 16px));opacity:0;
   transition:transform .5s var(--slow),opacity .3s var(--ease);
 }
@@ -737,4 +738,51 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
   .col--rest .surface,.col--lead .surface{--tz:0px;--sc:1}
   .surface::after{opacity:.28}
   .col__stage::after{--csh:.45;--cshs:1}
+}
+
+/* =========================================================================
+   AURORA — ночной режим витрины.
+   Обоснование: design/prototypes/2026-08-26-glide-color-concepts.html
+
+   Блок стоит В КОНЦЕ файла осознанно: правила ниже имеют ту же специфичность,
+   что и базовые описания компонентов, и должны выигрывать по порядку.
+   Если перенести его наверх (к :root), .cta и .masthead снова победят.
+
+   Переопределяется ТОЛЬКО подложка страницы. Product-токены (.surface,.frag)
+   намеренно остаются в ICE PAPER: они изображают реальные экраны приложения,
+   и светлый продукт на ночной странице читается как продуктовый скриншот —
+   ровно так и задумано. Перекрасить их значило бы показывать человеку не то,
+   что он увидит после установки.
+   ========================================================================= */
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#060A12;
+    --surface:#101827;
+    --line:#1D2739;
+    --line-strong:#2A3449;
+    --ink:#E9EFF7;
+    --hint:#7C8A9E;
+    /* Текстовый тил на ночном фоне: 10.8:1 на стекле. #0B6E70 здесь нечитаем. */
+    --teal-ink:#63DCD4;
+    --teal-wash:rgba(99,220,212,.12);
+    --shadow-surface:0 1px 0 rgba(255,255,255,.05) inset, 0 20px 44px -28px rgba(0,0,0,.9);
+  }
+
+  /* Единственный градиент на странице — первичное действие, и больше нигде. */
+  .cta{
+    background:linear-gradient(135deg,#45B9BB 0%,#6FE3C9 55%,#5AA8FF 100%);
+    color:#04202A;
+  }
+
+  /*
+   * Тёмный логотип: другой холст (1024×345), поэтому свои кроп-offsets.
+   * У PNG непрозрачный чёрный фон, а шапка — #101827, и знак сидел бы в чёрном
+   * прямоугольнике. mix-blend-mode:screen гасит именно чёрное (screen с 0 —
+   * это подложка) и оставляет белое белым — прозрачность без второго файла.
+   */
+  .logo img{width:126px;left:-8px;top:-4px;mix-blend-mode:screen}
+
+  .chat{background:#0C1422}
+
+  /* Тост ошибки остаётся светлым намеренно — он должен рвать ночной фон. */
 }

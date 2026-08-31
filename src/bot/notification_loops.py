@@ -102,6 +102,18 @@ from src.application.lead_mode_recovery_use_cases import (
     compute_due_nudges,
     mark_nudge_sent,
 )
+from src.application.trainer_onboarding_recovery_use_cases import (
+    STAGE_EMPTY_FORM,
+    STAGE_MISSING_FIELD,
+    STAGE_NOT_SUBMITTED,
+    STAGE_NO_BOOKING,
+    STAGE_REJECTED_RESUBMIT,
+    TRIAL_URGENCY_THRESHOLD_DAYS,
+    DueOnboardingNudge,
+    compute_due_onboarding_nudges,
+    get_trial_days_remaining,
+    mark_onboarding_nudge_sent,
+)
 from src.application.care_pulse_use_cases import (
     claim_care_pulse,
     is_within_care_pulse_window,
@@ -115,6 +127,9 @@ from src.application.trial_roi_recap_use_cases import (
 from src.infrastructure.db.models import (
     CARE_PULSE_AUDIENCE_CLIENT,
     CARE_PULSE_AUDIENCE_TRAINER,
+    ONBOARDING_NUDGE_STEP_D1,
+    ONBOARDING_NUDGE_STEP_D3,
+    ONBOARDING_NUDGE_STEP_D7,
     RECOVERY_STEP_D0,
     RECOVERY_STEP_D3,
     RECOVERY_STEP_D14,
@@ -607,6 +622,15 @@ def _lead_mode_recovery_loop_interval_sec() -> int:
     """Sleep between Lead Mode recovery series ticks; clamped for safe local debugging."""
     try:
         v = int(Settings().notification_lead_mode_recovery_interval_sec)
+    except (TypeError, ValueError):
+        v = 86400
+    return max(5, min(v, 86400))
+
+
+def _onboarding_reactivation_loop_interval_sec() -> int:
+    """Sleep between onboarding reactivation series ticks; clamped for safe local debugging."""
+    try:
+        v = int(Settings().notification_onboarding_reactivation_interval_sec)
     except (TypeError, ValueError):
         v = 86400
     return max(5, min(v, 86400))
@@ -2395,6 +2419,101 @@ async def run_lead_mode_recovery_loop(trainer_bot: Bot) -> None:
         except Exception as e:
             logger.exception("Lead Mode recovery loop: %s", e)
         await asyncio.sleep(_lead_mode_recovery_loop_interval_sec())
+
+
+_ONBOARDING_STAGE_BODY: dict[str, str] = {
+    STAGE_EMPTY_FORM: msg.TRAINER_ONBOARDING_STAGE_EMPTY_FORM,
+    STAGE_NOT_SUBMITTED: msg.TRAINER_ONBOARDING_STAGE_NOT_SUBMITTED,
+    STAGE_REJECTED_RESUBMIT: msg.TRAINER_ONBOARDING_STAGE_REJECTED_RESUBMIT,
+    STAGE_NO_BOOKING: msg.TRAINER_ONBOARDING_STAGE_NO_BOOKING,
+}
+
+_ONBOARDING_STEP_INTRO: dict[str, str] = {
+    ONBOARDING_NUDGE_STEP_D1: msg.TRAINER_ONBOARDING_NUDGE_INTRO_D1,
+    ONBOARDING_NUDGE_STEP_D3: msg.TRAINER_ONBOARDING_NUDGE_INTRO_D3,
+    ONBOARDING_NUDGE_STEP_D7: msg.TRAINER_ONBOARDING_NUDGE_INTRO_D7,
+}
+
+
+def _render_onboarding_nudge_text(
+    nudge: DueOnboardingNudge, *, trial_days_remaining: int | None
+) -> str:
+    """Pure: step intro + stage-specific body naming the concrete next action + trial urgency."""
+    intro = _ONBOARDING_STEP_INTRO.get(nudge.step)
+    if intro is None:
+        raise ValueError(f"Unknown onboarding nudge step: {nudge.step!r}")
+
+    if nudge.stage == STAGE_MISSING_FIELD:
+        missing = ", ".join(nudge.missing_labels_ru) or "оставшиеся поля анкеты"
+        body = msg.TRAINER_ONBOARDING_STAGE_MISSING_FIELD.format(missing=missing)
+    else:
+        body = _ONBOARDING_STAGE_BODY.get(nudge.stage)
+        if body is None:
+            raise ValueError(f"Unknown onboarding stage: {nudge.stage!r}")
+
+    trial_suffix = ""
+    if trial_days_remaining is not None and trial_days_remaining <= TRIAL_URGENCY_THRESHOLD_DAYS:
+        trial_suffix = (
+            msg.TRAINER_ONBOARDING_TRIAL_LAST_DAY
+            if trial_days_remaining <= 0
+            else msg.TRAINER_ONBOARDING_TRIAL_DAYS_LEFT.format(days=trial_days_remaining)
+        )
+
+    return intro + body + trial_suffix + msg.TRAINER_ONBOARDING_NUDGE_OUTRO
+
+
+async def run_onboarding_reactivation_loop(trainer_bot: Bot) -> None:
+    """
+    Once per day: send the next due onboarding-reactivation nudge (D+1/D+3/D+7) to each
+    telegram-linked trainer who stalled before finishing onboarding.
+
+    Idempotency boundary: trainer_onboarding_nudges (UNIQUE on trainer_id+step). Cancel-on-progress
+    is implicit — trainers who finish the relevant step disappear from the candidate list.
+
+    Work runs first on startup, then after each ``notification_onboarding_reactivation_interval_sec`` sleep.
+    """
+    while True:
+        try:
+            async with async_session_factory() as session:
+                due_list = await compute_due_onboarding_nudges(session)
+                if due_list:
+                    logger.info("Onboarding reactivation: %d due nudges", len(due_list))
+                for nudge in due_list:
+                    try:
+                        if not await is_trainer_push_allowed_now(session, nudge.trainer_id):
+                            # Quiet hours / opt-out — skip this tick; the step stays "due" and will
+                            # fire next day. After D+7 we cap there forever (idempotent).
+                            continue
+                        trial_days_remaining = await get_trial_days_remaining(
+                            session, nudge.trainer_id
+                        )
+                        text_msg = _render_onboarding_nudge_text(
+                            nudge, trial_days_remaining=trial_days_remaining
+                        )
+                        await trainer_bot.send_message(
+                            chat_id=nudge.trainer_telegram_id,
+                            text=text_msg,
+                            parse_mode="HTML",
+                        )
+                        # Persist after successful send so a Telegram error retries the step tomorrow.
+                        await mark_onboarding_nudge_sent(
+                            session,
+                            trainer_id=nudge.trainer_id,
+                            step=nudge.step,
+                            stage_anchor=nudge.stage,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Onboarding reactivation nudge failed (trainer=%s, step=%s): %s",
+                            nudge.trainer_id,
+                            nudge.step,
+                            e,
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Onboarding reactivation loop: %s", e)
+        await asyncio.sleep(_onboarding_reactivation_loop_interval_sec())
 
 
 async def run_recurring_materialization_loop() -> None:

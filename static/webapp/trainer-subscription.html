@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Подписка</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <style>
-    /* Subscription: theme.css?v=202608269 tokens + local layout only (constitution). */
+    /* Subscription: theme.css?v=202608270 tokens + local layout only (constitution). */
     html { height: 100%; overflow-x: hidden; }
     body.subscription-page {
       margin: 0;
@@ -1208,10 +1208,11 @@
       100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body class="subscription-page">
+<body class="subscription-page ar-pilot ar-pilot--trainer-subscription">
   <header class="header" role="banner">
     <span class="header-title">Подписка</span>
     <div class="trainer-mini-nav">
@@ -1327,23 +1328,23 @@
 
   <div id="confetti" class="confetti"></div>
 
-  <script src="mini-app-trainer-gate.js"></script>
-  <script src="mini-app-trainer-celebration.js"></script>
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-gate.js?v=202608315"></script>
+  <script src="mini-app-trainer-celebration.js?v=202608315"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
   <script>
     (function() {
       'use strict';
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
 
-      /** Telegram theme + same tokens as head script (constitution #0d1515 / #F4F2EC). */
+      /** Telegram theme + same tokens as head script (constitution #0B0C0E / #F1F3F2). */
       function syncSubscriptionTheme() {
         if (typeof window.__applySubscriptionTheme === 'function') {
           window.__applySubscriptionTheme();
         }
         var dark = document.documentElement.classList.contains('sub-root-dark');
         try {
-          var bgHex = dark ? '#0d1515' : '#F4F2EC';
+          var bgHex = dark ? '#0B0C0E' : '#F1F3F2';
           if (typeof tg !== 'undefined' && tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg !== 'undefined' && tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) { /* older clients */ }
@@ -2295,7 +2296,7 @@
       function createConfetti() {
         var container = document.getElementById('confetti');
         container.innerHTML = '';
-        var colors = ['#34C6C4', '#6FD8D5', '#34c759', '#007AFF', '#AF52DE'];
+        var colors = ['#45B9BB', '#7FD7D8', '#34c759', '#007AFF', '#AF52DE'];
         
         for (var i = 0; i < 50; i++) {
           var piece = document.createElement('div');

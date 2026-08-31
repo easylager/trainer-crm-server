@@ -76,6 +76,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     profile_complete = bool(readiness and readiness.get("complete"))
     full_profile_complete = bool(readiness and readiness.get("full_profile_complete"))
     tt_minimal_complete = bool(readiness and readiness.get("tt_minimal_complete"))
+    # «Отправлен на проверку», а не «готов к отправке»: profile_complete — это лишь 8 критериев.
+    # Сбрасывается в False, когда модерация вернула фидбек, — шаг снова становится действием.
+    moderation_submitted = bool(readiness and readiness.get("already_submitted_for_moderation"))
 
     out: dict[str, Any] = {
         "trainer_status": st,
@@ -84,6 +87,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "profile_complete": profile_complete,
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,
+        "moderation_submitted": moderation_submitted,
         "weekly_template_count": 0,
         "slots_this_week_count": 0,
         "slots_next_week_count": 0,
@@ -118,8 +122,10 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["tt_minimal_complete"] = True
         out["profile_complete"] = True
         out["full_profile_complete"] = True
-        # Center manager path: skip solo «первая запись» onboarding (hub step 2).
+        # Center manager path: skip solo «первая запись» onboarding (hub step 2)
+        # and «в каталог» (hub step 3) — карточку студийного тренера публикует не он сам.
         out["has_any_booking"] = True
+        out["moderation_submitted"] = True
         out["slots_locked_reason"] = None
         out["bookings_locked_reason"] = None
         out["trainer_id"] = trainer_id

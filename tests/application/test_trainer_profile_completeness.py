@@ -209,6 +209,69 @@ def test_tt_minimal_complete_without_photo_or_long_bio() -> None:
     assert miss == []
 
 
+def test_tt_minimal_complete_with_mobile_format_without_arenas() -> None:
+    t = {
+        "profile": {
+            "first_name": "Ann",
+            "last_name": "Xu",
+            "phone": "+375291112233",
+            "city_id": 1,
+        },
+        "photos": [],
+        "service_ids": [1],
+        "arena_ids": [],
+        "arena_work_format": "mobile",
+        "education_entries_count": 0,
+    }
+    ok, miss = analyze_tt_minimal_profile_readiness(t)
+    assert ok is True
+    assert miss == []
+
+
+def test_tt_minimal_complete_with_pending_arena_request() -> None:
+    t = {
+        "profile": {
+            "first_name": "Ann",
+            "last_name": "Xu",
+            "phone": "+375291112233",
+            "city_id": 1,
+        },
+        "photos": [],
+        "service_ids": [1],
+        "arena_ids": [],
+        "arena_work_format": "pending_request",
+        "arena_request_text": "Ледовый дворец",
+        "education_entries_count": 0,
+    }
+    ok, miss = analyze_tt_minimal_profile_readiness(t)
+    assert ok is True
+    assert miss == []
+
+
+def test_full_profile_still_requires_real_arena_not_mobile() -> None:
+    t = {
+        "profile": {
+            "first_name": "Ann",
+            "last_name": "Xu",
+            "phone": "+375291112233",
+            "city_id": 1,
+            "description": "x" * 30,
+            "experience_years": 5,
+            "session_duration_minutes": 45,
+            "min_hours_before_booking": 3,
+            "education": "Coach school",
+        },
+        "photos": [{"file_key": "k.jpg"}],
+        "service_ids": [1],
+        "arena_ids": [],
+        "arena_work_format": "mobile",
+        "education_entries_count": 0,
+    }
+    ok, miss = analyze_moderation_profile_completeness(t)
+    assert ok is False
+    assert "arenas" in miss
+
+
 def test_moderation_readiness_includes_tt_minimal_keys() -> None:
     t = {
         "profile": {

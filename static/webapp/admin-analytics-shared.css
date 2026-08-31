@@ -84,9 +84,10 @@ body {
   font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
   background: rgba(255,255,255,0.08); color: var(--tg-theme-hint-color);
 }
-.adm-pill.success { background: rgba(52, 199, 89, 0.15); color: #34c759; }
-.adm-pill.danger  { background: rgba(255, 59, 48, 0.15); color: #ff6b60; }
-.adm-pill.warn    { background: rgba(var(--accent-rgb), 0.18); color: #34C6C4; }
+.adm-pill.success { background: var(--app-ok-wash); color: var(--app-ok-ink); }
+.adm-pill.danger  { background: var(--app-danger-wash); color: var(--app-danger-ink); }
+/* Предупреждение — янтарь, а не бренд. Тил был здесь наследием, когда брендом был янтарь. */
+.adm-pill.warn    { background: var(--app-attention-wash); color: var(--app-attention-ink); }
 .adm-pill.info    { background: rgba(56, 132, 255, 0.18); color: #6ea8ff; }
 
 .adm-banner {

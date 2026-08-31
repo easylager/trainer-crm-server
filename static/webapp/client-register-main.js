@@ -7,7 +7,7 @@
     if (typeof tg.expand === 'function') tg.expand();
     try {
       var dark = tg.colorScheme === 'dark';
-      var bg = dark ? '#0d1515' : '#F4F2EC';
+      var bg = dark ? '#0B0C0E' : '#F1F3F2';
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
       if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bg);

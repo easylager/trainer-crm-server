@@ -1,12 +1,13 @@
 /**
  * Trainer theme overrides — load after theme.css + mini-app-trainer-nav.css.
- * Hard-coded GLIDE teal on nav buttons (Telegram themeParams often inject amber button_color).
+ * Пере-фиксирует GLIDE teal на nav-кнопках (Telegram themeParams часто подсовывает свой button_color).
  */
 button.btn-app-home,
 .trainer-mini-nav > button.btn-app-home {
-  border: 1px solid rgba(52, 198, 196, 0.34) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.34) !important;
   background: transparent !important;
-  color: #34C6C4 !important;
+  /* Тил ТЕКСТОМ — берём текстовый токен: заливочный #45B9BB на светлом даёт 2.2:1. */
+  color: var(--glide-ink-teal) !important;
   box-shadow: none !important;
   outline: none !important;
 }
@@ -21,8 +22,17 @@ html.trainer-theme-dark .trainer-mini-nav > button.btn-app-back {
   border-color: rgba(142, 142, 147, 0.28) !important;
 }
 
-/* Light canvas lock — beats stale Telegram themeParams + old @media dark CSS in WebView cache. */
+/*
+ * Canvas lock — перебивает и устаревшие themeParams Telegram, и старую тёмную CSS,
+ * залипшую в кэше WebView. Обе темы фиксируются явно, иначе после ревизии палитры
+ * часть клиентов продолжит показывать прежний тиловый фон из кэша.
+ */
 html.trainer-theme-light body {
-  background-color: #F4F2EC !important;
-  color: #16292A !important;
+  background-color: var(--glide-paper) !important;
+  color: var(--glide-text) !important;
+}
+
+html.trainer-theme-dark body {
+  background-color: var(--glide-paper) !important;
+  color: var(--glide-text) !important;
 }

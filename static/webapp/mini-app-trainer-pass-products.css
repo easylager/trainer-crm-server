@@ -68,7 +68,7 @@
       padding: 12px 14px;
       font-size: 14px;
       font-weight: 600;
-      color: var(--tg-theme-button-color, #34C6C4);
+      color: var(--tg-theme-button-color, #45B9BB);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1019,7 +1019,7 @@
       font-weight: 700;
       letter-spacing: 0.02em;
       color: var(--tg-theme-button-text-color, #1a1a1a);
-      background: var(--tg-theme-button-color, #34C6C4);
+      background: var(--tg-theme-button-color, #45B9BB);
       box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.28);
     }
     .pp-redemption-row {

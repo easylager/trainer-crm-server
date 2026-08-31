@@ -2702,7 +2702,7 @@
       border: 1.5px solid #fff;
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
     }
-    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color, #34C6C4); }
+    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color, #45B9BB); }
     .arena-map__legend-dot--idle { background: var(--tg-theme-hint-color); opacity: 0.85; }
 
     /* Custom Leaflet pin via divIcon — sized to match brand and visible on busy map. */
@@ -2721,7 +2721,7 @@
       transition: transform 0.12s ease, background 0.12s ease;
     }
     .arena-pin--selected {
-      background: var(--tg-theme-button-color, #34C6C4);
+      background: var(--tg-theme-button-color, #45B9BB);
       transform: scale(1.08);
       box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.45);
     }
@@ -2793,8 +2793,8 @@
       transition: background 0.12s ease, border-color 0.12s ease;
     }
     .arena-card.selected .arena-card__check {
-      background: var(--tg-theme-button-color, #34C6C4);
-      border-color: var(--tg-theme-button-color, #34C6C4);
+      background: var(--tg-theme-button-color, #45B9BB);
+      border-color: var(--tg-theme-button-color, #45B9BB);
     }
     .arena-card__main { flex: 1; min-width: 0; }
     .arena-card__name {

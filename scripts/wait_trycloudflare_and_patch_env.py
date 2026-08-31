@@ -14,6 +14,12 @@ import time
 from pathlib import Path
 
 _URL_RE = re.compile(r"https://[\w.-]+\.trycloudflare\.com/?")
+# cloudflared prints the public URL inside a boxed log line:
+# |  https://foo.trycloudflare.com                                  |
+_TUNNEL_BANNER_URL_RE = re.compile(
+    r"\|\s+(https://[\w.-]+\.trycloudflare\.com)\s+\|"
+)
+_REGISTERED_RE = re.compile(r"Registered tunnel connection")
 
 
 def _normalize_base(url: str) -> str:
@@ -79,9 +85,14 @@ def main() -> int:
             if len(data) > pos:
                 buf += data[pos:]
                 pos = len(data)
-            m = _URL_RE.search(buf)
-            if m:
-                url = _normalize_base(m.group(0))
+            banner_matches = list(_TUNNEL_BANNER_URL_RE.finditer(buf))
+            if banner_matches and _REGISTERED_RE.search(buf):
+                url = _normalize_base(banner_matches[-1].group(1))
+                break
+            # Fallback for older cloudflared log shapes.
+            matches = list(_URL_RE.finditer(buf))
+            if matches and _REGISTERED_RE.search(buf):
+                url = _normalize_base(matches[-1].group(0))
                 break
         time.sleep(float(args.poll))
 

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Правила реферальной программы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260818"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -23,17 +23,10 @@
       padding: 16px;
       padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 40px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #F4F2EC;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666666;
-      --tg-theme-secondary-bg-color: #FFFFFF;
     }
-    body.rules-page.rules-theme-dark {
-      --tg-theme-bg-color: #0d1515;
-      --tg-theme-text-color: #f5f5f5;
-      --tg-theme-hint-color: #8e8e93;
-      --tg-theme-secondary-bg-color: #2a2a2a;
-    }
+    /* Тема приходит из theme.css по классу на <html>, как на остальных экранах.
+       Собственных токенов страница больше не держит: они расходились с системой
+       (#2a2a2a против #141618, #f5f5f5 против #E6E9EA). TASK-017. */
     .rules-shell { max-width: 600px; margin: 0 auto; }
     .rules-updated {
       font-size: 12px;
@@ -63,7 +56,9 @@
       border-radius: 12px;
       padding: 14px 16px;
       margin: 16px 0;
-      border-left: 3px solid #34C6C4;
+      /* TASK-017: рейка нейтральная. Тил означает действие и активное
+         состояние; информационная врезка не является ни тем, ни другим. */
+      border-left: 3px solid var(--glide-line-strong, #CFD6D5);
     }
     .rules-highlight p { margin: 0; }
     /* Same header row as trainer-referral.html */
@@ -86,9 +81,10 @@
       min-width: 0;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body class="rules-page">
+<body class="rules-page ar-pilot ar-pilot--referral-rules">
   <div class="rules-shell">
     <header class="rules-page-header-row" aria-label="Раздел">
       <h1 class="rules-page-header-title">Правила реферальной программы</h1>
@@ -155,7 +151,7 @@
     </section>
   </div>
 
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -164,9 +160,9 @@
         if (typeof tg.expand === 'function') tg.expand();
       }
       var isDark = tg && tg.colorScheme === 'dark';
-      if (isDark) document.body.classList.add('rules-theme-dark');
+      if (isDark) document.documentElement.classList.add('trainer-theme-dark');
       try {
-        var bgHex = isDark ? '#0d1515' : '#F4F2EC';
+        var bgHex = isDark ? '#0B0C0E' : '#F1F3F2';
         if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
         if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
       } catch (e) {}

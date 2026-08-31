@@ -8,7 +8,7 @@
     }
     try {
       var darkUi = tg.colorScheme === 'dark';
-      var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
+      var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
     } catch (e) { /* older clients */ }
@@ -19,7 +19,7 @@
         }
         try {
           var du = tg.colorScheme === 'dark';
-          var bg = du ? '#0d1515' : '#F4F2EC';
+          var bg = du ? '#0B0C0E' : '#F1F3F2';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
         } catch (err) { /* ignore */ }

@@ -5,27 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Заявки клиентов</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
-  <script src="mini-app-confirm.js"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <script src="mini-app-confirm.js?v=202608315"></script>
   <style>
-    /* Shell: theme.css?v=202608269 + mini-app-components.css?v=202608264 */
+    /* Shell: theme.css?v=202608270 + mini-app-components.css?v=202608264 */
     /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
     :root {
-      --req-accent: #34C6C4;
-      --req-accent-deep: #1FA5A3;
-      --req-accent-soft: rgba(52, 198, 196, 0.2);
+      --req-accent: #45B9BB;
+      --req-accent-deep: #2E9A9C;
+      --req-accent-soft: rgba(69, 185, 187, 0.2);
       --req-cream: var(--tg-theme-secondary-bg-color);
       --req-surface: var(--tg-theme-secondary-bg-color);
       --req-text: var(--tg-theme-text-color);
       --req-muted: var(--tg-theme-hint-color);
       --req-shadow: 0 4px 24px rgba(18, 18, 18, 0.08);
-      --req-shadow-hover: 0 8px 32px rgba(52, 198, 196, 0.18);
+      --req-shadow-hover: 0 8px 32px rgba(69, 185, 187, 0.18);
       --req-radius: 18px;
       --req-radius-sm: 14px;
       /* Light: readable chips on cream */
@@ -36,7 +36,7 @@
     }
     html.trainer-theme-dark :root {
         --req-shadow: 0 4px 28px rgba(0, 0, 0, 0.45);
-        --req-shadow-hover: 0 8px 36px rgba(52, 198, 196, 0.15);
+        --req-shadow-hover: 0 8px 36px rgba(69, 185, 187, 0.15);
         --req-chip-success-bg: rgba(20, 83, 45, 0.55);
         --req-chip-success-fg: #6ee7b7;
         --req-chip-warn-bg: rgba(120, 53, 15, 0.55);
@@ -48,8 +48,8 @@
       font-family: var(--app-font-sans);
       background-color: var(--tg-theme-bg-color) !important;
       background-image:
-        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(52, 198, 196, 0.1), transparent 55%),
-        radial-gradient(ellipse 70% 50% at 100% 30%, rgba(52, 198, 196, 0.05), transparent 45%) !important;
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(69, 185, 187, 0.1), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 30%, rgba(69, 185, 187, 0.05), transparent 45%) !important;
       background-attachment: fixed;
       color: var(--tg-theme-text-color) !important;
       min-height: 100vh;
@@ -244,7 +244,7 @@
     }
     .request-card--progress .request-card__stripe {
       background: linear-gradient(180deg, #fbbf24 0%, #d97706 55%, #b45309 100%);
-      box-shadow: 2px 0 14px rgba(52, 198, 196, 0.22);
+      box-shadow: 2px 0 14px rgba(69, 185, 187, 0.22);
     }
     .request-card__body {
       flex: 1;
@@ -750,7 +750,7 @@
       height: 56px;
       border-radius: 18px;
       background: var(--req-accent);
-      color: var(--app-cta-text, #062A29);
+      color: var(--app-cta-text, #04262A);
       font-size: 19px;
       font-weight: 700;
       display: flex;
@@ -1099,10 +1099,11 @@
     }
     .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body>
+<body class="ar-pilot ar-pilot--trainer-requests">
   <header class="page-header">
     <div class="page-header-kicker">Входящие</div>
     <div class="header">
@@ -1210,9 +1211,9 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js"></script>
-  <script src="trainer-client-relay-ui.js?v=202605090"></script>
-  <script src="trainer-relay-helpers.js?v=202605090"></script>
+  <script src="mini-app-trainer-gate.js?v=202608315"></script>
+  <script src="trainer-client-relay-ui.js?v=202608315"></script>
+  <script src="trainer-relay-helpers.js?v=202608315"></script>
   <script>
     (function() {
       fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
@@ -1225,7 +1226,7 @@
         }
         try {
           var darkUi = tg.colorScheme === 'dark';
-          var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
+          var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) { /* older clients */ }
@@ -1236,7 +1237,7 @@
             }
             try {
               var du = tg.colorScheme === 'dark';
-              var bg = du ? '#0d1515' : '#F4F2EC';
+              var bg = du ? '#0B0C0E' : '#F1F3F2';
               if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
               if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
             } catch (err) { /* ignore */ }
@@ -2158,6 +2159,6 @@
       syncTrainerRequestsHeaderBack();
     })();
   </script>
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>

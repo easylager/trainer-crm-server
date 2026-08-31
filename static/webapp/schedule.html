@@ -5,17 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Моё расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body>
+<body class="ar-pilot ar-pilot--schedule">
 
   <div class="header">
     <span class="header-title">Моё расписание</span>
@@ -475,14 +476,14 @@
 
         const el = document.getElementById('scheduleContent');
         if (days.length === 0) {
-          el.innerHTML = '<div class="empty">Нет слотов на эту неделю</div>';
+          el.innerHTML = '<div class="empty ar-empty-state">Нет слотов на эту неделю</div>';
           return;
         }
 
         let html = '';
         days.forEach(function(dateKey) {
           const daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
-          html += '<div class="day-block"><div class="day-title">' + formatDateKey(dateKey) + '</div>';
+          html += '<div class="day-block ar-day"><div class="ar-day-head"><div class="day-title">' + formatDateKey(dateKey) + '</div><span class="ar-day-count">' + daySlots.length + ' сл.</span></div><div class="ar-day-slots">';
           daySlots.forEach(function(s) {
             const st = s.status || 'available';
             const booked = st === 'booked';
@@ -494,6 +495,7 @@
               : '';
             const tag = hasBooking ? 'button' : 'div';
             const openAttr = hasBooking ? ' type="button" data-booking-id="' + s.booking_id + '" tabindex="0" role="button" aria-label="Детали записи"' : '';
+            const chev = hasBooking ? '<span class="ar-chev" aria-hidden="true"></span>' : '';
             html += '<' + tag + ' class="' + cardClass + '"' + openAttr + '>';
             html += '<div class="slot-main">';
             html += '<div class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</div>';
@@ -501,9 +503,10 @@
             html += clientHint;
             html += '</div>';
             html += '<span class="slot-status ' + st + '">' + statusLabel(st) + '</span>';
+            html += chev;
             html += '</' + tag + '>';
           });
-          html += '</div>';
+          html += '</div></div>';
         });
         el.innerHTML = html;
 
@@ -765,6 +768,6 @@
       })();
     })();
   </script>
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>

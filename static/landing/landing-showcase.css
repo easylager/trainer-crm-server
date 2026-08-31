@@ -273,7 +273,7 @@
   font-weight: 600;
   color: var(--app-cta-text);
   background: var(--app-cta-fill);
-  box-shadow: 0 4px 12px rgba(52, 198, 196, 0.25);
+  box-shadow: 0 4px 12px rgba(69, 185, 187, 0.25);
 }
 
 .landing-showcase__screen--schedule {

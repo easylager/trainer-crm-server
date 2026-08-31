@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Профиль тренера</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
-  <script src="mini-app-confirm.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <script src="mini-app-phone-field.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <script src="mini-app-confirm.js?v=202608315"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,12 +26,13 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202608265" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202608265" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="preload" href="trainer-profile-main.js?v=202608315" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body>
+<body class="ar-pilot ar-pilot--trainer-profile">
   <div class="header">
     <div class="header-title">Профиль</div>
     <div class="app-header-actions trainer-mini-nav">
@@ -223,7 +224,7 @@
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint" style="margin: 0 0 14px;">Не переживайте, если что-то захотите уточнить позже — всегда можно дозаполнить или изменить в разделе «Профиль». 😊</p>
+          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги и укажите цену — остальное можно дописать в профиле позже.</p>
           <div id="servicesWrap"></div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
@@ -236,6 +237,9 @@
         <div class="card">
           <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
           <div id="arenasWrap"></div>
+          <div id="arenaEmptyActions" class="arena-empty-actions" hidden></div>
+          <p id="arenaSetupStatus" class="arena-setup-status" hidden role="status"></p>
+          <p class="field-error" id="err_arena_setup" role="status" hidden style="margin-top:8px;"></p>
           <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
           <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
         </div>
@@ -511,7 +515,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202608265"></script>
-  <script defer src="mini-app-trainer-home.js?v=20260563"></script>
+  <script defer src="trainer-profile-main.js?v=202608315"></script>
+  <script defer src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>

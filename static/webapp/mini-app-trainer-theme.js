@@ -4,20 +4,34 @@
  * Подключать сразу после telegram-web-app.js, ДО theme.css.
  */
 (function () {
-  var GLIDE_CTA_FILL = '#34C6C4';
-  var GLIDE_CTA_TEXT = '#062A29';
-  /* Cream canvas (landing's --paper, design/prototypes/2026-08-24-live-link-hero.html) — was #FBFAF7, read as near-pure-white. Cards stay white for the paper/card contrast. */
-  var LIGHT_BG = '#F4F2EC';
-  var LIGHT_SURFACE = '#FFFFFF';
-  var LIGHT_TEXT = '#16292A';
   /*
-   * Dark mode: calmer near-black background + muted teal wash (was #1c1c1c bg /
-   * full-strength #34C6C4 accent everywhere — read as harsh/neon on screens with
-   * lots of cards). CTA buttons stay at full brand strength (GLIDE_CTA_FILL).
+   * ЗНАЧЕНИЯ ЗЕРКАЛЯТ theme.css. Telegram ставит свои --tg-theme-* инлайном,
+   * поэтому здесь мы перебиваем их через !important — и любое расхождение с
+   * theme.css выиграет ЭТОТ файл. Меняете гамму — меняйте оба места.
+   * Обоснование палитры: design/prototypes/2026-08-26-glide-color-concepts.html
    */
-  var DARK_BG = '#0d1515';
-  var DARK_SURFACE = '#172425';
-  var DARK_ACCENT_RGB = '42, 152, 146';
+  var GLIDE_CTA_FILL = '#45B9BB';
+  var GLIDE_CTA_TEXT = '#04262A';
+  /* ICE PAPER: холодная бумага вместо кремовой — кремовая тянула тил в «клинический». */
+  var LIGHT_BG = '#F1F3F2';
+  var LIGHT_SURFACE = '#FFFFFF';
+  var LIGHT_TEXT = '#101617';
+  var LIGHT_HINT = '#5E6B6B';
+  /*
+   * ARENA: нейтрали ахроматические — в фоне нет ни грамма зелёного. Раньше он был
+   * (#0d1515 / #172425 — это тил, сведённый в тень), поэтому акцент того же тона
+   * не читался как акцент, и приходилось глушить его до 42,152,146. Теперь глушить
+   * не нужно: тил идёт в полную силу бренда, но занимает только действие и активное
+   * состояние.
+   *
+   * Текст — мягкий белый, а не #ffffff: чистый белый на почти чёрном даёт 18.5:1,
+   * ореол вокруг букв на OLED и резь вечером. #E6E9EA — 16.0:1.
+   */
+  var DARK_BG = '#0B0C0E';
+  var DARK_SURFACE = '#141618';
+  var DARK_TEXT = '#E6E9EA';
+  var DARK_HINT = '#868D93';
+  var ACCENT_RGB = '69, 185, 187';
 
   function getTg() {
     return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -55,16 +69,12 @@
     d.style.setProperty('--app-cta-text', GLIDE_CTA_TEXT, 'important');
     d.style.setProperty('--tg-theme-button-color', GLIDE_CTA_FILL, 'important');
     d.style.setProperty('--tg-theme-button-text-color', GLIDE_CTA_TEXT, 'important');
-    d.style.setProperty('--accent-rgb', dark ? DARK_ACCENT_RGB : '52, 198, 196', 'important');
-    d.style.setProperty(
-      '--accent-rgb-alt',
-      dark ? DARK_ACCENT_RGB : '52, 198, 196',
-      'important'
-    );
+    d.style.setProperty('--accent-rgb', ACCENT_RGB, 'important');
+    d.style.setProperty('--accent-rgb-alt', ACCENT_RGB, 'important');
     d.style.setProperty('--tg-theme-bg-color', dark ? DARK_BG : LIGHT_BG, 'important');
     d.style.setProperty(
       '--tg-theme-text-color',
-      dark ? '#ffffff' : LIGHT_TEXT,
+      dark ? DARK_TEXT : LIGHT_TEXT,
       'important'
     );
     d.style.setProperty(
@@ -72,9 +82,9 @@
       dark ? DARK_SURFACE : LIGHT_SURFACE,
       'important'
     );
-    d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+    d.style.setProperty('--tg-theme-hint-color', dark ? DARK_HINT : LIGHT_HINT, 'important');
     d.style.setProperty('--req-accent', GLIDE_CTA_FILL, 'important');
-    d.style.setProperty('--req-accent-deep', '#1FA5A3', 'important');
+    d.style.setProperty('--req-accent-deep', '#2E9A9C', 'important');
     d.style.colorScheme = dark ? 'dark' : 'light';
 
     applyTelegramChromeColors(dark);

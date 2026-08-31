@@ -114,7 +114,7 @@
     var tg = getTg();
     if (!tg) return;
     var dark = tg.colorScheme === 'dark';
-    var bgHex = dark ? '#0d1515' : '#F4F2EC';
+    var bgHex = dark ? '#0B0C0E' : '#F1F3F2';
     try {
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);

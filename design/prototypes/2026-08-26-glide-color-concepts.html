@@ -1,0 +1,711 @@
+<title>Glide Colour Concepts</title>
+<style>
+/* ============================================================
+   Галерея концептов. Хром страницы намеренно ахроматический
+   (нейтральный графит + один тонкий тиловый акцент), чтобы
+   не подкрашивать сами палитры. Один визуальный режим — это
+   презентационный планшет студии, а не адаптивный документ.
+   ============================================================ */
+:root{
+  --ink:        #0E0E10;
+  --ink-2:      #17171A;
+  --ink-3:      #1F1F23;
+  --plinth:     #2A2A2F;
+  --hair:       #2B2B31;
+  --fg:         #E9E9EC;
+  --fg-2:       #A0A0A8;
+  --fg-3:       #6E6E78;
+  --teal:       #45B9BB;
+  --teal-dim:   #2E7C7E;
+
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --pad: clamp(20px, 5vw, 64px);
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:var(--ink);
+  color:var(--fg);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 var(--pad);}
+
+/* ---------- типографика ---------- */
+.eyebrow{
+  font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--fg-3);margin:0;
+}
+h1{
+  font-size:clamp(34px,6.4vw,62px);
+  line-height:1.02;
+  letter-spacing:-.035em;
+  font-weight:800;
+  margin:14px 0 0;
+  text-wrap:balance;
+}
+h2{
+  font-size:clamp(24px,3.4vw,34px);
+  letter-spacing:-.028em;line-height:1.1;font-weight:800;margin:0;
+  text-wrap:balance;
+}
+h3{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0 0 8px;}
+p{margin:0;}
+.lede{font-size:clamp(16px,2vw,19px);line-height:1.55;color:var(--fg-2);max-width:62ch;}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.02em;font-variant-numeric:tabular-nums;}
+
+/* ---------- шапка ---------- */
+header.top{
+  padding-top:clamp(40px,8vw,88px);
+  padding-bottom:clamp(36px,6vw,68px);
+  border-bottom:1px solid var(--hair);
+}
+.brandline{display:flex;align-items:center;gap:14px;margin-bottom:clamp(28px,5vw,52px);}
+.brandline svg{width:54px;height:auto;color:var(--teal);display:block;}
+.brandline .wm{
+  font-weight:800;font-size:19px;letter-spacing:.16em;
+}
+.brandline .div{width:1px;height:22px;background:var(--hair);}
+.brandline .sub{font-size:11px;line-height:1.25;letter-spacing:.1em;color:var(--fg-3);text-transform:uppercase;font-weight:600;}
+.head-grid{display:grid;grid-template-columns:1fr;gap:26px;}
+@media(min-width:900px){.head-grid{grid-template-columns:1.15fr .85fr;gap:56px;align-items:end;}}
+.brief{border-left:2px solid var(--teal-dim);padding-left:18px;display:grid;gap:10px;}
+.brief dt{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);font-weight:700;}
+.brief dd{margin:0;font-size:14px;color:var(--fg-2);line-height:1.5;}
+
+/* ---------- секции ---------- */
+section{padding:clamp(48px,7vw,92px) 0;border-bottom:1px solid var(--hair);}
+.sec-head{display:grid;gap:14px;max-width:70ch;margin-bottom:clamp(30px,4vw,44px);}
+
+/* ---------- диагноз ---------- */
+.diag{display:grid;gap:0;border:1px solid var(--hair);border-radius:14px;overflow:hidden;background:var(--ink-2);}
+.diag-row{
+  display:grid;grid-template-columns:auto 1fr;gap:16px;
+  padding:18px 20px;border-top:1px solid var(--hair);align-items:start;
+}
+.diag-row:first-child{border-top:0;}
+.diag-row .tag{
+  font-family:var(--mono);font-size:11px;color:var(--ink);background:var(--fg-3);
+  border-radius:4px;padding:2px 7px;font-weight:700;white-space:nowrap;margin-top:3px;
+}
+.diag-row.crit .tag{background:#E0714A;}
+.diag-row b{display:block;font-size:15px;font-weight:700;letter-spacing:-.01em;margin-bottom:3px;}
+.diag-row span{font-size:14px;color:var(--fg-2);line-height:1.5;}
+.diag-row code{font-family:var(--mono);font-size:12.5px;color:var(--teal);background:rgba(69,185,187,.1);padding:1px 5px;border-radius:4px;}
+
+.with-ref{display:grid;gap:clamp(28px,4vw,48px);}
+@media(min-width:940px){.with-ref{grid-template-columns:1fr 340px;align-items:start;}}
+
+/* ---------- блок концепта ---------- */
+.concept{padding:clamp(48px,7vw,92px) 0;border-bottom:1px solid var(--hair);}
+.c-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;margin-bottom:6px;}
+.c-name{font-size:clamp(26px,3.6vw,38px);font-weight:800;letter-spacing:-.03em;line-height:1;margin:0;}
+.c-kicker{font-size:13px;letter-spacing:.02em;color:var(--teal);font-weight:600;}
+.c-body{display:grid;gap:clamp(30px,4vw,52px);margin-top:30px;}
+@media(min-width:940px){.c-body{grid-template-columns:340px 1fr;align-items:start;}}
+
+.notes{display:grid;gap:22px;align-content:start;}
+.notes .idea{font-size:16px;line-height:1.6;color:var(--fg);max-width:62ch;}
+.mech{display:grid;gap:11px;margin:0;padding:0;list-style:none;}
+.mech li{display:grid;grid-template-columns:auto 1fr;gap:11px;font-size:14.5px;color:var(--fg-2);line-height:1.5;}
+.mech li::before{
+  content:"";width:6px;height:6px;border-radius:2px;background:var(--teal-dim);margin-top:8px;
+}
+.mech li b{color:var(--fg);font-weight:650;}
+.risk{
+  font-size:13.5px;color:var(--fg-2);line-height:1.5;
+  border-left:2px solid #7A5A2E;padding-left:14px;
+}
+.risk b{color:#D9A05B;font-weight:700;}
+
+/* ---------- палитра ---------- */
+.pal{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none;}
+.pal li{
+  display:flex;align-items:center;gap:9px;
+  background:var(--ink-2);border:1px solid var(--hair);border-radius:9px;
+  padding:7px 12px 7px 8px;
+}
+.pal .sw{width:22px;height:22px;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);flex:none;}
+.pal .meta{display:grid;line-height:1.25;}
+.pal .role{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);font-weight:700;}
+.pal .hex{font-family:var(--mono);font-size:12px;color:var(--fg);font-variant-numeric:tabular-nums;}
+
+.ratios{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;}
+.ratios li{
+  font-family:var(--mono);font-size:11.5px;color:var(--fg-2);
+  border:1px solid var(--hair);border-radius:6px;padding:4px 9px;
+  font-variant-numeric:tabular-nums;
+}
+.ratios b{color:var(--fg);font-weight:600;}
+
+/* ---------- подставка под телефон ---------- */
+.plinth{
+  background:linear-gradient(180deg,#33333A 0%,var(--plinth) 55%,#232328 100%);
+  border-radius:20px;padding:26px 20px 30px;
+  display:grid;justify-items:center;gap:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.plinth .cap{
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.5);
+}
+.plinth.tight{padding:20px 16px 24px;}
+
+/* ============================================================
+   ТЕЛЕФОН. Всё внутри рисуется только через --p-* токены,
+   поэтому концепт = один набор переменных, разметка одна и та же.
+   ============================================================ */
+.phone{
+  width:300px;max-width:100%;
+  background:var(--p-bg);
+  border-radius:26px;
+  overflow:hidden;
+  box-shadow:0 2px 4px rgba(0,0,0,.4), 0 26px 50px -20px rgba(0,0,0,.75);
+  font-size:13px;
+  color:var(--p-text);
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+}
+.ph-head{
+  background:var(--p-head-bg);color:var(--p-head-fg);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 15px;font-weight:800;letter-spacing:-.02em;font-size:15px;
+  border-bottom:1px solid var(--p-head-line);
+}
+.ph-head .dots{display:flex;gap:12px;opacity:.55;font-size:14px;}
+.ph-body{padding:15px 14px 12px;display:grid;gap:13px;align-content:start;}
+
+.greet{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.greet h4{margin:0;font-size:17px;font-weight:800;letter-spacing:-.03em;line-height:1.15;}
+.linkbtn{
+  width:38px;height:38px;border-radius:11px;flex:none;
+  background:var(--p-wash);border:1px solid var(--p-brand-line);
+  color:var(--p-brand-ink);display:grid;place-items:center;
+}
+.linkbtn svg{width:17px;height:17px;}
+
+.days{display:flex;gap:5px;}
+.day{
+  flex:1;border-radius:9px;padding:6px 0 5px;text-align:center;
+  border:1px solid transparent;color:var(--p-hint);
+}
+.day .dow{font-size:8.5px;letter-spacing:.08em;font-weight:700;text-transform:uppercase;}
+.day .num{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.3;}
+.day.on{
+  background:var(--p-day-on-bg);border-color:var(--p-day-on-line);color:var(--p-day-on-fg);
+}
+.day.dot .num::after{
+  content:"";display:block;width:11px;height:2px;border-radius:2px;
+  background:var(--p-brand);margin:2px auto 0;
+}
+
+.alert{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:var(--p-r);
+  padding:10px 10px 10px 13px;
+}
+.alert .lbl{display:flex;align-items:center;gap:8px;font-weight:650;font-size:12.5px;}
+.alert .lbl i{width:6px;height:6px;border-radius:50%;background:var(--p-attn);flex:none;}
+.pill{
+  border-radius:99px;padding:6px 13px;font-size:11.5px;font-weight:700;border:0;
+  background:var(--p-quiet-bg);color:var(--p-quiet-fg);white-space:nowrap;
+}
+.pill.solid{background:var(--p-cta);color:var(--p-cta-fg);}
+
+.sec-lbl{font-size:10px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--p-hint);}
+.datehead{font-size:14px;font-weight:750;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+
+.lesson{
+  background:var(--p-card);border:1px solid var(--p-line);border-radius:var(--p-r);
+  padding:12px 13px;display:grid;gap:7px;box-shadow:var(--p-card-shadow);
+  position:relative;overflow:hidden;
+}
+.lesson .rail{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--p-brand);opacity:var(--p-rail,0);}
+.lesson .row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.lesson .time{font-size:14px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;}
+.tag.svc{background:var(--p-wash);color:var(--p-brand-ink);}
+.tag.ok{background:var(--p-ok-bg);color:var(--p-ok-fg);margin-left:auto;}
+.lesson .meta{font-size:11.5px;color:var(--p-hint);display:flex;gap:6px;align-items:center;}
+.lesson .who{font-size:12px;font-weight:600;}
+
+.chips{display:flex;gap:7px;flex-wrap:wrap;}
+.chip{
+  font-size:11px;font-weight:600;padding:6px 11px;border-radius:99px;
+  background:var(--p-chip-bg);color:var(--p-chip-fg);border:1px solid var(--p-line);
+  display:flex;align-items:center;gap:6px;
+}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--p-ok-dot);flex:none;}
+.chip.warn i{background:var(--p-attn);}
+
+.footrow{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-top:1px dashed var(--p-line);padding-top:12px;margin-top:2px;
+}
+.footrow .t1{font-size:12.5px;font-weight:700;}
+.footrow .t2{font-size:10.5px;color:var(--p-hint);}
+.fab{
+  border:0;border-radius:14px;padding:11px 16px;font-size:13px;font-weight:750;
+  background:var(--p-cta);color:var(--p-cta-fg);box-shadow:var(--p-cta-shadow);
+  display:flex;align-items:center;gap:7px;white-space:nowrap;
+}
+
+.nav{
+  display:flex;background:var(--p-nav-bg);border-top:1px solid var(--p-nav-line);
+  padding:8px 6px 12px;
+}
+.nav div{flex:1;display:grid;justify-items:center;gap:4px;color:var(--p-hint);font-size:9.5px;font-weight:600;position:relative;}
+.nav .ic{
+  width:34px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:14px;line-height:1;
+}
+.nav .on{color:var(--p-nav-on-fg);}
+.nav .on .ic{background:var(--p-nav-on-bg);color:var(--p-nav-on-ic);}
+.nav .badge{
+  position:absolute;top:-2px;right:calc(50% - 20px);min-width:14px;height:14px;border-radius:99px;
+  background:var(--p-attn);color:var(--p-attn-fg);font-size:9px;font-weight:800;
+  display:grid;place-items:center;padding:0 4px;
+}
+
+/* ---------- финальная линейка ---------- */
+.strip{
+  display:flex;gap:16px;overflow-x:auto;padding:4px 4px 18px;
+  scroll-snap-type:x proximity;
+}
+.strip .plinth{flex:none;scroll-snap-align:start;}
+.strip .phone{width:250px;font-size:12px;}
+
+.verdict{display:grid;gap:14px;max-width:74ch;}
+.verdict ol{margin:0;padding-left:20px;display:grid;gap:12px;}
+.verdict li{font-size:15px;color:var(--fg-2);line-height:1.55;}
+.verdict li b{color:var(--fg);font-weight:700;}
+footer{padding:36px 0 60px;color:var(--fg-3);font-size:13px;}
+
+@media (prefers-reduced-motion: no-preference){
+  .plinth{transition:transform .25s ease;}
+  .plinth:hover{transform:translateY(-3px);}
+}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:4px;}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="brandline">
+    <svg viewBox="-6 -6 112 68" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="butt" stroke-linejoin="miter">
+      <path d="M45.64 21.64 L33.66 9.66 Q28 4 22.34 9.66 L9.66 22.34 Q4 28 9.66 33.66 L22.34 46.34 Q28 52 33.66 46.34 L45.63 34.37"/>
+      <path d="M54.36 34.36 L66.34 46.34 Q72 52 77.66 46.34 L90.34 33.66 Q96 28 90.34 22.34 L77.66 9.66 Q72 4 66.34 9.66 L54.37 21.63"/>
+    </svg>
+    <span class="wm">GLIDE</span>
+    <span class="div"></span>
+    <span class="sub">Digital<br>skating<br>ecosystem</span>
+  </div>
+
+  <p class="eyebrow">Ревизия цветовой системы · 26.08.2026</p>
+  <div class="head-grid">
+    <div>
+      <h1>Пять способов перестать красить фон в цвет бренда</h1>
+      <p class="lede" style="margin-top:18px;">
+        Напряжение, которое вы чувствуете, — не в оттенке тила. Он хороший. Проблема в том,
+        что сегодня тил одновременно и фон, и обводка, и акцент, и активное состояние.
+        Когда акцентом становится всё, акцента не остаётся, и экран читается как ровный гул.
+      </p>
+    </div>
+    <dl class="brief">
+      <div><dt>Что не трогаем</dt><dd>Логотип и его тил <span class="mono" style="color:var(--teal)">#45B9BB</span>. Во всех пяти концептах он остаётся первичным цветом действия.</dd></div>
+      <div><dt>Что меняем</dt><dd>Нейтрали, роли и дозировку. Это ~30 строк в <span class="mono">theme.css</span>, не переверстка.</dd></div>
+      <div><dt>Как читать</dt><dd>Слева экран «Главная» тренера в упрощённом виде, справа — логика решения и его цена.</dd></div>
+    </dl>
+  </div>
+</header>
+
+<!-- ================= ДИАГНОЗ ================= -->
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Сначала — почему сейчас неуютно</p>
+    <h2>Пять механических причин</h2>
+    <p class="lede">Не «некрасиво», а конкретные конфликты, которые можно вычислить из значений в <span class="mono">theme.css</span>.</p>
+  </div>
+
+  <div class="with-ref">
+    <div class="diag">
+      <div class="diag-row crit">
+        <span class="tag">1</span>
+        <span><b>Фон — это тот же тил, только притушенный</b>
+        <code>#0d1515</code> <code>#172425</code> <code>#1D2C2D</code> — все три нейтрали смещены в сине-зелёный. Акцент <code>#34C6C4</code> — тот же тон в максимуме. Глаз различает фон и акцент только по светлоте, а не по цвету: цвет «есть везде» и потому нигде не работает.</span>
+      </div>
+      <div class="diag-row crit">
+        <span class="tag">2</span>
+        <span><b>Тил занят в семи ролях сразу</b>
+        Активный день, подчёркивания остальных дней, тег «тест», статус «подтверждено», кнопка «Профиль», FAB «Записать», активная вкладка навигации, обводка карточки занятия. Восемь равнояркими пятнами на одном экране — иерархии нет, взгляду негде остановиться.</span>
+      </div>
+      <div class="diag-row">
+        <span class="tag">3</span>
+        <span><b>Чистый белый на почти чёрном — 18.5:1</b>
+        Формально «отлично», практически — ореол вокруг букв на OLED и резь вечером. Комфортный коридор для тёмной темы — 13–16:1, то есть мягкий белый вроде <code>#E6E9EA</code>, а не <code>#ffffff</code>.</span>
+      </div>
+      <div class="diag-row">
+        <span class="tag">4</span>
+        <span><b>Нет второго цвета — нечем сказать «посмотри сюда»</b>
+        «Профиль не в каталоге» и красный бейдж «1» — это разные сигналы, но у первого нет своего цвета, он выглядит как обычная строка. Одна хрома на весь интерфейс = монотон.</span>
+      </div>
+      <div class="diag-row">
+        <span class="tag">5</span>
+        <span><b>Обводки конкурируют с содержимым</b>
+        Тиловые рамки чипов и карточек на тиловом фоне: контур спорит с тем, что внутри. Разделять поверхности должны свет и тень, а цвет — только называть действие.</span>
+      </div>
+    </div>
+
+    <div class="plinth" id="ref-slot">
+      <span class="cap">Как сейчас</span>
+    </div>
+  </div>
+</section>
+
+<div id="concepts"></div>
+
+<!-- ================= ЛИНЕЙКА ================= -->
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Всё рядом</p>
+    <h2>Один экран, шесть вариантов</h2>
+    <p class="lede">Прокрутите вбок. Полезнее всего сравнивать краем глаза — какой из них не хочется закрыть через минуту.</p>
+  </div>
+  <div class="strip" id="strip"></div>
+</section>
+
+<!-- ================= РЕКОМЕНДАЦИЯ ================= -->
+<section style="border-bottom:0;">
+  <div class="sec-head">
+    <p class="eyebrow">Если бы решал я</p>
+    <h2>Рекомендация</h2>
+  </div>
+  <div class="verdict">
+    <ol>
+      <li><b>ARENA — как основная тёмная тема продукта.</b> Она чинит ровно то, что болит, и не требует ничего, кроме замены нейтралей: тил остаётся тем же <span class="mono">#45B9BB</span>, но впервые получает контрастный фон, на котором виден. Риск близок к нулю, эффект — максимальный из всех вариантов на единицу работы.</li>
+      <li><b>ICE PAPER — как светлая тема-напарник.</b> У вас уже есть «бумажная» светлая гамма в <span class="mono">theme.css</span>; ICE PAPER — её доведённая версия с холодной бумагой вместо кремовой. Пара ARENA/ICE PAPER даёт один продукт в двух режимах, а не два разных продукта.</li>
+      <li><b>AURORA — для лендинга и онбординга, не для ежедневных экранов.</b> Градиент и стекло отлично продают и утомляют при десятом открытии за день. Разделите языки: витрина — AURORA, рабочее место — ARENA.</li>
+      <li><b>EMBER SLATE — если хочется характера.</b> Единственный вариант, где тил звучит громче, чем сейчас, при том что его стало меньше: тёплый угольный фон делает всю работу за счёт температурного контраста. Берите, если готовы к тому, что продукт перестанет выглядеть «как все спорт-приложения».</li>
+      <li><b>RINK — если монотон беспокоит сильнее всего.</b> Второй цвет снимает его радикально, но это уже двухцветный бренд: логотип одноцветный, и интерфейс начнёт от него отходить. Осознанное решение уровня бренда, а не темы.</li>
+    </ol>
+    <p class="lede" style="margin-top:8px;">
+      Скажите, какой берём, — переведу его в <span class="mono">theme.css</span> role-токенами
+      (нейтрали, <span class="mono">--glide-*</span>, семантика attention), не трогая разметку экранов.
+    </p>
+  </div>
+</section>
+
+<footer>Glide · концепты цветовой системы · экраны упрощены, содержимое реальное</footer>
+</div>
+
+<script>
+/* =========================================================
+   Один шаблон экрана + наборы токенов. Так сравнение честное:
+   отличаются только цвета, не композиция.
+   ========================================================= */
+
+const LINK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>';
+
+function phone(c, opts = {}) {
+  const vars = Object.entries(c.vars).map(([k, v]) => `${k}:${v}`).join(';');
+  const el = document.createElement('div');
+  el.className = 'phone';
+  el.setAttribute('style', vars);
+  el.innerHTML = `
+    <div class="ph-head"><span>Glide Coach</span><span class="dots">⋮ ✕</span></div>
+    <div class="ph-body">
+      <div class="greet">
+        <h4>Доброй ночи,<br>Максим 🌙</h4>
+        <div class="linkbtn">${LINK_ICON}</div>
+      </div>
+      <div class="days">
+        <div class="day on"><div class="dow">ср</div><div class="num">26</div></div>
+        <div class="day dot"><div class="dow">чт</div><div class="num">27</div></div>
+        <div class="day"><div class="dow">пт</div><div class="num">28</div></div>
+        <div class="day"><div class="dow">сб</div><div class="num">29</div></div>
+        <div class="day"><div class="dow">вс</div><div class="num">30</div></div>
+        <div class="day"><div class="dow">пн</div><div class="num">31</div></div>
+        <div class="day"><div class="dow">вт</div><div class="num">1</div></div>
+      </div>
+      <div class="alert">
+        <span class="lbl"><i></i>Профиль не в каталоге</span>
+        <button class="pill solid">Профиль</button>
+      </div>
+      <div class="sec-lbl">Ближайшие занятия</div>
+      <div class="datehead">27.08.2026 (Чт)</div>
+      <div class="lesson">
+        <span class="rail"></span>
+        <div class="row1">
+          <span class="time">16:15–17:00</span>
+          <span class="tag svc">тест</span>
+          <span class="tag ok">подтверждено</span>
+        </div>
+        <div class="who">Александр К.</div>
+        <div class="meta">📍 ТЦ Замок · Совершенствование</div>
+      </div>
+      <div class="chips">
+        <span class="chip"><i></i>Сегодня · свободно</span>
+        <span class="chip warn"><i></i>Неделя · 1 · 1 впереди</span>
+      </div>
+      <div class="footrow">
+        <div><div class="t1">Наше комьюнити</div><div class="t2">Справка · идеи и отзывы</div></div>
+        <button class="fab">＋ Записать</button>
+      </div>
+    </div>
+    <div class="nav">
+      <div class="on"><span class="ic">⌂</span>Главная</div>
+      <div><span class="ic">▤</span>Расписание</div>
+      <div><span class="ic">☺</span>Клиенты</div>
+      <div><span class="ic">⋯</span>Ещё<span class="badge">1</span></div>
+    </div>`;
+
+  const plinth = document.createElement('div');
+  plinth.className = 'plinth' + (opts.tight ? ' tight' : '');
+  plinth.innerHTML = `<span class="cap">${opts.cap || c.name}</span>`;
+  plinth.appendChild(el);
+  return plinth;
+}
+
+/* ---- общие значения, которые не различают концепты ---- */
+const BASE = {
+  '--p-r': '14px',
+  '--p-card-shadow': 'none',
+  '--p-cta-shadow': 'none',
+  '--p-rail': '0',
+};
+
+const CONCEPTS = [
+  {
+    id: 'now',
+    name: 'Как сейчас',
+    vars: { ...BASE,
+      '--p-bg': '#0d1515', '--p-head-bg': '#0b1212', '--p-head-fg': '#ffffff', '--p-head-line': '#1b2a2b',
+      '--p-card': '#1D2C2D', '--p-line': '#26393B', '--p-text': '#ffffff', '--p-hint': '#8e8e93',
+      '--p-brand': '#34C6C4', '--p-brand-ink': '#6FD8D5', '--p-brand-line': '#2c5a5b',
+      '--p-wash': 'rgba(52,198,196,.14)',
+      '--p-cta': '#34C6C4', '--p-cta-fg': '#062A29',
+      '--p-quiet-bg': '#34C6C4', '--p-quiet-fg': '#062A29',
+      '--p-day-on-bg': 'rgba(52,198,196,.14)', '--p-day-on-line': '#34C6C4', '--p-day-on-fg': '#ffffff',
+      '--p-ok-bg': 'rgba(52,198,196,.12)', '--p-ok-fg': '#6FD8D5', '--p-ok-dot': '#34C6C4',
+      '--p-attn': '#8e8e93', '--p-attn-fg': '#ffffff',
+      '--p-chip-bg': '#172425', '--p-chip-fg': '#ffffff',
+      '--p-nav-bg': '#141f20', '--p-nav-line': '#22302f',
+      '--p-nav-on-bg': '#34C6C4', '--p-nav-on-ic': '#062A29', '--p-nav-on-fg': '#ffffff',
+    },
+  },
+  {
+    id: 'arena',
+    name: 'ARENA',
+    kicker: 'Тил как единственный сигнал',
+    idea: 'Самый прямой ответ на диагноз: увести нейтрали в честный ахроматический графит, где нет ни грамма зелёного, и оставить тил ровно двум ролям — первичному действию и активному состоянию. Тот же <span class="mono">#45B9BB</span>, но впервые ему есть на чём прозвучать. Плюс тёплый янтарь появляется в единственном значении: «требует твоего внимания».',
+    mech: [
+      '<b>Фон становится нейтральным.</b> <span class="mono">#0B0C0E → #1A1D20</span> вместо тиловых теней. Разница фона и акцента теперь и в светлоте, и в цвете.',
+      '<b>Обводки замолкают.</b> Карточка отделяется тонкой серой линией <span class="mono">#262A2E</span>, а не тиловой рамкой. Цветной остаётся только левая рейка активного занятия.',
+      '<b>Тил уходит с чипов, тегов и подчёркиваний дней.</b> На экране остаётся два тиловых пятна: FAB и активная вкладка. Взгляд сразу знает, куда идти.',
+      '<b>Янтарь <span class="mono">#F0A24B</span> получает монополию на «требует внимания».</b> Точка у «Профиль не в каталоге», бейдж «1» и предупреждающий чип — один язык.',
+      '<b>Белый смягчается</b> до <span class="mono">#E6E9EA</span>: 16:1 вместо 18.5:1, ореол исчезает.',
+    ],
+    risk: '<b>Риск:</b> почти нулевой, но и характера прибавляется меньше всех. Это «правильно», а не «вау». Если хочется, чтобы приложение узнавалось по скриншоту, ARENA нужно усилить типографикой.',
+    pal: [
+      ['Фон', '#0B0C0E'], ['Поверхность', '#141618'], ['Карточка', '#1A1D20'], ['Линия', '#262A2E'],
+      ['Текст', '#E6E9EA'], ['Подпись', '#868D93'], ['Бренд', '#45B9BB'], ['Внимание', '#F0A24B'],
+    ],
+    ratios: ['Текст / фон <b>16.0:1</b>', 'Подпись / карточка <b>5.0:1</b>', 'Тил-текст / карточка <b>9.2:1</b>', 'Текст на кнопке <b>6.8:1</b>'],
+    vars: { ...BASE,
+      '--p-bg': '#0B0C0E', '--p-head-bg': '#0B0C0E', '--p-head-fg': '#E6E9EA', '--p-head-line': '#1E2226',
+      '--p-card': '#1A1D20', '--p-line': '#262A2E', '--p-text': '#E6E9EA', '--p-hint': '#868D93',
+      '--p-brand': '#45B9BB', '--p-brand-ink': '#57D0D2', '--p-brand-line': '#2A4C4D',
+      '--p-wash': 'rgba(69,185,187,.13)',
+      '--p-cta': '#45B9BB', '--p-cta-fg': '#04262A',
+      '--p-quiet-bg': '#262A2E', '--p-quiet-fg': '#E6E9EA',
+      '--p-day-on-bg': '#1F2327', '--p-day-on-line': '#33383D', '--p-day-on-fg': '#E6E9EA',
+      '--p-ok-bg': 'rgba(79,201,138,.13)', '--p-ok-fg': '#5FCF94', '--p-ok-dot': '#4FC98A',
+      '--p-attn': '#F0A24B', '--p-attn-fg': '#2A1704',
+      '--p-chip-bg': '#141618', '--p-chip-fg': '#B9BFC4',
+      '--p-nav-bg': '#101214', '--p-nav-line': '#22262A',
+      '--p-nav-on-bg': '#45B9BB', '--p-nav-on-ic': '#04262A', '--p-nav-on-fg': '#E6E9EA',
+      '--p-rail': '1', '--p-card-shadow': '0 1px 2px rgba(0,0,0,.35)',
+    },
+  },
+  {
+    id: 'paper',
+    name: 'ICE PAPER',
+    kicker: 'Дневной инструмент',
+    idea: 'Тренер открывает CRM на катке днём, при свете и часто на солнце. Светлая тема здесь не «альтернатива», а основной сценарий. Холодная бумага вместо кремовой — она не спорит с бирюзой, а поддерживает её, и весь экран читается как белая коробка с одной бирюзовой лентой.',
+    mech: [
+      '<b>Бумага уходит из кремовой в холодную</b> <span class="mono">#F1F3F2</span>. Кремовый <span class="mono">#F4F2EC</span> в текущей теме тянет в жёлтый и делает тил «больничным».',
+      '<b>Карточка светлее холста</b>, а не темнее: белая на бумаге, отделяется мягкой тенью. Это ровно та ошибка, из-за которой светлая тема раньше читалась как серая.',
+      '<b>Два разных тила.</b> <span class="mono">#45B9BB</span> — только заливка, <span class="mono">#0B6E70</span> — текст и иконки. Светлый тил на белом даёт 2:1 и в тексте нечитаем.',
+      '<b>Янтарь темнеет до <span class="mono">#8A5300</span></b>, чтобы оставаться читаемым текстом на белом (6.3:1), а яркий <span class="mono">#F0A24B</span> остаётся только точкой и бейджем.',
+    ],
+    risk: '<b>Риск:</b> вечером в тёмном зале светлый экран бьёт по глазам. ICE PAPER обязан идти в паре с тёмной темой, а не заменять её.',
+    pal: [
+      ['Бумага', '#F1F3F2'], ['Карточка', '#FFFFFF'], ['Линия', '#E2E6E5'], ['Текст', '#101617'],
+      ['Подпись', '#5E6B6B'], ['Заливка', '#45B9BB'], ['Тил-текст', '#0B6E70'], ['Внимание', '#8A5300'],
+    ],
+    ratios: ['Текст / бумага <b>16.4:1</b>', 'Подпись / карточка <b>5.5:1</b>', 'Тил-текст / белое <b>6.0:1</b>', 'Янтарь-текст / белое <b>6.3:1</b>'],
+    vars: { ...BASE,
+      '--p-r': '16px',
+      '--p-bg': '#F1F3F2', '--p-head-bg': '#FFFFFF', '--p-head-fg': '#101617', '--p-head-line': '#E2E6E5',
+      '--p-card': '#FFFFFF', '--p-line': '#E2E6E5', '--p-text': '#101617', '--p-hint': '#5E6B6B',
+      '--p-brand': '#45B9BB', '--p-brand-ink': '#0B6E70', '--p-brand-line': '#BFE3E3',
+      '--p-wash': 'rgba(69,185,187,.14)',
+      '--p-cta': '#45B9BB', '--p-cta-fg': '#04262A',
+      '--p-quiet-bg': '#EDF0EF', '--p-quiet-fg': '#101617',
+      '--p-day-on-bg': '#FFFFFF', '--p-day-on-line': '#CFD6D5', '--p-day-on-fg': '#101617',
+      '--p-ok-bg': '#E7F4EC', '--p-ok-fg': '#0F6B42', '--p-ok-dot': '#12855A',
+      '--p-attn': '#C87A15', '--p-attn-fg': '#FFFFFF',
+      '--p-chip-bg': '#FFFFFF', '--p-chip-fg': '#3A4544',
+      '--p-nav-bg': '#FFFFFF', '--p-nav-line': '#E2E6E5',
+      '--p-nav-on-bg': '#45B9BB', '--p-nav-on-ic': '#04262A', '--p-nav-on-fg': '#101617',
+      '--p-rail': '1',
+      '--p-card-shadow': '0 1px 2px rgba(16,40,40,.05), 0 8px 22px -16px rgba(16,40,40,.4)',
+      '--p-cta-shadow': '0 4px 12px -4px rgba(69,185,187,.6)',
+    },
+  },
+  {
+    id: 'aurora',
+    name: 'AURORA',
+    kicker: 'Лёд под софитами',
+    idea: 'Единственный смелый вариант. Ночная арена: почти синий-чёрный лёд, полупрозрачные карточки со светящейся кромкой и один градиент — бирюза уходит в мяту и в лёд-синий. Градиент живёт только на первичном действии и активной вкладке, поэтому не превращается в шум. Это выглядит как продукт, который стоит дорого.',
+    mech: [
+      '<b>Холст уходит в глубокий сине-чёрный</b> <span class="mono">#060A12</span> — почти комплементарный тилу. Максимальное разведение фона и акцента по цветовому кругу.',
+      '<b>Карточки — стекло:</b> заливка <span class="mono">rgba(255,255,255,.05)</span>, кромка <span class="mono">rgba(255,255,255,.09)</span>. Разделяет свет, а не цвет.',
+      '<b>CTA — градиент</b> <span class="mono">#45B9BB → #6FE3C9 → #5AA8FF</span> под 135°. Логотипный тил стоит первым, поэтому связь с брендом не теряется.',
+      '<b>Фиолетовый <span class="mono">#A78BFA</span></b> закрывает вторичные состояния — то, чего сегодня не хватает для «второго голоса».',
+    ],
+    risk: '<b>Риск:</b> градиенты и стекло стареют быстрее плоского цвета, и на дешёвых Android-экранах blur даёт полосы. Плюс это язык витрины: на десятом открытии за смену он утомляет сильнее спокойного ARENA.',
+    pal: [
+      ['Ночь', '#060A12'], ['Стекло', '#101827'], ['Кромка', '#1D2739'], ['Текст', '#E9EFF7'],
+      ['Подпись', '#7C8A9E'], ['Тил', '#45B9BB'], ['Мята', '#6FE3C9'], ['Лёд', '#5AA8FF'], ['Фиолет', '#A78BFA'],
+    ],
+    ratios: ['Текст / ночь <b>17.1:1</b>', 'Подпись / стекло <b>5.1:1</b>', 'Тил-текст / стекло <b>10.8:1</b>', 'Фиолет / стекло <b>6.5:1</b>'],
+    vars: { ...BASE,
+      '--p-r': '18px',
+      '--p-bg': '#060A12', '--p-head-bg': '#080D17', '--p-head-fg': '#E9EFF7', '--p-head-line': '#161F30',
+      '--p-card': '#101827', '--p-line': '#1D2739', '--p-text': '#E9EFF7', '--p-hint': '#7C8A9E',
+      '--p-brand': '#45B9BB', '--p-brand-ink': '#63DCD4', '--p-brand-line': '#26485A',
+      '--p-wash': 'rgba(99,220,212,.12)',
+      '--p-cta': 'linear-gradient(135deg,#45B9BB,#6FE3C9 55%,#5AA8FF)', '--p-cta-fg': '#04202A',
+      '--p-quiet-bg': '#1B2436', '--p-quiet-fg': '#E9EFF7',
+      '--p-day-on-bg': '#182133', '--p-day-on-line': '#2A3449', '--p-day-on-fg': '#E9EFF7',
+      '--p-ok-bg': 'rgba(111,227,201,.12)', '--p-ok-fg': '#6FE3C9', '--p-ok-dot': '#6FE3C9',
+      '--p-attn': '#A78BFA', '--p-attn-fg': '#1A0F3A',
+      '--p-chip-bg': '#0D1420', '--p-chip-fg': '#B4C1D2',
+      '--p-nav-bg': '#0A101B', '--p-nav-line': '#1A2434',
+      '--p-nav-on-bg': 'linear-gradient(135deg,#45B9BB,#5AA8FF)', '--p-nav-on-ic': '#04202A', '--p-nav-on-fg': '#E9EFF7',
+      '--p-rail': '1',
+      '--p-card-shadow': '0 1px 0 rgba(255,255,255,.05) inset, 0 12px 28px -18px rgba(0,0,0,.9)',
+      '--p-cta-shadow': '0 6px 20px -8px rgba(69,185,187,.7)',
+    },
+  },
+  {
+    id: 'ember',
+    name: 'EMBER SLATE',
+    kicker: 'Тёплый уголь · температурный контраст',
+    idea: 'Самый недооценённый приём в цвете: если фон тёплый, холодный акцент звучит громче — без единицы прибавленной насыщенности. Уголь с лёгкой охристой примесью делает тот же <span class="mono">#45B9BB</span> заметно свежее, чем он выглядит на сегодняшнем сине-зелёном фоне. И это единственный концепт, который сразу читается как «не такой, как все спортивные приложения».',
+    mech: [
+      '<b>Нейтрали уходят в тёплую сторону:</b> <span class="mono">#12110F → #211E1B</span>. Тил на них — единственное холодное пятно в кадре.',
+      '<b>Текст кремово-белый</b> <span class="mono">#EDE8E0</span>: продолжение тёплого фона, а не белая заплатка на нём.',
+      '<b>Песочный <span class="mono">#E0A868</span></b> берёт роль «внимание» и звучит естественно, потому что живёт в одной температуре с фоном.',
+      '<b>Тил можно давать реже.</b> На тёплом фоне хватает FAB и активной вкладки — остальное закрывают нейтрали и песок.',
+    ],
+    risk: '<b>Риск:</b> тёплый уголь тянет в «кофейню/подкаст», а вы про лёд. Держится это только жёсткой геометрией и типографикой — если верстка расслабится, ощущение спорта уйдёт.',
+    pal: [
+      ['Уголь', '#12110F'], ['Поверхность', '#1B1917'], ['Карточка', '#211E1B'], ['Линия', '#2E2A26'],
+      ['Текст', '#EDE8E0'], ['Подпись', '#9A9188'], ['Тил', '#45B9BB'], ['Песок', '#E0A868'],
+    ],
+    ratios: ['Текст / уголь <b>15.5:1</b>', 'Подпись / карточка <b>5.4:1</b>', 'Тил-текст / карточка <b>9.0:1</b>', 'Песок / карточка <b>7.9:1</b>'],
+    vars: { ...BASE,
+      '--p-r': '12px',
+      '--p-bg': '#12110F', '--p-head-bg': '#12110F', '--p-head-fg': '#EDE8E0', '--p-head-line': '#262320',
+      '--p-card': '#211E1B', '--p-line': '#2E2A26', '--p-text': '#EDE8E0', '--p-hint': '#9A9188',
+      '--p-brand': '#45B9BB', '--p-brand-ink': '#64CFD0', '--p-brand-line': '#2F4A4A',
+      '--p-wash': 'rgba(69,185,187,.13)',
+      '--p-cta': '#45B9BB', '--p-cta-fg': '#04262A',
+      '--p-quiet-bg': '#2E2A26', '--p-quiet-fg': '#EDE8E0',
+      '--p-day-on-bg': '#272320', '--p-day-on-line': '#3C3630', '--p-day-on-fg': '#EDE8E0',
+      '--p-ok-bg': 'rgba(127,191,106,.13)', '--p-ok-fg': '#8FC97C', '--p-ok-dot': '#7FBF6A',
+      '--p-attn': '#E0A868', '--p-attn-fg': '#2A1B08',
+      '--p-chip-bg': '#1B1917', '--p-chip-fg': '#C4BCB2',
+      '--p-nav-bg': '#171512', '--p-nav-line': '#2A2622',
+      '--p-nav-on-bg': '#45B9BB', '--p-nav-on-ic': '#04262A', '--p-nav-on-fg': '#EDE8E0',
+      '--p-rail': '1', '--p-card-shadow': '0 1px 2px rgba(0,0,0,.4)',
+    },
+  },
+  {
+    id: 'rink',
+    name: 'RINK',
+    kicker: 'Двухцветная система: тил + лёд',
+    idea: 'Если монотон — главная претензия, лечится он не оттенком фона, а вторым цветом. Тил остаётся цветом действия (что делать), лёд-синий берёт структуру и навигацию (где я нахожусь). Два цвета с разными обязанностями дают ту иерархию, которой сейчас нет, и заодно прямую ассоциацию со льдом под синим светом арены.',
+    mech: [
+      '<b>Роли делятся жёстко.</b> Тил = «сделать» (FAB, кнопка «Профиль», подтверждения). Лёд-синий <span class="mono">#6BA8FF</span> = «где ты» (активная вкладка, выбранный день, ссылки).',
+      '<b>Фон — глубокий синий лёд</b> <span class="mono">#071528</span>. Он одного семейства со вторым цветом, поэтому синий работает тихо, а тил остаётся самым ярким пятном.',
+      '<b>Пользователь перестаёт путать «состояние» и «действие»</b> — сегодня и то и другое бирюзовое.',
+      '<b>Янтарь остаётся третьим, редким</b> — только «требует внимания».',
+    ],
+    risk: '<b>Риск:</b> самый серьёзный из пяти. Логотип одноцветный, а интерфейс становится двухцветным — со временем это тянет за собой ревизию бренда. Плюс двухцветные системы дороже поддерживать: каждое новое состояние требует ответа на вопрос «оно про действие или про место».',
+    pal: [
+      ['Лёд-ночь', '#071528'], ['Поверхность', '#0E2138'], ['Линия', '#1E3145'], ['Текст', '#E4EDF7'],
+      ['Подпись', '#7D91A8'], ['Тил · действие', '#45B9BB'], ['Синий · место', '#6BA8FF'], ['Внимание', '#F2B15C'],
+    ],
+    ratios: ['Текст / фон <b>15.5:1</b>', 'Подпись / поверхность <b>5.0:1</b>', 'Тил-текст / поверхность <b>9.1:1</b>', 'Синий / поверхность <b>6.7:1</b>'],
+    vars: { ...BASE,
+      '--p-r': '16px',
+      '--p-bg': '#071528', '--p-head-bg': '#05101F', '--p-head-fg': '#E4EDF7', '--p-head-line': '#15263B',
+      '--p-card': '#0E2138', '--p-line': '#1E3145', '--p-text': '#E4EDF7', '--p-hint': '#7D91A8',
+      '--p-brand': '#45B9BB', '--p-brand-ink': '#5FD3D5', '--p-brand-line': '#255457',
+      '--p-wash': 'rgba(69,185,187,.13)',
+      '--p-cta': '#45B9BB', '--p-cta-fg': '#04262A',
+      '--p-quiet-bg': '#1B3049', '--p-quiet-fg': '#E4EDF7',
+      '--p-day-on-bg': 'rgba(107,168,255,.14)', '--p-day-on-line': '#2F4E76', '--p-day-on-fg': '#CFE0F7',
+      '--p-ok-bg': 'rgba(69,214,160,.12)', '--p-ok-fg': '#45D6A0', '--p-ok-dot': '#45D6A0',
+      '--p-attn': '#F2B15C', '--p-attn-fg': '#2A1B04',
+      '--p-chip-bg': '#0B1B2E', '--p-chip-fg': '#B3C4D8',
+      '--p-nav-bg': '#091A2C', '--p-nav-line': '#17293E',
+      '--p-nav-on-bg': '#6BA8FF', '--p-nav-on-ic': '#04162E', '--p-nav-on-fg': '#CFE0F7',
+      '--p-rail': '1', '--p-card-shadow': '0 1px 2px rgba(0,0,0,.4)',
+    },
+  },
+];
+
+/* ---- сборка страницы ---- */
+const byId = Object.fromEntries(CONCEPTS.map(c => [c.id, c]));
+
+document.getElementById('ref-slot').appendChild(phone(byId.now).querySelector('.phone'));
+
+const host = document.getElementById('concepts');
+CONCEPTS.filter(c => c.id !== 'now').forEach(c => {
+  const s = document.createElement('section');
+  s.className = 'concept';
+  s.id = c.id;
+  s.innerHTML = `
+    <div class="c-head">
+      <h2 class="c-name">${c.name}</h2>
+      <span class="c-kicker">${c.kicker}</span>
+    </div>
+    <div class="c-body">
+      <div class="left"></div>
+      <div class="notes">
+        <p class="idea">${c.idea}</p>
+        <ul class="pal">${c.pal.map(([role, hex]) => `
+          <li><span class="sw" style="background:${hex}"></span>
+              <span class="meta"><span class="role">${role}</span><span class="hex">${hex}</span></span></li>`).join('')}
+        </ul>
+        <ul class="mech">${c.mech.map(m => `<li><span>${m}</span></li>`).join('')}</ul>
+        <ul class="ratios">${c.ratios.map(r => `<li>${r}</li>`).join('')}</ul>
+        <p class="risk">${c.risk}</p>
+      </div>
+    </div>`;
+  s.querySelector('.left').appendChild(phone(c, { cap: c.name }));
+  host.appendChild(s);
+});
+
+const strip = document.getElementById('strip');
+CONCEPTS.forEach(c => strip.appendChild(phone(c, { tight: true, cap: c.name })));
+</script>

@@ -462,6 +462,8 @@ async def update_trainer_profile(
         if arena_ids is not None:
             await repo.set_trainer_arenas(trainer_id, arena_ids)
             await repo.reconcile_primary_arena(trainer_id)
+            if arena_ids:
+                await repo.clear_trainer_arena_setup_alternative(trainer_id)
         if primary_arena_id_set:
             if primary_arena_id is None:
                 await repo.reconcile_primary_arena(trainer_id)
@@ -503,6 +505,8 @@ async def update_trainer_profile(
     if arena_ids is not None:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
         await repo.reconcile_primary_arena(trainer_id)
+        if arena_ids:
+            await repo.clear_trainer_arena_setup_alternative(trainer_id)
     if primary_arena_id_set:
         if primary_arena_id is None:
             await repo.reconcile_primary_arena(trainer_id)

@@ -3,10 +3,11 @@
  * Motion lives in landing-motion.css; palette aligned with static/webapp/theme.css.
  */
 :root {
-  --tg-theme-bg-color: #FBFAF7;
-  --tg-theme-text-color: #16292A;
-  --tg-theme-hint-color: #5F6B6A;
-  --tg-theme-button-color: #34c6c4;
+  /* Днём витрина живёт в ICE PAPER — той же холодной бумаге, что и мини-приложения. */
+  --tg-theme-bg-color: #F1F3F2;
+  --tg-theme-text-color: #101617;
+  --tg-theme-hint-color: #5E6B6B;
+  --tg-theme-button-color: #45B9BB;
   --tg-theme-secondary-bg-color: #FFFFFF;
 
   /*
@@ -14,14 +15,14 @@
    * No shared build step between the landing bundle and the mini-app, so keep these two in sync
    * by hand if the ramp ever changes.
    */
-  --glide-50:  #effafa;
-  --glide-100: #d5f2f1;
-  --glide-300: #6fd8d5;
-  --glide-500: #34c6c4;
-  --glide-700: #0f6f6d;
-  --glide-900: #073f3e;
+  --glide-50:  #EEF9F9;
+  --glide-100: #D3EFEF;
+  --glide-300: #7FD7D8;
+  --glide-500: #45B9BB;
+  --glide-700: #0B6E70;
+  --glide-900: #073C3E;
   --glide-950: #04262a;
-  --glide-on-fill: #062a29;
+  --glide-on-fill: #04262A;
   /* --glide-500 is a FILL color (2.0:1 on light bg) — not for text. Use --glide-700 for text/links. */
   --glide-ink: var(--glide-700);
 
@@ -41,7 +42,7 @@
   --vertical-brand-primary: var(--ice-blue);
   --vertical-brand-deep: var(--ice-deep);
   --shadow-card: 0 2px 4px rgba(7, 63, 62, 0.06), 0 12px 32px rgba(7, 63, 62, 0.1);
-  --shadow-brand: 0 12px 32px rgba(52, 198, 196, 0.28), 0 4px 12px rgba(52, 198, 196, 0.18);
+  --shadow-brand: 0 12px 32px rgba(69, 185, 187, 0.28), 0 4px 12px rgba(69, 185, 187, 0.18);
   --landing-max: 960px;
   --landing-text-max: 680px;
   --landing-gutter: 20px;
@@ -52,13 +53,43 @@
   --app-font-display: "Playfair Display", Georgia, serif;
 }
 
+/*
+ * AURORA — «лёд под софитами». Ночной режим витрины.
+ *
+ * Витрина и рабочее место говорят на разных языках намеренно: градиент и стекло
+ * отлично продают и утомляют при десятом открытии за смену, поэтому AURORA живёт
+ * на лендинге и в онбординге, а мини-приложения остаются на ARENA/ICE PAPER.
+ * Обоснование: design/prototypes/2026-08-26-glide-color-concepts.html
+ *
+ * Холст — глубокий сине-чёрный, почти комплементарный тилу: максимальное разведение
+ * фона и акцента по цветовому кругу. Раньше здесь был #000000, на котором бирюза
+ * выглядела неоновой заплаткой.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --tg-theme-bg-color: #000000;
-    --tg-theme-text-color: #f5f5f7;
-    --tg-theme-hint-color: #98989d;
-    --tg-theme-secondary-bg-color: #1c1c1e;
+    --tg-theme-bg-color: #060A12;
+    --tg-theme-text-color: #E9EFF7;
+    --tg-theme-hint-color: #7C8A9E;
+    --tg-theme-secondary-bg-color: #101827;
     --landing-photo-opacity: 0.16;
+
+    /* Тил остаётся первым стопом градиента — связь с логотипом не теряется. */
+    --ice-frost: #C9E4FF;
+    --ice-mist: #1D2739;
+    --ice-glow: #6FE3C9;
+    --ice-blue: #5AA8FF;
+    --ice-deep: #101827;
+    --ice-night: #060A12;
+    --vertical-brand-frost: var(--ice-frost);
+    --vertical-brand-mist: var(--ice-mist);
+    --vertical-brand-glow: var(--ice-glow);
+    --vertical-brand-primary: var(--ice-blue);
+    --vertical-brand-deep: var(--ice-deep);
+
+    /* Ссылки и текстовый тил на ночном фоне: #63DCD4 даёт 10.8:1 на стекле. */
+    --glide-ink: #63DCD4;
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 32px -20px rgba(0, 0, 0, 0.9);
+    --shadow-brand: 0 12px 32px rgba(69, 185, 187, 0.24), 0 4px 12px rgba(90, 168, 255, 0.18);
   }
 }
 

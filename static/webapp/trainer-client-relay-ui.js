@@ -86,7 +86,7 @@
       '.trainer-relay-overlay[aria-hidden="true"]{display:none !important}' +
       '#' +
       MODAL_ID +
-      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#F4F2EC);' +
+      ' .trainer-relay-sheet{width:100%;max-width:440px;border-radius:16px 16px 0 0;background:var(--tg-theme-bg-color,#F1F3F2);' +
       'color:var(--tg-theme-text-color,#1a1a1a);padding:18px 16px 16px;margin:0;box-sizing:border-box;' +
       'box-shadow:0 -12px 40px rgba(0,0,0,.22)}' +
       '@media(min-width:520px){#' +
@@ -102,7 +102,7 @@
       MODAL_ID +
       ' .trainer-relay-callout{margin:12px 0 10px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5;' +
       'background:color-mix(in srgb,var(--tg-theme-secondary-bg-color,#f0f0f0) 88%,transparent);' +
-      'border-left:3px solid var(--tg-theme-button-color,#34C6C4);color:var(--tg-theme-text-color,#1a1a1a)}' +
+      'border-left:3px solid var(--tg-theme-button-color,#45B9BB);color:var(--tg-theme-text-color,#1a1a1a)}' +
       '#' +
       MODAL_ID +
       ' .trainer-relay-callout strong{font-weight:700}' +
@@ -155,7 +155,7 @@
       'color:var(--tg-theme-text-color)}' +
       '#' +
       MODAL_ID +
-      ' .trainer-relay-btn-primary{background:var(--tg-theme-button-color,#34C6C4);' +
+      ' .trainer-relay-btn-primary{background:var(--tg-theme-button-color,#45B9BB);' +
       'color:var(--tg-theme-button-text-color,#1a1a1a)}' +
       '#' +
       MODAL_ID +

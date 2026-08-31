@@ -54,9 +54,10 @@
 }
 
 .trainer-mini-nav > button.btn-app-home {
-  border: 1px solid rgba(52, 198, 196, 0.34) !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.34) !important;
   background: transparent !important;
-  color: #34C6C4 !important;
+  /* Текстовый тил, не заливочный: заливочный на светлом фоне даёт 2.2:1. */
+  color: var(--glide-ink-teal) !important;
   box-shadow: none !important;
 }
 

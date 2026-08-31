@@ -6,7 +6,7 @@
     if (typeof window.__applyClientMiniAppTheme === 'function') window.__applyClientMiniAppTheme();
     try {
       var darkUi = document.documentElement.classList.contains('client-mini-dark');
-      var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
+      var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
     } catch (e) { /* theme script may not expose dark class on this page */ }

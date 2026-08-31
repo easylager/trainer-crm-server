@@ -5,21 +5,22 @@
 html.trainer-theme-light body,
 html.trainer-theme-light body.hub-body,
 html.trainer-theme-light body.client-shell-body {
-  background-color: #F4F2EC !important;
-  color: #16292A !important;
+  background-color: var(--glide-paper) !important;
+  color: var(--glide-text) !important;
 }
 
 html.trainer-theme-dark body,
 html.trainer-theme-dark body.hub-body,
 html.trainer-theme-dark body.client-shell-body {
-  background-color: #0d1515 !important;
+  background-color: var(--glide-paper) !important;
+  color: var(--glide-text) !important;
 }
 
-/* Bottom tab bar — active «Главная» icon (was linear-gradient → #f48a0c in cache) */
+/* Bottom tab bar — активная «Главная». Заливка бренда, тёмный текст поверх неё. */
 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
-  background: #34C6C4 !important;
+  background: var(--app-cta-fill) !important;
   background-image: none !important;
-  color: #062A29 !important;
+  color: var(--app-cta-text) !important;
   box-shadow: var(--app-btn-shadow-surface) !important;
 }
 
@@ -31,10 +32,11 @@ html.trainer-theme-dark body.client-shell-body {
 
 button.btn-app-home,
 .client-mini-nav > button.btn-app-home {
-  border: 2px solid rgba(52, 198, 196, 0.42) !important;
+  border: 2px solid rgba(var(--accent-rgb), 0.42) !important;
   background: transparent !important;
   background-image: none !important;
-  color: #34C6C4 !important;
+  /* Тил ТЕКСТОМ — текстовый токен, а не заливочный (тот на светлом даёт 2.2:1). */
+  color: var(--glide-ink-teal) !important;
   box-shadow: none !important;
 }
 

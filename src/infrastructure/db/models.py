@@ -1382,3 +1382,39 @@ class TrainerRecoveryNudge(Base):
     expires_at_anchor: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+# ---------------------------------------------------------------------------
+# Onboarding reactivation nudges (D+1/D+3/D+7 series for stalled onboarding — idempotency log).
+# ---------------------------------------------------------------------------
+
+ONBOARDING_NUDGE_STEP_D1 = "d1"
+ONBOARDING_NUDGE_STEP_D3 = "d3"
+ONBOARDING_NUDGE_STEP_D7 = "d7"
+
+# Order matters: the loop fires the highest-eligible step at each tick, so steps with smaller
+# offsets must come first. Days are anchored to trainers.created_at (≈ Telegram link moment).
+ONBOARDING_NUDGE_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
+    (ONBOARDING_NUDGE_STEP_D1, 1),
+    (ONBOARDING_NUDGE_STEP_D3, 3),
+    (ONBOARDING_NUDGE_STEP_D7, 7),
+)
+
+ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED)
+
+
+class TrainerOnboardingNudge(Base):
+    """Idempotency log for onboarding reactivation series. One row per (trainer_id, step) — append-only."""
+    __tablename__ = "trainer_onboarding_nudges"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    step: Mapped[str] = mapped_column(String(8), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Stage id (see trainer_onboarding_recovery_use_cases) at the moment this step was sent —
+    # lets us audit which nudge copy a trainer actually received.
+    stage_anchor: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)

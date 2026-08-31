@@ -891,7 +891,7 @@
       align-items: center;
       gap: 8px;
     }
-    #descriptionMeta.description-warn { color: var(--glide-ink-teal, #0C6F6C); }
+    #descriptionMeta.description-warn { color: var(--glide-ink-teal, #0B6E70); }
     #descriptionMeta.description-ok { color: #34c759; }
     .char-progress {
       flex: 1;
@@ -907,8 +907,9 @@
       border-radius: 2px;
       transition: width 0.2s, background 0.2s;
     }
-    .char-progress-bar.warn { background: var(--app-cta-fill, #34C6C4); }
-    .char-progress-bar.ok { background: #34c759; }
+    /* Счётчик символов на исходе — янтарь «внимание», не бренд. */
+    .char-progress-bar.warn { background: var(--app-attention); }
+    .char-progress-bar.ok { background: var(--app-ok); }
     .field-error {
       font-size: 13px;
       color: var(--app-danger);
@@ -1066,7 +1067,7 @@
       color: var(--tg-theme-hint-color);
     }
     .photo-crop-confirm {
-      background: var(--app-cta-fill, #34C6C4);
+      background: var(--app-cta-fill, #45B9BB);
       color: var(--app-cta-text, #1a1a1a);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     }
@@ -1075,11 +1076,11 @@
     }
     /* Cropper.js defaults to Telegram-blue handles; GLIDE teal for trainer CRM */
     .photo-crop-stage .cropper-view-box {
-      outline: 2px solid var(--app-cta-fill, #34C6C4) !important;
+      outline: 2px solid var(--app-cta-fill, #45B9BB) !important;
       outline-offset: -1px;
     }
     .photo-crop-stage .cropper-point {
-      background-color: var(--app-cta-fill, #34C6C4) !important;
+      background-color: var(--app-cta-fill, #45B9BB) !important;
       border: 1px solid rgba(26, 26, 26, 0.35) !important;
       opacity: 1 !important;
     }
@@ -1126,9 +1127,9 @@
     }
     .status-pill.warn,
     .status-pill.pending {
-      background: rgba(52, 198, 196, 0.14) !important;
-      color: var(--glide-ink-teal, #0C6F6C) !important;
-      border: 1px solid rgba(52, 198, 196, 0.28);
+      background: rgba(69, 185, 187, 0.14) !important;
+      color: var(--glide-ink-teal, #0B6E70) !important;
+      border: 1px solid rgba(69, 185, 187, 0.28);
     }
     .profile-hero {
       margin-bottom: 20px;
@@ -1428,7 +1429,7 @@
       border-color: rgba(34, 197, 94, 0.28);
     }
     .save-toast.save-toast--warning {
-      border-color: rgba(52, 198, 196, 0.35);
+      border-color: rgba(69, 185, 187, 0.35);
     }
     .save-toast.save-toast--error {
       border-color: rgba(239, 68, 68, 0.45);
@@ -1462,8 +1463,8 @@
       color: #16a34a;
     }
     .save-toast--warning .save-toast-mark {
-      background: linear-gradient(135deg, rgba(52, 198, 196, 0.24) 0%, rgba(52, 198, 196, 0.1) 100%);
-      color: var(--glide-ink-teal, #0C6F6C);
+      background: linear-gradient(135deg, rgba(69, 185, 187, 0.24) 0%, rgba(69, 185, 187, 0.1) 100%);
+      color: var(--glide-ink-teal, #0B6E70);
     }
     .save-toast--error .save-toast-mark {
       background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(239, 68, 68, 0.1) 100%);
@@ -1976,7 +1977,12 @@
       width: 100%;
     }
 
-    /* GLIDE — перебиваем themeParams Telegram там, где страница задаёт свои токены */
+    /* GLIDE — перебиваем themeParams Telegram там, где страница задаёт свои токены.
+       TASK-017 / AC-004: тёмная ветка больше не держит собственную палитру на
+       хардкоде. Базовые правила ниже написаны на токенах и уже переключаются
+       вместе с темой, поэтому тёмных переопределений осталось ровно столько,
+       сколько действительно отличается: тени, «поднятые» семантические цвета
+       и акцентный текст. */
     body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-text-color) !important; }
     .filter-btn, .card, .edu-readonly, .profile-hero, .grid-step-preview-card, .schedule-grid-arena-only, .settings-format-card {
       background: var(--tg-theme-secondary-bg-color) !important;
@@ -2006,7 +2012,7 @@
     .profile-hero { background: var(--glide-brand-wash, rgba(var(--accent-rgb), 0.1)) !important; }
     .field input, .field textarea, .field select, .settings-format-num {
       background: var(--tg-theme-bg-color) !important;
-      color: #1a1a1a !important;
+      color: var(--tg-theme-text-color) !important;
     }
     .service-row, .arena-row, .progress-ring, .edu-card {
       background: var(--tg-theme-bg-color) !important;
@@ -2015,89 +2021,57 @@
       background: rgba(var(--accent-rgb), 0.12) !important;
     }
     .service-row input[type="number"] {
-      background: #fff !important;
-      color: #1a1a1a !important;
+      background: var(--glide-surface) !important;
+      color: var(--tg-theme-text-color) !important;
       border: 1px solid rgba(var(--accent-rgb), 0.4) !important;
     }
     .service-row input[type="number"].field-invalid {
       border-color: rgba(239, 68, 68, 0.6) !important;
       background: rgba(239, 68, 68, 0.04) !important;
     }
-    html.trainer-theme-dark body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-html.trainer-theme-dark .filter-btn, html.trainer-theme-dark .card, html.trainer-theme-dark .edu-readonly, html.trainer-theme-dark .grid-step-preview-card, html.trainer-theme-dark .schedule-grid-arena-only, html.trainer-theme-dark .settings-format-card {
-        background: #2a2a2a !important;
-        color: #f5f5f5 !important;
-      }
-html.trainer-theme-dark .settings-format-icon {
-        background: #1c1c1e !important;
-        color: rgb(var(--accent-rgb)) !important;
-        border-color: rgba(var(--accent-rgb), 0.42) !important;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-      }
-html.trainer-theme-dark .schedule-grid-arena-only__sub {
-        color: #a8a8a8 !important;
-      }
-html.trainer-theme-dark .filters { background: #252525 !important; }
-html.trainer-theme-dark .profile-form-nav__chip {
-        background: #1c1c1e !important;
-        border-color: rgba(var(--accent-rgb), 0.42) !important;
-        color: #f5f5f5 !important;
-      }
-html.trainer-theme-dark .settings-group-toggle__label {
-        background: #1c1c1e !important;
-        border-color: rgba(var(--accent-rgb), 0.35) !important;
-      }
-html.trainer-theme-dark .settings-group-toggle__input:checked + .settings-group-toggle__label {
-        background: rgba(var(--accent-rgb), 0.14) !important;
-        border-color: rgba(var(--accent-rgb), 0.52) !important;
-        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35) !important;
-      }
-html.trainer-theme-dark .profile-hero {
-        background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, rgba(var(--accent-rgb), 0.12)) !important;
-        color: #f5f5f5 !important;
-      }
-html.trainer-theme-dark .field input, html.trainer-theme-dark .field textarea, html.trainer-theme-dark .field select, html.trainer-theme-dark .settings-format-num {
-        background: #1a1a1a !important;
-        color: #f5f5f5 !important;
-      }
-html.trainer-theme-dark .service-row, html.trainer-theme-dark .arena-row, html.trainer-theme-dark .progress-ring, html.trainer-theme-dark .edu-card {
-        background: #222 !important;
-      }
-html.trainer-theme-dark .service-row.service-active, html.trainer-theme-dark .arena-row.arena-active {
-        background: rgba(var(--accent-rgb), 0.15) !important;
-      }
-html.trainer-theme-dark .service-row input[type="number"] {
-        background: #1a1a1a !important;
-        color: rgb(var(--accent-rgb)) !important;
-        border: 1px solid rgba(var(--accent-rgb), 0.5) !important;
-      }
-html.trainer-theme-dark .settings-duration-chip {
-        background: rgba(var(--accent-rgb), 0.12) !important;
-        border-color: rgba(var(--accent-rgb), 0.45) !important;
-        color: #f5f5f5 !important;
-      }
-html.trainer-theme-dark .save-toast {
-        background: rgba(42, 42, 42, 0.98) !important;
-        border-color: rgba(34, 197, 94, 0.3) !important;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.3) !important;
-      }
-html.trainer-theme-dark .save-toast-title { color: #f8fafc !important; }
-html.trainer-theme-dark .save-toast-desc { color: #94a3b8 !important; }
-html.trainer-theme-dark .save-toast--success .save-toast-mark {
-        background: rgba(34, 197, 94, 0.2) !important;
-        color: #4ade80 !important;
-      }
-html.trainer-theme-dark .save-toast--warning .save-toast-mark {
-        background: rgba(52, 198, 196, 0.2) !important;
-        color: #6FD8D5 !important;
-      }
-html.trainer-theme-dark .save-toast--error .save-toast-mark {
-        background: rgba(239, 68, 68, 0.22) !important;
-        color: #f87171 !important;
-      }
-html.trainer-theme-dark .hero-photo-tap { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
-html.trainer-theme-dark .hero-photo-frame { border-color: rgba(var(--accent-rgb), 0.35); }
-html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
+
+    /* Тёмная тема: только то, что отличается от базовых правил выше. */
+    html.trainer-theme-dark .settings-format-icon {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    }
+    html.trainer-theme-dark .schedule-grid-arena-only__sub {
+      color: var(--tg-theme-hint-color) !important;
+    }
+    html.trainer-theme-dark .settings-group-toggle__input:checked + .settings-group-toggle__label {
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35) !important;
+    }
+    /* Числовое поле цены: на тёмном значение читается акцентом, а не белым. */
+    html.trainer-theme-dark .service-row input[type="number"] {
+      color: var(--glide-ink-teal) !important;
+      border-color: rgba(var(--accent-rgb), 0.5) !important;
+    }
+    html.trainer-theme-dark .settings-duration-chip {
+      background: var(--glide-brand-wash) !important;
+      border-color: rgba(var(--accent-rgb), 0.45) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    html.trainer-theme-dark .save-toast {
+      background: var(--glide-card) !important;
+      border-color: color-mix(in srgb, var(--app-ok) 30%, transparent) !important;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.3) !important;
+    }
+    html.trainer-theme-dark .save-toast-title { color: var(--tg-theme-text-color) !important; }
+    html.trainer-theme-dark .save-toast-desc { color: var(--tg-theme-hint-color) !important; }
+    html.trainer-theme-dark .save-toast--success .save-toast-mark {
+      background: color-mix(in srgb, var(--app-ok) 20%, transparent) !important;
+      color: var(--app-ok-ink) !important;
+    }
+    html.trainer-theme-dark .save-toast--warning .save-toast-mark {
+      background: var(--glide-brand-wash) !important;
+      color: var(--glide-ink-teal) !important;
+    }
+    html.trainer-theme-dark .save-toast--error .save-toast-mark {
+      background: color-mix(in srgb, var(--app-danger) 22%, transparent) !important;
+      color: var(--app-danger) !important;
+    }
+    html.trainer-theme-dark .hero-photo-tap { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+    html.trainer-theme-dark .hero-photo-frame { border-color: rgba(var(--accent-rgb), 0.35); }
+    html.trainer-theme-dark .quick-action-btn { background: var(--glide-card) !important; }
 
 
     /* TTV tour: десктоп/планшет — в потоке и sticky сверху при длинной анкете.
@@ -2390,46 +2364,26 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       display: none !important;
     }
     /*
-     * ВИЗАРД — «бумага и белое с одним бирюзовым акцентом».
-     *
-     * Референсы (бренды с таким же бирюзовым логотипом): Perplexity — бумажный холст, offblack,
-     * ОДИН тил на навигацию и активные состояния, волосяные разделители вместо серых плашек;
-     * Deliveroo — насыщенный тил только как заливка действия поверх «полного белого»;
-     * Tiffany — бирюза микродозами на белом плюс тёплый нейтральный компаньон.
-     *
-     * Отсюда три правила этого экрана:
-     *   1. Холст — бумага, карточки — чистое белое, подъём тенью, а не заливкой.
-     *   2. Тил живёт только в акценте: кнопка, прогресс, фокус, выбранная строка. Никаких
-     *      тёмных плашек — прежняя графитовая шапка и серо-тиловые карточки делали экран
-     *      «тёмным и скучным» даже в светлой теме.
-     *   3. Цвет сверху даёт мягкая бирюзовая аврора на бумаге — присутствие бренда без тьмы.
-     *
-     * СВЕТЛЫЙ В ЛЮБОЙ ТЕМЕ. Переопределяем здесь и --glide-*, и --tg-theme-*: онбординг —
-     * фирменная «белая коробка», а не системная поверхность. Заодно это чинит наследование:
-     * любой перенесённый блок, который читает --tg-theme-text-color / --tg-theme-bg-color,
-     * получает наши светлые значения и в тёмной теме Telegram.
-     * Вернуть тёмную тему визарду = убрать этот блок токенов.
-     *
-     * --accent-rgb здесь тиловый: все унаследованные rgba(var(--accent-rgb), α) у перенесённых
-     * блоков (услуги, арены, чипы, тумблеры, код страны) становятся бирюзовыми внутри визарда
-     * и остаются янтарными за его пределами.
+     * ВИЗАРД — те же --glide-* роли, что и остальной мини-апп.
+     * Светлая тема: ICE PAPER. Тёмная: ARENA (html.trainer-theme-dark ниже).
+     * --accent-rgb здесь тиловый, чтобы перенесённые блоки не тащили янтарь из профиля.
      */
     .ob-flow {
-      --accent-rgb: 52, 198, 196;
-      --accent-rgb-alt: 52, 198, 196;
-      --glide-paper: #F4F2EC;
-      --glide-bg: #F4F2EC;
+      --accent-rgb: 69, 185, 187;
+      --accent-rgb-alt: 69, 185, 187;
+      --glide-paper: #F1F3F2;
+      --glide-bg: #F1F3F2;
       --glide-surface: #FFFFFF;
       --glide-card: #FFFFFF;
-      --glide-line: #E4E2DA;
-      --glide-line-strong: #D6D3C9;
-      --glide-text: #16292A;
-      --glide-hint: #5F6B6A;
-      --glide-ink: #0C6F6C;
-      --glide-ink-teal: #0C6F6C;
-      --glide-shadow-card: 0 1px 2px rgba(20, 40, 40, 0.04), 0 10px 28px -18px rgba(20, 40, 40, 0.35);
-      --glide-shadow-cta: 0 6px 18px -8px rgba(52, 198, 196, 0.75);
-      --app-brand-root-bg: #F4F2EC;
+      --glide-line: #E2E6E5;
+      --glide-line-strong: #CFD6D5;
+      --glide-text: #101617;
+      --glide-hint: #5E6B6B;
+      --glide-ink: #0B6E70;
+      --glide-ink-teal: #0B6E70;
+      --glide-shadow-card: 0 1px 2px rgba(16, 24, 28, 0.04), 0 10px 28px -18px rgba(16, 24, 28, 0.35);
+      --glide-shadow-cta: 0 6px 18px -8px rgba(69, 185, 187, 0.75);
+      --app-brand-root-bg: #F1F3F2;
       --app-brand-surface: #FFFFFF;
       /* Ошибка шага — единственная «тревожная» краска визарда; 6.0:1 на карточке. */
       --ob-flow-danger-text: #a8322f;
@@ -2448,7 +2402,7 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       grid-template-rows: auto 1fr auto;
       /* Аврора: бренд присутствует цветом, а не темнотой. Текст на ней — 13:1. */
       background:
-        radial-gradient(125% 55% at 50% 0%, rgba(52, 198, 196, 0.16) 0%, rgba(52, 198, 196, 0.05) 45%, rgba(52, 198, 196, 0) 72%),
+        radial-gradient(125% 55% at 50% 0%, rgba(69, 185, 187, 0.16) 0%, rgba(69, 185, 187, 0.05) 45%, rgba(69, 185, 187, 0) 72%),
         var(--glide-paper);
       color: var(--glide-text);
       accent-color: var(--glide-brand);
@@ -2457,18 +2411,35 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       max-height: 100dvh;
       overscroll-behavior: contain;
     }
-    /*
-     * Ночью бумага не должна слепить: приглушаем холст на пару процентов и гасим аврору.
-     * Это по-прежнему светлый экран — просто менее яркий.
-     */
     html.trainer-theme-dark .ob-flow {
-        --glide-paper: #F2F1EC;
-        --glide-bg: #F2F1EC;
-        --app-brand-root-bg: #F2F1EC;
-        background:
-          radial-gradient(125% 55% at 50% 0%, rgba(52, 198, 196, 0.12) 0%, rgba(52, 198, 196, 0.04) 45%, rgba(52, 198, 196, 0) 72%),
-          var(--glide-paper);
-      }
+      --glide-paper: #0B0C0E;
+      --glide-bg: #0B0C0E;
+      --glide-surface: #141618;
+      --glide-card: #1A1D20;
+      --glide-line: #262A2E;
+      --glide-line-strong: #33383D;
+      --glide-text: #E6E9EA;
+      --glide-hint: #868D93;
+      --glide-ink: #57D0D2;
+      --glide-ink-teal: #57D0D2;
+      --glide-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.7);
+      --glide-shadow-cta: 0 6px 18px -10px rgba(69, 185, 187, 0.55);
+      --app-brand-root-bg: #0B0C0E;
+      --app-brand-surface: #141618;
+      --tg-theme-text-color: var(--glide-text);
+      --tg-theme-hint-color: var(--glide-hint);
+      --tg-theme-bg-color: var(--glide-paper);
+      --tg-theme-secondary-bg-color: var(--glide-surface);
+      --tg-theme-button-color: var(--glide-brand);
+      --tg-theme-button-text-color: var(--glide-on-fill);
+      --ob-flow-danger-text: #ff9b96;
+      --ob-flow-danger-bg: rgba(255, 107, 99, 0.12);
+      --ob-flow-danger-line: rgba(255, 107, 99, 0.3);
+      background:
+        radial-gradient(125% 55% at 50% 0%, rgba(69, 185, 187, 0.14) 0%, rgba(69, 185, 187, 0) 62%),
+        var(--glide-paper);
+      color: var(--glide-text);
+    }
 
 
     /*
@@ -2720,12 +2691,6 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
     .ob-flow__error[hidden] {
       display: none;
     }
-    html.trainer-theme-dark .ob-flow {
-        --ob-flow-danger-text: #ff9b96;
-        --ob-flow-danger-bg: rgba(255, 107, 99, 0.12);
-        --ob-flow-danger-line: rgba(255, 107, 99, 0.3);
-      }
-
 
     /* Футер «плывёт» над бумагой: полупрозрачная подложка + размытие вместо глухой плашки. */
     .ob-flow__footer {
@@ -2734,10 +2699,12 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
       background: var(--glide-paper);
       border-top: 1px solid var(--glide-line);
+      position: relative;
+      z-index: 4;
     }
     @supports (backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px)) {
       .ob-flow__footer {
-        background: rgba(251, 250, 247, 0.86);
+        background: color-mix(in srgb, var(--glide-paper) 86%, transparent);
         -webkit-backdrop-filter: blur(14px) saturate(1.4);
         backdrop-filter: blur(14px) saturate(1.4);
       }
@@ -2752,6 +2719,8 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       font-weight: 600;
       cursor: pointer;
       touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
       -webkit-tap-highlight-color: transparent;
       transition: transform 0.12s ease, box-shadow 0.2s ease, opacity 0.15s ease;
     }
@@ -2766,7 +2735,7 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
     .ob-flow__btn-spinner {
       width: 20px;
       height: 20px;
-      border: 2px solid rgba(6, 42, 41, 0.22);
+      border: 2px solid rgba(4, 38, 42, 0.22);
       border-top-color: var(--glide-on-fill);
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
@@ -2811,7 +2780,7 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
     @media (prefers-reduced-motion: reduce) {
       .ob-flow__btn-spinner {
         animation: none;
-        border-top-color: rgba(6, 42, 41, 0.45);
+        border-top-color: rgba(4, 38, 42, 0.45);
         opacity: 0.85;
       }
     }
@@ -2878,16 +2847,187 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       border-color: var(--glide-line-strong) !important;
     }
     .ob-flow .service-row,
-    .ob-flow .arena-row {
+    .ob-flow .arena-row,
+    html.trainer-theme-dark .ob-flow .service-row,
+    html.trainer-theme-dark .ob-flow .arena-row {
       background: var(--glide-card) !important;
+      color: var(--glide-text) !important;
       border: 1px solid var(--glide-line);
       border-radius: 14px;
     }
+    html.trainer-theme-dark .ob-flow__slot .card,
+    html.trainer-theme-dark .ob-flow .settings-format-card {
+      background: var(--glide-card) !important;
+      color: var(--glide-text) !important;
+    }
     /* Выбранное — бирюзовая подсветка 10%, а не серая плашка. */
     .ob-flow .service-row.service-active,
-    .ob-flow .arena-row.arena-active {
+    .ob-flow .arena-row.arena-active,
+    html.trainer-theme-dark .ob-flow .service-row.service-active,
+    html.trainer-theme-dark .ob-flow .arena-row.arena-active {
       background: rgba(var(--accent-rgb), 0.1) !important;
       border-color: rgba(var(--accent-rgb), 0.5);
+    }
+
+    /*
+     * Шаг «Услуги» в визарде: нативный grouped list, без native checkbox
+     * (в тёмном Telegram он красится в графит и съедает подписи) и без аккордеона «Тарифы».
+     */
+    .ob-flow #servicesWrap.svc-pick {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1px solid var(--glide-line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--glide-surface) !important;
+    }
+    .ob-flow #servicesWrap .svc-pick__item,
+    .ob-flow #servicesWrap .service-block {
+      margin: 0;
+      border-bottom: 1px solid var(--glide-line);
+      background: transparent;
+    }
+    .ob-flow #servicesWrap .svc-pick__item:last-child,
+    .ob-flow #servicesWrap .service-block:last-child {
+      border-bottom: none;
+    }
+    .ob-flow #servicesWrap .svc-pick__row,
+    .ob-flow #servicesWrap .service-row,
+    html.trainer-theme-dark .ob-flow #servicesWrap .service-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      margin: 0 !important;
+      padding: 4px 4px 4px 12px !important;
+      min-height: 52px;
+      background: transparent !important;
+      border: none !important;
+      border-radius: 0 !important;
+    }
+    .ob-flow #servicesWrap .service-row.service-active,
+    html.trainer-theme-dark .ob-flow #servicesWrap .service-row.service-active {
+      background: transparent !important;
+    }
+    .ob-flow .svc-pick__head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 10px 4px 10px 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ob-flow .svc-name {
+      color: var(--glide-text) !important;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .ob-flow .svc-pick__check,
+    .ob-flow .service-row input[type="checkbox"].svc-pick__check {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      margin: 0;
+      border-radius: 50%;
+      border: 2px solid var(--glide-line-strong);
+      background: var(--glide-card);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      accent-color: unset;
+    }
+    .ob-flow .svc-pick__check:checked {
+      background: var(--glide-brand);
+      border-color: var(--glide-brand);
+    }
+    .ob-flow .svc-pick__check:checked::after {
+      content: '';
+      width: 10px;
+      height: 6px;
+      margin-top: -2px;
+      border: 2px solid var(--glide-on-fill);
+      border-top: 0;
+      border-right: 0;
+      transform: rotate(-45deg);
+    }
+    .ob-flow #servicesWrap .svc-tier-toggle {
+      display: none;
+    }
+    .ob-flow #servicesWrap .service-block:has(.service-active) .svc-tier-body,
+    .ob-flow #servicesWrap .svc-pick__item:has(.service-active) .svc-tier-body {
+      display: block !important;
+    }
+    .ob-flow #servicesWrap .svc-tier-body {
+      padding: 0 12px 14px;
+    }
+    .ob-flow #servicesWrap .svc-desc-wrap,
+    .ob-flow #servicesWrap .svc-client-notice-wrap,
+    .ob-flow #servicesWrap .svc-group-price-wrap {
+      display: none;
+    }
+    .ob-flow #servicesWrap .svc-tier-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ob-flow #servicesWrap .svc-tier-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) 118px;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--glide-card) !important;
+      border: 1px solid var(--glide-line);
+    }
+    .ob-flow #servicesWrap .tier-name {
+      color: var(--glide-text) !important;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .ob-flow #servicesWrap .svc-tier-row input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      border-radius: 6px;
+      border: 2px solid var(--glide-line-strong);
+      background: var(--glide-surface);
+    }
+    .ob-flow #servicesWrap .svc-tier-row input[type="checkbox"]:checked {
+      background: var(--glide-brand);
+      border-color: var(--glide-brand);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%2304262A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M2.5 6.2l2.4 2.4 4.6-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 12px;
+    }
+    .ob-flow #servicesWrap .svc-tier-row input[type="number"],
+    html.trainer-theme-dark .ob-flow #servicesWrap .svc-tier-row input[type="number"] {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      background: var(--glide-surface) !important;
+      color: var(--glide-text) !important;
+      border: 1px solid var(--glide-line-strong) !important;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .ob-flow #servicesWrap .price-suffix {
+      color: var(--glide-hint) !important;
+    }
+    .ob-flow .profile-collapse .card > .hint {
+      margin: 0 0 12px !important;
+      font-size: 13px;
+      color: var(--glide-hint) !important;
     }
     .ob-flow .settings-format-icon {
       background: var(--glide-50) !important;
@@ -2980,4 +3120,54 @@ html.trainer-theme-dark .quick-action-btn { background: #252525 !important; }
       font-size: 14px;
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
+    }
+
+    .arena-empty-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .arena-empty-lead {
+      margin: 0 0 4px !important;
+    }
+    .arena-empty-support-lead {
+      margin: 12px 0 6px !important;
+    }
+    .arena-empty-btn {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
+      white-space: normal;
+      line-height: 1.35;
+      padding: 12px 14px;
+    }
+    .arena-empty-btn--primary {
+      background: var(--app-cta-fill) !important;
+      color: #1a1a1a !important;
+      font-weight: 600;
+    }
+    .arena-empty-actions-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .arena-request-note,
+    .arena-support-textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .arena-setup-status {
+      margin: 10px 0 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .arena-setup-status--ok {
+      color: color-mix(in srgb, var(--tg-theme-button-color) 78%, #1a7f4b);
+    }
+    .arena-setup-status--warn {
+      color: #c0392b;
     }

@@ -5517,7 +5517,7 @@
             : 'Попробуйте фильтр «Все» или перелистайте неделю стрелками.';
         }
         var html =
-          '<div class="calendar-empty-state">' +
+          '<div class="calendar-empty-state ar-empty-state">' +
           '<p class="calendar-empty-state__title">' +
           escapeHtml(title) +
           '</p>' +
@@ -7614,9 +7614,9 @@
           var dayDuties = scheduleCenterOverlayRowsForDate(dateKey)
             .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
           if (!daySlots.length && !dayDuties.length) return;
-          html += '<div class="day-block cal-day-anchor" id="cal-day-' + dateKey + '"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
+          html += '<div class="day-block ar-day cal-day-anchor" id="cal-day-' + dateKey + '"><div class="ar-day-head"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div><span class="ar-day-count">' + (daySlots.length + dayDuties.length) + ' сл.</span></div><div class="ar-day-slots">';
           html += mergeDayCalendarTimelineHtml(daySlots, dayDuties);
-          html += '</div>';
+          html += '</div></div>';
         });
         if (!html) {
           content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter, entirePast);

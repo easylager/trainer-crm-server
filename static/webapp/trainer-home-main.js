@@ -3132,6 +3132,12 @@
           stepB.classList.toggle('locked', bookLocked);
         }
         if (iconB) iconB.textContent = bookDone ? '✓' : '2';
+        /* «Отправить ссылку ученику» sends a self-serve booking link — pointless if there isn't a
+           single slot yet for the client to pick. Reuse the same button to send the trainer to
+           schedule-editor first in that case; the two trainer-assisted paths (real/sandbox
+           quick-book) create their own ad-hoc slot and stay available regardless. */
+        var hasSchedule = !!(data.has_future_slots || (data.weekly_template_count > 0));
+        var needsScheduleFirst = !bookLocked && !bookDone && !hasSchedule;
         if (hintB) {
           if (bookLocked) {
             hintB.textContent = 'Откроется после шага 1.';
@@ -3140,13 +3146,18 @@
               data.has_upcoming_booking || data.has_confirmed_booking
                 ? 'Готово — запись в «Ближайших записях».'
                 : 'Уже делали — шаг закрыт.';
+          } else if (needsScheduleFirst) {
+            hintB.textContent = 'Сначала настройте расписание — иначе ученику нечего будет забронировать по ссылке.';
           } else {
             hintB.textContent = 'Посмотрите, как работает расписание, клиент и напоминания.';
           }
         }
         /* Show two-path CTAs when pending; collapsed «Готово» when done */
         if (ctasWrap) ctasWrap.style.display = (bookDone || bookLocked) ? 'none' : 'flex';
-        if (ctaSendLink) ctaSendLink.disabled = bookLocked || bookDone;
+        if (ctaSendLink) {
+          ctaSendLink.disabled = bookLocked || bookDone;
+          ctaSendLink.textContent = needsScheduleFirst ? 'Настроить расписание' : 'Отправить ссылку ученику';
+        }
         if (ctaBReal) ctaBReal.disabled = bookLocked || bookDone;
         if (ctaBSandbox) ctaBSandbox.disabled = bookLocked || bookDone;
         if (ctaBDone) ctaBDone.style.display = bookDone ? 'block' : 'none';
@@ -3180,7 +3191,7 @@
           } else if (pc) {
             hintC.textContent = 'Всё собрано — отправьте профиль на проверку.';
           } else {
-            hintC.textContent = 'Добавьте фото и остальные пункты профиля — без них в каталог не пускаем.';
+            hintC.textContent = 'Добавьте фото и остальные пункты профиля — так потенциальные клиенты смогут вас найти.';
           }
         }
         if (ctaC) {
@@ -3380,6 +3391,13 @@
         if (ctaSendLink) {
           ctaSendLink.onclick = function() {
             if (ctaSendLink.disabled) return;
+            if (ctaSendLink.textContent === 'Настроить расписание') {
+              /* navigateToImpl, not navigateTo — the CTA copy already explains why we're going
+                 here, so skip the generic «после первой записи» first-booking soft gate that
+                 navigateTo would otherwise show for a trainer with zero bookings so far. */
+              navigateToImpl('schedule-editor');
+              return;
+            }
             fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
               .then(function(r) {
                 return r.json().then(function(data) {

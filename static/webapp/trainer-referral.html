@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Реферальная программа</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -24,15 +24,15 @@
       padding: 12px;
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 80px);
       -webkit-font-smoothing: antialiased;
-      --tg-theme-bg-color: #F4F2EC;
+      --tg-theme-bg-color: #F1F3F2;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
       --tg-theme-secondary-bg-color: #FFFFFF;
-      --ref-accent: #34C6C4;
+      --ref-accent: #45B9BB;
       --ref-success: #34c759;
     }
     body.ref-page.ref-theme-dark {
-      --tg-theme-bg-color: #0d1515;
+      --tg-theme-bg-color: #0B0C0E;
       --tg-theme-text-color: #f5f5f5;
       --tg-theme-hint-color: #8e8e93;
       --tg-theme-secondary-bg-color: #2a2a2a;
@@ -258,10 +258,11 @@
       min-width: 0;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body class="ref-page">
+<body class="ref-page ar-pilot ar-pilot--trainer-referral">
   <div class="ref-shell">
     <header class="ref-page-header-row" aria-label="Раздел">
       <div class="ref-page-title">Рефералы</div>
@@ -342,7 +343,7 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -353,7 +354,7 @@
       var isDark = tg && tg.colorScheme === 'dark';
       if (isDark) document.body.classList.add('ref-theme-dark');
         try {
-          var bgHex = isDark ? '#0d1515' : '#F4F2EC';
+          var bgHex = isDark ? '#0B0C0E' : '#F1F3F2';
           if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
           if (tg && typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);

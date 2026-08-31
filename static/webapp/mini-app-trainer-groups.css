@@ -513,7 +513,7 @@
       transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .group-card-tg__meter > span.is-high {
-      background: var(--app-cta-fill, #34C6C4);
+      background: var(--app-cta-fill, #45B9BB);
     }
     .group-card-tg__meter > span.is-full {
       background: linear-gradient(90deg, rgba(255, 149, 0, 0.95) 0%, rgba(255, 59, 48, 0.95) 100%);

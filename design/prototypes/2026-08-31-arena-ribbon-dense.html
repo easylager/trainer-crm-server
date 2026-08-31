@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A+C на плотных поверхностях</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   A (Arena Depth) + C (Ribbon) — проверка на ПЛОТНЫХ поверхностях.
+
+   Витринная главная доказывает мало: там 4 карточки и много воздуха.
+   Настоящий вопрос — что будет, когда на экране 30+ строк.
+
+   Вывод, который проверяет этот файл: язык работает, НО геометрию
+   и глубину надо НОРМИРОВАТЬ. Если дать срез 45° и тень каждой
+   строке — экран превращается в визуальный шум, а 45° перестаёт
+   читаться как подпись бренда и становится просто «рваными углами».
+
+   ПРАВИЛО НОРМЫ (главный результат этого шага):
+     • Срез 45°  — только контейнер группы, hero и первичная кнопка.
+                   Никогда на строке списка.
+     • Глубина   — полная (градиент + блик + тень) только у hero
+                   и одиночных карточек. У строк списка — только
+                   блик и градиент, без тени.
+     • Штриховка — только за hero и пустыми состояниями.
+                   Никогда за плотным списком.
+     • Водяной знак — только hero. На списках отсутствует.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0B0C0E;
+  --surface:#141719;
+  --row-top:#1A1D20;
+  --row-bot:#16191C;
+  --card-top:#1D2125;
+  --card-bot:#15181B;
+  --line:#23282C;
+  --line-soft:#1B1F22;
+  --text:#E6E9EA;
+  --hint:#868D93;
+  --dim:#5A6167;
+  --teal:#45B9BB;
+  --teal-br:#57D0D2;
+  --amber:#C87A15;
+  --amber-br:#E8A33D;
+  --ok:#34D399;
+  --on-fill:#04262A;
+
+  --hair:inset 0 1px 0 rgba(255,255,255,.06);
+  --hair-strong:inset 0 1px 0 rgba(255,255,255,.08);
+  --lift:0 1px 2px rgba(0,0,0,.5), 0 14px 34px -16px rgba(0,0,0,.85);
+  --cut:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding:22px 12px 70px;
+  display:flex;flex-direction:column;align-items:center;gap:34px;
+  overflow-x:clip;
+}
+.screen{width:100%;max-width:390px}
+
+/* ── Ярлык экрана ── */
+.screen-tag{
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);font-weight:600;margin-bottom:12px;padding-left:2px;
+}
+
+/* ── Шапка ── */
+.top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 16px;margin-bottom:16px;
+  background:linear-gradient(180deg,#1B1E21,#15181A);
+  border:1px solid var(--line);box-shadow:var(--hair);
+  /* КОНТЕЙНЕР — срез разрешён */
+  clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+.mark{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.mark-icon{
+  width:22px;height:22px;display:block;flex-shrink:0;object-fit:contain;
+  /* только знак, без чёрной подложки — иначе «плашка» на градиенте шапки */
+}
+.top .wk{font-size:12px;color:var(--hint);font-weight:500}
+
+/* ── Недельная навигация ── */
+.wknav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 14px;margin-bottom:10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:13px;
+  box-shadow:var(--hair);
+}
+.wknav b{font-size:14.5px;font-weight:600;letter-spacing:-.02em}
+.wknav button{
+  width:28px;height:28px;border:1px solid var(--line);background:#1E2225;
+  color:var(--hint);border-radius:8px;cursor:pointer;font-size:15px;line-height:1;
+}
+
+/* ── Фильтры: срез мелкий, это управляющий элемент ── */
+.filters{display:flex;gap:7px;margin-bottom:16px}
+.fbtn{
+  padding:8px 15px;font-size:13.5px;font-weight:600;cursor:pointer;
+  font-family:inherit;letter-spacing:-.01em;
+  background:linear-gradient(180deg,#20252A,#191D20);
+  color:var(--text);border:1px solid var(--line);
+  box-shadow:var(--hair);
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.fbtn.on{
+  background:var(--teal);color:var(--on-fill);border-color:transparent;
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 6px 16px -8px rgba(69,185,187,.65);
+}
+
+/* ── ГРУППА ДНЯ: контейнер, срез разрешён ── */
+.day{
+  margin-bottom:12px;
+  background:var(--surface);border:1px solid var(--line);
+  box-shadow:var(--hair);
+  clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  overflow:hidden;
+}
+.day-head{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 15px;border-bottom:1px solid var(--line-soft);
+}
+.day-head b{font-size:13px;font-weight:600;letter-spacing:.02em}
+.day-head .n{font-size:12px;color:var(--dim);margin-left:auto}
+.day-head .today{
+  font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;
+  color:var(--teal-br);background:rgba(69,185,187,.14);
+  padding:3px 7px;border-radius:5px;
+}
+
+/* ── СТРОКА СЛОТА: скругление, НЕ срез. Блик без тени. ── */
+.slot{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 14px 12px 12px;margin:8px;
+  background:linear-gradient(180deg,var(--row-top),var(--row-bot));
+  border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--hair);
+  position:relative;
+}
+.slot+.slot{margin-top:0}
+/* Состояние — цветная рейка слева, единственный цветовой сигнал в строке */
+.slot::before{
+  content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;
+  border-radius:0 3px 3px 0;background:var(--dim);
+}
+.slot.booked::before{background:var(--teal)}
+.slot.pending::before{background:var(--amber)}
+.slot.free::before{background:#2E3439}
+
+.slot .t{
+  font-size:14px;font-weight:600;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;width:46px;flex-shrink:0;
+}
+.slot .who{flex:1;min-width:0}
+.slot .who b{
+  font-size:14px;font-weight:500;letter-spacing:-.01em;display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.slot .who small{font-size:12px;color:var(--hint);display:block;margin-top:1px}
+.slot .who .empty{color:var(--dim);font-weight:400;font-style:italic}
+.badge{
+  font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  padding:4px 8px;border-radius:6px;white-space:nowrap;flex-shrink:0;
+}
+.badge.pend{color:var(--amber-br);background:rgba(200,122,21,.15)}
+.badge.ok{color:var(--teal-br);background:rgba(69,185,187,.13)}
+/* Шеврон — 45°, единственный след геометрии на строке */
+.chev{
+  width:7px;height:7px;flex-shrink:0;
+  border-right:2px solid var(--dim);border-top:2px solid var(--dim);
+  transform:rotate(45deg);
+}
+
+/* ── Первичная кнопка: срез разрешён ── */
+.cta{
+  width:100%;margin-top:14px;padding:14px;border:none;cursor:pointer;
+  font-family:inherit;font-size:15px;font-weight:600;letter-spacing:-.01em;
+  background:var(--teal);color:var(--on-fill);
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 8px 22px -8px rgba(69,185,187,.6);
+  clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+}
+
+/* ══ ЭКРАН 2: клиентский каталог ══ */
+.cat-card{
+  display:flex;gap:13px;padding:13px;margin-bottom:10px;
+  background:linear-gradient(180deg,var(--row-top),var(--row-bot));
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--hair);
+}
+.ava{
+  width:52px;height:52px;flex-shrink:0;
+  background:linear-gradient(140deg,#2A3034,#1C2023);
+  border:1px solid var(--line);
+  display:grid;place-items:center;font-size:17px;font-weight:600;color:var(--dim);
+  /* мелкий срез — карточка тренера всё же самостоятельный объект */
+  clip-path:polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+}
+.cat-card .b{flex:1;min-width:0}
+.cat-card .nm{font-size:14.5px;font-weight:600;letter-spacing:-.015em}
+.cat-card .sp{font-size:12.5px;color:var(--hint);margin-top:2px}
+.cat-card .meta{display:flex;align-items:center;gap:9px;margin-top:8px}
+.star{font-size:12px;color:var(--teal-br);font-weight:600}
+.price{font-size:12.5px;color:var(--text);font-weight:600;margin-left:auto}
+.price span{color:var(--hint);font-weight:400;font-size:11.5px}
+
+/* ── Пустое состояние: штриховка и знак разрешены ── */
+.empty-state{
+  padding:34px 20px;text-align:center;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--card-top),var(--card-bot));
+  border:1px solid var(--line);box-shadow:var(--hair),var(--lift);
+  clip-path:polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.empty-state::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(45deg,rgba(69,185,187,.05) 0 1px,transparent 1px 22px);
+}
+.empty-state .mark-icon{display:block;margin:0 auto 14px;width:36px;height:36px;opacity:.45}
+.empty-state h3{font-size:16px;font-weight:600;letter-spacing:-.02em;position:relative}
+.empty-state p{font-size:13px;color:var(--hint);margin-top:7px;line-height:1.5;position:relative}
+
+/* ── Пояснение ── */
+.legend{
+  width:100%;max-width:390px;padding:16px;
+  border:1px dashed var(--line);border-radius:14px;
+}
+.legend h4{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal-br);font-weight:600;margin-bottom:10px}
+.legend li{font-size:12.5px;color:var(--hint);line-height:1.65;list-style:none;padding-left:15px;position:relative}
+.legend li::before{content:'';position:absolute;left:0;top:7px;width:5px;height:5px;border-right:1.5px solid var(--teal);border-top:1.5px solid var(--teal);transform:rotate(45deg)}
+.legend b{color:var(--text);font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ═══ ЭКРАН 1 — плотное расписание ═══ -->
+<div class="screen">
+  <div class="screen-tag">Экран 1 · Расписание тренера · 14 строк</div>
+
+  <div class="top">
+    <div class="mark"><img class="mark-icon" src="../../static/logos/01-icon/glide-icon-teal-transparent-128.png" alt="" width="22" height="22">Расписание</div>
+    <div class="wk">Пн–Вс</div>
+  </div>
+
+  <div class="wknav">
+    <button>‹</button><b>31 авг — 6 сен</b><button>›</button>
+  </div>
+
+  <div class="filters">
+    <button class="fbtn on">Все</button>
+    <button class="fbtn">Свободны</button>
+    <button class="fbtn">Заняты</button>
+  </div>
+
+  <div class="day">
+    <div class="day-head"><b>ПОНЕДЕЛЬНИК, 31</b><span class="today">Сегодня</span><span class="n">6 слотов</span></div>
+    <div class="slot booked"><div class="t">09:00</div><div class="who"><b>Анна Ковалёва</b><small>Индивидуальное · 60 мин</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot booked"><div class="t">10:30</div><div class="who"><b>Игорь Демченко</b><small>Индивидуальное · 45 мин</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot pending"><div class="t">12:00</div><div class="who"><b>Мария Шульц</b><small>Групповое · 90 мин</small></div><span class="badge pend">Ждёт</span><span class="chev"></span></div>
+    <div class="slot free"><div class="t">14:15</div><div class="who"><b class="empty">Свободно</b><small>45 мин · Лёд №2</small></div><span class="chev"></span></div>
+    <div class="slot booked"><div class="t">16:00</div><div class="who"><b>Группа «Ротор»</b><small>Групповое · 90 мин · 8 чел.</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot free"><div class="t">18:30</div><div class="who"><b class="empty">Свободно</b><small>60 мин · Лёд №1</small></div><span class="chev"></span></div>
+  </div>
+
+  <div class="day">
+    <div class="day-head"><b>ВТОРНИК, 1 СЕН</b><span class="n">5 слотов</span></div>
+    <div class="slot booked"><div class="t">09:00</div><div class="who"><b>Павел Юрченко</b><small>Индивидуальное · 60 мин</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot pending"><div class="t">11:00</div><div class="who"><b>Елена Барс</b><small>Индивидуальное · 45 мин</small></div><span class="badge pend">Ждёт</span><span class="chev"></span></div>
+    <div class="slot free"><div class="t">13:00</div><div class="who"><b class="empty">Свободно</b><small>60 мин</small></div><span class="chev"></span></div>
+    <div class="slot booked"><div class="t">15:30</div><div class="who"><b>Дмитрий Лосев</b><small>Индивидуальное · 60 мин</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot free"><div class="t">17:00</div><div class="who"><b class="empty">Свободно</b><small>45 мин</small></div><span class="chev"></span></div>
+  </div>
+
+  <div class="day">
+    <div class="day-head"><b>СРЕДА, 2 СЕН</b><span class="n">3 слота</span></div>
+    <div class="slot booked"><div class="t">10:00</div><div class="who"><b>Ольга Кравец</b><small>Индивидуальное · 60 мин</small></div><span class="badge ok">Занято</span><span class="chev"></span></div>
+    <div class="slot free"><div class="t">12:30</div><div class="who"><b class="empty">Свободно</b><small>60 мин</small></div><span class="chev"></span></div>
+    <div class="slot free"><div class="t">14:00</div><div class="who"><b class="empty">Свободно</b><small>45 мин</small></div><span class="chev"></span></div>
+  </div>
+
+  <button class="cta">+ Добавить слоты на неделю</button>
+</div>
+
+<!-- ═══ ЭКРАН 2 — клиентский каталог ═══ -->
+<div class="screen">
+  <div class="screen-tag">Экран 2 · Каталог тренеров · клиентское приложение</div>
+
+  <div class="top">
+    <div class="mark"><img class="mark-icon" src="../../static/logos/01-icon/glide-icon-teal-transparent-128.png" alt="" width="22" height="22">Каталог</div>
+    <div class="wk">24 тренера</div>
+  </div>
+
+  <div class="filters">
+    <button class="fbtn on">Все</button>
+    <button class="fbtn">Рядом</button>
+    <button class="fbtn">Сегодня</button>
+  </div>
+
+  <div class="cat-card">
+    <div class="ava">АК</div>
+    <div class="b">
+      <div class="nm">Анна Ковалёва</div>
+      <div class="sp">Фигурное катание · 8 лет опыта</div>
+      <div class="meta"><span class="star">★ 4.9</span><span class="sp">· 127 занятий</span><span class="price">45 <span>BYN</span></span></div>
+    </div>
+  </div>
+  <div class="cat-card">
+    <div class="ava">ПЮ</div>
+    <div class="b">
+      <div class="nm">Павел Юрченко</div>
+      <div class="sp">Хоккей · вратарь · 12 лет</div>
+      <div class="meta"><span class="star">★ 5.0</span><span class="sp">· 89 занятий</span><span class="price">60 <span>BYN</span></span></div>
+    </div>
+  </div>
+  <div class="cat-card">
+    <div class="ava">МШ</div>
+    <div class="b">
+      <div class="nm">Мария Шульц</div>
+      <div class="sp">Фигурное катание · дети</div>
+      <div class="meta"><span class="star">★ 4.8</span><span class="sp">· 203 занятия</span><span class="price">40 <span>BYN</span></span></div>
+    </div>
+  </div>
+  <div class="cat-card">
+    <div class="ava">ДЛ</div>
+    <div class="b">
+      <div class="nm">Дмитрий Лосев</div>
+      <div class="sp">Хоккей · техника катания</div>
+      <div class="meta"><span class="star">★ 4.7</span><span class="sp">· 64 занятия</span><span class="price">55 <span>BYN</span></span></div>
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div class="empty-state">
+    <img class="mark-icon" src="../../static/logos/01-icon/glide-icon-teal-transparent-128.png" alt="" width="36" height="36">
+    <h3>Больше никого рядом</h3>
+    <p>Попробуйте расширить радиус или убрать фильтр по времени.</p>
+  </div>
+</div>
+
+<div class="legend">
+  <h4>Правило нормы — результат этой проверки</h4>
+  <ul>
+    <li><b>Срез 45°</b> — контейнер группы, шапка, hero, первичная кнопка, аватар. Никогда на строке списка.</li>
+    <li><b>Глубина</b> — полная (градиент + блик + тень) только у hero и пустых состояний. У строк — блик и градиент, без тени.</li>
+    <li><b>Штриховка</b> — только за hero и пустыми состояниями. За плотным списком рябит.</li>
+    <li><b>Цвет в строке</b> — одна рейка слева плюс бейдж. Тил остаётся действием и активным состоянием.</li>
+    <li><b>Шеврон</b> — единственный след геометрии на строке, заменяет стрелку.</li>
+  </ul>
+</div>
+
+</body>
+</html>

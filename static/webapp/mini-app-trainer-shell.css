@@ -28,8 +28,8 @@ body.trainer-shell-has-suspended-banner {
   line-height: 1.35;
   text-align: center;
   color: #5c4a00;
-  background: color-mix(in srgb, #34C6C4 22%, var(--tg-theme-bg-color, #F4F2EC));
-  border-bottom: 1px solid color-mix(in srgb, #34C6C4 35%, transparent);
+  background: color-mix(in srgb, #45B9BB 22%, var(--tg-theme-bg-color, #F1F3F2));
+  border-bottom: 1px solid color-mix(in srgb, #45B9BB 35%, transparent);
 }
 
 body.trainer-shell-body.trainer-shell-tabs-hidden {

@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202608268"></script>
-  <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608267" />
-  <link rel="stylesheet" href="booking-client.css?v=202605305" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202608267" />
+  <script src="client-mini-app-theme.js?v=202608315"></script>
+  <script src="mini-app-phone-field.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <link rel="stylesheet" href="booking-client.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <script src="mini-app-telegram-chrome.js?v=202608267"></script>
-  <script src="booking-client.js?v=202605305"></script>
-  <script src="booking-deeplink.js?v=202606166"></script>
-  <script src="mini-app-client-shell.js?v=202608267"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <script src="booking-client.js?v=202608315"></script>
+  <script src="booking-deeplink.js?v=202608315"></script>
+  <script src="mini-app-client-shell.js?v=202608315"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -498,7 +498,7 @@
       padding: 9px 16px;
       border-radius: 20px;
       border: none;
-      background: var(--tg-theme-button-color, #34C6C4);
+      background: var(--tg-theme-button-color, #45B9BB);
       color: var(--tg-theme-button-text-color, #fff);
       font-size: 14px;
       font-weight: 600;
@@ -736,9 +736,10 @@
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608267" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608315" />
+<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body>
+<body class="ar-pilot ar-pilot--book">
   <div class="header">
     <h1 class="header-title" id="headerTitle">📅 Запись</h1>
     <div class="client-mini-nav">
@@ -864,7 +865,7 @@
         function syncTelegramChromeColors() {
           try {
             var darkUi = tg.colorScheme === 'dark';
-            var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
+            var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
             if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
             if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
             if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
@@ -2238,6 +2239,6 @@
       })();
     })();
   </script>
-  <script src="mini-app-client-home.js"></script>
+  <script src="mini-app-client-home.js?v=202608315"></script>
 </body>
 </html>

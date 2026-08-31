@@ -348,4 +348,6 @@ async def test_studio_admin_only_skips_trainer_onboarding_gates(db_session) -> N
     assert checklist["schedule_unlocked"] is True
     assert checklist["tt_minimal_complete"] is True
     assert checklist["has_any_booking"] is True
+    # Studio manager never submits their own card for moderation — step 3 must not strand them.
+    assert checklist["moderation_submitted"] is True
     assert checklist["slots_locked_reason"] is None

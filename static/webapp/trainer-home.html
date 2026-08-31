@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608312"></script>
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
   <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
   <script>
     (function () {
@@ -18,11 +18,11 @@
       } catch (e) { /* */ }
     })();
   </script>
-  <script src="mini-app-telegram-chrome.js?v=202608312"></script>
-  <script src="mini-app-phone-field.js?v=202608312"></script>
-  <link rel="stylesheet" href="theme.css?v=202608312" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608312" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608312" />
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <script src="mini-app-phone-field.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -38,13 +38,13 @@
     />
   </noscript>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608312" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608312" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608312" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608312" />
-  <link rel="preload" href="trainer-home-main.js?v=202608312" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202608312" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
+  <link rel="preload" href="trainer-home-main.js?v=202608317" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202608315" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -400,10 +400,10 @@
           <span class="onboarding-step-icon" id="onboardingIconCatalog">3</span>
           <div class="onboarding-step-body">
             <div class="onboarding-step-name">Попасть в каталог</div>
-            <!-- Hint/CTA are state-driven: not ready → profile, ready → submit, submitted → waiting -->
+            <!-- Hint is state-driven: not ready → profile, ready → submit, submitted → waiting -->
             <p class="onboarding-step-hint" id="onboardingHintCatalog">Добавьте фото и отправьте профиль на проверку — после неё вас начнут находить в каталоге.</p>
-            <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Заполнить профиль</button>
           </div>
+          <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Заполнить профиль</button>
         </li>
       </ol>
     </div>
@@ -964,14 +964,14 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=202608312"></script>
-  <script src="mini-app-trainer-celebration.js?v=202608312"></script>
-  <script src="trainer-client-relay-ui.js?v=202608312"></script>
-  <script src="trainer-relay-helpers.js?v=202608312"></script>
+  <script src="mini-app-trainer-gate.js?v=202608315"></script>
+  <script src="mini-app-trainer-celebration.js?v=202608315"></script>
+  <script src="trainer-client-relay-ui.js?v=202608315"></script>
+  <script src="trainer-relay-helpers.js?v=202608315"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script src="mini-app-trainer-pending-inbox.js?v=202608312"></script>
-  <script src="trainer-booking-context.js?v=202608312"></script>
-  <script defer src="trainer-home-main.js?v=202608312"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202608312"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=202608315"></script>
+  <script src="trainer-booking-context.js?v=202608315"></script>
+  <script defer src="trainer-home-main.js?v=202608317"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202608315"></script>
 </body>
 </html>

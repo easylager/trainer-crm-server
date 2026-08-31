@@ -23,16 +23,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202608261">
+  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202608272">
   <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202608261">
 </head>
 <body>
 <a class="skip" href="#hero">К содержимому</a>
 <header class="masthead">
   <div class="logo" id="logoBox">
-    <img id="logoImg"
-         src="/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
-         alt="Glide">
+    <!--
+      Ночью шапка тёмная, а на светлом варианте логотипа словесный знак чёрный —
+      на тёмном он пропадает. Меняем файл, а не красим фильтром: инверсия увела бы
+      бирюзу иконки в розовый. Свои offsets для тёмного файла — у него другой
+      холст (1024×345 против 1024×558), см. .logo img в landing-live-link.css.
+    -->
+    <picture>
+      <source media="(prefers-color-scheme: dark)"
+              srcset="/logos/02-horizontal-full/glide-horizontal-white-on-black.png">
+      <img id="logoImg"
+           src="/logos/02-horizontal-full/glide-horizontal-teal-icon-black-text-on-white.png"
+           alt="Glide">
+    </picture>
   </div>
   <button type="button" class="cta cta--sm js-landing-cta" id="mastheadCta">Начать в Telegram</button>
 </header>

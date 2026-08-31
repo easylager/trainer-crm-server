@@ -72,6 +72,26 @@ def test_booking_ready_when_pending_and_tt_minimal_not_submission_complete() -> 
     )
 
 
+def test_booking_ready_with_mobile_format_and_no_arenas() -> None:
+    t = {
+        "profile": {
+            "first_name": "Sam",
+            "last_name": "Lee",
+            "phone": "+375291112233",
+            "city_id": 1,
+        },
+        "photos": [],
+        "service_ids": [1],
+        "arena_ids": [],
+        "arena_work_format": "mobile",
+        "education_entries_count": 0,
+    }
+    assert (
+        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=t)
+        == TrainerAccessState.BOOKING_READY
+    )
+
+
 def test_pending_moderation_when_pending_and_complete_trainer() -> None:
     assert (
         resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=_trainer_moderation_complete())

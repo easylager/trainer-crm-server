@@ -15,7 +15,7 @@
 
 @keyframes landing-cta-glow {
   0%, 100% { box-shadow: var(--shadow-brand); }
-  50%      { box-shadow: 0 16px 40px rgba(52, 198, 196, 0.38), 0 6px 16px rgba(52, 198, 196, 0.22); }
+  50%      { box-shadow: 0 16px 40px rgba(69, 185, 187, 0.38), 0 6px 16px rgba(69, 185, 187, 0.22); }
 }
 
 @keyframes landing-slot-shimmer {

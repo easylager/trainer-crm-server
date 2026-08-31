@@ -602,10 +602,10 @@ html.trainer-theme-dark .schedule-week-day-strip__wkNav {
       border-radius: 8px;
     }
     .slot-status.available { background: rgba(52, 199, 89, 0.2); color: #34c759; }
-    .slot-status.booked { background: rgba(52, 198, 196, 0.14); color: #0C6F6C; }
+    .slot-status.booked { background: rgba(69, 185, 187, 0.14); color: #0B6E70; }
     .slot-status.booked-confirmed {
       background: rgba(var(--accent-rgb), 0.14);
-      color: var(--glide-ink-teal, #0c6f6c);
+      color: var(--glide-ink-teal, #0B6E70);
     }
     .slot-status.booked-pending {
       background: color-mix(in srgb, var(--app-warning) 16%, transparent);
@@ -613,7 +613,7 @@ html.trainer-theme-dark .schedule-week-day-strip__wkNav {
     }
     .slot-status.booked-completed {
       background: rgba(var(--accent-rgb), 0.12);
-      color: var(--glide-ink-teal, #0c6f6c);
+      color: var(--glide-ink-teal, #0B6E70);
     }
     .slot-status.cancelled { background: rgba(142, 142, 147, 0.2); color: var(--tg-theme-hint-color); }
     .btn-slot-del {
@@ -2336,7 +2336,7 @@ html.trainer-theme-dark .modal { background: var(--tg-theme-bg-color) !important
       padding: 14px 18px;
       border-radius: 14px;
       background: #1a1a1a;
-      color: var(--tg-theme-bg-color, #F4F2EC);
+      color: var(--tg-theme-bg-color, #F1F3F2);
       font-size: 15px;
       font-weight: 500;
       text-align: center;
@@ -3862,13 +3862,13 @@ html.trainer-theme-dark .modal { background: var(--tg-theme-bg-color) !important
       padding-right: 12px;
     }
     .precise-slot-tag--new {
-      border-left: 3px solid var(--tg-theme-button-color, #34C6C4);
-      background: color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 12%, var(--tg-theme-bg-color));
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 28%, transparent);
+      border-left: 3px solid var(--tg-theme-button-color, #45B9BB);
+      background: color-mix(in srgb, var(--tg-theme-button-color, #45B9BB) 12%, var(--tg-theme-bg-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color, #45B9BB) 28%, transparent);
     }
     html[data-app-theme="dark"] .precise-slot-tag--new {
-      background: color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 18%, var(--tg-theme-bg-color));
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 35%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color, #45B9BB) 18%, var(--tg-theme-bg-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color, #45B9BB) 35%, transparent);
     }
     .precise-slot-tag__time {
       flex: 1;

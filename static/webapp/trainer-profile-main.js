@@ -922,7 +922,7 @@
             minHint.style.color = '#34c759';
           } else if (trimLen > 0) {
             minHint.textContent = 'ещё ' + (MIN_DESCRIPTION_CHARS - trimLen) + ' симв.';
-            minHint.style.color = 'var(--glide-ink-teal, #0C6F6C)';
+            minHint.style.color = 'var(--glide-ink-teal, #0B6E70)';
           } else {
             minHint.textContent = 'мин. ' + MIN_DESCRIPTION_CHARS + ' символов';
             minHint.style.color = '';
@@ -1897,16 +1897,15 @@
         try {
           flow.style.height = nh + 'px';
         } catch (eH2) {}
+        /*
+         * Overlay is position:fixed; inset:0. Following visualViewport.offsetTop
+         * jumps the whole wizard when iOS/Telegram pans the layout viewport for the
+         * keyboard — price fields appear to "fly" to another place. Keep top at 0;
+         * shrinking height is enough for «Далее» to sit above the keyboard.
+         */
         try {
-          if (nt) flow.style.top = nt + 'px';
-          else flow.style.removeProperty('top');
+          flow.style.removeProperty('top');
         } catch (eT2) {}
-        // After layout settles, nudge the focused text field — never for <select> (iOS wheel + scroll = freezes).
-        var ae = document.activeElement;
-        var aTag = ae && ae.tagName;
-        if (aTag === 'INPUT' || aTag === 'TEXTAREA') {
-          if (ae && flow.contains(ae)) scheduleObFlowFocusedScroll(250);
-        }
       }
 
       var obFlowInsetDebounceT = null;
@@ -2255,7 +2254,7 @@
           containerId: 'profileNavArenas',
           tabId: 'form',
           title: 'Где вы тренируете',
-          subtitle: 'Выберите арены и отметьте основную — она попадёт в карточку.',
+          subtitle: 'Выберите арены из списка или укажите, если вашей площадки там нет.',
         },
       };
 
@@ -2340,13 +2339,9 @@
           }
         }
         /*
-         * Ставим фокус на первом пустом контроле без scrollIntoView — заголовок карточки
-         * должен оставаться видимым. iOS сам откроет клавиатуру и подвинет поле только
-         * когда пользователь реально тапнет по инпуту.
+         * Не ставим автофокус. На iOS/Telegram первый тап по «Далее» при открытой клавиатуре
+         * уходит в dismiss keyboard и не доходит до кнопки — шаг «срабатывает со второго раза».
          */
-        setTimeout(function() {
-          try { obFlowFocusFirstEmpty(key); } catch (eFoc) {}
-        }, 80);
       }
 
       /**
@@ -2637,38 +2632,34 @@
       }
 
       /**
+       * Снимок формы должен видеть актуальное значение ещё до blur:
+       * маска телефона / type=number на iOS иногда держат value до change.
+       * Не blur'им здесь — blur сжимает visualViewport и уводит футер из-под пальца.
+       */
+      function profileBlockTourCommitFocusedField() {
+        var flow = document.getElementById('onboardingFlow');
+        var ae = document.activeElement;
+        if (!flow || flow.hidden || !ae || !ae.closest || !flow.contains(ae)) return;
+        var tg = ae.tagName;
+        if (tg !== 'INPUT' && tg !== 'TEXTAREA' && tg !== 'SELECT') return;
+        try {
+          ae.dispatchEvent(new Event('input', { bubbles: true }));
+          ae.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (eCommit) {}
+        try {
+          setDirty();
+        } catch (eDirty) {}
+      }
+
+      /**
        * «Дальше»: сохранить при наличии черновика, затем перейти к следующему блоку по порядку TTV;
        * если форма уже сохранена — только обновить с сервера и перейти, если текущий шаг закрыт.
-       *
-       * Шаг «Услуги и цены»: одно «Далее» после ввода в поле часто срабатывало как «со второго раза» —
-       * снимок формы и domServicesPricesCoherent отставали от UI до blur или до следующего тика. Blur + setTimeout(0).
        */
       function profileBlockTourOnNextClick() {
         if (!state.profileBlockTourActive) return;
         var nxGate = document.getElementById('obFlowNext');
-        if (nxGate && nxGate.classList.contains('is-saving')) return;
-        var flow = document.getElementById('onboardingFlow');
-        /*
-         * Правило для ВСЕХ шагов (раньше только для «Услуг»): сначала снять фокус с поля,
-         * затем решать на следующем макротаске. Маска телефона, цены и описания дописывают
-         * значение по blur/change — без этого первый тап читал устаревший снимок формы
-         * и «Далее» срабатывало только со второго раза.
-         */
-        var ae0 = document.activeElement;
-        var deferred = false;
-        if (flow && !flow.hidden && ae0 && ae0.closest && ae0.closest('#onboardingFlow')) {
-          var tg0 = ae0.tagName;
-          if (tg0 === 'INPUT' || tg0 === 'TEXTAREA' || tg0 === 'SELECT') {
-            try {
-              ae0.blur();
-            } catch (eBl) {}
-            deferred = true;
-          }
-        }
-        if (deferred) {
-          setTimeout(profileBlockTourOnNextClickBody, 0);
-          return;
-        }
+        if (nxGate && (nxGate.disabled || nxGate.classList.contains('is-saving'))) return;
+        profileBlockTourCommitFocusedField();
         profileBlockTourOnNextClickBody();
       }
 
@@ -2807,58 +2798,70 @@
         state.profileBlockTourSessionSealOrder = profileBlockTourBuildWizardRail();
         state.profileBlockTourSessionVisitedLastForward = false;
         syncProfileBlockTourBar();
-        var k0 = profileBlockTourCanonicalFirstMissing();
-        if (k0) {
-          /* После показа липкого бара WebView иногда дорисовывает позже — повторяем наведение на шаг. */
-          requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-              if (!state.profileBlockTourActive) return;
-              focusFormFieldForReadinessKey(profileBlockTourCanonicalFirstMissing() || k0);
-            });
-          });
-          setTimeout(function() {
-            if (!state.profileBlockTourActive) return;
-            var k1 = profileBlockTourCanonicalFirstMissing();
-            if (k1) focusFormFieldForReadinessKey(k1);
-          }, 680);
-        }
+        /* Без автофокуса: открытая клавиатура на iOS съедает первый тап по «Далее». */
       }
 
       /**
-       * Footer CTA in block tour: rely on a single trusted `click` + short debounce.
-       * Previous pointerdown + swallowNextClick could drop the next mouse click if a synthetic click
-       * never arrived after touch (hybrid devices, Telegram desktop) — felt like «кнопка со второго раза».
+       * Footer CTA: iOS/Telegram часто не шлёт `click` на первый тап, пока открыта клавиатура
+       * (`mousedown preventDefault` это усугублял). Ловим pointerup/touchend с preventDefault
+       * и глушим повторный click тем же debounce.
        */
       function bindProfileTourBarTap(el, handler) {
         if (!el || el.dataset.tourTapBound) return;
         el.dataset.tourTapBound = '1';
         var last = 0;
-        var debounceMs = 120;
-        /*
-         * Кнопке футера фокус не нужен. Отменяя дефолт mousedown, мы не даём снять фокус
-         * с поля ДО click: иначе iOS/Telegram закрывают клавиатуру, visualViewport ужимается,
-         * футер уезжает из-под пальца — и первый тап уходит в пустоту («срабатывает со второго раза»).
-         * Сам handler снимает фокус сам (см. profileBlockTourOnNextClick).
-         */
-        el.addEventListener('mousedown', function(ev) {
-          try {
-            ev.preventDefault();
-          } catch (eMd) {}
+        var LOCK_MS = 500;
+        var downOn = false;
+        function fire(ev) {
+          if (el.disabled || el.classList.contains('is-saving')) {
+            if (ev) ev.preventDefault();
+            return;
+          }
+          var t = Date.now();
+          if (t - last < LOCK_MS) {
+            if (ev) ev.preventDefault();
+            return;
+          }
+          last = t;
+          if (ev) {
+            try {
+              ev.preventDefault();
+            } catch (ePd) {}
+          }
+          handler();
+        }
+        el.addEventListener('pointerdown', function(ev) {
+          if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+          downOn = true;
+        });
+        el.addEventListener('pointercancel', function() {
+          downOn = false;
         });
         el.addEventListener(
-          'click',
+          'pointerup',
           function(ev) {
-            var t = Date.now();
-            if (t - last < debounceMs) {
+            if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+            if (!downOn) return;
+            downOn = false;
+            fire(ev);
+          },
+          { passive: false }
+        );
+        el.addEventListener(
+          'touchend',
+          function(ev) {
+            if (!downOn && last && Date.now() - last < LOCK_MS) {
               ev.preventDefault();
-              ev.stopPropagation();
               return;
             }
-            last = t;
-            handler();
+            fire(ev);
+            downOn = false;
           },
-          false
+          { passive: false }
         );
+        el.addEventListener('click', function(ev) {
+          fire(ev);
+        });
       }
 
       function wireProfileBlockTourBar() {
@@ -2894,7 +2897,8 @@
           window.addEventListener('orientationchange', onFlowResize);
           if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', onFlowResize);
-            window.visualViewport.addEventListener('scroll', onFlowResize);
+            /* Do not listen to visualViewport.scroll: it fires while iOS pans on focus
+               and rewrites overlay height mid-gesture → visible jump. */
           }
           /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
           flow.addEventListener('focusin', scheduleProfileTourBarInsetSync);
@@ -4133,16 +4137,46 @@
         }
       }
 
+      /** Onboarding: if nothing is checked yet, open the two most common tariffs. */
+      function ensureDefaultServiceTiers(serviceId) {
+        var any = false;
+        SERVICE_TIER_ORDER.forEach(function(code) {
+          var tcb = document.getElementById('svc_tier_' + serviceId + '_' + code);
+          if (tcb && tcb.checked) any = true;
+        });
+        if (any) return;
+        ['adult', 'child'].forEach(function(code) {
+          var tcb = document.getElementById('svc_tier_' + serviceId + '_' + code);
+          var pel = document.getElementById('price_tier_' + serviceId + '_' + code);
+          if (tcb) tcb.checked = true;
+          if (pel) {
+            pel.disabled = false;
+            pel.value = '';
+          }
+        });
+      }
+
+      function openServiceTierBody(serviceId) {
+        var tbody = document.getElementById('svc_tier_body_' + serviceId);
+        var tbtn = document.getElementById('svc_tier_toggle_' + serviceId);
+        if (tbody) tbody.hidden = false;
+        if (tbtn) {
+          tbtn.setAttribute('aria-expanded', 'true');
+          tbtn.textContent = 'Свернуть ▴';
+        }
+      }
+
       function renderServices() {
         var wrap = document.getElementById('servicesWrap');
         wrap.innerHTML = '';
+        wrap.classList.add('svc-pick');
         var selectedIds = {};
         (state.trainer.services || []).forEach(function(s) {
           selectedIds[s.service_id] = true;
         });
         state.servicesCatalog.forEach(function(s) {
           var row = document.createElement('div');
-          row.className = 'service-row';
+          row.className = 'service-row svc-pick__row';
           var id = s.id;
           var isSelected = !!selectedIds[id];
           if (isSelected) row.classList.add('service-active');
@@ -4152,10 +4186,16 @@
           chk.type = 'checkbox';
           chk.id = 'svc_' + id;
           chk.checked = isSelected;
+          chk.className = 'svc-pick__check';
 
           var span = document.createElement('span');
           span.className = 'svc-name';
           span.textContent = s.name || ('Услуга #' + id);
+
+          var head = document.createElement('label');
+          head.className = 'svc-pick__head';
+          head.appendChild(chk);
+          head.appendChild(span);
 
           var toggleBtn = document.createElement('button');
           toggleBtn.type = 'button';
@@ -4308,7 +4348,8 @@
             inp.type = 'number';
             inp.step = '0.01';
             inp.min = '0';
-            inp.placeholder = '0.00';
+            inp.inputMode = 'decimal';
+            inp.placeholder = '0';
             inp.id = 'price_tier_' + id + '_' + code;
             inp.disabled = !isSelected || !tchk.checked;
             if (hasPrice) inp.value = String(pv);
@@ -4389,6 +4430,12 @@
           tierBody.appendChild(tierWrap);
           tierBody.appendChild(groupWrap);
 
+          if (isSelected && document.body.classList.contains('ob-flow-open')) {
+            tierBody.hidden = false;
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = 'Свернуть ▴';
+          }
+
           toggleBtn.addEventListener('click', function() {
             if (!chk.checked) return;
             tierBody.hidden = !tierBody.hidden;
@@ -4458,15 +4505,16 @@
               var pgeOn = document.getElementById('price_group_' + id);
               if (pgeOn) pgeOn.disabled = false;
               primeNewServiceTiersFromPeers(id);
+              ensureDefaultServiceTiers(id);
+              openServiceTierBody(id);
             }
             setDirty();
           });
 
-          row.appendChild(chk);
-          row.appendChild(span);
+          row.appendChild(head);
           row.appendChild(toggleBtn);
           var block = document.createElement('div');
-          block.className = 'service-block';
+          block.className = 'service-block svc-pick__item';
           block.appendChild(row);
           block.appendChild(tierBody);
           wrap.appendChild(block);
@@ -4505,15 +4553,346 @@
         });
       }
 
+      function trainerArenaSetupFormat() {
+        var t = state.trainer || {};
+        return (t.arena_work_format || '').trim();
+      }
+
+      function arenasStepCompleteLocally() {
+        var t = state.trainer || {};
+        if ((t.arena_ids || []).length) return true;
+        var fmt = trainerArenaSetupFormat();
+        if (fmt === 'mobile') return true;
+        if (fmt === 'pending_request' && (t.arena_request_text || '').trim()) return true;
+        return false;
+      }
+
+      function clearArenaSetupMessages() {
+        var st = document.getElementById('arenaSetupStatus');
+        var er = document.getElementById('err_arena_setup');
+        if (st) {
+          st.hidden = true;
+          st.textContent = '';
+          st.className = 'arena-setup-status';
+        }
+        if (er) {
+          er.hidden = true;
+          er.textContent = '';
+        }
+      }
+
+      function showArenaSetupStatus(msg, kind) {
+        var st = document.getElementById('arenaSetupStatus');
+        if (!st) return;
+        st.textContent = msg;
+        st.hidden = !msg;
+        st.className = 'arena-setup-status';
+        if (kind === 'ok') st.className += ' arena-setup-status--ok';
+        if (kind === 'warn') st.className += ' arena-setup-status--warn';
+      }
+
+      function postArenaSetup(body) {
+        return fetch(apiUrl('/trainer/profile/arena-setup'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify(body),
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            return { ok: r.ok, status: r.status, data: data };
+          });
+        });
+      }
+
+      function arenaSetupErrorDetail(data, status) {
+        if (!data) return 'Не удалось сохранить. Попробуйте ещё раз.';
+        if (typeof data.detail === 'string') return data.detail;
+        if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) return data.detail[0].msg;
+        if (status === 403) return 'Сессия устарела — перезапустите мини-приложение.';
+        return 'Не удалось сохранить. Попробуйте ещё раз.';
+      }
+
+      function afterArenaSetupSuccess(data) {
+        if (data && data.trainer) state.trainer = data.trainer;
+        if (data && data.moderation_readiness) state.moderation_readiness = data.moderation_readiness;
+        renderArenas();
+        renderModeration();
+        updateProgressRing();
+        syncProfileBlockTourBar();
+        if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
+          var missingRaw =
+            (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+          var missing = profileBlockTourMissingStepKeys(missingRaw);
+          if (!profileBlockTourUiStepStillMissing('arenas', missing)) {
+            profileBlockTourAdvanceOneStep('arenas', missing);
+            syncProfileBlockTourBar();
+          }
+        }
+      }
+
+      function renderArenaSupportBlock(box) {
+        var sep = document.createElement('p');
+        sep.className = 'hint arena-empty-support-lead';
+        sep.textContent = 'Или напишите в поддержку — поможем вручную:';
+        box.appendChild(sep);
+
+        var ta = document.createElement('textarea');
+        ta.className = 'input arena-support-textarea';
+        ta.rows = 3;
+        ta.maxLength = 4000;
+        ta.placeholder = 'Кратко опишите ситуацию…';
+        box.appendChild(ta);
+
+        var sbtn = document.createElement('button');
+        sbtn.type = 'button';
+        sbtn.className = 'filter-btn arena-empty-btn';
+        sbtn.textContent = 'Написать в поддержку';
+        var sstat = document.createElement('p');
+        sstat.className = 'arena-setup-status';
+        sstat.hidden = true;
+        sbtn.addEventListener('click', function() {
+          var text = (ta.value || '').trim();
+          if (!text) {
+            sstat.textContent = 'Напишите пару слов — что случилось.';
+            sstat.className = 'arena-setup-status arena-setup-status--warn';
+            sstat.hidden = false;
+            return;
+          }
+          sbtn.disabled = true;
+          fetch(apiUrl('/support'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ message: text, role: 'trainer' }),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                return { ok: r.ok, data: d };
+              });
+            })
+            .then(function(o) {
+              sbtn.disabled = false;
+              if (o.ok && o.data && o.data.ok !== false) {
+                ta.value = '';
+                sstat.textContent = 'Сообщение отправлено — ответ придёт в тренерском боте.';
+                sstat.className = 'arena-setup-status arena-setup-status--ok';
+                sstat.hidden = false;
+              } else {
+                sstat.textContent = 'Не удалось отправить. Попробуйте через /guide в боте.';
+                sstat.className = 'arena-setup-status arena-setup-status--warn';
+                sstat.hidden = false;
+              }
+            })
+            .catch(function() {
+              sbtn.disabled = false;
+              sstat.textContent = 'Ошибка сети. Попробуйте через /guide в боте.';
+              sstat.className = 'arena-setup-status arena-setup-status--warn';
+              sstat.hidden = false;
+            });
+        });
+        box.appendChild(sbtn);
+        box.appendChild(sstat);
+      }
+
+      function renderArenaRequestForm(box) {
+        box.innerHTML = '';
+        clearArenaSetupMessages();
+        var title = document.createElement('p');
+        title.className = 'hint arena-empty-lead';
+        title.textContent =
+          'Название площадки отправим команде — добавят в справочник и свяжутся при необходимости.';
+        box.appendChild(title);
+
+        var nameWrap = document.createElement('div');
+        nameWrap.className = 'field';
+        var nameLab = document.createElement('label');
+        nameLab.textContent = 'Название площадки';
+        nameLab.setAttribute('for', 'arenaRequestName');
+        var nameInp = document.createElement('input');
+        nameInp.type = 'text';
+        nameInp.id = 'arenaRequestName';
+        nameInp.className = 'input';
+        nameInp.maxLength = 200;
+        nameInp.placeholder = 'Например, Ледовый дворец на ул. …';
+        var prevReq = (state.trainer.arena_request_text || '').split(' — ')[0];
+        if (prevReq) nameInp.value = prevReq;
+        nameWrap.appendChild(nameLab);
+        nameWrap.appendChild(nameInp);
+        box.appendChild(nameWrap);
+
+        var noteWrap = document.createElement('div');
+        noteWrap.className = 'field';
+        var noteLab = document.createElement('label');
+        noteLab.textContent = 'Адрес или комментарий (необязательно)';
+        noteLab.setAttribute('for', 'arenaRequestNote');
+        var noteInp = document.createElement('textarea');
+        noteInp.id = 'arenaRequestNote';
+        noteInp.className = 'input arena-request-note';
+        noteInp.maxLength = 800;
+        noteInp.rows = 3;
+        noteWrap.appendChild(noteLab);
+        noteWrap.appendChild(noteInp);
+        box.appendChild(noteWrap);
+
+        var actions = document.createElement('div');
+        actions.className = 'arena-empty-actions-row';
+        var submit = document.createElement('button');
+        submit.type = 'button';
+        submit.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        submit.textContent = 'Отправить заявку';
+        var back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'filter-btn arena-empty-btn';
+        back.textContent = 'Назад';
+        back.addEventListener('click', function() {
+          renderArenaEmptyActions(true);
+        });
+        submit.addEventListener('click', function() {
+          var nm = (nameInp.value || '').trim();
+          var er = document.getElementById('err_arena_setup');
+          if (!nm) {
+            if (er) {
+              er.textContent = 'Укажите название площадки.';
+              er.hidden = false;
+            }
+            nameInp.focus();
+            return;
+          }
+          submit.disabled = true;
+          postArenaSetup({
+            mode: 'request',
+            arena_name: nm,
+            note: (noteInp.value || '').trim() || null,
+          })
+            .then(function(o) {
+              submit.disabled = false;
+              if (!o.ok) {
+                if (er) {
+                  er.textContent = arenaSetupErrorDetail(o.data, o.status);
+                  er.hidden = false;
+                }
+                return;
+              }
+              afterArenaSetupSuccess(o.data);
+            })
+            .catch(function() {
+              submit.disabled = false;
+              if (er) {
+                er.textContent = 'Не удалось отправить. Проверьте соединение.';
+                er.hidden = false;
+              }
+            });
+        });
+        actions.appendChild(submit);
+        actions.appendChild(back);
+        box.appendChild(actions);
+        renderArenaSupportBlock(box);
+      }
+
+      function renderArenaEmptyActions(hasCity) {
+        var box = document.getElementById('arenaEmptyActions');
+        if (!box) return;
+        box.innerHTML = '';
+        if (!hasCity || (state.trainer.arena_ids || []).length) {
+          box.hidden = true;
+          return;
+        }
+        box.hidden = false;
+        var fmt = trainerArenaSetupFormat();
+        if (fmt === 'mobile') {
+          showArenaSetupStatus(
+            'Вы указали выездной формат без постоянной площадки. Сетку расписания задаёте в «Настройках».',
+            'ok'
+          );
+          return;
+        }
+        if (fmt === 'pending_request') {
+          var txt = (state.trainer.arena_request_text || '').trim();
+          showArenaSetupStatus(
+            'Заявка отправлена' +
+              (txt ? ': «' + txt + '».' : '.') +
+              ' Пока команда добавляет площадку, можно настроить расписание.',
+            'ok'
+          );
+          var again = document.createElement('button');
+          again.type = 'button';
+          again.className = 'filter-btn arena-empty-btn';
+          again.textContent = 'Изменить заявку';
+          again.addEventListener('click', function() {
+            renderArenaRequestForm(box);
+          });
+          box.appendChild(again);
+          return;
+        }
+
+        var lead = document.createElement('p');
+        lead.className = 'hint arena-empty-lead';
+        lead.textContent = 'Если вашей площадки нет в списке — выберите, как продолжить:';
+        box.appendChild(lead);
+
+        var btnRequest = document.createElement('button');
+        btnRequest.type = 'button';
+        btnRequest.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        btnRequest.textContent = 'Моей площадки нет в списке';
+        btnRequest.addEventListener('click', function() {
+          renderArenaRequestForm(box);
+        });
+        box.appendChild(btnRequest);
+
+        var btnMobile = document.createElement('button');
+        btnMobile.type = 'button';
+        btnMobile.className = 'filter-btn arena-empty-btn';
+        btnMobile.textContent = 'Занимаюсь выездом / без постоянной площадки';
+        btnMobile.addEventListener('click', function() {
+          if (
+            !window.confirm(
+              'Выездной формат без привязки к арене из справочника. Продолжить?'
+            )
+          ) {
+            return;
+          }
+          var er = document.getElementById('err_arena_setup');
+          btnMobile.disabled = true;
+          postArenaSetup({ mode: 'mobile' })
+            .then(function(o) {
+              btnMobile.disabled = false;
+              if (!o.ok) {
+                if (er) {
+                  er.textContent = arenaSetupErrorDetail(o.data, o.status);
+                  er.hidden = false;
+                }
+                return;
+              }
+              afterArenaSetupSuccess(o.data);
+            })
+            .catch(function() {
+              btnMobile.disabled = false;
+              if (er) {
+                er.textContent = 'Не удалось сохранить. Проверьте соединение.';
+                er.hidden = false;
+              }
+            });
+        });
+        box.appendChild(btnMobile);
+        renderArenaSupportBlock(box);
+      }
+
       function renderArenas() {
         var wrap = document.getElementById('arenasWrap');
         var hint = document.getElementById('arenaHint');
+        var emptyBox = document.getElementById('arenaEmptyActions');
         wrap.innerHTML = '';
+        if (emptyBox) {
+          emptyBox.hidden = true;
+          emptyBox.innerHTML = '';
+        }
+        clearArenaSetupMessages();
         var selected = {};
-        (state.trainer.arena_ids || []).forEach(function(id) { selected[id] = true; });
+        (state.trainer.arena_ids || []).forEach(function(id) {
+          selected[id] = true;
+        });
         if (!state.arenasList.length) {
           hint.style.display = 'block';
-          hint.textContent = state.trainer.profile && state.trainer.profile.city_id
+          var hasCity = !!(state.trainer.profile && state.trainer.profile.city_id);
+          hint.textContent = hasCity
             ? 'Нет арен для выбранного города.'
             : 'Выберите город — появится список доступных арен.';
           var pwrap = document.getElementById('primaryArenaWrap');
@@ -4521,6 +4900,7 @@
             pwrap.innerHTML = '';
             pwrap.style.display = 'none';
           }
+          renderArenaEmptyActions(hasCity);
           return;
         }
         hint.style.display = 'none';
@@ -5381,10 +5761,11 @@
         if (!sw || sw.dataset.tourPriceFocus) return;
         sw.dataset.tourPriceFocus = '1';
         var focusedRow = null;
-        function scrollFocusedRowIntoCenter() {
+        function scrollFocusedPriceIfNeeded() {
           if (!focusedRow || !document.body.contains(focusedRow)) return;
+          if (profileTourFieldIsComfortablyVisible(focusedRow)) return;
           try {
-            focusedRow.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+            focusedRow.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
           } catch (e) {}
         }
         sw.addEventListener(
@@ -5398,9 +5779,8 @@
             var row = t.closest('.svc-tier-row') || t.closest('.svc-group-price-wrap');
             if (!row) return;
             focusedRow = row;
-            /* One immediate + один отложенный после анимации клавиатуры — меньше дёрганий, чем серия таймеров. */
-            requestAnimationFrame(scrollFocusedRowIntoCenter);
-            setTimeout(scrollFocusedRowIntoCenter, 360);
+            /* After keyboard animation only — never scrollIntoView({center}) (that relocates the whole list). */
+            setTimeout(scrollFocusedPriceIfNeeded, 380);
           },
           true
         );
@@ -5416,8 +5796,8 @@
           if (vvTourScrollDeb) clearTimeout(vvTourScrollDeb);
           vvTourScrollDeb = setTimeout(function() {
             vvTourScrollDeb = null;
-            scrollFocusedRowIntoCenter();
-          }, 96);
+            scrollFocusedPriceIfNeeded();
+          }, 160);
         }
         if (window.visualViewport) {
           window.visualViewport.addEventListener('resize', scheduleScrollRowOnViewportChange);

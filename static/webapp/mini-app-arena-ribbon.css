@@ -1,0 +1,852 @@
+/**
+ * Arena Depth + Ribbon geometry — pilot slice (TASK-017, DEC-007).
+ * Load AFTER theme.css and page CSS. Scoped to body.ar-pilot--* only.
+ *
+ * Norm:
+ *   • 45° cut — container, header, hero, primary CTA, avatar — never list rows.
+ *   • Full depth (gradient + hairline + lift) — hero + empty states only.
+ *   • List rows — gradient + hairline, no drop shadow.
+ *   • Hatch + watermark — hero and empty states only.
+ */
+
+/* ── Shared primitives ── */
+.ar-pilot .ar-chev {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  align-self: center;
+  border-right: 2px solid var(--glide-hint);
+  border-top: 2px solid var(--glide-hint);
+  transform: rotate(45deg);
+}
+
+.ar-pilot .filter-btn {
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  color: var(--tg-theme-text-color) !important;
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 0 !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: var(--app-ribbon-clip-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ar-pilot .filter-btn.active {
+  background: var(--app-cta-fill) !important;
+  color: var(--app-cta-text) !important;
+  border-color: transparent !important;
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow) !important;
+}
+
+.ar-pilot .week-nav {
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  background: var(--app-surface-container);
+  border: 1px solid var(--glide-line);
+  border-radius: 13px;
+  box-shadow: var(--app-hairline);
+}
+
+.ar-pilot .week-nav button {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+}
+
+/* Шапка экрана — контейнер, срез разрешён (DEC-007). */
+/* Один уровень вложенности, а не произвольная глубина: на части страниц шапка
+   завёрнута в контейнер, но глубже двух уровней .header встречается уже внутри
+   карточек и модалок, где контейнерная трактовка была бы неверной. */
+body.ar-pilot > .header,
+body.ar-pilot > * > .header,
+body.ar-pilot .client-app-header,
+body.ar-pilot .se-schedule-top-chrome .header {
+  padding: 13px 16px;
+  background: linear-gradient(180deg, var(--app-surface-header-top), var(--app-surface-header-bot));
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot > .header,
+body.ar-pilot > * > .header,
+body.ar-pilot .client-app-header {
+  margin-bottom: 16px;
+}
+
+/* Редактор расписания: шапка приклеена к чрому, внешнего отступа быть не должно. */
+body.ar-pilot .se-schedule-top-chrome .header {
+  margin-bottom: 0;
+}
+
+/* Группа дня — контейнер. */
+body.ar-pilot .ar-day {
+  margin-bottom: 12px;
+  background: var(--app-surface-container);
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline);
+  clip-path: var(--app-ribbon-clip-container);
+  overflow: hidden;
+}
+
+body.ar-pilot .ar-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--glide-line-soft, var(--glide-line));
+}
+
+body.ar-pilot .ar-day-head .day-title {
+  margin-bottom: 0;
+  opacity: 1;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+body.ar-pilot .ar-day-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--glide-hint);
+}
+
+body.ar-pilot .ar-day-slots {
+  padding: 0 0 4px;
+}
+
+/* Пустое состояние — полная глубина, штриховка и знак (DEC-007). */
+body.ar-pilot .ar-empty-state {
+  position: relative;
+  overflow: hidden;
+  padding: 34px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot .ar-empty-state::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+body.ar-pilot .ar-empty-state::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 14px;
+  opacity: 0.45;
+  position: relative;
+  z-index: 1;
+  background: url('/logos/01-icon/glide-icon-teal-transparent-128.png') center / contain no-repeat;
+}
+
+/* Главное действие экрана — срез. Целимся в .btn-block, а не только в
+   .btn-primary: полноширинная кнопка и есть паттерн главного действия, и она
+   бывает outline-вариантом. Иначе подпись бренда достаётся мелким фильтрам,
+   а самая важная кнопка экрана остаётся без неё (design-review 31.08.2026). */
+body.ar-pilot .btn-primary,
+body.ar-pilot .btn-block {
+  border-radius: 0;
+  clip-path: var(--app-ribbon-clip-btn);
+}
+
+/* Свечение — только залитым CTA: вокруг прозрачной обводки тиловый ореол
+   выглядит грязью, а не источником света. */
+body.ar-pilot .btn-primary {
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow) !important;
+}
+
+/* Активная вкладка. В тёмной теме она была ТЕМНЕЕ неактивной и сливалась с
+   фоном страницы, читаясь как провал, а не как выбор. Инвертируем: активная
+   приподнята светом, текст — тиловый. Заливку тилом не берём — рядом уже
+   стоит тиловый чип-фильтр, два пятна начали бы спорить. */
+body.ar-pilot .tab.active {
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  color: var(--glide-ink-teal) !important;
+  font-weight: 600;
+}
+
+body.ar-pilot .tab:not(.active) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── Schedule pilot ── */
+body.ar-pilot--schedule .ar-empty-state {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--glide-hint);
+}
+
+body.ar-pilot--schedule .slot-card {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin: 8px !important;
+  padding: 12px 14px 12px 12px !important;
+  border-radius: 11px !important;
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  position: relative;
+  clip-path: none !important;
+}
+
+body.ar-pilot--schedule .slot-card.slot-booked {
+  border-color: var(--glide-line) !important;
+  cursor: pointer;
+}
+
+body.ar-pilot--schedule .slot-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--glide-line-strong, var(--glide-line));
+}
+
+body.ar-pilot--schedule .slot-card.slot-booked::before {
+  background: var(--app-cta-fill);
+}
+
+body.ar-pilot--schedule .slot-card.slot-free::before {
+  background: var(--glide-hint);
+  opacity: 0.45;
+}
+
+body.ar-pilot--schedule .slot-card.slot-cancelled::before {
+  background: var(--glide-hint);
+  opacity: 0.3;
+}
+
+body.ar-pilot--schedule .slot-time {
+  font-variant-numeric: tabular-nums;
+  width: auto;
+  min-width: 46px;
+}
+
+body.ar-pilot--schedule .slot-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+body.ar-pilot--schedule .slot-status.available {
+  background: var(--app-ok-wash);
+  color: var(--app-ok-ink);
+}
+
+body.ar-pilot--schedule .slot-status.booked {
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+}
+
+body.ar-pilot--schedule .slot-status.cancelled {
+  background: rgba(142, 142, 147, 0.15);
+  color: var(--glide-hint);
+}
+
+/* ── Schedule editor pilot (canonical /webapp/schedule-editor) ── */
+body.ar-pilot--schedule-editor .slot-row {
+  align-items: center !important;
+  margin: 8px !important;
+  padding: 12px 14px 12px 12px !important;
+  border-radius: 11px !important;
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  position: relative;
+  clip-path: none !important;
+}
+
+body.ar-pilot--schedule-editor .slot-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--glide-line-strong, var(--glide-line));
+}
+
+body.ar-pilot--schedule-editor .slot-row.slot-booking-pending::before,
+body.ar-pilot--schedule-editor .slot-row.slot-booking-pending.slot-booked-click::before {
+  background: var(--app-attention);
+}
+
+body.ar-pilot--schedule-editor .slot-row.slot-booked-click::before,
+body.ar-pilot--schedule-editor .slot-row.slot-booking-confirmed::before,
+body.ar-pilot--schedule-editor .slot-row.slot-booking-completed::before {
+  background: var(--app-cta-fill);
+}
+
+body.ar-pilot--schedule-editor .slot-row.slot-available::before {
+  background: var(--glide-hint);
+  opacity: 0.45;
+}
+
+body.ar-pilot--schedule-editor .slot-row.slot-booked-click {
+  border-color: var(--glide-line) !important;
+}
+
+body.ar-pilot--schedule-editor .slot-row.slot-past {
+  opacity: 0.88;
+}
+
+body.ar-pilot--schedule-editor .slot-row .slot-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+body.ar-pilot--schedule-editor .calendar-empty-state__title,
+body.ar-pilot--schedule-editor .calendar-empty-state__hint {
+  position: relative;
+  z-index: 1;
+}
+
+body.ar-pilot--schedule-editor .template-apply-trigger {
+  clip-path: var(--app-ribbon-clip-btn);
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow) !important;
+}
+
+/* ── Catalog pilot ── */
+body.ar-pilot--catalog .catalog-hero:not(.catalog-hero--cover) {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 18px;
+  padding: 20px 18px 18px;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--catalog .catalog-hero:not(.catalog-hero--cover)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+body.ar-pilot--catalog .catalog-hero:not(.catalog-hero--cover)::before {
+  content: '';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 72px;
+  height: 72px;
+  opacity: 0.08;
+  pointer-events: none;
+  background: url('/logos/01-icon/glide-icon-teal-transparent-128.png') center / contain no-repeat;
+}
+
+body.ar-pilot--catalog .catalog-hero__title,
+body.ar-pilot--catalog .catalog-hero__lead,
+body.ar-pilot--catalog .catalog-hero__venue {
+  position: relative;
+  z-index: 1;
+}
+
+body.ar-pilot--catalog .trainer-list-card {
+  align-items: center !important;
+  gap: 13px !important;
+  padding: 13px 14px !important;
+  margin-bottom: 10px !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+  overflow: visible !important;
+}
+
+body.ar-pilot--catalog .trainer-list-card::before {
+  display: none !important;
+}
+
+body.ar-pilot--catalog .trainer-card-photo-wrap {
+  clip-path: var(--app-ribbon-clip-avatar);
+}
+
+body.ar-pilot--catalog .trainer-list-card .arrow {
+  font-size: 0 !important;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--glide-hint);
+  border-top: 2px solid var(--glide-hint);
+  transform: rotate(45deg);
+  opacity: 1;
+}
+
+body.ar-pilot--catalog .trainer-list-card:hover .arrow {
+  transform: rotate(45deg);
+}
+
+body.ar-pilot--catalog .catalog-scenario-chip--selected {
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow);
+}
+
+body.ar-pilot--catalog .empty:not(.catalog-collective-sessions-empty) {
+  position: relative;
+  overflow: hidden;
+  padding: 34px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--catalog .empty:not(.catalog-collective-sessions-empty)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+body.ar-pilot--catalog .btn-trainer-list {
+  clip-path: var(--app-ribbon-clip-btn);
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow) !important;
+}
+
+/* ── Trainer home pilot ── */
+/* Инбокс подтверждений — единственная «крупная» поверхность экрана:
+   контейнер, значит полная глубина и срез (DEC-007). */
+body.ar-pilot--trainer-home .hub-action-inbox__card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot)) !important;
+  box-shadow: var(--app-hairline), var(--app-lift) !important;
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+/* Строки внутри инбокса — блик и градиент, без тени и без среза. */
+body.ar-pilot--trainer-home .hub-action-inbox__item {
+  margin: 8px;
+  border-radius: 11px;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+  box-shadow: var(--app-hairline);
+  clip-path: none;
+}
+
+/* Первичная кнопка инбокса — действие, значит срез и свечение.
+   Целимся в модификатор --primary: базовый .hub-action-inbox__btn общий для
+   вторичных кнопок и задаёт «таблетку» 999px, по которой срез не читается. */
+body.ar-pilot--trainer-home .hub-action-inbox__btn--primary {
+  border-radius: 0;
+  clip-path: var(--app-ribbon-clip-sm);
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow);
+}
+
+/* Недельный пульс: семь мелких кнопок — среза не даём (норма), только
+   поверхность у дней с записями и тил у сегодняшнего как активного состояния. */
+body.ar-pilot--trainer-home .hub-week-pulse__day--has {
+  border-color: var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+  box-shadow: var(--app-hairline);
+}
+
+body.ar-pilot--trainer-home .hub-week-pulse__day--today {
+  border-color: transparent;
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow);
+}
+
+/* ── Trainer clients pilot ── */
+/* Строка клиента. До этого у КАЖДОЙ строки была тиловая рамка 2px — тил
+   переставал означать действие. По норме строка получает блик и градиент,
+   а граница становится нейтральной. */
+body.ar-pilot--trainer-clients .client-card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+/* Стрелка «›» — заменяем на шеврон 45°, единственный след геометрии в строке. */
+body.ar-pilot--trainer-clients .client-arrow {
+  font-size: 0 !important;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--glide-hint);
+  border-top: 2px solid var(--glide-hint);
+  transform: rotate(45deg);
+  opacity: 1;
+}
+
+/* Чипы-фильтры — управляющий элемент, мелкий срез. */
+body.ar-pilot--trainer-clients .tc-chip-filter {
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  border: 1px solid var(--glide-line) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: var(--app-ribbon-clip-sm);
+}
+
+body.ar-pilot--trainer-clients .tc-chip-filter.is-active {
+  background: var(--app-cta-fill) !important;
+  color: var(--app-cta-text) !important;
+  border-color: transparent !important;
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow) !important;
+}
+
+/* Карточка приглашения — самостоятельный контейнер: срез и полная глубина. */
+body.ar-pilot--trainer-clients .invite-card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot)) !important;
+  box-shadow: var(--app-hairline), var(--app-lift) !important;
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+/* Пустое досье — пустое состояние, значит штриховка и знак разрешены. */
+body.ar-pilot--trainer-clients .dossier-empty {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--trainer-clients .dossier-empty::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+/* ── Trainer groups pilot ── */
+/* Карточка группы — строка списка: блик и градиент, тени нет (DEC-007). */
+body.ar-pilot--trainer-groups .group-card-tg {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+/* Рейка статуса. По умолчанию она была тиловой у ВСЕХ карточек — тил переставал
+   означать действие. Нейтраль по умолчанию, цвет — только там, где есть статус. */
+body.ar-pilot--trainer-groups .group-card-tg::before {
+  width: 3px;
+  top: 9px;
+  bottom: 9px;
+  border-radius: 0 3px 3px 0;
+  background: var(--glide-line-strong, var(--glide-line));
+}
+
+body.ar-pilot--trainer-groups .group-card-tg[data-status="active"]::before {
+  background: var(--app-ok);
+}
+
+body.ar-pilot--trainer-groups .group-card-tg[data-status="archived"]::before {
+  background: var(--glide-hint);
+  opacity: 0.45;
+}
+
+/* Пустое состояние — полная глубина, штриховка и знак. */
+body.ar-pilot--trainer-groups .tg-empty-state {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--trainer-groups .tg-empty-state::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+/* ── Trainer pass products pilot ── */
+/* Экран уже опирается на токены состояний (--app-success / --app-danger),
+   поэтому добавляем только глубину: строки получают блик и градиент,
+   собственная тень снимается по норме. Левая рейка статуса не трогается. */
+body.ar-pilot--trainer-pass-products .pp-issued-card,
+body.ar-pilot--trainer-pass-products .cert-product-card {
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+body.ar-pilot--trainer-pass-products .cert-product-card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+}
+
+/* Первичное действие — срез и свечение. */
+body.ar-pilot--trainer-pass-products .pp-btn--primary {
+  border-radius: 0;
+  clip-path: var(--app-ribbon-clip-btn);
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow);
+}
+
+/* ── Trainer stats pilot ── */
+/* Плитки метрик — блик и градиент, собственная тень снимается (DEC-007). */
+body.ar-pilot--trainer-stats .kpi-card,
+body.ar-pilot--trainer-stats .money-kpi-tile,
+body.ar-pilot--trainer-stats .money-week-card,
+body.ar-pilot--trainer-stats .coach-card {
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+/* Денежный герой — единственная крупная поверхность экрана: полная глубина,
+   срез, штриховка и знак. */
+body.ar-pilot--trainer-stats .money-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--trainer-stats .money-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+/* Чип периода. Раньше тиловая рамка стояла на КАЖДОМ чипе, включая неактивные —
+   тил снова переставал означать выбор. Нейтраль по умолчанию, тил только активному. */
+body.ar-pilot--trainer-stats .money-period-chip {
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+  box-shadow: var(--app-hairline);
+  clip-path: var(--app-ribbon-clip-sm);
+}
+
+body.ar-pilot--trainer-stats .money-period-chip.is-active {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  border-color: transparent;
+  box-shadow: var(--app-cta-inset), var(--app-cta-glow);
+}
+
+/* ── Trainer profile pilot ── */
+/* Шапка профиля — hero: полная глубина, срез, штриховка и знак. */
+body.ar-pilot--trainer-profile .profile-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0 !important;
+  border: 1px solid var(--glide-line) !important;
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot)) !important;
+  box-shadow: var(--app-hairline), var(--app-lift) !important;
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--trainer-profile .profile-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+/* Карточки и строки анкеты — блик и градиент, без тени и без среза. */
+body.ar-pilot--trainer-profile .card,
+body.ar-pilot--trainer-profile .settings-format-card,
+body.ar-pilot--trainer-profile .edu-readonly,
+body.ar-pilot--trainer-profile .service-row,
+body.ar-pilot--trainer-profile .arena-row,
+body.ar-pilot--trainer-profile .quick-action-btn {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+/* ── Client home pilot ── */
+body.ar-pilot--client-home .hub-hero,
+body.ar-pilot--client-home .hub-acq-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+body.ar-pilot--client-home .hub-hero::after,
+body.ar-pilot--client-home .hub-acq-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(var(--accent-rgb), 0.05) 0 1px,
+    transparent 1px 22px
+  );
+}
+
+/* Строка записи: блик и градиент, без тени. Состояние — рейкой слева, а не
+   рамкой по периметру, и на токенах: раньше цвета были зашиты числами. */
+body.ar-pilot--client-home .hub-booking-row {
+  position: relative;
+  border: 1px solid var(--glide-line);
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+  box-shadow: var(--app-hairline);
+  clip-path: none;
+}
+
+body.ar-pilot--client-home .hub-booking-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--glide-line-strong, var(--glide-line));
+}
+
+body.ar-pilot--client-home .hub-booking-row--confirmed {
+  border-color: var(--glide-line);
+}
+
+body.ar-pilot--client-home .hub-booking-row--confirmed::before {
+  background: var(--app-ok);
+}
+
+body.ar-pilot--client-home .hub-booking-row--pending {
+  border-color: var(--glide-line);
+}
+
+body.ar-pilot--client-home .hub-booking-row--pending::before {
+  background: var(--app-attention);
+}
+
+/* `mini-app-client-theme.css` глушит background-image: none !important для
+   .hub-explore-tile и соседей — старое решение против декоративных градиентов.
+   Наш градиент это 3% сдвиг света, а не декор, поэтому перебиваем точечно. */
+body.ar-pilot--client-home .hub-explore-tile,
+body.ar-pilot--client-home .hub-discovery__card {
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline);
+  clip-path: none;
+}
+
+body.ar-pilot--client-home .hub-empty-state {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+/* ── Client requests pilot ── */
+body.ar-pilot--client-requests .request-card,
+body.ar-pilot--client-requests .trainer-card-full,
+body.ar-pilot--client-requests .responder-row,
+body.ar-pilot--client-requests .review-item {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+body.ar-pilot--client-requests .cr-responses-empty,
+body.ar-pilot--client-requests .reviews-empty {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  border: 1px solid var(--glide-line);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  box-shadow: var(--app-hairline), var(--app-lift);
+  clip-path: var(--app-ribbon-clip-container);
+}
+
+/* ── Client bookings pilot ── */
+body.ar-pilot--client-bookings .booking-card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}
+
+/* ── Book pilot ── */
+body.ar-pilot--book .slot-card {
+  border: 1px solid var(--glide-line) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
+  box-shadow: var(--app-hairline) !important;
+  clip-path: none !important;
+}

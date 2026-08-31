@@ -72,6 +72,7 @@ body.hub-body {
 }
 
 .hub-body--booking-led .ice-lane {
+  margin-top: 10px;
   margin-bottom: 10px;
 }
 
@@ -171,7 +172,7 @@ body.hub-body {
     0 12px 32px rgba(0, 0, 0, 0.06),
     0 2px 8px rgba(0, 0, 0, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(52, 198, 196, 0.12);
+  border: 1px solid rgba(69, 185, 187, 0.12);
   cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
   -webkit-tap-highlight-color: transparent;
@@ -180,12 +181,12 @@ body.hub-body {
 
 .hub-next-card--confirmed {
   background: var(--glide-surface, #ffffff);
-  border-color: rgba(52, 198, 196, 0.22);
+  border-color: rgba(69, 185, 187, 0.22);
 }
 
 .hub-next-card--pending {
   background: var(--glide-surface, #ffffff);
-  border-color: rgba(52, 198, 196, 0.14);
+  border-color: rgba(69, 185, 187, 0.14);
 }
 
 .hub-is-dark .hub-next-card {
@@ -197,7 +198,7 @@ body.hub-body {
 
 .hub-is-dark .hub-next-card--confirmed {
   background: #2c2c2e;
-  border-color: rgba(52, 198, 196, 0.28);
+  border-color: rgba(69, 185, 187, 0.28);
 }
 
 .hub-is-dark .hub-next-card--pending {
@@ -796,7 +797,7 @@ body.hub-body {
   line-height: 1.2;
   white-space: nowrap;
   background: none;
-  color: var(--tg-theme-button-color, #34C6C4);
+  color: var(--tg-theme-button-color, #45B9BB);
   border: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
@@ -2270,7 +2271,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 2px 18px 14px;
+  margin: 12px 18px 14px;
   opacity: 0;
   pointer-events: none;
   color: var(--app-cta-fill);

@@ -3642,6 +3642,31 @@ TRAINER_LEAD_MODE_SIGNALS_FAVORITES = (
 )
 TRAINER_LEAD_MODE_SIGNALS_NONE = ""  # Empty — message reads naturally without the signals sentence.
 
+# --- Onboarding reactivation (D+1/D+3/D+7 — trainers who linked Telegram but stalled) ---
+# Step intros escalate tone; stage bodies name the concrete next action (see TASK-011 AC-002).
+TRAINER_ONBOARDING_NUDGE_INTRO_D1 = "👋 <b>Продолжим регистрацию?</b>\n\n"
+TRAINER_ONBOARDING_NUDGE_INTRO_D3 = "⏳ <b>Ты в шаге от каталога.</b>\n\n"
+TRAINER_ONBOARDING_NUDGE_INTRO_D7 = "⚠️ <b>Последнее напоминание.</b>\n\n"
+
+TRAINER_ONBOARDING_STAGE_EMPTY_FORM = (
+    "Анкета почти пустая — заполни 5 полей (имя, телефон, город, услуга, площадка), "
+    "и сразу откроются расписание и тестовые записи."
+)
+TRAINER_ONBOARDING_STAGE_MISSING_FIELD = "Осталось заполнить: <b>{missing}</b>."
+TRAINER_ONBOARDING_STAGE_REJECTED_RESUBMIT = (
+    "Модератор оставил замечания по анкете — поправь и отправь снова."
+)
+TRAINER_ONBOARDING_STAGE_NOT_SUBMITTED = "Анкета готова — осталось отправить её на проверку."
+TRAINER_ONBOARDING_STAGE_NO_BOOKING = (
+    "Профиль активен, но пока нет ни одной записи. Загляни в каталог и настрой расписание — "
+    "клиенты уже могут тебя найти."
+)
+
+TRAINER_ONBOARDING_TRIAL_DAYS_LEFT = "\n\n⏰ Пробный период закончится через {days} дн."
+TRAINER_ONBOARDING_TRIAL_LAST_DAY = "\n\n⏰ Пробный период заканчивается сегодня."
+
+TRAINER_ONBOARDING_NUDGE_OUTRO = "\n\nНажми <b>Обзор</b> слева от поля ввода, чтобы продолжить."
+
 # Subscription tier access messages
 TRAINER_TIER_REQUIRED_CRM = (
     "⚠️ Для этой функции нужен активный тариф <b>CRM</b> или выше.\n\n"

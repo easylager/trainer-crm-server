@@ -18,7 +18,7 @@ def test_build_client_start_payload_matches_client_bot() -> None:
     assert build_client_start_payload(1, 2, 3) == "client_1_2_3"
 
 
-def test_build_links_https_catalog_and_tme() -> None:
+def test_build_links_returns_tme_deep_link() -> None:
     links, err = build_trainer_invite_links(
         webapp_base_url="https://api.example.com/",
         client_bot_username="ClientBot",
@@ -29,12 +29,13 @@ def test_build_links_https_catalog_and_tme() -> None:
     assert err is None
     assert links is not None
     assert links.client_bot_deep_link == "https://t.me/ClientBot?start=client_5_7_11"
-    assert links.catalog_page_url == "https://api.example.com/webapp/catalog"
 
 
-def test_build_links_no_catalog_without_https() -> None:
+def test_build_links_never_returns_catalog_page_url() -> None:
+    """/webapp/catalog only authenticates inside a Telegram Mini App launch (initData) — a bare
+    link handed out as shareable text can't carry that context, so it must never be built."""
     links, err = build_trainer_invite_links(
-        webapp_base_url="http://localhost:8000",
+        webapp_base_url="https://api.example.com/",
         client_bot_username="ClientBot",
         city_id=1,
         service_id=2,
@@ -84,7 +85,7 @@ def test_build_links_service_optional_zero_in_payload() -> None:
         assert err is None
         assert links is not None
         assert links.client_bot_deep_link == "https://t.me/B?start=client_1_0_1"
-        assert links.catalog_page_url == "https://x.com/webapp/catalog"
+        assert links.catalog_page_url is None
 
 
 def test_build_universal_invite_link_matches_hub_paperclip() -> None:

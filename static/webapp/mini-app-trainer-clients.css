@@ -216,9 +216,9 @@
       white-space: nowrap;
     }
     .client-badge--no-tg {
-      background: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 22%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 22%, transparent);
       color: var(--tg-theme-text-color);
-      border-color: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 38%, transparent);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 38%, transparent);
     }
     /* Sandbox pill: muted (not amber) so a demo identity reads as «not for production» at a glance. */
     .client-badge--sandbox {
@@ -229,9 +229,9 @@
       border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
     }
     .client-badge--recurring {
-      background: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 16%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 16%, transparent);
       color: var(--tg-theme-text-color);
-      border-color: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 34%, transparent);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 34%, transparent);
     }
     .client-badge--tier {
       background: color-mix(in srgb, #5ac8fa 13%, transparent);
@@ -777,7 +777,7 @@
     }
     .tc-stat--history-link:active {
       transform: scale(0.98);
-      background: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 10%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 10%, transparent);
     }
     .tc-stat--history-link .tc-stat-label::after {
       content: " ↓";
@@ -1671,7 +1671,7 @@
     }
     @keyframes tc-history-summary-pulse {
       0%, 100% { background: transparent; }
-      45% { background: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 12%, transparent); }
+      45% { background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 12%, transparent); }
     }
     .history-list--empty {
       color: var(--tg-theme-hint-color);
@@ -2565,9 +2565,9 @@
       line-height: 1.35;
     }
     .client-badge.client-badge--history-recurring {
-      background: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 16%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 16%, transparent);
       color: var(--tg-theme-text-color);
-      border-color: color-mix(in srgb, var(--app-cta-fill, #34C6C4) 34%, transparent);
+      border-color: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 34%, transparent);
     }
 
     .tc-client-filters {

@@ -111,6 +111,7 @@ def build_trainer_invite_links(
     sid = int(service_id) if service_id is not None and int(service_id) > 0 else None
     payload = build_client_start_payload(cid, sid, tid)
     deep = f"https://t.me/{u}?start={payload}"
-    base = (webapp_base_url or "").rstrip("/")
-    catalog = f"{base}/webapp/catalog" if base.lower().startswith("https://") else None
-    return TrainerInviteLinks(client_bot_deep_link=deep, catalog_page_url=catalog), None
+    # No catalog_page_url: /webapp/catalog only works launched as a Telegram Mini App
+    # (window.Telegram.WebApp.initData) — a bare link opened outside that context can't
+    # authenticate the client, so it's not safe to hand out as plain shareable text.
+    return TrainerInviteLinks(client_bot_deep_link=deep, catalog_page_url=None), None

@@ -75,7 +75,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=[MINIAPP_AUTH_ERROR_HEADER, "X-Ice-Studio-Outage"],
 )
@@ -475,7 +475,7 @@ def webapp_trainer_clients_page():
     return _webapp_file_response(path)
 
 
-@app.get("/webapp/trainer-home")
+@app.api_route("/webapp/trainer-home", methods=["GET", "HEAD"])
 def webapp_trainer_home_page():
     """Trainer hub: upcoming bookings + links to schedule, clients, requests, etc."""
     path = _WEBAPP_DIR / "trainer-home.html"
@@ -657,6 +657,19 @@ def webapp_components_css(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-arena-ribbon.css")
+def webapp_arena_ribbon_css(request: Request):
+    """Arena Depth + Ribbon pilot styles (TASK-017). Prefer ``?v=…`` for long-lived cache."""
+    path = _WEBAPP_DIR / "mini-app-arena-ribbon.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-trainer-hub.css")
 def webapp_trainer_hub_css(request: Request):
     """Trainer hub-only styles (trainer-home.html); use ``?v=…`` for long-lived cache."""
@@ -744,6 +757,49 @@ def webapp_client_mini_app_theme_js():
     return FileResponse(
         path,
         media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+# Trainer counterparts of client-mini-app-theme.js. Twelve trainer pages link both files,
+# but no route existed, so they 404'd and the trainer palette lock never ran — Telegram's
+# own themeParams leaked through instead. Same no-store policy as the client theme script:
+# a stale palette lock is exactly what these files exist to prevent.
+@app.get("/webapp/mini-app-trainer-theme.js")
+def webapp_mini_app_trainer_theme_js():
+    """Shared Telegram theme + CRM palette for trainer Mini Apps."""
+    path = _WEBAPP_DIR / "mini-app-trainer-theme.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-trainer-theme.css")
+def webapp_mini_app_trainer_theme_css():
+    """Trainer theme overrides (nav buttons, canvas lock); load after theme.css."""
+    path = _WEBAPP_DIR / "mini-app-trainer-theme.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-client-theme.css")
+def webapp_mini_app_client_theme_css():
+    """Client theme overrides (tab bar, canvas lock); load after theme.css. Was also missing a route."""
+    path = _WEBAPP_DIR / "mini-app-client-theme.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
         headers=_WEBAPP_NO_CACHE_HEADERS,
     )
 

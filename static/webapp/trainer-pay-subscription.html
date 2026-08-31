@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Оплата подписки</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
+  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <style>
-    /* Shell: theme.css?v=202608269 + mini-app-components.css?v=202608264 */
+    /* Shell: theme.css?v=202608270 + mini-app-components.css?v=202608264 */
     body {
       font-family: var(--app-font-sans);
       padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
@@ -204,10 +204,11 @@
       }
 
   </style>
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
-<body>
+<body class="ar-pilot ar-pilot--trainer-pay-subscription">
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
     <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
@@ -239,9 +240,9 @@
     <div class="error" id="errorText">Не удалось загрузить.</div>
     <button type="button" class="btn" id="btnRetry">Повторить</button>
   </div>
-  <script src="mini-app-trainer-gate.js"></script>
-  <script src="mini-app-trainer-celebration.js"></script>
-  <script src="mini-app-trainer-home.js"></script>
+  <script src="mini-app-trainer-gate.js?v=202608315"></script>
+  <script src="mini-app-trainer-celebration.js?v=202608315"></script>
+  <script src="mini-app-trainer-home.js?v=202608315"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
