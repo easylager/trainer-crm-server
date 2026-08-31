@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 from datetime import date, datetime, time
 
 from aiogram import Bot
@@ -27,6 +28,11 @@ def _trainer_display_name(trainer: dict) -> str:
 
 
 async def _send_to_admins(text: str, *, event: str, trainer_id: int) -> None:
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        # pytest sets this for the duration of every test; never spam real admins from a test run.
+        logger.debug("Skipping %s notification under pytest (trainer_id=%s)", event, trainer_id)
+        return
+
     settings = Settings()
     if not settings.telegram_bot_token_admin or not settings.admin_telegram_ids:
         logger.warning("Admin bot not configured, skipping %s notification (trainer_id=%s)", event, trainer_id)
