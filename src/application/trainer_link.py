@@ -21,6 +21,7 @@ class ConsumeLinkTokenResult:
 
     trainer_id: int | None = None
     error: Literal["invalid_token", "telegram_other_trainer"] | None = None
+    first_login: bool = False  # True if this is the first time trainer links Telegram
 
 
 async def consume_link_token(
@@ -67,7 +68,7 @@ async def consume_link_token(
                 {"now": now, "token": token},
             )
             await session.commit()
-            return ConsumeLinkTokenResult(trainer_id=existing_id)
+            return ConsumeLinkTokenResult(trainer_id=existing_id, first_login=False)
         await session.rollback()
         return ConsumeLinkTokenResult(error="telegram_other_trainer")
 
@@ -111,9 +112,9 @@ async def consume_link_token(
                     {"now": now, "token": token},
                 )
                 await session.commit()
-                return ConsumeLinkTokenResult(trainer_id=int(retry_id))
+                return ConsumeLinkTokenResult(trainer_id=int(retry_id), first_login=True)
             return ConsumeLinkTokenResult(error="telegram_other_trainer")
-        return ConsumeLinkTokenResult(trainer_id=trainer_id)
+        return ConsumeLinkTokenResult(trainer_id=trainer_id, first_login=True)
 
     trainer_id = int(token_trainer_id)
     try:
@@ -129,7 +130,7 @@ async def consume_link_token(
     except IntegrityError:
         await session.rollback()
         return ConsumeLinkTokenResult(error="telegram_other_trainer")
-    return ConsumeLinkTokenResult(trainer_id=trainer_id)
+    return ConsumeLinkTokenResult(trainer_id=trainer_id, first_login=True)
 
 
 async def get_trainer_row_by_telegram_id(session: AsyncSession, telegram_id: int) -> dict | None:

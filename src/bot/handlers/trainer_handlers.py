@@ -703,6 +703,12 @@ async def cmd_start(message: Message) -> None:
             trainer_id = link_out.trainer_id
             if trainer_id is not None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
+                # Notify admins about first login
+                if link_out.first_login:
+                    from src.application.trainer_events_notify import notify_admins_trainer_first_login
+                    trainer = await get_trainer(session, trainer_id)
+                    if trainer:
+                        await notify_admins_trainer_first_login(trainer_id, trainer)
                 # Record referral attribution if referrer was in payload
                 if pending_referrer_id:
                     await record_referral_attribution(session, pending_referrer_id, trainer_id)

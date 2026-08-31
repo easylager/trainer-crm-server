@@ -57,8 +57,34 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
         claimed_tip = r2.fetchone() is not None
     if claimed_congrats:
         from src.application.referral_use_cases import maybe_grant_referral_first_booking_bonus
+        from src.application.trainer_events_notify import notify_admins_trainer_first_booking
+        from src.application.trainer_use_cases import get_trainer
 
         await maybe_grant_referral_first_booking_bonus(trainer_id)
+
+        # Notify admins about first booking
+        trainer = await get_trainer(session, trainer_id)
+        if trainer:
+            # Get the first confirmed/completed booking
+            r = await session.execute(
+                text(
+                    """
+                    SELECT id, client_name, start_at FROM bookings
+                    WHERE trainer_id = :tid AND status IN ('confirmed', 'completed') AND NOT is_sandbox
+                    ORDER BY start_at ASC LIMIT 1
+                    """
+                ),
+                {"tid": trainer_id},
+            )
+            booking_row = r.fetchone()
+            if booking_row:
+                booking = {
+                    "id": booking_row[0],
+                    "client_name": booking_row[1],
+                    "start_at": booking_row[2],
+                }
+                await notify_admins_trainer_first_booking(trainer_id, trainer, booking)
+
     return claimed_congrats, claimed_tip
 
 

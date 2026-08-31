@@ -43,6 +43,10 @@ from src.application.arena_schedule_preset import (
     schedule_grid_preset_to_api,
 )
 from src.application.trainer_notification_prefs import validate_push_notification_window
+from src.application.trainer_arena_setup_use_cases import (
+    set_trainer_arena_mobile,
+    submit_trainer_arena_request,
+)
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -190,6 +194,45 @@ class WebappTrainerPhotoPresignBody(BaseModel):
     content_type: str = Field(default="image/jpeg", max_length=128)
 
 
+class TrainerArenaSetupBody(BaseModel):
+    mode: str = Field(..., min_length=1, max_length=32)
+    arena_name: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=800)
+
+
+@router.post("/trainer/profile/arena-setup")
+async def post_trainer_arena_setup_for_webapp(
+    body: TrainerArenaSetupBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+):
+    """When public arena list is empty: mobile format or request a new venue (TTV gate)."""
+    trainer_id = await _linked_trainer_id(session, principal)
+    mode = (body.mode or "").strip().lower()
+    if mode == "mobile":
+        trainer = await set_trainer_arena_mobile(session, trainer_id)
+    elif mode == "request":
+        try:
+            trainer = await submit_trainer_arena_request(
+                session,
+                trainer_id,
+                arena_name=body.arena_name or "",
+                note=body.note,
+                telegram_id=principal.user_id if principal.user_id else None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        raise HTTPException(status_code=422, detail="mode must be mobile or request")
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    readiness = moderation_readiness_dict(
+        trainer,
+        trainer_status=(trainer.get("status") or "").strip() or None,
+    )
+    return {"trainer": trainer, "moderation_readiness": readiness}
+
+
 @router.get("/trainer/profile")
 async def get_trainer_profile_for_webapp(
     session: AsyncSession = Depends(get_session),
@@ -311,6 +354,30 @@ async def patch_trainer_profile_for_webapp(
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     audit_log("trainer.profile_updated", ACTOR_API, "webapp_trainer_profile", {"trainer_id": trainer_id})
+
+    # Notify admins if profile is now ready for moderation
+    from src.application.trainer_profile_completeness import analyze_moderation_profile_completeness
+    from src.application.trainer_events_notify import notify_admins_trainer_profile_ready_for_moderation
+    from datetime import datetime
+
+    trainer = await get_trainer(session, trainer_id)
+    if trainer:
+        is_ready, _ = analyze_moderation_profile_completeness(trainer)
+        profile_obj = trainer.get("profile") or {}
+        notified_at = profile_obj.get("moderation_readiness_notified_at")
+
+        # Send notification only if profile is ready and we haven't notified yet
+        if is_ready and notified_at is None:
+            from sqlalchemy import text
+            await session.execute(
+                text(
+                    "UPDATE trainer_profiles SET moderation_readiness_notified_at = :now WHERE trainer_id = :trainer_id"
+                ),
+                {"now": datetime.now(), "trainer_id": trainer_id},
+            )
+            await session.commit()
+            await notify_admins_trainer_profile_ready_for_moderation(trainer_id, trainer)
+
     return {"ok": True}
 
 

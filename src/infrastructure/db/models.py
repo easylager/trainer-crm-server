@@ -92,6 +92,10 @@ class Trainer(Base):
     schedule_grid_step_minutes: Mapped[int] = mapped_column(
         SmallInteger(), nullable=False, default=15, server_default="15"
     )
+    # Empty catalog fallback: mobile/outdoor format or pending arena request (TTV gate only).
+    arena_work_format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    arena_request_text: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    arena_request_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
     referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
     # Public client catalog (/api/public/trainers): when false, trainer stays active but is hidden from browse + card.
@@ -210,6 +214,9 @@ class TrainerProfile(Base):
         DateTime(timezone=True), nullable=True
     )
     share_catalog_tip_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    moderation_readiness_notified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # P1/P2 (PRD): redeem — auto write-off on no-show for pass/cert; skip — do not redeem.
