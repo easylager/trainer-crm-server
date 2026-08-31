@@ -3393,16 +3393,28 @@
                   hubToast('Текст недоступен. Попробуйте позже.');
                   return;
                 }
-                copyTextToClipboardHub(text).then(function(ok) {
-                  if (ok) {
-                    hubToast('Текст с ссылкой скопирован — отправьте его ученику.');
-                  } else {
-                    hubToast('Скопируйте текст вручную.');
-                  }
-                });
+                // Try sync copy first (faster), then async fallback
+                if (typeof copyTextViaExecCommandHub === 'function' && copyTextViaExecCommandHub(text)) {
+                  hubToast('Текст скопирован — отправьте его ученику.');
+                  return;
+                }
+                // Fallback to async clipboard API
+                if (typeof copyTextToClipboardHub === 'function') {
+                  copyTextToClipboardHub(text).then(function(ok) {
+                    if (ok) {
+                      hubToast('Текст скопирован — отправьте его ученику.');
+                    } else {
+                      hubToast('Буфер обмена недоступен — скопируйте текст вручную.');
+                    }
+                  });
+                } else {
+                  hubToast('Скопируйте текст вручную.');
+                }
               })
               .catch(function(err) {
-                hubToast('Ошибка при загрузке ссылки.');
+                if (typeof hubToast === 'function') {
+                  hubToast('Ошибка при загрузке ссылки.');
+                }
               });
           };
         }
