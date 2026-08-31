@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608266"></script>
+  <script src="mini-app-trainer-theme.js?v=202608312"></script>
   <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
   <script>
     (function () {
@@ -18,11 +18,11 @@
       } catch (e) { /* */ }
     })();
   </script>
-  <script src="mini-app-telegram-chrome.js?v=202608265"></script>
-  <script src="mini-app-phone-field.js?v=202605203"></script>
-  <link rel="stylesheet" href="theme.css?v=202608269" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608264" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608269" />
+  <script src="mini-app-telegram-chrome.js?v=202608312"></script>
+  <script src="mini-app-phone-field.js?v=202608312"></script>
+  <link rel="stylesheet" href="theme.css?v=202608312" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202608312" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608312" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -38,12 +38,13 @@
     />
   </noscript>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608262" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608262" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608312" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608312" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202606293" />
-  <link rel="preload" href="trainer-home-main.js?v=202606306" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202606200" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608312" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608312" />
+  <link rel="preload" href="trainer-home-main.js?v=202608312" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202608312" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -52,8 +53,8 @@
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       background:
-        radial-gradient(ellipse 130% 80% at 50% 38%, rgba(52, 198, 196, 0.18) 0%, rgba(52, 198, 196, 0.06) 45%, transparent 68%),
-        var(--tg-theme-bg-color, #F4F2EC);
+        radial-gradient(ellipse 130% 80% at 50% 38%, rgba(69, 185, 187, 0.18) 0%, rgba(69, 185, 187, 0.06) 45%, transparent 68%),
+        var(--tg-theme-bg-color, #F1F3F2);
       will-change: opacity, transform;
     }
     #hubSplash.hub-splash--out {
@@ -74,22 +75,22 @@
     }
     .hub-splash-ring-1 {
       inset: 0;
-      border: 1.5px solid rgba(52, 198, 196, 0.45);
+      border: 1.5px solid rgba(69, 185, 187, 0.45);
     }
     .hub-splash-ring-2 {
       inset: 13px;
-      border: 1.5px solid rgba(52, 198, 196, 0.28);
+      border: 1.5px solid rgba(69, 185, 187, 0.28);
       animation-delay: -.87s;
     }
     .hub-splash-ring-3 {
       inset: 26px;
-      border: 1px solid rgba(52, 198, 196, 0.16);
+      border: 1px solid rgba(69, 185, 187, 0.16);
       animation-delay: -1.73s;
     }
     /* Brand glow in the center */
     .hub-splash-ring-glow {
       position: absolute; inset: 32px; border-radius: 50%;
-      background: radial-gradient(ellipse, rgba(52, 198, 196, 0.14) 0%, transparent 70%);
+      background: radial-gradient(ellipse, rgba(69, 185, 187, 0.14) 0%, transparent 70%);
       animation: hub-splash-breathe 2.6s ease-in-out infinite;
       animation-delay: -1.3s;
       will-change: opacity;
@@ -110,8 +111,8 @@
     }
     .hub-splash-icon {
       display: block;
-      color: var(--app-cta-fill, #34C6C4);
-      filter: drop-shadow(0 0 10px rgba(52, 198, 196, 0.35)) drop-shadow(0 2px 4px rgba(0,0,0,.12));
+      color: var(--app-cta-fill, #45B9BB);
+      filter: drop-shadow(0 0 10px rgba(69, 185, 187, 0.35)) drop-shadow(0 2px 4px rgba(0,0,0,.12));
     }
     /* Text block fades up after 180ms */
     .hub-splash-text {
@@ -160,7 +161,7 @@
     }
     .hub-splash-bar {
       height: 100%; transform-origin: left;
-      background: var(--app-cta-fill, #34C6C4);
+      background: var(--app-cta-fill, #45B9BB);
       animation: hub-splash-bar-fill .72s cubic-bezier(.22,1,.36,1) both;
       will-change: transform;
     }
@@ -206,7 +207,7 @@
   </script>
 
 </head>
-<body class="hub-body" data-trainer-shell="tabs">
+<body class="hub-body ar-pilot ar-pilot--trainer-home" data-trainer-shell="tabs">
 
   <!-- ─── Premium splash loader ─────────────────────────────────────────── -->
   <!-- Renders immediately on parse; dismissed by __hubSplash.markDataReady() -->
@@ -265,7 +266,7 @@
         if (typeof tg.expand  === 'function') tg.expand();
         /* Sync header/bg color with our splash bg — prevents color flash on app open */
         var isDark = document.documentElement.classList.contains('hub-is-dark');
-        var bgHex  = isDark ? '#0d1515' : '#F4F2EC';
+        var bgHex  = isDark ? '#0B0C0E' : '#F1F3F2';
         try { if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex); } catch(e) {}
         try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
         try { if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex); } catch(e) {}
@@ -369,7 +370,7 @@
       <div class="onboarding-strip-head">
         <span class="onboarding-progress-pill" id="onboardingProgressPill">Шаг 1 из 2</span>
         <h2 class="onboarding-strip-title">Первые шаги</h2>
-        <p class="onboarding-strip-lead">Два шага — и первые клиенты появятся в расписании.</p>
+        <p class="onboarding-strip-lead">Три шага — и вы попадёте в каталог, где вас найдут новые клиенты.</p>
       </div>
       <ol class="onboarding-steps">
         <li class="onboarding-step" id="onboardingStepProfile">
@@ -384,14 +385,24 @@
           <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
           <div class="onboarding-step-body">
             <div class="onboarding-step-name">Первый клиент</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Запишите первого клиента — всё встанет на место сразу.</p>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Отправьте ссылку ученику — как только он запишется сам, увидите настоящее начало.</p>
             <!-- Two-path CTAs: shown only while step is pending; replaced by disabled «Готово» when done -->
             <div class="onboarding-step-ctas" id="onboardingBookingCtas">
-              <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaBookingReal">Записать реального клиента</button>
+              <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaSendLink">Отправить ссылку ученику</button>
+              <button type="button" class="onboarding-step-cta onboarding-step-cta--secondary" id="onboardingCtaBookingReal">Записать реального клиента</button>
               <button type="button" class="onboarding-step-cta onboarding-step-cta--sandbox" id="onboardingCtaBookingSandbox">Попробовать на примере</button>
             </div>
-            <!-- Replaces the above when step is done (JS toggles visibility) -->
-            <button type="button" class="onboarding-step-cta" id="onboardingCtaBookingDone" style="display:none;" disabled>Готово</button>
+          </div>
+          <!-- Снаружи body — как у шага 1: «Готово» в одной строке с названием -->
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaBookingDone" style="display:none;" disabled>Готово</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepCatalog">
+          <span class="onboarding-step-icon" id="onboardingIconCatalog">3</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Попасть в каталог</div>
+            <!-- Hint/CTA are state-driven: not ready → profile, ready → submit, submitted → waiting -->
+            <p class="onboarding-step-hint" id="onboardingHintCatalog">Добавьте фото и отправьте профиль на проверку — после неё вас начнут находить в каталоге.</p>
+            <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Заполнить профиль</button>
           </div>
         </li>
       </ol>
@@ -953,14 +964,14 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=202606113"></script>
-  <script src="mini-app-trainer-celebration.js"></script>
-  <script src="trainer-client-relay-ui.js?v=202605201"></script>
-  <script src="trainer-relay-helpers.js?v=202605090"></script>
+  <script src="mini-app-trainer-gate.js?v=202608312"></script>
+  <script src="mini-app-trainer-celebration.js?v=202608312"></script>
+  <script src="trainer-client-relay-ui.js?v=202608312"></script>
+  <script src="trainer-relay-helpers.js?v=202608312"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script src="mini-app-trainer-pending-inbox.js?v=202606293"></script>
-  <script src="trainer-booking-context.js?v=202606304"></script>
-  <script defer src="trainer-home-main.js?v=202606306"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202606200"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=202608312"></script>
+  <script src="trainer-booking-context.js?v=202608312"></script>
+  <script defer src="trainer-home-main.js?v=202608312"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202608312"></script>
 </body>
 </html>

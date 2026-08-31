@@ -163,6 +163,19 @@ def _format_expires_ru_from_iso(iso_dt: str | None) -> str:
         return day
 
 
+def _trial_welcome_labels(sub_st: dict) -> tuple[str, str] | None:
+    """Tier label + expiry for welcome trial message, or None if trial should not be announced."""
+    if not (
+        sub_st.get("is_active")
+        and sub_st.get("is_trial")
+        and (sub_st.get("effective_tier") or "none") != "none"
+    ):
+        return None
+    tier_label = (sub_st.get("tier_name_ru") or "Полный доступ").strip() or "Полный доступ"
+    exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
+    return tier_label, exp_fmt
+
+
 async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
     """True if trainer has an active paid tier at least CRM (schedule, clients, passes)."""
     return await trainer_has_crm_access(session, trainer_id)
@@ -708,9 +721,12 @@ async def cmd_start(message: Message) -> None:
                     paid_ok = grant_kind == WELCOME_GRANT_KIND_PAID and not grant_result.get("error")
                     if not paid_ok:
                         await ensure_trainer_welcome_trial(s2, trainer_id)
+                async with async_session_factory() as s2:
+                    sub_st = await get_trainer_subscription_status(s2, trainer_id)
+                trial_welcome = _trial_welcome_labels(sub_st) if not paid_ok else None
+                kb_active = _post_welcome_link_keyboard(for_active_menu=True)
+                kb_onboarding = _post_welcome_link_keyboard(for_active_menu=False)
                 if state == TrainerAccessState.ACTIVE:
-                    async with async_session_factory() as s2:
-                        sub_st = await get_trainer_subscription_status(s2, trainer_id)
                     if paid_ok:
                         label = html.escape(
                             format_subscription_label(
@@ -730,36 +746,39 @@ async def cmd_start(message: Message) -> None:
                                 expires_date=html.escape(exp_fmt),
                             ),
                             parse_mode=ParseMode.HTML,
-                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                            reply_markup=kb_active,
                         )
-                    elif (
-                        sub_st.get("is_active")
-                        and sub_st.get("is_trial")
-                        and (sub_st.get("effective_tier") or "none") != "none"
-                    ):
-                        tier_label = html.escape(
-                            (sub_st.get("tier_name_ru") or "Полный доступ").strip() or "Полный доступ"
-                        )
-                        exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
+                    elif trial_welcome:
+                        tier_label, exp_fmt = trial_welcome
                         await message.answer(
                             msg.TRAINER_WELCOME_TRIAL_ACTIVATED.format(
-                                tier_name=tier_label,
+                                tier_name=html.escape(tier_label),
                                 expires_date=html.escape(exp_fmt),
                             ),
                             parse_mode=ParseMode.HTML,
-                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                            reply_markup=kb_active,
                         )
                     else:
                         await message.answer(
                             msg.TRAINER_LINK_SUCCESS_ACTIVE,
                             parse_mode=ParseMode.HTML,
-                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                            reply_markup=kb_active,
                         )
                 else:
+                    if trial_welcome:
+                        tier_label, exp_fmt = trial_welcome
+                        await message.answer(
+                            msg.TRAINER_WELCOME_TRIAL_ACTIVATED.format(
+                                tier_name=html.escape(tier_label),
+                                expires_date=html.escape(exp_fmt),
+                            ),
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=kb_onboarding,
+                        )
                     await message.answer(
                         trainer_first_link_onboarding_html(state, trainer),
                         parse_mode=ParseMode.HTML,
-                        reply_markup=_post_welcome_link_keyboard(for_active_menu=False),
+                        reply_markup=kb_onboarding,
                     )
                 await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
             elif link_out.error == "telegram_other_trainer":
@@ -868,6 +887,7 @@ async def _send_first_booking_milestone_followups(
     milestone_booking_info: dict | None = None,
     milestone_booking_id: int | None = None,
     skip_milestone_card: bool = False,
+    created_by_trainer: bool = True,
 ) -> None:
     """One-time celebration + share-link tip (DB flags already set in booking use case)."""
     if not milestone and not share_tip:
@@ -880,12 +900,20 @@ async def _send_first_booking_milestone_followups(
                     session, milestone_booking_id, trainer_id
                 )
         if info_for_card:
-            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=created_by_trainer)
         else:
-            card_html = (
-                "🎉 <b>Старт засчитан: это ваша первая запись в Glide!</b>\n\n"
-                + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
-            )
+            if created_by_trainer:
+                card_html = (
+                    "✅ <b>Запись создана.</b>\n\n"
+                    "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
+                    + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
+                )
+            else:
+                card_html = (
+                    "🎉 <b>Первая настоящая запись!</b>\n\n"
+                    "Клиент нашёл вас и записался сам — без вашего участия.\n\n"
+                    + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+                )
         await chat_message.answer(card_html, parse_mode=ParseMode.HTML)
     if not share_tip:
         return
@@ -1823,11 +1851,12 @@ async def _complete_schedule_create_booking(
                 session, booking_id, trainer_id
             )
         if info_for_card:
-            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=True)
         else:
             card_html = (
-                "🎉 <b>Старт засчитан: это ваша первая запись в Glide!</b>\n\n"
-                + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+                "✅ <b>Запись создана.</b>\n\n"
+                "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
+                + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
             )
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_w.webapp_base_url or "",
@@ -1885,6 +1914,7 @@ async def _complete_schedule_create_booking(
         share_tip=m_tip,
         milestone_booking_id=booking_id,
         skip_milestone_card=m_first,
+        created_by_trainer=True,
     )
 
 
@@ -2269,7 +2299,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         )
     else:
         milestone_info = {**info, "expected_payment_class": expected_payment_class}
-        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(milestone_info)
+        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(milestone_info, created_by_trainer=False)
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
             booking_id=booking_id,
@@ -2331,6 +2361,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         share_tip=m_tip,
         milestone_booking_info=info,
         skip_milestone_card=m_first,
+        created_by_trainer=False,
     )
 
 
@@ -3152,6 +3183,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
         milestone=m_first,
         share_tip=m_tip,
         milestone_booking_id=booking_id,
+        created_by_trainer=True,
     )
     audit_log("request.trainer_booked_client", ACTOR_TRAINER_BOT, telegram_id, {"request_id": request_id, "trainer_id": trainer_id, "booking_id": booking_id})
 

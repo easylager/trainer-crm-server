@@ -7,7 +7,7 @@
       /* Light: subtle ice breath at top. Dark: flat neutral — no teal wash over the whole screen. */
       background:
         radial-gradient(70% 50% at 100% -8%, color-mix(in srgb, var(--ice-glow) 12%, transparent) 0%, transparent 62%),
-        radial-gradient(140% 80% at 50% -12%, rgba(111, 216, 214, 0.055) 0%, rgba(111, 216, 214, 0.018) 45%, transparent 70%),
+        radial-gradient(140% 80% at 50% -12%, rgba(127, 215, 216, 0.055) 0%, rgba(127, 215, 216, 0.018) 45%, transparent 70%),
         var(--tg-theme-bg-color) !important;
       padding: 16px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
       overflow-x: hidden;
@@ -167,9 +167,15 @@
     .hub-week-pulse__day:active {
       transform: scale(0.95);
     }
+    /*
+     * Выбранный день — нейтральная приподнятая плашка, не тиловая рамка.
+     * Тиловым в полосе остаётся только индикатор загрузки (там цвет несёт данные);
+     * рамка же дублировала бы «где я» из нижней навигации и добавляла восьмое
+     * тиловое пятно на экран. См. правило дозировки в theme.css.
+     */
     .hub-week-pulse__day--today {
-      border-color: color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
-      background: color-mix(in srgb, var(--app-cta-fill) 10%, var(--tg-theme-secondary-bg-color));
+      border-color: var(--glide-line-strong);
+      background: var(--tg-theme-secondary-bg-color);
     }
     .hub-week-pulse__day--has:not(.hub-week-pulse__day--today) {
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
@@ -184,7 +190,7 @@
       color: var(--tg-theme-hint-color);
     }
     .hub-week-pulse__day--today .hub-week-pulse__wd {
-      color: color-mix(in srgb, var(--app-cta-fill) 82%, var(--tg-theme-text-color));
+      color: var(--tg-theme-text-color);
     }
 
     .hub-week-pulse__num {
@@ -635,17 +641,21 @@
       cursor: pointer;
       -webkit-appearance: none;
       appearance: none;
-      box-shadow: var(--glide-shadow-card, 0 1px 2px rgba(20, 40, 40, 0.04));
+      box-shadow: var(--glide-shadow-card, 0 1px 2px rgba(16, 24, 28, 0.04));
     }
     .hub-bookings-stack .slot-row:last-child { margin-bottom: 0; }
+    /*
+     * Обводка карточки — нейтральная. Тиловая рамка на тиловом фоне спорила
+     * с содержимым: контур кричал громче того, что внутри.
+     */
     .hub-bookings-stack .slot-row.slot-booked-click {
-      border-color: rgba(var(--accent-rgb), 0.34);
+      border-color: var(--glide-line-strong);
     }
     .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-pending {
-      border-color: color-mix(in srgb, var(--app-warning) 42%, transparent);
+      border-color: color-mix(in srgb, var(--app-attention) 42%, transparent);
     }
     .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
-      border-color: rgba(var(--accent-rgb), 0.38);
+      border-color: var(--glide-line-strong);
     }
     .hub-bookings-stack .slot-row.hub-booking-row--new {
       animation: hub-booking-row-new 1.8s ease;
@@ -722,7 +732,7 @@
       letter-spacing: 0.02em;
       vertical-align: middle;
       background: rgba(var(--accent-rgb), 0.14);
-      color: var(--tg-theme-button-color, #34C6C4);
+      color: var(--tg-theme-button-color, #45B9BB);
       border: 1px solid rgba(var(--accent-rgb), 0.35);
     }
     .hub-is-dark .hub-bookings-stack .hub-session-now-pill {
@@ -817,7 +827,7 @@
       height: 5px;
       border-radius: 50%;
       flex-shrink: 0;
-      background: var(--tg-theme-button-color, #34C6C4);
+      background: var(--tg-theme-button-color, #45B9BB);
       box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
     }
     .hub-is-dark .hub-bookings-stack .hub-new-client-pill {
@@ -892,17 +902,18 @@
       border-radius: 8px;
       flex-shrink: 0;
     }
+    /*
+     * Статус — это состояние, а не действие, поэтому он НЕ тиловый.
+     * Тил забронирован за первичным действием и активной вкладкой; иначе
+     * «подтверждено» спорит по яркости с кнопкой «Записать» (см. theme.css).
+     */
     .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
-      background: rgba(var(--accent-rgb), 0.14);
-      color: var(--glide-ink-teal, #0c6f6c);
-    }
-    .hub-is-dark .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
-      background: rgba(var(--accent-rgb), 0.18);
-      color: var(--app-cta-fill);
+      background: var(--app-ok-wash);
+      color: var(--app-ok-ink);
     }
     .hub-bookings-stack .slot-row .slot-status.booked-pending {
-      background: color-mix(in srgb, var(--app-warning) 16%, transparent);
-      color: var(--app-warning);
+      background: var(--app-attention-wash);
+      color: var(--app-attention-ink);
     }
     /* Group slot preview — same language as schedule-editor (no client name in list) */
     .hub-bookings-stack .slot-row.slot-group-hub-preview {
@@ -1130,7 +1141,7 @@
       height: 18px;
       border-radius: 50%;
       border: 2px solid color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
-      border-top-color: var(--tg-theme-button-color, #34C6C4);
+      border-top-color: var(--tg-theme-button-color, #45B9BB);
       animation: hubBookingSpin 0.65s linear infinite;
     }
     @keyframes hubBookingSpin {
@@ -1344,7 +1355,7 @@
       flex-shrink: 0;
       width: 18px;
       height: 18px;
-      accent-color: var(--tg-theme-button-color, #34C6C4);
+      accent-color: var(--tg-theme-button-color, #45B9BB);
     }
     .hub-fill-slots-pick-label {
       flex: 1;
@@ -1414,7 +1425,7 @@
       flex-shrink: 0;
     }
     .hub-fill-slots-status-badge--free {
-      background: color-mix(in srgb, var(--tg-theme-button-color, #34C6C4) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color, #45B9BB) 22%, transparent);
       color: color-mix(in srgb, var(--tg-theme-button-color, #c77800) 90%, var(--tg-theme-text-color));
     }
     .hub-fill-slots-status-badge--busy {
@@ -3092,6 +3103,13 @@
       align-self: stretch;
       text-align: center;
     }
+    .onboarding-step-cta--secondary {
+      border-color: rgba(128, 128, 128, 0.35) !important;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent) !important;
+      color: var(--tg-theme-text-color) !important;
+      font-weight: 500 !important;
+    }
+
     .onboarding-step-cta--sandbox {
       border-color: rgba(128, 128, 128, 0.25) !important;
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 94%, transparent) !important;
@@ -3628,10 +3646,10 @@
       border-radius: 999px;
       background: rgba(var(--accent-rgb), 0.14);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
-      color: var(--glide-ink-teal, #0C6F6C);
+      color: var(--glide-ink-teal, #0B6E70);
     }
     html.hub-is-dark .hub-lead-banner__chip {
-      color: var(--glide-on-deep-hint, #8FC4C3);
+      color: var(--glide-on-deep-hint, #8CC4C4);
       background: rgba(var(--accent-rgb), 0.18);
       border-color: rgba(var(--accent-rgb), 0.28);
     }
@@ -4069,10 +4087,11 @@
       background: var(--tg-theme-hint-color);
       opacity: 0.45;
     }
+    /* «Требует внимания» — янтарь. Тил здесь путал предупреждение с действием. */
     .hub-action-inbox__item--urgent .hub-action-inbox__dot {
-      background: var(--app-cta-fill);
+      background: var(--app-attention);
       opacity: 1;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-attention) 22%, transparent);
     }
     .hub-action-inbox__body {
       flex: 1;

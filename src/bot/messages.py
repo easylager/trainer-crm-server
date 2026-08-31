@@ -2264,18 +2264,12 @@ TRAINER_LINK_SUCCESS_ACTIVE = (
     "Основное — кнопка <b>«Обзор»</b> слева от поля ввода: расписание, заявки, клиенты и остальное в мини-приложении. "
     "Коротко по разделам: /guide"
 )
-# Единый «премиальный» онбординг после первой привязки по ссылке (не active) — герой + шаг ниже.
+# После первой привязки по ссылке (не active): одно обещание + одно действие; дата триала — отдельным сообщением.
 TRAINER_AFTER_LINK_HERO = (
-    "🤝 <b>Платформа, которую строим вместе с тренерами</b>\n\n"
-    "Мы делаем её с практикующими специалистами — чтобы уйти от хаоса в записи, "
-    "не терять клиентов и сделать работу системной.\n\n"
-    "<b>Что внутри:</b>\n"
-    "— онлайн-запись и каталог для привлечения клиентов\n"
-    "— расписание, CRM, абонементы и сертификаты\n"
-    "— аналитика дохода и трафика\n\n"
-    "Ты здесь не просто пользователь — твой опыт напрямую влияет на то, "
-    "как платформа работает для всей индустрии.\n\n"
-    "Начни с <b>«Обзор»</b> (<b>/home</b>) — там «Первые шаги» и сразу <b>пробный период на полном тарифе</b>."
+    "✅ <b>Telegram подключён</b>\n\n"
+    "CRM для тренера на льду — расписание, записи и клиенты в одном боте, "
+    "без отдельного приложения.\n\n"
+    "Нажми <b>«Обзор»</b> ниже — там «Первые шаги»."
 )
 TRAINER_AFTER_LINK_STEP_BOOKING_READY = (
     "<b>Сейчас</b>: базовый профиль готов — в мини-приложении уже можно настроить слоты и сделать тестовую запись. "
@@ -2709,10 +2703,33 @@ TRAINER_CREATE_BOOKING_DONE = (
     "📩 <b>Подтверждение клиенту:</b> {client_confirmation}\n"
     "📝 <b>Заметка:</b> можно добавить сразу кнопкой ниже."
 )
-# Appended to TRAINER_CREATE_BOOKING_DONE for onboarding demo (is_sandbox) bookings — same push as real flow.
-TRAINER_CREATE_BOOKING_SANDBOX_CANCEL_HINT = (
-    "\n\n💡 <i>Чтобы отменить эту запись, откройте «Детали записи» в приложении.</i>"
+# Onboarding «Попробовать на примере» — отдельный пуш, без жаргона «Детали записи» и без кнопки заметки.
+TRAINER_CREATE_BOOKING_SANDBOX_DONE = (
+    "✅ <b>Тестовая запись создана</b> — {client_name}, <b>{date}</b> ({day}) {time}.\n\n"
+    "Это учебный пример: клиент вымышленный, напоминания и сообщения в Telegram не уходят.\n\n"
+    "В «Обзоре» запись уже в блоке <b>«Ближайшие записи»</b> (пометка «тест»). "
+    "Нажмите кнопку ниже, откройте строку записи — там можно посмотреть детали или отменить."
 )
+
+
+def build_trainer_sandbox_booking_done_reply_markup(*, webapp_base: str):
+    """Single CTA back to trainer hub after onboarding demo booking."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BUTTON_HOME_WEBAPP,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home"),
+                ),
+            ],
+        ]
+    )
+
 # Rich push is sent by notification_service (trainer_booked loop), not inline from API/bot handlers.
 TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED = (
     "клиент получит подробное уведомление в боте в ближайшее время (услуга, цена, адрес и кнопка «Мои записи»)"
@@ -2963,6 +2980,11 @@ def build_trainer_booking_confirmed_echo_reply_markup(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML = (
+    "<i>Запись создана и зафиксирована. Дальше слушаете клиентов и живьём ведёте занятие. "
+    "Настоящее начало — когда клиент запишется сам.</i>"
+)
+
 TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML = (
     "<i>Дальше — рутина на автопилоте: напоминания, история клиента и расписание в одном месте. "
     "Вы уже сделали главное. 🚀</i>"
@@ -3024,6 +3046,7 @@ def format_trainer_first_booking_milestone_rich_html(
     client_has_telegram: bool | None = None,
     sandbox_demo_identity: bool = False,
     expected_payment_class: str | None = None,
+    created_by_trainer: bool = True,
 ) -> str:
     """
     Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
@@ -3089,9 +3112,21 @@ def format_trainer_first_booking_milestone_rich_html(
         elif client_has_telegram is False:
             tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
+    if created_by_trainer:
+        intro_block = (
+            "✅ <b>Запись создана.</b>\n\n"
+            "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке."
+        )
+        footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
+    else:
+        intro_block = (
+            "🎉 <b>Первая настоящая запись!</b>\n\n"
+            "Клиент нашёл вас и записался сам — без вашего участия."
+        )
+        footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+
     blocks: list[str] = [
-        "🎉 <b>Старт засчитан: это ваша первая запись в Glide!</b>\n\n"
-        "Вы только что перевели занятие в понятный план — с датой, местом и контекстом.",
+        intro_block,
         f"👤 <b>ФИО:</b> {cn}\n" + phone_line.rstrip("\n"),
         venue_block,
         f"📅 <b>Время</b>\n{when_line}",
@@ -3104,7 +3139,7 @@ def format_trainer_first_booking_milestone_rich_html(
         blocks.append(comment_section)
     if tg_line:
         blocks.append(tg_line)
-    blocks.append(TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML)
+    blocks.append(footer_html)
     return "\n\n".join(blocks)
 
 
@@ -3194,7 +3229,7 @@ def _trainer_slot_time_hhmm(t: object) -> str:
     return s[:5] if len(s) >= 5 else (s or "—")
 
 
-def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
+def format_trainer_first_booking_milestone_from_booking_row(info: dict, created_by_trainer: bool = True) -> str:
     """HTML card from `get_booking_milestone_display_for_trainer` / `confirm_booking` payload dict."""
     d = info.get("slot_date")
     st = info.get("start_time")
@@ -3222,6 +3257,7 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
         client_has_telegram=has_tg,
         sandbox_demo_identity=sandbox_demo,
         expected_payment_class=info.get("expected_payment_class"),
+        created_by_trainer=created_by_trainer,
     )
 
 

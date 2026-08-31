@@ -10,7 +10,7 @@
         if (typeof window.__applyTrainerHomeTheme === 'function') window.__applyTrainerHomeTheme();
         try {
           var darkUi = document.documentElement.classList.contains('hub-is-dark');
-          var bgHex = darkUi ? '#0d1515' : '#F4F2EC';
+          var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
           if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
@@ -432,7 +432,16 @@
           body: body != null ? JSON.stringify(body) : null,
         }).then(function(r) {
           return r.json().then(function(data) {
-            if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+            if (!r.ok) {
+              var detail = data && data.detail;
+              /* detail can be a plain string or a structured {message, missing_fields, ...} —
+                 stringifying the object form silently produced "[object Object]" toasts. */
+              var msg = (detail && typeof detail === 'object' ? detail.message : detail) ||
+                r.statusText || 'Ошибка';
+              var err = new Error(msg);
+              err.detail = detail;
+              throw err;
+            }
             return data;
           });
         });
@@ -1406,7 +1415,15 @@
         var bookingOk = onboardingBookingStepDone(data);
         if (!bookingOk) return false;
         if (data.is_active && data.profile_complete) return true;
-        if (!data.is_active && data.schedule_unlocked && data.tt_minimal_complete) return true;
+        // Не-active: путь закрыт только когда анкета ушла на проверку — иначе тренер
+        // остаётся вне каталога, а вести его дальше уже нечем.
+        if (
+          !data.is_active &&
+          data.schedule_unlocked &&
+          data.tt_minimal_complete &&
+          data.moderation_submitted
+        )
+          return true;
         return false;
       }
 
@@ -1827,8 +1844,14 @@
         var active = !!d.is_active;
         var complete = onboardingAllComplete(d);
 
-        /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock. */
-        if (onboardingBookingStepDone(d) && !isRhythmHintDismissed('catalog_publication')) {
+        /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock.
+         * Пока полоса онбординга видна, путь в каталог ведёт её третий шаг — хинт был бы дублем
+         * того же действия, к тому же закрываемым навсегда. */
+        if (
+          onboardingBookingStepDone(d) &&
+          !hubOnboardingStripVisible() &&
+          !isRhythmHintDismissed('catalog_publication')
+        ) {
           var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
           var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
           if (!inPublicCatalog) {
@@ -3085,13 +3108,22 @@
         var bookDone = schedUnlocked && !!bookingStepDone;
         var bookLocked = !schedUnlocked || (!active && !ttOk);
 
-        /* Progress pill: which of the two steps is the current focus. */
+        /* Stage 3 «в каталог»: отправка анкеты на проверку — считается вместе с остальными. */
+        var moderationSubmitted = !!(data && data.moderation_submitted);
+        var catalogDone = active ? pc : moderationSubmitted;
+
+        /* Progress pill: first step that is still open, out of three. */
         var pillEl = document.getElementById('onboardingProgressPill');
-        if (pillEl) pillEl.textContent = stage1Done ? 'Шаг 2 из 2' : 'Шаг 1 из 2';
+        if (pillEl) {
+          /* All three done → strip is hidden by onboardingAllComplete, so «3» is the last state shown. */
+          var focusStep = !stage1Done ? 1 : !bookDone ? 2 : 3;
+          pillEl.textContent = 'Шаг ' + focusStep + ' из 3';
+        }
         var stepB = document.getElementById('onboardingStepBooking');
         var iconB = document.getElementById('onboardingIconBooking');
         var hintB = document.getElementById('onboardingHintBooking');
         var ctasWrap = document.getElementById('onboardingBookingCtas');
+        var ctaSendLink = document.getElementById('onboardingCtaSendLink');
         var ctaBReal = document.getElementById('onboardingCtaBookingReal');
         var ctaBSandbox = document.getElementById('onboardingCtaBookingSandbox');
         var ctaBDone = document.getElementById('onboardingCtaBookingDone');
@@ -3114,9 +3146,48 @@
         }
         /* Show two-path CTAs when pending; collapsed «Готово» when done */
         if (ctasWrap) ctasWrap.style.display = (bookDone || bookLocked) ? 'none' : 'flex';
+        if (ctaSendLink) ctaSendLink.disabled = bookLocked || bookDone;
         if (ctaBReal) ctaBReal.disabled = bookLocked || bookDone;
         if (ctaBSandbox) ctaBSandbox.disabled = bookLocked || bookDone;
         if (ctaBDone) ctaBDone.style.display = bookDone ? 'block' : 'none';
+
+        /*
+         * Stage 3 «Попасть в каталог». Four states:
+         *   locked     — шаг 1 ещё не закрыт, отправлять нечего
+         *   not ready  — 8 критериев модерации не собраны (обычно нет фото) → в профиль
+         *   ready      — можно отправить прямо отсюда
+         *   submitted  — анкета на проверке, действий не осталось
+         * moderation_submitted сбрасывается, когда модерация вернула фидбек, — шаг
+         * сам собой снова становится действием.
+         */
+        var stepC = document.getElementById('onboardingStepCatalog');
+        var iconC = document.getElementById('onboardingIconCatalog');
+        var hintC = document.getElementById('onboardingHintCatalog');
+        var ctaC = document.getElementById('onboardingCtaCatalog');
+        var catalogLocked = !stage1Done;
+        if (stepC) {
+          stepC.classList.toggle('done', catalogDone);
+          stepC.classList.toggle('locked', catalogLocked && !catalogDone);
+        }
+        if (iconC) iconC.textContent = catalogDone ? '✓' : '3';
+        if (hintC) {
+          if (catalogDone && !active) {
+            hintC.textContent = 'Анкета на проверке — обычно это занимает не больше суток.';
+          } else if (catalogDone && active) {
+            hintC.textContent = 'Готово — вас видно в каталоге.';
+          } else if (catalogLocked) {
+            hintC.textContent = 'Откроется после шага 1.';
+          } else if (pc) {
+            hintC.textContent = 'Всё собрано — отправьте профиль на проверку.';
+          } else {
+            hintC.textContent = 'Добавьте фото и остальные пункты профиля — без них в каталог не пускаем.';
+          }
+        }
+        if (ctaC) {
+          ctaC.disabled = catalogLocked || catalogDone;
+          ctaC.style.display = catalogDone ? 'none' : '';
+          ctaC.textContent = pc ? 'Отправить на проверку' : 'Заполнить профиль';
+        }
 
         syncHubOnboardingWelcomeVisibility(data);
         if (window.TrainerShell && typeof window.TrainerShell.syncOnboarding === 'function') {
@@ -3305,6 +3376,36 @@
             navigateTo('trainer-profile?onboarding=blocks');
           };
         }
+        var ctaSendLink = document.getElementById('onboardingCtaSendLink');
+        if (ctaSendLink) {
+          ctaSendLink.onclick = function() {
+            if (ctaSendLink.disabled) return;
+            fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
+              .then(function(r) {
+                return r.json().then(function(data) {
+                  if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+                  return data;
+                });
+              })
+              .then(function(data) {
+                var text = data && data.share_text ? String(data.share_text).trim() : '';
+                if (!text) {
+                  hubToast('Текст недоступен. Попробуйте позже.');
+                  return;
+                }
+                copyTextToClipboardHub(text).then(function(ok) {
+                  if (ok) {
+                    hubToast('Текст с ссылкой скопирован — отправьте его ученику.');
+                  } else {
+                    hubToast('Скопируйте текст вручную.');
+                  }
+                });
+              })
+              .catch(function(err) {
+                hubToast('Ошибка при загрузке ссылки.');
+              });
+          };
+        }
         var ctaBReal2 = document.getElementById('onboardingCtaBookingReal');
         if (ctaBReal2) {
           ctaBReal2.onclick = function() {
@@ -3323,6 +3424,33 @@
             ensureTrainerSectionsAccess(function() {
               openHubQuickBookClientFlowFirst();
             });
+          };
+        }
+        var ctaC2 = document.getElementById('onboardingCtaCatalog');
+        if (ctaC2) {
+          ctaC2.onclick = function() {
+            if (ctaC2.disabled) return;
+            /* Not ready (обычно нет фото) — в профиль; готов — отправляем отсюда. */
+            if (ctaC2.textContent !== 'Отправить на проверку') {
+              navigateTo('trainer-profile?onboarding=blocks');
+              return;
+            }
+            ctaC2.disabled = true;
+            postJsonTrainer('/trainer/onboarding/submit-for-moderation')
+              .then(function() {
+                hubToast('Профиль отправлен на проверку');
+                loadOnboardingChecklist();
+              })
+              .catch(function(e) {
+                ctaC2.disabled = false;
+                /* 422 = не хватает критериев: сервер знает точнее, чем локальный флаг. */
+                var labels = e && e.detail && e.detail.missing_labels_ru;
+                var msg = (labels && labels.length)
+                  ? 'Не хватает: ' + labels.join(', ')
+                  : (e && e.message) || 'Не удалось отправить';
+                hubToast(msg);
+                loadOnboardingChecklist();
+              });
           };
         }
         var faq = document.getElementById('onboardingFaqBtn');
@@ -5861,7 +5989,7 @@
             var baseText = 'Клиент добавлен и запись успешно создана.';
             var tail =
               wasQuickSandbox
-                ? ' Запись появится в «Ближайших записях». Отменить можно в «Детали записи».'
+                ? ' Тестовая запись с пометкой «тест» уже в «Ближайших записях» — нажмите на строку, чтобы открыть или отменить.'
                 : ' Запись появится в «Ближайших записях».';
             presentHubBookingSuccess(res.booking, baseText + tail);
             loadBookings();
@@ -6834,7 +6962,7 @@
                 if (bid && !isNaN(bid)) stashHubPendingBookingHighlight(bid);
                 var tail =
                   wasQuickSandbox
-                    ? ' Запись появится в «Ближайших записях». Отменить можно в «Детали записи».'
+                    ? ' Тестовая запись с пометкой «тест» уже в «Ближайших записях» — нажмите на строку, чтобы открыть или отменить.'
                     : ' Запись появится в «Ближайших записях».';
                 presentHubBookingSuccess(res.booking, successText + tail);
                 loadBookings();
@@ -6911,7 +7039,7 @@
                   : 'Клиент добавлен и записан на занятие.';
                 var tail =
                   wasQuickSandbox
-                    ? ' Запись появится в «Ближайших записях». Отменить можно в «Детали записи».'
+                    ? ' Тестовая запись с пометкой «тест» уже в «Ближайших записях» — нажмите на строку, чтобы открыть или отменить.'
                     : ' Запись появится в «Ближайших записях».';
                 presentHubBookingSuccess(res.booking, baseText + tail);
                 loadBookings();
@@ -8399,18 +8527,22 @@
 
       var hubBookFabWired = false;
 
-      /** FAB only after onboarding is done — strip CTAs own the first-booking flow. */
+      /**
+       * FAB only after the first booking — strip CTAs own the first-booking flow.
+       * Deliberately not onboardingAllComplete: step 3 (каталог) не про запись,
+       * и ждать модерации, чтобы вернуть кнопку записи, было бы регрессией.
+       */
       function shouldShowHubBookFab() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
         var d = hubOnboardingData;
-        if (d && !onboardingAllComplete(d)) return false;
+        if (d && !onboardingBookingStepDone(d)) return false;
         if (
           trainerAccessSnapshot &&
           window.TrainerMiniAppGate &&
           !TrainerMiniAppGate.isActive(trainerAccessSnapshot)
         ) {
-          return !!(d && onboardingAllComplete(d));
+          return !!(d && onboardingBookingStepDone(d));
         }
         return true;
       }

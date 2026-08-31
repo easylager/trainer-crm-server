@@ -560,11 +560,12 @@ async def _send_trainer_post_booking_feedback(
         if first_booking_milestone:
             info_for_card = await get_booking_milestone_display_for_trainer(session, booking_id, trainer_id)
             if info_for_card:
-                card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+                card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card, created_by_trainer=True)
             else:
                 card_html = (
-                    "🎉 <b>Старт засчитан: это ваша первая запись в Glide!</b>\n\n"
-                    + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+                    "✅ <b>Запись создана.</b>\n\n"
+                    "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
+                    + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
                 )
             has_crm_push = await trainer_has_crm_access(session, trainer_id)
             milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
@@ -581,12 +582,16 @@ async def _send_trainer_post_booking_feedback(
                 reply_markup=milestone_kb,
             )
         else:
-            # Sandbox copy: replace Telegram-attached / not-attached lines with a calm preview note,
-            # so the trainer doesn't see «не привязан Telegram» for a phantom identity. The
-            # ``Пригласить в бот`` button is also dropped — there's no one to invite.
             if is_sandbox:
-                reminder_plan = "не отправляются — это пример"
-                client_confirmation = "не отправляется — это пример"
+                done_text = msg.TRAINER_CREATE_BOOKING_SANDBOX_DONE.format(
+                    client_name=html.escape(client_name),
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                )
+                reply_markup = msg.build_trainer_sandbox_booking_done_reply_markup(
+                    webapp_base=settings_push.webapp_base_url or "",
+                )
             else:
                 reminder_plan = await format_trainer_reminder_plan_for_client_day(
                     session,
@@ -597,37 +602,36 @@ async def _send_trainer_post_booking_feedback(
                 client_confirmation = "не применимо: у клиента не привязан Telegram"
                 if client_tg_id:
                     client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
-            keyboard_rows: list[list[InlineKeyboardButton]] = [
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
-                        callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
-                    )
-                ]
-            ]
-            if not client_tg_id and not is_sandbox:
-                keyboard_rows.append(
+                keyboard_rows: list[list[InlineKeyboardButton]] = [
                     [
                         InlineKeyboardButton(
-                            text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
-                            callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                            text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                            callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
                         )
                     ]
+                ]
+                if not client_tg_id:
+                    keyboard_rows.append(
+                        [
+                            InlineKeyboardButton(
+                                text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                                callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                            )
+                        ]
+                    )
+                done_text = msg.TRAINER_CREATE_BOOKING_DONE.format(
+                    client_name=html.escape(client_name),
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                    reminder_plan=html.escape(reminder_plan),
+                    client_confirmation=html.escape(client_confirmation),
                 )
-            done_text = msg.TRAINER_CREATE_BOOKING_DONE.format(
-                client_name=html.escape(client_name),
-                date=date_str,
-                day=day_str,
-                time=time_str,
-                reminder_plan=html.escape(reminder_plan),
-                client_confirmation=html.escape(client_confirmation),
-            )
-            if is_sandbox:
-                done_text += msg.TRAINER_CREATE_BOOKING_SANDBOX_CANCEL_HINT
+                reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
             await trainer_bot.send_message(
                 chat_id=trainer_telegram_id,
                 text=done_text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
+                reply_markup=reply_markup,
             )
         if share_catalog_tip:
             await send_trainer_share_catalog_tip_to_chat(
@@ -5250,13 +5254,15 @@ async def get_trainer_hub_universal_invite_link(
         trainer_id=int(trainer_id),
     )
     if err or not link:
-        return {"link": None}
+        return {"link": None, "share_text": None}
     from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
     from src.shared.audit import ACTOR_API, audit_log
+    from src.shared import msg
 
+    share_text = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=link)
     await record_trainer_client_invite_link_first_copy(session, int(trainer_id))
     audit_log("trainer.invite_link_copied", ACTOR_API, int(trainer_id), {"trainer_id": int(trainer_id)})
-    return {"link": link}
+    return {"link": link, "share_text": share_text}
 
 
 class ClientSelfRegisterBody(BaseModel):
