@@ -38,12 +38,12 @@
     />
   </noscript>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608318" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <link rel="preload" href="trainer-home-main.js?v=202608317" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202608318" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202608315" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
@@ -347,25 +347,7 @@
       aria-label="Сейчас важно"
     ></section>
 
-    <!-- Onboarding welcome — premium identity, airy; sits above the action card during «Первые шаги» -->
-    <section id="hubOnboardingWelcome" class="hub-onboarding-welcome" hidden aria-label="Добро пожаловать">
-      <p class="hub-onboarding-welcome__kicker">Добро пожаловать</p>
-      <h2 class="hub-onboarding-welcome__title" id="hubOnboardingWelcomeTitle">Рады видеть вас здесь</h2>
-      <p class="hub-onboarding-welcome__lead" id="hubOnboardingWelcomeLead">
-        Пока готовите профиль, мы держим для вас место в каталоге.
-      </p>
-      <div class="hub-onboarding-welcome__chips" aria-label="Что вас ждёт на платформе">
-        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">📍</span>Каталог</span>
-        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">📅</span>Расписание</span>
-        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">🔔</span>Напоминания</span>
-        <button type="button" class="hub-onboarding-welcome__chip hub-onboarding-welcome__chip--action" id="hubOnboardingWelcomeCommunity">
-          <span aria-hidden="true">💬</span>Комьюнити
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-      </div>
-    </section>
-
-    <!-- Onboarding action card — single focal step; same id for trainer-home-main.js -->
+    <!-- Onboarding action card — greeting above is enough; this is the single focal surface -->
     <div id="onboardingStrip" class="onboarding-strip onboarding-strip--hub-top" style="display:none;" hidden>
       <div class="onboarding-strip-head">
         <span class="onboarding-progress-pill" id="onboardingProgressPill">Шаг 1 из 2</span>
@@ -403,7 +385,7 @@
             <!-- Hint is state-driven: not ready → profile, ready → submit, submitted → waiting -->
             <p class="onboarding-step-hint" id="onboardingHintCatalog">Добавьте фото и отправьте профиль на проверку — после неё вас начнут находить в каталоге.</p>
           </div>
-          <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Заполнить профиль</button>
+          <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Открыть профиль</button>
         </li>
       </ol>
     </div>
@@ -971,7 +953,7 @@
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
   <script src="mini-app-trainer-pending-inbox.js?v=202608315"></script>
   <script src="trainer-booking-context.js?v=202608315"></script>
-  <script defer src="trainer-home-main.js?v=202608317"></script>
+  <script defer src="trainer-home-main.js?v=202608318"></script>
   <script defer src="mini-app-trainer-shell.js?v=202608315"></script>
 </body>
 </html>

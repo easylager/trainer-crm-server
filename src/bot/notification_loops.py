@@ -2434,18 +2434,30 @@ _ONBOARDING_STEP_INTRO: dict[str, str] = {
     ONBOARDING_NUDGE_STEP_D7: msg.TRAINER_ONBOARDING_NUDGE_INTRO_D7,
 }
 
+_ONBOARDING_EMPTY_INTRO: dict[str, str] = {
+    ONBOARDING_NUDGE_STEP_D1: msg.TRAINER_ONBOARDING_EMPTY_INTRO_D1,
+    ONBOARDING_NUDGE_STEP_D3: msg.TRAINER_ONBOARDING_EMPTY_INTRO_D3,
+    ONBOARDING_NUDGE_STEP_D7: msg.TRAINER_ONBOARDING_EMPTY_INTRO_D7,
+}
+
 
 def _render_onboarding_nudge_text(
     nudge: DueOnboardingNudge, *, trial_days_remaining: int | None
 ) -> str:
     """Pure: step intro + stage-specific body naming the concrete next action + trial urgency."""
-    intro = _ONBOARDING_STEP_INTRO.get(nudge.step)
+    intro_map = (
+        _ONBOARDING_EMPTY_INTRO if nudge.stage == STAGE_EMPTY_FORM else _ONBOARDING_STEP_INTRO
+    )
+    intro = intro_map.get(nudge.step)
     if intro is None:
         raise ValueError(f"Unknown onboarding nudge step: {nudge.step!r}")
 
     if nudge.stage == STAGE_MISSING_FIELD:
-        missing = ", ".join(nudge.missing_labels_ru) or "оставшиеся поля анкеты"
-        body = msg.TRAINER_ONBOARDING_STAGE_MISSING_FIELD.format(missing=missing)
+        if tuple(nudge.missing_labels_ru) == ("фотография профиля",):
+            body = msg.TRAINER_ONBOARDING_STAGE_MISSING_PHOTO_ONLY
+        else:
+            missing = ", ".join(nudge.missing_labels_ru) or "оставшиеся поля анкеты"
+            body = msg.TRAINER_ONBOARDING_STAGE_MISSING_FIELD.format(missing=missing)
     else:
         body = _ONBOARDING_STAGE_BODY.get(nudge.stage)
         if body is None:

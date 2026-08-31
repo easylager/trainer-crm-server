@@ -4325,12 +4325,9 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════════
-       ONBOARDING — premium first impression: one welcome, one focal action.
-       Hero is hidden; welcome is airy & borderless (identity), the step card
-       is the single bordered focal surface (action).
+       ONBOARDING — greeting in the header, one focal card («Первые шаги»).
        ═══════════════════════════════════════════════════════════════════ */
 
-    /* Entrance: gentle fade-up so the cabinet feels deliberate, not loaded */
     @keyframes onboardingFadeUp {
       from {
         opacity: 0;
@@ -4341,98 +4338,13 @@
         transform: translateY(0);
       }
     }
-    body.hub-onboarding-active #hubOnboardingWelcome {
+    body.hub-onboarding-active #onboardingStrip {
       animation: onboardingFadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-    body.hub-onboarding-active #onboardingStrip {
-      animation: onboardingFadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
-    }
     @media (prefers-reduced-motion: reduce) {
-      body.hub-onboarding-active #hubOnboardingWelcome,
       body.hub-onboarding-active #onboardingStrip {
         animation: none;
       }
-    }
-
-    /* Welcome — borderless, airy identity (not a card; sets premium tone) */
-    .hub-onboarding-welcome {
-      margin: 4px 0 18px;
-      padding: 0 2px;
-    }
-
-    .hub-onboarding-welcome__kicker {
-      margin: 0 0 6px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: color-mix(in srgb, var(--app-cta-fill) 80%, var(--tg-theme-text-color));
-    }
-
-    .hub-onboarding-welcome__title {
-      margin: 0 0 8px;
-      font-size: 27px;
-      font-weight: 700;
-      letter-spacing: -0.035em;
-      line-height: 1.12;
-      color: var(--tg-theme-text-color);
-    }
-
-    .hub-onboarding-welcome__lead {
-      margin: 0 0 14px;
-      font-size: 14px;
-      font-weight: 500;
-      line-height: 1.5;
-      color: var(--tg-theme-hint-color);
-      max-width: 32em;
-    }
-
-    .hub-onboarding-welcome__chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-    }
-
-    .hub-onboarding-welcome__chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 6px 11px;
-      border-radius: 999px;
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: -0.005em;
-      color: color-mix(in srgb, var(--tg-theme-text-color) 82%, var(--tg-theme-hint-color));
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent);
-      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
-    }
-
-    .hub-onboarding-welcome__chip span[aria-hidden] {
-      font-size: 13px;
-      line-height: 1;
-    }
-
-    /* Community chip — quiet, tappable; no longer a loud primary button */
-    .hub-onboarding-welcome__chip--action {
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-      color: color-mix(in srgb, var(--app-cta-fill) 70%, var(--tg-theme-text-color));
-      background: color-mix(in srgb, var(--app-cta-fill) 10%, transparent);
-      border-color: color-mix(in srgb, var(--app-cta-fill) 26%, transparent);
-      transition: transform 0.16s ease, background 0.16s ease;
-    }
-
-    .hub-onboarding-welcome__chip--action svg {
-      width: 13px;
-      height: 13px;
-      opacity: 0.7;
-    }
-
-    .hub-onboarding-welcome__chip--action:active {
-      transform: scale(0.96);
-      background: color-mix(in srgb, var(--app-cta-fill) 16%, transparent);
     }
 
     .hub-community-link {

@@ -192,10 +192,36 @@ class TestRenderOnboardingNudgeText:
             _nudge(step=ONBOARDING_NUDGE_STEP_D1, stage=STAGE_EMPTY_FORM),
             trial_days_remaining=None,
         )
-        assert "анкета" in text.lower()
+        assert "Рады, что вы заглянули" in text
+        assert "расписание" in text.lower()
         assert "Обзор" in text
+        assert "заполни" not in text.lower()
+
+    def test_empty_form_d3_uses_warming_intro_not_homework(self):
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(step=ONBOARDING_NUDGE_STEP_D3, stage=STAGE_EMPTY_FORM),
+            trial_days_remaining=None,
+        )
+        assert "кабинет уже ждёт" in text.lower()
+        assert "регистрац" not in text.lower()
 
     def test_missing_field_stage_names_concrete_labels(self):
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(
+                step=ONBOARDING_NUDGE_STEP_D3,
+                stage=STAGE_MISSING_FIELD,
+                missing=("город", "услуга"),
+            ),
+            trial_days_remaining=None,
+        )
+        assert "город" in text
+        assert "услуга" in text
+
+    def test_missing_photo_only_is_playful(self):
         from src.bot.notification_loops import _render_onboarding_nudge_text
 
         text = _render_onboarding_nudge_text(
@@ -206,7 +232,9 @@ class TestRenderOnboardingNudgeText:
             ),
             trial_days_remaining=None,
         )
-        assert "фотография профиля" in text
+        assert "Улыбочку" in text
+        assert "фото" in text.lower()
+        assert "заполни" not in text.lower()
 
     def test_missing_field_falls_back_when_labels_empty(self):
         from src.bot.notification_loops import _render_onboarding_nudge_text
@@ -242,7 +270,7 @@ class TestRenderOnboardingNudgeText:
             _nudge(step=ONBOARDING_NUDGE_STEP_D7, stage=STAGE_NO_BOOKING),
             trial_days_remaining=2,
         )
-        assert "через 2 дн." in text
+        assert "ещё 2 дн." in text
 
     def test_trial_suffix_last_day(self):
         from src.bot.notification_loops import _render_onboarding_nudge_text
@@ -278,7 +306,7 @@ class TestRenderOnboardingNudgeText:
             _nudge(step=ONBOARDING_NUDGE_STEP_D7, stage=STAGE_NO_BOOKING),
             trial_days_remaining=None,
         )
-        assert "записи" in text.lower()
+        assert "запись" in text.lower()
 
     def test_unknown_step_raises(self):
         from src.bot.notification_loops import _render_onboarding_nudge_text

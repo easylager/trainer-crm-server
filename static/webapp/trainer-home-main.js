@@ -587,47 +587,11 @@
         return true;
       }
 
-      /** During «Первые шаги» show welcome card instead of empty stat widgets. */
-      function syncHubOnboardingWelcomeVisibility(data) {
-        var welcome = document.getElementById('hubOnboardingWelcome');
+      /** Greeting is the welcome; «Первые шаги» below is the action — no second hero. */
+      function syncHubOnboardingWelcomeVisibility() {
         var statusMarkers = document.getElementById('hubStatusMarkers');
         var footerAside = document.getElementById('hubFooterAside');
         var show = hubOnboardingStripVisible();
-        var d = data || hubOnboardingData || null;
-
-        if (welcome) {
-          if (show) {
-            welcome.removeAttribute('hidden');
-            var titleEl = document.getElementById('hubOnboardingWelcomeTitle');
-            var leadEl = document.getElementById('hubOnboardingWelcomeLead');
-            var ttOk = !!(d && d.tt_minimal_complete);
-            var schedUnlocked = !!(d && (d.schedule_unlocked || d.is_active));
-            var bookDone = onboardingBookingStepDone(d);
-            if (titleEl) {
-              if (!ttOk) {
-                titleEl.textContent = 'Рады, что вы с нами';
-              } else if (!bookDone) {
-                titleEl.textContent = 'Почти готово — остался один шаг';
-              } else {
-                titleEl.textContent = 'Отличный старт';
-              }
-            }
-            if (leadEl) {
-              if (!ttOk) {
-                leadEl.textContent =
-                  'Пока готовите профиль, мы уже держим для вас место в каталоге.';
-              } else if (!bookDone && schedUnlocked) {
-                leadEl.textContent =
-                  'Анкета готова — теперь посмотрите, как работает запись. Можно на примере: расписание, клиент и напоминания оживут сразу.';
-              } else {
-                leadEl.textContent =
-                  'Вы уже в системе. Скоро здесь появятся цифры дня — пока можно сосредоточиться на «Первых шагах» выше.';
-              }
-            }
-          } else {
-            welcome.setAttribute('hidden', 'hidden');
-          }
-        }
 
         document.body.classList.toggle('hub-onboarding-active', show);
 
@@ -3191,13 +3155,13 @@
           } else if (pc) {
             hintC.textContent = 'Всё собрано — отправьте профиль на проверку.';
           } else {
-            hintC.textContent = 'Добавьте фото и остальные пункты профиля — так потенциальные клиенты смогут вас найти.';
+            hintC.textContent = 'Добавьте фото — так ученики сразу вас узнают в каталоге.';
           }
         }
         if (ctaC) {
           ctaC.disabled = catalogLocked || catalogDone;
           ctaC.style.display = catalogDone ? 'none' : '';
-          ctaC.textContent = pc ? 'Отправить на проверку' : 'Заполнить профиль';
+          ctaC.textContent = pc ? 'Отправить на проверку' : 'Открыть профиль';
         }
 
         syncHubOnboardingWelcomeVisibility(data);
@@ -9201,7 +9165,6 @@
       (function wireHubCommunitySheet() {
         var link = document.getElementById('hubCommunityLink');
         var faqLink = document.getElementById('hubCommunityFaqLink');
-        var welcomeCommunity = document.getElementById('hubOnboardingWelcomeCommunity');
         var overlay = document.getElementById('hubCommunitySheetOverlay');
         var sheet = document.getElementById('hubCommunitySheet');
         if (!link || !overlay || !sheet) return;
@@ -9218,7 +9181,6 @@
         }
 
         link.addEventListener('click', openHubCommunitySheet);
-        if (welcomeCommunity) welcomeCommunity.addEventListener('click', openHubCommunitySheet);
         if (faqLink) {
           faqLink.addEventListener('click', function() {
             closeHubCommunitySheet();
