@@ -59,7 +59,11 @@ async def send_trainer_share_catalog_tip_to_chat(
 
     if not in_public_catalog:
         if st != TRAINER_STATUS_ACTIVE:
-            # Не отправляем длинное «Что дальше?» про каталог и активацию — праздничная карточка первой записи уже ушла выше.
+            # Не в каталоге и модерация ещё не пройдена — не обещаем каталог, шлём только личную ссылку.
+            tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=deep_esc)
+            await bot.send_message(chat_id=chat_id, text=tip, parse_mode=ParseMode.HTML)
+            async with async_session_factory() as session:
+                await record_trainer_client_invite_link_first_copy(session, trainer_id)
             return
         elif links.catalog_page_url:
             cat_esc = html.escape(links.catalog_page_url)

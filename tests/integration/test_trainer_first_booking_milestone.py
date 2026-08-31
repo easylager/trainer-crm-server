@@ -64,8 +64,12 @@ async def test_first_trainer_booking_claims_milestone_once(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_sandbox_first_trainer_booking_claims_milestone_once(db_session: AsyncSession) -> None:
-    """Onboarding demo booking should still unlock the one-time celebration flags."""
+async def test_sandbox_booking_does_not_claim_milestone_but_real_first_booking_does(
+    db_session: AsyncSession,
+) -> None:
+    """Onboarding demo (sandbox) booking must not burn the once-only celebration/link-push
+    flags meant for the trainer's real first client; those flags claim on the trainer's
+    first real booking instead (TASK-006)."""
     tomorrow = date.today() + timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, tomorrow, time(10, 0), time(11, 0)
@@ -81,7 +85,7 @@ async def test_sandbox_first_trainer_booking_claims_milestone_once(db_session: A
         is_sandbox=True,
     )
     assert bid is not None
-    assert flags[0] is True and flags[1] is True
+    assert flags == (False, False)
 
     r = await db_session.execute(
         text(
@@ -90,7 +94,40 @@ async def test_sandbox_first_trainer_booking_claims_milestone_once(db_session: A
         {"tid": trainer_id},
     )
     row = r.fetchone()
-    assert row and row[0] is not None and row[1] is not None
+    assert row and row[0] is None and row[1] is None
+
+    r2 = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+            VALUES (:tid, :d, :st, :en, 'available', 1)
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": tomorrow, "st": time(14, 0), "en": time(15, 0)},
+    )
+    (slot2,) = r2.fetchone()
+    await db_session.commit()
+    client2 = await _create_client(db_session, unique_test_telegram_id())
+    bid2, flags2 = await create_booking(
+        db_session,
+        slot_id=slot2,
+        trainer_id=trainer_id,
+        client_id=client2,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert bid2 is not None
+    assert flags2 == (True, True)
+
+    r3 = await db_session.execute(
+        text(
+            "SELECT first_booking_milestone_at, share_catalog_tip_sent_at FROM trainer_profiles WHERE trainer_id = :tid"
+        ),
+        {"tid": trainer_id},
+    )
+    row3 = r3.fetchone()
+    assert row3 and row3[0] is not None and row3[1] is not None
 
 
 @pytest.mark.asyncio
