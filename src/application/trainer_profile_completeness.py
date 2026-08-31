@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.application.trainer_arena_setup_use_cases import tt_minimal_arenas_satisfied
 from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 
 # Minimum visible "about me" text for full-profile tier (characters after strip).
@@ -166,8 +167,7 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
     if not sids:
         missing.append("services")
 
-    aids = trainer.get("arena_ids")
-    if not aids:
+    if not tt_minimal_arenas_satisfied(trainer):
         missing.append("arenas")
 
     return len(missing) == 0, missing
@@ -176,6 +176,20 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
 def is_tt_minimal_profile_complete(trainer: dict[str, Any]) -> bool:
     ok, _ = analyze_tt_minimal_profile_readiness(trainer)
     return ok
+
+
+def is_intro_block_complete(trainer: dict[str, Any]) -> bool:
+    """
+    «Знакомство»: identity + contacts only — full_name, phone, city.
+    Narrower than TT-minimal (which also requires services/arenas from later Mini App steps).
+    """
+    profile = trainer.get("profile")
+    if not isinstance(profile, dict):
+        return False
+    fn = (profile.get("first_name") or "").strip()
+    ln = (profile.get("last_name") or "").strip()
+    phone = (profile.get("phone") or "").strip()
+    return bool(fn and ln and phone and profile.get("city_id") is not None)
 
 
 def analyze_moderation_submission_readiness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:

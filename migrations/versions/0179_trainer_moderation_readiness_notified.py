@@ -1,6 +1,6 @@
 """Track when trainer profile is ready for moderation notification sent.
 
-Revision ID: 0179_trainer_moderation_readiness_notified
+Revision ID: 0179_moderation_ready_notify
 Revises: 0178_trainer_arena_setup
 """
 
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0179_trainer_moderation_readiness_notified"
+revision = "0179_moderation_ready_notify"
 down_revision = "0178_trainer_arena_setup"
 branch_labels = None
 depends_on = None

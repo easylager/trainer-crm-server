@@ -65,23 +65,29 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
         # Notify admins about first booking
         trainer = await get_trainer(session, trainer_id)
         if trainer:
-            # Get the first confirmed/completed booking
             r = await session.execute(
                 text(
                     """
-                    SELECT id, client_name, start_at FROM bookings
-                    WHERE trainer_id = :tid AND status IN ('confirmed', 'completed') AND NOT is_sandbox
-                    ORDER BY start_at ASC LIMIT 1
+                    SELECT b.id, c.first_name, c.last_name, s.slot_date, s.start_time
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    JOIN clients c ON c.id = b.client_id
+                    WHERE b.trainer_id = :tid AND b.status IN ('confirmed', 'completed') AND NOT b.is_sandbox
+                    ORDER BY s.slot_date ASC, s.start_time ASC LIMIT 1
                     """
                 ),
                 {"tid": trainer_id},
             )
             booking_row = r.fetchone()
             if booking_row:
+                client_name = " ".join(
+                    p for p in (booking_row[1], booking_row[2]) if p
+                ).strip() or "Unknown"
                 booking = {
                     "id": booking_row[0],
-                    "client_name": booking_row[1],
-                    "start_at": booking_row[2],
+                    "client_name": client_name,
+                    "slot_date": booking_row[3],
+                    "start_time": booking_row[4],
                 }
                 await notify_admins_trainer_first_booking(trainer_id, trainer, booking)
 

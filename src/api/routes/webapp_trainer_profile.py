@@ -355,28 +355,26 @@ async def patch_trainer_profile_for_webapp(
         raise HTTPException(status_code=404, detail="Trainer not found")
     audit_log("trainer.profile_updated", ACTOR_API, "webapp_trainer_profile", {"trainer_id": trainer_id})
 
-    # Notify admins if profile is now ready for moderation
-    from src.application.trainer_profile_completeness import analyze_moderation_profile_completeness
-    from src.application.trainer_events_notify import notify_admins_trainer_profile_ready_for_moderation
-    from datetime import datetime
+    # Notify admins once the trainer has filled in the intro block (name, phone, city)
+    from src.application.trainer_profile_completeness import is_intro_block_complete
+    from src.application.trainer_events_notify import notify_admins_trainer_intro_completed
 
     trainer = await get_trainer(session, trainer_id)
-    if trainer:
-        is_ready, _ = analyze_moderation_profile_completeness(trainer)
-        profile_obj = trainer.get("profile") or {}
-        notified_at = profile_obj.get("moderation_readiness_notified_at")
-
-        # Send notification only if profile is ready and we haven't notified yet
-        if is_ready and notified_at is None:
-            from sqlalchemy import text
-            await session.execute(
-                text(
-                    "UPDATE trainer_profiles SET moderation_readiness_notified_at = :now WHERE trainer_id = :trainer_id"
-                ),
-                {"now": datetime.now(), "trainer_id": trainer_id},
-            )
+    if trainer and is_intro_block_complete(trainer):
+        claimed = await session.execute(
+            text(
+                """
+                UPDATE trainer_profiles
+                SET moderation_readiness_notified_at = NOW()
+                WHERE trainer_id = :trainer_id AND moderation_readiness_notified_at IS NULL
+                RETURNING trainer_id
+                """
+            ),
+            {"trainer_id": trainer_id},
+        )
+        if claimed.fetchone() is not None:
             await session.commit()
-            await notify_admins_trainer_profile_ready_for_moderation(trainer_id, trainer)
+            await notify_admins_trainer_intro_completed(trainer_id, trainer)
 
     return {"ok": True}
 
