@@ -7,6 +7,16 @@ created_at: 2026-08-31
 updated_at: 2026-08-31
 ---
 
+## Bugfix (локальное тестирование выявило 3 бага)
+
+1. **Первая запись**: SQL селектил несуществующие `bookings.client_name`/`start_at` → падал с `UndefinedColumnError`, endpoint подтверждения записи возвращал 500. Исправлено на JOIN с `slots`+`clients`.
+2. **«Знакомство»**: условие использовало `analyze_moderation_profile_completeness()` — полный дозье-тир из 11 критериев (фото, образование, услуги, арены, настройки записи), а не сам блок «Знакомство» (имя+телефон+город). Добавлена узкая проверка `is_intro_block_complete()`.
+3. **Имя тренера везде пустое**: все 3 notify-функции читали `trainer.get("first_name")` с верхнего уровня, а `TrainerRepository.get_by_id()` кладёт эти поля в `trainer["profile"]`. Добавлен `_trainer_display_name()` с правильным путём + HTML-escape.
+
+Также: dedup-флаг `moderation_readiness_notified_at` читался из dict, который его никогда не содержал (не селектился в `get_by_id`) → заменено на atomic `UPDATE...RETURNING`.
+
+**Важно для локального теста**: `src.bot.trainer_app` запущен без `--reload` — после git pull/правок его нужно перезапустить вручную, иначе фикс уведомления о первом входе не подхватится. `uvicorn --reload` (API) подхватывает fix для «Знакомства» и первой записи автоматически.
+
 # Task
 
 ## Objective
