@@ -1,6 +1,11 @@
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        /* Вызов expand() с небольшой задержкой, чтобы Telegram полностью инициализировал мини-апп.
+           Если вызвать сразу в IIFE, expand() может не сработать для мини-апп открытого из сообщения. */
+        setTimeout(function() { if (typeof tg.expand === 'function') tg.expand(); }, 100);
+      }
 
       function initData() { return (tg && tg.initData) ? tg.initData : ''; }
       function headersJson() {
