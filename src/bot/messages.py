@@ -2971,6 +2971,15 @@ def _milestone_service_tariff_price_html(
     return "\n".join(lines) + "\n"
 
 
+def _milestone_price_section_html(booking_price_cents: int | None) -> str:
+    if booking_price_cents is not None:
+        byn = booking_price_cents / 100.0
+        body = f"<b>{html.escape(format_rubles_byn_display(byn))}</b>"
+    else:
+        body = "<i>не указано в профиле</i>"
+    return f"💰 <b>Цена</b>\n{body}"
+
+
 def format_trainer_first_booking_milestone_rich_html(
     *,
     client_name: str,
@@ -3020,7 +3029,7 @@ def format_trainer_first_booking_milestone_rich_html(
         venue_block = (
             "📍 <b>Площадка</b>\n"
             f"{fallback_city}"
-            "<i>Арена не привязана к слоту — уточните у клиента или в расписании.</i>"
+            "<i>Не заполнена в профиле.</i>"
         ).rstrip("\n")
 
     svc_block = _milestone_service_tariff_price_html(
@@ -3057,10 +3066,7 @@ def format_trainer_first_booking_milestone_rich_html(
             tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
     if created_by_trainer:
-        intro_block = (
-            "✅ <b>Запись создана.</b>\n\n"
-            "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке."
-        )
+        intro_block = "✅ <b>Запись создана.</b>"
         footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
     else:
         intro_block = (
@@ -3077,6 +3083,7 @@ def format_trainer_first_booking_milestone_rich_html(
     ]
     if service_section:
         blocks.append(service_section.rstrip("\n"))
+    blocks.append(_milestone_price_section_html(booking_price_cents))
     if map_section:
         blocks.append(map_section)
     if comment_section:

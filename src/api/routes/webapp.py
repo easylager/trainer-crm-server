@@ -564,7 +564,6 @@ async def _send_trainer_post_booking_feedback(
             else:
                 card_html = (
                     "✅ <b>Запись создана.</b>\n\n"
-                    "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
                     + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
                 )
             has_crm_push = await trainer_has_crm_access(session, trainer_id)

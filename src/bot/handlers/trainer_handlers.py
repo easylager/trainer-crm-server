@@ -981,7 +981,6 @@ async def _send_first_booking_milestone_followups(
             if created_by_trainer:
                 card_html = (
                     "✅ <b>Запись создана.</b>\n\n"
-                    "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
                     + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
                 )
             else:
@@ -1931,7 +1930,6 @@ async def _complete_schedule_create_booking(
         else:
             card_html = (
                 "✅ <b>Запись создана.</b>\n\n"
-                "Это перенос вашей базы — настоящее вау будет, когда клиент запишется сам по ссылке.\n\n"
                 + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_SUBDUED_HTML
             )
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(

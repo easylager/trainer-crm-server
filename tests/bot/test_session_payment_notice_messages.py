@@ -258,7 +258,30 @@ def test_trainer_first_booking_milestone_pass_instead_of_price() -> None:
         expected_payment_class="PASS",
     )
     assert "Оплата: абонемент" in text
-    assert "Цена:" not in text
+    assert "💰" in text and "50" in text.split("💰")[1]
+
+
+def test_trainer_first_booking_milestone_missing_profile_venue_and_price() -> None:
+    text = msg.format_trainer_first_booking_milestone_rich_html(
+        client_name="Иван",
+        client_phone="+375291234567",
+        date_str="01.09",
+        day_label="Вт",
+        time_str="06:00",
+        arena_name=None,
+        arena_address=None,
+        service_name="Обучение катанию «с нуля»",
+        price_tier_label=None,
+        booking_price_cents=None,
+        duration_minutes=45,
+        client_has_telegram=False,
+        created_by_trainer=True,
+        expected_payment_class="none",
+    )
+    assert "перенос вашей базы" not in text
+    assert "Не заполнена в профиле" in text
+    assert "не указано в профиле" in text
+    assert text.startswith("✅ <b>Запись создана.</b>")
 
 
 def test_trainer_confirmed_echo_pass_instead_of_price() -> None:
