@@ -15,8 +15,12 @@
 (function () {
   'use strict';
 
-  var tg = window.Telegram && window.Telegram.WebApp;
-  if (tg) {
+  function getTg() {
+    return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  }
+
+  function applyChrome(tg) {
+    if (!tg) return;
     if (typeof tg.ready === 'function') tg.ready();
     if (typeof tg.expand === 'function') tg.expand();
     try {
@@ -30,12 +34,70 @@
     }
   }
 
-  var qs = new URLSearchParams(window.location.search);
-  var initData = (tg && tg.initData) || qs.get('init_data') || qs.get('initData') || '';
+  applyChrome(getTg());
 
+  function initDataFromUrl() {
+    try {
+      var qs = new URLSearchParams(window.location.search || '');
+      return qs.get('init_data') || qs.get('initData') || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * Never snapshot initData at parse time. Reply-keyboard Mini Apps («Начать») and cold
+   * WebViews often fill Telegram.WebApp.initData a tick after the first script runs.
+   * A GET without it is 401 → chrome overlay «Что-то пошло не так». Same wait as hub.
+   */
   function currentInit() {
-    if (tg && tg.initData) initData = tg.initData;
-    return initData || '';
+    var t = getTg();
+    var raw = (t && t.initData) || initDataFromUrl();
+    return raw ? String(raw) : '';
+  }
+
+  function waitForInitDataThen(callback) {
+    try {
+      var tg0 = getTg();
+      if (tg0 && typeof tg0.ready === 'function') tg0.ready();
+    } catch (eReady) { /* */ }
+    if (currentInit()) {
+      applyChrome(getTg());
+      callback();
+      return;
+    }
+    requestAnimationFrame(function () {
+      if (currentInit()) {
+        applyChrome(getTg());
+        callback();
+        return;
+      }
+      requestAnimationFrame(function () {
+        if (currentInit()) {
+          applyChrome(getTg());
+          callback();
+          return;
+        }
+        var n = 0;
+        var maxTicks = 140;
+        var iv = setInterval(function () {
+          n++;
+          if (currentInit()) {
+            clearInterval(iv);
+            applyChrome(getTg());
+            callback();
+            return;
+          }
+          if (n >= maxTicks) {
+            clearInterval(iv);
+            setTimeout(function () {
+              applyChrome(getTg());
+              callback();
+            }, 420);
+          }
+        }, 50);
+      });
+    });
   }
   function apiHeaders() {
     var raw = currentInit();
@@ -92,6 +154,7 @@
 
   function haptic(kind) {
     try {
+      var tg = getTg();
       if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.impactOccurred === 'function') {
         tg.HapticFeedback.impactOccurred(kind || 'light');
       }
@@ -814,5 +877,5 @@
 
   cacheEls();
   bind();
-  load();
+  waitForInitDataThen(load);
 })();

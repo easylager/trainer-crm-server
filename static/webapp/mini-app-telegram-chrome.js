@@ -556,8 +556,32 @@ window.wireHubSlotMessageButtons = function (root) {
     } catch (e2) {}
   }
 
-  function inspectUnauthorized(url, res) {
+  /** True when this fetch actually sent Mini App credentials. A 401 without them is a race, not a dead session. */
+  function outgoingHasCredential(url, init) {
+    try {
+      var s = String(url || '');
+      if (/[?&]init_data=/i.test(s) || /[?&]initData=/i.test(s)) return true;
+    } catch (e0) { /* */ }
+    try {
+      var h = init && init.headers;
+      if (!h) return false;
+      var v = '';
+      if (typeof Headers !== 'undefined' && h instanceof Headers) {
+        v = h.get('X-Telegram-Init-Data') || h.get('x-telegram-init-data') || '';
+      } else if (typeof h.get === 'function') {
+        v = h.get('X-Telegram-Init-Data') || h.get('x-telegram-init-data') || '';
+      } else {
+        v = h['X-Telegram-Init-Data'] || h['x-telegram-init-data'] || '';
+      }
+      return !!String(v || '').trim();
+    } catch (e1) {
+      return false;
+    }
+  }
+
+  function inspectUnauthorized(url, res, init) {
     if (!res || res.status !== 401 || !webappApiUrl(url)) return;
+    if (!outgoingHasCredential(url, init)) return;
     var h = '';
     try {
       h = res.headers.get(HDR) || '';
@@ -727,7 +751,7 @@ window.wireHubSlotMessageButtons = function (root) {
         url = '';
       }
       return orig.apply(this, arguments).then(function (res) {
-        inspectUnauthorized(url, res);
+        inspectUnauthorized(url, res, init || input);
         inspectOutage(url, res, orig);
         return res;
       }).catch(function (err) {
