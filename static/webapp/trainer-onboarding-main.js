@@ -635,19 +635,19 @@
   }
 
   /**
-   * Тап красит одну ячейку, протягивание пальцем — все ячейки под ним, тем же значением,
-   * что взято от первой (toggle). Без захвата указателя — в WebView это вызывает проблемы.
-   * Вместо этого подстраиваем логику: начинаем жест на pointerdown, обновляем на каждом
-   * pointermove, и завершаем на pointerup/cancel. Скролл сетки блокируется touch-action: none.
+   * Тап красит одну ячейку, протягивание пальцем — все ячейки под ним, тем же значением.
+   * Используем Touch Events вместо Pointer Events для лучшей совместимости с WebView.
    */
   var dragPaint = null;
 
   function bindGridDrag() {
     if (!el.obGrid) return;
 
-    var onPointerMove = function (e) {
-      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
-      var cellEl = cellUnderPoint(e.clientX, e.clientY);
+    var onTouchMove = function (e) {
+      if (!dragPaint) return;
+      if (!e.touches || e.touches.length === 0) return;
+      var touch = e.touches[0];
+      var cellEl = cellUnderPoint(touch.clientX, touch.clientY);
       if (!cellEl) return;
       var key = cellRowCol(cellEl);
       if (key === dragPaint.key) return;
@@ -659,31 +659,30 @@
       }
     };
 
-    var onPointerUp = function (e) {
-      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
+    var onTouchEnd = function (e) {
+      if (!dragPaint) return;
       dragPaint = null;
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-      document.removeEventListener('pointercancel', onPointerUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
     };
 
-    el.obGrid.addEventListener('pointerdown', function (e) {
+    el.obGrid.addEventListener('touchstart', function (e) {
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
       if (!cellEl || cellEl.disabled) return;
+      if (!e.touches || e.touches.length === 0) return;
       var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
+      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl) };
       paintCell(cellEl, currentCtxArenaId, value);
       haptic('light');
       syncGridCount();
       syncCta();
-      /* Вешаем обработчики движения и отпускания на document, чтобы ловить движение
-         за пределами сетки. Удаляем их в onPointerUp. */
-      document.addEventListener('pointermove', onPointerMove);
-      document.addEventListener('pointerup', onPointerUp);
-      document.addEventListener('pointercancel', onPointerUp);
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
     });
 
-    /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через pointerdown
+    /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через touchstart
        выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
     el.obGrid.addEventListener('click', function (e) {
       if (e.detail !== 0) return;
