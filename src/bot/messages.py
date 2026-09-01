@@ -2972,12 +2972,18 @@ def _milestone_service_tariff_price_html(
 
 
 def _milestone_price_section_html(booking_price_cents: int | None) -> str:
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        body = f"<b>{html.escape(format_rubles_byn_display(byn))}</b>"
-    else:
-        body = "<i>не указано в профиле</i>"
-    return f"💰 <b>Цена</b>\n{body}"
+    """
+    Price block, or "" when the booking carries no price.
+
+    Onboarding v2 never asks for tariffs, so "не указано в профиле" here would print a gap
+    notice inside the trainer's first-booking celebration — the one message that should be
+    pure good news. The soft D+1/D+8/D+21 series (trainer_profile_enrichment_use_cases) is
+    where prices get raised; an absent block says the same thing without the reproach.
+    """
+    if booking_price_cents is None:
+        return ""
+    byn = booking_price_cents / 100.0
+    return f"💰 <b>Цена</b>\n<b>{html.escape(format_rubles_byn_display(byn))}</b>"
 
 
 def format_trainer_first_booking_milestone_rich_html(
@@ -3024,13 +3030,13 @@ def format_trainer_first_booking_milestone_rich_html(
         if aa:
             venue_body += f"{html.escape(aa)}\n"
         venue_block = f"📍 <b>Площадка</b>\n{city_line}{venue_body}".rstrip("\n")
+    elif city_line:
+        venue_block = f"📍 <b>Площадка</b>\n{city_line}".rstrip("\n")
     else:
-        fallback_city = f"{city_line}" if city_line else ""
-        venue_block = (
-            "📍 <b>Площадка</b>\n"
-            f"{fallback_city}"
-            "<i>Не заполнена в профиле.</i>"
-        ).rstrip("\n")
+        # Onboarding v2 does not ask for an arena, so «не заполнена в профиле» here would drop a
+        # to-do into the one message that is pure good news. The trainer knows where they coach;
+        # the gap belongs in a calm nudge later, not in the celebration.
+        venue_block = ""
 
     svc_block = _milestone_service_tariff_price_html(
         service_name,
@@ -3075,15 +3081,20 @@ def format_trainer_first_booking_milestone_rich_html(
         )
         footer_html = TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
 
-    blocks: list[str] = [
-        intro_block,
-        f"👤 <b>ФИО:</b> {cn}\n" + phone_line.rstrip("\n"),
-        venue_block,
-        f"📅 <b>Время</b>\n{when_line}",
-    ]
+    # «ФИО» is a form field, not how a coach refers to the person who just booked them.
+    client_block = f"👤 <b>Ученик:</b> {cn}"
+    if phone_line:
+        client_block += "\n" + phone_line.rstrip("\n")
+
+    blocks: list[str] = [intro_block, client_block]
+    if venue_block:
+        blocks.append(venue_block)
+    blocks.append(f"📅 <b>Время</b>\n{when_line}")
     if service_section:
         blocks.append(service_section.rstrip("\n"))
-    blocks.append(_milestone_price_section_html(booking_price_cents))
+    price_section = _milestone_price_section_html(booking_price_cents)
+    if price_section:
+        blocks.append(price_section)
     if map_section:
         blocks.append(map_section)
     if comment_section:
@@ -3212,19 +3223,6 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict, created_
     )
 
 
-TRAINER_SHARE_FIRST_BOOKING_ACTIVE_HIDDEN_FROM_CATALOG_HTML = (
-    "👁 <b>Профиль активен, но вы скрыты из каталога</b>\n\n"
-    "В приложении в профиле включите <b>«Показать в каталоге»</b> — иначе клиенты не увидят вас в общем списке.\n\n"
-    "Ссылки для записи:\n\n"
-    "1️⃣ <b>Персональная ссылка в бота</b> (на вас и услугу):\n<code>{deep_link}</code>\n\n"
-    "2️⃣ <b>Страница каталога:</b>\n<code>{catalog_url}</code>"
-)
-TRAINER_SHARE_CATALOG_TIP_BOTH_HTML = (
-    "📣 <b>Следующий шаг к новым клиентам</b>\n\n"
-    "Чтобы клиенты записывались к вам сами, поделитесь ссылками:\n\n"
-    "1️⃣ <b>Персональная ссылка в бота</b> (на вас и услугу):\n<code>{deep_link}</code>\n\n"
-    "2️⃣ <b>Страница каталога:</b>\n<code>{catalog_url}</code>"
-)
 TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML = (
     "📣 <b>Следующий шаг к новым клиентам</b>\n\n"
     "Поделитесь персональной ссылкой на запись к вам:\n\n"
@@ -3240,10 +3238,6 @@ TRAINER_CLIENT_INVITE_LINK_FOR_TRAINER = (
     "Та же ссылка, что по кнопке со скрепкой на «Главной». Перешлите клиенту или скопируйте — "
     "после перехода он сможет зарегистрироваться в боте и получать уведомления.\n\n"
     "<code>{deep_link}</code>"
-)
-TRAINER_SHARE_CATALOG_TIP_PROFILE_INCOMPLETE = (
-    "📣 <b>Следующий шаг</b>\n\n"
-    "В профиле укажите <b>город и услугу</b> — тогда мы соберём для вас готовую ссылку на запись и на каталог."
 )
 TRAINER_BOOKING_DECLINE_PROMPT = (
     "Напиши короткий комментарий для клиента (необязательно).\n\n"

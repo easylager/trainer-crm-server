@@ -366,16 +366,29 @@ async def test_webapp_trainer_catalog_visibility_patch_401_without_init_data(app
 
 
 @pytest.mark.asyncio
-async def test_webapp_trainer_catalog_visibility_patch_403_when_not_active(
+async def test_webapp_trainer_catalog_visibility_patch_allowed_before_activation(
     app_use_test_db,
     db_session,
 ) -> None:
+    """
+    The toggle is the trainer's opt-in, so it must work while they are still deciding.
+
+    It used to 403 for anything but ``status=active`` — which meant a trainer could only say
+    «не хочу в каталог» after being published there.
+    """
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         create_resp = await client.post(
             "/api/trainers",
             json={"profile": {"first_name": "Не", "last_name": "Актив", "age": 29}},
         )
         trainer_id = create_resp.json()["id"]
+
+    # A fresh row defaults to «не в каталоге» — publication is never implicit.
+    r = await db_session.execute(
+        text("SELECT is_catalog_visible FROM trainers WHERE id = :id"), {"id": trainer_id}
+    )
+    assert r.scalar() is False
+
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
         text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
@@ -388,9 +401,13 @@ async def test_webapp_trainer_catalog_visibility_patch_403_when_not_active(
             resp = await client.patch(
                 "/api/webapp/trainer/catalog-visibility",
                 headers={"X-Telegram-Init-Data": "mock"},
-                json={"is_catalog_visible": False},
+                json={"is_catalog_visible": True},
             )
-    assert resp.status_code == 403
+    assert resp.status_code == 200, resp.text
+    r = await db_session.execute(
+        text("SELECT is_catalog_visible FROM trainers WHERE id = :id"), {"id": trainer_id}
+    )
+    assert r.scalar() is True
 
 
 @pytest.mark.asyncio

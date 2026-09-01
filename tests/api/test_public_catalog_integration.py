@@ -83,6 +83,7 @@ def _assert_public_education_entry(entry: dict) -> None:
 
 async def _create_active_trainer_via_api(
     client: AsyncClient,
+    db_session,
     *,
     city_id: int,
     service_ids: list[int],
@@ -101,6 +102,12 @@ async def _create_active_trainer_via_api(
     tid = r.json()["id"]
     st = await client.patch(f"/api/trainers/{tid}/status", json={"status": "active"})
     assert st.status_code == 200, st.text
+    # Since 0182_catalog_opt_in the catalog is opt-in: `active` alone no longer publishes a card.
+    # Written in SQL, not through the API — the suite shares one per-IP rate-limit window.
+    await db_session.execute(
+        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": tid}
+    )
+    await db_session.commit()
     return tid
 
 
@@ -111,7 +118,7 @@ async def test_public_catalog_list_shape_photo_source_and_no_leaks(
     sid, cid, aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         tid = await _create_active_trainer_via_api(
-            client, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
+            client, db_session, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
         )
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
         resp = await client.get(
@@ -135,7 +142,7 @@ async def test_public_trainer_detail_shape_booking_flags_education_and_no_leaks(
 ) -> None:
     sid, cid, aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
         d1 = await client.get(f"/api/public/trainers/{tid}")
     assert d1.status_code == 200
@@ -176,7 +183,7 @@ async def test_public_trainer_detail_shape_booking_flags_education_and_no_leaks(
 async def test_public_trainer_detail_404_when_inactive(app_use_test_db, db_session) -> None:
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await client.patch(f"/api/trainers/{tid}/status", json={"status": "pending_profile"})
         r = await client.get(f"/api/public/trainers/{tid}")
     assert r.status_code == 404
@@ -187,7 +194,7 @@ async def test_public_reviews_list_has_no_client_identifiers(app_use_test_db, db
     sid, cid, _ = await _require_seed_ids(db_session)
     ctid = unique_test_telegram_id()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
     await add_trainer_rating(db_session, tid, ctid, 5, review_text="Норм")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -209,7 +216,7 @@ async def test_public_education_route_matches_detail_safe_fields(
     """GET /trainers/{id}/education и блок education_entries в карточке — один контракт."""
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await client.patch(f"/api/trainers/{tid}/status", json={"status": "active"})
         post = await client.post(
             f"/api/trainers/{tid}/education",
@@ -253,7 +260,7 @@ async def test_public_education_includes_pending_moderation_for_active_trainer(
     """Подробные записи об образовании видны в каталоге до отдельного апрува модератором (pending)."""
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await client.patch(f"/api/trainers/{tid}/status", json={"status": "active"})
         post = await client.post(
             f"/api/trainers/{tid}/education",
@@ -296,6 +303,7 @@ async def test_public_filter_city_service_arena_narrow_results(
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         t_match = await _create_active_trainer_via_api(
             client,
+            db_session,
             city_id=cid,
             service_ids=[sid],
             arena_ids=[aid] if aid else None,
@@ -304,6 +312,7 @@ async def test_public_filter_city_service_arena_narrow_results(
         )
         t_other = await _create_active_trainer_via_api(
             client,
+            db_session,
             city_id=int(other_city),
             service_ids=[sid],
             first_name="Другой",
@@ -341,10 +350,11 @@ async def test_public_time_filters_require_matching_slot(
     dow = _pg_dow(slot_date)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         t_with = await _create_active_trainer_via_api(
-            client, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
+            client, db_session, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
         )
         t_without = await _create_active_trainer_via_api(
             client,
+            db_session,
             city_id=cid,
             service_ids=[sid],
             first_name="Без",
@@ -403,15 +413,15 @@ async def test_public_arena_ids_filter_returns_union_and_is_compatible_with_aren
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             t_a_only = await _create_active_trainer_via_api(
-                client, city_id=cid, service_ids=[sid], arena_ids=[aid],
+                client, db_session, city_id=cid, service_ids=[sid], arena_ids=[aid],
                 first_name="Arena", last_name="One",
             )
             t_b_only = await _create_active_trainer_via_api(
-                client, city_id=cid, service_ids=[sid], arena_ids=[aid2],
+                client, db_session, city_id=cid, service_ids=[sid], arena_ids=[aid2],
                 first_name="Arena", last_name="Two",
             )
             t_none = await _create_active_trainer_via_api(
-                client, city_id=cid, service_ids=[sid],
+                client, db_session, city_id=cid, service_ids=[sid],
                 first_name="Arena", last_name="None",
             )
             for tid in (t_a_only, t_b_only, t_none):
@@ -456,7 +466,7 @@ async def test_public_list_keeps_expired_subscription_trainer_visible_detail_can
     """
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
 
     await db_session.execute(
@@ -484,7 +494,7 @@ async def test_public_catalog_respects_is_catalog_visible(
     """Список и карточка /api/public/trainers* скрывают активного тренера при is_catalog_visible=false."""
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
 
     await db_session.execute(
@@ -519,6 +529,7 @@ async def test_public_pagination_total_stable(app_use_test_db, db_session) -> No
         for i in range(2):
             tid = await _create_active_trainer_via_api(
                 client,
+            db_session,
                 city_id=cid,
                 service_ids=[sid],
                 first_name="Стр",
@@ -568,6 +579,7 @@ async def test_public_arenas_trainer_count_per_service_and_city(
 
         tid = await _create_active_trainer_via_api(
             client,
+            db_session,
             city_id=cid,
             service_ids=[sid],
             arena_ids=[arena_a],
@@ -700,7 +712,7 @@ async def test_public_catalog_free_slots_14d_excludes_elapsed_same_day(
     sid, cid, aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         tid = await _create_active_trainer_via_api(
-            client, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
+            client, db_session, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
         )
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
 

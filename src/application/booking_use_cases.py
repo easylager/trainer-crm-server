@@ -3584,7 +3584,7 @@ async def list_bookings_for_client(
             SELECT b.id, b.slot_id, b.trainer_id, b.service_id, b.client_comment, b.status,
                    s.slot_date, s.start_time, s.end_time,
                    (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
-                   COALESCE(TRIM(p.first_name || ' ' || p.last_name), 'Тренер') AS trainer_name,
+                   COALESCE(NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''), 'Тренер') AS trainer_name,
                    t.telegram_id AS trainer_telegram_id,
                    NULLIF(TRIM(COALESCE(t.telegram_username, '')), '') AS trainer_telegram_username,
                    NULLIF(TRIM(COALESCE(p.phone, '')), '') AS trainer_phone,

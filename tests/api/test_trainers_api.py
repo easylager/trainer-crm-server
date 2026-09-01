@@ -217,6 +217,12 @@ async def test_public_trainer_education_returns_only_approved_records(app_use_te
         )
         trainer_id = create_resp.json()["id"]
         await client.patch(f"/api/trainers/{trainer_id}/status", json={"status": "active"})
+        # Since 0182_catalog_opt_in the catalog is opt-in: `active` alone no longer publishes a card.
+        await db_session.execute(
+            text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"),
+            {"tid": trainer_id},
+        )
+        await db_session.commit()
         approved_resp = await client.post(
             f"/api/trainers/{trainer_id}/education",
             json={

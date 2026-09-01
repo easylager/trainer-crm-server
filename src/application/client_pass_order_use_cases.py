@@ -143,7 +143,7 @@ async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int
 
     rnm = await session.execute(
         text("""
-            SELECT COALESCE(NULLIF(TRIM(tp.first_name || ' ' || tp.last_name), ''), 'Тренер')
+            SELECT COALESCE(NULLIF(TRIM(COALESCE(tp.first_name, '') || ' ' || COALESCE(tp.last_name, '')), ''), 'Тренер')
             FROM trainer_profiles tp WHERE tp.trainer_id = :tid
         """),
         {"tid": trainer_id},

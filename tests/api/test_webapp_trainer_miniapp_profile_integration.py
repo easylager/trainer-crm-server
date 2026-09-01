@@ -170,7 +170,9 @@ async def test_onboarding_checklist_pre_moderation_trainer_is_open_for_work(
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("is_active") is False
-    assert data.get("is_catalog_visible") is True
+    # Catalog listing is opt-in (0182_catalog_opt_in): a trainer who was never asked is not
+    # published, and the hub reads this flag to decide whether the catalog card is even a topic.
+    assert data.get("is_catalog_visible") is False
     assert "full_profile_complete" in data
     assert data.get("slots_this_week_count") == 0
     assert data.get("slots_next_week_count") == 0
@@ -1146,7 +1148,9 @@ async def test_submit_for_moderation_incomplete_returns_422_with_missing_fields(
         trainer_id = create_resp.json()["id"]
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
-        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
+        # asked to be listed — publication is no longer a side effect of a complete profile.
+        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1211,7 +1215,9 @@ async def test_submit_for_moderation_success_when_profile_complete(
     )
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
-        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
+        # asked to be listed — publication is no longer a side effect of a complete profile.
+        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1286,7 +1292,9 @@ async def test_submit_for_moderation_succeeds_with_submission_tier_only_profile(
     )
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
-        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
+        # asked to be listed — publication is no longer a side effect of a complete profile.
+        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1359,7 +1367,9 @@ async def test_moderation_readiness_embedded_reflects_submit_state(
     )
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
-        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
+        # asked to be listed — publication is no longer a side effect of a complete profile.
+        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()

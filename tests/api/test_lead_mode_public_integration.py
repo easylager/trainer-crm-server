@@ -73,7 +73,7 @@ async def test_public_trainer_detail_returns_lifecycle_for_lead_mode(
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _force_lead_mode(db_session, tid)
         await _set_telegram_username(db_session, tid, "valid_handle_123")
         resp = await client.get(f"/api/public/trainers/{tid}")
@@ -95,7 +95,7 @@ async def test_public_trainer_detail_active_trainer_exposes_contact_when_usernam
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
         await _set_telegram_username(db_session, tid, "active_trainer_42")
         resp = await client.get(f"/api/public/trainers/{tid}")
@@ -112,7 +112,7 @@ async def test_public_trainer_detail_lead_mode_without_username_has_null_cta(
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _force_lead_mode(db_session, tid)
         await _set_telegram_username(db_session, tid, None)
         resp = await client.get(f"/api/public/trainers/{tid}")
@@ -128,7 +128,7 @@ async def test_public_trainer_detail_lead_mode_with_invalid_username_rejects_cta
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _force_lead_mode(db_session, tid)
         # 4 chars — below Telegram's minimum of 5; must be rejected to avoid broken t.me links.
         await _set_telegram_username(db_session, tid, "abcd")
@@ -147,7 +147,7 @@ async def test_public_trainer_detail_records_profile_view(
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         before = await _count_demand_events(db_session, tid, DEMAND_EVENT_PROFILE_VIEW)
         resp = await client.get(
             f"/api/public/trainers/{tid}",
@@ -165,7 +165,7 @@ async def test_public_trainer_detail_view_dedup_within_same_day(
     """Same client refresh storm collapses to one row (sha256(ip||ua||tid||day) unique index)."""
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         before = await _count_demand_events(db_session, tid, DEMAND_EVENT_PROFILE_VIEW)
         ua = "pytest-dedup-A"
         for _ in range(3):
@@ -186,7 +186,7 @@ async def test_public_trainer_detail_view_distinct_ua_yields_two_rows(
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         before = await _count_demand_events(db_session, tid, DEMAND_EVENT_PROFILE_VIEW)
         await client.get(f"/api/public/trainers/{tid}", headers={"User-Agent": "client-A"})
         await client.get(f"/api/public/trainers/{tid}", headers={"User-Agent": "client-B"})
@@ -205,7 +205,7 @@ async def test_redirect_to_telegram_records_contact_click_and_302s(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, "trainer_handle")
         before = await _count_demand_events(db_session, tid, DEMAND_EVENT_CONTACT_CLICK)
         resp = await client.get(f"/r/tg/{tid}")
@@ -235,7 +235,7 @@ async def test_redirect_to_telegram_404_when_no_username(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, None)
         resp = await client.get(f"/r/tg/{tid}")
     assert resp.status_code == 404
@@ -249,7 +249,7 @@ async def test_redirect_to_telegram_404_when_invalid_username(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         # Below 5 chars — Telegram won't resolve, so we 404 instead of building a broken URL.
         await _set_telegram_username(db_session, tid, "abc")
         resp = await client.get(f"/r/tg/{tid}")
@@ -265,7 +265,7 @@ async def test_redirect_to_telegram_strips_at_prefix(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, "@stripped_handle")
         resp = await client.get(f"/r/tg/{tid}")
     assert resp.status_code == 302
@@ -280,7 +280,7 @@ async def test_redirect_to_telegram_explicit_source_query_passes_through(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, "src_test_user")
         resp = await client.get(f"/r/tg/{tid}", params={"src": "catalog"})
     assert resp.status_code == 302
@@ -309,7 +309,7 @@ async def test_redirect_to_telegram_unknown_source_query_dropped(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, "src_bad_user")
         resp = await client.get(f"/r/tg/{tid}", params={"src": "evil_string"})
     assert resp.status_code == 302
@@ -332,7 +332,7 @@ async def test_redirect_to_telegram_dedup_same_day(app_use_test_db, db_session) 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test", follow_redirects=False
     ) as client:
-        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        tid = await _create_active_trainer_via_api(client, db_session, city_id=cid, service_ids=[sid])
         await _set_telegram_username(db_session, tid, "dedup_user_1")
         before = await _count_demand_events(db_session, tid, DEMAND_EVENT_CONTACT_CLICK)
         ua = "pytest-redirect-dedup"

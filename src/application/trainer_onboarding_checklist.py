@@ -83,7 +83,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out: dict[str, Any] = {
         "trainer_status": st,
         "is_active": is_active,
-        "is_catalog_visible": bool(trainer.get("is_catalog_visible", True)),
+        "is_catalog_visible": bool(trainer.get("is_catalog_visible", False)),
         "profile_complete": profile_complete,
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,

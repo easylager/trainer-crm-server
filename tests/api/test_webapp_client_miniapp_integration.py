@@ -206,6 +206,13 @@ async def _create_trainer_online_with_slot(
         trainer_id = create_resp.json()["id"]
         await client.patch(f"/api/trainers/{trainer_id}/status", json={"status": "active"})
 
+    # Since 0182_catalog_opt_in the catalog is opt-in: `active` alone no longer publishes a card.
+    # Written in SQL, not through the API — the suite shares one per-IP rate-limit window.
+    await db_session.execute(
+        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": trainer_id}
+    )
+    await db_session.commit()
+
     await _ensure_trainer_subscription_tier(db_session, trainer_id, tier)
 
     await replace_slots_for_day(db_session, trainer_id, slot_date, {h * 60 for h in start_hours}, 60)

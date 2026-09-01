@@ -477,11 +477,19 @@
         return map[k] || (k || '—');
       }
 
+      /** Тренер попросился в каталог? Пока нет — «незаполненность» не дефект, а его выбор. */
+      function trainerWantsCatalogListing() {
+        return !!(state.trainer && state.trainer.is_catalog_visible === true);
+      }
+
       /** Статус в шапке: для черновика учитываем полноту и факт отправки на модерацию. */
       function heroStatusLabelRu(st, d) {
         st = (st || '').trim();
         d = d || {};
         if (st === 'pending_profile') {
+          /* Без заявки в каталог статус «Не заполнен» — это оценка, которую тренер не просил:
+             он работает по ссылке, и продукт для него полон. Называем состояние, а не пробел. */
+          if (!trainerWantsCatalogListing()) return 'Работает по ссылке';
           if (d.tt_minimal_complete && !d.complete) return 'Минимум готов';
           if (!d.complete) return 'Не заполнен';
           if (d.already_submitted_for_moderation) return 'На модерации';
@@ -497,6 +505,7 @@
         if (st === 'deactivated') return 'warn';
         if (st === 'pending_contract' || st === 'pending_payment') return 'pending';
         if (st === 'pending_profile') {
+          if (!trainerWantsCatalogListing()) return 'ok';
           if (d.already_submitted_for_moderation) return 'pending';
           if (d.tt_minimal_complete && !d.complete) return 'warn';
           if (!d.complete) return 'warn';
@@ -1394,14 +1403,19 @@
       }
 
       /**
-       * После каждого успешного «Сохранить» (и после загрузки фото): синхронизировали state с сервером —
-       * если статус черновик и анкета полная и ещё не в очереди на проверку, отправляем в админ-бот.
-       * Тренер отдельно модерацию не запускает.
+       * После каждого успешного «Сохранить» (и после загрузки фото, и после включения тумблера
+       * каталога): если тренер попросился в каталог, статус черновик, анкета полная и ещё не в
+       * очереди — отправляем в админ-бот.
+       *
+       * Ключевое условие — is_catalog_visible. Заполненная анкета сама по себе не значит
+       * «опубликуйте меня»: тренер может доводить карточку для своих же учеников. Раньше этого
+       * условия не было, и полнота профиля молча превращалась в публикацию.
        */
       function maybeAutoSubmitForModeration() {
         var t = state.trainer;
         var d = state.moderation_readiness || {};
         var st = (t && t.status) ? String(t.status).trim() : '';
+        if (!t || t.is_catalog_visible !== true) return Promise.resolve();
         if (st !== 'pending_profile' || !d.complete || d.already_submitted_for_moderation) {
           return Promise.resolve();
         }
@@ -3092,7 +3106,14 @@
         });
       }
 
-      /** Active trainers: show catalog listing toggle (separate PATCH, not part of profile snapshot). */
+      /**
+       * Catalog listing toggle — shown in every status (separate PATCH, not part of the profile snapshot).
+       *
+       * Раньше блок появлялся только у active. Пока тренер шёл к активации, сказать «в каталог
+       * не хочу» было негде, а анкета уходила на модерацию сама — публикация случалась без
+       * согласия. Теперь переключатель и есть согласие: пока он выключен, на проверку ничего
+       * не отправляется (см. maybeAutoSubmitForModeration и try_submit_trainer_for_moderation_review).
+       */
       function renderCatalogVisibility() {
         var t = state.trainer || {};
         var st = (t.status || '').trim();
@@ -3100,14 +3121,29 @@
         var card = document.getElementById('catalogVisibilityCard');
         var cb = document.getElementById('is_catalog_visible');
         if (!shellTitle || !card || !cb) return;
-        if (st !== 'active') {
-          shellTitle.hidden = true;
-          card.hidden = true;
-          return;
-        }
         shellTitle.hidden = false;
         card.hidden = false;
-        cb.checked = t.is_catalog_visible !== false;
+        var want = t.is_catalog_visible === true;
+        cb.checked = want;
+        cb.disabled = st === 'deactivated';
+
+        var titleEl = card.querySelector('.settings-group-toggle__title');
+        var hintEl = card.querySelector('.settings-group-toggle__hint');
+        if (titleEl) titleEl.textContent = 'Показывать в каталоге';
+        if (!hintEl) return;
+        if (st === 'deactivated') {
+          hintEl.textContent = 'Аккаунт выключен. Восстановление — через поддержку.';
+        } else if (st === 'active') {
+          hintEl.textContent = want
+            ? 'Клиенты находят вас в общем списке. Выключите — останется запись по вашей ссылке.'
+            : 'Вас нет в общем списке. Запись по вашей ссылке работает как обычно.';
+        } else if (want) {
+          hintEl.textContent =
+            'Готовим карточку к проверке. Как только всё будет заполнено, отправим её модератору.';
+        } else {
+          hintEl.textContent =
+            'Пока только по вашей ссылке — это нормально. Включите, когда захотите, чтобы вас находили новые ученики.';
+        }
       }
 
       function renderModeratorFeedbackBanner() {
@@ -3182,6 +3218,14 @@
         } else if (st === 'pending_payment') {
           missTitle.style.display = 'none';
           hint.textContent = 'Следующий шаг — оплата подписки.';
+        } else if (st === 'pending_profile' && !(state.trainer && state.trainer.is_catalog_visible === true)) {
+          /* Тренер не просился в каталог — значит на проверку ничего не уходит, и говорить
+             «осталось заполнить» нечестно: заполнять не нужно, продукт и так работает. */
+          missTitle.style.display = 'none';
+          hint.textContent =
+            'Вы работаете по своей ссылке — этого достаточно, и профиль можно не доводить. ' +
+            'Захотите, чтобы вас находили новые ученики, — включите «Показывать в каталоге» ' +
+            'в разделе «Настройки», и мы подскажем, что нужно для карточки.';
         } else if (st === 'pending_profile') {
           var fbRaw = state.trainer && state.trainer.moderation_feedback;
           var fbTrim = (fbRaw != null && String(fbRaw).trim()) ? String(fbRaw).trim() : '';
@@ -3366,6 +3410,15 @@
         var d = state.moderation_readiness || {};
         var missing = d.missing_fields || [];
         var stTr = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim().toLowerCase() : '';
+        var ringEl = document.getElementById('progressRing');
+        /* Процент заполненности имеет смысл только как «сколько осталось до карточки в каталоге».
+           Тренеру, который в каталог не просился, это не цель, а укор: кабинет у него уже полный.
+           Кольцо возвращается в ту же секунду, когда он включает «Показывать в каталоге». */
+        if (ringEl) {
+          var hideRing = stTr === 'pending_profile' && !trainerWantsCatalogListing();
+          ringEl.hidden = hideRing;
+          if (hideRing) return;
+        }
         var totalCriteria =
           d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
             ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
@@ -5685,12 +5738,27 @@
               }
               if (state.trainer) state.trainer.is_catalog_visible = want;
               haptic('success');
+              renderCatalogVisibility();
               renderModeration();
-              showSaveToast(
-                'Каталог',
-                want ? 'Профиль снова виден в каталоге клиентов' : 'Профиль скрыт из каталога клиентов',
-                'success'
-              );
+              updateProgressRing();
+              var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
+              var body;
+              if (st === 'active') {
+                body = want
+                  ? 'Профиль снова виден в каталоге клиентов'
+                  : 'Профиль скрыт из каталога клиентов';
+              } else {
+                var ready = !!(state.moderation_readiness && state.moderation_readiness.complete);
+                body = want
+                  ? (ready
+                      ? 'Отправляем карточку на проверку — обычно отвечаем в течение рабочего дня'
+                      : 'Готовим карточку к проверке — заполните анкету, и мы отправим её модератору')
+                  : 'Хорошо, в каталог не отправляем. Запись по вашей ссылке работает';
+              }
+              showSaveToast('Каталог', body, 'success');
+              // Включение тумблера — и есть просьба о публикации: если анкета уже полная,
+              // отправляем сразу, чтобы «хочу в каталог» не требовало второго действия.
+              if (want) maybeAutoSubmitForModeration();
             })
             .catch(function() {
               busy = false;

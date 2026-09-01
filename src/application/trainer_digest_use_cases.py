@@ -23,7 +23,7 @@ Two aggregators and one scheduler helper:
 
 Drought ladder order (first match wins; case 7 = silence):
   1. Open catalog requests > 0
-  2. Catalog hidden (``is_catalog_visible = false``)
+  2. Catalog hidden (``status = 'active'`` and ``is_catalog_visible = false`` — opted out, not «never asked»)
   3. No available slots in next 14 days
   4. Dormant clients (≥ 1 completed > 21 days ago, no future bookings)
   5. Profile incomplete (``full_profile_complete = false``)
@@ -47,8 +47,10 @@ from src.application.demand_signals_use_cases import get_signals_lifetime_totals
 from src.infrastructure.db.models import (
     DEMAND_EVENT_CATALOG_FAVORITE,
     DEMAND_EVENT_CONTACT_CLICK,
+    TRAINER_STATUS_ACTIVE,
 )
 from src.infrastructure.repositories.demand_signals_repository import DemandSignalsRepository
+from src.shared.trainer_status import normalize_trainer_status_value
 from src.shared.notification_hours import (
     NOTIFICATION_START_HOUR,
     NOTIFICATION_TZ,
@@ -479,13 +481,18 @@ async def _weekly_drought_block(
         }
 
     r_t = await session.execute(
-        text("SELECT is_catalog_visible FROM trainers WHERE id = :tid"),
+        text("SELECT is_catalog_visible, status FROM trainers WHERE id = :tid"),
         {"tid": trainer_id},
     )
     t_row = r_t.fetchone()
     is_catalog_visible = bool(t_row[0]) if t_row else True
+    # «Включим обратно?» only makes sense for someone who was in the catalog. Since
+    # 0182_catalog_opt_in, a not-yet-approved trainer is hidden because they never asked to be
+    # listed — nudging them weekly about a catalog they did not opt into is exactly the kind of
+    # pressure onboarding v2 removed.
+    is_catalog_eligible = normalize_trainer_status_value(t_row[1]) == TRAINER_STATUS_ACTIVE if t_row else False
 
-    if not is_catalog_visible:
+    if is_catalog_eligible and not is_catalog_visible:
         return {
             "triggered": True,
             "consecutive_skip_days": skip_days,

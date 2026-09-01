@@ -244,7 +244,7 @@ async def _fetch_top_trainer_completed(
             """
             SELECT
                 b.trainer_id,
-                COALESCE(NULLIF(TRIM(p.first_name || ' ' || p.last_name), ''), 'Тренер') AS display_name,
+                COALESCE(NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''), 'Тренер') AS display_name,
                 COUNT(*)::int AS cnt
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id

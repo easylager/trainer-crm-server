@@ -63,7 +63,6 @@ from src.application.trainer_use_cases import (
 from src.infrastructure.repositories.trainer_repository import TrainerRepository
 from src.application.trainer_profile_completeness import moderation_readiness_dict
 from src.infrastructure import s3
-from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
 
@@ -421,18 +420,19 @@ async def patch_trainer_catalog_visibility_for_webapp(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, bool]:
     """
-    Show or hide the trainer in the public client catalog. Only ``status=active`` trainers may change
-    this from the Mini App (onboarding accounts are not listed anyway).
+    The trainer's own opt-in to the public client catalog. Available in every status.
+
+    It used to be ``status=active`` only, on the reasoning that onboarding accounts are not
+    listed anyway. But that left a trainer who had not been approved yet with no way to say
+    «я не хочу в каталог» *before* it happened — and the profile screen queued them for
+    moderation automatically. Turning the switch on is now the act that asks for publication
+    (``try_submit_trainer_for_moderation_review`` refuses while it is off), so it has to be
+    reachable exactly when the trainer is still deciding.
     """
     trainer_id = await _linked_trainer_id(session, principal)
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
-    if (trainer.get("status") or "").strip() != TRAINER_STATUS_ACTIVE:
-        raise HTTPException(
-            status_code=403,
-            detail="Настройка каталога доступна после активации профиля",
-        )
     ok = await set_trainer_catalog_visibility(session, trainer_id, visible=body.is_catalog_visible)
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")

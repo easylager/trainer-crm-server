@@ -98,8 +98,10 @@ class Trainer(Base):
     arena_request_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
     referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
-    # Public client catalog (/api/public/trainers): when false, trainer stays active but is hidden from browse + card.
-    is_catalog_visible: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    # Public client catalog (/api/public/trainers): the trainer's own opt-in. Defaults to false —
+    # filling in a profile is not the same intent as asking to be listed publicly, and listings
+    # additionally require status = 'active'. See migration 0182_catalog_opt_in.
+    is_catalog_visible: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
     # First time trainer copied a client-facing invite or booking link in Mini App (growth funnel).
     client_invite_link_first_copied_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

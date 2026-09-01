@@ -261,7 +261,11 @@ def test_trainer_first_booking_milestone_pass_instead_of_price() -> None:
     assert "💰" in text and "50" in text.split("💰")[1]
 
 
-def test_trainer_first_booking_milestone_missing_profile_venue_and_price() -> None:
+def test_trainer_first_booking_milestone_omits_empty_venue_and_price_blocks() -> None:
+    """
+    Onboarding v2 asks for neither arena nor price, so the celebration must not turn those
+    gaps into «не заполнена в профиле» lines. Missing data = missing block, not a to-do.
+    """
     text = msg.format_trainer_first_booking_milestone_rich_html(
         client_name="Иван",
         client_phone="+375291234567",
@@ -279,9 +283,31 @@ def test_trainer_first_booking_milestone_missing_profile_venue_and_price() -> No
         expected_payment_class="none",
     )
     assert "перенос вашей базы" not in text
-    assert "Не заполнена в профиле" in text
-    assert "не указано в профиле" in text
+    assert "профиле" not in text
+    assert "Площадка" not in text
+    assert "💰" not in text
+    assert "👤 <b>Ученик:</b> Иван" in text
+    assert "ФИО" not in text
     assert text.startswith("✅ <b>Запись создана.</b>")
+
+
+def test_trainer_first_booking_milestone_without_client_phone_has_no_blank_line() -> None:
+    """A client without a phone must not leave an empty row where the phone line was."""
+    text = msg.format_trainer_first_booking_milestone_rich_html(
+        client_name="Иван",
+        client_phone="",
+        date_str="01.09",
+        day_label="Вт",
+        time_str="06:00",
+        arena_name=None,
+        arena_address=None,
+        service_name=None,
+        price_tier_label=None,
+        booking_price_cents=None,
+        created_by_trainer=False,
+    )
+    assert "\n\n\n" not in text
+    assert "👤 <b>Ученик:</b> Иван\n\n" in text
 
 
 def test_trainer_confirmed_echo_pass_instead_of_price() -> None:

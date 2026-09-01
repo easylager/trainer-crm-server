@@ -405,7 +405,9 @@ class TrainerRepository:
             "photo_pending": raw_photo_pend if isinstance(raw_photo_pend, dict) else None,
             "primary_arena_id": row[8] if len(row) > 8 else None,
             "schedule_grid_step_minutes": int(row[9]) if len(row) > 9 and row[9] is not None else 15,
-            "is_catalog_visible": bool(row[10]) if len(row) > 10 and row[10] is not None else True,
+            # Fail closed: an unreadable flag must not publish a card the trainer did not
+            # ask for (opt-in since 0182_catalog_opt_in).
+            "is_catalog_visible": bool(row[10]) if len(row) > 10 and row[10] is not None else False,
             "push_notification_start_hour": int(row[11]) if len(row) > 11 and row[11] is not None else None,
             "push_notification_end_hour": int(row[12]) if len(row) > 12 and row[12] is not None else None,
             "digest_enabled": bool(row[13]) if len(row) > 13 and row[13] is not None else True,

@@ -1199,7 +1199,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             """
             SELECT
                 c.id,
-                COALESCE(TRIM(c.first_name || ' ' || c.last_name), 'Клиент') AS name,
+                COALESCE(NULLIF(TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')), ''), 'Клиент') AS name,
                 COALESCE(c.phone, '') AS phone,
                 COUNT(*) AS cnt,
                 COALESCE(SUM(

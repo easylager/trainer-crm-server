@@ -32,7 +32,7 @@ async def _sender_row(session: AsyncSession, *, telegram_id: int, from_role: str
         r = await session.execute(
             text(
                 """
-                SELECT COALESCE(NULLIF(TRIM(tp.first_name || ' ' || tp.last_name), ''), ''),
+                SELECT COALESCE(NULLIF(TRIM(COALESCE(tp.first_name, '') || ' ' || COALESCE(tp.last_name, '')), ''), ''),
                        NULLIF(TRIM(t.telegram_username), ''), t.telegram_id
                 FROM trainers t
                 LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id

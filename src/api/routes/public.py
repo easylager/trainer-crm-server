@@ -177,7 +177,8 @@ def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
         return False
     if (trainer.get("status") or "").strip().lower() != "active":
         return False
-    return bool(trainer.get("is_catalog_visible", True))
+    # Fail closed: opt-in since 0182_catalog_opt_in — a missing flag must not expose a card.
+    return bool(trainer.get("is_catalog_visible", False))
 
 
 # Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients

@@ -602,6 +602,17 @@ async def try_submit_trainer_for_moderation_review(
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return {"ok": False, "error": "not_found"}
+    # Publication is the trainer's decision, and filling in a profile is not that decision.
+    # Without this gate the Mini App auto-submitted on every save, so a trainer who completed
+    # their card to look good to their own students was queued for the public catalog and
+    # published on approval — never having been asked. See migration 0182_catalog_opt_in.
+    if not bool(trainer.get("is_catalog_visible", False)):
+        return {
+            "ok": True,
+            "noop": True,
+            "reason": "catalog_opt_out",
+            "trainer_status": (trainer.get("status") or "").strip(),
+        }
     complete, missing = analyze_moderation_submission_readiness(trainer)
     if not complete:
         return {
@@ -724,7 +735,7 @@ async def list_public_trainer_reviews(
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
         return None
-    if not bool(trainer.get("is_catalog_visible", True)):
+    if not bool(trainer.get("is_catalog_visible", False)):
         return None
     return await TrainerRepository(session).list_public_ratings_for_trainer(
         trainer_id, limit=limit, offset=offset

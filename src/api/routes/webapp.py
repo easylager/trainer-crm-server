@@ -1917,7 +1917,7 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
             # Fetch trainer display name for the message
             r = await session.execute(
                 text("""
-                    SELECT COALESCE(TRIM(tp.first_name || ' ' || tp.last_name), 'Тренер')
+                    SELECT COALESCE(NULLIF(TRIM(COALESCE(tp.first_name, '') || ' ' || COALESCE(tp.last_name, '')), ''), 'Тренер')
                     FROM trainers t
                     LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
                     WHERE t.id = :tid
