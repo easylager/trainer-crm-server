@@ -219,11 +219,23 @@
         return base.slice(0, lim - 1).trimEnd() + '…';
       }
 
-      /** Pill for non-primary venue — same chip model as service badges on booking rows. */
+      /** Several linked venues — show which arena a slot belongs to. One arena: omit. */
+      function scheduleEditorIsMultiArena() {
+        return (state.trainerScheduleArenas || []).length > 1;
+      }
+
+      /** 📍 line — same as booking rows, only when the trainer has more than one arena. */
+      function scheduleEditorSlotVenueLine(s) {
+        if (!scheduleEditorIsMultiArena() || !s) return '';
+        var v = String(s.venue_label || s.arena_label || scheduleEditorArenaNameById(s.arena_id) || '').trim();
+        var vt = v ? escapeHtml(v) : '<span class="venue-muted">не указано</span>';
+        return '<div class="slot-venue">📍 ' + vt + '</div>';
+      }
+
+      /** Compact venue chip for precise-slot tags when multi-arena. */
       function scheduleEditorArenaChipHtml(arenaId, arenaLabel) {
-        var primaryId = scheduleEditorPrimaryArenaId();
+        if (!scheduleEditorIsMultiArena()) return '';
         var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
-        if (aid == null || primaryId == null || aid === primaryId) return '';
         var full = String(arenaLabel || scheduleEditorArenaNameById(aid) || '').trim();
         if (!full) return '';
         var short = scheduleEditorTruncateArenaLabel(full, 13);
@@ -7501,9 +7513,6 @@
         if (s.has_sandbox_booking && !groupHub) {
           html += '<span class="schedule-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>';
         }
-        if (!bookedClick && !groupHub && !cohortSlot) {
-          html += scheduleEditorArenaChipHtml(s.arena_id, s.arena_label);
-        }
         html += '</div>';
         if (serviceBadge) {
           html += '<div class="slot-service-badge-row">' + serviceBadge + '</div>';
@@ -7525,12 +7534,15 @@
           html += '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>';
         }
         if (bookedClick) {
-          const v = s.venue_label;
+          const v = s.venue_label || s.arena_label || scheduleEditorArenaNameById(s.arena_id);
           const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
           html += '<div class="slot-venue">📍 ' + vt + '</div>';
           if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
-        } else if (occ > 0 && s.client_preview && !groupHub && !cohortSlot) {
-          html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+        } else if (!groupHub && !cohortSlot) {
+          if (!(cap > 1 && String(s.arena_label || '').trim())) {
+            html += scheduleEditorSlotVenueLine(s);
+          }
+          if (occ > 0 && s.client_preview) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
         } else if (groupHub && s.client_preview) {
           html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
         }

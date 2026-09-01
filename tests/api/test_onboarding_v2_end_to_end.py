@@ -1,0 +1,167 @@
+"""
+Сквозной тест главного инварианта онбординга v2.
+
+> Модерация решает видимость в каталоге, а не право тренера работать.
+
+Проверяем оба конца одновременно, потому что порознь они ничего не доказывают:
+тренер без модерации и почти без профиля проходит первый экран, а его собственный
+ученик по личной ссылке действительно видит слоты и может записаться — при этом
+в публичном каталоге этого тренера нет.
+
+Если этот тест когда-нибудь упадёт, значит гейт вернулся.
+"""
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from unittest.mock import patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+
+from src.api.app import app
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+
+QUICK_SETUP_URL = "/api/webapp/trainer/onboarding/quick-setup"
+
+
+def _fresh_tg_id() -> int:
+    return 5_800_000_000 + (uuid.uuid4().int % 4_000_000_000)
+
+
+@contextmanager
+def _as_trainer(telegram_id: int) -> Iterator[None]:
+    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=fake):
+        yield
+
+
+@contextmanager
+def _as_client(telegram_id: int) -> Iterator[None]:
+    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=fake):
+        yield
+
+
+@pytest.mark.asyncio
+async def test_unmoderated_trainer_can_be_booked_but_is_not_in_the_catalog(
+    app_use_test_db, db_session
+) -> None:
+    trainer_tg = _fresh_tg_id()
+    client_tg = _fresh_tg_id()
+
+    # 1. Ровно то, что создаёт /start: строка тренера и привязанный Telegram. Больше ничего.
+    r = await db_session.execute(
+        text("INSERT INTO trainers (status) VALUES ('pending_profile') RETURNING id")
+    )
+    trainer_id = int(r.fetchone()[0])
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": trainer_tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    row = r.fetchone()
+    if not row:
+        pytest.skip("need services in DB")
+    service_id = int(row[0])
+
+    # 2. Первый экран. Никакой анкеты, города, площадки, телефона и фото.
+    with _as_trainer(trainer_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            setup = await c.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": [{"day_of_week": d, "hours": [7, 18]} for d in range(7)],
+                    "duration_minutes": 60,
+                },
+            )
+    assert setup.status_code == 200, setup.text
+    assert setup.json()["open_slots_ahead"] > 0
+
+    # ``quick-setup`` включает welcome-триал со всеми модулями — без модуля online
+    # обещание «ученик запишется сам» было бы невыполнимым.
+    r = await db_session.execute(
+        text("SELECT modules FROM trainer_subscriptions WHERE trainer_id = :t"),
+        {"t": trainer_id},
+    )
+    mods = r.scalar() or {}
+    assert mods.get("online") is True, "онлайн-запись должна работать с первой минуты триала"
+
+    # 3. Ученик по личной ссылке тренера видит слоты и может записаться.
+    with _as_client(client_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            slots = await c.get(
+                f"/api/webapp/client/slots?trainer_id={trainer_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert slots.status_code == 200, slots.text
+    body = slots.json()
+    assert body["online_booking_available"] is True
+    assert len(body["slots"]) > 0, "ученик должен видеть свободное время"
+
+    # 4. И при этом тренера нет в публичном каталоге — модерацию он не проходил.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        catalog = await c.get("/api/public/trainers?limit=200")
+    assert catalog.status_code == 200
+    payload = catalog.json()
+    rows = payload if isinstance(payload, list) else (payload.get("trainers") or payload.get("items") or [])
+    assert trainer_id not in [t.get("id") for t in rows], "в каталог пускает только модерация"
+
+
+@pytest.mark.asyncio
+async def test_the_first_screen_never_demands_a_profile(app_use_test_db, db_session) -> None:
+    """
+    Регрессия на возврат гейта: после первого экрана у тренера по-прежнему нет ни города,
+    ни телефона, ни описания, ни площадки — и это не мешает ему работать.
+    """
+    trainer_tg = _fresh_tg_id()
+    r = await db_session.execute(
+        text("INSERT INTO trainers (status) VALUES ('pending_profile') RETURNING id")
+    )
+    trainer_id = int(r.fetchone()[0])
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": trainer_tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    row = r.fetchone()
+    if not row:
+        pytest.skip("need services in DB")
+
+    with _as_trainer(trainer_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            await c.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [int(row[0])],
+                    "days": [{"day_of_week": 0, "hours": [9]}],
+                    "duration_minutes": 60,
+                },
+            )
+            checklist = await c.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+
+    r = await db_session.execute(
+        text("SELECT city_id, phone, description FROM trainer_profiles WHERE trainer_id = :t"),
+        {"t": trainer_id},
+    )
+    city_id, phone, description = r.fetchone()
+    assert city_id is None and not phone and not description
+
+    data = checklist.json()
+    assert data["schedule_unlocked"] is True
+    assert data["slots_locked_reason"] is None
+    assert (data.get("next_step") or {}).get("key") == "share_link", (
+        "следующий шаг после расписания — отдать ссылку ученику, а не заполнять анкету"
+    )

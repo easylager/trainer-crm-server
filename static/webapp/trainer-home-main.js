@@ -547,44 +547,31 @@
         return false;
       }
 
-      /** Schedule, clients, etc. — only after trainer account is active (profile stays open for onboarding). */
+      /**
+       * Может ли тренер работать в разделах. Онбординг v2: может любой привязанный
+       * не деактивированный аккаунт — модерация решает только видимость в каталоге.
+       */
       function canOpenTrainerSectionsSync() {
         if (!getInitData()) return false;
-        /* Checklist / snapshot first: same API answers user sees in Network; do NOT require TrainerMiniAppGate. */
+        if (hubOnboardingData && hubOnboardingData.schedule_unlocked) return true;
+        if (trainerAccessSnapshot && trainerAccessSnapshot.schedule_unlocked) return true;
         if (hubDataSaysTrainerActive(hubOnboardingData)) return true;
-        if (hubDataSaysTrainerActive(trainerAccessSnapshot)) return true;
-        if (!window.TrainerMiniAppGate) return false;
-        if (!trainerAccessSnapshot) return false;
-        return TrainerMiniAppGate.isActive(trainerAccessSnapshot);
+        return hubDataSaysTrainerActive(trainerAccessSnapshot);
       }
 
-      function showTrainerOnboardingNavAlert() {
-        var snap = trainerAccessSnapshot || {};
-        var st = String(snap.access_state || '')
-          .trim()
-          .toLowerCase();
-        var msg =
-          st === 'booking_ready' || snap.schedule_unlocked
-            ? 'Расписание уже доступно: откройте его с главной. Для каталога позже дополните анкету и пройдите проверку — раздел «Первые шаги».'
-            : 'Анкета ещё не готова: завершите шаги в блоке «Быстрый старт» и дождитесь активации.';
-        if (tg && typeof tg.showAlert === 'function') tg.showAlert(msg);
-        else alert(msg);
-      }
-
-      /** While «Быстрый старт» is visible, the «Профиль» tile is off — use strip CTA + ?onboarding=blocks. */
-      function alertHubProfileUseFirstSteps() {
-        var msg =
-          'Откройте анкету через кнопку в блоке «Быстрый старт» сверху — шаг «Заполни анкету» или «Продолжить».';
-        if (tg && typeof tg.showAlert === 'function') tg.showAlert(msg);
-        else alert(msg);
-      }
-
+      /**
+       * Только самый первый шаг — «настройте расписание». Пока он не сделан, у тренера
+       * действительно нет ничего, что стоило бы показать рядом: ни слотов, ни записей,
+       * ни цифр. Хаб в этот момент схлопывается до одной карточки.
+       *
+       * Все остальные карточки («отправьте ссылку», «где встречаетесь», «в каталог»)
+       * живут в хабе неделями — прятать за ними расписание и записи было бы враньём
+       * про состояние практики. Поэтому предикат узкий, а не «онбординг активен».
+       */
       function hubOnboardingStripVisible() {
-        var strip = document.getElementById('onboardingStrip');
-        if (!strip) return false;
-        if (strip.hasAttribute('hidden')) return false;
-        if (String(strip.style.display || '').toLowerCase() === 'none') return false;
-        return true;
+        var d = hubOnboardingData;
+        var step = d && d.next_step;
+        return !!(step && step.key === 'setup_week');
       }
 
       /** Greeting is the welcome; «Первые шаги» below is the action — no second hero. */
@@ -609,10 +596,21 @@
         return (hubLastTodayRemaining || 0) > 0 || (hubLastWeekRemaining || 0) > 0;
       }
 
-      /** True when hub should show the intentional empty-day canvas (not onboarding, no upcoming list). */
+      /**
+       * True when hub should show the intentional empty-day canvas (not onboarding, no upcoming list).
+       *
+       * Молчит, пока на экране есть карточка «следующий шаг» (см. hubNextStep / trainer_next_step.py).
+       * Раньше здесь молча дублировалась ровно та же тема — заголовок «Сегодня свободно» и текст
+       * «отправьте клиентам ссылку, и они запишутся сами» показывались ПОД карточкой, которая
+       * говорит о том же самом другими словами, плюс отдельная кнопка «Ссылка на запись» в плитках
+       * ниже. Одна и та же мысль трижды на одном экране — не забота, а шум. NextStep — единственный
+       * источник «что делать дальше», пока он есть; когда его нет (практика уже идёт своим ходом,
+       * просто сегодня тихий день), Day Canvas возвращается к своей настоящей роли.
+       */
       function shouldShowHubDayCanvas() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
+        if (hubOnboardingData && hubOnboardingData.next_step) return false;
         if (hubLastUpcomingListCount > 0) return false;
         if (hubHasUpcomingSessions()) return false;
         if (hubLastBookingsDays === null) return false;
@@ -1217,151 +1215,45 @@
         renderHubStatusMarkers();
       }
 
-      function hubTrainerProfileNavAllowedDuringOnboarding(pathWithQuery) {
-        var raw = String(pathWithQuery || '');
-        var base = raw.split('#')[0];
-        var q = base.indexOf('?') >= 0 ? base.slice(base.indexOf('?') + 1) : '';
-        return q.indexOf('onboarding=blocks') !== -1;
-      }
-
-      /** True while strip is visible and hub priority actions are locked (only profile step is active). */
-      function hubOnboardingNavBlocksGeneralNavigation() {
-        if (!hubOnboardingStripVisible()) return false;
-        var d = hubOnboardingData || null;
-        if (!d) return true;
-        var active = !!(d.is_active || hubDataSaysTrainerActive(d));
-        var ttOk = !!d.tt_minimal_complete;
-        var stage1Done = active ? !!d.profile_complete : ttOk;
-        var schedUnlocked = !!(d.schedule_unlocked || d.is_active);
-        var bookLocked = !schedUnlocked || (!active && !ttOk);
-        return !stage1Done || bookLocked;
-      }
-
-      function alertHubOnboardingStepOrder() {
-        var msg = 'Сейчас доступен только текущий шаг в блоке «Быстрый старт» сверху.';
-        if (tg && typeof tg.showAlert === 'function') tg.showAlert(msg);
-        else alert(msg);
-      }
-
       function navigateToImpl(pathWithQuery) {
         var url = webappBasePath() + pathWithQuery;
         url = withInit(url);
         window.location.href = url;
       }
 
+      /**
+       * Онбординг v2 ничего не блокирует. Функция осталась точкой синхронизации состояния
+       * после обновления доступа; кнопка «поделиться» здесь больше не выключается —
+       * поделиться ссылкой это и есть главное действие онбординга.
+       */
       function applyHubLockedState() {
-        var stripOn = hubOnboardingStripVisible();
-
         var shareBtn = document.getElementById('hubShareBookingLinkBtn');
         if (shareBtn && !shareBtn.hasAttribute('hidden')) {
-          shareBtn.classList.toggle('hub-share-btn--onboarding-lock', stripOn);
-          if (stripOn) {
-            shareBtn.setAttribute('disabled', 'disabled');
-            shareBtn.setAttribute('aria-disabled', 'true');
-          } else {
-            shareBtn.removeAttribute('disabled');
-            shareBtn.setAttribute('aria-disabled', 'false');
-          }
+          shareBtn.classList.remove('hub-share-btn--onboarding-lock');
+          shareBtn.removeAttribute('disabled');
+          shareBtn.setAttribute('aria-disabled', 'false');
         }
       }
 
+      /**
+       * Онбординг v2: раздел не может быть «закрыт незаполненной анкетой» — таких состояний
+       * больше нет. Остался единственный настоящий запрет: деактивированный аккаунт,
+       * и его проверяет сервер. Навигация просто ведёт туда, куда нажали.
+       */
       function navigateTo(pathWithQuery) {
-        var raw = String(pathWithQuery || '');
-        if (isProfilePath(raw)) {
-          if (hubOnboardingStripVisible() && !hubTrainerProfileNavAllowedDuringOnboarding(raw)) {
-            if (hubTrainerAwaitingFirstBooking()) {
-              openHubFirstBookingSoftGate('profile');
-            } else {
-              alertHubProfileUseFirstSteps();
-            }
-            return;
-          }
-          navigateToImpl(raw);
-          return;
-        }
-        if (hubOnboardingNavBlocksGeneralNavigation()) {
-          alertHubOnboardingStepOrder();
-          return;
-        }
-        if (canOpenTrainerSectionsSync()) {
-          completeHubSectionNavigation(pathWithQuery);
-          return;
-        }
-        /* After moderation, is_active flips on the server while WebView keeps stale JS state — always refetch before blocking. */
-        if (!getInitData() || !window.TrainerMiniAppGate) {
-          showTrainerOnboardingNavAlert();
-          return;
-        }
-        Promise.all([
-          window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
-            return null;
-          }),
-          fetchTrainerProfileForHub(),
-        ])
-          .then(function(results) {
-            var a = results[0];
-            var prof = results[1];
-            trainerAccessSnapshot = a;
-            mergeHubAccessFromProfilePayload(prof);
-            syncHubForceClientChatRelayFromTrainerAccess();
-            applyHubLockedState();
-            if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) {
-              completeHubSectionNavigation(pathWithQuery);
-            } else {
-              showTrainerOnboardingNavAlert();
-            }
-          });
+        navigateToImpl(String(pathWithQuery || ''));
       }
 
       function navigateToWithHash(path, hash) {
         var p = String(path || '').replace(/^\//, '');
-        if (p === 'trainer-profile' && hubOnboardingStripVisible()) {
-          var h = String(hash || '').replace(/^#/, '');
-          var d = hubOnboardingData;
-          var allowMod =
-            d &&
-            h === 'moderation' &&
-            ((d.profile_complete && !d.is_active) ||
-              (d.is_active && !d.profile_complete) ||
-              (!d.is_active && !d.profile_complete && d.tt_minimal_complete));
-          if (!allowMod) {
-            if (hubTrainerAwaitingFirstBooking()) {
-              openHubFirstBookingSoftGate('profile');
-            } else {
-              alertHubProfileUseFirstSteps();
-            }
-            return;
-          }
-        }
-        var url = webappBasePath() + p;
-        url = withInit(url);
+        var url = withInit(webappBasePath() + p);
         if (hash) url += '#' + String(hash).replace(/^#/, '');
         window.location.href = url;
       }
 
-      /** Reuses the same access refresh path as navigateTo, but runs a callback instead of route switch. */
+      /** Осталось как точка расширения; онбординг больше не является причиной отказа. */
       function ensureTrainerSectionsAccess(onAllowed) {
-        if (canOpenTrainerSectionsSync()) {
-          onAllowed();
-          return;
-        }
-        if (!getInitData() || !window.TrainerMiniAppGate) {
-          showTrainerOnboardingNavAlert();
-          return;
-        }
-        Promise.all([
-          window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
-            return null;
-          }),
-          fetchTrainerProfileForHub(),
-        ]).then(function(results) {
-          trainerAccessSnapshot = results[0];
-          mergeHubAccessFromProfilePayload(results[1]);
-          syncHubForceClientChatRelayFromTrainerAccess();
-          applyHubLockedState();
-          if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) onAllowed();
-          else showTrainerOnboardingNavAlert();
-        });
+        if (typeof onAllowed === 'function') onAllowed();
       }
 
       function onboardingBookingStepDone(data) {
@@ -1374,257 +1266,39 @@
         );
       }
 
-      function onboardingAllComplete(data) {
-        if (!data) return false;
-        var bookingOk = onboardingBookingStepDone(data);
-        if (!bookingOk) return false;
-        if (data.is_active && data.profile_complete) return true;
-        // Не-active: путь закрыт только когда анкета ушла на проверку — иначе тренер
-        // остаётся вне каталога, а вести его дальше уже нечем.
-        if (
-          !data.is_active &&
-          data.schedule_unlocked &&
-          data.tt_minimal_complete &&
-          data.moderation_submitted
-        )
-          return true;
-        return false;
+      function hubCatalogOnboardingSkipKey() {
+        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
+        if (id == null && hubOnboardingData && hubOnboardingData.trainer_id != null) {
+          id = hubOnboardingData.trainer_id;
+        }
+        if (id == null) return '';
+        return 'hub_onboarding_catalog_skip_' + String(id);
       }
 
-      /**
-       * «Быстрый старт» виден, шаг 1 и расписание пройдены, но ещё нет первой записи —
-       * сетку не блокируем; при переходе показываем soft gate вместо жёсткого lock.
+      function hasSkippedCatalogOnboarding() {
+        try {
+          var k = hubCatalogOnboardingSkipKey();
+          return !!(k && localStorage.getItem(k) === '1');
+        } catch (eSkip) {
+          return false;
+        }
+      }
+
+      function persistSkippedCatalogOnboarding() {
+        try {
+          var k = hubCatalogOnboardingSkipKey();
+          if (k) localStorage.setItem(k, '1');
+        } catch (ePersist) { /* */ }
+        dismissHubInboxRhythmItem('catalog_publication');
+      }
+
+      /*
+       * Модалка «сначала первая запись» удалена вместе с навигационным гейтом:
+       * разделы больше не закрываются онбордингом, поэтому объяснять запрет нечем и незачем.
        */
-      function hubTrainerAwaitingFirstBooking() {
-        if (!hubOnboardingStripVisible()) return false;
-        if (hubOnboardingNavBlocksGeneralNavigation()) return false;
-        return !onboardingBookingStepDone(hubOnboardingData);
-      }
-
-      function hubPathToFirstBookingSoftGateId(pathWithQuery) {
-        var base = String(pathWithQuery || '')
-          .split('?')[0]
-          .split('#')[0]
-          .replace(/^\//, '')
-          .toLowerCase();
-        if (base === 'trainer-clients') return 'clients';
-        if (base === 'trainer-groups') return 'groups';
-        if (base === 'trainer-requests') return 'requests';
-        if (base === 'schedule-editor') return 'schedule';
-        if (base === 'trainer-profile') return 'profile';
-        if (base === 'trainer-pass-products') return 'passes';
-        if (base === 'trainer-subscription') return 'subscription';
-        if (base === 'trainer-stats') return 'stats';
-        if (base === 'trainer-referral') return 'referral';
-        return null;
-      }
-
-      var HUB_SOFT_GATE_FIRST_BOOKING_INTRO = 'После первой записи здесь будет:';
-      var HUB_SOFT_GATE_FIRST_BOOKING_FOOTER =
-        'Создайте первую запись (можно тестовую), чтобы посмотреть как это работает.';
-
-      var HUB_FIRST_BOOKING_SOFT_GATE = {
-        _default: {
-          title: 'Раздел после первой записи',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'связка записи с клиентом и расписанием',
-            'напоминания и статусы',
-            'история и быстрые действия',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        clients: {
-          title: '👥 Клиенты',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'список клиентов',
-            'заметки по каждому',
-            'история занятий',
-            'быстрый контакт',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        groups: {
-          title: '👥 Группы',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'набор и состав участников',
-            'расписание групповых слотов',
-            'заполненность и статусы',
-            'продукты и оплата',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        requests: {
-          title: '📥 Заявки клиентов',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'новые отклики и вопросы',
-            'быстрый ответ и переход к записи',
-            'меньше ручного поиска в чатах',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        schedule: {
-          title: '📅 Расписание, шаблоны, история записей',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'слоты и недельный шаблон',
-            'история записей и занятых окон',
-            'напоминания и статусы в одном месте',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        profile: {
-          title: '👤 Профиль и настройки',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'услуги, цены и площадки',
-            'видимость в каталоге',
-            'модерация и актуальные данные',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        passes: {
-          title: '🎫 Абонементы и сертификаты',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'продукты: абонементы и подарочные сертификаты',
-            'выдача, списание и остатки по клиентам',
-            'связь с расписанием',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        subscription: {
-          title: '💳 Тариф и оплата',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'текущий план и продление',
-            'доступные модули (группы, аналитика)',
-            'апгрейд, когда вырастет поток',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        stats: {
-          title: '📈 Показатели и динамика',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'загрузка и динамика записей',
-            'метрики по вашему тарифу',
-            'цифры на реальных данных, не «пустые» графики',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-        referral: {
-          title: '🎁 Рефералы',
-          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
-          bullets: [
-            'ваша персональная ссылка или код',
-            'бонусы за активных приглашённых',
-            'итоги в одном разделе',
-          ],
-          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
-        },
-      };
-
-      function closeHubFirstBookingSoftGate() {
-        var m = document.getElementById('hubFirstBookingSoftGate');
-        if (!m) return;
-        m.style.display = 'none';
-        m.setAttribute('aria-hidden', 'true');
-      }
-
-      function openHubFirstBookingSoftGate(gateId) {
-        var key = HUB_FIRST_BOOKING_SOFT_GATE[gateId] ? gateId : '_default';
-        var def = HUB_FIRST_BOOKING_SOFT_GATE[key];
-        var m = document.getElementById('hubFirstBookingSoftGate');
-        var tEl = document.getElementById('hubSoftGateTitle');
-        var introEl = document.getElementById('hubSoftGateIntro');
-        var listEl = document.getElementById('hubSoftGateList');
-        var footEl = document.getElementById('hubSoftGateFooter');
-        var skipEl = document.getElementById('hubSoftGateSkip');
-        if (!m || !tEl || !introEl || !listEl || !footEl) return;
-        tEl.textContent = def.title;
-        introEl.textContent = def.intro;
-        listEl.innerHTML = (def.bullets || []).map(function(b) {
-          return '<li>' + escapeHtml(b) + '</li>';
-        }).join('');
-        footEl.textContent = def.footer;
-        if (skipEl) {
-          skipEl.hidden = true;
-          skipEl.onclick = null;
-          skipEl.textContent = '';
-          if (key === 'profile') {
-            skipEl.hidden = false;
-            skipEl.textContent = 'Открыть анкету';
-            skipEl.onclick = function() {
-              closeHubFirstBookingSoftGate();
-              navigateToImpl('trainer-profile?onboarding=blocks');
-            };
-          } else if (key === 'schedule') {
-            skipEl.hidden = false;
-            skipEl.textContent = 'Только открыть расписание';
-            skipEl.onclick = function() {
-              closeHubFirstBookingSoftGate();
-              navigateToImpl('schedule-editor');
-            };
-          } else if (key === 'subscription') {
-            skipEl.hidden = false;
-            skipEl.textContent = 'Перейти к тарифу и оплате';
-            skipEl.onclick = function() {
-              closeHubFirstBookingSoftGate();
-              navigateToImpl('trainer-subscription?v=20260450');
-            };
-          }
-        }
-        m.style.display = 'flex';
-        m.setAttribute('aria-hidden', 'false');
-      }
-
-      function wireHubFirstBookingSoftGate() {
-        var m = document.getElementById('hubFirstBookingSoftGate');
-        if (!m || m.dataset.wiredHubFirstBookingSoftGate === '1') return;
-        m.dataset.wiredHubFirstBookingSoftGate = '1';
-        var primary = document.getElementById('hubSoftGateCtaPrimary');
-        var sandbox = document.getElementById('hubSoftGateCtaSandbox');
-        var closeBtn = document.getElementById('hubSoftGateClose');
-        if (closeBtn) {
-          closeBtn.onclick = function() {
-            closeHubFirstBookingSoftGate();
-          };
-        }
-        m.onclick = function(ev) {
-          if (ev.target === m) closeHubFirstBookingSoftGate();
-        };
-        if (primary) {
-          primary.onclick = function() {
-            closeHubFirstBookingSoftGate();
-            hubQuickBookIsSandbox = false;
-            ensureTrainerSectionsAccess(function() {
-              openHubQuickBookClientFlowFirst();
-            });
-          };
-        }
-        if (sandbox) {
-          sandbox.onclick = function() {
-            closeHubFirstBookingSoftGate();
-            hubQuickBookIsSandbox = true;
-            ensureTrainerSectionsAccess(function() {
-              openHubQuickBookClientFlowFirst();
-            });
-          };
-        }
-      }
 
       function completeHubSectionNavigation(pathWithQuery) {
-        var raw = String(pathWithQuery || '');
-        var gid = hubPathToFirstBookingSoftGateId(raw);
-        if (hubTrainerAwaitingFirstBooking() && gid) {
-          openHubFirstBookingSoftGate(gid);
-          return;
-        }
-        navigateToImpl(raw);
+        navigateToImpl(String(pathWithQuery || ''));
       }
 
       function parseNonNegativeInt(v) {
@@ -1806,14 +1480,16 @@
         if (!d || !getInitData()) return out;
 
         var active = !!d.is_active;
-        var complete = onboardingAllComplete(d);
 
         /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock.
          * Пока полоса онбординга видна, путь в каталог ведёт её третий шаг — хинт был бы дублем
          * того же действия, к тому же закрываемым навсегда. */
+        /* Карточка «следующий шаг» — единственный источник «что делать дальше».
+           Пока она на экране, ритм-подсказка про каталог не дублирует её. */
         if (
           onboardingBookingStepDone(d) &&
-          !hubOnboardingStripVisible() &&
+          !d.next_step &&
+          !hasSkippedCatalogOnboarding() &&
           !isRhythmHintDismissed('catalog_publication')
         ) {
           var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
@@ -1846,7 +1522,13 @@
           }
         }
 
-        if (!active || !complete) return out;
+        /* Онбординг v2: тот же баг, что был на сервере (см. trainer_hub_action_inbox.py) —
+           это клиентский фолбэк, срабатывающий, только если bootstrap не прислал
+           action_inbox (partial_errors / очень ранний рендер). is_active теперь значит
+           «в каталоге», а не «может работать», и держится False неделями у рабочего
+           тренера. Гейт — по наличию расписания, как и на сервере. */
+        var hasSchedule = !!(d.weekly_template_count > 0 || d.has_future_slots);
+        if (!hasSchedule) return out;
 
         /* Growth loop: referral accrual (cap shown on referral page) — show even in Lead Mode. */
         if (!isRhythmHintDismissed('referral_growth')) {
@@ -2094,28 +1776,14 @@
           });
         }
 
-        // Universal invite link is available to all trainers (no booking tier gate)
-        {
-          var hasSomethingToShare =
-            wd >= 1 ||
-            !!d.has_future_slots ||
-            !!d.has_future_available_slots ||
-            !!d.has_any_booking ||
-            !!d.has_upcoming_booking ||
-            !!d.has_confirmed_booking;
-          var eligibleForShare =
-            complete || (!!d.is_active && onboardingBookingStepDone(d));
-          if (eligibleForShare && hasSomethingToShare) {
-            out.push({
-              id: 'share_link',
-              priority: 72,
-              text:
-                'Поделитесь пригласительной ссылкой с клиентами. Кнопка со значком связи справа вверху.',
-              ctaLabel: 'Скопировать ссылку',
-              action: 'share_link',
-            });
-          }
-        }
+        /*
+         * «Поделитесь ссылкой» здесь больше не дублируется. До онбординга v2 это был один
+         * из growth-хинтов в общем списке (id share_link, priority 72), делящий место
+         * с рефералкой и remind-хинтами. Теперь у этого сообщения есть выделенная карточка
+         * «следующий шаг» (см. trainer_next_step.py, STEP_SHARE_LINK) —
+         * она уже единственная и недвусмысленная. Показать то же самое ещё и в общем списке
+         * значило бы дважды сказать одно и то же на одном экране, только тише второй раз.
+         */
 
         /* Weekly template: do not gate on _last_shown — that hid the candidate for 10d after any render and left only slot hints. */
         /* Weekly template = onboarding before «maintenance» slot nudges — higher priority than slots_this/next. */
@@ -2250,13 +1918,10 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
+          /* Каталог — единственное, ради чего теперь заполняют анкету, поэтому ведём сразу
+             во вкладку статуса, где видно, чего не хватает карточке. */
           var od2 = hubOnboardingData;
-          if (od2 && !od2.is_active && od2.tt_minimal_complete && !od2.profile_complete) {
-            /* TTV already done — ?onboarding=blocks would finish the tour with zero steps and redirect home. */
-            navigateToWithHash('trainer-profile', 'moderation');
-            return;
-          }
-          if (od2 && od2.is_active && !od2.profile_complete) {
+          if (od2 && !od2.profile_complete) {
             navigateToWithHash('trainer-profile', 'moderation');
             return;
           }
@@ -2401,7 +2066,15 @@
 
       function buildHubInboxItems() {
         if (!getInitData()) return [];
-        if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items) && hubServerActionInbox.items.length) {
+        /*
+         * Раньше здесь стояла проверка `.items.length`, из-за которой сервер, честно ответивший
+         * «сейчас показывать нечего» (пустой массив), выглядел неотличимо от «данных ещё нет» —
+         * и клиент пересчитывал список заново своей собственной, более старой логикой. Так
+         * рефералка (см. trainer_hub_action_inbox.py) снова появлялась в самый первый день
+         * онбординга, хотя сервер её уже отфильтровал. Доверяем серверу, если он вообще ответил —
+         * array present, а не array non-empty.
+         */
+        if (hubServerActionInbox && Array.isArray(hubServerActionInbox.items)) {
           var mapped = hubServerActionInbox.items.map(mapServerInboxItem).filter(Boolean);
           mapped = mapped.filter(function(it) {
             return it.kind !== 'rhythm' || !isRhythmHintDismissed(it.id);
@@ -2535,7 +2208,7 @@
         var scheduleBadge = hubLastPendingCount > 0 ? hubLastPendingCount : 0;
         var requestsBadge = hubRequestsStatReady && hubLastNewRequestsCount > 0 ? hubLastNewRequestsCount : 0;
         var profileBadge = 0;
-        if (d && !isRhythmHintDismissed('catalog_publication')) {
+        if (d && !hasSkippedCatalogOnboarding() && !isRhythmHintDismissed('catalog_publication')) {
           var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
           var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
           if (!inPublicCatalog && onboardingBookingStepDone(d)) {
@@ -2978,6 +2651,11 @@
         renderHubSummaryHints();
       }
 
+      /**
+       * Онбординг v2. Чеклиста больше нет — сервер присылает готовую карточку
+       * «следующий шаг» (или null). Здесь остаётся только синхронизация снапшота
+       * доступа и отрисовка одной карточки.
+       */
       function applyOnboardingChecklist(data) {
         hubOnboardingData = data;
         hubRhythmHintsReady = true;
@@ -2985,186 +2663,18 @@
           trainerAccessSnapshot = trainerAccessSnapshot || {};
           trainerAccessSnapshot.trainer_id = data.trainer_id;
         }
-        /* Checklist loads async after GET /trainer/access — can show activation before snapshot was refreshed. */
-        var tsCh = data && String(data.trainer_status || '')
-          .trim()
-          .toLowerCase();
-        var activeFromChecklist = !!(data && hubDataSaysTrainerActive(data));
-        var schedUnlocked = !!(data && (data.schedule_unlocked || activeFromChecklist));
-        var ttOk = !!(data && data.tt_minimal_complete);
-        if (activeFromChecklist) {
+        var tsCh = data && String(data.trainer_status || '').trim().toLowerCase();
+        if (data && data.schedule_unlocked) {
           trainerAccessSnapshot = trainerAccessSnapshot || {};
-          trainerAccessSnapshot.is_active = true;
+          /* is_active = «в каталоге», а не «может работать». Разделение осознанное. */
+          trainerAccessSnapshot.is_active = !!hubDataSaysTrainerActive(data);
           trainerAccessSnapshot.access_state = 'active';
           trainerAccessSnapshot.schedule_unlocked = true;
           if (tsCh) trainerAccessSnapshot.trainer_status = tsCh;
-        } else if (data && data.schedule_unlocked) {
-          trainerAccessSnapshot = trainerAccessSnapshot || {};
-          trainerAccessSnapshot.is_active = false;
-          trainerAccessSnapshot.access_state = 'booking_ready';
-          trainerAccessSnapshot.schedule_unlocked = true;
-          if (tsCh) trainerAccessSnapshot.trainer_status = tsCh;
-        }
-        var strip = document.getElementById('onboardingStrip');
-        if (!strip) {
-          syncHubWeekRhythmPanel();
-          return;
-        }
-        /* Both stages done: hide checklist (no separate sandbox banner — success is toast + bot push). */
-        if (data && onboardingAllComplete(data)) {
-          strip.setAttribute('hidden', 'hidden');
-          strip.style.display = 'none';
-          syncHubOnboardingWelcomeVisibility(data);
-          if (window.TrainerShell && typeof window.TrainerShell.syncOnboarding === 'function') {
-            window.TrainerShell.syncOnboarding(data);
-          }
-          applyHubLockedState();
-          syncHubStats();
-          refreshHubEmptyBookingsIfNeeded();
-          syncHubWeekRhythmPanel();
-          syncHubDayCanvas();
-          renderHubSummaryHints();
-          return;
-        }
-        strip.removeAttribute('hidden');
-        strip.style.display = 'block';
-
-        var stepP = document.getElementById('onboardingStepProfile');
-        var iconP = document.getElementById('onboardingIconProfile');
-        var hintP = document.getElementById('onboardingHintProfile');
-        var ctaP = document.getElementById('onboardingCtaProfile');
-        var pc = !!(data && data.profile_complete);
-        var fpc = !!(data && data.full_profile_complete);
-        var active = !!(data && data.is_active);
-        /** Stage 1: pending — TTV minimal; active — полная очередь на модерацию. */
-        var stage1Done = active ? pc : ttOk;
-        if (stepP) {
-          stepP.classList.toggle('done', stage1Done);
-          stepP.classList.remove('locked');
-        }
-        if (iconP) iconP.textContent = stage1Done ? '✓' : '1';
-        if (hintP) {
-          if (!stage1Done && !active) {
-            hintP.textContent = 'Откроет расписание и записи.';
-          } else if (!stage1Done && active) {
-            hintP.textContent = 'Осталось закрыть пару пунктов — и вы в каталоге.';
-          } else if (active && !fpc) {
-            hintP.textContent = 'Добавьте детали — клиенты видят полный профиль.';
-          } else if (schedUnlocked && ttOk && !pc) {
-            hintP.textContent = 'База готова — можно отправить на проверку.';
-          } else {
-            hintP.textContent = 'Готово — анкета ушла на проверку.';
-          }
-        }
-        if (ctaP) {
-          if (stage1Done) {
-            ctaP.disabled = true;
-            ctaP.textContent = 'Готово';
-          } else {
-            ctaP.disabled = false;
-            if (pc) ctaP.textContent = 'Статус';
-            else if (!active && !ttOk) ctaP.textContent = 'Продолжить';
-            else ctaP.textContent = 'Открыть';
-          }
         }
 
-        var bookingStepDone = onboardingBookingStepDone(data);
-        var bookDone = schedUnlocked && !!bookingStepDone;
-        var bookLocked = !schedUnlocked || (!active && !ttOk);
+        renderHubNextStep(data && data.next_step);
 
-        /* Stage 3 «в каталог»: отправка анкеты на проверку — считается вместе с остальными. */
-        var moderationSubmitted = !!(data && data.moderation_submitted);
-        var catalogDone = active ? pc : moderationSubmitted;
-
-        /* Progress pill: first step that is still open, out of three. */
-        var pillEl = document.getElementById('onboardingProgressPill');
-        if (pillEl) {
-          /* All three done → strip is hidden by onboardingAllComplete, so «3» is the last state shown. */
-          var focusStep = !stage1Done ? 1 : !bookDone ? 2 : 3;
-          pillEl.textContent = 'Шаг ' + focusStep + ' из 3';
-        }
-        var stepB = document.getElementById('onboardingStepBooking');
-        var iconB = document.getElementById('onboardingIconBooking');
-        var hintB = document.getElementById('onboardingHintBooking');
-        var ctasWrap = document.getElementById('onboardingBookingCtas');
-        var ctaSendLink = document.getElementById('onboardingCtaSendLink');
-        var ctaBReal = document.getElementById('onboardingCtaBookingReal');
-        var ctaBSandbox = document.getElementById('onboardingCtaBookingSandbox');
-        var ctaBDone = document.getElementById('onboardingCtaBookingDone');
-        if (stepB) {
-          stepB.classList.toggle('done', bookDone);
-          stepB.classList.toggle('locked', bookLocked);
-        }
-        if (iconB) iconB.textContent = bookDone ? '✓' : '2';
-        /* «Отправить ссылку ученику» sends a self-serve booking link — pointless if there isn't a
-           single slot yet for the client to pick. Reuse the same button to send the trainer to
-           schedule-editor first in that case; the two trainer-assisted paths (real/sandbox
-           quick-book) create their own ad-hoc slot and stay available regardless. */
-        var hasSchedule = !!(data.has_future_slots || (data.weekly_template_count > 0));
-        var needsScheduleFirst = !bookLocked && !bookDone && !hasSchedule;
-        if (hintB) {
-          if (bookLocked) {
-            hintB.textContent = 'Откроется после шага 1.';
-          } else if (bookDone) {
-            hintB.textContent =
-              data.has_upcoming_booking || data.has_confirmed_booking
-                ? 'Готово — запись в «Ближайших записях».'
-                : 'Уже делали — шаг закрыт.';
-          } else if (needsScheduleFirst) {
-            hintB.textContent = 'Сначала настройте расписание — иначе ученику нечего будет забронировать по ссылке.';
-          } else {
-            hintB.textContent = 'Посмотрите, как работает расписание, клиент и напоминания.';
-          }
-        }
-        /* Show two-path CTAs when pending; collapsed «Готово» when done */
-        if (ctasWrap) ctasWrap.style.display = (bookDone || bookLocked) ? 'none' : 'flex';
-        if (ctaSendLink) {
-          ctaSendLink.disabled = bookLocked || bookDone;
-          ctaSendLink.textContent = needsScheduleFirst ? 'Настроить расписание' : 'Отправить ссылку ученику';
-        }
-        if (ctaBReal) ctaBReal.disabled = bookLocked || bookDone;
-        if (ctaBSandbox) ctaBSandbox.disabled = bookLocked || bookDone;
-        if (ctaBDone) ctaBDone.style.display = bookDone ? 'block' : 'none';
-
-        /*
-         * Stage 3 «Попасть в каталог». Four states:
-         *   locked     — шаг 1 ещё не закрыт, отправлять нечего
-         *   not ready  — 8 критериев модерации не собраны (обычно нет фото) → в профиль
-         *   ready      — можно отправить прямо отсюда
-         *   submitted  — анкета на проверке, действий не осталось
-         * moderation_submitted сбрасывается, когда модерация вернула фидбек, — шаг
-         * сам собой снова становится действием.
-         */
-        var stepC = document.getElementById('onboardingStepCatalog');
-        var iconC = document.getElementById('onboardingIconCatalog');
-        var hintC = document.getElementById('onboardingHintCatalog');
-        var ctaC = document.getElementById('onboardingCtaCatalog');
-        var catalogLocked = !stage1Done;
-        if (stepC) {
-          stepC.classList.toggle('done', catalogDone);
-          stepC.classList.toggle('locked', catalogLocked && !catalogDone);
-        }
-        if (iconC) iconC.textContent = catalogDone ? '✓' : '3';
-        if (hintC) {
-          if (catalogDone && !active) {
-            hintC.textContent = 'Анкета на проверке — обычно это занимает не больше суток.';
-          } else if (catalogDone && active) {
-            hintC.textContent = 'Готово — вас видно в каталоге.';
-          } else if (catalogLocked) {
-            hintC.textContent = 'Откроется после шага 1.';
-          } else if (pc) {
-            hintC.textContent = 'Всё собрано — отправьте профиль на проверку.';
-          } else {
-            hintC.textContent = 'Добавьте фото — так ученики сразу вас узнают в каталоге.';
-          }
-        }
-        if (ctaC) {
-          ctaC.disabled = catalogLocked || catalogDone;
-          ctaC.style.display = catalogDone ? 'none' : '';
-          ctaC.textContent = pc ? 'Отправить на проверку' : 'Открыть профиль';
-        }
-
-        syncHubOnboardingWelcomeVisibility(data);
         if (window.TrainerShell && typeof window.TrainerShell.syncOnboarding === 'function') {
           window.TrainerShell.syncOnboarding(data);
         }
@@ -3175,6 +2685,163 @@
         syncHubDayCanvas();
         syncHubGhostBooking();
         renderHubSummaryHints();
+      }
+
+      /** localStorage-ключ «не сейчас» для приглашения в каталог (по тренеру). */
+      function hubNextStepDismissKey(key) {
+        var tid = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
+        if (!tid) return null;
+        return 'glide_next_step_dismissed_' + key + '_' + tid;
+      }
+
+      function hubNextStepDismissed(key) {
+        try {
+          var k = hubNextStepDismissKey(key);
+          return !!(k && localStorage.getItem(k) === '1');
+        } catch (e) { return false; }
+      }
+
+      function persistHubNextStepDismissed(key) {
+        try {
+          var k = hubNextStepDismissKey(key);
+          if (k) localStorage.setItem(k, '1');
+        } catch (e) { /* приватный режим — переживём */ }
+      }
+
+      /** Одна карточка, одно действие. Нет карточки — секция скрыта целиком. */
+      function renderHubNextStep(step) {
+        var host = document.getElementById('hubNextStep');
+        if (!host) return;
+        if (!step || hubNextStepDismissed(step.key)) {
+          host.setAttribute('hidden', 'hidden');
+          return;
+        }
+        var titleEl = document.getElementById('hubNextStepTitle');
+        var bodyEl = document.getElementById('hubNextStepBody');
+        var ctaEl = document.getElementById('hubNextStepCta');
+        var secEl = document.getElementById('hubNextStepSecondary');
+
+        host.setAttribute('data-step', step.key || '');
+        if (titleEl) titleEl.textContent = step.title || '';
+        if (bodyEl) bodyEl.textContent = step.body || '';
+
+        if (ctaEl && step.cta) {
+          ctaEl.textContent = step.cta.label || '';
+          ctaEl.onclick = function () { runHubNextStepAction(step, step.cta.action); };
+          if (step.cta.action === 'share_link') prefetchHubInviteShare();
+        }
+        if (secEl) {
+          if (step.secondary) {
+            secEl.textContent = step.secondary.label || '';
+            secEl.removeAttribute('hidden');
+            secEl.onclick = function () { runHubNextStepAction(step, step.secondary.action); };
+          } else {
+            secEl.setAttribute('hidden', 'hidden');
+            secEl.onclick = null;
+          }
+        }
+        host.removeAttribute('hidden');
+      }
+
+      function runHubNextStepAction(step, action) {
+        if (action === 'open_onboarding') {
+          navigateTo('trainer-onboarding');
+          return;
+        }
+        if (action === 'open_profile') {
+          navigateTo('trainer-profile');
+          return;
+        }
+        if (action === 'share_link') {
+          shareTrainerInviteLink();
+          return;
+        }
+        if (action === 'dismiss') {
+          persistHubNextStepDismissed(step.key);
+          renderHubNextStep(null);
+        }
+      }
+
+      /**
+       * Единственный путь «поделиться ссылкой» в продукте.
+       * Открывает нативный выбор чата Telegram; при отсутствии API — копирует в буфер.
+       *
+       * t.me/share/url обязан содержать url= (ссылку). Пустой url= Telegram молча глотает —
+       * кнопка «Отправить ученику» выглядела мёртвой и на онбординге, и на хабе.
+       * Ссылку греем заранее: openTelegramLink после fetch теряет user-gesture.
+       */
+      var hubInviteShareCache = null;
+      var hubInviteShareInflight = null;
+
+      function parseHubInviteShare(body) {
+        var link = body && body.link ? String(body.link).trim() : '';
+        return {
+          link: link,
+          shareText: (body && body.share_text) ? String(body.share_text) : '',
+          shareBody: (body && body.share_body) ? String(body.share_body) : '',
+        };
+      }
+
+      function prefetchHubInviteShare() {
+        if (hubInviteShareCache && hubInviteShareCache.link) return;
+        if (hubInviteShareInflight) return;
+        hubInviteShareInflight = fetch(
+          apiUrlWithQuery('/trainer/hub/universal-invite-link'),
+          { headers: headersJson() }
+        )
+          .then(function (r) { return r.json(); })
+          .then(function (body) {
+            hubInviteShareCache = parseHubInviteShare(body);
+          })
+          .catch(function () { /* клик сам повторит запрос */ })
+          .then(function () { hubInviteShareInflight = null; });
+      }
+
+      function openHubInviteShare(payload) {
+        var link = payload && payload.link;
+        if (!link) return false;
+        if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
+          return !!window.openTelegramShareUrlFromMiniApp({
+            shareUrl: link,
+            shareBody: payload.shareBody || '',
+            fullMessage: payload.shareText || link,
+          });
+        }
+        return false;
+      }
+
+      function copyHubInviteLink(link) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(
+            function () { hubToast('Ссылка скопирована — вставьте её в чат с учеником.'); },
+            function () { hubToast(link); }
+          );
+          return;
+        }
+        hubToast(link);
+      }
+
+      function shareTrainerInviteLink() {
+        if (hubInviteShareCache && hubInviteShareCache.link) {
+          if (openHubInviteShare(hubInviteShareCache)) return;
+          copyHubInviteLink(hubInviteShareCache.link);
+          return;
+        }
+        fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
+          .then(function (r) { return r.json(); })
+          .then(function (body) {
+            var payload = parseHubInviteShare(body);
+            hubInviteShareCache = payload;
+            if (!payload.link) {
+              hubToast('Ссылка для учеников появится чуть позже.');
+              return;
+            }
+            if (openHubInviteShare(payload)) return;
+            copyHubInviteLink(payload.link);
+          })
+          .catch(function () {
+            hubToast('Не получилось получить ссылку. Попробуйте ещё раз.');
+          });
       }
 
       /** Hide «Ближайшие записи» block when there is nothing to show (no empty-state copy). */
@@ -3201,92 +2868,18 @@
       }
 
       /** Sample booking row for trainers who have never created a booking. */
-      function shouldShowHubGhostBooking() {
-        if (!getInitData()) return false;
-        if (hubOnboardingStripVisible()) return false;
-        if (hubLastUpcomingListCount > 0 || hubHasUpcomingSessions()) return false;
-        if (hubLastBookingsDays === null) return false;
-        var onb = hubOnboardingData;
-        if (!onb || onboardingBookingStepDone(onb)) return false;
-        var snap = trainerAccessSnapshot;
-        if (snap && window.TrainerMiniAppGate && !window.TrainerMiniAppGate.isActive(snap)) return false;
-        if (!onb.schedule_unlocked && !onb.is_active && !hubDataSaysTrainerActive(onb)) return false;
-        return true;
-      }
-
-      function hubGhostBookingDayMeta() {
-        var d = new Date();
-        d.setDate(d.getDate() + 1);
-        var wd = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
-        return {
-          date: hubLocalIsoDate(d),
-          day_label: 'завтра · ' + wd[d.getDay()],
-        };
-      }
-
-      function buildHubGhostBookingHtml(dayMeta) {
-        var dayLine = dayHeaderLine(dayMeta || hubGhostBookingDayMeta());
-        return (
-          '<div class="hub-booking-ghost-wrap">' +
-          '<div class="hub-day-label">' +
-          escapeHtml(dayLine) +
-          '</div>' +
-          '<div class="hub-bookings-stack">' +
-          '<div class="slot-row slot-booked-click slot-booking-confirmed hub-booking-ghost" data-hub-ghost-booking="1" role="button" tabindex="0">' +
-          '<div class="slot-row-left">' +
-          '<div class="hub-slot-time-row">' +
-          '<span class="slot-time">10:00–11:00</span>' +
-          '<span class="hub-booking-ghost__pill">Пример</span>' +
-          '</div>' +
-          '<div class="slot-venue">📍 Зал или площадка</div>' +
-          '<div class="slot-client-hint">Алексей К.</div>' +
-          '</div>' +
-          '<div class="slot-meta">' +
-          '<span class="slot-status booked booked-confirmed">подтверждено</span>' +
-          '</div>' +
-          '</div>' +
-          '</div>' +
-          '<p class="hub-booking-ghost__caption">Так будет выглядеть запись — нажмите, чтобы создать первую.</p>' +
-          '<div class="hub-booking-ghost__cta">' +
-          '<button type="button" class="btn-block btn-primary" data-hub-ghost-booking="1">Записать первого клиента</button>' +
-          '</div>' +
-          '</div>'
-        );
-      }
-
-      function wireHubGhostBooking() {
-        var block = document.getElementById('bookingsBlock');
-        if (!block || block.dataset.ghostWired === '1') return;
-        block.dataset.ghostWired = '1';
-        block.addEventListener('click', function(ev) {
-          var hit = ev.target && ev.target.closest && ev.target.closest('[data-hub-ghost-booking]');
-          if (!hit) return;
-          ev.preventDefault();
-          runHubHintAction('__book_client__');
-        });
-      }
-
-      /** Shows ghost sample row in bookings area, or hides section when not applicable. */
+      /*
+       * «Пример записи» (фальшивая карточка «Алексей К., подтверждено») удалена.
+       *
+       * Она занимала место главного действия и учила не тому: тренер видел готовую запись,
+       * которой нет. Пустое место под записями честнее — а что делать дальше, говорит
+       * карточка «следующий шаг», ровно одним предложением и одной кнопкой.
+       */
       function renderHubGhostBooking() {
-        if (!shouldShowHubGhostBooking()) return false;
-        var block = document.getElementById('bookingsBlock');
-        var head = document.querySelector('.hub-section-head--bookings-top');
-        if (!block) return false;
-
-        if (head) {
-          head.classList.add('hub-section-head--ghost');
-          var titleEl = head.querySelector('.hub-section-title');
-          if (titleEl) titleEl.textContent = 'Пример записи';
-        }
-
-        block.innerHTML = buildHubGhostBookingHtml(hubGhostBookingDayMeta());
-        setHubUpcomingBookingsSectionVisible(true);
-        wireHubGhostBooking();
-        return true;
+        return false;
       }
 
       function syncHubGhostBooking() {
-        if (renderHubGhostBooking()) return;
         if (hubLastUpcomingListCount > 0 || hubHasUpcomingSessions()) return;
         if (hubLastBookingsDays === null) return;
         hideHubUpcomingBookingsSection();
@@ -3305,11 +2898,9 @@
       }
 
       function loadOnboardingChecklist() {
-        var strip = document.getElementById('onboardingStrip');
-        if (!strip) return;
+        var card = document.getElementById('hubNextStep');
         if (!getInitData()) {
-          strip.setAttribute('hidden', 'hidden');
-          strip.style.display = 'none';
+          if (card) card.setAttribute('hidden', 'hidden');
           /* Do not set hubRhythmHintsReady or hide rhythm skeleton: on iOS initData often arrives
            * late; marking ready here blocks showHubRhythmHintsSkeleton() when bootstrap runs. */
           syncHubWeekRhythmPanel();
@@ -3336,124 +2927,12 @@
       }
 
       function wireOnboardingHub() {
-        var ctaP = document.getElementById('onboardingCtaProfile');
-        if (ctaP) {
-          ctaP.onclick = function() {
-            if (ctaP.disabled) return;
-            if (ctaP.textContent === 'Статус') {
-              navigateToWithHash('trainer-profile', 'moderation');
-              return;
-            }
-            if (ctaP.textContent === 'Продолжить') {
-              navigateTo('trainer-profile?onboarding=blocks');
-              return;
-            }
-            navigateTo('trainer-profile?onboarding=blocks');
-          };
-        }
-        var ctaSendLink = document.getElementById('onboardingCtaSendLink');
-        if (ctaSendLink) {
-          ctaSendLink.onclick = function() {
-            if (ctaSendLink.disabled) return;
-            if (ctaSendLink.textContent === 'Настроить расписание') {
-              /* navigateToImpl, not navigateTo — the CTA copy already explains why we're going
-                 here, so skip the generic «после первой записи» first-booking soft gate that
-                 navigateTo would otherwise show for a trainer with zero bookings so far. */
-              navigateToImpl('schedule-editor');
-              return;
-            }
-            fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
-              .then(function(r) {
-                return r.json().then(function(data) {
-                  if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
-                  return data;
-                });
-              })
-              .then(function(data) {
-                var text = data && data.share_text ? String(data.share_text).trim() : '';
-                if (!text) {
-                  hubToast('Текст недоступен. Попробуйте позже.');
-                  return;
-                }
-                // Try sync copy first (faster), then async fallback
-                if (typeof copyTextViaExecCommandHub === 'function' && copyTextViaExecCommandHub(text)) {
-                  hubToast('Текст скопирован — отправьте его ученику.');
-                  return;
-                }
-                // Fallback to async clipboard API
-                if (typeof copyTextToClipboardHub === 'function') {
-                  copyTextToClipboardHub(text).then(function(ok) {
-                    if (ok) {
-                      hubToast('Текст скопирован — отправьте его ученику.');
-                    } else {
-                      hubToast('Буфер обмена недоступен — скопируйте текст вручную.');
-                    }
-                  });
-                } else {
-                  hubToast('Скопируйте текст вручную.');
-                }
-              })
-              .catch(function(err) {
-                if (typeof hubToast === 'function') {
-                  hubToast('Ошибка при загрузке ссылки.');
-                }
-              });
-          };
-        }
-        var ctaBReal2 = document.getElementById('onboardingCtaBookingReal');
-        if (ctaBReal2) {
-          ctaBReal2.onclick = function() {
-            if (ctaBReal2.disabled) return;
-            hubQuickBookIsSandbox = false;
-            ensureTrainerSectionsAccess(function() {
-              openHubQuickBookClientFlowFirst();
-            });
-          };
-        }
-        var ctaBSandbox2 = document.getElementById('onboardingCtaBookingSandbox');
-        if (ctaBSandbox2) {
-          ctaBSandbox2.onclick = function() {
-            if (ctaBSandbox2.disabled) return;
-            hubQuickBookIsSandbox = true;
-            ensureTrainerSectionsAccess(function() {
-              openHubQuickBookClientFlowFirst();
-            });
-          };
-        }
-        var ctaC2 = document.getElementById('onboardingCtaCatalog');
-        if (ctaC2) {
-          ctaC2.onclick = function() {
-            if (ctaC2.disabled) return;
-            /* Not ready (обычно нет фото) — в профиль; готов — отправляем отсюда. */
-            if (ctaC2.textContent !== 'Отправить на проверку') {
-              navigateTo('trainer-profile?onboarding=blocks');
-              return;
-            }
-            ctaC2.disabled = true;
-            postJsonTrainer('/trainer/onboarding/submit-for-moderation')
-              .then(function() {
-                hubToast('Профиль отправлен на проверку');
-                loadOnboardingChecklist();
-              })
-              .catch(function(e) {
-                ctaC2.disabled = false;
-                /* 422 = не хватает критериев: сервер знает точнее, чем локальный флаг. */
-                var labels = e && e.detail && e.detail.missing_labels_ru;
-                var msg = (labels && labels.length)
-                  ? 'Не хватает: ' + labels.join(', ')
-                  : (e && e.message) || 'Не удалось отправить';
-                hubToast(msg);
-                loadOnboardingChecklist();
-              });
-          };
-        }
+        /* Онбординг v2: кнопки карточки «следующий шаг» привязываются в renderHubNextStep,
+           потому что их количество и действия зависят от шага. Здесь остались только
+           элементы хаба, живущие рядом с онбордингом. */
         var faq = document.getElementById('onboardingFaqBtn');
         if (faq) {
           faq.onclick = function() {
-            if (hubOnboardingStripVisible()) {
-              alertHubOnboardingStepOrder();
-              return;
-            }
             navigateTo('trainer-faq');
           };
         }
@@ -3610,34 +3089,14 @@
       function buildHubNextBestHint() {
         var onb = hubOnboardingData;
         if (!onb) return null;
-        if (!onb.is_active) {
-          if (onboardingBookingStepDone(onb)) {
-            return {
-              type: 'info',
-              text: 'Следующий шаг: отправьте анкету на модерацию во вкладке «Статус».',
-              href: 'trainer-profile',
-            };
-          }
-          if (onb.tt_minimal_complete && (onb.schedule_unlocked || onb.is_active)) {
-            return {
-              type: 'info',
-              text: 'Сделайте первую запись: нажмите «Записать клиента».',
-              href: '__book_client__',
-            };
-          }
-          return {
-            type: 'info',
-            text: 'Закройте шаг «Профиль по блокам», чтобы открыть запись клиентов.',
-            href: 'trainer-profile?onboarding=blocks',
-          };
-        }
-        if (onb.full_profile_complete === false) {
-          return {
-            type: 'info',
-            text: 'Доработайте профиль для каталога: фото, описание, опыт и образование.',
-            href: 'trainer-profile',
-          };
-        }
+
+        /*
+         * Онбординг v2: пока на экране есть карточка «следующий шаг», подсказка молчит.
+         * Раньше здесь жил второй набор советов («закройте шаг Профиль по блокам»,
+         * «отправьте анкету на модерацию»), который говорил тренеру другое, чем чеклист
+         * сверху. Два источника «что делать дальше» — это не забота, а шум.
+         */
+        if (onb.next_step) return null;
 
         var availThis = parseNonNegativeInt(onb.available_slots_this_week_count);
         var bookThis = parseNonNegativeInt(onb.bookings_this_week_count);
@@ -8526,17 +7985,24 @@
        * Deliberately not onboardingAllComplete: step 3 (каталог) не про запись,
        * и ждать модерации, чтобы вернуть кнопку записи, было бы регрессией.
        */
+      /**
+       * Ручная запись остаётся доступна с первой секунды, а не только после первой брони —
+       * иначе пока Day Canvas молчит рядом с карточкой «следующий шаг» (см.
+       * shouldShowHubDayCanvas), у тренера в это окно вообще нет способа записать клиента
+       * вручную: FAB был единственной альтернативой плитке «Записать клиента» в Day Canvas,
+       * и старый гейт на «уже есть бронь» её же и требовал.
+       */
       function shouldShowHubBookFab() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
         var d = hubOnboardingData;
-        if (d && !onboardingBookingStepDone(d)) return false;
+        if (d && !d.schedule_unlocked) return false;
         if (
           trainerAccessSnapshot &&
           window.TrainerMiniAppGate &&
           !TrainerMiniAppGate.isActive(trainerAccessSnapshot)
         ) {
-          return !!(d && onboardingBookingStepDone(d));
+          return !!(d && d.schedule_unlocked);
         }
         return true;
       }
@@ -8558,9 +8024,9 @@
         hubBookFabWired = true;
         fab.onclick = function() {
           var d = hubOnboardingData || null;
-          var schedUnlocked = !!(d && (d.schedule_unlocked || d.is_active));
-          if (!schedUnlocked) {
-            navigateTo('trainer-profile?onboarding=blocks');
+          /* Расписания ещё нет — ведём на первый экран настройки, а не в анкету. */
+          if (d && d.next_step && d.next_step.key === 'setup_week') {
+            navigateTo('trainer-onboarding');
             return;
           }
           ensureTrainerSectionsAccess(function() {
@@ -8847,7 +8313,6 @@
       wireHubSubscriptionCelebrationClose();
 
       wireOnboardingHub();
-      wireHubFirstBookingSoftGate();
       wireHubRhythmSlots();
 
       /** Maps GET /trainer/hub/bootstrap payload into hub globals (single round-trip). */

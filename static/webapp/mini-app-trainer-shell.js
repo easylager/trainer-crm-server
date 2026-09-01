@@ -276,19 +276,6 @@
 
   /* ─── Onboarding navigation guard ───────────────────────────────────────── */
 
-  function onboardingBookingStepDone(data) {
-    if (!data) return false;
-    return !!(data.has_any_booking || data.has_confirmed_booking || data.has_upcoming_booking);
-  }
-
-  function onboardingAllComplete(data) {
-    if (!data) return true;
-    if (!onboardingBookingStepDone(data)) return false;
-    if (data.is_active && data.profile_complete) return true;
-    if (!data.is_active && data.schedule_unlocked && data.tt_minimal_complete) return true;
-    return false;
-  }
-
   function pathRouteKey(path) {
     return String(path || '').replace(/^\.\//, '').split('?')[0].split('#')[0];
   }
@@ -370,11 +357,13 @@
     return !!(caps && caps.show_center_grid);
   }
 
-  /** Whether a shell route is reachable during «Первые шаги». */
+  /**
+   * Доступен ли маршрут. Единственное оставшееся ограничение — режим центра/студии:
+   * это не онбординг, а роль аккаунта, у которого личного расписания просто нет.
+   * Всё, что было связано с анкетой и первой записью, удалено вместе со старой моделью.
+   */
   function evaluateOnboardingPath(path) {
-    var data = state.onboardingData;
     var key = pathRouteKey(path);
-
     if (isOrganizationAdminNav() && !showPersonalCrm()) {
       var screenTitle = collectiveScreenTitle();
       if (key === 'trainer-home' || key === 'trainer-collective') return { allow: true };
@@ -386,35 +375,6 @@
         secondary: null,
       };
     }
-
-    if (!data || onboardingAllComplete(data)) return { allow: true };
-    if (key === 'trainer-home') return { allow: true };
-
-    var ttOk = !!data.tt_minimal_complete;
-    var schedUnlocked = !!(data.schedule_unlocked || data.is_active);
-
-    if (!ttOk) {
-      return {
-        allow: false,
-        title: 'Сначала анкета',
-        hint: 'Завершите шаг «Расскажите о себе» в блоке «Первые шаги» на главной — тогда откроются остальные разделы.',
-        primary: { path: 'trainer-home', label: 'Первые шаги' },
-        secondary: null,
-      };
-    }
-
-    if (key === 'schedule-editor' && schedUnlocked) return { allow: true };
-
-    if (!onboardingBookingStepDone(data)) {
-      return {
-        allow: false,
-        title: 'Сначала первая запись',
-        hint: 'Сделайте тестовую или реальную запись на главной — разделы оживут после этого шага.',
-        primary: { path: 'trainer-home', label: 'Первые шаги' },
-        secondary: schedUnlocked ? { path: 'schedule-editor', label: 'Расписание' } : null,
-      };
-    }
-
     return { allow: true };
   }
 
@@ -590,22 +550,17 @@
     syncInboxBadges();
   }
 
+  /** Замки вкладок остались только для режима организации. */
   function syncOnboardingTabLocks() {
     var bar = document.getElementById('trainerTabBar');
     if (!bar) return;
-    var data = state.onboardingData;
-    var onboarding = data && !onboardingAllComplete(data);
 
     bar.querySelectorAll('.trainer-tab-bar__btn').forEach(function (btn) {
       var id = btn.dataset.tabId;
       var locked = false;
-      if (onboarding) {
-        if (id === 'home') locked = false;
-        else if (id === 'schedule') locked = !evaluateOnboardingPath('schedule-editor').allow;
-        else if (id === 'clients') locked = !evaluateOnboardingPath('trainer-clients').allow;
-        else if (id === 'center') locked = !evaluateOnboardingPath('trainer-collective').allow;
-        else if (id === 'more') locked = false;
-      }
+      if (id === 'schedule') locked = !evaluateOnboardingPath('schedule-editor').allow;
+      else if (id === 'clients') locked = !evaluateOnboardingPath('trainer-clients').allow;
+      else if (id === 'center') locked = !evaluateOnboardingPath('trainer-collective').allow;
       btn.classList.toggle('trainer-tab-bar__btn--locked', locked);
       btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
     });
@@ -614,7 +569,7 @@
     if (list) {
       list.querySelectorAll('.trainer-more-sheet__link').forEach(function (link) {
         var path = link.getAttribute('data-shell-path') || '';
-        var locked = onboarding && !evaluateOnboardingPath(path).allow;
+        var locked = !evaluateOnboardingPath(path).allow;
         link.classList.toggle('trainer-more-sheet__link--locked', locked);
         link.setAttribute('aria-disabled', locked ? 'true' : 'false');
       });

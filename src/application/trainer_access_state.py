@@ -1,6 +1,16 @@
 """
-Trainer bot access: map DB trainer.status + profile completeness to a small enum.
-Aligned with admin moderation (pending_profile queue → approve → active).
+Trainer bot access: map DB trainer row to a small enum.
+
+Onboarding v2 invariant: **moderation gates the public catalog, not the trainer's own tools.**
+A linked trainer works from the first second — schedule, slots, bookings, clients, notes.
+``trainers.status`` stays the *catalog* moderation state (public listings already filter
+``status = 'active'``); it no longer decides whether the trainer may use the product.
+
+Three states, no completeness tiers:
+
+* ``NOT_LINKED``  — this Telegram account is not bound to a trainer row.
+* ``ACTIVE``      — linked and working. Everything operational is open.
+* ``DEACTIVATED`` — linked but switched off by an admin.
 """
 from __future__ import annotations
 
@@ -11,19 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application.trainer_link import get_trainer_row_by_telegram_id, get_trainer_row_for_miniapp_principal
-from src.application.trainer_profile_completeness import (
-    is_profile_complete_for_moderation,
-    is_tt_minimal_profile_complete,
-)
 from src.application.trainer_use_cases import get_trainer
+from src.infrastructure.db.models import TRAINER_STATUS_DEACTIVATED
 from src.shared.trainer_status import normalize_trainer_status_value
-from src.infrastructure.db.models import (
-    TRAINER_STATUS_ACTIVE,
-    TRAINER_STATUS_DEACTIVATED,
-    TRAINER_STATUS_PENDING_CONTRACT,
-    TRAINER_STATUS_PENDING_PAYMENT,
-    TRAINER_STATUS_PENDING_PROFILE,
-)
 
 
 class TrainerAccessState(str, Enum):
@@ -31,43 +31,25 @@ class TrainerAccessState(str, Enum):
 
     NOT_LINKED = "not_linked"
     ACTIVE = "active"
-    BLOCKED_PROFILE = "blocked_profile"
-    # pending_profile + TTV minimal: Mini App schedule/bookings; bot CRM flows match app (catalog still moderated).
-    BOOKING_READY = "booking_ready"
-    PENDING_MODERATION = "pending_moderation"
     DEACTIVATED = "deactivated"
 
 
 def trainer_may_use_bot_workflows(state: TrainerAccessState) -> bool:
-    """
-    Trainer-bot handlers (callbacks, CRM messages) run for these states.
-
-    Catalog / public card is gated in Mini App + moderation; onboarding trainers still need
-    notes, invites, and schedule-related flows in chat before status becomes active.
-    """
-    return state in (
-        TrainerAccessState.ACTIVE,
-        TrainerAccessState.BOOKING_READY,
-        TrainerAccessState.PENDING_MODERATION,
-    )
+    """Trainer-bot handlers (callbacks, CRM messages) run for linked, non-deactivated trainers."""
+    return state == TrainerAccessState.ACTIVE
 
 
 def resolve_trainer_access_state(*, status: str, trainer: dict[str, Any] | None) -> TrainerAccessState:
-    """Pure mapping for tests and single place for rules."""
-    st = (status or "").strip().lower()
-    if st == TRAINER_STATUS_ACTIVE:
-        return TrainerAccessState.ACTIVE
+    """
+    Pure mapping for tests and single place for rules.
+
+    ``trainer`` is accepted for call-site compatibility and is deliberately unused: access no
+    longer depends on profile completeness. Only an explicit ``deactivated`` status closes the door.
+    """
+    st = normalize_trainer_status_value(status)
     if st == TRAINER_STATUS_DEACTIVATED:
         return TrainerAccessState.DEACTIVATED
-    if st in (TRAINER_STATUS_PENDING_CONTRACT, TRAINER_STATUS_PENDING_PAYMENT):
-        return TrainerAccessState.PENDING_MODERATION
-    if st == TRAINER_STATUS_PENDING_PROFILE:
-        if trainer is not None and is_profile_complete_for_moderation(trainer):
-            return TrainerAccessState.PENDING_MODERATION
-        if trainer is not None and is_tt_minimal_profile_complete(trainer):
-            return TrainerAccessState.BOOKING_READY
-        return TrainerAccessState.BLOCKED_PROFILE
-    return TrainerAccessState.PENDING_MODERATION
+    return TrainerAccessState.ACTIVE
 
 
 async def get_trainer_access_state(
@@ -81,14 +63,10 @@ async def get_trainer_access_state(
     row = await get_trainer_row_by_telegram_id(session, telegram_id)
     if not row:
         return TrainerAccessState.NOT_LINKED, None
-    tid = row["id"]
-    trainer = await get_trainer(session, tid)
+    trainer = await get_trainer(session, row["id"])
     if not trainer:
         return TrainerAccessState.NOT_LINKED, None
-    status = normalize_trainer_status_value(trainer.get("status"))
-    state = resolve_trainer_access_state(status=status, trainer=trainer)
-    if status == TRAINER_STATUS_ACTIVE:
-        return TrainerAccessState.ACTIVE, trainer
+    state = resolve_trainer_access_state(status=trainer.get("status"), trainer=trainer)
     return state, trainer
 
 
@@ -100,12 +78,8 @@ async def get_trainer_access_state_from_principal(
     row = await get_trainer_row_for_miniapp_principal(session, principal)
     if not row:
         return TrainerAccessState.NOT_LINKED, None
-    tid = row["id"]
-    trainer = await get_trainer(session, tid)
+    trainer = await get_trainer(session, row["id"])
     if not trainer:
         return TrainerAccessState.NOT_LINKED, None
-    status = normalize_trainer_status_value(trainer.get("status"))
-    state = resolve_trainer_access_state(status=status, trainer=trainer)
-    if status == TRAINER_STATUS_ACTIVE:
-        return TrainerAccessState.ACTIVE, trainer
+    state = resolve_trainer_access_state(status=trainer.get("status"), trainer=trainer)
     return state, trainer

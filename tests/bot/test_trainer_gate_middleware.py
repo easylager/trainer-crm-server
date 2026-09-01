@@ -1,4 +1,7 @@
-"""Regression: TrainerGateMiddleware does not invoke downstream handler when access is blocked.
+"""Regression: TrainerGateMiddleware only blocks NOT_LINKED and DEACTIVATED.
+
+Onboarding v2 removed the profile-completeness tiers, so a linked trainer with an empty
+profile passes straight through — see tests/application/test_trainer_access_state.py.
 
 We call ``_handle_message`` directly: ``__call__`` requires a real aiogram ``Message`` instance.
 """
@@ -39,12 +42,12 @@ def _no_trainer_support_pollution() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gate_blocks_handler_when_not_active(monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session) -> None:
+async def test_gate_blocks_handler_when_deactivated(monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session) -> None:
     seen: list[int] = []
 
     async def fake_state(_session, uid: int):
         seen.append(uid)
-        return TrainerAccessState.BLOCKED_PROFILE, None
+        return TrainerAccessState.DEACTIVATED, None
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -68,11 +71,11 @@ async def test_gate_blocks_handler_when_not_active(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_allowlisted_command_when_linked_but_blocked(
+async def test_gate_passes_allowlisted_command_when_deactivated(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     async def fake_state(_session, _uid: int):
-        return TrainerAccessState.BLOCKED_PROFILE, {"id": 1}
+        return TrainerAccessState.DEACTIVATED, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -94,11 +97,11 @@ async def test_gate_passes_allowlisted_command_when_linked_but_blocked(
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_allowlisted_home_when_linked_but_blocked(
+async def test_gate_passes_allowlisted_home_when_deactivated(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     async def fake_state(_session, _uid: int):
-        return TrainerAccessState.BLOCKED_PROFILE, {"id": 1}
+        return TrainerAccessState.DEACTIVATED, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -175,11 +178,11 @@ async def test_gate_passes_welcome_link_start_when_not_linked(
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_callback_when_booking_ready(
+async def test_gate_passes_booking_callback_for_active_trainer(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     async def fake_state(_session, uid: int):
-        return TrainerAccessState.BOOKING_READY, {"id": 1}
+        return TrainerAccessState.ACTIVE, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -208,7 +211,7 @@ async def test_gate_passes_booking_crm_callbacks_for_linked_trainer(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     async def fake_state(_session, _uid: int):
-        return TrainerAccessState.BOOKING_READY, {"id": 1}
+        return TrainerAccessState.ACTIVE, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -232,13 +235,13 @@ async def test_gate_passes_booking_crm_callbacks_for_linked_trainer(
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_booking_note_reply_while_blocked(
+async def test_gate_passes_booking_note_reply_while_deactivated(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     trainer_booking_note_awaiting.add(42)
 
     async def fake_state(_session, uid: int):
-        return TrainerAccessState.BLOCKED_PROFILE, None
+        return TrainerAccessState.DEACTIVATED, None
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -257,3 +260,35 @@ async def test_gate_passes_booking_note_reply_while_blocked(
     out = await mw._handle_message(handler, msg, {})
     assert out == "saved"
     handler.assert_awaited_once_with(msg, {})
+
+
+@pytest.mark.asyncio
+async def test_gate_passes_new_trainer_with_empty_profile(
+    monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
+) -> None:
+    """
+    The onboarding v2 promise: a trainer linked one second ago, with nothing filled in,
+    reaches every handler. Previously this hit BLOCKED_PROFILE and got a wall of text.
+    """
+
+    async def fake_state(_session, _uid: int):
+        return TrainerAccessState.ACTIVE, {"id": 1, "status": "pending_profile", "profile": {}}
+
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
+        fake_state,
+        raising=True,
+    )
+    mw = TrainerGateMiddleware()
+    handler = AsyncMock(return_value="ok")
+
+    msg = SimpleNamespace(
+        from_user=SimpleNamespace(id=42),
+        text="какой-то произвольный текст",
+        answer=AsyncMock(),
+    )
+
+    out = await mw._handle_message(handler, msg, {})
+    assert out == "ok"
+    handler.assert_awaited_once_with(msg, {})
+    msg.answer.assert_not_called()

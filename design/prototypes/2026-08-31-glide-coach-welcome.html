@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Glide Coach — welcome</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #F1F3F2;
+      --surface: #FFFFFF;
+      --line: #E2E6E5;
+      --line-2: #CFD6D5;
+      --ink: #101617;
+      --hint: #5E6B6B;
+      --teal: #45B9BB;
+      --teal-ink: #0B6E70;
+      --on-teal: #04262A;
+      --wash: rgba(69, 185, 187, 0.12);
+      --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    .frame {
+      width: 1280px;
+      height: 720px;
+      display: grid;
+      grid-template-columns: 1fr 520px;
+      gap: 0;
+      padding: 56px 56px 56px 64px;
+      background:
+        radial-gradient(900px 480px at 108% 12%, rgba(69, 185, 187, 0.16), transparent 58%),
+        radial-gradient(700px 400px at -8% 110%, rgba(16, 22, 23, 0.06), transparent 55%),
+        var(--paper);
+    }
+    .copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-right: 48px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .brand img {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: #0B0C0E;
+      box-shadow: 0 8px 24px -12px rgba(16, 24, 28, 0.55);
+    }
+    .brand span {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--teal-ink);
+    }
+    h1 {
+      font-size: 52px;
+      font-weight: 700;
+      letter-spacing: -0.038em;
+      line-height: 1.08;
+      max-width: 11em;
+    }
+    .lede {
+      margin-top: 18px;
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--hint);
+      max-width: 22em;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 28px;
+    }
+    .chip {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--teal-ink);
+      background: var(--wash);
+      border: 1px solid color-mix(in srgb, var(--teal) 28%, transparent);
+      border-radius: 999px;
+      padding: 8px 14px;
+    }
+    .phone {
+      align-self: center;
+      width: 520px;
+      height: 608px;
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 28px;
+      box-shadow:
+        0 1px 3px rgba(16, 24, 28, 0.05),
+        0 28px 56px -28px rgba(16, 24, 28, 0.42);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .phone-head {
+      padding: 22px 22px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .phone-kicker {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--hint);
+    }
+    .phone-title {
+      margin-top: 6px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .phone-sub {
+      margin-top: 4px;
+      font-size: 14px;
+      color: var(--hint);
+    }
+    .slots {
+      padding: 16px 16px 20px;
+      background: var(--paper);
+      flex: 1;
+    }
+    .day {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--hint);
+      margin: 6px 0 10px 4px;
+    }
+    .slot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+    .slot--open {
+      border-color: var(--teal);
+      background: var(--wash);
+    }
+    .slot--busy {
+      opacity: 0.48;
+      background: transparent;
+    }
+    .time {
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .venue {
+      margin-top: 3px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--hint);
+    }
+    .mark {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--teal-ink);
+    }
+    .busy {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--hint);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="copy">
+      <div class="brand">
+        <img src="../../static/logos/01-icon/glide-icon-teal-square-512.png" alt="" />
+        <span>Glide Coach</span>
+      </div>
+      <h1>Ученик записывается сам</h1>
+      <p class="lede">Ссылка вместо переписки «когда можно?». Расписание, клиенты и каталог — в Telegram.</p>
+      <div class="chips">
+        <span class="chip">Живая ссылка</span>
+        <span class="chip">Расписание</span>
+        <span class="chip">14 дней бесплатно</span>
+      </div>
+    </div>
+    <aside class="phone" aria-hidden="true">
+      <div class="phone-head">
+        <div class="phone-kicker">Ваш ученик видит</div>
+        <div class="phone-title">Выберите время</div>
+        <div class="phone-sub">Фигурное катание · Minsk Arena</div>
+      </div>
+      <div class="slots">
+        <div class="day">Среда, 18 июня</div>
+        <div class="slot slot--busy">
+          <div>
+            <div class="time">16:00–17:00</div>
+            <div class="venue">Minsk Arena</div>
+          </div>
+          <span class="busy">Занято</span>
+        </div>
+        <div class="slot slot--open">
+          <div>
+            <div class="time">18:00–19:00</div>
+            <div class="venue">Minsk Arena</div>
+          </div>
+          <span class="mark">Свободно</span>
+        </div>
+        <div class="slot">
+          <div>
+            <div class="time">19:00–20:00</div>
+            <div class="venue">Minsk Arena</div>
+          </div>
+          <span class="mark">›</span>
+        </div>
+        <div class="day">Четверг, 19 июня</div>
+        <div class="slot">
+          <div>
+            <div class="time">07:30–08:30</div>
+            <div class="venue">Чижовка-Арена</div>
+          </div>
+          <span class="mark">›</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

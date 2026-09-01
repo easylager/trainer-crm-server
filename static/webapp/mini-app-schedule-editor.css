@@ -346,7 +346,7 @@ html.trainer-theme-dark .schedule-week-day-strip__wkNav {
     .slot-row .svc-badge.svc-badge--rose .svc-badge-dot { background: var(--svc-accent-rose); }
     .slot-row .svc-badge.svc-badge--slate .svc-badge-dot { background: var(--svc-accent-slate); }
 
-    /* Secondary venue chip on slot mini-cards (svc-badge model; hidden when arena is primary). */
+    /* Venue chip on compact precise-slot tags (multi-arena trainers). */
     .slot-row .schedule-arena-chip,
     .precise-slot-tag .schedule-arena-chip {
       flex-shrink: 1;

@@ -222,26 +222,23 @@ async def get_trainer_id_linked_any_status(session: AsyncSession, telegram_id: i
 
 async def get_trainer_id_for_webapp_trainer_operations(session: AsyncSession, telegram_id: int) -> int | None:
     """
-    Trainer Mini App: schedule, slots, trainer-side bookings — active, or pending_profile with TTV minimal profile.
+    Trainer Mini App operations: schedule, slots, trainer-side bookings, clients, notes.
 
-    Payments, catalog products, and other CRM surfaces still use ``get_trainer_id_by_telegram_id`` (active only).
+    Onboarding v2: any linked trainer who is not ``deactivated`` may run their own operations from
+    the first second. Profile completeness and catalog moderation no longer gate this — moderation
+    only decides whether the public catalog lists the trainer.
+
+    Payments, catalog products, and other catalog-facing surfaces still use
+    ``get_trainer_id_by_telegram_id`` (active only).
     """
-    from src.application.trainer_profile_completeness import is_tt_minimal_profile_complete
-    from src.application.trainer_use_cases import get_trainer
-    from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+    from src.infrastructure.db.models import TRAINER_STATUS_DEACTIVATED
 
     row = await get_trainer_row_by_telegram_id(session, telegram_id)
     if not row:
         return None
-    tid = int(row["id"])
-    st = (row.get("status") or "").strip().lower()
-    if st == TRAINER_STATUS_ACTIVE:
-        return tid
-    if st == TRAINER_STATUS_PENDING_PROFILE:
-        trainer = await get_trainer(session, tid)
-        if trainer and is_tt_minimal_profile_complete(trainer):
-            return tid
-    return None
+    if (row.get("status") or "").strip().lower() == TRAINER_STATUS_DEACTIVATED:
+        return None
+    return int(row["id"])
 
 
 async def get_trainer_id_by_telegram_id_from_principal(
@@ -270,19 +267,12 @@ async def get_trainer_id_for_webapp_trainer_operations_from_principal(
     session: AsyncSession,
     principal: MiniAppPrincipal,
 ) -> int | None:
-    from src.application.trainer_profile_completeness import is_tt_minimal_profile_complete
-    from src.application.trainer_use_cases import get_trainer
-    from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+    """Same rule as :func:`get_trainer_id_for_webapp_trainer_operations`, for a Mini App principal."""
+    from src.infrastructure.db.models import TRAINER_STATUS_DEACTIVATED
 
     row = await get_trainer_row_for_miniapp_principal(session, principal)
     if not row:
         return None
-    tid = int(row["id"])
-    st = (row.get("status") or "").strip().lower()
-    if st == TRAINER_STATUS_ACTIVE:
-        return tid
-    if st == TRAINER_STATUS_PENDING_PROFILE:
-        trainer = await get_trainer(session, tid)
-        if trainer and is_tt_minimal_profile_complete(trainer):
-            return tid
-    return None
+    if (row.get("status") or "").strip().lower() == TRAINER_STATUS_DEACTIVATED:
+        return None
+    return int(row["id"])

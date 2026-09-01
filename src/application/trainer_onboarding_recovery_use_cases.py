@@ -98,8 +98,12 @@ def determine_onboarding_stage(
     Pure: map checklist flags to a stuck-stage id, or None if the trainer is not actionable right
     now (fully onboarded, or waiting on admin review with nothing left for them to do).
     """
+    # Первая запись — практика уже работает. Старая серия («добить анкету») здесь
+    # умолкает: тарифы и «что не входит» — отдельный мягкий пинг после записи.
+    if has_any_booking:
+        return None
     if trainer_status == TRAINER_STATUS_ACTIVE:
-        return None if has_any_booking else STAGE_NO_BOOKING
+        return STAGE_NO_BOOKING
     if trainer_status != TRAINER_STATUS_PENDING_PROFILE:
         return None
     if not tt_minimal_complete:
@@ -137,13 +141,8 @@ async def _list_segment_candidates(session: AsyncSession) -> list[dict[str, Any]
             SELECT t.id, t.telegram_id, t.created_at
             FROM trainers t
             WHERE t.telegram_id IS NOT NULL
-              AND (
-                    t.status = :status_pending_profile
-                 OR (
-                        t.status = :status_active
-                    AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.trainer_id = t.id)
-                 )
-              )
+              AND t.status IN (:status_pending_profile, :status_active)
+              AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.trainer_id = t.id)
             """
         ),
         {

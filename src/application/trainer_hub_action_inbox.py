@@ -106,16 +106,6 @@ def _onboarding_booking_step_done(d: dict[str, Any]) -> bool:
     )
 
 
-def _onboarding_all_complete(d: dict[str, Any]) -> bool:
-    if not _onboarding_booking_step_done(d):
-        return False
-    if d.get("is_active") and d.get("profile_complete"):
-        return True
-    if not d.get("is_active") and d.get("schedule_unlocked") and d.get("tt_minimal_complete"):
-        return True
-    return False
-
-
 async def fetch_hub_pending_booking_ids(
     session: AsyncSession,
     trainer_id: int,
@@ -204,7 +194,13 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
     out: list[dict[str, Any]] = []
     d = onboarding
     active = bool(d.get("is_active"))
-    complete = _onboarding_all_complete(d)
+    # Онбординг v2: «активен» здесь означает «есть с чем работать» (собрано расписание),
+    # а не «прошёл модерацию каталога» — is_active стал чисто витринным флагом и почти
+    # у всех работающих тренеров будет False неделями. Старая проверка на его основе
+    # молча гасила весь блок ритм-подсказок (пустые слоты, «без записи», шаблон, рефералы)
+    # для любого немодерированного тренера — регрессия, найденная вручную после переезда
+    # на trainer_next_step.py. См. те же сигналы, что и STEP_SETUP_WEEK там.
+    has_schedule = int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
 
     if _onboarding_booking_step_done(d):
         cat_vis = d.get("is_catalog_visible") is not False and d.get("is_catalog_visible") != 0
@@ -244,23 +240,29 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                     )
                 )
 
-    if not active or not complete:
+    if not has_schedule:
         return out
 
-    out.append(
-        _inbox_item(
-            item_id="referral_growth",
-            kind="rhythm",
-            priority=66,
-            title=(
-                "До 60 бесплатных дней полного доступа — приглашайте коллег "
-                "по реферальной программе. Подробности в разделе «Рефералы»."
-            ),
-            primary_label="Рефералы",
-            primary_action="trainer_referral",
-            dismissible=True,
+    # Реферальная программа — это «пригласите коллегу», отдельная от next_step тема «пригласите
+    # своего клиента». Обе про приглашение, и без гейта они конкурируют визуально в первые же
+    # секунды после первого экрана — до того, как тренер вообще получил свою первую запись.
+    # Приглашать коллег имеет смысл только после того, как тренер сам увидел, что продукт
+    # работает, а не сразу после того, как расписание создано.
+    if _onboarding_booking_step_done(d):
+        out.append(
+            _inbox_item(
+                item_id="referral_growth",
+                kind="rhythm",
+                priority=66,
+                title=(
+                    "До 60 бесплатных дней полного доступа — приглашайте коллег "
+                    "по реферальной программе. Подробности в разделе «Рефералы»."
+                ),
+                primary_label="Рефералы",
+                primary_action="trainer_referral",
+                dismissible=True,
+            )
         )
-    )
 
     if d.get("has_crm_subscription_access") is False:
         return out

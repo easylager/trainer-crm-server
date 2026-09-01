@@ -3091,34 +3091,106 @@
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent);
       color: color-mix(in srgb, var(--tg-theme-text-color) 55%, var(--tg-theme-hint-color));
     }
-    /* Two-CTA layout for step 2 (real + sandbox paths) */
-    .onboarding-step-ctas {
+    /* Step 2: one recommended action; other paths as caption links */
+    .onboarding-step:not(.is-current) .onboarding-choice {
+      display: none !important;
+    }
+    .onboarding-choice {
       display: flex;
-      flex-direction: column;
-      gap: 5px;
-      margin-top: 8px;
+      flex-direction: column !important;
+      align-items: stretch;
+      gap: 10px;
+      margin-top: 12px;
+      width: 100%;
+      flex: 1 1 100%;
     }
-    .onboarding-step-ctas .onboarding-step-cta {
-      flex-shrink: unset;
-      align-self: stretch;
+    .onboarding-choice-card {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 13px 16px;
+      border: none;
+      border-radius: 13px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
       text-align: center;
+      cursor: pointer;
+      color: #1a1a1a;
+      background: var(--app-cta-fill);
+      box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.34);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    .onboarding-step-cta--secondary {
-      border-color: rgba(128, 128, 128, 0.35) !important;
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent) !important;
-      color: var(--tg-theme-text-color) !important;
-      font-weight: 500 !important;
+    .onboarding-choice-card:disabled {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+    .onboarding-choice-card:active {
+      transform: scale(0.985);
+    }
+    .onboarding-choice-alts {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      margin: 0;
+      padding: 0 4px 2px;
+    }
+    .onboarding-choice-alts__dot {
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 70%, transparent);
+      font-size: 12px;
+      line-height: 1;
+    }
+    .onboarding-choice-alt {
+      margin: 0;
+      padding: 4px 2px;
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .onboarding-choice-alt:disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    .onboarding-choice-alt:active {
+      opacity: 0.72;
     }
 
-    .onboarding-step-cta--sandbox {
-      border-color: rgba(128, 128, 128, 0.25) !important;
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 94%, transparent) !important;
-      color: var(--tg-theme-hint-color) !important;
-      font-weight: 500 !important;
+    .onboarding-step-skip {
+      flex: 1 1 100%;
+      width: 100%;
+      margin-top: 4px;
+      padding: 10px 8px;
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .onboarding-step-skip[hidden] {
+      display: none !important;
+    }
+    .onboarding-step-skip:active {
+      opacity: 0.72;
     }
 
-    /* ── Progressive focus: the ONE active step dominates; others whisper ── */
-    .onboarding-step:not(.done):not(.locked) {
+    /* ── Progressive focus: ONLY .is-current dominates; others whisper ── */
+    .onboarding-step.is-current {
       flex-wrap: wrap;
       align-items: center;
       padding: 14px 14px 16px;
@@ -3126,7 +3198,7 @@
       background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-bg-color));
       border: 1px solid color-mix(in srgb, var(--app-cta-fill) 30%, transparent);
     }
-    .onboarding-step:not(.done):not(.locked) .onboarding-step-icon {
+    .onboarding-step.is-current .onboarding-step-icon {
       width: 28px;
       height: 28px;
       font-size: 14px;
@@ -3134,19 +3206,18 @@
       color: #1a1a1a;
       box-shadow: 0 3px 10px rgba(var(--accent-rgb), 0.4);
     }
-    .onboarding-step:not(.done):not(.locked) .onboarding-step-name {
+    .onboarding-step.is-current .onboarding-step-name {
       font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
-    .onboarding-step:not(.done):not(.locked) .onboarding-step-hint {
+    .onboarding-step.is-current .onboarding-step-hint {
       font-size: 12.5px;
       margin-top: 3px;
     }
 
     /* Active step: the single primary CTA is full-width and brand-filled */
-    .onboarding-step:not(.done):not(.locked) > .onboarding-step-cta,
-    .onboarding-step:not(.done):not(.locked) .onboarding-step-cta--primary {
+    .onboarding-step.is-current > .onboarding-step-cta {
       flex: 1 1 100%;
       width: 100%;
       align-self: stretch;
@@ -3163,8 +3234,7 @@
       box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.34);
       transition: transform 0.16s ease, opacity 0.16s ease;
     }
-    .onboarding-step:not(.done):not(.locked) > .onboarding-step-cta:active,
-    .onboarding-step:not(.done):not(.locked) .onboarding-step-cta--primary:active {
+    .onboarding-step.is-current > .onboarding-step-cta:active {
       transform: scale(0.985);
       opacity: 0.94;
     }
@@ -4581,3 +4651,61 @@
         transition: none;
       }
     }
+
+/* ============================================================================
+ * Онбординг v2 — карточка «следующий шаг».
+ *
+ * Заменяет блок «Первые шаги» (чеклист из трёх пунктов с замками и прогресс-пилюлей).
+ * Одна карточка, один основной глагол. Вторичное действие есть только там, где отказ —
+ * это законный выбор («Не сейчас» на приглашении в каталог), и выглядит как ссылка,
+ * а не как вторая кнопка: две равнозначные кнопки снова превращают шаг в выбор.
+ * ==========================================================================*/
+.hub-next-step {
+  margin: 0 var(--hub-gutter, 16px) 18px;
+  padding: 18px 18px 16px;
+  background: var(--app-surface-container, var(--glide-surface));
+  border: 1px solid var(--glide-line);
+  border-radius: 16px;
+  box-shadow: var(--app-lift, none);
+}
+.hub-next-step[hidden] { display: none; }
+
+.hub-next-step__title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  line-height: 1.28;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--app-text);
+}
+.hub-next-step__body {
+  margin: 0 0 16px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--app-muted);
+}
+.hub-next-step__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hub-next-step__cta { margin: 0; }
+.hub-next-step__secondary {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 4px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--app-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  align-self: center;
+}
+.hub-next-step__secondary[hidden] { display: none; }
+.hub-next-step__secondary:focus-visible,
+.hub-next-step__cta:focus-visible {
+  outline: 2px solid var(--app-cta-fill);
+  outline-offset: 2px;
+}

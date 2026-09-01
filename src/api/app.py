@@ -475,6 +475,28 @@ def webapp_trainer_clients_page():
     return _webapp_file_response(path)
 
 
+@app.api_route("/webapp/trainer-onboarding", methods=["GET", "HEAD"])
+def webapp_trainer_onboarding_page():
+    """First run: the only setup screen a trainer ever sees — sports + weekly grid, then the link."""
+    path = _WEBAPP_DIR / "trainer-onboarding.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-onboarding-main.js")
+def webapp_trainer_onboarding_main_js(request: Request):
+    """First-run screen logic. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-onboarding-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.api_route("/webapp/trainer-home", methods=["GET", "HEAD"])
 def webapp_trainer_home_page():
     """Trainer hub: upcoming bookings + links to schedule, clients, requests, etc."""

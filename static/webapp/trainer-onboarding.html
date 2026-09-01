@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Первый запуск</title>
+  <script>
+    (function () {
+      try {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (!tg) return;
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+      } catch (e) { /* */ }
+    })();
+  </script>
+  <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+  <link rel="stylesheet" href="theme.css?v=202609011" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609011" />
+  <script src="mini-app-telegram-chrome.js?v=202609015"></script>
+  <style>
+    /*
+     * Первый запуск. Один экран, два вопроса, ноль ввода с клавиатуры.
+     *
+     * Правило этой страницы: тренер отвечает пальцем, а не головой. Всё, что нельзя
+     * ответить не задумываясь, здесь не спрашивается — оно спрашивается позже,
+     * в момент, когда без ответа ломается действие с живым человеком.
+     */
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--app-bg);
+      color: var(--app-text);
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .ob {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      /* Место под липкую кнопку внизу, чтобы она никогда не накрывала последний ряд сетки. */
+      padding: 0 0 108px;
+    }
+
+    .ob-head { padding: 26px 20px 6px; }
+    .ob-eyebrow {
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--app-muted);
+      margin: 0 0 8px;
+    }
+    .ob-title {
+      font-size: 25px;
+      line-height: 1.2;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -.01em;
+    }
+    .ob-lead {
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--app-muted);
+      margin: 10px 0 0;
+    }
+
+    .ob-step { padding: 22px 20px 0; }
+    .ob-step-title {
+      font-size: 17px;
+      font-weight: 650;
+      margin: 0 0 4px;
+    }
+    .ob-step-hint {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--app-muted);
+      margin: 0 0 14px;
+    }
+
+    /* ── Услуги: чипсы, мультивыбор ── */
+    /* [hidden] должен побеждать display: класс .ob-chips сам по себе всегда сильнее голого
+       атрибута (author-стиль всегда перебивает UA default для [hidden]) — уже ловили эту
+       же ошибку на .ob-skip. #obDuration прячется этим классом, когда площадка фиксирует
+       длительность (см. syncDurationLock в JS), поэтому гвард обязателен. */
+    .ob-chips[hidden] { display: none; }
+    .ob-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ob-chip {
+      appearance: none;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .12s ease, border-color .12s ease, color .12s ease;
+    }
+    .ob-chip[aria-pressed="true"] {
+      background: var(--app-cta-fill);
+      border-color: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      font-weight: 650;
+    }
+    .ob-chip:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
+
+    /* ── Сетка недели ── */
+    .ob-grid-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -20px;
+      padding: 0 16px 4px 6px;
+    }
+    .ob-grid {
+      display: grid;
+      grid-template-columns: 26px repeat(7, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .ob-grid-dayhead {
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      color: var(--app-text);
+      padding-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .ob-grid-dayhead.is-weekend { color: var(--app-attention); }
+    .ob-grid-hour {
+      font-size: 13px;
+      font-weight: 650;
+      color: var(--app-text);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .ob-cell {
+      appearance: none;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      border-radius: 8px;
+      height: 34px;
+      padding: 0;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .1s ease, border-color .1s ease;
+    }
+    .ob-cell[aria-pressed="true"] {
+      background: var(--app-cta-fill);
+      border-color: var(--app-cta-fill);
+    }
+    .ob-cell:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
+
+    .ob-grid-foot {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--app-muted);
+    }
+    .ob-link-btn {
+      appearance: none;
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      color: var(--glide-ink-teal, var(--glide-700));
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+
+    /* ── Площадка: длительность зафиксирована ── */
+    .ob-arena-locked-note {
+      margin: 10px 0 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--app-muted);
+    }
+    .ob-arena-locked-note[hidden] { display: none; }
+
+    /* ── Поиск и список площадок ── */
+    .ob-arena-pick[hidden] { display: none; }
+    .ob-arena-pick { margin-top: 14px; }
+    .ob-arena-search {
+      appearance: none;
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      /* Светлый чип + тёмный Telegram: --app-text белый, WebKit заливает буквы им. */
+      color: var(--app-chip-text);
+      -webkit-text-fill-color: var(--app-chip-text);
+      caret-color: var(--app-cta-fill);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+    .ob-arena-search::placeholder {
+      color: var(--glide-ink, #0B6E70);
+      -webkit-text-fill-color: var(--glide-ink, #0B6E70);
+      opacity: .55;
+    }
+    .ob-arena-search:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 1px; }
+    .ob-arena-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .ob-arena-option {
+      appearance: none;
+      width: 100%;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .ob-arena-option[aria-pressed="true"] {
+      background: var(--app-cta-fill);
+      border-color: var(--app-cta-fill);
+      color: var(--app-cta-text);
+    }
+    .ob-arena-option__name { font-size: 15px; font-weight: 600; }
+    .ob-arena-option__meta {
+      font-size: 12.5px;
+      color: var(--app-muted);
+    }
+    .ob-arena-option[aria-pressed="true"] .ob-arena-option__meta { color: inherit; opacity: .85; }
+    .ob-arena-empty {
+      font-size: 14px;
+      color: var(--app-muted);
+      padding: 8px 2px;
+    }
+
+    /* ── Табы площадок над сеткой недели ── */
+    .ob-arena-tabs[hidden] { display: none; }
+    .ob-arena-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      margin-bottom: 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .ob-arena-tab {
+      appearance: none;
+      flex: 0 0 auto;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ob-arena-tab[aria-selected="true"] {
+      background: var(--app-cta-fill);
+      border-color: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      font-weight: 650;
+    }
+
+    /* Ячейка дня, занятого другой площадкой в мульти-режиме. */
+    .ob-cell--taken {
+      background: transparent;
+      border-style: dashed;
+      cursor: default;
+      opacity: .5;
+    }
+
+    /* ── Липкая кнопка ── */
+    .ob-foot {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+      background: var(--app-bg);
+      border-top: 1px solid var(--glide-line, #E2E6E5);
+    }
+    .ob-cta {
+      appearance: none;
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 16px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      cursor: pointer;
+    }
+    .ob-cta[disabled] { opacity: .5; cursor: default; }
+    .ob-foot-note {
+      margin: 8px 0 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--app-muted);
+      text-align: center;
+      min-height: 18px;
+    }
+    .ob-foot-note.is-error { color: var(--app-danger-ink); }
+
+    /* ── Экран 2: ссылка ── */
+    .ob-done { padding: 40px 20px 0; display: none; }
+    .ob-done.is-on { display: block; }
+    .ob-done-mark {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 700;
+      margin-bottom: 18px;
+    }
+    .ob-done-title {
+      font-size: 25px; line-height: 1.2; font-weight: 700; margin: 0 0 10px; letter-spacing: -.01em;
+    }
+    .ob-done-lead { font-size: 16px; line-height: 1.5; color: var(--app-muted); margin: 0 0 22px; }
+    .ob-done-ask {
+      background: var(--app-surface);
+      border: 1px solid var(--glide-line, #E2E6E5);
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .ob-done-ask strong { font-weight: 650; }
+
+    /* [hidden] должен побеждать display: атрибут hidden сам по себе слабее любого display. */
+    .ob-skip[hidden] { display: none; }
+    .ob-skip {
+      display: block;
+      margin: 14px auto 0;
+      background: none;
+      border: 0;
+      font: inherit;
+      font-size: 14px;
+      color: var(--app-muted);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+
+    .ob-loading, .ob-fatal {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--app-muted);
+      font-size: 15px;
+    }
+    .ob-fatal { display: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="ob" id="obShell">
+
+  <div class="ob-loading" id="obLoading" role="status">Загружаем…</div>
+  <div class="ob-fatal" id="obFatal" role="alert"></div>
+
+  <!-- ── Шаг 1: что и когда ── -->
+  <div id="obSetup" hidden>
+    <div class="ob-head">
+      <p class="ob-eyebrow">Первый запуск</p>
+      <h1 class="ob-title" id="obTitle">Настроим за две минуты</h1>
+      <p class="ob-lead">Дальше ученик сам выберет время по вашей ссылке — а расписание всегда можно поправить.</p>
+    </div>
+
+    <section class="ob-step" aria-labelledby="obServicesTitle">
+      <h2 class="ob-step-title" id="obServicesTitle">Что вы тренируете?</h2>
+      <p class="ob-step-hint">Можно выбрать несколько.</p>
+      <div class="ob-chips" id="obServices" role="group" aria-labelledby="obServicesTitle"></div>
+    </section>
+
+    <section class="ob-step" aria-labelledby="obDurationTitle">
+      <h2 class="ob-step-title" id="obDurationTitle">Сколько длится занятие?</h2>
+      <p class="ob-step-hint" id="obDurationHint">Столько будет длиться каждое окно в расписании.</p>
+      <div class="ob-chips" id="obDuration" role="group" aria-labelledby="obDurationTitle"></div>
+      <p class="ob-arena-locked-note" id="obDurationLockedNote" hidden></p>
+    </section>
+
+    <section class="ob-step" aria-labelledby="obArenaModeTitle">
+      <h2 class="ob-step-title" id="obArenaModeTitle">Где вы тренируете?</h2>
+      <p class="ob-step-hint">Можно пропустить — расписание всё равно заработает.</p>
+      <div class="ob-chips" id="obArenaMode" role="group" aria-labelledby="obArenaModeTitle">
+        <button type="button" class="ob-chip" data-arena-mode="none">Пока не указывать</button>
+        <button type="button" class="ob-chip" data-arena-mode="single">Одна площадка</button>
+        <button type="button" class="ob-chip" data-arena-mode="multi">Несколько площадок</button>
+      </div>
+
+      <!-- Одна площадка: выбор одной из списка. -->
+      <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>
+        <input type="text" class="ob-arena-search" id="obArenaSingleSearch" placeholder="Найти площадку" autocomplete="off">
+        <div class="ob-arena-list" id="obArenaSingleList" role="listbox" aria-label="Площадки"></div>
+      </div>
+
+      <!-- Несколько площадок: сначала отмечаем, где работаем. -->
+      <div id="obArenaMultiPickWrap" class="ob-arena-pick" hidden>
+        <input type="text" class="ob-arena-search" id="obArenaMultiSearch" placeholder="Найти площадку" autocomplete="off">
+        <div class="ob-arena-list" id="obArenaMultiList" role="group" aria-label="Площадки, где вы работаете"></div>
+      </div>
+    </section>
+
+    <section class="ob-step" aria-labelledby="obWeekTitle">
+      <h2 class="ob-step-title" id="obWeekTitle">Когда обычно?</h2>
+      <p class="ob-step-hint" id="obWeekHint">Мы отметили типичное. Можно не всё сразу — потом подкорректируете :)</p>
+      <div class="ob-arena-tabs" id="obArenaTabs" role="tablist" aria-label="Площадка" hidden></div>
+      <div class="ob-grid-wrap">
+        <div class="ob-grid" id="obGrid" role="group" aria-labelledby="obWeekTitle"></div>
+      </div>
+      <div class="ob-grid-foot">
+        <span id="obGridCount">—</span>
+        <button type="button" class="ob-link-btn" id="obGridMore">Показать больше часов</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Шаг 2: ссылка ── -->
+  <div class="ob-done" id="obDone">
+    <div class="ob-done-mark" aria-hidden="true">✓</div>
+    <h1 class="ob-done-title" id="obDoneTitle">Готово</h1>
+    <p class="ob-done-lead" id="obDoneLead"></p>
+    <div class="ob-done-ask">
+      Отправьте ссылку <strong>одному ученику</strong> — тому, кто и так собирался к вам на этой неделе.
+    </div>
+  </div>
+
+  <div class="ob-foot" id="obFoot" hidden>
+    <button type="button" class="ob-cta" id="obCta">Готово</button>
+    <p class="ob-foot-note" id="obNote"></p>
+    <button type="button" class="ob-skip" id="obSkip" hidden>Позже</button>
+  </div>
+</div>
+
+<script src="trainer-onboarding-main.js?v=202609025"></script>
+</body>
+</html>

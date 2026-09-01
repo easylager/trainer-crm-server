@@ -350,6 +350,19 @@ window.openTelegramShareUrlFromMiniApp = function (opts) {
     }
   }
 
+  /* Ссылка уже есть, текста нет — вырезаем URL из полного сообщения, иначе
+     Telegram отрисует только голый url= без заготовленного текста. */
+  if (shareUrl && !shareBody && fullMessage) {
+    var full = fullMessage.replace(/\r\n/g, '\n').trim();
+    if (full.indexOf(shareUrl) === 0) {
+      shareBody = full.slice(shareUrl.length).replace(/^\s+/, '').trim();
+    } else if (full.length >= shareUrl.length && full.slice(-shareUrl.length) === shareUrl) {
+      shareBody = full.slice(0, -shareUrl.length).replace(/\s+$/, '').trim();
+    } else if (full !== shareUrl) {
+      shareBody = full;
+    }
+  }
+
   if (!shareUrl) {
     var tg0 = window.Telegram && window.Telegram.WebApp;
     if (tg0 && typeof tg0.showAlert === 'function') {
@@ -378,6 +391,19 @@ window.openTelegramShareUrlFromMiniApp = function (opts) {
       return true;
     } catch (e1) {
       /* fall through */
+    }
+  }
+  if (typeof tg.openLink === 'function') {
+    try {
+      tg.openLink(href, { try_instant_view: false });
+      return true;
+    } catch (e1b) {
+      try {
+        tg.openLink(href);
+        return true;
+      } catch (e1c) {
+        /* fall through */
+      }
     }
   }
 

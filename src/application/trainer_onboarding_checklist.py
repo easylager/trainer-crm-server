@@ -7,7 +7,9 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 so onboarding «первая запись» does not regress after cancel.
 ``has_completed_booking`` = at least one booking with status ``completed`` (hub nudge: client notes).
 ``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
-``schedule_unlocked`` mirrors Mini App access (active or pending TTV + CRM trial).
+``schedule_unlocked`` is True for every linked, non-deactivated trainer (onboarding v2:
+moderation gates the catalog, not the trainer's own tools).
+``arena_count`` / ``real_bookings_count`` / ``arena_work_format`` feed the single «next step» card.
 ``is_catalog_visible`` = trainer row flag (hub rhythm: catalog publication hint when false while active).
 ``weekly_template_count`` = rows in ``trainer_schedule_templates`` (hub nudge after onboarding complete).
 ``slots_this_week_count`` = available/booked slots from today till end of current week.
@@ -44,7 +46,11 @@ from src.application.organization_capabilities import (
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
-from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+from src.infrastructure.db.models import (
+    TRAINER_STATUS_ACTIVE,
+    TRAINER_STATUS_DEACTIVATED,
+    TRAINER_STATUS_PENDING_PROFILE,
+)
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.trainer_status import normalize_trainer_status_value
 
@@ -54,13 +60,7 @@ _SLOT_HORIZON_DAYS = 56
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 # Inline: profile not ready for TTV path and no CRM trial yet.
-_SLOTS_BOOKINGS_LOCKED_RU = (
-    "Станет доступно после активации аккаунта: тогда откроются расписание и записи."
-)
-_SLOTS_BOOKINGS_LOCKED_PENDING_RU = (
-    "Заполните базовый профиль (имя, телефон, город, услуга, площадка, длительность и окно записи) — "
-    "тогда откроется расписание и тестовые записи до активации."
-)
+_SLOTS_BOOKINGS_LOCKED_RU = "Аккаунт деактивирован — расписание и записи закрыты."
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 
@@ -109,6 +109,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "open_loop_clients_no_telegram_count": 0,
         "fill_slots_invite_candidates_count": 0,
         "has_crm_subscription_access": False,
+        "arena_count": 0,
+        "real_bookings_count": 0,
+        "arena_work_format": None,
     }
 
     has_crm = await trainer_has_crm_access(session, trainer_id)
@@ -144,20 +147,15 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
             )
         return out
 
-    pending_ttv_unlock = (
-        st == TRAINER_STATUS_PENDING_PROFILE and tt_minimal_complete and has_crm
-    )
-
-    if not is_active and not pending_ttv_unlock:
-        reason = _SLOTS_BOOKINGS_LOCKED_PENDING_RU if st == TRAINER_STATUS_PENDING_PROFILE else _SLOTS_BOOKINGS_LOCKED_RU
-        out["slots_locked_reason"] = reason
-        out["bookings_locked_reason"] = reason
+    # Onboarding v2: nothing here locks the trainer out any more. Schedule and bookings are open
+    # from the first second; ``is_active`` only says whether the public catalog lists them.
+    # The old "locked until the anketa is complete" branch is gone deliberately — it was the
+    # single biggest source of drop-off and of the tier machinery around it.
+    if st == TRAINER_STATUS_DEACTIVATED:
+        out["slots_locked_reason"] = _SLOTS_BOOKINGS_LOCKED_RU
+        out["bookings_locked_reason"] = _SLOTS_BOOKINGS_LOCKED_RU
         out["schedule_unlocked"] = False
         out["trainer_id"] = trainer_id
-        out["open_loop_pending_bookings_count"] = 0
-        out["open_loop_clients_no_upcoming_count"] = 0
-        out["open_loop_clients_no_telegram_count"] = 0
-        out["fill_slots_invite_candidates_count"] = 0
         return out
 
     r_tpl = await session.execute(
@@ -368,8 +366,30 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         int(row_last[0]) if row_last and row_last[0] is not None else None
     )
 
-    out["schedule_unlocked"] = bool(is_active or pending_ttv_unlock)
+    # Reached only by a linked, non-deactivated trainer — so the schedule is open, full stop.
+    out["schedule_unlocked"] = True
     out["trainer_id"] = trainer_id
+
+    # Facts the «next step» card needs and nothing else does.
+    r_next = await session.execute(
+        text(
+            """
+            SELECT
+                (SELECT COUNT(*)::int FROM trainer_arenas WHERE trainer_id = :tid) AS arena_cnt,
+                (
+                    SELECT COUNT(*)::int FROM bookings
+                    WHERE trainer_id = :tid
+                      AND status IN ('confirmed', 'completed')
+                      AND NOT is_sandbox
+                ) AS real_bookings_cnt
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row_next = r_next.fetchone()
+    out["arena_count"] = int(row_next[0] or 0) if row_next else 0
+    out["real_bookings_count"] = int(row_next[1] or 0) if row_next else 0
+    out["arena_work_format"] = (trainer.get("arena_work_format") or "").strip() or None
 
     # Open-loop rhythm hints: every CTE here MUST exclude sandbox identity (both ``b.is_sandbox`` and
     # ``c.is_sandbox``). Otherwise the demo client surfaces in «no upcoming session» / «invite to bot»

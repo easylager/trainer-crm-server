@@ -198,6 +198,40 @@ async def get_schedule_grid_preset_for_trainer_arena(
     }
 
 
+async def get_arena_schedule_preset_raw(session: AsyncSession, arena_id: int) -> dict[str, Any]:
+    """
+    Grid preset for a bare arena — no ``trainer_arenas`` link required.
+
+    Used when picking a venue during onboarding, before the trainer is linked to it: we still
+    need to know the real grid to render the right hour picker and duration lock. Unlike
+    :func:`get_schedule_grid_preset_for_trainer_arena`, this never raises for an unlinked arena.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT grid_kind, minute_offset, hour_start, hour_end, slot_duration_minutes
+            FROM arena_schedule_presets
+            WHERE arena_id = :aid
+            """
+        ),
+        {"aid": int(arena_id)},
+    )
+    row = r.fetchone()
+    if not row:
+        p = default_quarter_preset()
+        p["arena_id"] = int(arena_id)
+        return p
+    return {
+        "kind": (row[0] or GRID_QUARTER_15).strip(),
+        "minute_offset": int(row[1] or 0),
+        "hour_start": int(row[2] if row[2] is not None else DEFAULT_SCHEDULE_HOUR_START),
+        "hour_end": int(row[3] if row[3] is not None else DEFAULT_SCHEDULE_HOUR_END),
+        "slot_duration_minutes": int(row[4]) if row[4] is not None else None,
+        "arena_id": int(arena_id),
+        "step_minutes": 15 if (row[0] or GRID_QUARTER_15).strip() == GRID_QUARTER_15 else None,
+    }
+
+
 def schedule_grid_preset_to_api(preset: dict[str, Any]) -> dict[str, Any]:
     """JSON-safe payload for GET /schedule."""
     raw_dur = preset.get("slot_duration_minutes")

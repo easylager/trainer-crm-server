@@ -166,6 +166,46 @@ def test_client_reminder_pass_instead_of_price() -> None:
     assert "50" not in text
 
 
+def test_client_trainer_booked_without_tariff_still_renders() -> None:
+    """Quick-setup: услуга есть, цены нет — пуш ученику без ценника, без падения."""
+    text = msg.format_client_trainer_booked_you_html(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=None,
+        price_tier_label=None,
+        arena_name="Манеж",
+        arena_address=None,
+        duration_minutes=60,
+        map_link=None,
+        expected_payment_class=None,
+    )
+    assert "Персональная" in text
+    assert "Вас записали" in text
+    assert "💳" not in text
+
+
+def test_upcoming_payment_line_empty_without_price() -> None:
+    assert (
+        msg.format_client_upcoming_payment_display_html(
+            expected_payment_class=None,
+            booking_price_cents=None,
+        )
+        == ""
+    )
+    assert (
+        msg.format_session_payment_notice_html(
+            phase="upcoming",
+            outcome="one_off",
+            booking_price_cents=None,
+            for_client=True,
+        )
+        == ""
+    )
+
+
 def test_client_trainer_booked_pass_instead_of_price() -> None:
     text = msg.format_client_trainer_booked_you_html(
         date="10.06",

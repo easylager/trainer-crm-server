@@ -6,17 +6,30 @@ from src.bot.handlers.trainer_handlers import _trial_welcome_labels
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html
 
 
-def test_after_link_hero_is_short_and_matches_landing_promise() -> None:
+def test_after_link_hero_sells_the_action_not_the_product() -> None:
+    """
+    Onboarding v2 copy rule: the first message promises one outcome and asks for one tap.
+    No feature list, no «CRM», no anketa, no trial — those all switch the reader into
+    evaluation mode when we need them in working mode.
+    """
     hero = msg.TRAINER_AFTER_LINK_HERO
-    assert "Платформа, которую строим вместе" not in hero
-    assert "CRM для тренера на льду" in hero
-    assert "пробный период" not in hero.lower()
+    low = hero.lower()
+    for forbidden in ("crm", "анкет", "провер", "пробный период", "тариф", "первые шаги"):
+        assert forbidden not in low, f"hero must not mention «{forbidden}»"
+    assert "ссылка" in low and "ученик" in low
     assert len(hero) < 280
 
 
-def test_blocked_profile_onboarding_is_hero_only() -> None:
-    html = trainer_first_link_onboarding_html(TrainerAccessState.BLOCKED_PROFILE, None)
-    assert html == msg.TRAINER_AFTER_LINK_HERO
+def test_new_trainer_after_link_gets_the_hero() -> None:
+    """A freshly linked trainer with an empty profile sees the offer, never a gate."""
+    assert trainer_first_link_onboarding_html(TrainerAccessState.ACTIVE, None) == msg.TRAINER_AFTER_LINK_HERO
+
+
+def test_deactivated_after_link_is_told_plainly() -> None:
+    assert (
+        trainer_first_link_onboarding_html(TrainerAccessState.DEACTIVATED, None)
+        == msg.TRAINER_AFTER_LINK_STEP_DEACTIVATED
+    )
 
 
 def test_trial_welcome_labels_requires_active_trial_tier() -> None:

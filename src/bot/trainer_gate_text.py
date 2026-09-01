@@ -1,80 +1,29 @@
-"""User-visible texts for trainer bot access gate (shared by middleware and /start)."""
-import html
+"""
+User-visible texts for trainer bot access gate (shared by middleware and /start).
+
+Onboarding v2: there are only two things to say. Either this Telegram account is not a trainer
+here yet, or the account was switched off. A linked, working trainer never sees a gate — the
+catalog moderation state is shown inside the app, not as a wall in chat.
+"""
 from typing import Any
 
 from src.application.trainer_access_state import TrainerAccessState
-from src.application.trainer_profile_completeness import moderation_readiness_dict
 from src.bot import messages as msg
-from src.infrastructure.db.models import (
-    TRAINER_STATUS_PENDING_CONTRACT,
-    TRAINER_STATUS_PENDING_PAYMENT,
-    TRAINER_STATUS_PENDING_PROFILE,
-)
 
 
 def trainer_first_link_onboarding_html(state: TrainerAccessState, trainer: dict[str, Any] | None) -> str:
-    """
-    Single HTML message after successful welcome link (non-active): value prop + clear next step.
-    Replaces dry TRAINER_LINK_SUCCESS + gate wall of text.
-    """
+    """Single HTML message right after a successful welcome link: one promise, one action."""
     if state == TrainerAccessState.DEACTIVATED:
         return msg.TRAINER_AFTER_LINK_STEP_DEACTIVATED
-    hero = msg.TRAINER_AFTER_LINK_HERO
-    step = _after_link_step_html(state, trainer).strip()
-    if step:
-        return f"{hero}\n\n{step}"
-    return hero
-
-
-def _after_link_step_html(state: TrainerAccessState, trainer: dict[str, Any] | None) -> str:
     if state == TrainerAccessState.NOT_LINKED:
         return msg.TRAINER_ONLY_VIA_SITE
-    if state == TrainerAccessState.BLOCKED_PROFILE:
-        # Hero already points to «Обзор» / быстрый старт — без повторного «сначала анкета».
-        return ""
-    if state == TrainerAccessState.BOOKING_READY:
-        return msg.TRAINER_AFTER_LINK_STEP_BOOKING_READY
-    if state == TrainerAccessState.PENDING_MODERATION:
-        t = trainer or {}
-        st = (t.get("status") or "").strip()
-        if st in (TRAINER_STATUS_PENDING_CONTRACT, TRAINER_STATUS_PENDING_PAYMENT):
-            return msg.TRAINER_AFTER_LINK_STEP_AWAITING_ACTIVATION
-        fb = t.get("moderation_feedback")
-        if fb and str(fb).strip():
-            return msg.TRAINER_AFTER_LINK_STEP_NEEDS_EDIT.format(
-                feedback=html.escape(str(fb).strip()),
-            )
-        if st == TRAINER_STATUS_PENDING_PROFILE:
-            ready = moderation_readiness_dict(t, trainer_status=st)
-            if ready.get("complete") and not ready.get("already_submitted_for_moderation"):
-                return msg.TRAINER_AFTER_LINK_STEP_INVITE_SUBMIT
-        return msg.TRAINER_AFTER_LINK_STEP_PENDING
-    return msg.TRAINER_AFTER_LINK_STEP_PENDING  # fallback
+    return msg.TRAINER_AFTER_LINK_HERO
 
 
 def trainer_gate_message(state: TrainerAccessState, trainer: dict[str, Any] | None) -> str:
     if state == TrainerAccessState.NOT_LINKED:
         return msg.TRAINER_ONLY_VIA_SITE
-    if state == TrainerAccessState.BLOCKED_PROFILE:
-        return msg.TRAINER_GATE_BLOCKED_PROFILE
-    if state == TrainerAccessState.BOOKING_READY:
-        return msg.TRAINER_GATE_BOOKING_READY
-    if state == TrainerAccessState.PENDING_MODERATION:
-        t = trainer or {}
-        st = (t.get("status") or "").strip()
-        # Договор/оплата важнее редкого хвоста moderation_feedback на этом статусе.
-        if st in (TRAINER_STATUS_PENDING_CONTRACT, TRAINER_STATUS_PENDING_PAYMENT):
-            return msg.TRAINER_GATE_AWAITING_ACTIVATION
-        fb = t.get("moderation_feedback")
-        if fb and str(fb).strip():
-            return msg.TRAINER_GATE_NEEDS_EDIT.format(
-                feedback=html.escape(str(fb).strip()),
-            )
-        if st == TRAINER_STATUS_PENDING_PROFILE:
-            ready = moderation_readiness_dict(t, trainer_status=st)
-            if ready.get("complete") and not ready.get("already_submitted_for_moderation"):
-                return msg.TRAINER_GATE_INVITE_SUBMIT
-        return msg.TRAINER_GATE_PENDING_MODERATION
     if state == TrainerAccessState.DEACTIVATED:
         return msg.TRAINER_GATE_DEACTIVATED
-    return msg.TRAINER_GATE_PENDING_MODERATION
+    # ACTIVE never hits a gate; keep a safe, non-alarming fallback.
+    return msg.TRAINER_GATE_DEACTIVATED

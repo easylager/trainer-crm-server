@@ -1,7 +1,17 @@
-"""Pure mapping tests for trainer bot access (no DB)."""
+"""
+Pure mapping tests for trainer bot access (no DB).
+
+Onboarding v2 contract: moderation gates the public catalog, not the trainer's own tools.
+Every linked trainer is ACTIVE for access purposes unless an admin deactivated the account —
+regardless of how empty the profile is.
+"""
 import pytest
 
-from src.application.trainer_access_state import TrainerAccessState, resolve_trainer_access_state
+from src.application.trainer_access_state import (
+    TrainerAccessState,
+    resolve_trainer_access_state,
+    trainer_may_use_bot_workflows,
+)
 from src.infrastructure.db.models import (
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
@@ -11,102 +21,46 @@ from src.infrastructure.db.models import (
 )
 
 
-def _trainer_moderation_complete() -> dict:
-    return {
-        "id": 1,
-        "status": TRAINER_STATUS_PENDING_PROFILE,
-        "profile": {
-            "first_name": "Ann",
-            "last_name": "Bee",
-            "age": 30,
-            "phone": "+375291234567",
-            "contacts": "@ann",
-            "description": "x" * 25,
-            "city_id": 1,
-            "education": "higher",
-            "experience_years": 5,
-            "session_duration_minutes": 45,
-            "min_hours_before_booking": 24,
-        },
-        "photos": [{"file_key": "trainers/1/p.jpg", "file_key_list": None, "sort_order": 0}],
-        "service_ids": [1],
-        "arena_ids": [1],
-        "education_entries_count": 0,
-    }
-
-
-def test_blocked_profile_when_pending_and_no_trainer_aggregate() -> None:
-    assert (
-        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=None)
-        == TrainerAccessState.BLOCKED_PROFILE
-    )
-
-
-def test_blocked_profile_when_pending_and_incomplete_trainer() -> None:
-    t = {"profile": {"first_name": "A", "last_name": "B", "age": 30}, "photos": [], "service_ids": [1]}
-    assert resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=t) == TrainerAccessState.BLOCKED_PROFILE
-
-
-def _trainer_tt_minimal_only() -> dict:
-    """5-field TTV gate: no photo/description/education or session/booking settings required."""
-    return {
-        "id": 2,
-        "status": TRAINER_STATUS_PENDING_PROFILE,
-        "profile": {
-            "first_name": "Sam",
-            "last_name": "Lee",
-            "phone": "+375291112233",
-            "city_id": 1,
-        },
-        "photos": [],
-        "service_ids": [1],
-        "arena_ids": [1],
-        "education_entries_count": 0,
-    }
-
-
-def test_booking_ready_when_pending_and_tt_minimal_not_submission_complete() -> None:
-    assert (
-        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=_trainer_tt_minimal_only())
-        == TrainerAccessState.BOOKING_READY
-    )
-
-
-def test_booking_ready_with_mobile_format_and_no_arenas() -> None:
-    t = {
-        "profile": {
-            "first_name": "Sam",
-            "last_name": "Lee",
-            "phone": "+375291112233",
-            "city_id": 1,
-        },
-        "photos": [],
-        "service_ids": [1],
-        "arena_ids": [],
-        "arena_work_format": "mobile",
-        "education_entries_count": 0,
-    }
-    assert (
-        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=t)
-        == TrainerAccessState.BOOKING_READY
-    )
-
-
-def test_pending_moderation_when_pending_and_complete_trainer() -> None:
-    assert (
-        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=_trainer_moderation_complete())
-        == TrainerAccessState.PENDING_MODERATION
-    )
+def test_only_three_states_exist() -> None:
+    """The tier machinery (BLOCKED_PROFILE / BOOKING_READY / PENDING_MODERATION) is gone for good."""
+    assert {s.value for s in TrainerAccessState} == {"not_linked", "active", "deactivated"}
 
 
 @pytest.mark.parametrize(
     "status",
-    [TRAINER_STATUS_PENDING_CONTRACT, TRAINER_STATUS_PENDING_PAYMENT],
+    [
+        TRAINER_STATUS_ACTIVE,
+        TRAINER_STATUS_PENDING_PROFILE,
+        TRAINER_STATUS_PENDING_CONTRACT,
+        TRAINER_STATUS_PENDING_PAYMENT,
+    ],
 )
-def test_pending_moderation_contract_payment(status: str) -> None:
-    assert resolve_trainer_access_state(status=status, trainer=None) == TrainerAccessState.PENDING_MODERATION
+def test_every_non_deactivated_status_is_active(status: str) -> None:
+    assert resolve_trainer_access_state(status=status, trainer=None) == TrainerAccessState.ACTIVE
 
 
-def test_active_and_deactivated() -> None:
-    assert resolve_trainer_access_state(status=TRAINER_STATUS_ACTIVE, trainer=None) == TrainerAccessState.ACTIVE
-    assert resolve_trainer_access_state(status=TRAINER_STATUS_DEACTIVATED, trainer=None) == TrainerAccessState.DEACTIVATED
+def test_empty_profile_does_not_block_access() -> None:
+    """A brand-new trainer with nothing filled in still works — that is the whole point."""
+    empty = {"id": 1, "status": TRAINER_STATUS_PENDING_PROFILE, "profile": {}, "photos": [], "service_ids": []}
+    assert (
+        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=empty)
+        == TrainerAccessState.ACTIVE
+    )
+
+
+def test_deactivated_is_the_only_closed_door() -> None:
+    assert (
+        resolve_trainer_access_state(status=TRAINER_STATUS_DEACTIVATED, trainer=None)
+        == TrainerAccessState.DEACTIVATED
+    )
+
+
+def test_unknown_status_falls_back_to_active() -> None:
+    """Never lock a paying trainer out because of a status value we failed to recognise."""
+    assert resolve_trainer_access_state(status="something_new", trainer=None) == TrainerAccessState.ACTIVE
+
+
+def test_bot_workflows_allowed_exactly_for_active() -> None:
+    assert trainer_may_use_bot_workflows(TrainerAccessState.ACTIVE) is True
+    assert trainer_may_use_bot_workflows(TrainerAccessState.DEACTIVATED) is False
+    assert trainer_may_use_bot_workflows(TrainerAccessState.NOT_LINKED) is False

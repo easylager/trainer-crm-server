@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models import (
     TRAINER_STATUS_DEACTIVATED,
+    TRAINER_STATUS_PENDING_PROFILE,
     Client,
     ClientFamilyAccessMember,
     Trainer,
@@ -29,8 +30,10 @@ from src.shared.config import Settings
 logger = logging.getLogger(__name__)
 
 Audience = Literal["clients", "trainers"]
+TrainerSegment = Literal["all", "pending_profile"]
 DELIVERY_LOG_DIR = Path("var/release-comms")
 DEFAULT_SEND_DELAY_SEC = 0.05
+TRAINER_SEGMENTS: frozenset[str] = frozenset({"all", "pending_profile"})
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class ReleaseCommsSpec:
     webapp_path: str | None
     html_body: str
     source_path: Path | None = None
+    segment: str | None = None
 
 
 @dataclass
@@ -65,6 +69,15 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
     audience: Audience = audience_raw  # type: ignore[assignment]
     button_text = (meta.get("button_text") or "").strip() or None
     webapp_path = (meta.get("webapp_path") or "").strip() or None
+    segment_raw = (meta.get("segment") or "all").strip().lower()
+    if audience == "trainers":
+        if segment_raw not in TRAINER_SEGMENTS:
+            raise ValueError(f"Invalid trainer segment {segment_raw!r} in {path}")
+        segment = segment_raw
+    else:
+        if segment_raw not in ("", "all"):
+            raise ValueError(f"segment is only for trainers, got {segment_raw!r} in {path}")
+        segment = "all"
     html_body = body.strip()
     if not html_body:
         raise ValueError(f"Empty message body in {path}")
@@ -75,6 +88,7 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
         webapp_path=webapp_path,
         html_body=html_body,
         source_path=path,
+        segment=segment,
     )
 
 
@@ -131,14 +145,20 @@ def save_delivery_log(
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-async def fetch_audience_telegram_ids(session: AsyncSession, audience: Audience) -> list[int]:
+async def fetch_audience_telegram_ids(
+    session: AsyncSession,
+    audience: Audience,
+    *,
+    segment: str | None = None,
+) -> list[int]:
     if audience == "trainers":
-        rows = await session.scalars(
-            select(Trainer.telegram_id).where(
-                Trainer.telegram_id.is_not(None),
-                Trainer.status != TRAINER_STATUS_DEACTIVATED,
-            )
+        q = select(Trainer.telegram_id).where(
+            Trainer.telegram_id.is_not(None),
+            Trainer.status != TRAINER_STATUS_DEACTIVATED,
         )
+        if (segment or "all") == "pending_profile":
+            q = q.where(Trainer.status == TRAINER_STATUS_PENDING_PROFILE)
+        rows = await session.scalars(q)
         return sorted({int(tid) for tid in rows if tid is not None})
 
     primary = select(Client.telegram_id).where(
@@ -201,7 +221,9 @@ async def broadcast_release_comms(
     if chat_id is not None:
         targets = [chat_id]
     else:
-        targets = await fetch_audience_telegram_ids(session, spec.audience)
+        targets = await fetch_audience_telegram_ids(
+            session, spec.audience, segment=spec.segment
+        )
         if limit is not None:
             targets = targets[: max(0, limit)]
 

@@ -4,6 +4,7 @@ Schedule: by calendar week (this/next). Template for quick apply; add slots to a
 """
 import asyncio
 import html
+import logging
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
 
@@ -130,6 +131,10 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
+
+# Модульный логгер: использовался в этом файле, но нигде не определялся —
+# любая ветка с logger.warning падала бы с NameError.
+logger = logging.getLogger(__name__)
 
 router = Router(name="trainer")
 
@@ -289,6 +294,39 @@ def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=url))],
+        ]
+    )
+
+
+async def _seed_trainer_avatar_bg(bot, trainer_id: int, telegram_user_id: int) -> None:
+    """Fire-and-forget avatar copy; owns its session so /start's transaction is unaffected."""
+    from src.application.trainer_quick_setup_use_cases import seed_trainer_photo_from_telegram
+
+    try:
+        async with async_session_factory() as s:
+            await seed_trainer_photo_from_telegram(bot, s, trainer_id, telegram_user_id)
+    except Exception:
+        logger.info("avatar seed task failed trainer_id=%s", trainer_id, exc_info=True)
+
+
+def _onboarding_start_keyboard() -> InlineKeyboardMarkup | None:
+    """
+    One button under the first message: «Начать» → the quick-setup screen.
+
+    Not «Обзор». The hub is a place with many things in it; at second zero the trainer needs a
+    single door, and behind it a screen that asks two questions they can answer without thinking.
+    """
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_ONBOARDING_START_BUTTON,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-onboarding"),
+                )
+            ]
         ]
     )
 
@@ -732,6 +770,42 @@ async def cmd_start(message: Message) -> None:
                 trial_welcome = _trial_welcome_labels(sub_st) if not paid_ok else None
                 kb_active = _post_welcome_link_keyboard(for_active_menu=True)
                 kb_onboarding = _post_welcome_link_keyboard(for_active_menu=False)
+
+                # Onboarding v2: the fork is «has this trainer set up a week yet», not «did a
+                # moderator approve them». A first-timer gets one offer and one button; everyone
+                # else gets the normal welcome-back with the hub and their subscription state.
+                from src.application.trainer_quick_setup_use_cases import (
+                    seed_trainer_identity_from_telegram,
+                    seed_trainer_photo_from_telegram,
+                    trainer_has_weekly_template,
+                )
+
+                tg_user = message.from_user
+                await seed_trainer_identity_from_telegram(
+                    session,
+                    trainer_id,
+                    first_name=getattr(tg_user, "first_name", None),
+                    last_name=getattr(tg_user, "last_name", None),
+                )
+                # Avatar in the background: it improves the client's booking screen, but the
+                # trainer must never wait on Telegram's CDN to see their first message.
+                asyncio.create_task(
+                    _seed_trainer_avatar_bg(message.bot, trainer_id, int(user_id))
+                )
+                is_first_run = (
+                    state != TrainerAccessState.DEACTIVATED
+                    and not await trainer_has_weekly_template(session, trainer_id)
+                )
+                if is_first_run:
+                    kb_start = _onboarding_start_keyboard()
+                    await message.answer(
+                        msg.TRAINER_AFTER_LINK_HERO,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=kb_start if kb_start else kb_onboarding,
+                    )
+                    await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
+                    return
+
                 if state == TrainerAccessState.ACTIVE:
                     if paid_ok:
                         label = html.escape(
@@ -871,13 +945,9 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
         await chat_message.answer(msg.TRAINER_INVITE_ERR_PROFILE_INCOMPLETE)
         return
     assert links is not None
-    if links.catalog_page_url:
-        plain = msg.TRAINER_INVITE_PLAIN_CLIENT_WITH_CATALOG.format(
-            deep_link=links.client_bot_deep_link,
-            catalog_url=links.catalog_page_url,
-        )
-    else:
-        plain = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=links.client_bot_deep_link)
+    # Одна ссылка независимо от того, доступна ли страница каталога: ученик идёт к конкретному
+    # тренеру, а второй адрес рядом с первым только заставляет выбирать.
+    plain = msg.TRAINER_INVITE_PLAIN_CLIENT.format(deep_link=links.client_bot_deep_link)
     await chat_message.answer(msg.TRAINER_INVITE_INTRO_HTML)
     await chat_message.answer(plain, parse_mode=None)
     async with async_session_factory() as session:

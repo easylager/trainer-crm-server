@@ -103,6 +103,20 @@ class TestDetermineOnboardingStage:
             == STAGE_NO_BOOKING
         )
 
+    def test_none_when_pending_profile_already_has_a_booking(self):
+        """Онбординг v2: запись есть, анкета пустая — не долбим «заполни поля»."""
+        assert (
+            determine_onboarding_stage(
+                trainer_status=TRAINER_STATUS_PENDING_PROFILE,
+                tt_minimal_complete=True,
+                profile_complete=False,
+                moderation_submitted=False,
+                has_moderation_feedback=False,
+                has_any_booking=True,
+            )
+            is None
+        )
+
     def test_none_when_active_with_a_booking(self):
         assert (
             determine_onboarding_stage(

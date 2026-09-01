@@ -52,6 +52,19 @@ def test_share_body_legacy_message_link_last_line_still_splits() -> None:
     assert dl not in body
 
 
+def test_trainer_invite_plain_strips_link_for_native_share() -> None:
+    """Текст для ученика: ссылка последней строкой — в url=, приветствие в text=."""
+    from src.bot import messages as msg
+
+    dl = "https://t.me/glide_client_bot?start=welcome_ref_13"
+    full = msg.TRAINER_INVITE_PLAIN_CLIENT.format(deep_link=dl)
+    body = share_body_for_native_share_dialog(full, dl)
+    assert dl not in body
+    assert "можно заглянуть в расписание" in body
+    assert "Выбери" not in body
+    assert not body.rstrip().endswith(":")
+
+
 def test_share_copy_same_regardless_of_context() -> None:
     """Entry point (hub vs catalog vs booking) does not change the message body."""
     dl = "https://t.me/b?start=x"

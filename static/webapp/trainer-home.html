@@ -4,21 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202608315"></script>
-  <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
+  <!-- Call ready() before telegram.org: iOS WebView already injects Telegram.WebApp;
+       a blocking telegram.org fetch leaves the Mini App on the splash forever. -->
   <script>
     (function () {
-      try {
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (!tg) return;
-        if (typeof tg.ready === 'function') tg.ready();
-        if (typeof tg.expand === 'function') tg.expand();
-        window.__tgReadyCalled = true;
-      } catch (e) { /* */ }
+      function go() {
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (!tg) return;
+          if (typeof tg.ready === 'function') tg.ready();
+          if (typeof tg.expand === 'function') tg.expand();
+          window.__tgReadyCalled = true;
+        } catch (e) { /* */ }
+      }
+      go();
     })();
   </script>
-  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+  <script src="mini-app-trainer-theme.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609015"></script>
   <script src="mini-app-phone-field.js?v=202608315"></script>
   <link rel="stylesheet" href="theme.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
@@ -38,13 +42,13 @@
     />
   </noscript>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202608318" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202609012" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <link rel="preload" href="trainer-home-main.js?v=202608318" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202608315" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202609015" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202609012" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -348,47 +352,19 @@
     ></section>
 
     <!-- Onboarding action card — greeting above is enough; this is the single focal surface -->
-    <div id="onboardingStrip" class="onboarding-strip onboarding-strip--hub-top" style="display:none;" hidden>
-      <div class="onboarding-strip-head">
-        <span class="onboarding-progress-pill" id="onboardingProgressPill">Шаг 1 из 2</span>
-        <h2 class="onboarding-strip-title">Первые шаги</h2>
-        <p class="onboarding-strip-lead">Три шага — и вы попадёте в каталог, где вас найдут новые клиенты.</p>
+    <!--
+      Онбординг v2: одна карточка «следующий шаг» вместо чеклиста из трёх пунктов.
+      Что показать — решает сервер (src/application/trainer_next_step.py), здесь только отрисовка.
+      Карточки нет — значит подсказывать нечего, и это нормальное состояние.
+    -->
+    <section id="hubNextStep" class="hub-next-step" hidden aria-labelledby="hubNextStepTitle">
+      <h2 class="hub-next-step__title" id="hubNextStepTitle"></h2>
+      <p class="hub-next-step__body" id="hubNextStepBody"></p>
+      <div class="hub-next-step__actions">
+        <button type="button" class="btn-block btn-primary hub-next-step__cta" id="hubNextStepCta"></button>
+        <button type="button" class="hub-next-step__secondary" id="hubNextStepSecondary" hidden></button>
       </div>
-      <ol class="onboarding-steps">
-        <li class="onboarding-step" id="onboardingStepProfile">
-          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Расскажите о себе</div>
-            <p class="onboarding-step-hint" id="onboardingHintProfile">Откроет расписание и онлайн-запись.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Продолжить</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepBooking">
-          <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Первый клиент</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Отправьте ссылку ученику — как только он запишется сам, увидите настоящее начало.</p>
-            <!-- Two-path CTAs: shown only while step is pending; replaced by disabled «Готово» when done -->
-            <div class="onboarding-step-ctas" id="onboardingBookingCtas">
-              <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaSendLink">Отправить ссылку ученику</button>
-              <button type="button" class="onboarding-step-cta onboarding-step-cta--secondary" id="onboardingCtaBookingReal">Записать реального клиента</button>
-              <button type="button" class="onboarding-step-cta onboarding-step-cta--sandbox" id="onboardingCtaBookingSandbox">Попробовать на примере</button>
-            </div>
-          </div>
-          <!-- Снаружи body — как у шага 1: «Готово» в одной строке с названием -->
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaBookingDone" style="display:none;" disabled>Готово</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepCatalog">
-          <span class="onboarding-step-icon" id="onboardingIconCatalog">3</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Попасть в каталог</div>
-            <!-- Hint is state-driven: not ready → profile, ready → submit, submitted → waiting -->
-            <p class="onboarding-step-hint" id="onboardingHintCatalog">Добавьте фото и отправьте профиль на проверку — после неё вас начнут находить в каталоге.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaCatalog">Открыть профиль</button>
-        </li>
-      </ol>
-    </div>
+    </section>
 
     <!--
       Lead Mode banner: visible only when lifecycle.is_lead_mode === true.
@@ -604,21 +580,6 @@
         <button type="button" class="btn-block btn-primary" id="hubGroupSlotAddBtn" style="display: none;">Добавить участника</button>
         <button type="button" class="btn-block btn-secondary" id="hubGroupSlotCloseBtn">Закрыть</button>
       </div>
-    </div>
-  </div>
-
-  <div id="hubFirstBookingSoftGate" class="modal-overlay hub-book-flow-overlay hub-soft-gate-overlay" style="display: none;" aria-hidden="true">
-    <div class="modal book-flow-modal hub-book-modal hub-soft-gate-modal" role="dialog" aria-labelledby="hubSoftGateTitle" aria-modal="true">
-      <button type="button" class="hub-soft-gate-close" id="hubSoftGateClose" aria-label="Закрыть">×</button>
-      <h3 id="hubSoftGateTitle" class="book-modal-title hub-soft-gate-title"></h3>
-      <p id="hubSoftGateIntro" class="book-choice-lead hub-soft-gate-intro"></p>
-      <ul id="hubSoftGateList" class="hub-soft-gate-list"></ul>
-      <p id="hubSoftGateFooter" class="hub-soft-gate-footer"></p>
-      <div class="modal-actions hub-soft-gate-actions">
-        <button type="button" class="btn-block btn-primary" id="hubSoftGateCtaPrimary">Создать первую запись</button>
-        <button type="button" class="btn-block btn-secondary" id="hubSoftGateCtaSandbox">Попробовать на примере</button>
-      </div>
-      <button type="button" class="btn-link hub-soft-gate-skip" id="hubSoftGateSkip" hidden></button>
     </div>
   </div>
 
@@ -946,14 +907,14 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=202608315"></script>
+  <script src="mini-app-trainer-gate.js?v=202609012"></script>
   <script src="mini-app-trainer-celebration.js?v=202608315"></script>
   <script src="trainer-client-relay-ui.js?v=202608315"></script>
   <script src="trainer-relay-helpers.js?v=202608315"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
   <script src="mini-app-trainer-pending-inbox.js?v=202608315"></script>
   <script src="trainer-booking-context.js?v=202608315"></script>
-  <script defer src="trainer-home-main.js?v=202608318"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202608315"></script>
+  <script defer src="trainer-home-main.js?v=202609015"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202609012"></script>
 </body>
 </html>

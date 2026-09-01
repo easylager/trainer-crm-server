@@ -1,13 +1,13 @@
 """
-Blocks trainer bot work only for states that cannot use CRM yet (e.g. incomplete profile, deactivated).
+Trainer bot access gate. Onboarding v2: two doors, not six.
 
-NOT_LINKED (telegram not bound to a trainer row): only /start with welcome-link payload is allowed;
-everything else gets TRAINER_ONLY_VIA_SITE — no slash menu, no hub, no CRM callbacks.
+NOT_LINKED (telegram not bound to a trainer row): only /start with a welcome-link payload is
+allowed; everything else gets TRAINER_ONLY_VIA_SITE — no slash menu, no hub, no CRM callbacks.
 
-Allows full bot workflows when linked trainer is ACTIVE, BOOKING_READY (TTV minimal), or
-PENDING_MODERATION (full anketa submitted — catalog still outside chat). Same allowlist as before
-for early onboarding: /start, /guide, /profile, /myprofile, /cancel, support, profwiz:*,
-booking_add_note:* / booking_invite_client:* (handlers enforce booking ownership).
+Every other linked trainer works: profile completeness and catalog moderation no longer block
+chat workflows. Only an admin-set ``deactivated`` status closes the door, and it says so plainly.
+The allowlist (/start, /guide, /profile, /myprofile, /cancel, support, profwiz:*, booking-scoped
+callbacks) survives so a deactivated account can still read help and reach support.
 """
 import logging
 import time

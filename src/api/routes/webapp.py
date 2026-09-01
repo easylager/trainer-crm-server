@@ -665,8 +665,8 @@ async def get_trainer_access_for_webapp(
         await ensure_trainer_welcome_trial(session, tid)
     norm_status = normalize_trainer_status_value(trainer.get("status") if trainer else None)
     # Belt-and-suspenders: state machine + raw status (drivers may have returned non-str before normalize in repo).
-    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
-    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
+    is_active = norm_status == TRAINER_STATUS_ACTIVE
+    schedule_unlocked = state == TrainerAccessState.ACTIVE
     settings = Settings()
     return {
         "access_state": state.value,
@@ -3132,8 +3132,10 @@ async def get_trainer_hub_bootstrap(
         await ensure_trainer_welcome_trial(session, int(trainer_row["id"]))
     tid = int(trainer_row["id"]) if trainer_row and trainer_row.get("id") is not None else None
     norm_status = normalize_trainer_status_value(trainer_row.get("status") if trainer_row else None)
-    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
-    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
+    # ``is_active`` = listed in the public catalog (moderation passed). It no longer gates the
+    # trainer's own tools — see get_trainer_id_for_webapp_trainer_operations.
+    is_active = norm_status == TRAINER_STATUS_ACTIVE
+    schedule_unlocked = state == TrainerAccessState.ACTIVE
     access: dict[str, Any] = {
         "access_state": state.value,
         "trainer_id": tid,
@@ -3143,9 +3145,11 @@ async def get_trainer_hub_bootstrap(
         "force_client_chat_relay": bool(Settings().trainer_webapp_force_client_chat_relay),
     }
 
-    # Same semantics as get_trainer_id_linked_any_status / get_trainer_id_by_telegram_id without extra queries
-    # (get_trainer_access_state already resolved the trainer row).
+    # Two scopes, deliberately different:
+    #   trainer_id_ops    — may run own operations (schedule, bookings, revenue, subscription)
+    #   trainer_id_active — listed in the catalog, so catalog-fed leads («заявки») apply
     trainer_id_linked = tid
+    trainer_id_ops = tid if state == TrainerAccessState.ACTIVE else None
     trainer_id_active = tid if norm_status == TRAINER_STATUS_ACTIVE else None
 
     profile: dict[str, Any] | None = None
@@ -3169,11 +3173,13 @@ async def get_trainer_hub_bootstrap(
         async def _read_lifecycle(s: AsyncSession) -> dict[str, Any]:
             return await build_trainer_lifecycle_payload(s, tid_l)
 
-        if trainer_id_active:
-            tid_act = trainer_id_active
+        if trainer_id_ops:
+            tid_act = trainer_id_ops
+            tid_cat = trainer_id_active
 
             async def _read_req_count(s: AsyncSession) -> int:
-                return await count_unanswered_requests_for_trainer(s, tid_act)
+                # Catalog leads only exist for a listed trainer.
+                return await count_unanswered_requests_for_trainer(s, tid_cat) if tid_cat else 0
 
             async def _read_revenue(s: AsyncSession) -> dict[str, Any]:
                 return await get_trainer_hub_revenue_month_to_date(s, tid_act)
@@ -3250,16 +3256,6 @@ async def get_trainer_hub_bootstrap(
                 partial_errors["lifecycle"] = str(r_life)
             else:
                 lifecycle = r_life
-            if state == TrainerAccessState.BOOKING_READY and trainer_id_linked:
-
-                async def _read_subscription_ttv(s: AsyncSession) -> dict[str, Any]:
-                    return await get_trainer_subscription_status(s, trainer_id_linked)
-
-                (r_sub_ttv,) = await _hub_bootstrap_gather_reads(session, _read_subscription_ttv)
-                if isinstance(r_sub_ttv, BaseException):
-                    partial_errors["subscription_status"] = str(r_sub_ttv)
-                else:
-                    subscription_status = r_sub_ttv
 
     collective_payload: dict[str, Any] | None = None
     suspended_collective: dict[str, Any] | None = None
@@ -3365,10 +3361,22 @@ async def get_trainer_hub_bootstrap(
             show_center_inbox=show_center_inbox,
         )
 
+    # Onboarding v2: one card, resolved server-side, so the copy and the ordering live in one
+    # tested place instead of branching in the hub's JS.
+    # Exposed twice on purpose: at the top level for readability, and inside the checklist because
+    # the hub renders from whichever of the two sources answered first (bootstrap or the standalone
+    # checklist GET). Keeping them in sync here is cheaper than teaching the client about both.
+    from src.application.trainer_next_step import resolve_trainer_next_step
+
+    next_step = resolve_trainer_next_step(onboarding_checklist)
+    if onboarding_checklist is not None:
+        onboarding_checklist["next_step"] = next_step
+
     return {
         "access": access,
         "profile": profile,
         "onboarding_checklist": onboarding_checklist,
+        "next_step": next_step,
         "requests_summary": requests_summary,
         "revenue_mtd": revenue_mtd,
         "bookings": bookings,
@@ -3395,8 +3403,8 @@ async def get_trainer_hub_inbox_count(
     if not tid:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     norm_status = normalize_trainer_status_value(trainer_row.get("status") if trainer_row else None)
-    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
-    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
+    is_active = norm_status == TRAINER_STATUS_ACTIVE
+    schedule_unlocked = state == TrainerAccessState.ACTIVE
     onboarding = await get_trainer_onboarding_checklist(session, tid)
     requests_count = 0
     if is_active:
@@ -5259,9 +5267,10 @@ async def get_trainer_hub_universal_invite_link(
     from src.shared.audit import ACTOR_API, audit_log
 
     share_text = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=link)
+    share_body = share_body_for_native_share_dialog(share_text, link)
     await record_trainer_client_invite_link_first_copy(session, int(trainer_id))
     audit_log("trainer.invite_link_copied", ACTOR_API, int(trainer_id), {"trainer_id": int(trainer_id)})
-    return {"link": link, "share_text": share_text}
+    return {"link": link, "share_text": share_text, "share_body": share_body}
 
 
 class ClientSelfRegisterBody(BaseModel):
@@ -7565,97 +7574,6 @@ async def post_trainer_booking_quick(
     }
 
 
-class TrainerSandboxBookingBody(BaseModel):
-    """Onboarding sandbox: one-field body for demo quick-booking (no client selection needed)."""
-    slot_date: str
-    start_time: str
-    duration_minutes: int = 45
-
-
-@router.post("/trainer/onboarding/sandbox-booking")
-async def post_trainer_onboarding_sandbox_booking(
-    body: TrainerSandboxBookingBody,
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    Create a sandbox (demo) booking for onboarding TTV step 2.
-    Auto-creates or reuses a phantom client per trainer. Excluded from stats/revenue like other
-    sandbox rows, but the trainer still receives the same first-booking Telegram celebration when
-    this is their first confirmed slot (onboarding aha moment).
-    The trainer can delete the booking afterward via the normal cancel endpoint.
-    """
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
-    notify_tid = _trainer_bot_notify_telegram_id(principal)
-    try:
-        slot_date = date.fromisoformat(body.slot_date)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid slot_date") from None
-    try:
-        start_minutes = next(iter(_hhmm_strings_to_minutes([body.start_time.strip()])))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    client_id = await get_or_create_sandbox_client_for_trainer(
-        session, trainer_id, first_name="Пример", last_name="К."
-    )
-    await link_trainer_client_roster(session, trainer_id, client_id)
-    await session.commit()
-
-    r_svc = await session.execute(
-        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid LIMIT 1"),
-        {"tid": trainer_id},
-    )
-    row_svc = r_svc.fetchone()
-    if not row_svc:
-        raise HTTPException(
-            status_code=400,
-            detail="Добавьте хотя бы одну услугу в профиле, чтобы сделать пробную запись.",
-        )
-    service_id = row_svc[0]
-
-    try:
-        result = await create_trainer_quick_booking(
-            session,
-            trainer_id=trainer_id,
-            slot_date=slot_date,
-            start_minutes=start_minutes,
-            duration_minutes=body.duration_minutes,
-            client_id=client_id,
-            service_id=service_id,
-            is_sandbox=True,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    if result is None:
-        raise HTTPException(status_code=400, detail="Не удалось создать пробную запись")
-    booking_id, slot_id, first_booking_milestone, share_catalog_tip = result
-    slot = await get_slot(session, slot_id)
-    await _send_trainer_post_booking_feedback(
-        session=session,
-        trainer_id=trainer_id,
-        trainer_telegram_id=notify_tid,
-        booking_id=int(booking_id),
-        client_id=int(client_id),
-        slot_date=(slot or {}).get("slot_date"),
-        start_time=(slot or {}).get("start_time"),
-        first_booking_milestone=first_booking_milestone,
-        share_catalog_tip=share_catalog_tip,
-        is_sandbox=True,
-    )
-    return {
-        "success": True,
-        "booking_id": booking_id,
-        "slot_id": slot_id,
-        "first_booking_milestone": first_booking_milestone,
-        "share_catalog_tip": share_catalog_tip,
-    }
-
-
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")
 async def post_trainer_booking_make_regular(
     booking_id: int,
@@ -7882,6 +7800,210 @@ def _serialize_trainer_request(req: dict) -> dict:
     }
 
 
+@router.get("/trainer/onboarding/quick-setup")
+async def get_trainer_onboarding_quick_setup(
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Everything the first-run screen needs, in one call: who the trainer is, the sports they can
+    pick, and a pre-filled week to confirm.
+
+    Returns ``already_done`` when the trainer already has a weekly template, so re-opening the
+    link lands on the share step instead of re-asking a question they answered.
+    """
+    from src.application.trainer_quick_setup_use_cases import (
+        DEFAULT_SESSION_DURATION_MINUTES,
+        suggested_week,
+    )
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    await ensure_trainer_welcome_trial(session, trainer_id)
+
+    r_svc = await session.execute(
+        text("SELECT id, name FROM services ORDER BY sort_order, name")
+    )
+    services = [{"id": int(row[0]), "name": row[1]} for row in r_svc.fetchall()]
+
+    r_mine = await session.execute(
+        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    selected = [int(row[0]) for row in r_mine.fetchall()]
+
+    # capacity = 1: individual template rows only — quick-setup never writes group rows, and a
+    # group row's hour bucket leaking into this grid would confuse the onboarding picker.
+    r_tpl = await session.execute(
+        text(
+            """
+            SELECT day_of_week, EXTRACT(HOUR FROM start_time)::int AS h, arena_id
+            FROM trainer_schedule_templates
+            WHERE trainer_id = :tid AND capacity = 1
+            ORDER BY day_of_week, start_time
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    existing: dict[int, list[int]] = {}
+    # First arena_id seen per day wins the label — onboarding only ever wrote one venue per day;
+    # a day edited later in schedule-editor to mix venues shows its first venue here, which is a
+    # reasonable "mostly true" label for a re-opened onboarding screen, not the source of truth.
+    existing_day_arena: dict[int, int] = {}
+    for row in r_tpl.fetchall():
+        dow = int(row[0])
+        existing.setdefault(dow, []).append(int(row[1]))
+        if row[2] is not None and dow not in existing_day_arena:
+            existing_day_arena[dow] = int(row[2])
+
+    # Candidate arenas for the picker: platform-wide (small dataset — this is a single-region
+    # product), each with its real grid so the client can render the right hour labels and lock
+    # duration where the venue fixes one. Scoping by city would need a city question first, which
+    # defeats the point — the arena picker IS how a trainer without a city yet still gets a
+    # working, honest grid.
+    r_arenas = await session.execute(
+        text(
+            """
+            SELECT a.id, a.name, c.name AS city_name,
+                   COALESCE(p.grid_kind, 'quarter_15') AS grid_kind,
+                   COALESCE(p.minute_offset, 0) AS minute_offset,
+                   COALESCE(p.hour_start, 6) AS hour_start,
+                   COALESCE(p.hour_end, 23) AS hour_end,
+                   p.slot_duration_minutes
+            FROM arenas a
+            JOIN cities c ON c.id = a.city_id AND c.is_active = true
+            LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
+            WHERE a.is_active = true
+            ORDER BY c.sort_order, c.name, a.sort_order, a.name
+            """
+        )
+    )
+    arenas = [
+        {
+            "id": int(row[0]),
+            "name": row[1],
+            "city_name": row[2],
+            "grid_kind": row[3],
+            "minute_offset": int(row[4]),
+            "hour_start": int(row[5]),
+            "hour_end": int(row[6]),
+            "fixed_duration_minutes": int(row[7]) if row[7] is not None else None,
+        }
+        for row in r_arenas.fetchall()
+    ]
+
+    r_linked = await session.execute(
+        text("SELECT arena_id FROM trainer_arenas WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    linked_arena_ids = [int(row[0]) for row in r_linked.fetchall()]
+
+    trainer = await get_trainer(session, trainer_id) or {}
+    first_name = ((trainer.get("profile") or {}).get("first_name") or "").strip()
+    distinct_arenas_in_week = {a for a in existing_day_arena.values()}
+
+    return {
+        "trainer_id": trainer_id,
+        "first_name": first_name,
+        "services": services,
+        "selected_service_ids": selected,
+        "week": (
+            [
+                {"day_of_week": d, "hours": h, "arena_id": existing_day_arena.get(d)}
+                for d, h in sorted(existing.items())
+            ]
+            if existing
+            else [{**row, "arena_id": None} for row in suggested_week()]
+        ),
+        "week_is_suggestion": not existing,
+        "already_done": bool(existing),
+        "duration_minutes": (
+            (trainer.get("profile") or {}).get("session_duration_minutes")
+            or DEFAULT_SESSION_DURATION_MINUTES
+        ),
+        "arenas": arenas,
+        "linked_arena_ids": linked_arena_ids,
+        "primary_arena_id": trainer.get("primary_arena_id"),
+        # Initial UI mode when re-opening: derived from what is actually saved, never stored
+        # separately — «несколько площадок» is exactly «more than one distinct arena in the week».
+        "multi_arena": len(distinct_arenas_in_week) > 1,
+    }
+
+
+class TrainerQuickSetupBody(BaseModel):
+    """First-run payload: what the trainer coaches and when. No free text, no optional fields."""
+
+    service_ids: list[int] = Field(default_factory=list)
+    days: list[dict[str, Any]] = Field(default_factory=list)
+    duration_minutes: int = Field(default=60, ge=15, le=480)
+
+
+@router.post("/trainer/onboarding/quick-setup")
+async def post_trainer_onboarding_quick_setup(
+    body: TrainerQuickSetupBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    The entire first run in one request: services + defaults + weekly template + two weeks of slots,
+    and the invite link to hand to a client.
+
+    This is the only write the onboarding makes. If it succeeds the trainer has a working practice;
+    if it fails nothing half-configured is left behind (single transaction per use case).
+    """
+    from src.application.trainer_quick_setup_use_cases import (
+        QuickSetupError,
+        parse_quick_setup_days,
+        run_trainer_quick_setup,
+    )
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    await ensure_trainer_welcome_trial(session, trainer_id)
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+
+    try:
+        days = parse_quick_setup_days(body.days)
+        result = await run_trainer_quick_setup(
+            session,
+            trainer_id,
+            service_ids=[int(s) for s in body.service_ids],
+            days=days,
+            duration_minutes=int(body.duration_minutes),
+        )
+    except QuickSetupError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    settings = Settings()
+    link, share_text = None, None
+    if settings.client_bot_username:
+        link, err = build_trainer_universal_invite_link(
+            client_bot_username=settings.client_bot_username,
+            trainer_id=int(trainer_id),
+        )
+        if err:
+            link = None
+        if link:
+            share_text = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=link)
+
+    share_body = share_body_for_native_share_dialog(share_text, link) if link and share_text else None
+    return {
+        "ok": True,
+        "slots_created": result.slots_created,
+        "open_slots_ahead": result.open_slots_ahead,
+        "days_with_slots": result.days_with_slots,
+        "duration_minutes": result.duration_minutes,
+        "link": link,
+        "share_text": share_text,
+        "share_body": share_body,
+    }
+
+
 @router.get("/trainer/onboarding/moderation-readiness")
 async def webapp_trainer_moderation_readiness(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
@@ -7909,6 +8031,9 @@ async def webapp_trainer_onboarding_checklist(
     data = await get_trainer_onboarding_checklist(session, trainer_id)
     if not data:
         raise HTTPException(status_code=404, detail="Trainer not found")
+    from src.application.trainer_next_step import resolve_trainer_next_step
+
+    data["next_step"] = resolve_trainer_next_step(data)
     return data
 
 

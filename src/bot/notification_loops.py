@@ -2528,6 +2528,72 @@ async def run_onboarding_reactivation_loop(trainer_bot: Bot) -> None:
         await asyncio.sleep(_onboarding_reactivation_loop_interval_sec())
 
 
+def _profile_enrichment_keyboard() -> InlineKeyboardMarkup | None:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_PROFILE_ENRICH_NUDGE_BTN,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-profile"),
+                )
+            ]
+        ]
+    )
+
+
+async def run_profile_enrichment_loop(trainer_bot: Bot) -> None:
+    """
+    After the first real booking: D+1 / D+8 / D+21 postcard to optionally fill tariffs.
+
+    Idempotency: trainer_profile_nudges. Stops as soon as any service has a price.
+    Same tick interval as onboarding reactivation (daily in production).
+    """
+    from src.application.trainer_profile_enrichment_use_cases import (
+        compute_due_profile_enrichment_nudges,
+        mark_profile_enrichment_nudge_sent,
+        render_profile_enrichment_nudge_text,
+    )
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                due_list = await compute_due_profile_enrichment_nudges(session)
+                if due_list:
+                    logger.info("Profile enrichment: %d due nudges", len(due_list))
+                keyboard = _profile_enrichment_keyboard()
+                for nudge in due_list:
+                    try:
+                        if not await is_trainer_push_allowed_now(session, nudge.trainer_id):
+                            continue
+                        text_msg = render_profile_enrichment_nudge_text(nudge.step)
+                        await trainer_bot.send_message(
+                            chat_id=nudge.trainer_telegram_id,
+                            text=text_msg,
+                            parse_mode="HTML",
+                            reply_markup=keyboard,
+                        )
+                        await mark_profile_enrichment_nudge_sent(
+                            session,
+                            trainer_id=nudge.trainer_id,
+                            step=nudge.step,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Profile enrichment nudge failed (trainer=%s, step=%s): %s",
+                            nudge.trainer_id,
+                            nudge.step,
+                            e,
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Profile enrichment loop: %s", e)
+        await asyncio.sleep(_onboarding_reactivation_loop_interval_sec())
+
+
 async def run_recurring_materialization_loop() -> None:
     """
     Periodically prune over-materialized futures and fill gaps inside

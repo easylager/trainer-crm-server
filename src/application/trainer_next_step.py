@@ -1,0 +1,142 @@
+"""
+Хаб тренера: одна карточка «следующий шаг» вместо чеклиста.
+
+Почему одна, а не список. Чеклист из трёх пунктов с блокировками — это карта территории,
+которую тренер не просил. Он показывает, сколько ещё не сделано, требует прочитать три
+заголовка и выбрать, и в момент максимальной неуверенности предлагает три равнозначные
+кнопки. Одна карточка показывает ровно то, что имеет смысл сделать прямо сейчас, и исчезает,
+когда делать нечего — а «нечего» здесь нормальное и частое состояние.
+
+Функция чистая: словарь фактов на входе, карточка на выходе. Весь копирайт онбординга живёт
+здесь, а не размазан по 200 строкам ветвлений в JS.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+# Сколько реальных занятий должно пройти по личной ссылке, прежде чем предлагать каталог.
+# Смысл порога: каталог — награда за работающую практику, а не задание на старте. Пока у
+# тренера нет своего потока, обещание «вас найдут новые ученики» продукт выполнить не может.
+CATALOG_INVITE_MIN_BOOKINGS = 5
+
+# Действия, которые понимает хаб. Держим список коротким намеренно.
+ACTION_OPEN_ONBOARDING = "open_onboarding"
+ACTION_SHARE_LINK = "share_link"
+ACTION_OPEN_PROFILE = "open_profile"
+ACTION_DISMISS = "dismiss"
+
+STEP_SETUP_WEEK = "setup_week"
+STEP_REFRESH_WEEK = "refresh_week"
+STEP_SHARE_LINK = "share_link"
+STEP_SET_ARENA = "set_arena"
+STEP_CATALOG_INVITE = "catalog_invite"
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if 2 <= n % 10 <= 4 and not (10 <= n % 100 < 20):
+        return few
+    return many
+
+
+def resolve_trainer_next_step(
+    checklist: dict[str, Any] | None,
+    *,
+    catalog_invite_dismissed: bool = False,
+) -> dict[str, Any] | None:
+    """
+    Единственная карточка для хаба, или ``None``, когда подсказывать нечего.
+
+    Порядок проверок = порядок срочности. Первое совпадение выигрывает: две карточки на
+    экране — это уже чеклист.
+    """
+    if not checklist:
+        return None
+    if not checklist.get("schedule_unlocked", True):
+        return None  # деактивированный аккаунт: подсказки неуместны
+    if checklist.get("studio_access_mode") == "admin_only":
+        return None  # тренер центра: расписание ведёт администратор
+
+    has_week = int(checklist.get("weekly_template_count") or 0) > 0
+    has_slots = bool(checklist.get("has_future_slots"))
+    has_booking = bool(checklist.get("has_any_booking"))
+    real_bookings = int(checklist.get("real_bookings_count") or 0)
+    arena_ok = (
+        int(checklist.get("arena_count") or 0) > 0
+        or bool(checklist.get("arena_work_format"))
+    )
+    in_catalog = bool(checklist.get("is_active")) and bool(checklist.get("is_catalog_visible"))
+
+    # 1. Недели нет — работать нечем. Это единственный по-настоящему обязательный шаг.
+    if not has_week and not has_slots:
+        return {
+            "key": STEP_SETUP_WEEK,
+            "title": "Настройте расписание",
+            # «Без анкеты» не пишем: отрицание всё равно называет анкету и подсказывает,
+            # что где-то она есть. Говорим про длительность и результат.
+            "body": "Две минуты, ничего заполнять не нужно. Дальше ученик выберет время сам.",
+            "cta": {"label": "Начать", "action": ACTION_OPEN_ONBOARDING},
+            "secondary": None,
+        }
+
+    # 2. Неделя настроена, но впереди пусто: слоты кончились и новых не сгенерировалось.
+    #    Отправлять ссылку в этом состоянии — значит показать ученику пустой экран.
+    #    Обещание ссылки и реальность расписания обязаны совпадать, иначе ломается доверие
+    #    ровно к тому каналу, который мы построили.
+    if not has_slots:
+        return {
+            "key": STEP_REFRESH_WEEK,
+            "title": "Свободных окон не осталось",
+            "body": "Ученик откроет ссылку и не увидит времени. Откройте расписание на ближайшие недели.",
+            "cta": {"label": "Обновить расписание", "action": ACTION_OPEN_ONBOARDING},
+            "secondary": None,
+        }
+
+    # 3. Расписание есть, но никто ни разу не записывался. Одна кнопка, одна задача.
+    if not has_booking:
+        return {
+            "key": STEP_SHARE_LINK,
+            "title": "Отправьте ссылку одному ученику",
+            "body": (
+                "Тому, кто и так собирался к вам на этой неделе. "
+                "Он выберет время сам — вам придёт уведомление."
+            ),
+            "cta": {"label": "Отправить ученику", "action": ACTION_SHARE_LINK},
+            "secondary": None,
+        }
+
+    # 4. Запись есть, а места встречи нет — теперь вопрос про площадку срочный и понятный.
+    #    Раньше он стоял на первом экране, где у тренера не было повода на него отвечать.
+    if not arena_ok:
+        return {
+            "key": STEP_SET_ARENA,
+            "title": "Где встречаетесь?",
+            "body": "К вам уже записались, но площадка не указана — ученик не знает, куда приходить.",
+            "cta": {"label": "Указать площадку", "action": ACTION_OPEN_PROFILE},
+            "secondary": None,
+        }
+
+    # После первой записи карточку «отправьте ссылку» больше не держим.
+    # Повторять ссылку — дело хинтов, не отдельного блока на хабе.
+
+    # 5. Поток есть — только теперь каталог перестаёт быть обещанием и становится предложением.
+    if (
+        real_bookings >= CATALOG_INVITE_MIN_BOOKINGS
+        and not in_catalog
+        and not catalog_invite_dismissed
+    ):
+        word = _plural(real_bookings, "занятие", "занятия", "занятий")
+        return {
+            "key": STEP_CATALOG_INVITE,
+            "title": "Вас уже записывают",
+            "body": (
+                f"{real_bookings} {word} по вашей ссылке. Хотите, чтобы находили новые ученики? "
+                "Для карточки нужны фото и пара слов о себе."
+            ),
+            "cta": {"label": "Заполнить профиль", "action": ACTION_OPEN_PROFILE},
+            "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
+        }
+
+    # Подсказывать нечего — и это нормальное состояние работающего кабинета.
+    return None

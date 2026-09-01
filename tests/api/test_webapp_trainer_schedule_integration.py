@@ -122,11 +122,14 @@ async def test_schedule_get_401_without_init_data(app_use_test_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_schedule_get_403_when_trainer_not_active(
+async def test_schedule_open_for_fresh_trainer_before_moderation(
     app_use_test_db,
     db_session,
 ) -> None:
-    """Schedule uses get_trainer_id_by_telegram_id (active only), unlike profile webapp."""
+    """
+    Onboarding v2: a trainer linked seconds ago — status ``pending_profile``, nothing filled in —
+    opens their own schedule. Moderation only decides catalog visibility.
+    """
     tg = _fresh_trainer_telegram_id()
     r = await db_session.execute(
         text("INSERT INTO trainers (status) VALUES ('pending_profile') RETURNING id")
@@ -136,11 +139,31 @@ async def test_schedule_get_403_when_trainer_not_active(
         text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
         {"tg": tg, "id": tid},
     )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/schedule",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_schedule_get_403_when_trainer_deactivated(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """The one closed door: an admin-deactivated account."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(
+        text("INSERT INTO trainers (status) VALUES ('deactivated') RETURNING id")
+    )
+    tid = r.fetchone()[0]
     await db_session.execute(
-        text(
-            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) VALUES (:tid, 'A', 'B', 30)"
-        ),
-        {"tid": tid},
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
     )
     await db_session.commit()
 

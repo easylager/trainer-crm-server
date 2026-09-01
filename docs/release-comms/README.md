@@ -26,6 +26,8 @@ python -m scripts.broadcast_release_comms \
 
 Любое обновление с **видимыми** изменениями (имя бота, дизайн, UX, оплата, даунтайм) требует подготовленного сообщения **до** деплоя.
 
+Шаблон: `TEMPLATE.md`. Пример точечной рассылки (только тренеры без профиля): `2026-09-01-simpler-onboarding.trainers.md` — в frontmatter `segment: pending_profile`.
+
 ## Чеклист релиза
 
 1. **Draft** — скопировать `TEMPLATE.md` → `YYYY-MM-DD-<slug>.clients.md` и/или `.trainers.md`

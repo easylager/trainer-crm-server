@@ -138,11 +138,16 @@ async def test_moderation_readiness_matches_between_profile_and_onboarding_endpo
 
 
 @pytest.mark.asyncio
-async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
+async def test_onboarding_checklist_pre_moderation_trainer_is_open_for_work(
     app_use_test_db,
     db_session,
 ) -> None:
-    """Before activation, slot/booking flags are false and steps are explicitly locked."""
+    """
+    Онбординг v2: до модерации тренер уже работает.
+
+    Счётчики нулевые просто потому, что он ещё ничего не создал, — но расписание открыто,
+    причин блокировки нет, и хаб предлагает первый шаг, а не стену.
+    """
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         create_resp = await client.post(
             "/api/trainers",
@@ -178,11 +183,12 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     assert data.get("has_any_booking") is False
     assert data.get("has_upcoming_booking") is False
     assert data.get("weekly_template_count") == 0
-    assert data.get("slots_locked_reason")
-    assert data.get("bookings_locked_reason")
-    assert data.get("schedule_unlocked") is False
+    assert data.get("slots_locked_reason") is None
+    assert data.get("bookings_locked_reason") is None
+    assert data.get("schedule_unlocked") is True, "модерация гейтит каталог, а не работу тренера"
     assert data.get("fill_slots_invite_candidates_count") == 0
     assert data.get("has_crm_subscription_access") is False
+    assert (data.get("next_step") or {}).get("key") == "setup_week"
 
 
 @pytest.mark.asyncio

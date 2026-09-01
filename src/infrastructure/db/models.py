@@ -1403,6 +1403,42 @@ ONBOARDING_NUDGE_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
 ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED)
 
 
+# ---------------------------------------------------------------------------
+# Profile enrichment after first real booking (tariffs / «что не входит»).
+# ---------------------------------------------------------------------------
+
+PROFILE_NUDGE_STEP_P1 = "p1"
+PROFILE_NUDGE_STEP_P8 = "p8"
+PROFILE_NUDGE_STEP_P21 = "p21"
+
+# Days since first non-sandbox booking. Largest-unfired, same as onboarding reactivation.
+PROFILE_NUDGE_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
+    (PROFILE_NUDGE_STEP_P1, 1),
+    (PROFILE_NUDGE_STEP_P8, 8),
+    (PROFILE_NUDGE_STEP_P21, 21),
+)
+
+PROFILE_NUDGE_STEP_KEYS = tuple(s for s, _ in PROFILE_NUDGE_STEPS_ORDERED)
+
+
+class TrainerProfileNudge(Base):
+    """Idempotency log for post-booking profile enrichment series. One row per (trainer_id, step)."""
+
+    __tablename__ = "trainer_profile_nudges"
+    __table_args__ = (
+        UniqueConstraint("trainer_id", "step", name="ux_profile_nudges_trainer_step"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    step: Mapped[str] = mapped_column(String(8), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class TrainerOnboardingNudge(Base):
     """Idempotency log for onboarding reactivation series. One row per (trainer_id, step) — append-only."""
     __tablename__ = "trainer_onboarding_nudges"

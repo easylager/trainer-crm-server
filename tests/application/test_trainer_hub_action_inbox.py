@@ -219,3 +219,77 @@ def test_build_hub_dual_summary() -> None:
     assert summary["personal_today_remaining"] == 2
     assert summary["center_inbox_pending"] == 1
     assert summary["collective_slug"] == "broski"
+
+
+def test_rhythm_hints_visible_for_unmoderated_trainer_with_a_real_schedule() -> None:
+    """
+    Регрессия онбординга v2: рабочий тренер без модерации (is_active=False) должен видеть
+    ритм-подсказки (пустые слоты, шаблон, рефералы) наравне с тем, кто уже в каталоге.
+    Раньше блок гейтился по is_active + старому «tt_minimal_complete», и молчал для
+    любого немодерированного тренера — даже с рабочим расписанием и записями.
+    """
+    onboarding = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "has_confirmed_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_future_available_slots": False,
+        "slots_this_week_count": 0,
+        "available_slots_this_week_count": 0,
+        "bookings_this_week_count": 0,
+        "has_crm_subscription_access": True,
+    }
+    with patch(
+        "src.application.trainer_hub_action_inbox._minsk_weekday_mon0",
+        return_value=0,
+    ):
+        payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+
+    ids = [x["id"] for x in payload["items"]]
+    assert "slots_this_week" in ids, "пустая неделя должна быть видна без модерации"
+    assert "referral_growth" in ids, "рефералка не должна требовать статуса в каталоге"
+
+
+def test_rhythm_hints_stay_silent_before_the_first_schedule() -> None:
+    """До первого расписания (первый экран онбординга) ритм-блоку нечего показывать."""
+    onboarding = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": False,
+        "weekly_template_count": 0,
+        "has_future_slots": False,
+        "has_crm_subscription_access": True,
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    assert payload["items"] == []
+
+
+def test_referral_growth_waits_for_a_first_booking() -> None:
+    """
+    Регрессия: реферальная программа («пригласите коллегу») не должна конкурировать с
+    карточкой «следующий шаг» («пригласите своего ученика») в первые же секунды после
+    quick-setup — до того, как у тренера появилась хоть одна запись.
+    """
+    fresh_schedule = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": False,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+        "available_slots_this_week_count": 5,
+        "bookings_this_week_count": 0,
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=fresh_schedule, schedule_unlocked=True)
+    ids = [x["id"] for x in payload["items"]]
+    assert "referral_growth" not in ids
+
+    after_first_booking = dict(fresh_schedule, has_any_booking=True)
+    payload2 = build_trainer_hub_action_inbox(onboarding=after_first_booking, schedule_unlocked=True)
+    ids2 = [x["id"] for x in payload2["items"]]
+    assert "referral_growth" in ids2

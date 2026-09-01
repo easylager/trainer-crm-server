@@ -63,32 +63,16 @@
     return /trainer-home(?:\.html)?$/i.test(String(global.location.pathname || ''));
   }
 
+  /**
+   * Онбординг v2: у гейта осталось два настоящих состояния.
+   *
+   * blocked_profile / booking_ready / pending_moderation удалены вместе со старой моделью:
+   * незаполненная анкета и очередь модерации больше не закрывают тренеру его же инструменты,
+   * поэтому и объяснять здесь нечего. Если сервер когда-нибудь вернёт незнакомое состояние,
+   * мы показываем нейтральный текст, а не пугающий.
+   */
   function gateCopy(access) {
     var st = (access && access.access_state) || '';
-    if (st === 'blocked_profile') {
-      return {
-        icon: '📋',
-        title: 'Сначала анкета',
-        hint:
-          'Завершите шаг «Расскажите о себе» на главной — расписание и остальные разделы откроются сразу после него.',
-      };
-    }
-    if (st === 'booking_ready') {
-      return {
-        icon: '🚀',
-        title: 'Почти готово',
-        hint:
-          'Базовый профиль готов. Сделайте первую запись на главной — тогда разделы оживут полностью.',
-      };
-    }
-    if (st === 'pending_moderation') {
-      return {
-        icon: '⏳',
-        title: 'Профиль на проверке',
-        hint:
-          'Команда проверяет анкету. Обычно до одного рабочего дня. Разделы откроются автоматически — можно спокойно закрыть это окно.',
-      };
-    }
     if (st === 'deactivated') {
       return {
         icon: '⏸️',
@@ -112,44 +96,12 @@
 
   function gateActionsHtml(access) {
     var st = (access && access.access_state) || '';
-    var onHub = isHubPage();
-    var parts = [];
-
-    if (st === 'blocked_profile') {
-      parts.push(
-        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile-onboarding">Заполнить анкету</button>'
-      );
-      if (!onHub) {
-        parts.push(
-          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
-        );
-      }
-    } else if (st === 'booking_ready') {
-      parts.push(
-        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="hub">Первые шаги</button>'
-      );
-      if (!onHub) {
-        parts.push(
-          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="schedule">Расписание</button>'
-        );
-      }
-    } else if (st === 'pending_moderation') {
-      parts.push(
-        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>'
-      );
-      if (!onHub) {
-        parts.push(
-          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
-        );
-      }
-    } else if (st !== 'not_linked' && st !== 'deactivated' && !onHub) {
-      parts.push(
-        '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
-      );
-    }
-
-    if (!parts.length) return '';
-    return '<div class="bd-trainer-gate__actions">' + parts.join('') + '</div>';
+    if (st === 'not_linked' || st === 'deactivated' || isHubPage()) return '';
+    return (
+      '<div class="bd-trainer-gate__actions">' +
+      '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>' +
+      '</div>'
+    );
   }
 
   function gateCardHtml(access, compact) {
@@ -177,13 +129,9 @@
     if (!container) return;
     container.querySelectorAll('[data-trainer-gate]').forEach(function (btn) {
       btn.onclick = function () {
+        /* Осталась одна кнопка — «На главную»: гейт больше не ведёт в анкету. */
         var a = btn.getAttribute('data-trainer-gate');
-        if (a === 'profile') window.location.href = withInit('trainer-profile', initData);
-        if (a === 'profile-onboarding') {
-          window.location.href = withInit('trainer-profile?onboarding=blocks', initData);
-        }
         if (a === 'hub') window.location.href = withInit('trainer-home', initData);
-        if (a === 'schedule') window.location.href = withInit('schedule-editor', initData);
       };
     });
   }
@@ -222,16 +170,18 @@
     shouldBlockFeatureFetch: function () {
       return _blockingOverlayActive;
     },
+    /**
+     * «Может работать». Единственная закрытая дверь — деактивированный аккаунт;
+     * модерация каталога сюда больше не входит.
+     */
     isActive: function (a) {
       if (!a) return false;
-      if (a.is_active === true || a.is_active === 'true' || a.is_active === 1) return true;
-      if (a.access_state === 'active') return true;
+      var st = String(a.access_state || '').trim().toLowerCase();
+      if (st === 'deactivated' || st === 'not_linked') return false;
       if (a.schedule_unlocked === true || a.schedule_unlocked === 'true' || a.schedule_unlocked === 1) return true;
-      if (a.access_state === 'booking_ready') return true;
-      var ts = String(a.trainer_status || '')
-        .trim()
-        .toLowerCase();
-      return ts === 'active';
+      if (st === 'active') return true;
+      if (a.is_active === true || a.is_active === 'true' || a.is_active === 1) return true;
+      return String(a.trainer_status || '').trim().toLowerCase() === 'active';
     },
   };
 })(window);
