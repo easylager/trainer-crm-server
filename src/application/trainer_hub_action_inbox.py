@@ -106,6 +106,26 @@ def _onboarding_booking_step_done(d: dict[str, Any]) -> bool:
     )
 
 
+def _should_nudge_catalog_in_hub(d: dict[str, Any]) -> bool:
+    """
+  Catalog/profile hints in hub only after a real booking stream or when a moderated
+  trainer hid catalog visibility — not right after the first booking (push nudges cover that).
+    """
+    from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
+
+    if not _onboarding_booking_step_done(d):
+        return False
+    cat_vis = d.get("is_catalog_visible") is not False and d.get("is_catalog_visible") != 0
+    in_public = bool(d.get("is_active")) and bool(d.get("profile_complete")) and cat_vis
+    if in_public:
+        return False
+    real = int(d.get("real_bookings_count") or 0)
+    if real >= CATALOG_INVITE_MIN_BOOKINGS:
+        return True
+    # Moderated trainer turned off catalog listing — not «fill profile after first booking».
+    return bool(d.get("is_active")) and not cat_vis
+
+
 async def fetch_hub_pending_booking_ids(
     session: AsyncSession,
     trainer_id: int,
@@ -202,7 +222,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
     # на trainer_next_step.py. См. те же сигналы, что и STEP_SETUP_WEEK там.
     has_schedule = int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
 
-    if _onboarding_booking_step_done(d):
+    if _should_nudge_catalog_in_hub(d):
         cat_vis = d.get("is_catalog_visible") is not False and d.get("is_catalog_visible") != 0
         in_public = active and bool(d.get("profile_complete")) and cat_vis
         if not in_public:
@@ -464,15 +484,8 @@ def build_trainer_hub_inbox_menu_badges(
         "trainer-requests": max(0, int(requests_count)),
         "trainer-profile": 0,
     }
-    if onboarding and _onboarding_booking_step_done(onboarding):
-        cat_vis = onboarding.get("is_catalog_visible") is not False and onboarding.get("is_catalog_visible") != 0
-        in_public = (
-            bool(onboarding.get("is_active"))
-            and bool(onboarding.get("profile_complete"))
-            and cat_vis
-        )
-        if not in_public:
-            menu["trainer-profile"] = 1
+    if onboarding and _should_nudge_catalog_in_hub(onboarding):
+        menu["trainer-profile"] = 1
     return menu
 
 

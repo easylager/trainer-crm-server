@@ -1266,6 +1266,19 @@
         );
       }
 
+      /** Catalog/profile hub hints only after 5+ real bookings or when moderated trainer hid listing. */
+      var HUB_CATALOG_NUDGE_MIN_BOOKINGS = 5;
+
+      function shouldShowHubCatalogPublicationHint(d) {
+        if (!d || !onboardingBookingStepDone(d)) return false;
+        var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
+        var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
+        if (inPublicCatalog) return false;
+        var real = parseNonNegativeInt(d.real_bookings_count);
+        if (real >= HUB_CATALOG_NUDGE_MIN_BOOKINGS) return true;
+        return !!d.is_active && !catVis;
+      }
+
       function hubCatalogOnboardingSkipKey() {
         var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
         if (id == null && hubOnboardingData && hubOnboardingData.trainer_id != null) {
@@ -1487,7 +1500,7 @@
         /* Карточка «следующий шаг» — единственный источник «что делать дальше».
            Пока она на экране, ритм-подсказка про каталог не дублирует её. */
         if (
-          onboardingBookingStepDone(d) &&
+          shouldShowHubCatalogPublicationHint(d) &&
           !d.next_step &&
           !hasSkippedCatalogOnboarding() &&
           !isRhythmHintDismissed('catalog_publication')
@@ -2209,9 +2222,7 @@
         var requestsBadge = hubRequestsStatReady && hubLastNewRequestsCount > 0 ? hubLastNewRequestsCount : 0;
         var profileBadge = 0;
         if (d && !hasSkippedCatalogOnboarding() && !isRhythmHintDismissed('catalog_publication')) {
-          var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
-          var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
-          if (!inPublicCatalog && onboardingBookingStepDone(d)) {
+          if (shouldShowHubCatalogPublicationHint(d)) {
             profileBadge = 1;
           }
         }

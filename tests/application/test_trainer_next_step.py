@@ -2,7 +2,7 @@
 Хаб показывает ровно одну подсказку — и правильную.
 
 Это тесты продуктового контракта онбординга v2, а не форматирования: порядок срочности,
-момент вопроса про площадку, порог каталога и — важнее всего — то, что работающий кабинет
+момент каталога, порог каталога и — важнее всего — то, что работающий кабинет
 молчит.
 """
 from src.application.trainer_next_step import (
@@ -59,8 +59,8 @@ def test_after_the_week_the_only_task_is_to_share_the_link() -> None:
     assert step["secondary"] is None, "в момент неуверенности — ровно одна кнопка"
 
 
-def test_arena_is_asked_only_after_a_real_booking_exists() -> None:
-    """Площадка не спрашивается на первом экране и спрашивается сразу, как станет нужна."""
+def test_hub_does_not_nag_arena_or_profile_after_first_booking() -> None:
+    """После первой записи хаб молчит — площадку и профиль не выносим отдельной карточкой."""
     before = resolve_trainer_next_step(
         _checklist(weekly_template_count=5, has_future_slots=True)
     )
@@ -74,8 +74,7 @@ def test_arena_is_asked_only_after_a_real_booking_exists() -> None:
             real_bookings_count=1,
         )
     )
-    assert after["key"] == STEP_SET_ARENA
-    assert after["cta"]["action"] == ACTION_OPEN_PROFILE
+    assert after is None
 
 
 def test_mobile_work_format_counts_as_an_answered_arena() -> None:
@@ -100,6 +99,19 @@ def test_first_booking_hides_the_share_card() -> None:
             has_any_booking=True,
             real_bookings_count=1,
             arena_count=1,
+        )
+    )
+    assert step is None
+
+
+def test_first_booking_without_arena_still_gets_no_hub_card() -> None:
+    step = resolve_trainer_next_step(
+        _checklist(
+            weekly_template_count=5,
+            has_future_slots=True,
+            has_any_booking=True,
+            real_bookings_count=1,
+            arena_count=0,
         )
     )
     assert step is None

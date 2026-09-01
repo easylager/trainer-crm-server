@@ -62,10 +62,6 @@ def resolve_trainer_next_step(
     has_slots = bool(checklist.get("has_future_slots"))
     has_booking = bool(checklist.get("has_any_booking"))
     real_bookings = int(checklist.get("real_bookings_count") or 0)
-    arena_ok = (
-        int(checklist.get("arena_count") or 0) > 0
-        or bool(checklist.get("arena_work_format"))
-    )
     in_catalog = bool(checklist.get("is_active")) and bool(checklist.get("is_catalog_visible"))
 
     # 1. Недели нет — работать нечем. Это единственный по-настоящему обязательный шаг.
@@ -106,16 +102,9 @@ def resolve_trainer_next_step(
             "secondary": None,
         }
 
-    # 4. Запись есть, а места встречи нет — теперь вопрос про площадку срочный и понятный.
-    #    Раньше он стоял на первом экране, где у тренера не было повода на него отвечать.
-    if not arena_ok:
-        return {
-            "key": STEP_SET_ARENA,
-            "title": "Где встречаетесь?",
-            "body": "К вам уже записались, но площадка не указана — ученик не знает, куда приходить.",
-            "cta": {"label": "Указать площадку", "action": ACTION_OPEN_PROFILE},
-            "secondary": None,
-        }
+    # Площадку и необязательные поля профиля (цены, «что не входит») в хаб не выносим:
+    # после первой записи кабинет уже работает, а мягкие пуши D+1/D+8/D+21 ведут в профиль
+    # без отдельного блока на главном экране.
 
     # После первой записи карточку «отправьте ссылку» больше не держим.
     # Повторять ссылку — дело хинтов, не отдельного блока на хабе.

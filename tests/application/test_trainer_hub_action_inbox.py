@@ -8,6 +8,7 @@ from src.application.trainer_hub_action_inbox import (
     _cap_hub_inbox_rhythm_items,
     _rhythm_show_slots_next_week_hint,
     _rhythm_show_slots_this_week_hint,
+    _should_nudge_catalog_in_hub,
     build_hub_dual_summary,
     build_trainer_hub_action_inbox,
     build_trainer_hub_inbox_badges,
@@ -138,6 +139,32 @@ def test_action_inbox_pending_and_requests() -> None:
     assert pending["booking_ids"] == [101, 102]
     assert pending["primary_action"] == "batch_confirm"
     assert "open_loop_pending" not in kinds
+
+
+def test_early_practice_gets_no_catalog_hub_nudge() -> None:
+    onboarding = {
+        "is_active": False,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "real_bookings_count": 1,
+        "is_catalog_visible": True,
+        "weekly_template_count": 1,
+        "has_future_slots": True,
+    }
+    assert not _should_nudge_catalog_in_hub(onboarding)
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+    )
+    assert "catalog_publication" not in {it["id"] for it in inbox["items"]}
+    badges = build_trainer_hub_inbox_badges(
+        onboarding=onboarding,
+        requests_count=0,
+        pending_count=0,
+    )
+    assert badges["menu"]["trainer-profile"] == 0
 
 
 def test_inbox_badges_schedule_and_clients() -> None:
