@@ -1664,11 +1664,11 @@ async def post_client_booking(
                     session, trainer_id, sess_arena
                 )
                 if err == "no_venue":
-                    raise HTTPException(
-                        status_code=400,
-                        detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
-                    )
-                if err == "invalid_arena":
+                    # Onboarding v2: slots without a venue are valid — personal-link booking must not
+                    # require a primary arena. Catalog browse still filters by city/arena upstream.
+                    arena_for_booking = None
+                    used_primary_despite_filter = False
+                elif err == "invalid_arena":
                     raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
                 arena_for_booking = resolved
 
