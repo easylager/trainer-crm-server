@@ -626,11 +626,32 @@
     return cellEl.dataset.dow + '_' + cellEl.dataset.hour;
   }
 
-  function cellUnderPoint(x, y) {
-    var target = document.elementFromPoint(x, y);
-    var cellEl = target && target.closest ? target.closest('.ob-cell') : null;
-    if (!cellEl || cellEl.disabled || !el.obGrid.contains(cellEl)) return null;
-    return cellEl;
+  /**
+   * Координаты всех ячеек, снятые ОДИН раз в момент начала штриха. Раньше клетка под пальцем
+   * искалась через document.elementFromPoint() при захваченном pointer capture — в WebView
+   * Telegram это сочетание «залипает» на первой ячейке (hit-test не видит, что палец сдвинулся),
+   * поэтому протягивание красило только её. Геометрия из кэша не зависит от особенностей
+   * hit-testing конкретного движка и работает одинаково везде. Кэш валиден в течение штриха,
+   * потому что во время протягивания раскладка не меняется (renderGrid() не вызывается).
+   */
+  function collectCellRects() {
+    var out = [];
+    var nodes = el.obGrid.querySelectorAll('.ob-cell');
+    for (var i = 0; i < nodes.length; i++) {
+      var c = nodes[i];
+      if (c.disabled) continue;
+      var r = c.getBoundingClientRect();
+      out.push({ el: c, left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+    }
+    return out;
+  }
+
+  function cellAtPoint(cells, x, y) {
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      if (x >= c.left && x <= c.right && y >= c.top && y <= c.bottom) return c.el;
+    }
+    return null;
   }
 
   /**
@@ -640,41 +661,55 @@
    */
   var dragPaint = null;
 
+  function startPaint(cellEl) {
+    var value = cellEl.getAttribute('aria-pressed') !== 'true';
+    dragPaint = {
+      arenaId: currentCtxArenaId,
+      value: value,
+      key: cellRowCol(cellEl),
+      cells: collectCellRects(),
+    };
+    paintCell(cellEl, currentCtxArenaId, value);
+    haptic('light');
+    syncGridCount();
+    syncCta();
+  }
+
+  function movePaint(x, y) {
+    if (!dragPaint) return;
+    var cellEl = cellAtPoint(dragPaint.cells, x, y);
+    if (!cellEl) return;
+    var key = cellRowCol(cellEl);
+    if (key === dragPaint.key) return;
+    dragPaint.key = key;
+    if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
+      haptic('light');
+      syncGridCount();
+      syncCta();
+    }
+  }
+
+  function endPaint() {
+    dragPaint = null;
+  }
+
   function bindGridDrag() {
     if (!el.obGrid) return;
 
     el.obGrid.addEventListener('pointerdown', function (e) {
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
       if (!cellEl || cellEl.disabled) return;
-      var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
-      paintCell(cellEl, currentCtxArenaId, value);
-      haptic('light');
-      syncGridCount();
-      syncCta();
-      try { el.obGrid.setPointerCapture(e.pointerId); } catch (err) { /* старые браузеры без capture */ }
+      startPaint(cellEl);
     });
 
     el.obGrid.addEventListener('pointermove', function (e) {
-      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
-      var cellEl = cellUnderPoint(e.clientX, e.clientY);
-      if (!cellEl) return;
-      var key = cellRowCol(cellEl);
-      if (key === dragPaint.key) return;
-      dragPaint.key = key;
-      if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
-        haptic('light');
-        syncGridCount();
-        syncCta();
-      }
+      if (!dragPaint) return;
+      movePaint(e.clientX, e.clientY);
     });
 
-    function endDrag(e) {
-      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
-      dragPaint = null;
-    }
-    el.obGrid.addEventListener('pointerup', endDrag);
-    el.obGrid.addEventListener('pointercancel', endDrag);
+    el.obGrid.addEventListener('pointerup', endPaint);
+    el.obGrid.addEventListener('pointercancel', endPaint);
+    el.obGrid.addEventListener('pointerleave', endPaint);
 
     /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через pointerdown
        выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
