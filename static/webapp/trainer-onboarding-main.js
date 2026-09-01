@@ -538,11 +538,16 @@
     }
   }
 
+  /* Контекст площадки для текущей отрисовки грида — читается делегированными pointer-
+     хендлерами ниже, чтобы красить ячейки во время drag без полной перерисовки грида. */
+  var currentCtxArenaId = null;
+
   function renderGrid() {
     if (!el.obGrid) return;
     var arena = currentGridArena();
     var offset = arenaOffset(arena);
     var ctxArenaId = arena ? arena.id : null;
+    currentCtxArenaId = ctxArenaId;
     var hours = visibleHours(arena);
     syncWeekHint(arena);
     if (el.obGridMore) {
@@ -578,6 +583,8 @@
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'ob-cell';
+    b.dataset.dow = dow;
+    b.dataset.hour = hour;
 
     var existingArena = dayArenaId(dow);
     var hours = dayHours(dow);
@@ -596,17 +603,91 @@
     var on = hours.indexOf(hour) >= 0 && existingArena === ctxArenaId;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
     b.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, offset));
-    b.onclick = function () {
-      var cur = dayHours(dow).slice();
-      var i = cur.indexOf(hour);
-      if (i >= 0) cur.splice(i, 1);
-      else cur.push(hour);
-      setDayHours(dow, cur, ctxArenaId);
-      haptic('light');
-      renderGrid();
-      syncCta();
-    };
+    /* Клики/тапы и протягивание пальцем обрабатываются делегированно на el.obGrid —
+       см. bindGridDrag(). Так одну ячейку можно закрасить без перерисовки всего грида. */
     return b;
+  }
+
+  /** Проставляет/снимает значение для одной ячейки и синхронизирует state.week. */
+  function paintCell(cellEl, ctxArenaId, value) {
+    var dow = parseInt(cellEl.dataset.dow, 10);
+    var hour = parseInt(cellEl.dataset.hour, 10);
+    var cur = dayHours(dow).slice();
+    var i = cur.indexOf(hour);
+    if (value && i < 0) cur.push(hour);
+    else if (!value && i >= 0) cur.splice(i, 1);
+    else return false;
+    setDayHours(dow, cur, ctxArenaId);
+    cellEl.setAttribute('aria-pressed', value ? 'true' : 'false');
+    return true;
+  }
+
+  function cellRowCol(cellEl) {
+    return cellEl.dataset.dow + '_' + cellEl.dataset.hour;
+  }
+
+  function cellUnderPoint(x, y) {
+    var target = document.elementFromPoint(x, y);
+    var cellEl = target && target.closest ? target.closest('.ob-cell') : null;
+    if (!cellEl || cellEl.disabled || !el.obGrid.contains(cellEl)) return null;
+    return cellEl;
+  }
+
+  /**
+   * Тап красит одну ячейку, протягивание пальцем — все ячейки под ним, тем же значением,
+   * что взято от первой (toggle). Проведённый штрих не триггерит полную перерисовку грида —
+   * только точечные атрибуты, иначе на быстром движении будет видимый рывок/мерцание.
+   */
+  var dragPaint = null;
+
+  function bindGridDrag() {
+    if (!el.obGrid) return;
+
+    el.obGrid.addEventListener('pointerdown', function (e) {
+      var cellEl = e.target.closest && e.target.closest('.ob-cell');
+      if (!cellEl || cellEl.disabled) return;
+      var value = cellEl.getAttribute('aria-pressed') !== 'true';
+      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
+      paintCell(cellEl, currentCtxArenaId, value);
+      haptic('light');
+      syncGridCount();
+      syncCta();
+      try { el.obGrid.setPointerCapture(e.pointerId); } catch (err) { /* старые браузеры без capture */ }
+    });
+
+    el.obGrid.addEventListener('pointermove', function (e) {
+      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
+      var cellEl = cellUnderPoint(e.clientX, e.clientY);
+      if (!cellEl) return;
+      var key = cellRowCol(cellEl);
+      if (key === dragPaint.key) return;
+      dragPaint.key = key;
+      if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
+        haptic('light');
+        syncGridCount();
+        syncCta();
+      }
+    });
+
+    function endDrag(e) {
+      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
+      dragPaint = null;
+    }
+    el.obGrid.addEventListener('pointerup', endDrag);
+    el.obGrid.addEventListener('pointercancel', endDrag);
+
+    /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через pointerdown
+       выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
+    el.obGrid.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;
+      var cellEl = e.target.closest && e.target.closest('.ob-cell');
+      if (!cellEl || cellEl.disabled) return;
+      var value = cellEl.getAttribute('aria-pressed') !== 'true';
+      paintCell(cellEl, currentCtxArenaId, value);
+      haptic('light');
+      syncGridCount();
+      syncCta();
+    });
   }
 
   function syncGridCount() {
@@ -859,6 +940,7 @@
 
   function bind() {
     if (el.obCta) el.obCta.onclick = submit;
+    bindGridDrag();
     if (el.obGridMore) {
       el.obGridMore.onclick = function () {
         state.hoursExpanded = !state.hoursExpanded;

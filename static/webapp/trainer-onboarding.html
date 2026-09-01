@@ -148,6 +148,11 @@
       cursor: pointer;
       font-family: inherit;
       transition: background .1s ease, border-color .1s ease;
+      /* Позволяет вести пальцем по нескольким ячейкам подряд («протянуть» диапазон),
+         не отдавая жест браузерному скроллу/зуму на середине штриха. */
+      touch-action: none;
+      -webkit-touch-callout: none;
+      user-select: none;
     }
     .ob-cell[aria-pressed="true"] {
       background: var(--app-cta-fill);
