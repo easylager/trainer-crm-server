@@ -645,18 +645,7 @@
   function bindGridDrag() {
     if (!el.obGrid) return;
 
-    el.obGrid.addEventListener('pointerdown', function (e) {
-      var cellEl = e.target.closest && e.target.closest('.ob-cell');
-      if (!cellEl || cellEl.disabled) return;
-      var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
-      paintCell(cellEl, currentCtxArenaId, value);
-      haptic('light');
-      syncGridCount();
-      syncCta();
-    });
-
-    el.obGrid.addEventListener('pointermove', function (e) {
+    var onPointerMove = function (e) {
       if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
       var cellEl = cellUnderPoint(e.clientX, e.clientY);
       if (!cellEl) return;
@@ -668,14 +657,31 @@
         syncGridCount();
         syncCta();
       }
-    });
+    };
 
-    function endDrag(e) {
+    var onPointerUp = function (e) {
       if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
       dragPaint = null;
-    }
-    el.obGrid.addEventListener('pointerup', endDrag);
-    el.obGrid.addEventListener('pointercancel', endDrag);
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerUp);
+    };
+
+    el.obGrid.addEventListener('pointerdown', function (e) {
+      var cellEl = e.target.closest && e.target.closest('.ob-cell');
+      if (!cellEl || cellEl.disabled) return;
+      var value = cellEl.getAttribute('aria-pressed') !== 'true';
+      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
+      paintCell(cellEl, currentCtxArenaId, value);
+      haptic('light');
+      syncGridCount();
+      syncCta();
+      /* Вешаем обработчики движения и отпускания на document, чтобы ловить движение
+         за пределами сетки. Удаляем их в onPointerUp. */
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('pointercancel', onPointerUp);
+    });
 
     /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через pointerdown
        выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
