@@ -108,22 +108,24 @@ def _onboarding_booking_step_done(d: dict[str, Any]) -> bool:
 
 def _should_nudge_catalog_in_hub(d: dict[str, Any]) -> bool:
     """
-  Catalog/profile hints in hub only after a real booking stream or when a moderated
-  trainer hid catalog visibility — not right after the first booking (push nudges cover that).
+    Catalog hints only once a real booking stream exists — never right after the first booking
+    (the push nudges cover that), and never for a trainer who already answered.
+
+    Two branches used to reach further and both were wrong once the catalog became opt-in:
+    «moderated trainer hid the listing» nagged someone who deliberately switched it off, and
+    nothing here looked at «Не сейчас» at all — that answer only lived in the browser.
     """
     from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
 
     if not _onboarding_booking_step_done(d):
         return False
-    cat_vis = d.get("is_catalog_visible") is not False and d.get("is_catalog_visible") != 0
+    if d.get("catalog_invite_dismissed"):
+        return False
+    cat_vis = bool(d.get("is_catalog_visible"))
     in_public = bool(d.get("is_active")) and bool(d.get("profile_complete")) and cat_vis
     if in_public:
         return False
-    real = int(d.get("real_bookings_count") or 0)
-    if real >= CATALOG_INVITE_MIN_BOOKINGS:
-        return True
-    # Moderated trainer turned off catalog listing — not «fill profile after first booking».
-    return bool(d.get("is_active")) and not cat_vis
+    return int(d.get("real_bookings_count") or 0) >= CATALOG_INVITE_MIN_BOOKINGS
 
 
 async def fetch_hub_pending_booking_ids(
@@ -223,7 +225,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
     has_schedule = int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
 
     if _should_nudge_catalog_in_hub(d):
-        cat_vis = d.get("is_catalog_visible") is not False and d.get("is_catalog_visible") != 0
+        cat_vis = bool(d.get("is_catalog_visible"))
         in_public = active and bool(d.get("profile_complete")) and cat_vis
         if not in_public:
             body = ""
@@ -241,11 +243,6 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                 body = (
                     "Для показа в каталоге закройте критерии профиля — в разделе статуса видно, "
                     "что ещё важно для публикации."
-                )
-            elif active and not cat_vis:
-                body = (
-                    "Сейчас вас нет в общем списке. Включите «Показать в каталоге» в профиле, "
-                    "когда будете готовы к новым обращениям оттуда."
                 )
             if body:
                 out.append(

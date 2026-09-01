@@ -23,7 +23,38 @@ CATALOG_INVITE_MIN_BOOKINGS = 5
 ACTION_OPEN_ONBOARDING = "open_onboarding"
 ACTION_SHARE_LINK = "share_link"
 ACTION_OPEN_PROFILE = "open_profile"
+ACTION_ENABLE_CATALOG = "enable_catalog"
 ACTION_DISMISS = "dismiss"
+
+# Короткие имена полей для карточки. Формулировки из MISSING_FIELD_LABELS_RU написаны для
+# списка на вкладке «Статус» («краткое описание (не менее 25 символов)») и в предложение не
+# ложатся. Ключи те же, поэтому карточка и профиль просят буквально одно и то же — раньше
+# карточка обещала «фото и пару слов о себе», а профиль встречал списком из восьми пунктов.
+_CATALOG_CARD_FIELD_WORDS: dict[str, str] = {
+    "full_name": "имя и фамилия",
+    "phone": "телефон",
+    "photo": "фото",
+    "city": "город",
+    "arenas": "площадка",
+    "services": "услуга",
+    "session_duration_minutes": "длительность занятия",
+    "min_hours_before_booking": "окно записи",
+}
+
+
+def _catalog_card_requirements(missing_fields: list[str] | None) -> str:
+    """«телефон, город и площадка» — то, чего действительно не хватает, или '' когда всё есть."""
+    words = [
+        _CATALOG_CARD_FIELD_WORDS[k]
+        for k in (missing_fields or [])
+        if k in _CATALOG_CARD_FIELD_WORDS
+    ]
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0]
+    return ", ".join(words[:-1]) + " и " + words[-1]
+
 
 STEP_SETUP_WEEK = "setup_week"
 STEP_REFRESH_WEEK = "refresh_week"
@@ -116,14 +147,19 @@ def resolve_trainer_next_step(
         and not catalog_invite_dismissed
     ):
         word = _plural(real_bookings, "занятие", "занятия", "занятий")
+        need = _catalog_card_requirements(checklist.get("catalog_missing_fields"))
+        tail = f"Для карточки не хватает: {need}." if need else "Карточка уже готова."
         return {
             "key": STEP_CATALOG_INVITE,
             "title": "Вас уже записывают",
             "body": (
-                f"{real_bookings} {word} по вашей ссылке. Хотите, чтобы находили новые ученики? "
-                "Для карточки нужны фото и пара слов о себе."
+                f"{real_bookings} {word} по вашей ссылке. "
+                f"Хотите, чтобы вас находили новые ученики? {tail}"
             ),
-            "cta": {"label": "Заполнить профиль", "action": ACTION_OPEN_PROFILE},
+            # Кнопка включает показ в каталоге и ведёт в профиль. Раньше она вела просто в
+            # профиль, а согласие на публикацию было спрятано в «Настройках» — тренер жал
+            # «Заполнить профиль» и попадал на экран, который просил сходить ещё куда-то.
+            "cta": {"label": "Хочу в каталог", "action": ACTION_ENABLE_CATALOG},
             "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
         }
 

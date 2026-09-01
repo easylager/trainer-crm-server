@@ -30,6 +30,7 @@ from src.application.trainer_profile_completeness import (
     MODERATION_SUBMISSION_CRITERIA_TOTAL,
 )
 from src.shared.telegram_webapp import InitDataAuthError
+from tests.api.test_webapp_client_miniapp_integration import _require_seed_ids
 
 
 def _fresh_trainer_telegram_id() -> int:
@@ -2092,3 +2093,124 @@ async def test_patch_service_ui_accents_then_my_services(
     row = next((x for x in items if int(x["id"]) == sid), None)
     assert row is not None
     assert row.get("ui_accent") is None
+
+
+@pytest.mark.asyncio
+async def test_catalog_invite_not_now_is_remembered_server_side(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """
+    «Не сейчас» на приглашении в каталог должно пережить смену устройства.
+
+    Раньше ответ лежал только в localStorage: тренер отказывался на телефоне и снова видел
+    то же приглашение на планшете или после очистки кэша. Отказ — это ответ, и он хранится
+    там же, где вычисляется вопрос.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Не", "last_name": "Сейчас", "age": 31}},
+        )
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            before = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            dismissed = await client.post(
+                "/api/webapp/trainer/onboarding/next-step/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"key": "catalog_invite"},
+            )
+            after = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            wrong_key = await client.post(
+                "/api/webapp/trainer/onboarding/next-step/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"key": "setup_week"},
+            )
+
+    assert before.status_code == 200
+    assert before.json().get("catalog_invite_dismissed") is False
+    assert dismissed.status_code == 200, dismissed.text
+    assert after.json().get("catalog_invite_dismissed") is True
+    # Остальные карточки описывают работу, которая реально блокирует записи — их не прячем.
+    assert wrong_key.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_enabling_catalog_queues_a_complete_profile_for_review(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """
+    Включение тумблера и есть просьба о публикации — с любого экрана.
+
+    Карточка на хабе включает показ в каталоге и не открывает профиль, поэтому очередь
+    модерации не может зависеть от того, что где-то в JS профиля вызовут ещё один запрос.
+    """
+    sid, cid, aid = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={
+                "profile": {
+                    "first_name": "Готов",
+                    "last_name": "Ккаталогу",
+                    "age": 34,
+                    "phone": "+375291112255",
+                    "city_id": cid,
+                    "session_duration_minutes": 45,
+                    "min_hours_before_booking": 3,
+                },
+                "service_ids": [sid],
+                "arena_ids": [aid] if aid else [],
+            },
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_photos (trainer_id, file_key, sort_order) VALUES (:tid, :fk, 0)"
+        ),
+        {"tid": trainer_id, "fk": f"trainers/{trainer_id}/x.jpg"},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    r = await db_session.execute(
+        text("SELECT moderation_submitted_at FROM trainers WHERE id = :id"), {"id": trainer_id}
+    )
+    assert r.scalar() is None
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.patch(
+                "/api/webapp/trainer/catalog-visibility",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"is_catalog_visible": True},
+            )
+    assert resp.status_code == 200, resp.text
+
+    r2 = await db_session.execute(
+        text("SELECT is_catalog_visible, moderation_submitted_at FROM trainers WHERE id = :id"),
+        {"id": trainer_id},
+    )
+    row = r2.fetchone()
+    assert row[0] is True
+    assert row[1] is not None

@@ -221,6 +221,11 @@ class TrainerProfile(Base):
     moderation_readiness_notified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Hub «Не сейчас» on the catalog invite. Server-side because a refusal must survive a
+    # different device or a cleared cache — otherwise we keep asking someone who said no.
+    catalog_invite_dismissed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # P1/P2 (PRD): redeem — auto write-off on no-show for pass/cert; skip — do not redeem.
     pass_cert_no_show_policy: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="redeem"

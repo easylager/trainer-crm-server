@@ -11,6 +11,9 @@ so onboarding «первая запись» does not regress after cancel.
 moderation gates the catalog, not the trainer's own tools).
 ``arena_count`` / ``real_bookings_count`` / ``arena_work_format`` feed the single «next step» card.
 ``is_catalog_visible`` = trainer row flag (hub rhythm: catalog publication hint when false while active).
+``catalog_invite_dismissed`` = trainer answered «Не сейчас» to the hub catalog invite (persisted, not per-device).
+``catalog_missing_fields`` / ``catalog_missing_labels_ru`` = submission-tier gaps, so the catalog invite
+names the same fields the profile will ask for instead of promising a shorter list.
 ``weekly_template_count`` = rows in ``trainer_schedule_templates`` (hub nudge after onboarding complete).
 ``slots_this_week_count`` = available/booked slots from today till end of current week.
 ``slots_next_week_count`` = available/booked slots for the next full week.
@@ -112,7 +115,20 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "arena_count": 0,
         "real_bookings_count": 0,
         "arena_work_format": None,
+        # «Не сейчас» на приглашении в каталог — ответ тренера, а не состояние вкладки.
+        "catalog_invite_dismissed": False,
+        # Что реально требуется для карточки (submission tier), чтобы приглашение в каталог
+        # называло те же поля, которые потом попросит профиль.
+        "catalog_missing_fields": list(readiness.get("missing_fields") or []) if readiness else [],
+        "catalog_missing_labels_ru": list(readiness.get("missing_labels_ru") or []) if readiness else [],
     }
+
+    r_dismiss = await session.execute(
+        text("SELECT catalog_invite_dismissed_at FROM trainer_profiles WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    dismiss_row = r_dismiss.fetchone()
+    out["catalog_invite_dismissed"] = bool(dismiss_row and dismiss_row[0] is not None)
 
     has_crm = await trainer_has_crm_access(session, trainer_id)
     out["has_crm_subscription_access"] = has_crm

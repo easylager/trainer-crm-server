@@ -8,7 +8,7 @@
 from src.application.trainer_next_step import (
     ACTION_DISMISS,
     ACTION_OPEN_ONBOARDING,
-    ACTION_OPEN_PROFILE,
+    ACTION_ENABLE_CATALOG,
     ACTION_SHARE_LINK,
     CATALOG_INVITE_MIN_BOOKINGS,
     STEP_CATALOG_INVITE,
@@ -31,7 +31,8 @@ def _checklist(**over) -> dict:
         "arena_count": 0,
         "arena_work_format": None,
         "is_active": False,
-        "is_catalog_visible": True,
+        # Каталог по заявке (0182): новый тренер в него не просился.
+        "is_catalog_visible": False,
     }
     base.update(over)
     return base
@@ -218,3 +219,55 @@ def test_fully_booked_week_is_not_mistaken_for_an_empty_one() -> None:
         )
     )
     assert step is None
+
+
+def test_catalog_invite_names_the_fields_the_profile_will_actually_ask_for() -> None:
+    """
+    Карточка обещала «фото и пара слов о себе», а submission tier требует восемь пунктов —
+    тренер жал кнопку и попадал на список, которого не ждал. Теперь список один и тот же.
+    """
+    step = resolve_trainer_next_step(
+        _checklist(
+            weekly_template_count=5,
+            has_future_slots=True,
+            has_any_booking=True,
+            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
+            catalog_missing_fields=["phone", "city", "arenas"],
+        )
+    )
+    assert step["key"] == STEP_CATALOG_INVITE
+    assert "не хватает: телефон, город и площадка." in step["body"]
+    assert "пара слов о себе" not in step["body"]
+
+
+def test_catalog_invite_says_the_card_is_ready_when_nothing_is_missing() -> None:
+    step = resolve_trainer_next_step(
+        _checklist(
+            weekly_template_count=5,
+            has_future_slots=True,
+            has_any_booking=True,
+            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
+            catalog_missing_fields=[],
+        )
+    )
+    assert "Карточка уже готова." in step["body"]
+    assert "не хватает" not in step["body"]
+
+
+def test_catalog_invite_cta_is_the_opt_in_itself() -> None:
+    """
+    Кнопка включает показ в каталоге, а не просто открывает профиль: согласие на публикацию
+    живёт в «Настройках», и раньше «Заполнить профиль» вело на экран, который отправлял
+    тренера искать тумблер где-то ещё.
+    """
+    step = resolve_trainer_next_step(
+        _checklist(
+            weekly_template_count=5,
+            has_future_slots=True,
+            has_any_booking=True,
+            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
+            catalog_missing_fields=["phone"],
+        )
+    )
+    assert step["cta"]["action"] == ACTION_ENABLE_CATALOG
+    assert step["secondary"]["action"] == ACTION_DISMISS

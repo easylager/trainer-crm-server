@@ -55,6 +55,7 @@ from src.application.trainer_use_cases import (
     list_trainer_education,
     register_photo,
     set_trainer_catalog_visibility,
+    try_submit_trainer_for_moderation_review,
     update_trainer_education,
     update_trainer_profile,
     upload_trainer_education_document_photo_from_bytes,
@@ -436,6 +437,12 @@ async def patch_trainer_catalog_visibility_for_webapp(
     ok = await set_trainer_catalog_visibility(session, trainer_id, visible=body.is_catalog_visible)
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
+    if body.is_catalog_visible:
+        # Switching it on IS the request to be published, whichever screen flipped it — the hub
+        # card does not open the profile at all. Idempotent and quiet: an incomplete profile or
+        # an already-queued one just comes back as a noop, and the trainer sees the same thing
+        # either way (the profile lists what is still missing).
+        await try_submit_trainer_for_moderation_review(session, trainer_id)
     audit_log(
         "trainer.catalog_visibility_updated",
         ACTOR_API,

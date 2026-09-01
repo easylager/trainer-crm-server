@@ -715,11 +715,21 @@
         return actions.slice(0, 4);
       }
 
+      /**
+       * Чип каталога, или null. «Активен» раньше зависел только от is_active, поэтому тренер,
+       * который сам выключил показ в каталоге, продолжал читать «Каталог · активен» — прямая
+       * неправда на главном экране. «Скрыт» тоном ok, а не warn: это его решение, не поломка.
+       */
+      function hubCatalogStatusChip(onb) {
+        if (!onb || !(onb.is_active || hubDataSaysTrainerActive(onb))) return null;
+        var visible = !!onb.is_catalog_visible;
+        return { text: visible ? 'Каталог · активен' : 'Каталог · скрыт', tone: 'ok' };
+      }
+
       function buildHubDayCanvasStatusChips(onb) {
         var chips = [];
-        if (onb && (onb.is_active || hubDataSaysTrainerActive(onb))) {
-          chips.push({ text: 'Каталог · активен', tone: 'ok' });
-        }
+        var catalogChip = hubCatalogStatusChip(onb);
+        if (catalogChip) chips.push(catalogChip);
         var weekRem = hubLastWeekRemaining || 0;
         if (weekRem > 0) {
           chips.push({
@@ -865,9 +875,8 @@
           });
         }
 
-        if (onb && (onb.is_active || hubDataSaysTrainerActive(onb)) && chips.length < 6) {
-          chips.push({ text: 'Каталог · активен', tone: 'ok' });
-        }
+        var catalogChip = hubCatalogStatusChip(onb);
+        if (catalogChip && chips.length < 6) chips.push(catalogChip);
 
         return chips;
       }
@@ -1266,17 +1275,19 @@
         );
       }
 
-      /** Catalog/profile hub hints only after 5+ real bookings or when moderated trainer hid listing. */
+      /** Catalog hub hints only after 5+ real bookings, and never once the trainer has answered. */
       var HUB_CATALOG_NUDGE_MIN_BOOKINGS = 5;
 
+      /* Зеркало _should_nudge_catalog_in_hub из trainer_hub_action_inbox.py — держать в паре.
+         Ветка «активен, но каталог выключен» убрана: это его решение, а не незакрытая задача.
+         «Не сейчас» теперь тоже учитываем — ответ хранится на сервере. */
       function shouldShowHubCatalogPublicationHint(d) {
         if (!d || !onboardingBookingStepDone(d)) return false;
-        var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
-        var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
+        if (d.catalog_invite_dismissed) return false;
+        var catVis = !!d.is_catalog_visible;
+        var inPublicCatalog = !!d.is_active && !!d.profile_complete && catVis;
         if (inPublicCatalog) return false;
-        var real = parseNonNegativeInt(d.real_bookings_count);
-        if (real >= HUB_CATALOG_NUDGE_MIN_BOOKINGS) return true;
-        return !!d.is_active && !catVis;
+        return parseNonNegativeInt(d.real_bookings_count) >= HUB_CATALOG_NUDGE_MIN_BOOKINGS;
       }
 
       function hubCatalogOnboardingSkipKey() {
@@ -1505,8 +1516,8 @@
           !hasSkippedCatalogOnboarding() &&
           !isRhythmHintDismissed('catalog_publication')
         ) {
-          var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
-          var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
+          var catVis = !!d.is_catalog_visible;
+          var inPublicCatalog = !!d.is_active && !!d.profile_complete && catVis;
           if (!inPublicCatalog) {
             var body = '';
             var ctaLab = 'Профиль';
@@ -1519,9 +1530,6 @@
             } else if (d.is_active && !d.profile_complete) {
               body =
                 'Для показа в каталоге закройте критерии профиля — в разделе статуса видно, что ещё важно для публикации.';
-            } else if (d.is_active && !catVis) {
-              body =
-                'Сейчас вас нет в общем списке. Включите «Показать в каталоге» в профиле, когда будете готовы к новым обращениям оттуда.';
             }
             if (body) {
               out.push({
@@ -2698,32 +2706,22 @@
         renderHubSummaryHints();
       }
 
-      /** localStorage-ключ «не сейчас» для приглашения в каталог (по тренеру). */
-      function hubNextStepDismissKey(key) {
-        var tid = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
-        if (!tid) return null;
-        return 'glide_next_step_dismissed_' + key + '_' + tid;
-      }
-
-      function hubNextStepDismissed(key) {
-        try {
-          var k = hubNextStepDismissKey(key);
-          return !!(k && localStorage.getItem(k) === '1');
-        } catch (e) { return false; }
-      }
-
+      /**
+       * «Не сейчас» уходит на сервер (POST .../next-step/dismiss): раньше ответ жил только в
+       * localStorage, и тренер, отказавшийся на телефоне, снова видел приглашение на планшете
+       * или после очистки кэша. Сервер уже не присылает next_step, если ответ записан, —
+       * локальная проверка при рендере не нужна.
+       */
       function persistHubNextStepDismissed(key) {
-        try {
-          var k = hubNextStepDismissKey(key);
-          if (k) localStorage.setItem(k, '1');
-        } catch (e) { /* приватный режим — переживём */ }
+        return postJsonTrainer('/trainer/onboarding/next-step/dismiss', { key: key })
+          .catch(function () { /* сеть отвалилась — переспросим в следующий раз */ });
       }
 
       /** Одна карточка, одно действие. Нет карточки — секция скрыта целиком. */
       function renderHubNextStep(step) {
         var host = document.getElementById('hubNextStep');
         if (!host) return;
-        if (!step || hubNextStepDismissed(step.key)) {
+        if (!step) {
           host.setAttribute('hidden', 'hidden');
           return;
         }
@@ -2767,10 +2765,36 @@
           shareTrainerInviteLink();
           return;
         }
+        if (action === 'enable_catalog') {
+          enableHubCatalogListing();
+          return;
+        }
         if (action === 'dismiss') {
           persistHubNextStepDismissed(step.key);
           renderHubNextStep(null);
         }
+      }
+
+      /**
+       * «Хочу в каталог» — включаем показ и открываем профиль.
+       *
+       * Включение тумблера и есть просьба о публикации: сервер сам поставит карточку в очередь
+       * на проверку, если анкета уже полная. Профиль открываем следом, потому что чаще всего
+       * чего-то не хватает, и список недостающего живёт там.
+       */
+      function enableHubCatalogListing() {
+        fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
+          method: 'PATCH',
+          headers: headersJson(),
+          body: JSON.stringify({ is_catalog_visible: true }),
+        })
+          .then(function () {
+            if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
+            navigateTo('trainer-profile');
+          })
+          .catch(function () {
+            navigateTo('trainer-profile');
+          });
       }
 
       /**

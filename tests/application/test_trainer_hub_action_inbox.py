@@ -3,6 +3,7 @@ from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
 from src.application.trainer_hub_action_inbox import (
     HUB_RHYTHM_GROWTH_MAX,
     _cap_hub_inbox_rhythm_items,
@@ -172,6 +173,10 @@ def test_inbox_badges_schedule_and_clients() -> None:
         "is_active": True,
         "profile_complete": False,
         "has_any_booking": True,
+        # Каталог теперь по заявке: подсказка про профиль появляется только при живом потоке
+        # записей. Раньше её триггерил сам факт «активен, но не в каталоге» — то есть тренер,
+        # который сам выключил показ, получал бейдж «доделай профиль».
+        "real_bookings_count": CATALOG_INVITE_MIN_BOOKINGS,
         "is_catalog_visible": False,
         "open_loop_clients_no_telegram_count": 3,
     }
@@ -320,3 +325,37 @@ def test_referral_growth_waits_for_a_first_booking() -> None:
     payload2 = build_trainer_hub_action_inbox(onboarding=after_first_booking, schedule_unlocked=True)
     ids2 = [x["id"] for x in payload2["items"]]
     assert "referral_growth" in ids2
+
+
+def test_catalog_hub_nudge_respects_not_now() -> None:
+    """«Не сейчас» — ответ, а не состояние вкладки: он хранится на сервере и гасит подсказку."""
+    onboarding = {
+        "is_active": False,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "real_bookings_count": CATALOG_INVITE_MIN_BOOKINGS + 3,
+        "is_catalog_visible": False,
+        "weekly_template_count": 1,
+        "has_future_slots": True,
+    }
+    assert _should_nudge_catalog_in_hub(onboarding)
+    assert not _should_nudge_catalog_in_hub({**onboarding, "catalog_invite_dismissed": True})
+
+
+def test_active_trainer_who_hid_catalog_is_not_nudged() -> None:
+    """
+    Выключенный показ в каталоге — решение тренера, а не незакрытая задача.
+
+    Раньше эта комбинация (active + is_catalog_visible=false) сама по себе поднимала подсказку
+    «включите показ», сколько бы раз тренер её ни закрывал.
+    """
+    onboarding = {
+        "is_active": True,
+        "profile_complete": True,
+        "has_any_booking": True,
+        "real_bookings_count": 1,
+        "is_catalog_visible": False,
+        "weekly_template_count": 1,
+        "has_future_slots": True,
+    }
+    assert not _should_nudge_catalog_in_hub(onboarding)

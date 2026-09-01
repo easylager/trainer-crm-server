@@ -8032,8 +8032,49 @@ async def webapp_trainer_onboarding_checklist(
         raise HTTPException(status_code=404, detail="Trainer not found")
     from src.application.trainer_next_step import resolve_trainer_next_step
 
-    data["next_step"] = resolve_trainer_next_step(data)
+    data["next_step"] = resolve_trainer_next_step(
+        data, catalog_invite_dismissed=bool(data.get("catalog_invite_dismissed"))
+    )
     return data
+
+
+class TrainerNextStepDismissBody(BaseModel):
+    key: str
+
+
+@router.post("/trainer/onboarding/next-step/dismiss")
+async def webapp_trainer_dismiss_next_step(
+    body: TrainerNextStepDismissBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Remember «Не сейчас» on the hub catalog invite.
+
+    The answer used to live in ``localStorage`` only, so it was forgotten on another device or
+    after a cache clear and the trainer was asked again. Only the catalog invite is dismissible —
+    the other next-step cards describe work that is actually blocking, and hiding them would
+    leave the trainer with a schedule nobody can book.
+    """
+    from src.application.trainer_next_step import STEP_CATALOG_INVITE
+
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
+    if body.key != STEP_CATALOG_INVITE:
+        raise HTTPException(status_code=422, detail="This step cannot be dismissed")
+    await session.execute(
+        text(
+            """
+            UPDATE trainer_profiles
+            SET catalog_invite_dismissed_at = NOW()
+            WHERE trainer_id = :tid AND catalog_invite_dismissed_at IS NULL
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    await session.commit()
+    return {"ok": True}
 
 
 @router.post("/trainer/onboarding/submit-for-moderation")
