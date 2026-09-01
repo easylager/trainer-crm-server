@@ -626,72 +626,21 @@
     return cellEl.dataset.dow + '_' + cellEl.dataset.hour;
   }
 
-  /**
-   * Координаты всех ячеек, снятые ОДИН раз в момент начала штриха. Раньше клетка под пальцем
-   * искалась через document.elementFromPoint() при захваченном pointer capture — в WebView
-   * Telegram это сочетание «залипает» на первой ячейке (hit-test не видит, что палец сдвинулся),
-   * поэтому протягивание красило только её. Геометрия из кэша не зависит от особенностей
-   * hit-testing конкретного движка и работает одинаково везде. Кэш валиден в течение штриха,
-   * потому что во время протягивания раскладка не меняется (renderGrid() не вызывается).
-   */
-  function collectCellRects() {
-    var out = [];
-    var nodes = el.obGrid.querySelectorAll('.ob-cell');
-    for (var i = 0; i < nodes.length; i++) {
-      var c = nodes[i];
-      if (c.disabled) continue;
-      var r = c.getBoundingClientRect();
-      out.push({ el: c, left: r.left, right: r.right, top: r.top, bottom: r.bottom });
-    }
-    return out;
-  }
-
-  function cellAtPoint(cells, x, y) {
-    for (var i = 0; i < cells.length; i++) {
-      var c = cells[i];
-      if (x >= c.left && x <= c.right && y >= c.top && y <= c.bottom) return c.el;
-    }
-    return null;
+  function cellUnderPoint(x, y) {
+    var target = document.elementFromPoint(x, y);
+    if (!target || !target.closest) return null;
+    var cellEl = target.closest('.ob-cell');
+    if (!cellEl || cellEl.disabled || !el.obGrid.contains(cellEl)) return null;
+    return cellEl;
   }
 
   /**
    * Тап красит одну ячейку, протягивание пальцем — все ячейки под ним, тем же значением,
-   * что взято от первой (toggle). Проведённый штрих не триггерит полную перерисовку грида —
-   * только точечные атрибуты, иначе на быстром движении будет видимый рывок/мерцание.
+   * что взято от первой (toggle). Без захвата указателя — в WebView это вызывает проблемы.
+   * Вместо этого подстраиваем логику: начинаем жест на pointerdown, обновляем на каждом
+   * pointermove, и завершаем на pointerup/cancel. Скролл сетки блокируется touch-action: none.
    */
   var dragPaint = null;
-
-  function startPaint(cellEl) {
-    var value = cellEl.getAttribute('aria-pressed') !== 'true';
-    dragPaint = {
-      arenaId: currentCtxArenaId,
-      value: value,
-      key: cellRowCol(cellEl),
-      cells: collectCellRects(),
-    };
-    paintCell(cellEl, currentCtxArenaId, value);
-    haptic('light');
-    syncGridCount();
-    syncCta();
-  }
-
-  function movePaint(x, y) {
-    if (!dragPaint) return;
-    var cellEl = cellAtPoint(dragPaint.cells, x, y);
-    if (!cellEl) return;
-    var key = cellRowCol(cellEl);
-    if (key === dragPaint.key) return;
-    dragPaint.key = key;
-    if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
-      haptic('light');
-      syncGridCount();
-      syncCta();
-    }
-  }
-
-  function endPaint() {
-    dragPaint = null;
-  }
 
   function bindGridDrag() {
     if (!el.obGrid) return;
@@ -699,17 +648,34 @@
     el.obGrid.addEventListener('pointerdown', function (e) {
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
       if (!cellEl || cellEl.disabled) return;
-      startPaint(cellEl);
+      var value = cellEl.getAttribute('aria-pressed') !== 'true';
+      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl), pointerId: e.pointerId };
+      paintCell(cellEl, currentCtxArenaId, value);
+      haptic('light');
+      syncGridCount();
+      syncCta();
     });
 
     el.obGrid.addEventListener('pointermove', function (e) {
-      if (!dragPaint) return;
-      movePaint(e.clientX, e.clientY);
+      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
+      var cellEl = cellUnderPoint(e.clientX, e.clientY);
+      if (!cellEl) return;
+      var key = cellRowCol(cellEl);
+      if (key === dragPaint.key) return;
+      dragPaint.key = key;
+      if (paintCell(cellEl, dragPaint.arenaId, dragPaint.value)) {
+        haptic('light');
+        syncGridCount();
+        syncCta();
+      }
     });
 
-    el.obGrid.addEventListener('pointerup', endPaint);
-    el.obGrid.addEventListener('pointercancel', endPaint);
-    el.obGrid.addEventListener('pointerleave', endPaint);
+    function endDrag(e) {
+      if (!dragPaint || dragPaint.pointerId !== e.pointerId) return;
+      dragPaint = null;
+    }
+    el.obGrid.addEventListener('pointerup', endDrag);
+    el.obGrid.addEventListener('pointercancel', endDrag);
 
     /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через pointerdown
        выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
