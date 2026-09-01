@@ -114,7 +114,7 @@
     }
     .ob-grid {
       display: grid;
-      grid-template-columns: 26px repeat(7, minmax(0, 1fr));
+      grid-template-columns: minmax(20px, max-content) repeat(7, minmax(0, 1fr));
       gap: 5px;
     }
     .ob-grid-dayhead {
@@ -134,7 +134,8 @@
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      padding-right: 6px;
+      padding-right: 4px;
+      white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
     .ob-cell {
