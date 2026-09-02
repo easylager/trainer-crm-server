@@ -4,9 +4,10 @@
 # runs as a docker-compose daemon (nothing to watch there, so no window).
 #
 # Usage:
-#   ./dev-start          start (or attach to) the dev session
+#   ./dev-start          start, repair, or attach to the dev session
 #   ./dev-start status    list the tmux windows and whether they're alive
 #   ./dev-start stop      kill the whole session (leaves postgres running)
+#   ./dev-start repair    heal tunnel/API/bots without attaching
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +24,12 @@ cmd="${1:-up}"
 
 case "$cmd" in
   up|start) ;;
+  repair)
+    bash "$ROOT/scripts/dev_repair_stack.sh"
+    exit 0
+    ;;
   stop|down)
+    bash "$ROOT/scripts/dev_stop_tunnel.sh" 2>/dev/null || true
     if tmux has-session -t "$SESSION" 2>/dev/null; then
       log "killing tmux session '$SESSION' (postgres container keeps running)"
       tmux kill-session -t "$SESSION"
@@ -35,24 +41,43 @@ case "$cmd" in
   status)
     if tmux has-session -t "$SESSION" 2>/dev/null; then
       tmux list-windows -t "$SESSION"
+      PY="$ROOT/.venv/bin/python"
+      [[ -x "$PY" ]] || PY="python3"
+      BASE="$("$PY" "$ROOT/scripts/dev_tunnel_util.py" read-env-url "$ROOT/.env" 2>/dev/null || true)"
+      if [[ -n "$BASE" ]]; then
+        if "$PY" "$ROOT/scripts/dev_tunnel_util.py" health "$BASE" >/dev/null 2>&1; then
+          log "tunnel: OK $BASE"
+        else
+          log "tunnel: UNHEALTHY $BASE (run ./dev-start to repair)"
+        fi
+      else
+        log "tunnel: no WEBAPP_BASE_URL in .env"
+      fi
     else
       log "no tmux session '$SESSION' running"
     fi
     exit 0
     ;;
   *)
-    die "unknown command '$cmd' (use: up | stop | status)"
+    die "unknown command '$cmd' (use: up | repair | stop | status)"
     ;;
 esac
 
 require tmux
-require cloudflared
 require python3
+require curl
+require ssh
 [[ -f "$ROOT/.env" ]] || die "no .env at $ROOT/.env -- create it from .env.example first."
 
-# --- already running? just hop into it, don't touch anything ---------------
+if ! command -v cloudflared >/dev/null 2>&1; then
+  log "cloudflared not installed — will use localhost.run fallback (brew install cloudflare/cloudflare/cloudflared for CF)"
+fi
+
+# --- session already running: repair then attach --------------------------------
 if tmux has-session -t "$SESSION" 2>/dev/null; then
-  log "session '$SESSION' already running -- attaching"
+  log "session '$SESSION' already running — repairing stack..."
+  bash "$ROOT/scripts/dev_repair_stack.sh"
+  log "attaching to '$SESSION'..."
   if [[ -n "${TMUX:-}" ]]; then
     exec tmux switch-client -t "$SESSION"
   else
@@ -81,12 +106,14 @@ log "running migrations (alembic upgrade head)..."
 "$PY" -m alembic upgrade head || log "alembic upgrade failed -- check migration state manually."
 
 # --- clear stray processes left over from a non-tmux run --------------------
+bash "$ROOT/scripts/dev_stop_tunnel.sh" 2>/dev/null || true
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+pkill -f "uvicorn src.api.app:app" 2>/dev/null || true
 pkill -f "src.bot.client_app" 2>/dev/null || true
 pkill -f "src.bot.trainer_app" 2>/dev/null || true
 pkill -f "src.bot.admin_app" 2>/dev/null || true
 pkill -f "src.bot.notification_service" 2>/dev/null || true
-pkill -f "cloudflared tunnel --url http://127.0.0.1:8000" 2>/dev/null || true
+sleep 1
 
 # --- build the tmux session --------------------------------------------------
 log "creating tmux session '$SESSION'"
@@ -107,9 +134,8 @@ tmux set-window-option -t "$SESSION:monitor" remain-on-exit on
 tmux select-window -t "$SESSION:tunnel"
 
 log "windows: tunnel, api, bot-client, bot-trainer, bot-admin, notify, monitor"
-log "• monitor window auto-respawns crashed services"
-log "• tunnel window auto-restarts cloudflared and respawns api/bots on URL change"
-log "• all windows stay open on crash (remain-on-exit) -- check logs in each window"
+log "tunnel: cloudflared → fallback localhost.run; auto-restart on drop"
+log "run ./dev-start again anytime to repair + attach (fixes stale tunnel URLs)"
 log "attaching to '$SESSION'..."
 
 if [[ -n "${TMUX:-}" ]]; then
