@@ -38,6 +38,110 @@
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
+
+    /* City / arena picker search — sticky on long lists (e.g. Moscow arenas) */
+    .catalog-picker-search {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      margin: 0 0 10px;
+      padding: 2px 0 8px;
+      background: linear-gradient(
+        180deg,
+        var(--tg-theme-bg-color) 0%,
+        var(--tg-theme-bg-color) 72%,
+        color-mix(in srgb, var(--tg-theme-bg-color) 88%, transparent) 100%
+      );
+    }
+    .catalog-picker-search--arena {
+      margin-top: 4px;
+    }
+    .catalog-picker-search__field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px 0 12px;
+      min-height: 48px;
+      border-radius: 16px;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .catalog-picker-search__field:focus-within {
+      border-color: rgba(var(--accent-rgb), 0.5);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16), 0 4px 18px rgba(0, 0, 0, 0.08);
+    }
+    .catalog-picker-search__icon {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+    }
+    .catalog-picker-search__field:focus-within .catalog-picker-search__icon {
+      color: var(--tg-theme-button-color);
+      opacity: 1;
+    }
+    .catalog-picker-search__input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 16px;
+      line-height: 1.3;
+      padding: 12px 0;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .catalog-picker-search__input::-webkit-search-cancel-button,
+    .catalog-picker-search__input::-webkit-search-decoration {
+      display: none;
+    }
+    .catalog-picker-search__input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+    }
+    .catalog-picker-search__input:focus {
+      outline: none;
+    }
+    .catalog-picker-search__clear {
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: none;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+    }
+    .catalog-picker-search__clear:active {
+      transform: scale(0.94);
+    }
+    @media (hover: hover) {
+      .catalog-picker-search__clear:hover {
+        background: color-mix(in srgb, var(--tg-theme-button-color) 14%, transparent);
+        color: var(--tg-theme-button-color);
+      }
+    }
+    .catalog-picker-search__meta {
+      margin: 6px 4px 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .catalog-picker-search__empty-hint {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
     .choice-card {
       display: flex;
       align-items: center;

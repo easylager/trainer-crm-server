@@ -1037,6 +1037,10 @@
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
+        if (id !== 'screenCity') resetPickerSearch('city');
+        if (id !== 'screenArena') resetPickerSearch('arena');
+        if (id === 'screenCity') focusPickerSearch('city');
+        if (id === 'screenArena') focusPickerSearch('arena');
         if (id === 'screenTrainerDetail') {
           document.querySelectorAll('#catalogTabsOnDetail .tab-btn').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.tab === 'my_trainer');
@@ -3747,6 +3751,112 @@
         return String(s).replace(/"/g, '&quot;');
       }
 
+      /** Show search whenever there is anything to filter (even 2 cities — user expects the field). */
+      var CATALOG_PICKER_SEARCH_MIN = 1;
+
+      var catalogCityItems = [];
+      var catalogCitySearchBound = false;
+      var catalogArenaSearchBound = false;
+
+      function normalizePickerSearch(value) {
+        return String(value || '')
+          .toLowerCase()
+          .replace(/ё/g, 'е')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function pickerSearchTokens(query) {
+        var q = normalizePickerSearch(query);
+        return q ? q.split(' ') : [];
+      }
+
+      /** Every whitespace-separated token must appear in the combined haystack. */
+      function pickerItemMatchesQuery(query, parts) {
+        var tokens = pickerSearchTokens(query);
+        if (!tokens.length) return true;
+        var hay = normalizePickerSearch((parts || []).filter(Boolean).join(' '));
+        if (!hay) return false;
+        for (var i = 0; i < tokens.length; i++) {
+          if (hay.indexOf(tokens[i]) < 0) return false;
+        }
+        return true;
+      }
+
+      function syncPickerSearchChrome(kind, totalCount, visibleCount, query) {
+        var wrap = document.getElementById(kind + 'SearchWrap');
+        var input = document.getElementById(kind + 'SearchInput');
+        var clearBtn = document.getElementById(kind + 'SearchClear');
+        var meta = document.getElementById(kind + 'SearchMeta');
+        if (!wrap || !input) return;
+        var showSearch = totalCount >= CATALOG_PICKER_SEARCH_MIN;
+        if (showSearch) wrap.removeAttribute('hidden');
+        else wrap.setAttribute('hidden', '');
+        var hasQuery = !!normalizePickerSearch(query);
+        if (clearBtn) {
+          if (hasQuery) clearBtn.removeAttribute('hidden');
+          else clearBtn.setAttribute('hidden', '');
+        }
+        if (meta) {
+          if (!showSearch || !hasQuery) {
+            meta.setAttribute('hidden', '');
+            meta.textContent = '';
+          } else if (visibleCount === 0) {
+            meta.removeAttribute('hidden');
+            meta.textContent = 'Ничего не найдено — попробуйте другое название или адрес';
+          } else if (visibleCount < totalCount) {
+            meta.removeAttribute('hidden');
+            meta.textContent = 'Показано ' + visibleCount + ' из ' + totalCount;
+          } else {
+            meta.setAttribute('hidden', '');
+            meta.textContent = '';
+          }
+        }
+      }
+
+      function resetPickerSearch(kind) {
+        var input = document.getElementById(kind + 'SearchInput');
+        if (!input || !input.value) return;
+        input.value = '';
+        if (kind === 'city') renderCityList();
+        else if (kind === 'arena') renderArenaListCheckboxes();
+      }
+
+      function focusPickerSearch(kind) {
+        var wrap = document.getElementById(kind + 'SearchWrap');
+        var input = document.getElementById(kind + 'SearchInput');
+        if (!wrap || wrap.hasAttribute('hidden') || !input) return;
+        requestAnimationFrame(function() {
+          try { input.focus({ preventScroll: true }); } catch (eFocus) { input.focus(); }
+        });
+      }
+
+      function maybeFocusActivePickerSearch(kind) {
+        var screenId = kind === 'city' ? 'screenCity' : 'screenArena';
+        var screen = document.getElementById(screenId);
+        var input = document.getElementById(kind + 'SearchInput');
+        if (!screen || !screen.classList.contains('active') || !input || input.value) return;
+        focusPickerSearch(kind);
+      }
+
+      function bindPickerSearchOnce(kind, onInput) {
+        var boundFlag = kind === 'city' ? catalogCitySearchBound : catalogArenaSearchBound;
+        if (boundFlag) return;
+        if (kind === 'city') catalogCitySearchBound = true;
+        else catalogArenaSearchBound = true;
+        var input = document.getElementById(kind + 'SearchInput');
+        var clearBtn = document.getElementById(kind + 'SearchClear');
+        if (!input) return;
+        input.addEventListener('input', onInput);
+        if (clearBtn) {
+          clearBtn.addEventListener('click', function() {
+            input.value = '';
+            onInput();
+            input.focus();
+          });
+        }
+      }
+
       var CATALOG_NOTICE_PREFIX = 'В стоимость не входят:';
 
       /** Text after the fixed prefix for display (or full text if prefix missing — still shown under the same lead). */
@@ -4294,58 +4404,93 @@
       }
 
       function loadCities() {
+        bindPickerSearchOnce('city', renderCityList);
+        resetPickerSearch('city');
         setCatalogListLoading(document.getElementById('cityList'), 3);
+        var searchWrap = document.getElementById('citySearchWrap');
+        if (searchWrap) searchWrap.setAttribute('hidden', '');
         getJson('/cities').then(function(data) {
-          var items = data.items || [];
-          if (!items.length) {
+          catalogCityItems = data.items || [];
+          if (!catalogCityItems.length) {
             document.getElementById('cityList').innerHTML = '<div class="empty">Нет городов</div>';
+            syncPickerSearchChrome('city', 0, 0, '');
             syncCatalogHeaderBack();
             return;
           }
-          var html = items.map(function(c) {
-            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">' + CATALOG_FILTER_LABELS.city + '</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
-          }).join('');
-          document.getElementById('cityList').innerHTML = html;
-          document.querySelectorAll('#cityList .choice-card').forEach(function(btn) {
-            btn.onclick = function() {
-              var newCityId = parseInt(btn.dataset.id, 10);
-              var cityChanged = state.cityId != null && state.cityId !== newCityId;
-              state.cityId = newCityId;
-              state.cityName = btn.dataset.name || '';
-              loadCatalogScenariosFromApi(newCityId);
-              invalidateCatalogServicesCache();
-              invalidateCatalogArenasCache();
-              clearCatalogSessionStorageCache();
-              var afterCity = function() {
-                persistCatalogFilters();
-                if (state.returnToSummary) {
-                  state.returnToSummary = false;
-                  if (cityChanged) {
-                    clearArenaSelection();
-                    state.trainerId = null;
-                    state.trainerName = '';
-                  }
-                  renderSummary();
-                  syncScenarioChipSelection();
-                  showScreen('screenSummary');
-                } else {
-                  loadServices();
-                  showScreen('screenService');
-                }
-                prefetchFirstPageIfNeeded();
-              };
-              if (cityChanged) {
-                clearServiceIfInvalidForCity(newCityId).then(afterCity);
-              } else {
-                afterCity();
-              }
-            };
-          });
+          renderCityList();
           syncCatalogHeaderBack();
         }).catch(function() {
+          catalogCityItems = [];
           document.getElementById('cityList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          syncPickerSearchChrome('city', 0, 0, '');
           syncCatalogHeaderBack();
         });
+      }
+
+      function renderCityList() {
+        var listEl = document.getElementById('cityList');
+        if (!listEl) return;
+        var input = document.getElementById('citySearchInput');
+        var query = input ? input.value : '';
+        var items = catalogCityItems || [];
+        var filtered = items.filter(function(c) {
+          return pickerItemMatchesQuery(query, [c.name]);
+        });
+        syncPickerSearchChrome('city', items.length, filtered.length, query);
+        if (!filtered.length) {
+          listEl.innerHTML =
+            '<div class="empty">' +
+            (normalizePickerSearch(query)
+              ? 'Город не найден<div class="catalog-picker-search__empty-hint">Проверьте написание или очистите поиск</div>'
+              : 'Нет городов') +
+            '</div>';
+          return;
+        }
+        var html = filtered.map(function(c) {
+          return (
+            '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + escapeAttr(c.name || '') + '">' +
+            '<div class="main"><div class="label">' + CATALOG_FILTER_LABELS.city + '</div><div class="value">' + escapeHtml(c.name || '') + '</div></div>' +
+            '<span class="arrow">→</span></button>'
+          );
+        }).join('');
+        listEl.innerHTML = html;
+        listEl.querySelectorAll('.choice-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var newCityId = parseInt(btn.dataset.id, 10);
+            var cityChanged = state.cityId != null && state.cityId !== newCityId;
+            state.cityId = newCityId;
+            state.cityName = btn.dataset.name || '';
+            resetPickerSearch('city');
+            loadCatalogScenariosFromApi(newCityId);
+            invalidateCatalogServicesCache();
+            invalidateCatalogArenasCache();
+            clearCatalogSessionStorageCache();
+            var afterCity = function() {
+              persistCatalogFilters();
+              if (state.returnToSummary) {
+                state.returnToSummary = false;
+                if (cityChanged) {
+                  clearArenaSelection();
+                  state.trainerId = null;
+                  state.trainerName = '';
+                }
+                renderSummary();
+                syncScenarioChipSelection();
+                showScreen('screenSummary');
+              } else {
+                loadServices();
+                showScreen('screenService');
+              }
+              prefetchFirstPageIfNeeded();
+            };
+            if (cityChanged) {
+              clearServiceIfInvalidForCity(newCityId).then(afterCity);
+            } else {
+              afterCity();
+            }
+          };
+        });
+        maybeFocusActivePickerSearch('city');
       }
 
       function openServiceSummaryModal(title, bodyText) {
@@ -4627,6 +4772,8 @@
       }
 
       function loadArenas() {
+        bindPickerSearchOnce('arena', renderArenaListCheckboxes);
+        resetPickerSearch('arena');
         var listEl = document.getElementById('arenaList');
         setCatalogListLoading(listEl, 3);
         var mapWrap = document.getElementById('arenaMapWrap');
@@ -4635,6 +4782,8 @@
         if (actions) actions.setAttribute('hidden', '');
         var applyBar = document.getElementById('arenaApplyBar');
         if (applyBar) applyBar.setAttribute('hidden', '');
+        var arenaSearchWrap = document.getElementById('arenaSearchWrap');
+        if (arenaSearchWrap) arenaSearchWrap.setAttribute('hidden', '');
         fetchCatalogArenas(state.cityId, state.serviceId).then(function(items) {
           arenaScreenDraft.items = items;
           arenaScreenDraft.ids = state.arenaIds.slice();
@@ -4659,13 +4808,27 @@
       function renderArenaListCheckboxes() {
         var listEl = document.getElementById('arenaList');
         var items = arenaScreenDraft.items || [];
+        var input = document.getElementById('arenaSearchInput');
+        var query = input ? input.value : '';
         if (!items.length) {
           listEl.innerHTML = '<div class="empty">В этом городе арены пока не добавлены</div>';
+          syncPickerSearchChrome('arena', 0, 0, query);
+          return;
+        }
+        var filtered = items.filter(function(a) {
+          return pickerItemMatchesQuery(query, [a.name, a.address]);
+        });
+        syncPickerSearchChrome('arena', items.length, filtered.length, query);
+        if (!filtered.length) {
+          listEl.innerHTML =
+            '<div class="empty">' +
+            'Площадка не найдена<div class="catalog-picker-search__empty-hint">Попробуйте часть названия или адреса</div>' +
+            '</div>';
           return;
         }
         var selectedSet = {};
         arenaScreenDraft.ids.forEach(function(id) { selectedSet[id] = true; });
-        var html = items.map(function(a) {
+        var html = filtered.map(function(a) {
           var isSel = !!selectedSet[a.id];
           var name = (a.name || '').replace(/"/g, '&quot;');
           var addr = a.address ? ('<div class="arena-card__addr">' + escapeHtml(a.address) + '</div>') : '';
@@ -4700,6 +4863,7 @@
             toggleArenaInDraft(id, name);
           });
         });
+        maybeFocusActivePickerSearch('arena');
       }
 
       function toggleArenaInDraft(id, name) {
