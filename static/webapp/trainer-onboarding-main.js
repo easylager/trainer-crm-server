@@ -635,19 +635,19 @@
   }
 
   /**
-   * Тап красит одну ячейку, протягивание пальцем — все ячейки под ним, тем же значением.
-   * Используем Touch Events вместо Pointer Events для лучшей совместимости с WebView.
+   * Тап/клик красит одну ячейку, протягивание — все ячейки под курсором/пальцем.
+   * Pointer Events: мышь на десктопе + тач в WebView (touch-only ломал десктоп).
    */
   var dragPaint = null;
 
   function bindGridDrag() {
-    if (!el.obGrid) return;
+    if (!el.obGrid || el.obGrid.dataset.obDragBound === '1') return;
+    el.obGrid.dataset.obDragBound = '1';
 
-    var onTouchMove = function (e) {
-      if (!dragPaint) return;
-      if (!e.touches || e.touches.length === 0) return;
-      var touch = e.touches[0];
-      var cellEl = cellUnderPoint(touch.clientX, touch.clientY);
+    var onPointerMove = function (e) {
+      if (!dragPaint || e.pointerId !== dragPaint.pointerId) return;
+      if (e.cancelable) e.preventDefault();
+      var cellEl = cellUnderPoint(e.clientX, e.clientY);
       if (!cellEl) return;
       var key = cellRowCol(cellEl);
       if (key === dragPaint.key) return;
@@ -659,31 +659,45 @@
       }
     };
 
-    var onTouchEnd = function (e) {
-      if (!dragPaint) return;
+    var endDrag = function (e) {
+      if (!dragPaint || e.pointerId !== dragPaint.pointerId) return;
       dragPaint = null;
-      document.removeEventListener('touchmove', onTouchMove);
-      document.removeEventListener('touchend', onTouchEnd);
-      document.removeEventListener('touchcancel', onTouchEnd);
+      try {
+        if (el.obGrid.hasPointerCapture(e.pointerId)) {
+          el.obGrid.releasePointerCapture(e.pointerId);
+        }
+      } catch (errCapture) { /* старые WebView */ }
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', endDrag);
+      document.removeEventListener('pointercancel', endDrag);
     };
 
-    el.obGrid.addEventListener('touchstart', function (e) {
+    el.obGrid.addEventListener('pointerdown', function (e) {
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
       if (!cellEl || cellEl.disabled) return;
-      if (!e.touches || e.touches.length === 0) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.cancelable) e.preventDefault();
       var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      dragPaint = { arenaId: currentCtxArenaId, value: value, key: cellRowCol(cellEl) };
-      paintCell(cellEl, currentCtxArenaId, value);
-      haptic('light');
-      syncGridCount();
-      syncCta();
-      document.addEventListener('touchmove', onTouchMove, { passive: false });
-      document.addEventListener('touchend', onTouchEnd);
-      document.addEventListener('touchcancel', onTouchEnd);
+      dragPaint = {
+        arenaId: currentCtxArenaId,
+        value: value,
+        key: cellRowCol(cellEl),
+        pointerId: e.pointerId,
+      };
+      try {
+        el.obGrid.setPointerCapture(e.pointerId);
+      } catch (errCapture) { /* */ }
+      if (paintCell(cellEl, currentCtxArenaId, value)) {
+        haptic('light');
+        syncGridCount();
+        syncCta();
+      }
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', endDrag);
+      document.addEventListener('pointercancel', endDrag);
     });
 
-    /* Клик от клавиатуры (Enter/Space на сфокусированной кнопке) не проходит через touchstart
-       выше — ловим его отдельно по detail === 0 (у клика мышью/тапом detail >= 1). */
+    /* Enter/Space на сфокусированной кнопке — click с detail === 0 (мышь/pointer выше). */
     el.obGrid.addEventListener('click', function (e) {
       if (e.detail !== 0) return;
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
