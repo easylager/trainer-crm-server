@@ -3,6 +3,7 @@
 
 var reduce   = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var isMobile = function(){ return window.matchMedia('(max-width: 860px)').matches; };
+var isCompactHero = function(){ return window.matchMedia('(max-width: 1180px)').matches; };
 
 /* ══════════════════════════ HERO ═══════════════════════════════════════ */
 var mini       = document.getElementById('mini');
@@ -41,8 +42,8 @@ var surfTrainerEl = document.getElementById('surfTrainer');
 
 /* Directs the eye: `w` leads, the other recedes. 'none' returns both to rest. */
 function side(w){
-  hero.setAttribute('data-side', w);           /* only has effect at <=860px */
-  if (isMobile()){
+  hero.setAttribute('data-side', w);           /* stacked deck focus at <=1180px */
+  if (isCompactHero()){
     colClient.classList.remove('col--lead','col--rest');
     colTrainer.classList.remove('col--lead','col--rest');
     return;
@@ -131,7 +132,6 @@ function beat2(){
 function beat3(){
   state = 3; setBeat(3);
   side('trainer');
-  if (isMobile()){ notif.classList.add('notif--mobile'); document.body.appendChild(notif); }
   notif.classList.add('is-in');
   after(reduce ? 20 : 2600, function(){
     notif.classList.remove('is-in');
@@ -188,6 +188,9 @@ function reset(){
   document.getElementById('slotPick').classList.remove('slot-card--taken');
   mini.classList.remove('is-closed');
   notif.classList.remove('is-in');
+  if (surfTrainerEl && notif.parentNode !== surfTrainerEl){
+    surfTrainerEl.insertBefore(notif, surfTrainerEl.firstChild);
+  }
   inbox.classList.remove('is-shown');
   targetSlot.classList.add('s-card--free');
   targetSlot.classList.remove('s-card--new');
@@ -443,8 +446,25 @@ var fragNodes = FRAGS.map(function(f){
   return d;
 });
 
-/* scroll distance: one screen per stage + a tail for the assembly */
-rmSpacer.style.height = (COUNT * 58 + 55) + 'vh';
+/* name/desc — единственный источник копирайта: и десктопный список, и
+   мобильная карусель читают его из уже существующей разметку .rm__item. */
+var STEPS = rmItems.map(function(it, i){
+  return {
+    name: it.querySelector('.rm__name').textContent,
+    desc: it.querySelector('.rm__desc').textContent,
+    frag: FRAGS[i]
+  };
+});
+
+/* scroll distance: one screen per stage + a tail for the assembly.
+   На мобильном sticky-roadmap выключен целиком — карусель ниже. */
+function syncSpacer(){
+  if (!rmSpacer) return;
+  if (isMobile()){ rmSpacer.hidden = true; rmSpacer.style.height = '0px'; return; }
+  rmSpacer.hidden = false;
+  rmSpacer.style.height = (COUNT * 58 + 55) + 'vh';
+}
+syncSpacer();
 
 var current = -1, currentAsm = null;
 function setStage(i, assembled){
@@ -452,7 +472,10 @@ function setStage(i, assembled){
      left the last item stuck "active" once the chain assembled. */
   if (i === current && assembled === currentAsm) return;
   current = i; currentAsm = assembled;
-  fragNodes.forEach(function(n,k){ n.classList.toggle('is-on', k === i); });
+  fragNodes.forEach(function(n,k){
+    n.classList.toggle('is-on', k === i);
+    if (k === i) n.scrollTop = 0;
+  });
   rmItems.forEach(function(it,k){
     it.classList.toggle('is-on',   k === i && !assembled);
     it.classList.toggle('is-past', assembled || k < i);
@@ -474,58 +497,59 @@ function onScroll(){
   rmFill.style.height = (assembled ? 100 : ((idx + 0.5) / COUNT) * 100) + '%';
 }
 
-/* ── Mobile: linear story, scroll reveals but never hides ───────────────── */
-var rmmList  = document.getElementById('rmmList');
-var rmmFill  = document.getElementById('rmmFill');
-var rmmChips = document.getElementById('rmmChips');
-var NAMES = ['Запись','Расписание','Клиенты','Заметки',
-             'Абонементы и сертификаты','Каталог Glide','Реферальная программа','Аналитика'];
+/* ── Mobile: native swipe carousel, no scroll-jacking ─────────────────────── */
+var rmc      = document.getElementById('rmc');
+var rmcTrack = document.getElementById('rmcTrack');
+var rmcFill  = document.getElementById('rmcFill');
+var rmcLabel = document.getElementById('rmcLabel');
+var rmcCards = [];
 
-function buildMobile(){
-  if (rmmList.dataset.built) return;
-  rmmList.dataset.built = '1';
-  rmItems.forEach(function(src, i){
-    var li = document.createElement('li');
-    li.className = 'rmm__item';
-    li.innerHTML =
-      '<span class="rmm__dot"></span>' +
-      '<p class="rmm__name">' + NAMES[i] + '</p>' +
-      '<p class="rmm__desc">' + src.querySelector('.rm__desc').textContent + '</p>' +
-      '<div class="rmm__stage"><div class="frag is-on">' +
-        '<p class="frag__cap">' + FRAGS[i].cap + '</p>' + FRAGS[i].html +
-      '</div></div>';
-    rmmList.appendChild(li);
+function buildCarousel(){
+  if (rmcTrack.childElementCount) return; /* построить один раз */
+  STEPS.forEach(function(s){
+    var card = document.createElement('div');
+    card.className = 'rmc__card';
+    card.innerHTML =
+      '<p class="rmc__cardName">' + s.name + '</p>' +
+      '<p class="rmc__cardDesc">' + s.desc + '</p>' +
+      '<div class="rmc__cardFrag"><p class="frag__cap">' + s.frag.cap + '</p>' + s.frag.html + '</div>';
+    rmcTrack.appendChild(card);
+    rmcCards.push(card);
   });
-  NAMES.forEach(function(n){
-    var s = document.createElement('span');
-    s.className = 'rm__doneChip';
-    s.textContent = n;
-    rmmChips.appendChild(s);
-  });
-
-  var items = [].slice.call(rmmList.querySelectorAll('.rmm__item'));
-  if ('IntersectionObserver' in window && !reduce){
-    var mo = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){
-        if (e.isIntersecting){
-          e.target.classList.add('is-in');
-          var seen = items.filter(function(x){ return x.classList.contains('is-in'); }).length;
-          rmmFill.style.height = (seen / items.length) * 100 + '%';
-        }
-      });
-    }, { threshold:.25, rootMargin:'0px 0px -12% 0px' });
-    items.forEach(function(it){ mo.observe(it); });
-  } else {
-    /* no observer / reduced motion — everything visible, rail full */
-    items.forEach(function(it){ it.classList.add('is-in'); });
-    rmmFill.style.height = '100%';
-  }
+  var final = document.createElement('div');
+  final.className = 'rmc__final';
+  final.innerHTML =
+    '<div class="rmc__finalChips">' +
+      STEPS.map(function(s){ return '<span class="rmc__finalChip">' + s.name + '</span>'; }).join('') +
+    '</div>' +
+    '<p class="rmc__finalLine">Один бот в Telegram — без установки и настройки CRM.</p>';
+  rmcTrack.appendChild(final);
+  rmcCards.push(final);
 }
 
+function onRmcScroll(){
+  var max = rmcTrack.scrollWidth - rmcTrack.clientWidth;
+  var idx = max > 0
+    ? Math.round((rmcTrack.scrollLeft / max) * (rmcCards.length - 1))
+    : 0;
+  idx = Math.max(0, Math.min(rmcCards.length - 1, idx));
+  rmcFill.style.width = ((idx + 1) / rmcCards.length * 100) + '%';
+  rmcLabel.textContent = (idx + 1) + '/' + rmcCards.length + ' · ' +
+    (idx < STEPS.length ? STEPS[idx].name : 'Готово');
+}
+
+var rmcTicking = false;
+rmcTrack.addEventListener('scroll', function(){
+  if (rmcTicking) return;
+  rmcTicking = true;
+  requestAnimationFrame(function(){ onRmcScroll(); rmcTicking = false; });
+}, { passive:true });
+
 function syncMode(){
+  syncSpacer();
   if (isMobile()){
-    buildMobile();
-    document.getElementById('rmm').setAttribute('aria-hidden','false');
+    buildCarousel();
+    onRmcScroll();
   } else {
     onScroll();
   }

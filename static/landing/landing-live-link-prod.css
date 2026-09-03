@@ -16,14 +16,17 @@
 }
 .close__sub{margin:0 0 22px;color:var(--hint);font-size:15px;line-height:1.45}
 .foot{
-  padding:28px clamp(20px,4vw,56px) 40px;
+  padding:28px clamp(20px,4vw,56px) calc(40px + env(safe-area-inset-bottom, 0px));
+  padding-left:max(clamp(20px,4vw,56px), env(safe-area-inset-left, 0px));
+  padding-right:max(clamp(20px,4vw,56px), env(safe-area-inset-right, 0px));
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   border-top:1px solid var(--line);background:var(--paper);
 }
 .foot__brand{margin:0;font-weight:700;letter-spacing:-.02em}
 .foot__geo{margin:0;color:var(--hint);font-size:14px}
 .landing-error{
-  position:fixed;left:16px;right:16px;bottom:16px;z-index:9001;
+  position:fixed;left:max(16px, env(safe-area-inset-left, 0px));right:max(16px, env(safe-area-inset-right, 0px));
+  bottom:calc(16px + env(safe-area-inset-bottom, 0px));z-index:9001;
   margin:0;padding:12px 14px;border-radius:12px;
   background:#fff3f3;border:1px solid #f5c2c2;color:#8b1e1e;font-size:14px;
   box-shadow:var(--shadow-surface);

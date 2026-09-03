@@ -9,7 +9,7 @@
   <title>Glide — CRM для тренера на льду</title>
   <link rel="canonical" href="__LANDING_CANONICAL__">
   <meta property="og:type" content="website">
-  <meta property="og:locale" content="ru_BY">
+  <meta property="og:locale" content="ru_RU">
   <meta property="og:site_name" content="Glide">
   <meta property="og:title" content="Glide — CRM для тренера на льду">
   <meta property="og:description" content="Telegram вместо отдельного CRM. Живая ссылка на запись, расписание и каталог Glide — в одном боте.">
@@ -23,8 +23,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202608272">
-  <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202608261">
+  <link rel="stylesheet" href="/landing/landing-live-link.css?v=202609037">
+  <link rel="stylesheet" href="/landing/landing-live-link-prod.css?v=202609037">
 </head>
 <body>
 <a class="skip" href="#hero">К содержимому</a>
@@ -51,7 +51,7 @@
 <main class="hero" id="hero" data-side="client">
 
   <div class="hero__copy">
-    <p class="eyebrow" id="heroEyebrow">Glide · тренерам на льду · Беларусь</p>
+    <p class="eyebrow" id="heroEyebrow">Glide · тренерам на льду · СНГ</p>
     <h1 id="heroTitle">CRM для тренера на льду</h1>
     <p class="lede" id="heroLede">Telegram вместо отдельного CRM. Ссылка — вместо переписки «когда можно?». Каталог&nbsp;Glide и аналитика — в одном боте. 14 дней бесплатно.</p>
     <button type="button" class="cta cta--lg js-landing-cta" id="heroCta">Начать в Telegram</button>
@@ -65,6 +65,11 @@
       <span class="beat" data-beat="5"></span>
       <button type="button" class="replay" id="replay">Показать ещё раз</button>
     </div>
+  </div>
+
+  <div class="side-pill" id="sidePill" aria-hidden="true">
+    <span class="side-pill__opt" data-role="client">Ученик</span>
+    <span class="side-pill__opt" data-role="trainer">Тренер</span>
   </div>
 
   <!-- ── Client ── -->
@@ -341,17 +346,15 @@
   <div id="rmSpacer" aria-hidden="true"></div>
 </section>
 
-<!-- ══════════════════ SECTION 2 — ROADMAP (mobile story) ══════════════════ -->
-<section class="rmm" id="rmm" aria-hidden="true">
-  <p class="rmm__eyebrow">Рабочее пространство</p>
-  <h2 class="rmm__title">Всё рабочее пространство тренера — в одном месте</h2>
-  <ol class="rmm__list" id="rmmList">
-    <div class="rmm__track"><span class="rmm__fill" id="rmmFill"></span></div>
-  </ol>
-  <div class="rmm__done">
-    <div class="rmm__doneChips" id="rmmChips"></div>
-    <p class="rmm__doneLine">Один бот в Telegram — без установки и настройки CRM.</p>
+<!-- ══════════════════ ROADMAP — мобильная swipe-карусель ═══════════════════ -->
+<section class="rmc" id="rmc" aria-hidden="true">
+  <p class="rmc__eyebrow">Рабочее пространство</p>
+  <h2 class="rmc__title">Всё рабочее пространство тренера — в одном месте</h2>
+  <div class="rmc__progress">
+    <span class="rmc__bar"><span class="rmc__fill" id="rmcFill"></span></span>
+    <span class="rmc__label" id="rmcLabel">1/9 · Запись</span>
   </div>
+  <div class="rmc__track" id="rmcTrack"></div>
 </section>
 
 <!-- ══════════════════ ПЛАНИРУЕМЫЕ ОБНОВЛЕНИЯ ══════════════════════════════
@@ -397,11 +400,11 @@
 </section>
 <footer class="foot" id="footer">
   <p class="foot__brand" id="footerBrand">Glide</p>
-  <p class="foot__geo" id="footerGeo">Беларусь</p>
+  <p class="foot__geo" id="footerGeo">СНГ</p>
 </footer>
 <p class="landing-error" id="landingError" hidden role="alert"></p>
 
-<script src="/landing/landing-live-link-main.js?v=202608261" defer></script>
-<script src="/landing/landing-live-link-demo.js?v=202608261" defer></script>
+<script src="/landing/landing-live-link-main.js?v=202609037" defer></script>
+<script src="/landing/landing-live-link-demo.js?v=202609037" defer></script>
 </body>
 </html>
