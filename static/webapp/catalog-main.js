@@ -4853,25 +4853,11 @@
         });
       }
 
-      /** After a map/list select, bring the card into view if it sits under the map or below the fold. */
-      function revealArenaCardAfterPromote(card) {
+      /** Pulse highlight only — never scrollIntoView (map taps must keep the viewport on the map). */
+      function pulseArenaCardAfterPromote(card) {
         if (!card) return;
-        var reduced = arenaListPrefersReducedMotion();
         card.classList.add('arena-card--just-selected');
         setTimeout(function() { card.classList.remove('arena-card--just-selected'); }, 700);
-        requestAnimationFrame(function() {
-          var rect = card.getBoundingClientRect();
-          var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-          // Sticky apply bar + Telegram chrome — treat as already visible only inside this band.
-          var topOk = rect.top >= 72;
-          var bottomOk = rect.bottom <= vh - 96;
-          if (topOk && bottomOk) return;
-          try {
-            card.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
-          } catch (e) {
-            card.scrollIntoView(true);
-          }
-        });
       }
 
       function renderArenaListCheckboxes(opts) {
@@ -4899,6 +4885,12 @@
         }
         var selectedSet = {};
         arenaScreenDraft.ids.forEach(function(id) { selectedSet[id] = true; });
+
+        // Lock scroll across the DOM rebuild — otherwise Telegram/WebKit can jump the page
+        // when cards reorder under a tall map.
+        var lockedScrollY = promoteId != null
+          ? (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0)
+          : null;
 
         var firstRects = null;
         if (promoteId != null) {
@@ -4936,6 +4928,9 @@
           );
         }).join('');
         listEl.innerHTML = '<div class="arena-card-list">' + html + '</div>';
+        if (lockedScrollY != null) {
+          window.scrollTo(0, lockedScrollY);
+        }
         listEl.querySelectorAll('.arena-card').forEach(function(card) {
           card.addEventListener('click', function(ev) {
             ev.preventDefault();
@@ -4947,11 +4942,18 @@
         });
         if (promoteId != null) {
           animateArenaListReorder(listEl, firstRects);
-          revealArenaCardAfterPromote(
+          pulseArenaCardAfterPromote(
             listEl.querySelector('.arena-card[data-id="' + promoteId + '"]')
           );
+          // Restore again after FLIP layout — some WebViews nudge scroll during transform setup.
+          if (lockedScrollY != null) {
+            window.scrollTo(0, lockedScrollY);
+            requestAnimationFrame(function() { window.scrollTo(0, lockedScrollY); });
+          }
+          // Do not re-focus search on promote — focus can scroll the page away from the map.
+        } else {
+          maybeFocusActivePickerSearch('arena');
         }
-        maybeFocusActivePickerSearch('arena');
       }
 
       function toggleArenaInDraft(id, name) {
