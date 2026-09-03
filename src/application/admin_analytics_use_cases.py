@@ -1478,9 +1478,11 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                     ))                                                          AS has_template,
                     COUNT(*) FILTER (WHERE {_shared_invite})                    AS copied_invite,
                     COUNT(*) FILTER (WHERE {_submitted_mod})                    AS submitted_moderation,
+                    -- «activated» = опубликован в каталоге (status='active'), не «работает» —
+                    -- онбординг v2 гейтит каталог, а не инструменты; см. TASK-026.
                     COUNT(*) FILTER (WHERE status = 'active')                   AS activated,
                     COUNT(*) FILTER (
-                        WHERE status = 'active' AND EXISTS (
+                        WHERE EXISTS (
                             SELECT 1 FROM bookings b
                             WHERE b.trainer_id = t.id
                               AND b.status NOT IN ('cancelled', 'declined')
@@ -1507,7 +1509,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
     except ProgrammingError:
         pass
 
-    # ── 2. PROOF OF VALUE (all active trainers) ───────────────────────────
+    # ── 2. PROOF OF VALUE (all working trainers, not only catalog-published) ──
     proof: dict = {}
     try:
         r = await session.execute(
@@ -1558,7 +1560,9 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                     )                                                           AS got_first_save
                 FROM trainers t
                 LEFT JOIN real_bookings rb ON rb.trainer_id = t.id
-                WHERE t.status = 'active'
+                -- Работающие, не только опубликованные в каталоге (см. TASK-026) —
+                -- иначе весь пробный период тренер не попадает в этот срез вовсе.
+                WHERE t.status <> 'deactivated'
                 """
             )
         )
@@ -1857,6 +1861,8 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
     except ProgrammingError:
         pass
 
+    hint_funnel, feature_adoption = await _get_hint_funnel_and_feature_adoption(session)
+
     return {
         "today": today.isoformat(),
         "activation_funnel": activation,
@@ -1865,7 +1871,106 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
         "monetization": monetization,
         "habit": habit,
         "correlation": correlation,
+        "hint_funnel": hint_funnel,
+        "feature_adoption": feature_adoption,
     }
+
+
+_HINT_FUNNEL_WINDOW_DAYS = 30
+_FEATURE_ADOPTION_DAY_MARKS = (7, 14)
+
+
+async def _get_hint_funnel_and_feature_adoption(
+    session: AsyncSession,
+) -> tuple[list[dict], dict]:
+    """
+    TASK-028: (a) per-hint shown/clicked/dismissed over the last 30 days, from the guidance
+    telemetry written by ``POST /trainer/hub/inbox-event``; (b) how many of the 11 tracked
+    features a trainer has touched by day 7 / day 14 of their lifetime, from
+    ``trainer_feature_first_use``. Both read-only, no side effects.
+    """
+    hint_funnel: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH events AS (
+                    SELECT
+                        payload->>'item_id' AS item_id,
+                        CASE
+                            WHEN event_type IN ('trainer.hub.inbox_item_shown', 'trainer.hub.next_step_shown')
+                                THEN 'shown'
+                            WHEN event_type IN ('trainer.hub.hint_clicked', 'trainer.hub.next_step_clicked')
+                                THEN 'clicked'
+                            WHEN event_type IN ('trainer.hub.hint_dismissed', 'trainer.hub.next_step_dismissed')
+                                THEN 'dismissed'
+                        END AS action
+                    FROM platform_audit_events
+                    WHERE event_type IN (
+                        'trainer.hub.inbox_item_shown', 'trainer.hub.hint_clicked', 'trainer.hub.hint_dismissed',
+                        'trainer.hub.next_step_shown', 'trainer.hub.next_step_clicked', 'trainer.hub.next_step_dismissed'
+                    )
+                    AND occurred_at >= now() - make_interval(days => :window_days)
+                    AND payload->>'item_id' IS NOT NULL
+                )
+                SELECT
+                    item_id,
+                    COUNT(*) FILTER (WHERE action = 'shown')::int AS shown,
+                    COUNT(*) FILTER (WHERE action = 'clicked')::int AS clicked,
+                    COUNT(*) FILTER (WHERE action = 'dismissed')::int AS dismissed
+                FROM events
+                GROUP BY item_id
+                ORDER BY shown DESC, item_id
+                """
+            ),
+            {"window_days": _HINT_FUNNEL_WINDOW_DAYS},
+        )
+        hint_funnel = [
+            {
+                "item_id": row[0],
+                "shown": int(row[1] or 0),
+                "clicked": int(row[2] or 0),
+                "dismissed": int(row[3] or 0),
+            }
+            for row in r.fetchall()
+        ]
+    except ProgrammingError:
+        pass
+
+    feature_adoption: dict[str, list[dict] | int] = {}
+    for day_mark in _FEATURE_ADOPTION_DAY_MARKS:
+        rows: list[dict] = []
+        try:
+            r = await session.execute(
+                text(
+                    """
+                    WITH eligible AS (
+                        SELECT id, created_at FROM trainers
+                        WHERE created_at <= now() - make_interval(days => :day_mark)
+                    ),
+                    touched AS (
+                        SELECT e.id AS trainer_id, COUNT(f.feature)::int AS n
+                        FROM eligible e
+                        LEFT JOIN trainer_feature_first_use f
+                            ON f.trainer_id = e.id
+                           AND f.first_used_at <= e.created_at + make_interval(days => :day_mark)
+                        GROUP BY e.id
+                    )
+                    SELECT n, COUNT(*)::int FROM touched GROUP BY n ORDER BY n
+                    """
+                ),
+                {"day_mark": day_mark},
+            )
+            rows = [{"features_touched": int(row[0]), "trainers": int(row[1])} for row in r.fetchall()]
+        except ProgrammingError:
+            pass
+        feature_adoption[f"day{day_mark}"] = rows
+
+    from src.application.trainer_feature_tracking import FEATURE_KEYS
+
+    feature_adoption["total_features"] = len(FEATURE_KEYS)
+
+    return hint_funnel, feature_adoption
 
 
 # ──────────────────────────────────────────────────────────────────────────

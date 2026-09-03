@@ -260,6 +260,12 @@ async def issue_certificate(
                 },
             )
             row = r.fetchone()
+            from src.application.trainer_feature_tracking import (
+                FEATURE_CERTIFICATE_ISSUED,
+                record_feature_first_use,
+            )
+
+            await record_feature_first_use(session, trainer_id, FEATURE_CERTIFICATE_ISSUED)
             await session.commit()
             return {
                 "id": row[0],

@@ -63,10 +63,16 @@ ACTOR_LABELS_RU: dict[str, str] = {
     "api": "API",
 }
 
-# Product telemetry with no admin-timeline value — still emitted to stdout audit log.
+# Product telemetry with no admin-timeline value — still persisted to platform_audit_events
+# (TASK-028: needed for the hint funnel), only hidden from the human-facing activity feed
+# in list_platform_audit_events_for_admin below. Never used to skip the DB write itself.
 ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "trainer.hub.inbox_item_shown",
+        # TASK-028: fires on every hub render, same volume/signal profile as
+        # inbox_item_shown above. hint_clicked/hint_dismissed/next_step_clicked/
+        # next_step_dismissed stay visible — real engagement, much lower volume.
+        "trainer.hub.next_step_shown",
     }
 )
 
@@ -150,9 +156,13 @@ async def _persist_audit_record(record: dict[str, Any]) -> None:
 
 
 async def insert_platform_audit_from_record(session: AsyncSession, record: dict[str, Any]) -> int | None:
+    """
+    Persists every event unconditionally — ``ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES`` only
+    hides rows from the human-facing timeline query below, it never skips the write
+    (TASK-028: high-volume product telemetry like ``inbox_item_shown`` still needs to be
+    queryable for the hint funnel, just not mixed into the admin's activity feed).
+    """
     event_type = str(record.get("event") or "")
-    if event_type in ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES:
-        return None
     actor_type = str(record.get("actor_type") or "")
     actor_id = str(record.get("actor_id") or "")
     payload = dict(record.get("payload") or {})

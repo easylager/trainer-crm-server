@@ -918,6 +918,9 @@
         var main = document.getElementById('screenMain');
         var det = document.getElementById('screenBookingDetail');
         var dec = document.getElementById('screenBookingDecline');
+        if (main && view !== 'main' && main.classList.contains('active')) {
+          state.scheduleScrollY = window.scrollY || 0;
+        }
         if (main) main.classList.toggle('active', view === 'main');
         if (det) det.classList.toggle('active', view === 'detail');
         if (dec) dec.classList.toggle('active', view === 'decline');
@@ -985,20 +988,27 @@
       }
 
       function syncAfterBookingPop() {
+        var savedScrollY = state.scheduleScrollY || 0;
+        state.scheduleScrollY = null;
         showBookingStack('main');
-        window.scrollTo(0, 0);
+        function restoreScheduleScroll() {
+          requestAnimationFrame(function() { window.scrollTo(0, savedScrollY); });
+        }
         if (state.pendingReloadAfterPop) {
           state.pendingReloadAfterPop = false;
           loadSlots();
+          restoreScheduleScroll();
           return;
         }
         if (state.scheduleDataLoaded && state.tab === 'calendar') {
           refreshCalendarChrome();
           renderCalendar();
           flushPendingGroupHubModal();
+          restoreScheduleScroll();
           return;
         }
         loadSlots();
+        restoreScheduleScroll();
       }
 
       function navigateToTrainerHomeSafe() {

@@ -1407,7 +1407,16 @@ ONBOARDING_NUDGE_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
     (ONBOARDING_NUDGE_STEP_D7, 7),
 )
 
-ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED)
+# TASK-035: a trainer whose trial burned out before they finished onboarding is otherwise total
+# silence (no LEAD_MODE reachable from pending_profile). This step is deliberately NOT part of
+# ONBOARDING_NUDGE_STEPS_ORDERED — that list is calendar offsets from created_at, but trial length
+# is configurable (see resolve_trial_period_days), so this step is scheduled off the trainer's
+# actual trial expiry instead (see get_trial_expired_days_ago).
+ONBOARDING_NUDGE_STEP_TRIAL_OVER = "trialend"
+
+ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED) + (
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1461,3 +1470,52 @@ class TrainerOnboardingNudge(Base):
     # Stage id (see trainer_onboarding_recovery_use_cases) at the moment this step was sent —
     # lets us audit which nudge copy a trainer actually received.
     stage_anchor: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+
+class TrainerFeatureFirstUse(Base):
+    """
+    Idempotency log for TASK-028 feature-adoption tracking. One row per (trainer_id, feature),
+    ever — atomic ``INSERT ... ON CONFLICT DO NOTHING`` claims it exactly once (see
+    ``trainer_feature_tracking.record_feature_first_use``). Small table by construction: at
+    most ``len(FEATURE_KEYS)`` rows per trainer for the trainer's whole lifetime.
+    """
+
+    __tablename__ = "trainer_feature_first_use"
+    __table_args__ = (
+        UniqueConstraint("trainer_id", "feature", name="ux_feature_first_use_trainer_feature"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    feature: Mapped[str] = mapped_column(String(32), nullable=False)
+    first_used_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class TrainerHintDismissal(Base):
+    """
+    TASK-029: server-side «Не сейчас» for hub rhythm hints. One row per (trainer_id, hint_id)
+    — upserted, not append-only (unlike the nudge logs above): ``snooze_until`` moves forward
+    each time the trainer dismisses the same hint again after it returned. ``dismissed_at`` is
+    the most recent dismissal timestamp, kept for display/audit; the *decision* of whether the
+    hint is currently hidden is ``snooze_until > now()``, checked in
+    ``trainer_hint_dismissal_use_cases.get_active_snoozes``.
+    """
+
+    __tablename__ = "trainer_hint_dismissals"
+    __table_args__ = (
+        UniqueConstraint("trainer_id", "hint_id", name="ux_hint_dismissals_trainer_hint"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    hint_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    snooze_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

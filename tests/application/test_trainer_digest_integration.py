@@ -6,7 +6,7 @@ then verify aggregator shape and content.
 """
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -16,6 +16,7 @@ from src.application.trainer_digest_use_cases import (
     get_trainer_daily_digest,
     get_trainer_weekly_digest,
 )
+from src.bot.notification_loops import _list_digest_candidates_for_kind
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
 
@@ -333,3 +334,136 @@ async def test_weekly_drought_ladder_case_dormant_clients(db_session) -> None:
     assert w["drought"]["case_key"] == "dormant_clients"
     assert len(w["drought"]["data"]["clients"]) == 1
     assert w["drought"]["data"]["clients"][0]["client_name"] == "Sleeper Ent"
+
+
+async def _seed_bare_trainer(
+    db_session,
+    *,
+    status: str,
+    telegram_id: int | None,
+    digest_enabled: bool = True,
+) -> int:
+    """Minimal trainer row — no profile/services/arenas — for digest-candidates gating tests."""
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO trainers (status, telegram_id, digest_enabled, is_catalog_visible)
+            VALUES (:status, :tg, :digest_enabled, false)
+            RETURNING id
+            """
+        ),
+        {"status": status, "tg": telegram_id, "digest_enabled": digest_enabled},
+    )
+    (trainer_id,) = r.fetchone()
+    return trainer_id
+
+
+async def _insert_todays_slot_and_booking(db_session, trainer_id: int, today: date) -> None:
+    """One confirmed session today so the digest has something to report (not required by
+    ``_list_digest_candidates_for_kind`` itself — the candidate list doesn't look at bookings —
+    but keeps the fixture honest for anyone reusing it against the full digest aggregator."""
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '09:00', TIME '10:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": today},
+    )
+    (slot_id,) = r.fetchone()
+    client_id = await _insert_client(db_session, "Today")
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (trainer_id, client_id, slot_id, service_id, status)
+            VALUES (:tid, :cid, :sid, :svc, 'confirmed')
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id, "sid": slot_id, "svc": service_id},
+    )
+
+
+@pytest.mark.asyncio
+async def test_digest_candidates_include_pending_profile_trainer(db_session) -> None:
+    """TASK-026 AC-001: onboarding v2 — a still-unmoderated trainer must still get the digest."""
+    today = date.today()
+    tg = unique_test_telegram_id()
+    trainer_id = await _seed_bare_trainer(db_session, status="pending_profile", telegram_id=tg)
+    await _insert_todays_slot_and_booking(db_session, trainer_id, today)
+    await db_session.commit()
+
+    rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
+    assert trainer_id in {r["trainer_id"] for r in rows}
+
+
+async def _insert_expired_trial_subscription(db_session, *, trainer_id: int) -> None:
+    """TASK-035: candidate SQL must not gate on subscription state at all."""
+    r = await db_session.execute(
+        text("SELECT id FROM subscription_plans WHERE COALESCE(is_trial, false) = true LIMIT 1")
+    )
+    row = r.fetchone()
+    if row:
+        plan_id = int(row[0])
+    else:
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO subscription_plans (name, price_cents, period_days, is_trial, sort_order)
+                VALUES ('Digest Test Trial', 0, 14, true, 1) RETURNING id
+                """
+            )
+        )
+        (plan_id,) = r.fetchone()
+    now = datetime.now(timezone.utc)
+    expires_at = now - timedelta(days=20)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status)
+            VALUES (:tid, :pid, :s, :e, 'trial')
+            """
+        ),
+        {"tid": trainer_id, "pid": plan_id, "s": expires_at - timedelta(days=14), "e": expires_at},
+    )
+
+
+@pytest.mark.asyncio
+async def test_digest_candidates_include_pending_profile_trainer_with_expired_trial(
+    db_session,
+) -> None:
+    """TASK-035 AC-002: expired-trial pending_profile trainer stays a digest candidate."""
+    today = date.today()
+    tg = unique_test_telegram_id()
+    trainer_id = await _seed_bare_trainer(db_session, status="pending_profile", telegram_id=tg)
+    await _insert_todays_slot_and_booking(db_session, trainer_id, today)
+    await _insert_expired_trial_subscription(db_session, trainer_id=trainer_id)
+    await db_session.commit()
+
+    rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
+    assert trainer_id in {r["trainer_id"] for r in rows}
+
+
+@pytest.mark.asyncio
+async def test_digest_candidates_exclude_deactivated_trainer(db_session) -> None:
+    """TASK-026 AC-003 (digest half): explicit deactivation is the only status that closes it."""
+    today = date.today()
+    tg = unique_test_telegram_id()
+    trainer_id = await _seed_bare_trainer(db_session, status="deactivated", telegram_id=tg)
+    await db_session.commit()
+
+    rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
+    assert trainer_id not in {r["trainer_id"] for r in rows}
+
+
+@pytest.mark.asyncio
+async def test_digest_candidates_exclude_trainer_without_telegram(db_session) -> None:
+    """TASK-026 AC-004 (digest half): no telegram_id means no delivery channel at all."""
+    today = date.today()
+    trainer_id = await _seed_bare_trainer(db_session, status="active", telegram_id=None)
+    await db_session.commit()
+
+    rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
+    assert trainer_id not in {r["trainer_id"] for r in rows}

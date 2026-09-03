@@ -27,9 +27,12 @@ from src.application.admin_analytics_use_cases import (
     get_admin_engagement_stats,
     get_admin_growth_stats,
     get_admin_money_stats,
+    get_admin_product_analytics,
     get_admin_retention_stats,
     get_admin_trainers_hub_stats,
 )
+from tests.conftest import belarus_test_phone, unique_test_telegram_id
+from tests.db_catalog_helpers import require_seed_service_id
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -411,6 +414,88 @@ async def test_engagement_online_module_ignores_non_active_trainer(db_session: A
     assert after["trainers_active"] == before["trainers_active"]
 
 
+async def _insert_confirmed_booking(session: AsyncSession, trainer_id: int, *, days_ago: int = 0) -> int:
+    """Non-sandbox confirmed booking for ``trainer_id`` — for activation-funnel/proof-of-value deltas."""
+    service_id = await require_seed_service_id(session)
+    tg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tg)
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'Ana', 'Lytics', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    slot_date = (datetime.now(timezone.utc) - timedelta(days=days_ago)).date()
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '09:00', TIME '10:00', 'booked') RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": slot_date},
+    )
+    (slot_id,) = r.fetchone()
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO bookings (trainer_id, client_id, slot_id, service_id, status)
+            VALUES (:tid, :cid, :sid, :svc, 'confirmed') RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id, "sid": slot_id, "svc": service_id},
+    )
+    return int(r.scalar_one())
+
+
+@pytest.mark.asyncio
+async def test_activation_funnel_first_booking_counts_pending_profile_trainer(
+    db_session: AsyncSession,
+) -> None:
+    """TASK-026 AC-005: activation funnel's has_first_booking must not require status='active'."""
+    before = await get_admin_product_analytics(db_session)
+    trainer_id = await _insert_trainer(db_session, status="pending_profile")
+    await _insert_confirmed_booking(db_session, trainer_id)
+    after = await get_admin_product_analytics(db_session)
+    assert after["activation_funnel"]["has_first_booking"] == (
+        before["activation_funnel"]["has_first_booking"] + 1
+    )
+    # The catalog-publication step is untouched by this — status stayed pending_profile.
+    assert after["activation_funnel"]["activated"] == before["activation_funnel"]["activated"]
+
+
+@pytest.mark.asyncio
+async def test_activation_funnel_activated_still_requires_catalog_status(
+    db_session: AsyncSession,
+) -> None:
+    """TASK-026 AC-005: `activated` (catalog publication) stays strictly status='active'."""
+    before = await get_admin_product_analytics(db_session)
+    await _insert_trainer(db_session, status="pending_profile")
+    after_pending = await get_admin_product_analytics(db_session)
+    assert after_pending["activation_funnel"]["activated"] == before["activation_funnel"]["activated"]
+
+    await _insert_trainer(db_session, status="active")
+    after_active = await get_admin_product_analytics(db_session)
+    assert after_active["activation_funnel"]["activated"] == (
+        after_pending["activation_funnel"]["activated"] + 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_proof_of_value_counts_pending_profile_trainer(db_session: AsyncSession) -> None:
+    """TASK-026 AC-005: proof-of-value denominator/counters include working, unmoderated trainers."""
+    before = await get_admin_product_analytics(db_session)
+    trainer_id = await _insert_trainer(db_session, status="pending_profile")
+    await _insert_confirmed_booking(db_session, trainer_id)
+    after = await get_admin_product_analytics(db_session)
+    assert after["proof_of_value"]["active_total"] == before["proof_of_value"]["active_total"] + 1
+    assert after["proof_of_value"]["first_booking"] == before["proof_of_value"]["first_booking"] + 1
+
+
 @pytest.mark.asyncio
 async def test_engagement_active_trainer_count_excludes_deactivated(db_session: AsyncSession) -> None:
     before = await get_admin_engagement_stats(db_session)
@@ -448,3 +533,76 @@ def test_module_combo_label_and_key() -> None:
     # Ordering: online-groups-analytics, '0'/'1' bits.
     assert _module_combo_key({"online": True, "groups": False, "analytics": True}) == "1-0-1"
     assert _module_combo_key(None) == "0-0-0"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# TASK-028: hint funnel + feature adoption distribution
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_hint_funnel_counts_shown_clicked_dismissed(db_session: AsyncSession) -> None:
+    from src.application.platform_audit_use_cases import insert_platform_audit_from_record
+
+    tid = await _insert_trainer(db_session)
+    before = await get_admin_product_analytics(db_session)
+    before_row = next((r for r in before["hint_funnel"] if r["item_id"] == "share_link"), None)
+    before_shown = before_row["shown"] if before_row else 0
+    before_clicked = before_row["clicked"] if before_row else 0
+    before_dismissed = before_row["dismissed"] if before_row else 0
+
+    for event in (
+        "trainer.hub.inbox_item_shown",
+        "trainer.hub.inbox_item_shown",
+        "trainer.hub.hint_clicked",
+        "trainer.hub.hint_dismissed",
+    ):
+        await insert_platform_audit_from_record(
+            db_session,
+            {
+                "event": event,
+                "actor_type": "api",
+                "actor_id": str(tid),
+                "payload": {"trainer_id": tid, "item_id": "share_link"},
+            },
+        )
+    await db_session.commit()
+
+    after = await get_admin_product_analytics(db_session)
+    after_row = next(r for r in after["hint_funnel"] if r["item_id"] == "share_link")
+    assert after_row["shown"] == before_shown + 2
+    assert after_row["clicked"] == before_clicked + 1
+    assert after_row["dismissed"] == before_dismissed + 1
+
+
+@pytest.mark.asyncio
+async def test_feature_adoption_counts_trainer_at_day7_and_day14(db_session: AsyncSession) -> None:
+    from src.application.trainer_feature_tracking import (
+        FEATURE_CLIENT_NOTE_WRITTEN,
+        FEATURE_PASS_ISSUED,
+        record_feature_first_use,
+    )
+
+    # Created 20 days ago — eligible for both the day7 and day14 marks.
+    tid = await _insert_trainer(db_session, created_offset_days=20)
+    await record_feature_first_use(db_session, tid, FEATURE_PASS_ISSUED)
+    await record_feature_first_use(db_session, tid, FEATURE_CLIENT_NOTE_WRITTEN)
+    await db_session.commit()
+    # Backdate first_used_at so both claims land within the trainer's first 14 days.
+    await db_session.execute(
+        text(
+            """
+            UPDATE trainer_feature_first_use
+            SET first_used_at = (SELECT created_at FROM trainers WHERE id = :tid) + INTERVAL '3 days'
+            WHERE trainer_id = :tid
+            """
+        ),
+        {"tid": tid},
+    )
+    await db_session.commit()
+
+    data = await get_admin_product_analytics(db_session)
+    adoption = data["feature_adoption"]
+    assert adoption["total_features"] == 11
+    day14_bucket = {row["features_touched"]: row["trainers"] for row in adoption["day14"]}
+    assert day14_bucket.get(2, 0) >= 1

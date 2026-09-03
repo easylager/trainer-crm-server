@@ -253,6 +253,7 @@ async def list_trainer_issued_items(
             )
 
     items.sort(key=lambda x: x.get("issued_at") or "", reverse=True)
+    items.sort(key=lambda x: x.get("status_bucket") != "active")
     total = len(items)
     active_count = sum(
         1

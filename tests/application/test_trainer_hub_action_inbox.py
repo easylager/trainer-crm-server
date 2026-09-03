@@ -1,8 +1,9 @@
 """Unit tests for trainer hub unified action inbox builder (Wave B)."""
-from datetime import datetime
+from datetime import datetime, time
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from src.application.trainer_feature_moments import ITEM_RECURRING_CLIENT
 from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
 from src.application.trainer_hub_action_inbox import (
     HUB_RHYTHM_GROWTH_MAX,
@@ -142,6 +143,92 @@ def test_action_inbox_pending_and_requests() -> None:
     assert "open_loop_pending" not in kinds
 
 
+def _feature_moment_facts_recurring_client() -> dict:
+    return {
+        "recurring_client": {
+            "client_id": 1,
+            "client_name": "Анна",
+            "day_of_week": 4,
+            "start_time": time(18, 0),
+            "count": 3,
+        },
+        "pass": None,
+        "groups": None,
+        "stats": None,
+        "certificates": None,
+    }
+
+
+def test_feature_moment_card_appears_when_facts_present() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    assert ITEM_RECURRING_CLIENT in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_absent_without_facts() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=None,
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_never_outranks_pending_or_requests() -> None:
+    """AC-005: обучающая карточка никогда не опережает срочное/операционное."""
+    onboarding = {
+        "schedule_unlocked": True,
+        "has_crm_subscription_access": True,
+        "open_loop_pending_bookings_count": 1,
+    }
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=1,
+        bookings=None,
+        schedule_unlocked=True,
+        pending_booking_ids=[555],
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    ids = [it["id"] for it in inbox["items"]]
+    assert ids.index("pending_bookings") < ids.index(ITEM_RECURRING_CLIENT)
+    assert ids.index("unanswered_requests") < ids.index(ITEM_RECURRING_CLIENT)
+
+
+def test_feature_moment_card_respects_active_snoozes() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+        active_hint_snoozes={ITEM_RECURRING_CLIENT: "irrelevant"},
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_absent_in_lead_mode() -> None:
+    """AC-007: без подписки обучающая карточка не показывается."""
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": False}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
+
+
 def test_early_practice_gets_no_catalog_hub_nudge() -> None:
     onboarding = {
         "is_active": False,
@@ -173,6 +260,7 @@ def test_inbox_badges_schedule_and_clients() -> None:
         "is_active": True,
         "profile_complete": False,
         "has_any_booking": True,
+        "has_real_booking": True,
         # Каталог теперь по заявке: подсказка про профиль появляется только при живом потоке
         # записей. Раньше её триггерил сам факт «активен, но не в каталоге» — то есть тренер,
         # который сам выключил показ, получал бейдж «доделай профиль».
@@ -266,6 +354,7 @@ def test_rhythm_hints_visible_for_unmoderated_trainer_with_a_real_schedule() -> 
         "profile_complete": False,
         "has_any_booking": True,
         "has_confirmed_booking": True,
+        "has_real_booking": True,
         "weekly_template_count": 3,
         "has_future_slots": True,
         "has_future_available_slots": False,
@@ -321,7 +410,7 @@ def test_referral_growth_waits_for_a_first_booking() -> None:
     ids = [x["id"] for x in payload["items"]]
     assert "referral_growth" not in ids
 
-    after_first_booking = dict(fresh_schedule, has_any_booking=True)
+    after_first_booking = dict(fresh_schedule, has_any_booking=True, has_real_booking=True)
     payload2 = build_trainer_hub_action_inbox(onboarding=after_first_booking, schedule_unlocked=True)
     ids2 = [x["id"] for x in payload2["items"]]
     assert "referral_growth" in ids2
@@ -333,6 +422,7 @@ def test_catalog_hub_nudge_respects_not_now() -> None:
         "is_active": False,
         "profile_complete": False,
         "has_any_booking": True,
+        "has_real_booking": True,
         "real_bookings_count": CATALOG_INVITE_MIN_BOOKINGS + 3,
         "is_catalog_visible": False,
         "weekly_template_count": 1,
@@ -359,3 +449,84 @@ def test_active_trainer_who_hid_catalog_is_not_nudged() -> None:
         "has_future_slots": True,
     }
     assert not _should_nudge_catalog_in_hub(onboarding)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# TASK-029: server-side snooze filtering + EDGE-002 (urgent hints never dismissible)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def test_active_snoozes_hide_a_rhythm_candidate() -> None:
+    onboarding = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+    }
+    without_snooze = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    ids_before = [x["id"] for x in without_snooze["items"]]
+    assert "referral_growth" in ids_before
+
+    with_snooze = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        schedule_unlocked=True,
+        active_hint_snoozes={"referral_growth": "2099-01-01"},
+    )
+    ids_after = [x["id"] for x in with_snooze["items"]]
+    assert "referral_growth" not in ids_after
+
+
+def test_open_loop_no_next_and_slots_this_week_are_not_dismissible() -> None:
+    """TASK-029 EDGE-002/DEC-004: urgent hints must never carry dismissible=True."""
+    onboarding = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+        "has_future_available_slots": False,
+        "open_loop_clients_no_upcoming_count": 2,
+        "available_slots_this_week_count": 0,
+        "bookings_this_week_count": 0,
+    }
+    with patch(
+        "src.application.trainer_hub_action_inbox._minsk_weekday_mon0",
+        return_value=0,
+    ):
+        payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    by_id = {x["id"]: x for x in payload["items"]}
+    assert "open_loop_no_next" in by_id
+    assert by_id["open_loop_no_next"]["dismissible"] is False
+    assert "slots_this_week" in by_id
+    assert by_id["slots_this_week"]["dismissible"] is False
+
+
+def test_snooze_cannot_hide_an_always_urgent_hint_even_if_passed() -> None:
+    """DEC-002: urgent hints are never dismissible "ни на клиенте, ни на сервере" — the
+    filter itself excludes NON_DISMISSIBLE_URGENT_HINT_IDS, not just the dismiss endpoint's
+    write-side allowlist, so a stray/future snooze row for one of these ids (should never
+    exist, but defense-in-depth) still can't hide it from the response."""
+    onboarding = {
+        "is_active": False,
+        "is_catalog_visible": True,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+        "has_future_available_slots": False,
+        "open_loop_clients_no_upcoming_count": 2,
+    }
+    payload = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        schedule_unlocked=True,
+        active_hint_snoozes={"open_loop_no_next": "2099-01-01"},
+    )
+    ids = [x["id"] for x in payload["items"]]
+    assert "open_loop_no_next" in ids

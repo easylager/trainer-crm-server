@@ -58,8 +58,13 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
     if claimed_congrats:
         from src.application.referral_use_cases import maybe_grant_referral_first_booking_bonus
         from src.application.trainer_events_notify import notify_admins_trainer_first_booking
+        from src.application.trainer_feature_tracking import (
+            FEATURE_FIRST_REAL_BOOKING,
+            record_feature_first_use,
+        )
         from src.application.trainer_use_cases import get_trainer
 
+        await record_feature_first_use(session, trainer_id, FEATURE_FIRST_REAL_BOOKING)
         await maybe_grant_referral_first_booking_bonus(trainer_id)
 
         # Notify admins about first booking

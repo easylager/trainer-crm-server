@@ -58,7 +58,13 @@ async def test_insert_and_list_audit_event(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_timeline_excludes_inbox_item_shown(db_session: AsyncSession) -> None:
+async def test_admin_timeline_excludes_inbox_item_shown_but_still_persists_it(
+    db_session: AsyncSession,
+) -> None:
+    """
+    TASK-028: ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES hides a row from the human-facing
+    timeline, but must never skip the DB write — the hint funnel needs this event queryable.
+    """
     r = await db_session.execute(
         text(
             """
@@ -90,24 +96,14 @@ async def test_admin_timeline_excludes_inbox_item_shown(db_session: AsyncSession
     )
     await db_session.commit()
 
-    assert hidden_id is None
+    assert hidden_id is not None, "excluded from the timeline is not the same as excluded from storage"
     assert visible_id is not None
     assert "trainer.hub.inbox_item_shown" in ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES
 
-    await db_session.execute(
-        text(
-            """
-            INSERT INTO platform_audit_events (
-                event_type, actor_type, actor_id, source, trainer_id, payload
-            )
-            VALUES (
-                'trainer.hub.inbox_item_shown', 'api', :actor_id, 'api', :trainer_id, '{}'::jsonb
-            )
-            """
-        ),
-        {"actor_id": str(trainer_id), "trainer_id": trainer_id},
+    r2 = await db_session.execute(
+        text("SELECT event_type FROM platform_audit_events WHERE id = :id"), {"id": hidden_id}
     )
-    await db_session.commit()
+    assert r2.scalar_one() == "trainer.hub.inbox_item_shown"
 
     data = await list_platform_audit_events_for_admin(db_session, limit=20, trainer_id=trainer_id)
     event_types = {ev["event_type"] for ev in data["events"]}
@@ -163,3 +159,32 @@ def test_get_audit_sessionmaker_returns_sessionmaker_not_function() -> None:
     maker = platform_audit_mod._get_audit_sessionmaker()
     assert isinstance(maker, async_sessionmaker)
     assert maker is not platform_audit_mod._get_audit_sessionmaker
+
+
+@pytest.mark.asyncio
+async def test_admin_timeline_excludes_next_step_shown_too(db_session: AsyncSession) -> None:
+    """TASK-028 AC-008: next_step_shown fires on every hub render — same noise profile
+    as inbox_item_shown, hidden from the timeline for the same reason; persisted regardless."""
+    r = await db_session.execute(
+        text(
+            "INSERT INTO trainers (status, schedule_grid_step_minutes) "
+            "VALUES ('active', 15) RETURNING id"
+        )
+    )
+    trainer_id = int(r.scalar_one())
+
+    hidden_id = await insert_platform_audit_from_record(
+        db_session,
+        {
+            "event": "trainer.hub.next_step_shown",
+            "actor_type": "api",
+            "actor_id": str(trainer_id),
+            "payload": {"trainer_id": trainer_id, "item_id": "share_link"},
+        },
+    )
+    await db_session.commit()
+    assert hidden_id is not None
+
+    data = await list_platform_audit_events_for_admin(db_session, limit=20, trainer_id=trainer_id)
+    event_types = {ev["event_type"] for ev in data["events"]}
+    assert "trainer.hub.next_step_shown" not in event_types

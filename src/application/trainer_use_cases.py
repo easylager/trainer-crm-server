@@ -567,6 +567,13 @@ async def set_trainer_catalog_visibility(session: AsyncSession, trainer_id: int,
         return False
     if not await repo.set_is_catalog_visible(trainer_id, visible):
         return False
+    if visible:
+        from src.application.trainer_feature_tracking import (
+            FEATURE_CATALOG_ENABLED,
+            record_feature_first_use,
+        )
+
+        await record_feature_first_use(session, trainer_id, FEATURE_CATALOG_ENABLED)
     await session.commit()
     return True
 

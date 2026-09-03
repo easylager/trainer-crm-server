@@ -101,9 +101,18 @@ def _non_negative_int(v: Any) -> int:
 
 
 def _onboarding_booking_step_done(d: dict[str, Any]) -> bool:
-    return bool(
-        d.get("has_any_booking") or d.get("has_confirmed_booking") or d.get("has_upcoming_booking")
-    )
+    """
+    True once the trainer has a *real* booking (not sandbox, not voided before it happened)
+    — gates the referral-growth hint and the catalog-nudge early check (TASK-027).
+
+    Deliberately reads ``has_real_booking``, not ``has_any_booking``/``has_confirmed_booking``/
+    ``has_upcoming_booking``: those three intentionally still flip True for a sandbox demo
+    booking (activation parity with the real flow — see
+    ``trainer_onboarding_checklist.py``'s docstring), which is correct for the share-link
+    onboarding step but would leak into «invite colleagues» / «invite more clients» nudges
+    meant for trainers who actually have real traction.
+    """
+    return bool(d.get("has_real_booking"))
 
 
 def _should_nudge_catalog_in_hub(d: dict[str, Any]) -> bool:
@@ -211,8 +220,19 @@ def _inbox_item(
     return row
 
 
-def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[str, Any]]:
-    """Rhythm hints from checklist — excludes open_loop_pending (merged into pending_bookings)."""
+def _build_hub_rhythm_inbox_candidates(
+    onboarding: dict[str, Any],
+    *,
+    active_snoozes: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Rhythm hints from checklist — excludes open_loop_pending (merged into pending_bookings).
+
+    ``active_snoozes`` (TASK-029): server-recorded «Не сейчас» — ``{hint_id: snooze_until}``
+    from ``trainer_hint_dismissal_use_cases.get_active_snoozes``, already filtered to
+    non-expired rows by the caller. A snoozed id never reaches the response at all — the
+    client no longer decides whether to hide something the server sent it.
+    """
     out: list[dict[str, Any]] = []
     d = onboarding
     active = bool(d.get("is_active"))
@@ -319,7 +339,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                     ),
                     primary_label="Расписание",
                     primary_action="schedule",
-                    dismissible=True,
+                    dismissible=False,
                 )
             )
         elif fill_candidates > 0:
@@ -339,7 +359,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                 title=f"{remind_n} {_plural_ru(remind_n, 'ученик', 'ученика', 'учеников')} без следующей записи{suffix}.",
                 primary_label="Напомнить",
                 primary_action="fill_slots_invites",
-                dismissible=True,
+                dismissible=False,
             )
             if open_no_tg > 0:
                 item["secondary_label"] = "Клиенты без бота"
@@ -361,7 +381,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                     primary_action="trainer_clients_invite_bot",
                     secondary_label="Рассылка в боте",
                     secondary_action="fill_slots_invites",
-                    dismissible=True,
+                    dismissible=False,
                 )
             )
 
@@ -397,7 +417,7 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                 title="На этой неделе нет свободных слотов. Добавьте окна, чтобы клиенты могли записаться.",
                 primary_label="Добавить слоты",
                 primary_action="schedule",
-                dismissible=True,
+                dismissible=False,
             )
         )
 
@@ -433,22 +453,6 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
             )
         )
 
-    if d.get("has_completed_booking"):
-        out.append(
-            _inbox_item(
-                item_id="client_notes",
-                kind="rhythm",
-                priority=40,
-                title=(
-                    "После завершённой записи можно кратко зафиксировать заметки в карточке клиента — "
-                    "так проще вести следующие занятия."
-                ),
-                primary_label="Профиль клиента",
-                primary_action="client_notes",
-                dismissible=True,
-            )
-        )
-
     if (
         open_no_tg > 0
         and not any(x["id"] == "open_loop_no_next" for x in out)
@@ -467,6 +471,17 @@ def _build_hub_rhythm_inbox_candidates(onboarding: dict[str, Any]) -> list[dict[
                 dismissible=True,
             )
         )
+
+    if active_snoozes:
+        from src.application.trainer_hint_dismissal_use_cases import (
+            NON_DISMISSIBLE_URGENT_HINT_IDS,
+        )
+
+        out = [
+            item
+            for item in out
+            if item["id"] not in active_snoozes or item["id"] in NON_DISMISSIBLE_URGENT_HINT_IDS
+        ]
 
     return out
 
@@ -556,10 +571,16 @@ def build_trainer_hub_action_inbox(
     pending_booking_ids: list[int] | None = None,
     center_inbox_pending: int = 0,
     show_center_inbox: bool = False,
+    active_hint_snoozes: dict[str, Any] | None = None,
+    feature_moment_facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build unified hub inbox payload for bootstrap and inbox-count endpoint.
     Operational items require schedule_unlocked (active or TTV booking-ready).
+    ``active_hint_snoozes`` — see ``_build_hub_rhythm_inbox_candidates`` (TASK-029).
+    ``feature_moment_facts`` — see ``trainer_feature_moments.fetch_trainer_feature_moment_facts``
+    (TASK-030); caller fetches it once (or omits it entirely when the gate the resolver
+    would apply anyway is already known false) and passes the raw facts through here.
     """
     items: list[dict[str, Any]] = []
     pending_count = 0
@@ -633,7 +654,28 @@ def build_trainer_hub_action_inbox(
         )
 
     if onboarding:
-        items.extend(_build_hub_rhythm_inbox_candidates(onboarding))
+        items.extend(
+            _build_hub_rhythm_inbox_candidates(onboarding, active_snoozes=active_hint_snoozes)
+        )
+
+    if onboarding:
+        from src.application.trainer_feature_moments import resolve_trainer_feature_moment
+
+        dismissed = frozenset((active_hint_snoozes or {}).keys())
+        moment = resolve_trainer_feature_moment(onboarding, feature_moment_facts, dismissed_ids=dismissed)
+        if moment:
+            items.append(
+                _inbox_item(
+                    item_id=moment["item_id"],
+                    kind="rhythm",
+                    priority=50,
+                    title=moment["title"],
+                    subtitle=moment.get("subtitle") or "",
+                    primary_label=moment["primary_label"],
+                    primary_action=moment["primary_action"],
+                    dismissible=True,
+                )
+            )
 
     items.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
     items = _cap_hub_inbox_rhythm_items(items)

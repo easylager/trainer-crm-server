@@ -3631,6 +3631,14 @@ TRAINER_ONBOARDING_NUDGE_OUTRO = (
     "\n\nОткройте <b>Обзор</b> слева от поля ввода — там «Первые шаги»."
 )
 
+# TASK-035: honest "trial is over" framing for trainers stuck in pending_profile past their trial —
+# never promises functionality that isn't actually there in pending_profile (AC-004). Stage-specific
+# body (below) is appended after this, same as the other steps.
+TRAINER_ONBOARDING_NUDGE_INTRO_TRIAL_OVER = (
+    "⏳ <b>Пробный период закончился.</b>\n\n"
+    "Это не бан и не сброс анкеты — просто чтобы продолжить, нужно закончить с этим шагом:\n\n"
+)
+
 # --- Profile enrichment after first booking (tariffs / «что не входит») ---
 # Voice: same as photo nudge — play, respect, «вы». No «заполни / срочно».
 # Practice already works; this is a postcard, not a gate.

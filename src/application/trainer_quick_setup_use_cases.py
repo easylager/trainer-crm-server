@@ -39,7 +39,6 @@ from src.application.arena_schedule_preset import (
     GRID_HOURLY_MINUTE,
     fixed_slot_duration_minutes,
     get_arena_schedule_preset_raw,
-    get_schedule_grid_preset_for_trainer,
 )
 from src.application.trainer_schedule_use_cases import (
     replace_templates_for_day,
@@ -170,13 +169,49 @@ async def seed_trainer_photo_from_telegram(
 
 
 @dataclass(frozen=True)
+class QuickSetupSlot:
+    """
+    One start the trainer marked, at the precision the template actually stores.
+
+    ``start_minute`` is minutes from midnight, so 13:25 survives the round-trip. ``None`` for
+    ``duration_minutes`` means «resolve it» — the arena's fixed duration if it sets one, else
+    the trainer's own choice.
+    """
+
+    start_minute: int
+    duration_minutes: int | None = None
+    arena_id: int | None = None
+
+
+@dataclass(frozen=True)
 class QuickSetupDay:
     day_of_week: int  # 0=Mon .. 6=Sun
-    hours: tuple[int, ...]
-    #: One venue per day — a trainer who splits a single day across two arenas is a real but
-    #: rare case; onboarding covers "a different arena on a different day" (the common one)
-    #: and leaves finer intra-day splits to schedule-editor later.
+    #: Hour-grid shorthand: whole hours, one venue for all of them. Kept because most of the
+    #: screen still works this way; normalized into ``slots`` before anything is written.
+    hours: tuple[int, ...] = ()
     arena_id: int | None = None
+    #: Explicit starts, carried through unchanged. This is what brings back a slot at 13:25, or
+    #: a second venue inside the same day — neither of which the hour grid can express.
+    slots: tuple[QuickSetupSlot, ...] = ()
+
+    def resolved_slots(self, arena_offset: int = 0) -> tuple[QuickSetupSlot, ...]:
+        """
+        The day as it will be written: hours shifted onto the venue's grid, plus explicit starts.
+
+        Both shapes arrive together for the same day and that is normal, not a client bug — the
+        screen draws part of a day on its hour grid and carries the rest verbatim. On a collision
+        the explicit slot wins: it came out of the template with a duration and a venue already
+        decided, and the hour is only a coarser way of naming the same start.
+        """
+        merged: dict[int, QuickSetupSlot] = {
+            h * 60 + arena_offset: QuickSetupSlot(
+                start_minute=h * 60 + arena_offset, arena_id=self.arena_id
+            )
+            for h in self.hours
+        }
+        for slot in self.slots:
+            merged[slot.start_minute] = slot
+        return tuple(merged[m] for m in sorted(merged))
 
 
 @dataclass(frozen=True)
@@ -197,11 +232,34 @@ def parse_quick_setup_days(raw: list[dict[str, Any]] | None) -> list[QuickSetupD
     """
     Validate the grid payload. Raises QuickSetupError with a user-facing message.
 
-    A day dict may repeat (e.g. the client sent a day row per arena tab it touched); the last
-    occurrence for a given ``day_of_week`` wins, same as the arena-less path always did. That is
-    what keeps "one arena per day" true by construction — see :class:`QuickSetupDay`.
+    Two shapes are accepted on the same field:
+
+    * ``{"day_of_week": 0, "hours": [7, 18], "arena_id": 5}`` — the hour grid, one venue for
+      the day. Still what the screen sends for everything it can draw.
+    * ``{"day_of_week": 0, "slots": [{"start_minute": 805, "duration_minutes": 60,
+      "arena_id": 5}, ...]}`` — explicit starts. This is how a slot at 13:25, or a day split
+      between two venues, comes back unchanged after the trainer re-opens the screen.
+
+    Both shapes may describe the same day, and routinely do: the screen sends the part it drew on
+    its hour grid as ``hours`` and the part it could not draw as ``slots``. Repeated
+    ``day_of_week`` entries are **merged**, keyed by start minute, rather than the last one
+    winning — a day is a set of starts, and dropping the earlier entry is how the previous
+    contract quietly deleted a venue.
     """
-    days: dict[int, tuple[tuple[int, ...], int | None]] = {}
+    by_day: dict[int, dict[int, QuickSetupSlot]] = {}
+    hour_shorthand: dict[int, tuple[set[int], int | None]] = {}
+
+    def _arena(raw_value: Any) -> int | None:
+        if raw_value is None:
+            return None
+        try:
+            aid = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise QuickSetupError("Не понял площадку.") from exc
+        if aid <= 0:
+            raise QuickSetupError("Не понял площадку.")
+        return aid
+
     for item in raw or []:
         try:
             dow = int(item.get("day_of_week"))
@@ -209,32 +267,61 @@ def parse_quick_setup_days(raw: list[dict[str, Any]] | None) -> list[QuickSetupD
             raise QuickSetupError("Не понял день недели.") from exc
         if dow < 0 or dow > 6:
             raise QuickSetupError("День недели должен быть от 0 до 6.")
-        raw_arena = item.get("arena_id")
-        arena_id: int | None = None
-        if raw_arena is not None:
+        day_arena = _arena(item.get("arena_id"))
+
+        for raw_slot in item.get("slots") or []:
             try:
-                arena_id = int(raw_arena)
-            except (TypeError, ValueError) as exc:
-                raise QuickSetupError("Не понял площадку.") from exc
-            if arena_id <= 0:
-                raise QuickSetupError("Не понял площадку.")
-        hours: set[int] = set()
-        for h in item.get("hours") or []:
-            try:
-                hv = int(h)
-            except (TypeError, ValueError) as exc:
+                minute = int(raw_slot.get("start_minute"))
+            except (TypeError, ValueError, AttributeError) as exc:
                 raise QuickSetupError("Не понял время начала.") from exc
-            if hv < 0 or hv > 23:
-                raise QuickSetupError("Время начала должно быть от 0 до 23.")
-            hours.add(hv)
-        if hours:
-            days[dow] = (tuple(sorted(hours)), arena_id)
-    if not days:
+            if minute < 0 or minute > 24 * 60 - 1:
+                raise QuickSetupError("Время начала должно быть внутри суток.")
+            raw_dur = raw_slot.get("duration_minutes")
+            duration: int | None = None
+            if raw_dur is not None:
+                try:
+                    duration = int(raw_dur)
+                except (TypeError, ValueError) as exc:
+                    raise QuickSetupError("Не понял длительность.") from exc
+                if duration < 15 or duration > 480:
+                    raise QuickSetupError("Длительность занятия должна быть от 15 до 480 минут.")
+            slot_arena = _arena(raw_slot.get("arena_id"))
+            by_day.setdefault(dow, {})[minute] = QuickSetupSlot(
+                start_minute=minute,
+                duration_minutes=duration,
+                arena_id=slot_arena if slot_arena is not None else day_arena,
+            )
+
+        raw_hours = item.get("hours") or []
+        if raw_hours:
+            hours, _prev_arena = hour_shorthand.get(dow, (set(), None))
+            for h in raw_hours:
+                try:
+                    hv = int(h)
+                except (TypeError, ValueError) as exc:
+                    raise QuickSetupError("Не понял время начала.") from exc
+                if hv < 0 or hv > 23:
+                    raise QuickSetupError("Время начала должно быть от 0 до 23.")
+                hours.add(hv)
+            hour_shorthand[dow] = (hours, day_arena)
+
+    out: list[QuickSetupDay] = []
+    for dow in sorted(set(by_day) | set(hour_shorthand)):
+        slots = tuple(by_day.get(dow, {})[m] for m in sorted(by_day.get(dow, {})))
+        hours, hour_arena = hour_shorthand.get(dow, (set(), None))
+        if not slots and not hours:
+            continue
+        out.append(
+            QuickSetupDay(
+                day_of_week=dow,
+                hours=tuple(sorted(hours)),
+                arena_id=hour_arena,
+                slots=slots,
+            )
+        )
+    if not out:
         raise QuickSetupError("Отметьте хотя бы одно время — иначе ученику нечего выбрать.")
-    return [
-        QuickSetupDay(day_of_week=d, hours=h, arena_id=aid)
-        for d, (h, aid) in sorted(days.items())
-    ]
+    return out
 
 
 async def _apply_profile_settings(session: AsyncSession, trainer_id: int, duration_minutes: int) -> None:
@@ -352,34 +439,45 @@ def _day_grid(
     day: QuickSetupDay,
     presets: dict[int, dict[str, Any]],
     fallback_duration_minutes: int,
-) -> tuple[dict[int, int], int]:
+) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
     """
-    Resolve one day's (minute_to_capacity, duration_minutes) against its arena's real grid.
+    Resolve one day into (minute→capacity, minute→arena_id, minute→duration).
 
-    No arena chosen → today's original behaviour: whole hours, trainer's own duration choice.
-    Arena chosen → minutes shift by the arena's ``minute_offset`` (the ТЦ Замок case: slots at
-    :15, not :00) and duration locks to the arena's ``slot_duration_minutes`` when it sets one,
-    overriding what the trainer picked for that specific day — that lock is what stops a slot
-    grid and a booking length from silently disagreeing.
+    The hour shorthand shifts onto the venue's grid (the ТЦ Замок case: slots at :15, not :00)
+    and takes the arena's fixed duration when it sets one, overriding the trainer's own chip for
+    that day — that lock is what stops a slot grid and a booking length from silently disagreeing.
+
+    Explicit ``slots`` are honoured as given: they came out of the template unchanged and putting
+    them back through the hour grid is exactly how minutes and second venues got lost before.
+    Their duration is still resolved per venue when the payload did not carry one.
     """
     offset = 0
-    duration = fallback_duration_minutes
     if day.arena_id is not None:
         preset = presets[day.arena_id]
         if (preset.get("kind") or "").strip() == GRID_HOURLY_MINUTE:
             offset = int(preset.get("minute_offset") or 0)
-        fixed = fixed_slot_duration_minutes(preset)
-        if fixed is not None:
-            duration = fixed
-        h0 = int(preset.get("hour_start", 0))
-        h1 = int(preset.get("hour_end", 23))
-        out_of_range = [h for h in day.hours if h < h0 or h > h1]
-        if out_of_range:
-            raise QuickSetupError(
-                f"Площадка работает с {h0}:00 до {h1}:00 — уберите время вне этого окна."
-            )
-    minute_to_capacity = {h * 60 + offset: 1 for h in day.hours}
-    return minute_to_capacity, duration
+
+    minute_to_capacity: dict[int, int] = {}
+    minute_to_arena_id: dict[int, int] = {}
+    minute_to_duration: dict[int, int] = {}
+    for slot in day.resolved_slots(offset):
+        minute = int(slot.start_minute)
+        duration = slot.duration_minutes
+        if slot.arena_id is not None:
+            preset = presets[slot.arena_id]
+            fixed = fixed_slot_duration_minutes(preset)
+            if fixed is not None:
+                duration = fixed
+            h0 = int(preset.get("hour_start", 0))
+            h1 = int(preset.get("hour_end", 23))
+            if not (h0 <= minute // 60 <= h1):
+                raise QuickSetupError(
+                    f"Площадка работает с {h0}:00 до {h1}:00 — уберите время вне этого окна."
+                )
+            minute_to_arena_id[minute] = slot.arena_id
+        minute_to_capacity[minute] = 1
+        minute_to_duration[minute] = int(duration or fallback_duration_minutes)
+    return minute_to_capacity, minute_to_arena_id, minute_to_duration
 
 
 async def run_trainer_quick_setup(
@@ -403,38 +501,38 @@ async def run_trainer_quick_setup(
     await _set_services(session, trainer_id, service_ids)
     await _apply_profile_settings(session, trainer_id, duration_minutes)
 
-    arena_ids_used = sorted({d.arena_id for d in days if d.arena_id is not None})
+    arena_ids_used = sorted(
+        {
+            aid
+            for d in days
+            for aid in ([d.arena_id] + [sl.arena_id for sl in d.slots])
+            if aid is not None
+        }
+    )
     presets = await _validate_and_link_arenas(session, trainer_id, arena_ids_used)
-
-    # ``replace_templates_for_day`` validates its ``duration_minutes`` argument against the
-    # trainer's *current* primary-arena preset even for an empty day (no minutes to actually
-    # apply it to) — see trainer_schedule_use_cases.py. Linking a single-venue trainer above may
-    # have just set ``primary_arena_id`` to an arena with a fixed duration; blindly passing the
-    # trainer's global chip choice for every *other*, empty weekday would then fail validation
-    # for a value nothing is even using. Resolve the one duration that is always safe to quote
-    # for an empty day: the fixed duration of whatever arena is now primary, or the trainer's
-    # own choice when nothing fixes it.
-    trainer_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
-    empty_day_duration = fixed_slot_duration_minutes(trainer_preset) or duration_minutes
 
     by_day = {d.day_of_week: d for d in days}
     for dow in range(7):
         minute_to_capacity: dict[int, int] = {}
-        minute_to_arena_id: dict[int, int] | None = None
-        day_duration = empty_day_duration
+        minute_to_arena_id: dict[int, int] = {}
+        minute_to_duration: dict[int, int] = {}
         day = by_day.get(dow)
         if day is not None:
-            minute_to_capacity, day_duration = _day_grid(day, presets, duration_minutes)
-            if day.arena_id is not None:
-                minute_to_arena_id = {m: day.arena_id for m in minute_to_capacity}
-        # Days the trainer left empty are written too, so unchecking a day actually clears it.
+            minute_to_capacity, minute_to_arena_id, minute_to_duration = _day_grid(
+                day, presets, duration_minutes
+            )
+        # Days the trainer left empty are written too, so unchecking a day actually clears it —
+        # but only its individual rows: onboarding cannot draw group classes, so it must not
+        # delete them either.
         await replace_templates_for_day(
             session,
             trainer_id,
             dow,
             minute_to_capacity,
-            day_duration,
-            minute_to_arena_id=minute_to_arena_id,
+            duration_minutes,
+            minute_to_arena_id=minute_to_arena_id or None,
+            minute_to_duration=minute_to_duration or None,
+            only_capacity_one=True,
         )
 
     base = today or date.today()

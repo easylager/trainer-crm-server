@@ -19,6 +19,12 @@ Design contract (see .ai/tasks/TASK-011.md):
   practice because the legacy site-first creation path (`POST /api/trainers`) is gated by
   `legacy_trainers_api_enabled` (off in production); every real trainer is created via
   `consume_link_token`, where `created_at` and telegram_id are set together.
+- TASK-035: a `trialend` step follows once the trainer's trial has *actually* expired (anchored to
+  the resolved trial subscription's `expires_at`, not a calendar offset — trial length is
+  configurable). Only applies to the pending_profile-derived stages, not `STAGE_NO_BOOKING`
+  (active trainers) — see `get_trial_expired_days_ago` / `compute_due_onboarding_nudges`. Without
+  this, a trainer stuck in `pending_profile` past their trial can never reach LEAD_MODE and falls
+  into permanent silence.
 - Each step is delivered at most once per trainer (UNIQUE (trainer_id, step) in the idempotency log).
 - Cancel-on-progress is implicit: once a trainer's stage resolves to None (finished the relevant
   step, or is waiting on admin review with nothing left to do), this module stops listing them as a
@@ -37,10 +43,12 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.trainer_client_invite_tracking import sql_trainer_has_real_booking
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
 from src.infrastructure.db.models import (
     ONBOARDING_NUDGE_STEP_KEYS,
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
     ONBOARDING_NUDGE_STEPS_ORDERED,
     SUBSCRIPTION_STATUS_TRIAL,
     TRAINER_STATUS_ACTIVE,
@@ -52,6 +60,10 @@ from src.infrastructure.db.models import (
 # Deliberately separate from `subscription_reminder_trial_days_ahead` (billing reminder, D-1 only) —
 # this is an earlier, softer signal woven into the onboarding nudge itself.
 TRIAL_URGENCY_THRESHOLD_DAYS = 3
+
+# TASK-035: grace after the trial's actual expiry before the "trial is over" step fires — avoids
+# firing same-day as the D-1 billing "trial ends today" reminder.
+ONBOARDING_TRIAL_OVER_GRACE_DAYS = 1
 
 # Stuck-stage ids — see TASK-011 AC-002. Ordered here by typical funnel position, not priority.
 STAGE_EMPTY_FORM = "empty_form"
@@ -92,15 +104,17 @@ def determine_onboarding_stage(
     profile_complete: bool,
     moderation_submitted: bool,
     has_moderation_feedback: bool,
-    has_any_booking: bool,
+    has_real_booking: bool,
 ) -> str | None:
     """
     Pure: map checklist flags to a stuck-stage id, or None if the trainer is not actionable right
     now (fully onboarded, or waiting on admin review with nothing left for them to do).
     """
-    # Первая запись — практика уже работает. Старая серия («добить анкету») здесь
-    # умолкает: тарифы и «что не входит» — отдельный мягкий пинг после записи.
-    if has_any_booking:
+    # Первая настоящая запись — практика уже работает. Старая серия («добить анкету») здесь
+    # умолкает: тарифы и «что не входит» — отдельный мягкий пинг после записи. Читаем
+    # has_real_booking, а не has_any_booking (TASK-027) — иначе одна тестовая или мгновенно
+    # отменённая запись молча гасит всю серию реактивации ровно тому, кому она нужнее всего.
+    if has_real_booking:
         return None
     if trainer_status == TRAINER_STATUS_ACTIVE:
         return STAGE_NO_BOOKING
@@ -134,15 +148,24 @@ def _pick_due_step(
 
 
 async def _list_segment_candidates(session: AsyncSession) -> list[dict[str, Any]]:
-    """Telegram-linked trainers in the onboarding-reactivation segment (status shape only)."""
+    """
+    Telegram-linked trainers in the onboarding-reactivation segment (status shape only).
+
+    The "no real booking yet" exclusion must match ``has_real_booking`` in the checklist
+    (TASK-027) — a sandbox demo or an instantly-voided booking must not silence this whole
+    series, and a real booking that was later cancelled must not resurrect a trainer into it.
+    Both this SQL-level filter and ``determine_onboarding_stage``'s own gate below must read
+    the same signal: if the SQL admits a candidate but the stage resolver still checks the
+    old ``has_any_booking``, the trainer is silently dropped a second time.
+    """
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT t.id, t.telegram_id, t.created_at
             FROM trainers t
             WHERE t.telegram_id IS NOT NULL
               AND t.status IN (:status_pending_profile, :status_active)
-              AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.trainer_id = t.id)
+              AND NOT {sql_trainer_has_real_booking()}
             """
         ),
         {
@@ -186,7 +209,7 @@ async def list_onboarding_candidates(session: AsyncSession) -> list[OnboardingCa
             profile_complete=bool(checklist.get("profile_complete")),
             moderation_submitted=bool(checklist.get("moderation_submitted")),
             has_moderation_feedback=has_feedback,
-            has_any_booking=bool(checklist.get("has_any_booking")),
+            has_real_booking=bool(checklist.get("has_real_booking")),
         )
         if stage is None:
             continue
@@ -226,6 +249,24 @@ async def compute_due_onboarding_nudges(
 
         sent = await _list_sent_steps_for_trainer(session, cand.trainer_id)
         picked = _pick_due_step(days_since_start=days_since_start, already_sent=sent)
+
+        # TASK-035: a trainer stuck in pending_profile can never reach LEAD_MODE, so once their
+        # trial actually runs out (per the *resolved* trial length, not a hardcoded offset) they'd
+        # otherwise fall into permanent silence. STAGE_NO_BOOKING (trainer_status=active) is
+        # excluded — that segment is out of this task's scope, see TASK-035 Decision.
+        if cand.stage != STAGE_NO_BOOKING and ONBOARDING_NUDGE_STEP_TRIAL_OVER not in sent:
+            trial_expired_days_ago = await get_trial_expired_days_ago(
+                session, cand.trainer_id, now=moment
+            )
+            if (
+                trial_expired_days_ago is not None
+                and trial_expired_days_ago >= ONBOARDING_TRIAL_OVER_GRACE_DAYS
+            ):
+                # The trial having actually ended is always the more current fact than an unfired
+                # D+1/D+3/D+7 reminder — same "largest unfired" precedence, just off a different
+                # clock (trial expiry, not created_at).
+                picked = (ONBOARDING_NUDGE_STEP_TRIAL_OVER, trial_expired_days_ago)
+
         if picked is None:
             continue
         step_key, days_offset = picked
@@ -274,6 +315,44 @@ async def get_trial_days_remaining(
     return math.ceil(remaining_seconds / 86400)
 
 
+async def get_trial_expired_days_ago(
+    session: AsyncSession, trainer_id: int, *, now: datetime | None = None
+) -> int | None:
+    """
+    Whole days since the trainer's trial subscription actually expired, or None if they never had
+    a trial or it hasn't expired yet.
+
+    Deliberately anchored to the resolved trial subscription's real ``expires_at`` — not a fixed
+    day-count from ``created_at`` — because trial length is configurable
+    (``resolve_trial_period_days``: env → platform_settings → plan default, itself not fixed at
+    14 days). Reads by plan shape (``is_trial``) rather than current subscription ``status`` so it
+    still finds the trial row after ``expire_subscriptions_to_past_due`` flips it to past_due.
+    """
+    moment = now or datetime.now(timezone.utc)
+    result = await session.execute(
+        text(
+            """
+            SELECT ts.expires_at
+            FROM trainer_subscriptions ts
+            JOIN subscription_plans sp ON sp.id = ts.plan_id
+            WHERE ts.trainer_id = :tid AND sp.is_trial = true
+            ORDER BY ts.expires_at DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row = result.fetchone()
+    if not row or row[0] is None:
+        return None
+    expires_at: datetime = row[0]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at > moment:
+        return None
+    return int((moment - expires_at).total_seconds() // 86400)
+
+
 async def mark_onboarding_nudge_sent(
     session: AsyncSession,
     *,
@@ -309,7 +388,9 @@ __all__ = [
     "list_onboarding_candidates",
     "compute_due_onboarding_nudges",
     "get_trial_days_remaining",
+    "get_trial_expired_days_ago",
     "mark_onboarding_nudge_sent",
     "TRIAL_URGENCY_THRESHOLD_DAYS",
+    "ONBOARDING_TRIAL_OVER_GRACE_DAYS",
     "_pick_due_step",
 ]

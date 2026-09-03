@@ -3674,6 +3674,166 @@ async def list_bookings_for_client(
     return out
 
 
+async def list_booking_history_for_client(
+    session: AsyncSession,
+    client_telegram_id: int,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+    trainer_id: int | None = None,
+) -> tuple[list[dict], bool]:
+    """List client's booking history — the complement of ``list_bookings_for_client``.
+
+    Partition, not a literal "slot in the past": any booking NOT in the upcoming set
+    (terminal status, OR still pending/confirmed but its slot already ended) belongs here.
+    A booking cancelled for a future slot must not vanish from both lists — it shows up
+    here immediately rather than waiting for the slot to pass. Newest first. Sandbox excluded.
+    Returns ``(rows, has_more)``; fetches one extra row to detect a next page without a COUNT(*).
+    """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return [], False
+    lim = max(1, min(int(limit), 100))
+    off = max(0, int(offset))
+    trainer_clause = " AND b.trainer_id = :trainer_id" if trainer_id is not None else ""
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, b.slot_id, b.trainer_id, b.service_id, b.client_comment, b.status,
+                   s.slot_date, s.start_time, s.end_time,
+                   (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
+                   COALESCE(NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''), 'Тренер') AS trainer_name,
+                   t.telegram_id AS trainer_telegram_id,
+                   NULLIF(TRIM(COALESCE(t.telegram_username, '')), '') AS trainer_telegram_username,
+                   NULLIF(TRIM(COALESCE(p.phone, '')), '') AS trainer_phone,
+                   srv.name AS service_name,
+                   b.price_tier_kind,
+                   a.name AS arena_name,
+                   a.address AS arena_address,
+                   a.latitude AS arena_lat,
+                   a.longitude AS arena_lon,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents,
+                   NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice,
+                   false AS hub_in_session,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+                   b.service_price_variant_id,
+                   p.city_id AS trainer_city_id
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            JOIN trainers t ON t.id = b.trainer_id
+            JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN LATERAL (
+                SELECT a2.name, a2.address, a2.latitude, a2.longitude
+                FROM arenas a2
+                WHERE a2.id = ("""
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """)
+            ) a ON true
+            WHERE b.client_id = :cid
+              AND NOT b.is_sandbox
+              AND (
+                b.status NOT IN ('pending', 'confirmed')
+                OR """ + _SQL_SLOT_END_TS + """ <= CURRENT_TIMESTAMP
+              )"""
+            + trainer_clause
+            + """
+            ORDER BY s.slot_date DESC, s.start_time DESC, b.id DESC
+            OFFSET :off
+            LIMIT :lim
+        """
+        ),
+        {"cid": int(cid), "off": off, "lim": lim + 1, **({"trainer_id": int(trainer_id)} if trainer_id is not None else {})},
+    )
+    rows = r.fetchall()
+    has_more = len(rows) > lim
+    rows = rows[:lim]
+    out = []
+    for row in rows:
+        arena_name = (row[16] or "").strip() if row[16] else ""
+        arena_address = (row[17] or "").strip() if row[17] else ""
+        lat, lon = row[18], row[19]
+        if lat is not None and lon is not None:
+            map_link = f"https://yandex.ru/maps/?pt={lon},{lat}&z=16"
+        else:
+            map_link = None
+        if not arena_name:
+            place_display = "Уточните у тренера"
+        else:
+            place_display = f"Площадка: {arena_name}"
+        out.append({
+            "id": row[0],
+            "slot_id": row[1],
+            "trainer_id": row[2],
+            "service_id": row[3],
+            "service_name": (row[14] or "").strip() or "—",
+            "price_tier_kind": normalize_price_tier_kind(row[15]),
+            "client_comment": row[4],
+            "status": row[5],
+            "slot_date": row[6],
+            "start_time": row[7],
+            "end_time": row[8],
+            "duration_minutes": row[9] if row[9] is not None else 45,
+            "trainer_name": (row[10] or "").strip() or "Тренер",
+            "trainer_telegram_id": row[11],
+            "trainer_telegram_username": (row[12] or "").strip() or None,
+            "trainer_phone": (row[13] or "").strip() or None,
+            "place_display": place_display,
+            "arena_name": arena_name or None,
+            "arena_address": arena_address or None,
+            "map_link": map_link,
+            "price_cents": int(row[20]) if row[20] is not None else None,
+            "service_client_notice": (row[21] or "").strip() or None,
+            "hub_in_session": bool(row[22]),
+            "arena_id": int(row[23]) if row[23] is not None else None,
+            "service_price_variant_id": int(row[24]) if row[24] is not None else None,
+            "trainer_city_id": int(row[25]) if row[25] is not None else None,
+        })
+    from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
+
+    await enrich_booking_dicts_with_expected_payment_class(session, out)
+    return out, has_more
+
+
+async def list_client_booking_trainer_options(
+    session: AsyncSession,
+    client_telegram_id: int,
+) -> list[dict]:
+    """Distinct trainers the client has any (non-sandbox) booking with — source for the trainer chips.
+
+    Deliberately NOT ``client_trainer_edges``: an edge can exist from a "saved" trainer with zero
+    bookings, which would render a chip with nothing behind it. Ordered by most recent activity.
+    """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return []
+    r = await session.execute(
+        text(
+            """
+            SELECT b.trainer_id,
+                   COALESCE(NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''), 'Тренер') AS trainer_name,
+                   MAX(""" + _SQL_SLOT_START_TS + """) AS last_slot_start
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
+            WHERE b.client_id = :cid
+              AND NOT b.is_sandbox
+            GROUP BY b.trainer_id, trainer_name
+            ORDER BY last_slot_start DESC
+            """
+        ),
+        {"cid": int(cid)},
+    )
+    return [
+        {"trainer_id": int(row[0]), "trainer_name": (row[1] or "").strip() or "Тренер"}
+        for row in r.fetchall()
+        if row[0] is not None
+    ]
+
+
 # Hub «последняя запись» / primary fallback: includes client-cancelled visits (still «мой тренер»).
 _SQL_PRIMARY_LATEST_BOOKING_STATUSES = (
     "'pending', 'confirmed', 'completed', 'no_show', 'cancelled'"

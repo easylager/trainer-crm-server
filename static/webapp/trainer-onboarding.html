@@ -116,6 +116,7 @@
       display: grid;
       grid-template-columns: minmax(20px, max-content) repeat(7, minmax(0, 1fr));
       gap: 5px;
+      touch-action: none;
     }
     .ob-grid-dayhead {
       font-size: 13px;
@@ -254,7 +255,45 @@
       padding: 8px 2px;
     }
 
-    /* ── Табы площадок над сеткой недели ── */
+    /* ── Окна из «Расписания», которые сетка не умеет нарисовать ── */
+    .ob-carried[hidden] { display: none; }
+    .ob-carried {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--app-surface-2, rgba(127,127,127,.08));
+      border: 1px solid var(--app-border, rgba(127,127,127,.18));
+    }
+    .ob-carried__title {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--app-text, inherit);
+    }
+    .ob-carried__row {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    .ob-carried__day {
+      flex: 0 0 auto;
+      min-width: 26px;
+      font-weight: 600;
+      color: var(--app-text-muted, #8a8a8a);
+    }
+    .ob-carried__times { color: var(--app-text, inherit); }
+    .ob-carried__hint {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--app-text-muted, #8a8a8a);
+    }
+
+    /* ── Кисти площадок над сеткой недели ──
+       Выбирают, чем красит следующий тап — не «какой день показать» (вкладок больше нет,
+       сетка одна на всю неделю). Каждая кисть выбирает следующий тап, чем красит. */
     .ob-arena-tabs[hidden] { display: none; }
     .ob-arena-tabs {
       display: flex;
@@ -266,30 +305,87 @@
     .ob-arena-tab {
       appearance: none;
       flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 22px auto;
+      grid-template-rows: auto auto;
+      column-gap: 8px;
+      align-items: center;
       border: 1px solid var(--app-chip-line);
       background: var(--app-chip-bg);
       color: var(--app-chip-text);
-      border-radius: 999px;
-      padding: 8px 14px;
+      border-radius: 12px;
+      padding: 7px 14px 7px 8px;
       font: inherit;
-      font-size: 14px;
-      font-weight: 500;
       cursor: pointer;
       white-space: nowrap;
+      text-align: left;
     }
-    .ob-arena-tab[aria-selected="true"] {
+    .ob-arena-tab[aria-pressed="true"] {
+      border-color: var(--app-cta-fill);
+      font-weight: 650;
+    }
+    .ob-arena-tab__swatch {
+      grid-row: 1 / 3;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ob-arena-tab__label { font-size: 14px; }
+    .ob-arena-tab__meta {
+      font-size: 11px;
+      color: var(--app-muted);
+      font-weight: 400;
+    }
+    .ob-arena-tab__meta:empty { display: none; }
+
+    /* Различитель площадки на клетке/чипе — НЕ цвет (нейтрали и тил в этом продукте
+       не кодируют домен, см. theme.css: «ЦВЕТ НАЗЫВАЕТ ТОЛЬКО ДЕЙСТВИЕ И СОСТОЯНИЕ»),
+       а буква + заливка тем же тилом трёх разных плотностей: сплошная / контур / штрих.
+       Так до трёх площадок различимы и в тёмной теме, и для дальтоника (AC-005).
+       Селектор с [aria-pressed="true"] нужен, чтобы перебить .ob-cell[aria-pressed="true"]
+       выше — та же специфичность (класс+атрибут), без него побеждала бы сплошная заливка
+       для всех трёх площадок одинаково. */
+    .ob-cell--taken.ob-cell--arena-0,
+    .ob-cell[aria-pressed="true"].ob-cell--arena-0,
+    .ob-arena-tab--arena-0 .ob-arena-tab__swatch {
       background: var(--app-cta-fill);
       border-color: var(--app-cta-fill);
       color: var(--app-cta-text);
-      font-weight: 650;
+    }
+    .ob-cell--taken.ob-cell--arena-1,
+    .ob-cell[aria-pressed="true"].ob-cell--arena-1,
+    .ob-arena-tab--arena-1 .ob-arena-tab__swatch {
+      background: transparent;
+      border: 2px solid var(--app-cta-fill);
+      color: var(--app-cta-fill);
+    }
+    .ob-cell--taken.ob-cell--arena-2,
+    .ob-cell[aria-pressed="true"].ob-cell--arena-2,
+    .ob-arena-tab--arena-2 .ob-arena-tab__swatch {
+      background: repeating-linear-gradient(
+        135deg, var(--app-cta-fill) 0 3px, transparent 3px 7px
+      );
+      border-color: var(--app-cta-fill);
+      color: var(--app-cta-text);
+    }
+    .ob-cell.ob-cell--arena-0, .ob-cell.ob-cell--arena-1, .ob-cell.ob-cell--arena-2 {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
     }
 
-    /* Ячейка дня, занятого другой площадкой в мульти-режиме. */
+    /* Ячейка часа, занятого другой площадкой в режиме «нескольких». */
     .ob-cell--taken {
-      background: transparent;
-      border-style: dashed;
       cursor: default;
-      opacity: .5;
+      opacity: .55;
     }
 
     /* ── Липкая кнопка ── */
@@ -349,6 +445,16 @@
       line-height: 1.5;
     }
     .ob-done-ask strong { font-weight: 650; }
+
+    .ob-done-schedule-link[hidden] { display: none; }
+    .ob-done-schedule-link {
+      display: block;
+      margin-top: 14px;
+      font-size: 14px;
+      color: var(--app-muted);
+      text-decoration: none;
+    }
+    .ob-done-schedule-link:active { opacity: .7; }
 
     /* [hidden] должен побеждать display: атрибут hidden сам по себе слабее любого display. */
     .ob-skip[hidden] { display: none; }
@@ -431,7 +537,7 @@
     <section class="ob-step" aria-labelledby="obWeekTitle">
       <h2 class="ob-step-title" id="obWeekTitle">Когда обычно?</h2>
       <p class="ob-step-hint" id="obWeekHint">Мы отметили типичное. Можно не всё сразу — потом подкорректируете :)</p>
-      <div class="ob-arena-tabs" id="obArenaTabs" role="tablist" aria-label="Площадка" hidden></div>
+      <div class="ob-arena-tabs" id="obArenaTabs" role="group" aria-label="Чем красить" hidden></div>
       <div class="ob-grid-wrap">
         <div class="ob-grid" id="obGrid" role="group" aria-labelledby="obWeekTitle"></div>
       </div>
@@ -439,6 +545,9 @@
         <span id="obGridCount">—</span>
         <button type="button" class="ob-link-btn" id="obGridMore">Показать больше часов</button>
       </div>
+      <!-- Окна, которые эта сетка нарисовать не может (своё время начала, вторая площадка
+           в тот же день). Показаны, чтобы счётчик не врал, и сохраняются как есть. -->
+      <div class="ob-carried" id="obCarried" hidden></div>
     </section>
   </div>
 
@@ -450,6 +559,9 @@
     <div class="ob-done-ask">
       Отправьте ссылку <strong>одному ученику</strong> — тому, кто и так собирался к вам на этой неделе.
     </div>
+    <!-- Показываем только тем, у кого реально есть время вне часовой сетки (state.carried) —
+         остальным эта строка была бы просто шумом. -->
+    <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала (не с начала часа)? Настройте в «Расписании» →</a>
   </div>
 
   <div class="ob-foot" id="obFoot" hidden>
@@ -459,6 +571,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202609026"></script>
+<script src="trainer-onboarding-main.js?v=202609030"></script>
 </body>
 </html>

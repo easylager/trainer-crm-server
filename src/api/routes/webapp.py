@@ -40,7 +40,10 @@ from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_lab
 from src.shared.profile_phone import coerce_required_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
 from src.application.booking_problem_rollout import booking_problem_api_allowed_for_trainer
-from src.application.booking_payment_notice import classify_booking_expected_payment_class
+from src.application.booking_payment_notice import (
+    classify_booking_expected_payment_class,
+    resolve_pass_instance_for_booking,
+)
 from src.application.booking_problem_use_cases import (
     get_trainer_booking_problem_options,
     submit_trainer_booking_problem,
@@ -409,6 +412,8 @@ from src.application.client_trainer_primary_graph import (
 )
 from src.api.routes.webapp_client_payloads import (
     CLIENT_DAYS,
+    client_booking_history_days_payload as _client_booking_history_days_payload,
+    client_booking_trainer_options_payload as _client_booking_trainer_options_payload,
     client_bookings_days_payload as _client_bookings_days_payload,
     client_requests_list_payload as _client_requests_list_payload,
     serialize_client_request as _serialize_client_request,
@@ -1061,6 +1066,20 @@ def _schedule_slot_intervals(body: ScheduleSlotsDayBody) -> list[tuple[time, tim
     return [(_minutes_to_time(m), _minutes_to_time(m + duration)) for m in minutes_set]
 
 
+_SLOT_RELATED_SNOOZE_HINT_IDS = ("slots_next_week", "open_loop_free_next")
+
+
+async def _clear_slot_related_hint_snoozes(session: AsyncSession, trainer_id: int) -> None:
+    """
+    TASK-029 S3: saving slots is the server-side mirror of what the client used to do to its
+    own localStorage after a schedule save — a stale «не сейчас» on a slots-related hint must
+    not survive the change that made the hint relevant again.
+    """
+    from src.application.trainer_hint_dismissal_use_cases import clear_hint_snoozes
+
+    await clear_hint_snoozes(session, trainer_id, list(_SLOT_RELATED_SNOOZE_HINT_IDS))
+
+
 @router.post("/schedule/slots")
 async def post_schedule_slots(
     body: ScheduleSlotsDayBody,
@@ -1158,6 +1177,7 @@ async def post_schedule_slots(
         if per_slot:
             background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
         invalidate_slots_for_trainer(trainer_id)
+        await _clear_slot_related_hint_snoozes(session, trainer_id)
         return {"ok": True, "trainer_id": trainer_id}
 
     if body.start_times is not None:
@@ -1189,6 +1209,7 @@ async def post_schedule_slots(
 
     # Mini app: schedule-editor clears hub rhythm dismiss + sets fill-slots boost (per-trainer storage).
     invalidate_slots_for_trainer(trainer_id)
+    await _clear_slot_related_hint_snoozes(session, trainer_id)
     return {"ok": True, "trainer_id": trainer_id}
 
 
@@ -2255,7 +2276,24 @@ async def get_client_bookings(
 ):
     """List client's upcoming bookings grouped by day. Arena + address + map_link. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
-    return await _client_bookings_days_payload(session, telegram_id)
+    payload = await _client_bookings_days_payload(session, telegram_id)
+    payload["trainer_options"] = await _client_booking_trainer_options_payload(session, telegram_id)
+    return payload
+
+
+@router.get("/client/bookings/history")
+async def get_client_bookings_history(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    trainer_id: int | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """List client's past/terminal bookings grouped by day, newest first. Auth: client initData."""
+    telegram_id = client_catalog_telegram_key(principal)
+    return await _client_booking_history_days_payload(
+        session, telegram_id, offset=offset, limit=limit, trainer_id=trainer_id
+    )
 
 
 @router.get("/client/family-access")
@@ -2979,6 +3017,10 @@ async def get_trainer_stats_api(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_analytics_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED)
+    from src.application.trainer_feature_tracking import FEATURE_STATS_OPENED, record_feature_first_use
+
+    await record_feature_first_use(session, trainer_id, FEATURE_STATS_OPENED)
+    await session.commit()
     data = await get_trainer_stats_dashboard(session, trainer_id)
     return _serialize_trainer_dashboard(data)
 
@@ -3350,6 +3392,17 @@ async def get_trainer_hub_bootstrap(
                         or "Центр"
                     ),
                 )
+        from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
+
+        active_hint_snoozes = await get_active_snoozes(session, trainer_id_linked)
+        feature_moment_facts = None
+        if schedule_unlocked and (onboarding_checklist or {}).get("has_crm_subscription_access") is not False:
+            from src.application.trainer_feature_moments import fetch_trainer_feature_moment_facts
+
+            try:
+                feature_moment_facts = await fetch_trainer_feature_moment_facts(session, trainer_id_linked)
+            except Exception as exc:
+                partial_errors["feature_moment_facts"] = str(exc)
         action_inbox = build_trainer_hub_action_inbox(
             onboarding=onboarding_checklist or {},
             requests_count=req_n,
@@ -3358,7 +3411,11 @@ async def get_trainer_hub_bootstrap(
             pending_booking_ids=pending_booking_ids,
             center_inbox_pending=center_inbox_pending,
             show_center_inbox=show_center_inbox,
+            active_hint_snoozes=active_hint_snoozes,
+            feature_moment_facts=feature_moment_facts,
         )
+        if onboarding_checklist is not None:
+            onboarding_checklist["active_hint_snoozes"] = list(active_hint_snoozes.keys())
 
     # Onboarding v2: one card, resolved server-side, so the copy and the ordering live in one
     # tested place instead of branching in the hub's JS.
@@ -3408,11 +3465,21 @@ async def get_trainer_hub_inbox_count(
     requests_count = 0
     if is_active:
         requests_count = await count_unanswered_requests_for_trainer(session, tid)
+    from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
+
+    active_hint_snoozes = await get_active_snoozes(session, tid)
+    feature_moment_facts = None
+    if schedule_unlocked and (onboarding or {}).get("has_crm_subscription_access") is not False:
+        from src.application.trainer_feature_moments import fetch_trainer_feature_moment_facts
+
+        feature_moment_facts = await fetch_trainer_feature_moment_facts(session, tid)
     inbox = build_trainer_hub_action_inbox(
         onboarding=onboarding,
         requests_count=requests_count,
         bookings=None,
         schedule_unlocked=schedule_unlocked,
+        active_hint_snoozes=active_hint_snoozes,
+        feature_moment_facts=feature_moment_facts,
     )
     return {
         "total_actionable": inbox["total_actionable"],
@@ -3442,7 +3509,15 @@ async def post_trainer_hub_inbox_event(
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    allowed = {"inbox_item_shown", "batch_confirm_success"}
+    allowed = {
+        "inbox_item_shown",
+        "batch_confirm_success",
+        "hint_clicked",
+        "hint_dismissed",
+        "next_step_shown",
+        "next_step_clicked",
+        "next_step_dismissed",
+    }
     if body.event not in allowed:
         raise HTTPException(status_code=400, detail="Unsupported inbox event")
     audit_log(
@@ -5587,6 +5662,16 @@ async def get_trainer_booking_detail(
         detail["pass_cert_instrument_hint"] = "сертификат"
     else:
         detail["pass_cert_instrument_hint"] = None
+
+    pass_instance = None
+    if ppc == "PASS" and booking:
+        pass_instance = await resolve_pass_instance_for_booking(
+            session, booking_id, booking["client_id"], trainer_id
+        )
+    detail["pass_instance_id"] = pass_instance["pass_instance_id"] if pass_instance else None
+    detail["pass_sessions_remaining"] = pass_instance["sessions_remaining"] if pass_instance else None
+    detail["pass_sessions_total"] = pass_instance["sessions_total"] if pass_instance else None
+    detail["pass_product_name"] = pass_instance["product_name"] if pass_instance else None
 
     edit_ctx = await load_booking_service_edit_context(session, booking_id, trainer_id)
     detail["service_edit"] = (
@@ -7833,11 +7918,15 @@ async def get_trainer_onboarding_quick_setup(
     selected = [int(row[0]) for row in r_mine.fetchall()]
 
     # capacity = 1: individual template rows only — quick-setup never writes group rows, and a
-    # group row's hour bucket leaking into this grid would confuse the onboarding picker.
+    # group row's hour bucket leaking into this grid would confuse the onboarding picker. Group
+    # rows are also never deleted by the save that follows (``only_capacity_one``).
+    #
+    # Full precision on purpose: reading the hour and dropping the minutes turned a 13:25 slot
+    # into 13:00 the moment the trainer re-opened this screen and pressed «Сохранить».
     r_tpl = await session.execute(
         text(
             """
-            SELECT day_of_week, EXTRACT(HOUR FROM start_time)::int AS h, arena_id
+            SELECT day_of_week, start_time, duration_minutes, arena_id
             FROM trainer_schedule_templates
             WHERE trainer_id = :tid AND capacity = 1
             ORDER BY day_of_week, start_time
@@ -7845,16 +7934,26 @@ async def get_trainer_onboarding_quick_setup(
         ),
         {"tid": trainer_id},
     )
+    existing_slots: dict[int, list[dict[str, Any]]] = {}
     existing: dict[int, list[int]] = {}
-    # First arena_id seen per day wins the label — onboarding only ever wrote one venue per day;
-    # a day edited later in schedule-editor to mix venues shows its first venue here, which is a
-    # reasonable "mostly true" label for a re-opened onboarding screen, not the source of truth.
     existing_day_arena: dict[int, int] = {}
     for row in r_tpl.fetchall():
         dow = int(row[0])
-        existing.setdefault(dow, []).append(int(row[1]))
-        if row[2] is not None and dow not in existing_day_arena:
-            existing_day_arena[dow] = int(row[2])
+        start_minute = int(row[1].hour) * 60 + int(row[1].minute)
+        arena_id = int(row[3]) if row[3] is not None else None
+        existing_slots.setdefault(dow, []).append(
+            {
+                "start_minute": start_minute,
+                "duration_minutes": int(row[2]),
+                "arena_id": arena_id,
+            }
+        )
+        # ``hours`` / ``arena_id`` below are the legacy shape, kept one release so a Mini App
+        # still running the previous script keeps rendering a week instead of an empty grid.
+        # Lossy by nature — that is why the client prefers ``slots``.
+        existing.setdefault(dow, []).append(start_minute // 60)
+        if arena_id is not None and dow not in existing_day_arena:
+            existing_day_arena[dow] = arena_id
 
     # Candidate arenas for the picker: platform-wide (small dataset — this is a single-region
     # product), each with its real grid so the client can render the right hour labels and lock
@@ -7900,7 +7999,12 @@ async def get_trainer_onboarding_quick_setup(
 
     trainer = await get_trainer(session, trainer_id) or {}
     first_name = ((trainer.get("profile") or {}).get("first_name") or "").strip()
-    distinct_arenas_in_week = {a for a in existing_day_arena.values()}
+    distinct_arenas_in_week = {
+        s["arena_id"]
+        for rows in existing_slots.values()
+        for s in rows
+        if s["arena_id"] is not None
+    }
 
     return {
         "trainer_id": trainer_id,
@@ -7909,11 +8013,16 @@ async def get_trainer_onboarding_quick_setup(
         "selected_service_ids": selected,
         "week": (
             [
-                {"day_of_week": d, "hours": h, "arena_id": existing_day_arena.get(d)}
-                for d, h in sorted(existing.items())
+                {
+                    "day_of_week": d,
+                    "hours": sorted(set(existing.get(d, []))),
+                    "arena_id": existing_day_arena.get(d),
+                    "slots": existing_slots[d],
+                }
+                for d in sorted(existing_slots)
             ]
-            if existing
-            else [{**row, "arena_id": None} for row in suggested_week()]
+            if existing_slots
+            else [{**row, "arena_id": None, "slots": []} for row in suggested_week()]
         ),
         "week_is_suggestion": not existing,
         "already_done": bool(existing),
@@ -8035,6 +8144,9 @@ async def webapp_trainer_onboarding_checklist(
     data["next_step"] = resolve_trainer_next_step(
         data, catalog_invite_dismissed=bool(data.get("catalog_invite_dismissed"))
     )
+    from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
+
+    data["active_hint_snoozes"] = list((await get_active_snoozes(session, trainer_id)).keys())
     return data
 
 
@@ -8074,6 +8186,33 @@ async def webapp_trainer_dismiss_next_step(
         {"tid": trainer_id},
     )
     await session.commit()
+    return {"ok": True}
+
+
+class TrainerRhythmHintDismissBody(BaseModel):
+    hint_id: str
+
+
+@router.post("/trainer/hub/rhythm-hint/dismiss")
+async def webapp_trainer_dismiss_rhythm_hint(
+    body: TrainerRhythmHintDismissBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Server-side «Не сейчас» for a hub rhythm hint (TASK-029) — distinct from the catalog
+    invite's dismiss above: different table, different id namespace, always-urgent hints
+    (open_loop_no_next, slots_this_week) are rejected on principle, not just by omission.
+    """
+    from src.application.trainer_hint_dismissal_use_cases import dismiss_rhythm_hint
+
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
+    try:
+        await dismiss_rhythm_hint(session, trainer_id, body.hint_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"ok": True}
 
 
