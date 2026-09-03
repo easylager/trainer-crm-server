@@ -1,8 +1,8 @@
 ---
 task_id: TASK-041
 title: Прошедшие записи сегодняшнего дня скрыты без повторного клика
-status: READY
-phase: estimate
+status: COMPLETE
+phase: review
 priority: HIGH
 created_at: 2026-09-03
 updated_at: 2026-09-03
@@ -64,21 +64,32 @@ updated_at: 2026-09-03
 прошедшим временем окончания — эта запись видна в календаре сразу, без клика по дню.
 Requirement: CONFIRMED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: браузерная проверка (Playwright, замоканный Telegram WebApp init_data, throwaway
+активный тестовый тренер) — слот сегодня 00:00–01:00 (уже завершён), первая же загрузка
+расписания без взаимодействия: booking видна (`[data-booking-id]` найден сразу).
+Verified at: uncommitted working tree, 2026-09-04
 
 ### AC-002
 Прошедшие дни **предыдущих** дней недели (не сегодня) по-прежнему скрыты до клика по
 нижней полоске — поведение не регрессирует.
 Requirement: CONFIRMED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: диф `scheduleStripDayNeedsPastReveal` не менял ветку `dateStr < todayStr` —
+условие и тело идентичны до/после правки (единственное изменение — слияние
+`dateStr > todayStr` в `dateStr >= todayStr`, что затрагивает только `dateStr === todayStr`).
+Verified at: uncommitted working tree, 2026-09-04
 
 ### AC-003
 Нижняя полоска дней не помечает сегодняшний день как «нужно раскрыть», раз всё уже
 показано.
 Requirement: INFERRED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: `scheduleStripDayNeedsPastReveal` теперь возвращает `false` для `dateStr >= todayStr`
+безусловно — сегодняшний день никогда не помечается «нужно раскрыть».
+Verified at: uncommitted working tree, 2026-09-04
 
 ## Technical Plan
 
@@ -96,8 +107,19 @@ Scope: filterOutPastSlots, scheduleStripDayNeedsPastReveal.
 Covers: AC-001, AC-002, AC-003
 Verification: manual (браузер)
 Estimate: 1
-Status: READY
+Status: DONE
 
 ## Next Action
 
-Реализовать S1, проверить вручную (текущая дата/время близко к концу тестовой записи).
+Задача завершена.
+
+## Execution History
+
+- **TASK_CREATED** — план и слайсы готовы (заведена 2026-09-03 параллельной сессией на
+  `wip/schedule-editor-010-042`, восстановлена в `master` 2026-09-04).
+- 2026-09-04 | реализация перенесена из `wip/schedule-editor-010-042` (совпадает 1-в-1 с
+  Technical Plan): `filterOutPastSlots`, `scheduleStripDayNeedsPastReveal`.
+- 2026-09-04 | браузерная верификация (Playwright, замоканный HMAC-подписанный Telegram
+  init_data, throwaway тестовый тренер) — 3/3 AC VERIFIED. Тестовые данные удалены после.
+- 2026-09-04 | REVIEW clean — диф ровно 2 функции, без побочных изменений.
+- 2026-09-04 | COMPLETE

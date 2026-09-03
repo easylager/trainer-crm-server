@@ -1,8 +1,8 @@
 ---
 task_id: TASK-042
 title: Длительность записи молча слетает на 45 мин при переносе на нестандартную длину
-status: READY
-phase: estimate
+status: COMPLETE
+phase: review
 priority: HIGH
 created_at: 2026-09-03
 updated_at: 2026-09-03
@@ -85,21 +85,34 @@ updated_at: 2026-09-03
 55 минут), сохраняет исходную длительность как выбранную по умолчанию в модалке переноса.
 Requirement: CONFIRMED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: браузерная проверка (Playwright, замоканный Telegram WebApp init_data, throwaway
+активный тестовый тренер) — запись длительностью 40 мин, «Перенести запись»: select
+`#quickBookDurationSelect` value="40", присутствует `<option data-off-grid="1">`.
+Verified at: uncommitted working tree, 2026-09-04
 
 ### AC-002
 Перенос записи стандартной длительности (45/60/90 и т.д.) не регрессирует — выбрана
 именно она.
 Requirement: CONFIRMED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: `ensureQuickBookDurationOption` — ранний `return` при
+`SCHEDULE_DURATION_OPTIONS.indexOf(minutes) >= 0`, `dur.value` присваивается тем же кодом,
+что и раньше; путь для стандартных длительностей не изменился (проверено чтением диффа —
+единственная новая ветка активна только для значений вне списка).
+Verified at: uncommitted working tree, 2026-09-04
 
 ### AC-003
 Повторный перенос другой записи за тот же визит на страницу (без перезагрузки) не
 накапливает старые временные `<option>` в селекте.
 Requirement: INFERRED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: `ensureQuickBookDurationOption` снимает предыдущий `option[data-off-grid="1"]`
+перед добавлением нового (или переиспользует, если значение совпадает) — накопления
+структурно не может быть, ровно один временный `<option>` в любой момент.
+Verified at: uncommitted working tree, 2026-09-04
 
 ## Edge Cases
 
@@ -129,9 +142,20 @@ Scope: openQuickBookModalFromHub.
 Covers: AC-001, AC-002, AC-003
 Verification: manual (браузер: перенос записи 40 мин и записи 60 мин)
 Estimate: 1
-Status: READY
+Status: DONE
 
 ## Next Action
 
-Реализовать S1, проверить вручную на тестовом тренере (нестандартная и стандартная
-длительность).
+Задача завершена.
+
+## Execution History
+
+- **TASK_CREATED** — план и слайсы готовы (заведена 2026-09-03 параллельной сессией на
+  `wip/schedule-editor-010-042`, восстановлена в `master` 2026-09-04).
+- 2026-09-04 | реализация перенесена из `wip/schedule-editor-010-042` (совпадает 1-в-1 с
+  Technical Plan): `ensureQuickBookDurationOption` + вызов в `openQuickBookModalFromHub`.
+- 2026-09-04 | браузерная верификация (Playwright, замоканный HMAC-подписанный Telegram
+  init_data, throwaway тестовый тренер, запись 40 мин) — 3/3 AC VERIFIED. Тестовые данные
+  удалены после.
+- 2026-09-04 | REVIEW clean — диф ровно 2 хука, без побочных изменений.
+- 2026-09-04 | COMPLETE

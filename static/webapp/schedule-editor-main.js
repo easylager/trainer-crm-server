@@ -3654,6 +3654,24 @@
 
       var SCHEDULE_DURATION_OPTIONS = [45, 50, 60, 70, 75, 90, 105, 120, 180];
 
+      /**
+       * Reschedule (TASK-042) must preserve the exact original duration, even off-grid — unlike
+       * new bookings, snapping to the nearest fixed option would silently change an already
+       * agreed session length. Injects a single temporary option so `.value = minutes` actually
+       * selects it instead of being silently ignored by the browser.
+       */
+      function ensureQuickBookDurationOption(selectEl, minutes) {
+        var stale = selectEl.querySelector('option[data-off-grid="1"]');
+        if (stale && parseInt(stale.value, 10) !== minutes) stale.remove();
+        if (SCHEDULE_DURATION_OPTIONS.indexOf(minutes) >= 0) return;
+        if (selectEl.querySelector('option[value="' + minutes + '"]')) return;
+        var opt = document.createElement('option');
+        opt.value = String(minutes);
+        opt.textContent = minutes + ' мин';
+        opt.setAttribute('data-off-grid', '1');
+        selectEl.appendChild(opt);
+      }
+
       /** Map profile minutes to nearest option in #slotDurationSelect / quick-book. */
       function normalizeDurationToScheduleSelect(minutes) {
         var allowed = SCHEDULE_DURATION_OPTIONS;
@@ -5463,13 +5481,11 @@
         return end.getTime() < Date.now();
       }
 
-      /** Hide past calendar days and today's slots that already ended (local time). */
+      /** Hide past calendar days; today's slots stay visible even after they end. */
       function filterOutPastSlots(slots) {
         var todayStr = dateToStr(new Date());
         return slots.filter(function(s) {
-          if (s.slot_date < todayStr) return false;
-          if (s.slot_date > todayStr) return true;
-          return !isSlotEndedInPast(s);
+          return s.slot_date >= todayStr;
         });
       }
 
@@ -5506,14 +5522,9 @@
         if (isEntireWeekInPast(state.weekStart)) return false;
         if (state.showPastThisWeek) return false;
         var todayStr = dateToStr(new Date());
-        if (dateStr > todayStr) return false;
-        if (dateStr < todayStr) {
-          return (state.slots || []).some(function(s) {
-            return s.slot_date === dateStr;
-          });
-        }
+        if (dateStr >= todayStr) return false;
         return (state.slots || []).some(function(s) {
-          return s.slot_date === todayStr && isSlotEndedInPast(s);
+          return s.slot_date === dateStr;
         });
       }
 
@@ -6293,7 +6304,9 @@
         var dur = document.getElementById('quickBookDurationSelect');
         if (dur) {
           var pDur = parseInt(prefill.durationMinutes, 10);
-          dur.value = String(!isNaN(pDur) && pDur >= 15 ? pDur : (state.defaultSlotDurationMinutes || 45));
+          var wantedDur = !isNaN(pDur) && pDur >= 15 ? pDur : (state.defaultSlotDurationMinutes || 45);
+          ensureQuickBookDurationOption(dur, wantedDur);
+          dur.value = String(wantedDur);
         }
         syncDurationUIFromScheduleGrid();
         setQuickBookDatetimeLoading(true);
