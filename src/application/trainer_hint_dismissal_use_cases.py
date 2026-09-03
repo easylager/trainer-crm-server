@@ -32,6 +32,15 @@ DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS: dict[str, int] = {
     "template": 10,
     "client_notes": 10,
     "open_loop_no_telegram": 10,
+    # TASK-030 «фича в нужный момент»: 30 дней, не 3/10 — EDGE-004/EDGE-003 в задаче
+    # прямо требуют «глушить надолго», иначе постоянно истинное условие (тренер
+    # принципиально не пользуется абонементами) превращает подсказку в фоновый
+    # раздражитель на той же неделе.
+    "feature_moment_recurring_client": 30,
+    "feature_moment_pass": 30,
+    "feature_moment_groups": 30,
+    "feature_moment_stats": 30,
+    "feature_moment_certificates": 30,
 }
 
 DISMISSIBLE_HINT_IDS: frozenset[str] = frozenset(DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS)

@@ -1,8 +1,9 @@
 """Unit tests for trainer hub unified action inbox builder (Wave B)."""
-from datetime import datetime
+from datetime import datetime, time
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from src.application.trainer_feature_moments import ITEM_RECURRING_CLIENT
 from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
 from src.application.trainer_hub_action_inbox import (
     HUB_RHYTHM_GROWTH_MAX,
@@ -140,6 +141,92 @@ def test_action_inbox_pending_and_requests() -> None:
     assert pending["booking_ids"] == [101, 102]
     assert pending["primary_action"] == "batch_confirm"
     assert "open_loop_pending" not in kinds
+
+
+def _feature_moment_facts_recurring_client() -> dict:
+    return {
+        "recurring_client": {
+            "client_id": 1,
+            "client_name": "Анна",
+            "day_of_week": 4,
+            "start_time": time(18, 0),
+            "count": 3,
+        },
+        "pass": None,
+        "groups": None,
+        "stats": None,
+        "certificates": None,
+    }
+
+
+def test_feature_moment_card_appears_when_facts_present() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    assert ITEM_RECURRING_CLIENT in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_absent_without_facts() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=None,
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_never_outranks_pending_or_requests() -> None:
+    """AC-005: обучающая карточка никогда не опережает срочное/операционное."""
+    onboarding = {
+        "schedule_unlocked": True,
+        "has_crm_subscription_access": True,
+        "open_loop_pending_bookings_count": 1,
+    }
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=1,
+        bookings=None,
+        schedule_unlocked=True,
+        pending_booking_ids=[555],
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    ids = [it["id"] for it in inbox["items"]]
+    assert ids.index("pending_bookings") < ids.index(ITEM_RECURRING_CLIENT)
+    assert ids.index("unanswered_requests") < ids.index(ITEM_RECURRING_CLIENT)
+
+
+def test_feature_moment_card_respects_active_snoozes() -> None:
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": True}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+        active_hint_snoozes={ITEM_RECURRING_CLIENT: "irrelevant"},
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
+
+
+def test_feature_moment_card_absent_in_lead_mode() -> None:
+    """AC-007: без подписки обучающая карточка не показывается."""
+    onboarding = {"schedule_unlocked": True, "has_crm_subscription_access": False}
+    inbox = build_trainer_hub_action_inbox(
+        onboarding=onboarding,
+        requests_count=0,
+        bookings=None,
+        schedule_unlocked=True,
+        feature_moment_facts=_feature_moment_facts_recurring_client(),
+    )
+    assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
 
 
 def test_early_practice_gets_no_catalog_hub_nudge() -> None:

@@ -120,6 +120,48 @@ body.client-bookings-body {
 
 .booking-card .badge.pending { background: rgba(255, 149, 0, 0.2); color: #ff9500; }
 .booking-card .badge.confirmed { background: rgba(52, 199, 89, 0.2); color: #34c759; }
+.booking-card .badge.completed { background: rgba(10, 132, 255, 0.16); color: #0a84ff; }
+.booking-card .badge.cancelled,
+.booking-card .badge.declined,
+.booking-card .badge.trainer_removed { background: rgba(142, 142, 147, 0.2); color: #8e8e93; }
+.booking-card .badge.no_show,
+.booking-card .badge.payment_dispute { background: rgba(255, 59, 48, 0.16); color: #ff3b30; }
+
+.cb-mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 12px;
+  background: rgba(var(--accent-rgb), 0.06);
+  border-radius: 12px;
+}
+
+.cb-mode-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tg-theme-hint-color);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cb-mode-tab.active {
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.cb-trainer-chips {
+  margin: 0 0 12px;
+}
+
+.cb-load-more {
+  margin: 4px 0 4px;
+}
 
 .booking-card .btn-cancel {
   flex-shrink: 0;

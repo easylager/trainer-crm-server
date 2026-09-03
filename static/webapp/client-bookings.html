@@ -5,21 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои записи</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202608315"></script>
-  <script src="mini-app-phone-field.js?v=202608315"></script>
-  <link rel="stylesheet" href="theme.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
+  <script src="client-mini-app-theme.js?v=202609031"></script>
+  <script src="mini-app-phone-field.js?v=202609031"></script>
+  <link rel="stylesheet" href="theme.css?v=202609031" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609031" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609031" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
-  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
-<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <script src="mini-app-client-shell.js?v=202608315"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609031"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202609031" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609031" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202609031" />
+<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609031" />
+  <script src="mini-app-client-shell.js?v=202609031"></script>
   <script>
     (function () {
       try {
@@ -44,6 +44,11 @@
   </div>
 
   <div id="screenList" data-screen class="active">
+    <div class="cb-mode-tabs" id="cbModeTabs">
+      <button type="button" class="cb-mode-tab active" data-mode="upcoming" id="cbTabUpcoming">Предстоящие</button>
+      <button type="button" class="cb-mode-tab" data-mode="history" id="cbTabHistory">История</button>
+    </div>
+    <div class="filter-chips cb-trainer-chips" id="cbTrainerChips" style="display:none;"></div>
     <div id="listContent">
       <div class="cb-booking-skel-list" role="status" aria-busy="true" aria-label="Загрузка записей">
         <div class="cb-booking-skel-card client-skel-shimmer" aria-hidden="true">
@@ -241,9 +246,10 @@
         } catch (e2) { /* */ }
       }
       function apiUrl(path) {
-        var base = '/api/webapp';
+        var url = '/api/webapp' + path;
         var id = initData();
-        return base + path + (id ? '?init_data=' + encodeURIComponent(id) : '');
+        if (id) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(id);
+        return url;
       }
       function headers() {
         var h = { 'Content-Type': 'application/json' };
@@ -251,7 +257,12 @@
         return h;
       }
 
-      var state = { days: [], cancelBookingId: null, currentBooking: null, returnToHub: false };
+      var state = {
+        days: [], cancelBookingId: null, currentBooking: null, returnToHub: false,
+        mode: 'upcoming',
+        historyDays: [], historyOffset: 0, historyHasMore: false, historyLoading: false, historyLoaded: false,
+        trainerFilter: null, trainerOptions: []
+      };
       var bookingsFetchPromise = null;
       var bookingsHydratedFromWarm = false;
       var bookingsWarmFingerprint = '';
@@ -510,7 +521,17 @@
           if (day.bookings) {
             for (var j = 0; j < day.bookings.length; j++) {
               if (day.bookings[j].id === id) {
-                return { booking: day.bookings[j], dayDate: day.date, dayLabel: day.day_label };
+                return { booking: day.bookings[j], dayDate: day.date, dayLabel: day.day_label, isHistory: false };
+              }
+            }
+          }
+        }
+        for (var hi = 0; hi < state.historyDays.length; hi++) {
+          var hday = state.historyDays[hi];
+          if (hday.bookings) {
+            for (var hj = 0; hj < hday.bookings.length; hj++) {
+              if (hday.bookings[hj].id === id) {
+                return { booking: hday.bookings[hj], dayDate: hday.date, dayLabel: hday.day_label, isHistory: true };
               }
             }
           }
@@ -607,8 +628,7 @@
           document.getElementById('detailServiceNotice').textContent = '';
         }
         
-        var statusText = (booking.status === 'confirmed') ? 'Подтверждено' : 'Ожидает подтверждения';
-        document.getElementById('detailStatus').textContent = statusText;
+        document.getElementById('detailStatus').textContent = bookingStatusMeta(booking.status).text;
         
         // Кнопки действий
         var mapBtn = document.getElementById('detailMapBtn');
@@ -671,7 +691,17 @@
         } else {
           contactBtn.style.display = 'none';
         }
-        
+
+        var cancelBtn = document.getElementById('detailCancelBtn');
+        var policyHint = document.getElementById('detailPolicyHint');
+        if (result.isHistory) {
+          cancelBtn.style.display = 'none';
+          if (policyHint) policyHint.style.display = 'none';
+        } else {
+          cancelBtn.style.display = '';
+          if (policyHint) policyHint.style.display = '';
+        }
+
         showScreen('screenDetail');
       };
 
@@ -756,6 +786,8 @@
         return startBookingsFetch()
           .then(function(data) {
             var days = data.days || [];
+            state.trainerOptions = data.trainer_options || [];
+            renderTrainerChips();
             var freshFp = fingerprintBookingsDays(days);
             if (window.ClientShell && window.ClientShell.writeBookingsWarmCache) {
               window.ClientShell.writeBookingsWarmCache({ days: days });
@@ -768,10 +800,10 @@
             state.days = days;
             bookingsWarmFingerprint = freshFp;
             if (days.length === 0) {
-              if (!deeplinkOpen) renderEmptyBookingsList();
+              if (!deeplinkOpen && state.mode === 'upcoming') renderEmptyBookingsList();
               return;
             }
-            if (!deeplinkOpen) {
+            if (!deeplinkOpen && state.mode === 'upcoming') {
               renderAllBookings();
               document.body.classList.add('bookings-body--revealed');
             }
@@ -779,14 +811,178 @@
           })
           .catch(function() {
             if (bookingsHydratedFromWarm) return;
-            document.getElementById('listContent').innerHTML =
-              '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
+            if (state.mode === 'upcoming') {
+              document.getElementById('listContent').innerHTML =
+                '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
+            }
           });
       }
 
-      function bookingCardHtml(b) {
-        var statusClass = (b.status || '') === 'confirmed' ? 'confirmed' : 'pending';
-        var statusText = statusClass === 'confirmed' ? 'Подтверждено' : 'Ожидает подтверждения';
+      function renderTrainerChips() {
+        var wrap = document.getElementById('cbTrainerChips');
+        if (!wrap) return;
+        var opts = state.trainerOptions || [];
+        if (opts.length < 2) {
+          wrap.style.display = 'none';
+          wrap.innerHTML = '';
+          return;
+        }
+        var html = '<button type="button" class="filter-chip' + (state.trainerFilter == null ? ' selected' : '') + '" data-trainer-id="">Все</button>';
+        for (var i = 0; i < opts.length; i++) {
+          var o = opts[i];
+          var sel = state.trainerFilter === o.trainer_id ? ' selected' : '';
+          html += '<button type="button" class="filter-chip' + sel + '" data-trainer-id="' + o.trainer_id + '">' + escapeHtml(o.trainer_name) + '</button>';
+        }
+        wrap.innerHTML = html;
+        wrap.style.display = 'flex';
+        wrap.querySelectorAll('.filter-chip').forEach(function(chip) {
+          chip.onclick = function() {
+            var idRaw = chip.getAttribute('data-trainer-id');
+            state.trainerFilter = idRaw ? parseInt(idRaw, 10) : null;
+            renderTrainerChips();
+            if (state.mode === 'upcoming') {
+              renderAllBookings();
+            } else {
+              loadHistory(true);
+            }
+          };
+        });
+      }
+
+      function mergeHistoryDays(newDays) {
+        for (var i = 0; i < newDays.length; i++) {
+          var nd = newDays[i];
+          var last = state.historyDays[state.historyDays.length - 1];
+          if (last && last.date === nd.date) {
+            last.bookings = last.bookings.concat(nd.bookings);
+          } else {
+            state.historyDays.push(nd);
+          }
+        }
+      }
+
+      function loadHistory(reset) {
+        if (state.historyLoading) return Promise.resolve();
+        if (reset) {
+          state.historyOffset = 0;
+          state.historyDays = [];
+          state.historyLoaded = false;
+          renderBookingsListSkeleton(2);
+        }
+        state.historyLoading = true;
+        var qs = 'offset=' + state.historyOffset + '&limit=20';
+        if (state.trainerFilter != null) qs += '&trainer_id=' + state.trainerFilter;
+        return getJson(apiUrl('/client/bookings/history?' + qs))
+          .then(function(data) {
+            var newDays = data.days || [];
+            var count = 0;
+            for (var i = 0; i < newDays.length; i++) count += (newDays[i].bookings || []).length;
+            mergeHistoryDays(newDays);
+            state.historyOffset += count;
+            state.historyHasMore = !!data.has_more;
+            state.historyLoaded = true;
+            state.historyLoading = false;
+            if (state.mode === 'history') renderHistoryList();
+          })
+          .catch(function() {
+            state.historyLoading = false;
+            if (!state.historyLoaded) {
+              if (state.mode === 'history') {
+                document.getElementById('listContent').innerHTML =
+                  '<div class="error">Не удалось загрузить историю. Попробуйте обновить страницу.</div>';
+              }
+              return;
+            }
+            var moreBtn = document.getElementById('cbLoadMoreHistory');
+            if (moreBtn) {
+              moreBtn.disabled = false;
+              moreBtn.textContent = 'Показать ещё';
+            }
+            showAppToast('Не удалось загрузить ещё записи. Попробуйте ещё раз.', true);
+          });
+      }
+
+      function renderHistoryList() {
+        var listEl = document.getElementById('listContent');
+        var days = state.historyDays;
+        if (!days.length) {
+          if (window.ClientShell && typeof window.ClientShell.renderEmptyState === 'function') {
+            window.ClientShell.renderEmptyState(listEl, {
+              icon: window.ClientShell.TAB_ICONS.bookings,
+              title: state.trainerFilter != null ? 'Нет записей с выбранным тренером' : 'Пока нет прошедших записей',
+              hint: state.trainerFilter != null ? '' : 'Здесь появятся ваши тренировки после первого посещения.',
+            });
+          } else {
+            listEl.innerHTML = '<div class="empty">Пока нет прошедших записей.</div>';
+          }
+          return;
+        }
+        var html = '';
+        for (var d = 0; d < days.length; d++) {
+          var day = days[d];
+          if (!day.bookings || !day.bookings.length) continue;
+          html += '<div class="cb-date-group">';
+          html += '<div class="cb-date-group-label">' + escapeHtml(formatDate(day.date));
+          if (day.day_label) {
+            html += ' <span class="cb-date-group-weekday">(' + escapeHtml(day.day_label) + ')</span>';
+          }
+          html += '</div>';
+          for (var k = 0; k < day.bookings.length; k++) {
+            html += bookingCardHtml(day.bookings[k], { isHistory: true });
+          }
+          html += '</div>';
+        }
+        if (state.historyHasMore) {
+          html += '<button type="button" class="btn-secondary btn-block cb-load-more" id="cbLoadMoreHistory">Показать ещё</button>';
+        }
+        listEl.innerHTML = html;
+        var moreBtn = document.getElementById('cbLoadMoreHistory');
+        if (moreBtn) {
+          moreBtn.onclick = function() {
+            moreBtn.disabled = true;
+            moreBtn.textContent = 'Загрузка…';
+            loadHistory(false);
+          };
+        }
+      }
+
+      function switchMode(mode) {
+        if (state.mode === mode) return;
+        state.mode = mode;
+        document.getElementById('cbTabUpcoming').classList.toggle('active', mode === 'upcoming');
+        document.getElementById('cbTabHistory').classList.toggle('active', mode === 'history');
+        if (mode === 'upcoming') {
+          if (state.days.length === 0) {
+            renderEmptyBookingsList();
+          } else {
+            renderAllBookings();
+          }
+        } else if (!state.historyLoaded) {
+          loadHistory(true);
+        } else {
+          renderHistoryList();
+        }
+      }
+
+      function bookingStatusMeta(status) {
+        switch (status) {
+          case 'confirmed': return { cls: 'confirmed', text: 'Подтверждено' };
+          case 'pending': return { cls: 'pending', text: 'Ожидает подтверждения' };
+          case 'completed': return { cls: 'completed', text: 'Проведено' };
+          case 'cancelled': return { cls: 'cancelled', text: 'Отменено' };
+          case 'declined': return { cls: 'declined', text: 'Отклонено' };
+          case 'no_show': return { cls: 'no_show', text: 'Неявка' };
+          case 'payment_dispute': return { cls: 'payment_dispute', text: 'Спор по оплате' };
+          case 'trainer_removed': return { cls: 'trainer_removed', text: 'Удалено тренером' };
+          default: return { cls: 'pending', text: 'Статус уточняется' };
+        }
+      }
+
+      function bookingCardHtml(b, opts) {
+        opts = opts || {};
+        var meta = bookingStatusMeta(b.status);
+        var statusClass = meta.cls;
+        var statusText = meta.text;
         var arena = (b.arena_name || '').trim() || null;
         var address = (b.arena_address || '').trim() || null;
         var mapLink = b.map_link || null;
@@ -811,19 +1007,24 @@
         html += '<span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span>';
         html += '</div>';
         html += '</div>';
-        html += '<button type="button" class="btn-cancel" data-id="' + b.id + '" aria-label="Отменить запись" onclick="event.stopPropagation();">';
-        html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-        html += '</button></div>';
+        if (!opts.isHistory) {
+          html += '<button type="button" class="btn-cancel" data-id="' + b.id + '" aria-label="Отменить запись" onclick="event.stopPropagation();">';
+          html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+          html += '</button>';
+        }
+        html += '</div>';
         return html;
       }
 
       function renderAllBookings() {
         var days = state.days;
+        var filterId = state.trainerFilter;
         var html = '';
         var anyCard = false;
         for (var d = 0; d < days.length; d++) {
           var day = days[d];
-          if (!day.bookings || day.bookings.length === 0) continue;
+          var bookings = (day.bookings || []).filter(function(b) { return filterId == null || b.trainer_id === filterId; });
+          if (!bookings.length) continue;
           anyCard = true;
           html += '<div class="cb-date-group">';
           html += '<div class="cb-date-group-label">' + escapeHtml(formatDate(day.date));
@@ -831,13 +1032,15 @@
             html += ' <span class="cb-date-group-weekday">(' + escapeHtml(day.day_label) + ')</span>';
           }
           html += '</div>';
-          for (var k = 0; k < day.bookings.length; k++) {
-            html += bookingCardHtml(day.bookings[k]);
+          for (var k = 0; k < bookings.length; k++) {
+            html += bookingCardHtml(bookings[k]);
           }
           html += '</div>';
         }
         if (!anyCard) {
-          html = '<div class="empty">У вас пока нет записей.<br>Выберите тренера в каталоге и нажмите «Записаться».</div>';
+          html = filterId != null
+            ? '<div class="empty">Нет записей с выбранным тренером.</div>'
+            : '<div class="empty">У вас пока нет записей.<br>Выберите тренера в каталоге и нажмите «Записаться».</div>';
         }
         document.getElementById('listContent').innerHTML = html;
         document.querySelectorAll('.booking-card .btn-cancel').forEach(function(btn) {
@@ -906,6 +1109,9 @@
       });
       window.addEventListener('popstate', syncClientBookingsHeaderBack);
 
+      document.getElementById('cbTabUpcoming').onclick = function() { switchMode('upcoming'); };
+      document.getElementById('cbTabHistory').onclick = function() { switchMode('history'); };
+
       (function bootstrapBookingsUiFast() {
         var ctx = getBookingsNavCtx();
         if (ctx.openBookingId != null) {
@@ -936,6 +1142,6 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202608315"></script>
+  <script src="mini-app-client-home.js?v=202609031"></script>
 </body>
 </html>

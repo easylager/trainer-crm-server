@@ -114,3 +114,32 @@ async def test_list_trainer_issued_items_merges_pass_and_certificate(db_session:
     page2 = await list_trainer_issued_items(db_session, trainer_id, limit=1, offset=1)
     assert len(page2["items"]) == 1
     assert page2["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_trainer_issued_items_puts_active_before_closed_regardless_of_date(
+    db_session: AsyncSession,
+) -> None:
+    trainer_id, client_id, pass_product_id = await _seed_trainer_client(db_session)
+    # Closed pass issued more recently than the active one — a pure issued_at DESC sort
+    # would put it first; TASK-039 requires active passes to stay above closed ones.
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO pass_instances (
+                client_id, pass_product_id, sessions_remaining, sessions_total, price_cents,
+                status, issued_at
+            )
+            VALUES
+                (:cid, :pid, 0, 8, 8000, 'used_up', now()),
+                (:cid, :pid, 3, 8, 8000, 'active', now() - interval '10 days')
+            """
+        ),
+        {"cid": client_id, "pid": pass_product_id},
+    )
+    await db_session.commit()
+
+    data = await list_trainer_issued_items(db_session, trainer_id)
+    assert data["total"] == 2
+    buckets = [it["status_bucket"] for it in data["items"]]
+    assert buckets == ["active", "closed"]

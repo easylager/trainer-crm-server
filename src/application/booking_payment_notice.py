@@ -14,7 +14,7 @@ API load or reminder send. Already delivered Telegram pushes are historical and 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -315,6 +315,75 @@ async def classify_booking_expected_payment_class(
         session, [(int(booking_id), int(trainer_id))]
     )
     return pc_map.get(int(booking_id))
+
+
+async def resolve_pass_instance_for_booking(
+    session: AsyncSession,
+    booking_id: int,
+    client_id: int,
+    trainer_id: int,
+) -> dict[str, Any] | None:
+    """
+    Concrete pass instance covering this one booking, for the booking detail card
+    (TASK-003/TASK-040): the actually redeemed instance if the visit already happened,
+    otherwise the same FIFO queue projection that made classify_booking_expected_payment_class
+    say "PASS" for it. Mirrors the pass-only branch of _allocate_expected_payment_classes —
+    keep both in sync if the pool priority rule ever changes. None when this booking isn't
+    (and won't be) pass-covered.
+    """
+    r = await session.execute(
+        text("SELECT pass_instance_id FROM pass_redemptions WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    row = r.fetchone()
+    instance_id: int | None = int(row[0]) if row else None
+
+    if instance_id is None:
+        rows = await _load_upcoming_payment_queue_for_client_trainer(session, client_id, trainer_id)
+        pool = await _load_pass_pool_for_client_trainer(session, client_id, trainer_id)
+        for queue_row in rows:
+            if queue_row.has_pass_redemption or queue_row.has_cert_credit:
+                continue
+            entry = next(
+                (
+                    e
+                    for e in pool
+                    if e.remaining > 0
+                    and _pass_entry_covers_booking(e, queue_row.service_id, queue_row.price_tier_kind)
+                ),
+                None,
+            )
+            if entry is None:
+                if queue_row.booking_id == booking_id:
+                    return None
+                continue
+            entry.remaining -= 1
+            if queue_row.booking_id == booking_id:
+                instance_id = entry.instance_id
+                break
+        if instance_id is None:
+            return None
+
+    r2 = await session.execute(
+        text(
+            """
+            SELECT pi.sessions_remaining, pi.sessions_total, p.name
+            FROM pass_instances pi
+            JOIN trainer_pass_products p ON p.id = pi.pass_product_id
+            WHERE pi.id = :id
+            """
+        ),
+        {"id": instance_id},
+    )
+    row2 = r2.fetchone()
+    if not row2:
+        return None
+    return {
+        "pass_instance_id": instance_id,
+        "sessions_remaining": int(row2[0] or 0),
+        "sessions_total": int(row2[1] or 0),
+        "product_name": (row2[2] or "").strip() or "Абонемент",
+    }
 
 
 async def load_pass_sessions_remaining_after_booking(

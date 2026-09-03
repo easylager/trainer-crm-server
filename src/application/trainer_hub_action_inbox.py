@@ -453,22 +453,6 @@ def _build_hub_rhythm_inbox_candidates(
             )
         )
 
-    if d.get("has_completed_booking"):
-        out.append(
-            _inbox_item(
-                item_id="client_notes",
-                kind="rhythm",
-                priority=40,
-                title=(
-                    "После завершённой записи можно кратко зафиксировать заметки в карточке клиента — "
-                    "так проще вести следующие занятия."
-                ),
-                primary_label="Профиль клиента",
-                primary_action="client_notes",
-                dismissible=True,
-            )
-        )
-
     if (
         open_no_tg > 0
         and not any(x["id"] == "open_loop_no_next" for x in out)
@@ -588,11 +572,15 @@ def build_trainer_hub_action_inbox(
     center_inbox_pending: int = 0,
     show_center_inbox: bool = False,
     active_hint_snoozes: dict[str, Any] | None = None,
+    feature_moment_facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build unified hub inbox payload for bootstrap and inbox-count endpoint.
     Operational items require schedule_unlocked (active or TTV booking-ready).
     ``active_hint_snoozes`` — see ``_build_hub_rhythm_inbox_candidates`` (TASK-029).
+    ``feature_moment_facts`` — see ``trainer_feature_moments.fetch_trainer_feature_moment_facts``
+    (TASK-030); caller fetches it once (or omits it entirely when the gate the resolver
+    would apply anyway is already known false) and passes the raw facts through here.
     """
     items: list[dict[str, Any]] = []
     pending_count = 0
@@ -669,6 +657,25 @@ def build_trainer_hub_action_inbox(
         items.extend(
             _build_hub_rhythm_inbox_candidates(onboarding, active_snoozes=active_hint_snoozes)
         )
+
+    if onboarding:
+        from src.application.trainer_feature_moments import resolve_trainer_feature_moment
+
+        dismissed = frozenset((active_hint_snoozes or {}).keys())
+        moment = resolve_trainer_feature_moment(onboarding, feature_moment_facts, dismissed_ids=dismissed)
+        if moment:
+            items.append(
+                _inbox_item(
+                    item_id=moment["item_id"],
+                    kind="rhythm",
+                    priority=50,
+                    title=moment["title"],
+                    subtitle=moment.get("subtitle") or "",
+                    primary_label=moment["primary_label"],
+                    primary_action=moment["primary_action"],
+                    dismissible=True,
+                )
+            )
 
     items.sort(key=lambda x: int(x.get("priority") or 0), reverse=True)
     items = _cap_hub_inbox_rhythm_items(items)

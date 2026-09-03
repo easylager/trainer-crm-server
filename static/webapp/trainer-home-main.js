@@ -369,6 +369,11 @@
         'template',
         'client_notes',
         'open_loop_no_telegram',
+        'feature_moment_recurring_client',
+        'feature_moment_pass',
+        'feature_moment_groups',
+        'feature_moment_stats',
+        'feature_moment_certificates',
       ];
       /** DEC-002/DEC-004: urgent hints are never dismissible, on client or server. */
       var HUB_URGENT_NON_DISMISSIBLE_HINT_IDS = ['open_loop_no_next', 'slots_this_week'];
@@ -1976,6 +1981,30 @@
         }
         if (cand.action === 'trainer_collective_schedule' || cand.action === 'schedule_editor') {
           navigateTo('schedule-editor');
+          return;
+        }
+        if (cand.action === 'trainer_pass_products') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-pass-products');
+          });
+          return;
+        }
+        if (cand.action === 'trainer_groups') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-groups');
+          });
+          return;
+        }
+        if (cand.action === 'trainer_stats') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-stats');
+          });
+          return;
+        }
+        if (cand.action === 'trainer_certificates') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-pass-products?tab=certs');
+          });
           return;
         }
       }

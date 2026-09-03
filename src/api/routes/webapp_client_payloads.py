@@ -10,7 +10,11 @@ from itertools import groupby
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.booking_use_cases import list_bookings_for_client
+from src.application.booking_use_cases import (
+    list_booking_history_for_client,
+    list_bookings_for_client,
+    list_client_booking_trainer_options,
+)
 from src.application.client_request_comment_display import (
     client_request_comment_editable,
     client_request_subtype,
@@ -129,6 +133,41 @@ async def client_bookings_days_payload(session: AsyncSession, telegram_id: int) 
             "bookings": [serialize_client_booking(b) for b in day_bookings],
         })
     return {"days": days_list}
+
+
+async def client_booking_history_days_payload(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+    trainer_id: int | None = None,
+) -> dict:
+    """Shared JSON body for GET /client/bookings/history — same day-grouping as upcoming, plus has_more."""
+    bookings, has_more = await list_booking_history_for_client(
+        session, telegram_id, offset=offset, limit=limit, trainer_id=trainer_id
+    )
+    if not bookings:
+        return {"days": [], "has_more": False}
+
+    days_list = []
+    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
+        day_bookings = list(group)
+        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
+        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
+        day_label = CLIENT_DAYS[dow] if dow < len(CLIENT_DAYS) else ""
+        days_list.append({
+            "date": date_str,
+            "day_label": day_label,
+            "bookings": [serialize_client_booking(b) for b in day_bookings],
+        })
+    return {"days": days_list, "has_more": has_more}
+
+
+async def client_booking_trainer_options_payload(session: AsyncSession, telegram_id: int) -> list[dict]:
+    """Flat trainer list (id + name) for the booking-history/upcoming trainer chips."""
+    options = await list_client_booking_trainer_options(session, telegram_id)
+    return [{"trainer_id": o["trainer_id"], "trainer_name": o["trainer_name"]} for o in options]
 
 
 async def client_requests_list_payload(session: AsyncSession, telegram_id: int) -> dict:
