@@ -224,12 +224,46 @@
         return (state.trainerScheduleArenas || []).length > 1;
       }
 
-      /** 📍 line — same as booking rows, only when the trainer has more than one arena. */
+      /** Стабильный порядковый номер площадки среди арен тренера (по id, не по порядку выбора) —
+          держит различитель клетки/бейджа одинаковым между сессиями и экранами. */
+      function scheduleEditorArenaOrdinal(arenaId) {
+        var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
+        if (aid == null) return 0;
+        var ids = (state.trainerScheduleArenas || [])
+          .map(function(a) { return Number(a.id); })
+          .sort(function(a, b) { return a - b; });
+        var i = ids.indexOf(aid);
+        return i >= 0 ? i : 0;
+      }
+
+      /** Нецветовой различитель площадки (см. AC-005 в онбординге, trainer-onboarding-main.js):
+          1–2 буквы названия — не цвет, тема этого продукта кодирует цветом только действие/состояние. */
+      function scheduleEditorArenaInitial(name) {
+        var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+        return (parts[0] || '').charAt(0).toUpperCase();
+      }
+
+      /** Компактный монограмм-бейдж площадки: буква + плотность заливки тем же тилом
+          (сплошная / контур / штрих, цикл по 3 — см. .arena-mono в mini-app-components.css),
+          тот же приём, что и в онбординге, только без ограничения в 3 площадки. */
+      function scheduleEditorArenaMonogramHtml(arenaId, arenaLabel) {
+        if (!scheduleEditorIsMultiArena()) return '';
+        var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
+        var name = String(arenaLabel || scheduleEditorArenaNameById(aid) || '').trim();
+        if (!name) return '';
+        var initial = scheduleEditorArenaInitial(name);
+        if (!initial) return '';
+        var pat = aid != null ? scheduleEditorArenaOrdinal(aid) % 3 : 0;
+        return '<span class="arena-mono arena-mono--p' + pat + '" aria-hidden="true">' + escapeHtml(initial) + '</span>';
+      }
+
+      /** Несколько связанных площадок — показывает к какой арене относится слот. Одна арена: не показываем. */
       function scheduleEditorSlotVenueLine(s) {
         if (!scheduleEditorIsMultiArena() || !s) return '';
         var v = String(s.venue_label || s.arena_label || scheduleEditorArenaNameById(s.arena_id) || '').trim();
         var vt = v ? escapeHtml(v) : '<span class="venue-muted">не указано</span>';
-        return '<div class="slot-venue">📍 ' + vt + '</div>';
+        return '<div class="slot-venue">' + scheduleEditorArenaMonogramHtml(s.arena_id, v) + vt + '</div>';
       }
 
       /** Compact venue chip for precise-slot tags when multi-arena. */
@@ -241,7 +275,7 @@
         var short = scheduleEditorTruncateArenaLabel(full, 13);
         return (
           '<span class="svc-badge svc-badge--slate schedule-arena-chip" role="status" title="' + escapeHtml(full) + '">' +
-            '<span class="svc-badge-dot" aria-hidden="true"></span>' +
+            scheduleEditorArenaMonogramHtml(aid, full) +
             '<span class="svc-badge-label">' + escapeHtml(short) + '</span>' +
           '</span>'
         );
@@ -3519,6 +3553,19 @@
         if (mod100 < 11 || mod100 > 14) {
           if (mod10 === 1) w = 'слот';
           else if (mod10 >= 2 && mod10 <= 4) w = 'слота';
+        }
+        return String(n) + ' ' + w;
+      }
+
+      /** Russian plural for «N день/дня/дней» — used in the week-apply toast. */
+      function ruDayCountLabel(n) {
+        n = Math.max(0, parseInt(String(n), 10) || 0);
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        var w = 'дней';
+        if (mod100 < 11 || mod100 > 14) {
+          if (mod10 === 1) w = 'день';
+          else if (mod10 >= 2 && mod10 <= 4) w = 'дня';
         }
         return String(n) + ' ' + w;
       }
@@ -7549,7 +7596,7 @@
           if (svcL || arL) {
             html += '<div class="slot-group-catalog-meta">';
             if (svcL) html += '<div class="slot-group-meta-line">' + escapeHtml(svcL) + '</div>';
-            if (arL) html += '<div class="slot-group-meta-line">' + escapeHtml(arL) + '</div>';
+            if (arL) html += '<div class="slot-group-meta-line">' + scheduleEditorArenaMonogramHtml(s.arena_id, arL) + escapeHtml(arL) + '</div>';
             html += '</div>';
           }
         }
@@ -8885,6 +8932,153 @@
 
       initPreciseFormEvents();
 
+      /* TASK-010: после сохранения шаблона одного дня — предложить скопировать его на другие
+         дни недели одной кнопкой. Чисто клиентская надстройка поверх уже сохранённого дня:
+         каждый выбранный день шлётся тем же PUT /schedule/templates/day, что и обычное
+         сохранение (наследует весь контракт TASK-021/022/023 — точные минуты, arena_id,
+         group_arena_id — один и тот же templateBody, меняется только day_of_week). Отмена
+         ничего не меняет сверх уже сохранённого исходного дня. */
+      var pendingWeekApply = null;
+
+      function closeWeekApplyModal() {
+        var el = document.getElementById('modalWeekApply');
+        if (el) {
+          if (document.activeElement && el.contains(document.activeElement)) {
+            document.activeElement.blur();
+          }
+          el.style.display = 'none';
+          el.setAttribute('aria-hidden', 'true');
+        }
+        pendingWeekApply = null;
+      }
+
+      function renderWeekApplyDays() {
+        var host = document.getElementById('weekApplyDays');
+        if (!host || !pendingWeekApply) return;
+        host.innerHTML = '';
+        for (var d = 0; d < 7; d++) {
+          if (d === pendingWeekApply.sourceDay) continue;
+          (function(day) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'week-apply-day-chip';
+            btn.textContent = DAYS[day];
+            var on = pendingWeekApply.selected.has(day);
+            btn.setAttribute('role', 'checkbox');
+            btn.setAttribute('aria-checked', on ? 'true' : 'false');
+            btn.classList.toggle('is-selected', on);
+            btn.onclick = function() {
+              if (pendingWeekApply.selected.has(day)) pendingWeekApply.selected.delete(day);
+              else pendingWeekApply.selected.add(day);
+              renderWeekApplyDays();
+            };
+            host.appendChild(btn);
+          })(d);
+        }
+      }
+
+      function openWeekApplySheet(sourceDay, templateBody) {
+        var n = (templateBody.slots || []).length;
+        if (!n) {
+          showMain();
+          return;
+        }
+        pendingWeekApply = { sourceDay: sourceDay, templateBody: templateBody, selected: new Set() };
+        var preview = document.getElementById('weekApplyPreview');
+        if (preview) {
+          preview.textContent =
+            'Скопировать расписание «' + DAYS[sourceDay] + '» (' + ruSlotCountLabel(n) +
+            ') на выбранные дни? Текущий шаблон этих дней будет заменён.';
+        }
+        renderWeekApplyDays();
+        var el = document.getElementById('modalWeekApply');
+        if (el) {
+          el.style.display = 'flex';
+          el.setAttribute('aria-hidden', 'false');
+        }
+      }
+
+      function applyTemplateToSelectedDays() {
+        if (!pendingWeekApply) return;
+        var days = Array.from(pendingWeekApply.selected).sort(function(a, b) { return a - b; });
+        if (!days.length) {
+          closeWeekApplyModal();
+          showMain();
+          return;
+        }
+        var body = pendingWeekApply.templateBody;
+        var confirmBtn = document.getElementById('weekApplyConfirm');
+        if (confirmBtn) confirmBtn.disabled = true;
+        var okCount = 0;
+        var failCount = 0;
+        function step(idx) {
+          if (idx >= days.length) {
+            closeWeekApplyModal();
+            if (confirmBtn) confirmBtn.disabled = false;
+            if (failCount) {
+              showToast('Скопировано на ' + okCount + ' из ' + days.length + ' дней — часть не сохранилась');
+            } else {
+              showToast('Расписание скопировано на ' + ruDayCountLabel(okCount));
+            }
+            showMain();
+            return;
+          }
+          var dayBody = Object.assign({}, body, { day_of_week: days[idx] });
+          fetch(apiUrlWithQuery('/schedule/templates/day'), {
+            method: 'PUT',
+            headers: headers(),
+            body: JSON.stringify(dayBody),
+          })
+            .then(function(r) {
+              if (r.ok) okCount++;
+              else failCount++;
+            })
+            .catch(function() { failCount++; })
+            .then(function() { step(idx + 1); });
+        }
+        step(0);
+      }
+
+      (function wireWeekApplyModal() {
+        var cancelBtn = document.getElementById('weekApplyCancel');
+        var confirmBtn = document.getElementById('weekApplyConfirm');
+        var weekdaysBtn = document.getElementById('weekApplyPickWeekdays');
+        var allBtn = document.getElementById('weekApplyPickAll');
+        var noneBtn = document.getElementById('weekApplyPickNone');
+        if (cancelBtn) {
+          cancelBtn.onclick = function() {
+            closeWeekApplyModal();
+            showMain();
+          };
+        }
+        if (confirmBtn) confirmBtn.onclick = applyTemplateToSelectedDays;
+        if (weekdaysBtn) {
+          weekdaysBtn.onclick = function() {
+            if (!pendingWeekApply) return;
+            for (var d = 0; d <= 4; d++) {
+              if (d !== pendingWeekApply.sourceDay) pendingWeekApply.selected.add(d);
+            }
+            renderWeekApplyDays();
+          };
+        }
+        if (allBtn) {
+          allBtn.onclick = function() {
+            if (!pendingWeekApply) return;
+            for (var d = 0; d < 7; d++) {
+              if (d !== pendingWeekApply.sourceDay) pendingWeekApply.selected.add(d);
+            }
+            renderWeekApplyDays();
+          };
+        }
+        if (noneBtn) {
+          noneBtn.onclick = function() {
+            if (!pendingWeekApply) return;
+            pendingWeekApply.selected.clear();
+            renderWeekApplyDays();
+          };
+        }
+      })();
+
       (function wireSlotDurationOverlap() {
         var sel = document.getElementById('slotDurationSelect');
         if (!sel) return;
@@ -8996,7 +9190,7 @@
             .then(function(r) {
               if (r.ok) {
                 showToast('Шаблон сохранён');
-                showMain();
+                openWeekApplySheet(state.editDay, templateBody);
               } else {
                 r.json().then(function(o) {
                   var d = o.detail || 'Ошибка';

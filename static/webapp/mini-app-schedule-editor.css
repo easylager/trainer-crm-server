@@ -410,6 +410,53 @@ html.trainer-theme-dark .schedule-week-day-strip__wkNav {
     .schedule-grid-arena-chip:active {
       opacity: 0.92;
     }
+    .week-apply-quick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .week-apply-quick-btn {
+      flex: 0 0 auto;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent);
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .week-apply-quick-btn:active { opacity: 0.85; }
+    .week-apply-days {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .week-apply-day-chip {
+      padding: 10px 4px;
+      border-radius: 10px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .week-apply-day-chip.is-selected {
+      border-color: color-mix(in srgb, var(--app-cta-fill) 72%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill) 16%, var(--tg-theme-secondary-bg-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
+    }
+    .week-apply-day-chip:active { opacity: 0.92; }
     .schedule-sandbox-pill {
       display: inline-block;
       margin-left: 8px;

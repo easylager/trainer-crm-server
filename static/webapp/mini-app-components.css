@@ -309,6 +309,40 @@ body {
   line-height: 1.35;
 }
 .slot-venue .venue-muted { font-style: italic; }
+
+/* Нецветовой различитель площадки у мультиарен-тренера: буква + плотность заливки одним
+   тилом (сплошная / контур / штрих), цикл по 3 — тот же приём, что в онбординге
+   (trainer-onboarding.html: «ЦВЕТ НАЗЫВАЕТ ТОЛЬКО ДЕЙСТВИЕ И СОСТОЯНИЕ», без цвета домена). */
+.arena-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: -3px;
+}
+.svc-badge .arena-mono { margin-right: 0; }
+.arena-mono--p0 {
+  background: var(--app-cta-fill);
+  border: 1px solid var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
+.arena-mono--p1 {
+  background: transparent;
+  border: 1.5px solid var(--app-cta-fill);
+  color: var(--app-cta-fill);
+}
+.arena-mono--p2 {
+  background: repeating-linear-gradient(135deg, var(--app-cta-fill) 0 2px, transparent 2px 5px);
+  border: 1px solid var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
 .slot-client-hint {
   font-size: 12px;
   color: var(--tg-theme-hint-color);
