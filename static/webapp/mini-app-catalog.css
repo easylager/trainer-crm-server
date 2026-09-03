@@ -2884,6 +2884,19 @@
       border-color: rgba(var(--accent-rgb), 0.55);
       background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
     }
+    /* Brief pulse after map/list select — helps the eye catch the promoted card. */
+    .arena-card--just-selected {
+      animation: arena-card-promote-pulse 0.65s ease;
+    }
+    @keyframes arena-card-promote-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.35); }
+      55% { box-shadow: 0 0 0 8px rgba(var(--accent-rgb), 0); }
+      100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .arena-card--just-selected { animation: none; }
+      .arena-card { transition: none; }
+    }
     .arena-card__check {
       flex: 0 0 auto;
       width: 22px;
