@@ -1,8 +1,8 @@
 ---
 task_id: TASK-039
 title: Использованные абонементы не отделены от активных в списке выданных
-status: READY
-phase: estimate
+status: COMPLETE
+phase: review
 priority: MEDIUM
 created_at: 2026-09-03
 updated_at: 2026-09-03
@@ -64,14 +64,20 @@ updated_at: 2026-09-03
 сортировка по `issued_at` (новые выше).
 Requirement: CONFIRMED
 Verification method: unit
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: tests/application/test_trainer_issued_items.py::test_list_trainer_issued_items_puts_active_before_closed_regardless_of_date
+— closed-но-более-свежий пасс всё равно идёт вторым; passed
+Verified at: master b972cbd+, 2026-09-04
 
 ### AC-002
 Фильтры «Активные» и «Закрытые» и пагинация (`total`, `has_more`, `active_count`) не
 меняют поведение — правка не трогает подсчёт, только порядок при `status=all`.
 Requirement: CONFIRMED
 Verification method: unit
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: полный файл tests/application/test_trainer_issued_items.py — 4/4 теста зелёные
+(включая merge/пагинацию), regressions не обнаружено
+Verified at: master b972cbd+, 2026-09-04
 
 ## Technical Plan
 
@@ -86,8 +92,19 @@ Scope: list_trainer_issued_items.
 Covers: AC-001, AC-002
 Verification: unit-тест на функцию с фикстурными данными разных статусов и дат.
 Estimate: 1
-Status: READY
+Status: DONE
 
 ## Next Action
 
-Реализовать S1, добавить unit-тест.
+Задача завершена — реализация и тест уже были на master до взятия задачи в работу
+(попали туда побочно с TASK-007, коммит b972cbd), это подтверждено прогоном.
+
+## Execution History
+
+- **TASK_CREATED** — заведена 2026-09-03, план и слайсы уже готовы.
+- 2026-09-04 | обнаружено: правка (`items.sort(key=lambda x: x.get("status_bucket") != "active")`)
+  и тест `test_list_trainer_issued_items_puts_active_before_closed_regardless_of_date` уже на
+  master — попали туда как часть коммита `b972cbd` (TASK-007), не отражено в статусе файла.
+- 2026-09-04 | верификация: полный файл tests/application/test_trainer_issued_items.py —
+  4/4 теста зелёные.
+- 2026-09-04 | COMPLETE

@@ -1782,7 +1782,17 @@
           }
           var payPc = String((b.problem_payment_class || b.expected_payment_class || '')).toUpperCase();
           var payValueHtml = '';
-          if (payPc === 'PASS') payValueHtml = escapeHtml('Абонемент покрывает');
+          if (payPc === 'PASS' && b.pass_instance_id != null && pathBase) {
+            var passLabel = (b.pass_product_name || 'Абонемент') + ': ' +
+              (b.pass_sessions_remaining != null ? b.pass_sessions_remaining : 0) + ' из ' +
+              (b.pass_sessions_total != null ? b.pass_sessions_total : 0);
+            var passUrl = pathBase + 'trainer-pass-products?pass_instance_id=' +
+              encodeURIComponent(String(b.pass_instance_id)) +
+              '&client_id=' + encodeURIComponent(String(b.client_id)) + '&tab=issued';
+            payValueHtml = '<a class="tc-pass-link" href="' + escapeHtml(passUrl) + '">' +
+              '<span>' + escapeHtml(passLabel) + '</span>' +
+              '<span class="tc-pass-link__arrow" aria-hidden="true">→</span></a>';
+          } else if (payPc === 'PASS') payValueHtml = escapeHtml('Абонемент покрывает');
           else if (payPc === 'CERT') payValueHtml = escapeHtml('Сертификат покрывает');
           else payValueHtml = formatTrainerDetailPriceFromCents(b.booking_price_cents);
           if (payValueHtml) {

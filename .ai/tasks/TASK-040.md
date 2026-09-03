@@ -1,8 +1,8 @@
 ---
 task_id: TASK-040
 title: Остаток занятий по абонементу не виден в карточке записи
-status: READY
-phase: estimate
+status: COMPLETE
+phase: review
 priority: MEDIUM
 created_at: 2026-09-03
 updated_at: 2026-09-03
@@ -88,7 +88,9 @@ updated_at: 2026-09-03
 реальный использованный `pass_instance_id` и его текущий остаток из БД.
 Requirement: CONFIRMED
 Verification method: unit
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: tests/application/test_booking_pass_instance_resolution.py::test_resolves_the_actually_redeemed_instance_for_a_past_visit — passed
+Verified at: master c1d5d34+, 2026-09-04
 
 ### AC-002
 Будущая непогашенная запись, которую очередь распределения относит к `PASS`, показывает
@@ -96,7 +98,10 @@ Result: NOT_VERIFIED
 единственном подходящем активном абонементе).
 Requirement: CONFIRMED
 Verification method: unit
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: tests/application/test_booking_pass_instance_resolution.py::test_resolves_the_projected_instance_for_an_unredeemed_future_visit
++ test_returns_none_when_queue_has_no_pass_left_for_this_visit — both passed (3/3 in file)
+Verified at: master c1d5d34+, 2026-09-04
 
 ### AC-003
 Карточка записи при `payPc === 'PASS'` и наличии `pass_instance_id` в ответе показывает
@@ -105,7 +110,13 @@ Result: NOT_VERIFIED
 прежний статичный текст «Абонемент покрывает» (деградация без падения).
 Requirement: CONFIRMED
 Verification method: manual
-Result: NOT_VERIFIED
+Result: VERIFIED
+Evidence: браузерная проверка (Playwright, замоканный Telegram WebApp init_data, throwaway
+тренер с реальной погашенной записью): карточка показала «QA Пробный абонемент: 7 из 10» как
+`<a class="tc-pass-link" href="/webapp/trainer-pass-products?pass_instance_id=25&client_id=311&tab=issued">`,
+старый статичный текст отсутствует. Деградационная ветка (`else if (payPc === 'PASS')`)
+не менялась — код-ревью подтверждает fallback без изменений.
+Verified at: uncommitted working tree, 2026-09-04
 
 ## Technical Plan
 
@@ -130,7 +141,7 @@ Scope: booking_payment_notice.py, webapp.py.
 Covers: AC-001, AC-002
 Verification: unit-тесты на resolve_pass_instance_for_booking (погашенный / спроецированный случаи)
 Estimate: 2
-Status: READY
+Status: DONE
 
 ### S2 Фронтенд: кликабельная строка в карточке записи
 Goal: платёжная строка ведёт в абонемент вместо статичного текста.
@@ -138,8 +149,24 @@ Scope: schedule-editor-main.js.
 Covers: AC-003
 Verification: manual (браузер)
 Estimate: 1
-Status: READY
+Status: DONE
 
 ## Next Action
 
-Реализовать S1 с тестами, затем S2.
+Задача завершена. S1 (бэкенд) уже был на master до взятия задачи в работу (попал туда
+побочно с TASK-007, коммит b972cbd — включая `resolve_pass_instance_for_booking`, прокидку
+полей в `webapp.py` и unit-тесты). Довели S2 (фронтенд) и перепроверили S1.
+
+## Execution History
+
+- **TASK_CREATED** — заведена 2026-09-03, план и слайсы уже готовы.
+- 2026-09-04 | обнаружено: S1 (бэкенд, `resolve_pass_instance_for_booking` +
+  `get_trainer_booking_detail` + unit-тесты) уже на master — попал туда как часть коммита
+  `b972cbd` (TASK-007), не был отражён в статусе этого файла.
+- 2026-09-04 | реализован S2: кликабельная ссылка `tc-pass-link` в карточке записи
+  (`schedule-editor-main.js`) + CSS в `mini-app-components.css` (перенесено из
+  `wip/schedule-editor-010-042`).
+- 2026-09-04 | верификация: 3/3 unit-теста зелёные (AC-001/AC-002), браузерная проверка
+  на throwaway тренере подтвердила AC-003 (ссылка «QA Пробный абонемент: 7 из 10»,
+  корректный href). Тестовые данные удалены.
+- 2026-09-04 | COMPLETE
