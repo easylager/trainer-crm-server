@@ -26,7 +26,7 @@
 }
 /* Product tokens — the target Glide system (theme.css neutrals + brand teal),
    scoped to anything that represents real app UI. */
-.surface,.frag{
+.surface,.frag,.rmc__cardFrag{
   --p-bg:#F1F3F2;
   --p-card:#FFFFFF;
   --p-line:#E2E6E5;
@@ -45,18 +45,21 @@
 
 
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;overflow-x:clip}
 body{
   margin:0;font-family:var(--sans);
   background:var(--paper);color:var(--ink);
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:clip;
 }
 
 /* ── Masthead ───────────────────────────────────────────────────────────── */
 .masthead{
   position:sticky;top:0;z-index:800;
   background:var(--surface);border-bottom:1px solid var(--line);
-  padding:0 clamp(20px,4vw,56px);height:76px;
+  padding:0 max(clamp(20px,4vw,56px), env(safe-area-inset-right, 0px)) 0 max(clamp(20px,4vw,56px), env(safe-area-inset-left, 0px));
+  padding-top:env(safe-area-inset-top, 0px);
+  height:calc(76px + env(safe-area-inset-top, 0px));
   display:flex;align-items:center;justify-content:space-between;gap:20px;
 }
 .logo{position:relative;overflow:hidden;width:114px;height:34px;flex-shrink:0}
@@ -175,6 +178,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
   pointer-events:none;z-index:-1;
 }
 .col__label{display:block;margin:0 0 10px 2px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--hint)}
+.side-pill{display:none}
 .surface{
   margin:0;position:relative;background:var(--p-bg);
   border:1px solid var(--line-strong);border-radius:18px;
@@ -440,7 +444,7 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
    Progressive roadmap: scroll advances one capability at a time.
    ══════════════════════════════════════════════════════════════════════════ */
 .rm{position:relative;background:var(--paper);border-top:1px solid var(--line)}
-.rm__sticky{position:sticky;top:76px;height:calc(100vh - 76px);min-height:600px;display:flex;align-items:center;overflow:hidden}
+.rm__sticky{position:sticky;top:calc(76px + env(safe-area-inset-top, 0px));height:calc(100vh - 76px - env(safe-area-inset-top, 0px));min-height:600px;display:flex;align-items:center;overflow:hidden}
 .rm__inner{
   width:100%;max-width:1560px;margin:0 auto;
   padding:0 clamp(20px,4vw,56px);
@@ -610,8 +614,8 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 }
 .rm__doneLine.is-on{opacity:1;transform:none}
 
-/* mobile-only roadmap story */
-.rmm{display:none}
+/* mobile-only roadmap carousel (markup filled by JS) */
+.rmc{display:none}
 
 /* ── Планируемые обновления ────────────────────────────────────────────────
    Deliberately quiet: hairlines, no fills, no product UI. None of this ships
@@ -644,76 +648,208 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width:1180px){
-  .hero{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:34px}
-  .hero__copy{grid-column:1/-1}
-  h1{max-width:16ch}
-  .lede{max-width:56ch}
-  .rm__inner{grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:36px}
-  .rm__title{margin-bottom:28px;max-width:18ch}
-}
-@media (max-width:860px){
-  .masthead{height:64px;padding:0 18px}
-  .masthead .cta--sm{padding:9px 15px;font-size:13px}
-  .hero{grid-template-columns:1fr;padding:26px 18px 36px;row-gap:0}
-  .hero__copy{grid-column:auto}
-  /* One surface at a time; the client column is a normal block that simply
-     isn't rendered until the flow brings it in. */
-  .surfaces{display:block;position:static}
-  .col--client{
-    position:static;width:auto;right:auto;top:auto;
-    transform:none;opacity:1;pointer-events:auto;transition:none;
+  /* Hero: stacked deck — client выезжает из-за тренера, оба остаются в кадре.
+     Фокус beat'а — scale/opacity, не display:none. */
+  .hero{
+    grid-template-columns:1fr;
+    row-gap:28px;
+    padding:clamp(28px,4vh,48px) clamp(18px,4vw,40px) clamp(36px,6vh,64px);
+    perspective:1400px;perspective-origin:50% 38%;
   }
-  .hero:not(.is-live) .col--client{display:none}
-  h1{max-width:none;font-size:clamp(32px,8.5vw,44px)}
+  .hero__copy{grid-column:auto}
+  h1{max-width:none;font-size:clamp(32px,6vw,48px)}
   .lede{max-width:none;margin-bottom:24px}
-  .cta--lg{width:100%;padding:16px 22px}
-  /* the row is invisible at rest, so its reserved space must read as ordinary
-     rhythm rather than a hole above the surface */
-  .beats{margin-top:22px;margin-bottom:8px;min-height:18px}
-  .surface{height:min(548px,66vh)}
-  .hero[data-side="client"]  .col--trainer{display:none}
-  .hero[data-side="trainer"] .col--client{display:none}
-  /* One surface at a time, so there is nothing to be deeper *than*. Keep the
-     arrival, drop the parallax and the focus depth. */
-  .hero{perspective:1400px;perspective-origin:50% 30%}
+  .surfaces{
+    position:relative;transform-style:preserve-3d;
+    max-width:min(400px,100%);margin:0 auto;width:100%;
+    min-height:min(520px,62vh);
+  }
+  .col--trainer{
+    position:relative;z-index:2;
+    transition:transform .75s var(--slow),opacity .55s var(--slow);
+  }
+  .col--client{
+    position:absolute;top:0;left:0;width:90%;right:auto;
+    z-index:1;
+    transform:translate3d(12%, 18px, -70px) scale(.9);
+    opacity:0;pointer-events:none;
+    transition:transform 1.05s var(--slow),opacity .6s var(--slow);
+  }
+  .hero.is-live .col--client{
+    transform:translate3d(0, 14px, 0) scale(.93);
+    opacity:1;pointer-events:auto;
+  }
+  /* Фокус beat'а: ведущий экран крупнее, второй уходит назад — но виден. */
+  .hero[data-side="trainer"] .col--trainer{z-index:3;transform:scale(1);opacity:1}
+  .hero[data-side="trainer"] .col--client{
+    z-index:1;transform:translate3d(-2%, 22px, 0) scale(.86);opacity:.55;pointer-events:none;
+  }
+  .hero[data-side="client"] .col--client{
+    z-index:3;transform:translate3d(2%, 0, 0) scale(1);opacity:1;pointer-events:auto;
+  }
+  .hero[data-side="client"] .col--trainer{
+    z-index:1;transform:translate3d(7%, 26px, 0) scale(.86);opacity:.55;
+  }
   .col--rest .surface,.col--lead .surface{--tz:0px}
   .col--rest{opacity:1}
   .col__stage::after{--csh:.4;--cshs:1}
   .surface::after{opacity:.3}
-  .notif--mobile{position:fixed;left:12px;right:12px;top:72px;z-index:900;cursor:pointer}
+  .surface{height:min(500px,58vh)}
+  .col__label{font-size:10px;margin-bottom:8px}
+  .beats{margin-top:22px;margin-bottom:8px;min-height:18px}
+  .rm__inner{grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:36px}
+  .rm__title{margin-bottom:28px;max-width:18ch}
+}
+@media (max-width:860px){
+  .masthead{height:calc(64px + env(safe-area-inset-top, 0px));padding-left:max(18px, env(safe-area-inset-left, 0px));padding-right:max(18px, env(safe-area-inset-right, 0px))}
+  .masthead .cta--sm{padding:9px 15px;font-size:13px}
+  .hero{padding:26px 18px 36px;row-gap:0}
+  .surfaces{min-height:min(480px,56vh)}
+  .surface{height:min(460px,54vh)}
+  .cta--lg{width:100%;padding:16px 22px}
+  .inbox__item{flex-wrap:wrap;gap:8px}
+  .inbox__btn{margin-left:auto}
 
-  /* Section 2 becomes a linear vertical story — no sticky, no cross-fade. */
-  .rm__sticky{display:none}
-  .rmm{display:block;padding:40px 18px 52px}
-  .rmm__eyebrow{margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
-  .rmm__title{margin:0 0 30px;font-size:clamp(26px,7.5vw,34px);line-height:1.12;font-weight:700;letter-spacing:-.03em}
-  .rmm__list{list-style:none;margin:0;padding:0;position:relative}
-  .rmm__track{position:absolute;left:7px;top:10px;bottom:10px;width:2px;background:var(--line-strong);border-radius:2px}
-  .rmm__fill{position:absolute;left:0;top:0;width:100%;height:0;background:var(--teal);border-radius:2px;transition:height .6s var(--slow)}
-  .rmm__item{position:relative;padding:0 0 0 30px;margin-bottom:34px}
-  .rmm__dot{position:absolute;left:1px;top:5px;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--line-strong);transition:border-color .5s var(--slow),background .5s var(--slow)}
-  .rmm__item.is-in .rmm__dot{border-color:var(--teal);background:var(--teal)}
-  .rmm__name{margin:0;font-size:17px;font-weight:700;letter-spacing:-.02em}
-  .rmm__desc{margin:5px 0 0;font-size:13.5px;line-height:1.5;color:var(--hint)}
-  /* Auto-height: a mobile fragment must never be clipped — the whole point is
-     that the visitor can read the real screen. */
-  .rmm__stage{
-    margin-top:14px;border-radius:16px;border:1px solid var(--line-strong);
-    background:var(--p-bg);box-shadow:var(--shadow-surface);overflow:hidden;
-    position:relative;
-    opacity:0;transform:translateY(12px);
-    transition:opacity .6s var(--slow),transform .6s var(--slow);
+  /* Roadmap: тот же scroll-driven sticky, что на десктопе — rail виден, превью компактное. */
+  .rm{border-top:1px solid var(--line)}
+  .rm__sticky{
+    display:flex;
+    top:calc(64px + env(safe-area-inset-top, 0px));
+    height:calc(100vh - 64px - env(safe-area-inset-top, 0px));
+    min-height:0;align-items:stretch;
   }
-  .rmm__item.is-in .rmm__stage{opacity:1;transform:none}
-  .rmm__stage .frag{opacity:1;transform:none;position:relative;inset:auto;padding:16px}
-  .soon{padding:44px 18px 56px}
+  .rm__inner{
+    display:flex;flex-direction:column;height:100%;width:100%;
+    padding:12px 18px 14px;gap:0;max-width:none;
+  }
+  .rm__inner > div:first-child{
+    flex:0 0 auto;max-height:46%;display:flex;flex-direction:column;overflow:hidden;
+  }
+  .rm__eyebrow{margin-bottom:4px;font-size:11px}
+  .rm__title{
+    margin:0 0 8px;font-size:clamp(18px,4.8vw,24px);line-height:1.12;max-width:none;
+  }
+  .rm__list{
+    flex:0 1 auto;min-height:0;max-height:min(220px,34vh);margin-top:2px;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .rm__list::-webkit-scrollbar{width:0}
+  .rm__track{left:9px;top:6px;bottom:8px}
+  .rm__item{height:32px;padding-left:34px;opacity:.35}
+  .rm__item.is-past{opacity:.55}
+  .rm__item.is-on{opacity:1;height:32px}
+  .rm__dot{left:3px;top:2px;width:12px;height:12px}
+  .rm__name{font-size:13.5px;line-height:1.2}
+  .rm__desc{display:none}
+  .rm__done{margin-top:6px;gap:4px}
+  .rm__doneChip{font-size:10px;padding:4px 8px}
+  .rm__doneLine{font-size:13px;margin-top:8px;max-width:none}
+  /* Превью — главное: забирает оставшуюся высоту, контент скроллится внутри. */
+  .rm__stage{
+    flex:1 1 auto;width:100%;min-height:min(280px,38vh);height:auto;margin-top:10px;
+    border-radius:14px;
+  }
+  .rm__stage .frag{
+    padding:12px 14px 14px;font-size:12px;
+    overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .rm__stage .frag__cap{font-size:9.5px;margin-bottom:5px;letter-spacing:.08em}
+  .rm__stage .frag__screen{font-size:14px;margin-bottom:8px}
+  .rm__stage .slot-card,.rm__stage .s-card,.rm__stage .c-card,.rm__stage .p-card,
+  .rm__stage .t-card,.rm__stage .a-card{padding:9px 11px;margin-bottom:6px}
+  .rm__stage .slot-time,.rm__stage .s-time{font-size:13px}
+  .rm__stage .day-title{font-size:10.5px;margin:6px 0 5px}
+  .rm__stage .sched__chips,.rm__stage .d-tags{gap:4px;margin-bottom:8px}
+  .rm__stage .chip{font-size:10.5px;padding:3px 8px}
+  .rm__stage .c-name,.rm__stage .p-name,.rm__stage .t-name{font-size:13px}
+  .rm__stage .a-bars{height:64px}
+  #rmSpacer{display:none!important}
+  .r-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .soon{padding:44px 18px calc(56px + env(safe-area-inset-bottom, 0px))}
   .soon__inner{grid-template-columns:1fr;gap:22px}
   .soon__title{max-width:none}
   .soon__item{grid-template-columns:1fr;gap:8px}
   .soon__mark{justify-self:start}
-  .rmm__done{margin-top:8px;padding-left:30px}
-  .rmm__doneChips{display:flex;flex-wrap:wrap;gap:7px}
-  .rmm__doneLine{margin:18px 0 0;font-size:15px;line-height:1.55;font-weight:500}
+
+  /* Hero: кроссфейд вместо 3D-выезда — на телефоне перспектива/наклон не
+     читаются, а перекрытие карточек выглядит как поломка вёрстки. */
+  .hero{perspective:none}
+  .hero--enter .col--trainer .col__stage{animation:none}
+  .col__stage{transform:none!important}
+  .surfaces{position:relative}
+  .col--client,.col--trainer{
+    position:absolute;inset:0;width:100%;
+    transition:opacity .45s var(--slow),transform .45s var(--slow);
+  }
+  .col--trainer{opacity:1;transform:none;pointer-events:auto}
+  .col--client{
+    opacity:0;transform:translateY(8px);pointer-events:none;
+    right:auto;left:0;
+  }
+  .hero.is-live .col--client{opacity:0;transform:translateY(8px);pointer-events:none}
+  .hero[data-side="client"] .col--client{opacity:1;transform:none;pointer-events:auto}
+  .hero[data-side="client"] .col--trainer{opacity:0;transform:translateY(8px);pointer-events:none}
+  .hero[data-side="trainer"] .col--trainer{opacity:1;transform:none;pointer-events:auto}
+  .hero[data-side="trainer"] .col--client{opacity:0;transform:translateY(8px);pointer-events:none}
+  .col__stage::after{display:none}
+
+  .side-pill{
+    display:flex;gap:4px;margin:0 auto 14px;padding:3px;width:max-content;
+    background:var(--surface);border:1px solid var(--line);border-radius:999px;
+  }
+  .side-pill__opt{
+    padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;
+    color:var(--hint);transition:background .3s var(--ease),color .3s var(--ease);
+  }
+  .hero[data-side="client"] .side-pill__opt[data-role="client"],
+  .hero[data-side="trainer"] .side-pill__opt[data-role="trainer"]{
+    background:var(--teal-wash);color:var(--teal-ink);
+  }
+
+  /* Roadmap: sticky scroll-jacking выключен на мобильном — карусель вместо него. */
+  .rm{display:none}
+  .rmc{
+    display:block;padding:32px 18px calc(48px + env(safe-area-inset-bottom, 0px));
+    border-top:1px solid var(--line);
+  }
+  .rmc__eyebrow{margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--hint)}
+  .rmc__title{margin:0 0 16px;font-size:clamp(20px,5vw,26px);line-height:1.15;font-weight:700;letter-spacing:-.02em}
+  .rmc__progress{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .rmc__bar{flex:1;height:3px;border-radius:2px;background:var(--line-strong);overflow:hidden}
+  .rmc__fill{display:block;height:100%;width:0;background:var(--teal);border-radius:2px;transition:width .25s var(--ease)}
+  .rmc__label{flex-shrink:0;font-size:11.5px;font-weight:600;color:var(--hint);white-space:nowrap}
+  .rmc__track{
+    display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -18px;padding-left:18px;padding-right:18px;
+  }
+  .rmc__track::-webkit-scrollbar{display:none}
+  .rmc__card{
+    flex:0 0 86%;scroll-snap-align:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:16px 16px 18px;
+  }
+  .rmc__cardName{margin:0 0 2px;font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+  .rmc__cardDesc{margin:0 0 12px;font-size:12.5px;line-height:1.5;color:var(--hint)}
+  .rmc__cardFrag{background:var(--p-bg);color:var(--p-text);font-size:14px;border:1px solid var(--p-line);border-radius:12px;padding:12px 14px 14px;overflow:hidden}
+  .rmc__cardFrag .frag__cap{font-size:9.5px;margin-bottom:5px;letter-spacing:.08em}
+  .rmc__cardFrag .frag__screen{font-size:14px;margin-bottom:8px}
+  .rmc__final{
+    flex:0 0 86%;scroll-snap-align:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 18px;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .rmc__finalChips{display:flex;flex-wrap:wrap;gap:6px}
+  .rmc__finalChip{font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;background:var(--teal-wash);color:var(--teal-ink)}
+  .rmc__finalLine{margin:0;font-size:14px;line-height:1.5;font-weight:500;color:var(--ink)}
+}
+@media (max-width:480px){
+  .masthead .cta--sm{padding:8px 12px;font-size:12px}
+  .logo{width:96px;height:28px}
+  .sched__share{padding:6px 10px;font-size:11px;gap:5px}
+  .sched__share svg{width:12px;height:12px}
+  .a-bars{gap:5px;height:72px}
+  .rm__list{max-height:min(190px,30vh)}
+  .rm__stage{min-height:min(260px,36vh)}
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────────────── */
@@ -727,7 +863,6 @@ h1{margin:0 0 22px;font-size:clamp(38px,4.2vw,60px);line-height:1.02;font-weight
   /* the roadmap must stay readable with no motion at all */
   .rm__item{opacity:1}
   .rm__desc{opacity:1;transform:none}
-  .rmm__stage{opacity:1;transform:none}
   .soon__item{opacity:1;transform:none}
   .s-card--sweep::after{display:none}
   /* No perspective, no tilt, no arrival, no moving light. */

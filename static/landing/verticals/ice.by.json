@@ -2,7 +2,7 @@
   "brand": {
     "name": "Glide",
     "tagline": "Расписание, которое не тает",
-    "eyebrow": "Glide · тренерам на льду · Беларусь"
+    "eyebrow": "Glide · тренерам на льду · СНГ"
   },
   "hero": {
     "title": "CRM для тренера на льду",
@@ -133,7 +133,7 @@
     "bento_texture": "/landing/assets/bento-ice-grain.webp"
   },
   "footer": {
-    "geo": "Беларусь",
+    "geo": "СНГ",
     "powered_by": "Glide",
     "credit_key": "hero_image_credit"
   }
