@@ -6,7 +6,7 @@ import html
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
 from src.application.trainer_invite_links import build_trainer_universal_invite_link
@@ -51,7 +51,14 @@ async def send_trainer_share_catalog_tip_to_chat(
     tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=html.escape(link))
     # Кнопка копирования ссылки в Telegram (встроенная функция)
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text='📋 Скопировать ссылку', copy_text=link)]]
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text='📋 Скопировать ссылку',
+                    copy_text=CopyTextButton(text=link),
+                )
+            ]
+        ]
     )
     await bot.send_message(chat_id=chat_id, text=tip, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     async with async_session_factory() as session:
