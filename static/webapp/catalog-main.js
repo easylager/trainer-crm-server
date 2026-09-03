@@ -4805,7 +4805,78 @@
         });
       }
 
-      function renderArenaListCheckboxes() {
+      function arenaListPrefersReducedMotion() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      }
+
+      /**
+       * Keep selected arenas at the top of the list (most recently selected first).
+       * Unselected keep their relative catalog order. Makes map taps findable without hunting.
+       */
+      function sortArenasSelectedFirst(filtered, selectedSet) {
+        var selected = [];
+        var rest = [];
+        filtered.forEach(function(a) {
+          if (selectedSet[a.id]) selected.push(a);
+          else rest.push(a);
+        });
+        selected.sort(function(a, b) {
+          return arenaScreenDraft.ids.indexOf(a.id) - arenaScreenDraft.ids.indexOf(b.id);
+        });
+        return selected.concat(rest);
+      }
+
+      /** FLIP: invert old→new positions so the reorder reads as a slide, not a hard jump. */
+      function animateArenaListReorder(listEl, firstRects) {
+        if (!firstRects || !Object.keys(firstRects).length) return;
+        if (arenaListPrefersReducedMotion()) return;
+        listEl.querySelectorAll('.arena-card[data-id]').forEach(function(el) {
+          var first = firstRects[String(el.dataset.id)];
+          if (!first) return;
+          var last = el.getBoundingClientRect();
+          var dy = first.top - last.top;
+          if (Math.abs(dy) < 1) return;
+          el.style.transition = 'none';
+          el.style.transform = 'translateY(' + dy + 'px)';
+          // Force layout before playing the transition forward.
+          void el.offsetWidth;
+          el.style.transition = 'transform 0.34s cubic-bezier(0.22, 1, 0.36, 1)';
+          el.style.transform = '';
+          var clear = function(ev) {
+            if (ev && ev.propertyName && ev.propertyName !== 'transform') return;
+            el.style.transition = '';
+            el.style.transform = '';
+            el.removeEventListener('transitionend', clear);
+          };
+          el.addEventListener('transitionend', clear);
+          setTimeout(clear, 450);
+        });
+      }
+
+      /** After a map/list select, bring the card into view if it sits under the map or below the fold. */
+      function revealArenaCardAfterPromote(card) {
+        if (!card) return;
+        var reduced = arenaListPrefersReducedMotion();
+        card.classList.add('arena-card--just-selected');
+        setTimeout(function() { card.classList.remove('arena-card--just-selected'); }, 700);
+        requestAnimationFrame(function() {
+          var rect = card.getBoundingClientRect();
+          var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+          // Sticky apply bar + Telegram chrome — treat as already visible only inside this band.
+          var topOk = rect.top >= 72;
+          var bottomOk = rect.bottom <= vh - 96;
+          if (topOk && bottomOk) return;
+          try {
+            card.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+          } catch (e) {
+            card.scrollIntoView(true);
+          }
+        });
+      }
+
+      function renderArenaListCheckboxes(opts) {
+        opts = opts || {};
+        var promoteId = opts.promoteId != null ? opts.promoteId : null;
         var listEl = document.getElementById('arenaList');
         var items = arenaScreenDraft.items || [];
         var input = document.getElementById('arenaSearchInput');
@@ -4828,6 +4899,17 @@
         }
         var selectedSet = {};
         arenaScreenDraft.ids.forEach(function(id) { selectedSet[id] = true; });
+
+        var firstRects = null;
+        if (promoteId != null) {
+          firstRects = {};
+          listEl.querySelectorAll('.arena-card[data-id]').forEach(function(el) {
+            firstRects[String(el.dataset.id)] = el.getBoundingClientRect();
+          });
+        }
+
+        filtered = sortArenasSelectedFirst(filtered, selectedSet);
+
         var html = filtered.map(function(a) {
           var isSel = !!selectedSet[a.id];
           var name = (a.name || '').replace(/"/g, '&quot;');
@@ -4863,19 +4945,27 @@
             toggleArenaInDraft(id, name);
           });
         });
+        if (promoteId != null) {
+          animateArenaListReorder(listEl, firstRects);
+          revealArenaCardAfterPromote(
+            listEl.querySelector('.arena-card[data-id="' + promoteId + '"]')
+          );
+        }
         maybeFocusActivePickerSearch('arena');
       }
 
       function toggleArenaInDraft(id, name) {
         var idx = arenaScreenDraft.ids.indexOf(id);
-        if (idx >= 0) {
+        var selecting = idx < 0;
+        if (!selecting) {
           arenaScreenDraft.ids.splice(idx, 1);
           arenaScreenDraft.names.splice(idx, 1);
         } else {
-          arenaScreenDraft.ids.push(id);
-          arenaScreenDraft.names.push(name);
+          // Most recent selection leads the list — map tap → card appears at the top.
+          arenaScreenDraft.ids.unshift(id);
+          arenaScreenDraft.names.unshift(name);
         }
-        renderArenaListCheckboxes();
+        renderArenaListCheckboxes(selecting ? { promoteId: id } : {});
         updateArenaScreenChrome();
         if (typeof window.__arenaMapSyncSelection === 'function') {
           window.__arenaMapSyncSelection(arenaScreenDraft.ids);
