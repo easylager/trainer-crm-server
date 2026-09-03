@@ -3395,6 +3395,14 @@ async def get_trainer_hub_bootstrap(
         from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 
         active_hint_snoozes = await get_active_snoozes(session, trainer_id_linked)
+        feature_moment_facts = None
+        if schedule_unlocked and (onboarding_checklist or {}).get("has_crm_subscription_access") is not False:
+            from src.application.trainer_feature_moments import fetch_trainer_feature_moment_facts
+
+            try:
+                feature_moment_facts = await fetch_trainer_feature_moment_facts(session, trainer_id_linked)
+            except Exception as exc:
+                partial_errors["feature_moment_facts"] = str(exc)
         action_inbox = build_trainer_hub_action_inbox(
             onboarding=onboarding_checklist or {},
             requests_count=req_n,
@@ -3404,6 +3412,7 @@ async def get_trainer_hub_bootstrap(
             center_inbox_pending=center_inbox_pending,
             show_center_inbox=show_center_inbox,
             active_hint_snoozes=active_hint_snoozes,
+            feature_moment_facts=feature_moment_facts,
         )
         if onboarding_checklist is not None:
             onboarding_checklist["active_hint_snoozes"] = list(active_hint_snoozes.keys())
@@ -3459,12 +3468,18 @@ async def get_trainer_hub_inbox_count(
     from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 
     active_hint_snoozes = await get_active_snoozes(session, tid)
+    feature_moment_facts = None
+    if schedule_unlocked and (onboarding or {}).get("has_crm_subscription_access") is not False:
+        from src.application.trainer_feature_moments import fetch_trainer_feature_moment_facts
+
+        feature_moment_facts = await fetch_trainer_feature_moment_facts(session, tid)
     inbox = build_trainer_hub_action_inbox(
         onboarding=onboarding,
         requests_count=requests_count,
         bookings=None,
         schedule_unlocked=schedule_unlocked,
         active_hint_snoozes=active_hint_snoozes,
+        feature_moment_facts=feature_moment_facts,
     )
     return {
         "total_actionable": inbox["total_actionable"],
