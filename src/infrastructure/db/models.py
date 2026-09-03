@@ -1407,7 +1407,16 @@ ONBOARDING_NUDGE_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
     (ONBOARDING_NUDGE_STEP_D7, 7),
 )
 
-ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED)
+# TASK-035: a trainer whose trial burned out before they finished onboarding is otherwise total
+# silence (no LEAD_MODE reachable from pending_profile). This step is deliberately NOT part of
+# ONBOARDING_NUDGE_STEPS_ORDERED — that list is calendar offsets from created_at, but trial length
+# is configurable (see resolve_trial_period_days), so this step is scheduled off the trainer's
+# actual trial expiry instead (see get_trial_expired_days_ago).
+ONBOARDING_NUDGE_STEP_TRIAL_OVER = "trialend"
+
+ONBOARDING_NUDGE_STEP_KEYS = tuple(s for s, _ in ONBOARDING_NUDGE_STEPS_ORDERED) + (
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
+)
 
 
 # ---------------------------------------------------------------------------

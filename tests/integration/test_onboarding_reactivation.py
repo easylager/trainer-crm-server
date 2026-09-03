@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import create_booking
 from src.application.trainer_onboarding_recovery_use_cases import (
+    ONBOARDING_TRIAL_OVER_GRACE_DAYS,
     STAGE_EMPTY_FORM,
     STAGE_NO_BOOKING,
     compute_due_onboarding_nudges,
@@ -28,6 +29,8 @@ from src.application.trainer_onboarding_recovery_use_cases import (
 from src.infrastructure.db.models import (
     ONBOARDING_NUDGE_STEP_D1,
     ONBOARDING_NUDGE_STEP_D3,
+    ONBOARDING_NUDGE_STEP_D7,
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
     TRAINER_STATUS_PENDING_PROFILE,
@@ -167,6 +170,50 @@ async def _give_non_real_booking(
             "st": status,
             "sb": is_sandbox,
         },
+    )
+    await session.commit()
+
+
+async def _ensure_trial_plan(session: AsyncSession) -> int:
+    """TASK-035: minimal is_trial=true plan row, reused across tests (mirrors the non-trial
+    ``_ensure_plan`` helper in ``test_lead_mode_recovery.py``)."""
+    r = await session.execute(
+        text("SELECT id FROM subscription_plans WHERE COALESCE(is_trial, false) = true LIMIT 1")
+    )
+    row = r.fetchone()
+    if row:
+        return int(row[0])
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO subscription_plans (name, price_cents, period_days, is_trial, sort_order)
+            VALUES ('Onboarding Reactivation Test Trial', 0, 14, true, 1) RETURNING id
+            """
+        )
+    )
+    (pid,) = r.fetchone()
+    await session.commit()
+    return int(pid)
+
+
+async def _insert_trial_subscription(
+    session: AsyncSession, *, trainer_id: int, expires_days_ago: int
+) -> None:
+    """A trial subscription whose ``expires_at`` is ``expires_days_ago`` days in the past (0 means
+    "expires right now"). Status intentionally kept 'trial' — ``get_trial_expired_days_ago`` must
+    find it by plan shape (``is_trial``), not by a status a background job hasn't flipped yet."""
+    plan_id = await _ensure_trial_plan(session)
+    now = datetime.now(timezone.utc)
+    expires_at = now - timedelta(days=expires_days_ago)
+    started_at = expires_at - timedelta(days=14)
+    await session.execute(
+        text(
+            """
+            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status)
+            VALUES (:tid, :pid, :s, :e, 'trial')
+            """
+        ),
+        {"tid": trainer_id, "pid": plan_id, "s": started_at, "e": expires_at},
     )
     await session.commit()
 
@@ -321,3 +368,95 @@ async def test_trainer_progressing_out_of_segment_stops_further_nudges(
 
     due_after = await compute_due_onboarding_nudges(db_session)
     assert not any(n.trainer_id == tid for n in due_after)
+
+
+# --- TASK-035: trial-over step for trainers stuck in pending_profile past their trial ----------
+
+
+@pytest.mark.asyncio
+async def test_trial_over_step_fires_for_stalled_pending_profile_trainer(
+    db_session: AsyncSession,
+) -> None:
+    """AC-001: pending_profile, no bookings, trial expired 20 days ago — not silence."""
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), created_days_ago=20)
+    await _insert_trial_subscription(db_session, trainer_id=tid, expires_days_ago=20)
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].step == ONBOARDING_NUDGE_STEP_TRIAL_OVER
+
+
+@pytest.mark.asyncio
+async def test_trial_over_step_not_yet_due_within_grace_period(db_session: AsyncSession) -> None:
+    """Trial just expired (within ``ONBOARDING_TRIAL_OVER_GRACE_DAYS``) — falls back to the
+    normal D+1/D+3/D+7 pick instead of the trial-over step firing same-day as billing's own
+    'trial ends today' reminder."""
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), created_days_ago=20)
+    assert ONBOARDING_TRIAL_OVER_GRACE_DAYS >= 1
+    await _insert_trial_subscription(db_session, trainer_id=tid, expires_days_ago=0)
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].step == ONBOARDING_NUDGE_STEP_D7
+
+
+@pytest.mark.asyncio
+async def test_trial_over_step_is_idempotent(db_session: AsyncSession) -> None:
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), created_days_ago=20)
+    await _insert_trial_subscription(db_session, trainer_id=tid, expires_days_ago=20)
+    for step in (
+        ONBOARDING_NUDGE_STEP_D1,
+        ONBOARDING_NUDGE_STEP_D3,
+        ONBOARDING_NUDGE_STEP_D7,
+        ONBOARDING_NUDGE_STEP_TRIAL_OVER,
+    ):
+        await mark_onboarding_nudge_sent(
+            db_session, trainer_id=tid, step=step, stage_anchor=STAGE_EMPTY_FORM
+        )
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert mine == []
+
+
+@pytest.mark.asyncio
+async def test_trial_over_step_excluded_for_active_no_booking_stage(
+    db_session: AsyncSession,
+) -> None:
+    """Regression for the TASK-035 Decision: STAGE_NO_BOOKING (active, no bookings) is out of
+    scope — it must keep getting the plain D+1/D+3/D+7 series, never `trialend`."""
+    tid = await _create_trainer(
+        db_session, telegram_id=_next_tg(), status=TRAINER_STATUS_ACTIVE, created_days_ago=20
+    )
+    await _insert_trial_subscription(db_session, trainer_id=tid, expires_days_ago=20)
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].step == ONBOARDING_NUDGE_STEP_D7
+
+
+@pytest.mark.asyncio
+async def test_trial_over_step_excluded_for_deactivated_trainer(db_session: AsyncSession) -> None:
+    """EDGE-002: an admin deactivation after trial expiry must stop the series outright."""
+    tid = await _create_trainer(
+        db_session, telegram_id=_next_tg(), status=TRAINER_STATUS_DEACTIVATED, created_days_ago=20
+    )
+    await _insert_trial_subscription(db_session, trainer_id=tid, expires_days_ago=20)
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert mine == []
+
+
+@pytest.mark.asyncio
+async def test_no_trial_row_leaves_normal_series_unaffected(db_session: AsyncSession) -> None:
+    """A trainer who never had a trial subscription row keeps the plain offset-based pick."""
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), created_days_ago=1)
+
+    due = await compute_due_onboarding_nudges(db_session)
+    mine = [n for n in due if n.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].step == ONBOARDING_NUDGE_STEP_D1

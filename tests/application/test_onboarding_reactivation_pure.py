@@ -17,6 +17,7 @@ from src.infrastructure.db.models import (
     ONBOARDING_NUDGE_STEP_D1,
     ONBOARDING_NUDGE_STEP_D3,
     ONBOARDING_NUDGE_STEP_D7,
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
     TRAINER_STATUS_PENDING_PROFILE,
@@ -329,3 +330,65 @@ class TestRenderOnboardingNudgeText:
             _render_onboarding_nudge_text(
                 _nudge(step="d999", stage=STAGE_EMPTY_FORM), trial_days_remaining=None
             )
+
+
+class TestRenderTrialOverStep:
+    """TASK-035: honest 'trial ended' framing for pending_profile trainers past their trial."""
+
+    def test_names_trial_ended_and_continuing(self):
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(step=ONBOARDING_NUDGE_STEP_TRIAL_OVER, stage=STAGE_NOT_SUBMITTED),
+            trial_days_remaining=None,
+        )
+        assert "пробный период закончился" in text.lower()
+        assert "продолжить" in text.lower()
+
+    def test_does_not_promise_functionality_outside_pending_profile(self):
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(step=ONBOARDING_NUDGE_STEP_TRIAL_OVER, stage=STAGE_NOT_SUBMITTED),
+            trial_days_remaining=None,
+        )
+        lowered = text.lower()
+        for forbidden in ("crm", "тариф", "аналитик", "групп"):
+            assert forbidden not in lowered
+
+    def test_rejected_resubmit_does_not_sound_like_start_over(self):
+        """EDGE-001: trial ended + moderation feedback must not read as 'begin again'."""
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(step=ONBOARDING_NUDGE_STEP_TRIAL_OVER, stage=STAGE_REJECTED_RESUBMIT),
+            trial_days_remaining=None,
+        )
+        lowered = text.lower()
+        assert "начните заново" not in lowered
+        assert "регистрац" not in lowered
+        assert "замечания" in lowered
+
+    def test_reuses_stage_specific_body(self):
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(
+                step=ONBOARDING_NUDGE_STEP_TRIAL_OVER,
+                stage=STAGE_MISSING_FIELD,
+                missing=("город", "услуга"),
+            ),
+            trial_days_remaining=None,
+        )
+        assert "город" in text
+        assert "услуга" in text
+
+    def test_no_duplicate_trial_suffix(self):
+        """trial_days_remaining is always None by the time this step fires — no double messaging."""
+        from src.bot.notification_loops import _render_onboarding_nudge_text
+
+        text = _render_onboarding_nudge_text(
+            _nudge(step=ONBOARDING_NUDGE_STEP_TRIAL_OVER, stage=STAGE_NOT_SUBMITTED),
+            trial_days_remaining=None,
+        )
+        assert text.count("Пробный период") == 1

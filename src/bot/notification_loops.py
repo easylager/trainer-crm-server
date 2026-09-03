@@ -130,6 +130,7 @@ from src.infrastructure.db.models import (
     ONBOARDING_NUDGE_STEP_D1,
     ONBOARDING_NUDGE_STEP_D3,
     ONBOARDING_NUDGE_STEP_D7,
+    ONBOARDING_NUDGE_STEP_TRIAL_OVER,
     RECOVERY_STEP_D0,
     RECOVERY_STEP_D3,
     RECOVERY_STEP_D14,
@@ -2445,12 +2446,18 @@ def _render_onboarding_nudge_text(
     nudge: DueOnboardingNudge, *, trial_days_remaining: int | None
 ) -> str:
     """Pure: step intro + stage-specific body naming the concrete next action + trial urgency."""
-    intro_map = (
-        _ONBOARDING_EMPTY_INTRO if nudge.stage == STAGE_EMPTY_FORM else _ONBOARDING_STEP_INTRO
-    )
-    intro = intro_map.get(nudge.step)
-    if intro is None:
-        raise ValueError(f"Unknown onboarding nudge step: {nudge.step!r}")
+    if nudge.step == ONBOARDING_NUDGE_STEP_TRIAL_OVER:
+        # TASK-035: one honest intro regardless of stage — the stage-specific body below (same
+        # selection as every other step) is what keeps this from sounding like "start over" for
+        # e.g. STAGE_REJECTED_RESUBMIT (EDGE-001).
+        intro = msg.TRAINER_ONBOARDING_NUDGE_INTRO_TRIAL_OVER
+    else:
+        intro_map = (
+            _ONBOARDING_EMPTY_INTRO if nudge.stage == STAGE_EMPTY_FORM else _ONBOARDING_STEP_INTRO
+        )
+        intro = intro_map.get(nudge.step)
+        if intro is None:
+            raise ValueError(f"Unknown onboarding nudge step: {nudge.step!r}")
 
     if nudge.stage == STAGE_MISSING_FIELD:
         if tuple(nudge.missing_labels_ru) == ("фотография профиля",):
@@ -2476,8 +2483,9 @@ def _render_onboarding_nudge_text(
 
 async def run_onboarding_reactivation_loop(trainer_bot: Bot) -> None:
     """
-    Once per day: send the next due onboarding-reactivation nudge (D+1/D+3/D+7) to each
-    telegram-linked trainer who stalled before finishing onboarding.
+    Once per day: send the next due onboarding-reactivation nudge (D+1/D+3/D+7, or `trialend` once
+    the trial has actually expired — TASK-035) to each telegram-linked trainer who stalled before
+    finishing onboarding.
 
     Idempotency boundary: trainer_onboarding_nudges (UNIQUE on trainer_id+step). Cancel-on-progress
     is implicit — trainers who finish the relevant step disappear from the candidate list.

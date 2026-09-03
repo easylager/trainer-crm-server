@@ -6,7 +6,7 @@ then verify aggregator shape and content.
 """
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
@@ -393,6 +393,53 @@ async def test_digest_candidates_include_pending_profile_trainer(db_session) -> 
     tg = unique_test_telegram_id()
     trainer_id = await _seed_bare_trainer(db_session, status="pending_profile", telegram_id=tg)
     await _insert_todays_slot_and_booking(db_session, trainer_id, today)
+    await db_session.commit()
+
+    rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
+    assert trainer_id in {r["trainer_id"] for r in rows}
+
+
+async def _insert_expired_trial_subscription(db_session, *, trainer_id: int) -> None:
+    """TASK-035: candidate SQL must not gate on subscription state at all."""
+    r = await db_session.execute(
+        text("SELECT id FROM subscription_plans WHERE COALESCE(is_trial, false) = true LIMIT 1")
+    )
+    row = r.fetchone()
+    if row:
+        plan_id = int(row[0])
+    else:
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO subscription_plans (name, price_cents, period_days, is_trial, sort_order)
+                VALUES ('Digest Test Trial', 0, 14, true, 1) RETURNING id
+                """
+            )
+        )
+        (plan_id,) = r.fetchone()
+    now = datetime.now(timezone.utc)
+    expires_at = now - timedelta(days=20)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status)
+            VALUES (:tid, :pid, :s, :e, 'trial')
+            """
+        ),
+        {"tid": trainer_id, "pid": plan_id, "s": expires_at - timedelta(days=14), "e": expires_at},
+    )
+
+
+@pytest.mark.asyncio
+async def test_digest_candidates_include_pending_profile_trainer_with_expired_trial(
+    db_session,
+) -> None:
+    """TASK-035 AC-002: expired-trial pending_profile trainer stays a digest candidate."""
+    today = date.today()
+    tg = unique_test_telegram_id()
+    trainer_id = await _seed_bare_trainer(db_session, status="pending_profile", telegram_id=tg)
+    await _insert_todays_slot_and_booking(db_session, trainer_id, today)
+    await _insert_expired_trial_subscription(db_session, trainer_id=trainer_id)
     await db_session.commit()
 
     rows = await _list_digest_candidates_for_kind(db_session, today, "daily")
