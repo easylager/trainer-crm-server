@@ -58,6 +58,13 @@ async def upsert_trainer_client_note(
         {"tid": trainer_id, "cid": client_id},
     )
     row = r.fetchone()
+    if trimmed:
+        from src.application.trainer_feature_tracking import (
+            FEATURE_CLIENT_NOTE_WRITTEN,
+            record_feature_first_use,
+        )
+
+        await record_feature_first_use(session, trainer_id, FEATURE_CLIENT_NOTE_WRITTEN)
     await session.commit()
     return {"id": row[0], "note": row[1] or ""}
 

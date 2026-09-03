@@ -32,7 +32,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=False,
                 moderation_submitted=False,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             == STAGE_EMPTY_FORM
         )
@@ -45,7 +45,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=False,
                 moderation_submitted=False,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             == STAGE_MISSING_FIELD
         )
@@ -58,7 +58,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=True,
                 moderation_submitted=False,
                 has_moderation_feedback=True,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             == STAGE_REJECTED_RESUBMIT
         )
@@ -71,7 +71,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=True,
                 moderation_submitted=False,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             == STAGE_NOT_SUBMITTED
         )
@@ -85,7 +85,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=True,
                 moderation_submitted=True,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             is None
         )
@@ -98,7 +98,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=True,
                 moderation_submitted=True,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             == STAGE_NO_BOOKING
         )
@@ -112,7 +112,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=False,
                 moderation_submitted=False,
                 has_moderation_feedback=False,
-                has_any_booking=True,
+                has_real_booking=True,
             )
             is None
         )
@@ -125,7 +125,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=True,
                 moderation_submitted=True,
                 has_moderation_feedback=False,
-                has_any_booking=True,
+                has_real_booking=True,
             )
             is None
         )
@@ -139,7 +139,7 @@ class TestDetermineOnboardingStage:
                 profile_complete=False,
                 moderation_submitted=False,
                 has_moderation_feedback=False,
-                has_any_booking=False,
+                has_real_booking=False,
             )
             is None
         )

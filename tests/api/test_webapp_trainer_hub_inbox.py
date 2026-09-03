@@ -11,6 +11,7 @@ from src.api.app import app
 from tests.api.test_webapp_trainer_schedule_integration import (
     _create_active_trainer,
     _fresh_trainer_telegram_id,
+    _insert_slot,
     patch_trainer_webapp_init,
 )
 from tests.db_catalog_helpers import require_seed_service_id
@@ -146,6 +147,123 @@ async def test_hub_inbox_event_records_audit(app_use_test_db, db_session) -> Non
             )
     assert resp.status_code == 200
     assert resp.json().get("ok") is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event",
+    [
+        "hint_clicked",
+        "hint_dismissed",
+        "next_step_shown",
+        "next_step_clicked",
+        "next_step_dismissed",
+    ],
+)
+async def test_hub_inbox_event_accepts_task_028_event_types(
+    app_use_test_db, db_session, event: str
+) -> None:
+    """TASK-028: showed→clicked/dismissed pairing needs these event types allowed."""
+    tg = _fresh_trainer_telegram_id()
+    await _create_active_trainer(db_session, tg, with_crm=True)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/hub/inbox-event",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"event": event, "surface": "hub", "item_id": "share_link"},
+            )
+    assert resp.status_code == 200
+    assert resp.json().get("ok") is True
+
+
+@pytest.mark.asyncio
+async def test_hub_inbox_event_rejects_unknown_event(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    await _create_active_trainer(db_session, tg, with_crm=True)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/hub/inbox-event",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"event": "made_up_event", "surface": "hub"},
+            )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_rhythm_hint_dismiss_snoozes_a_dismissible_hint(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    await _create_active_trainer(db_session, tg, with_crm=True)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/hub/rhythm-hint/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"hint_id": "referral_growth"},
+            )
+    assert resp.status_code == 200
+    assert resp.json().get("ok") is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hint_id", ["open_loop_no_next", "slots_this_week", "made_up_hint"])
+async def test_rhythm_hint_dismiss_rejects_urgent_and_unknown(
+    app_use_test_db, db_session, hint_id: str
+) -> None:
+    tg = _fresh_trainer_telegram_id()
+    await _create_active_trainer(db_session, tg, with_crm=True)
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/hub/rhythm-hint/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"hint_id": hint_id},
+            )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_dismissed_rhythm_hint_disappears_from_bootstrap_end_to_end(
+    app_use_test_db, db_session
+) -> None:
+    """
+    TASK-029 AC-001/AC-003 end-to-end: real dismiss endpoint → real snooze row →
+    real bootstrap response no longer contains the hint — no localStorage involved anywhere.
+    """
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    # has_future_slots=True, weekly_template_count stays 0 → the "template" rhythm hint fires.
+    await _insert_slot(db_session, trainer_id, date.today() + timedelta(days=2), 10, 11)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            before = await client.get(
+                "/api/webapp/trainer/hub/bootstrap?bookings_limit=10",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            before_ids = {it["id"] for it in before.json()["action_inbox"]["items"]}
+            assert "template" in before_ids
+
+            dismiss_resp = await client.post(
+                "/api/webapp/trainer/hub/rhythm-hint/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"hint_id": "template"},
+            )
+            assert dismiss_resp.status_code == 200
+
+            after = await client.get(
+                "/api/webapp/trainer/hub/bootstrap?bookings_limit=10",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            after_ids = {it["id"] for it in after.json()["action_inbox"]["items"]}
+            assert "template" not in after_ids
+
+            inbox_count = await client.get(
+                "/api/webapp/trainer/hub/inbox-count",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert inbox_count.status_code == 200
 
 
 @pytest.mark.asyncio

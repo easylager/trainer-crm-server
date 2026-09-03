@@ -1066,6 +1066,9 @@ async def create_training_group(
             {"gid": gid, "dow": dow, "st": st, "dur": dur},
         )
     await materialize_slots_for_group(session, trainer_id, gid)
+    from src.application.trainer_feature_tracking import FEATURE_GROUP_CREATED, record_feature_first_use
+
+    await record_feature_first_use(session, trainer_id, FEATURE_GROUP_CREATED)
     return gid
 
 

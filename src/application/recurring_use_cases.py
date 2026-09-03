@@ -303,6 +303,9 @@ async def create_recurring_client_slot(
         },
     )
     (pk,) = r.fetchone()
+    from src.application.trainer_feature_tracking import FEATURE_RECURRING_SET, record_feature_first_use
+
+    await record_feature_first_use(session, trainer_id, FEATURE_RECURRING_SET)
     await session.commit()
     return pk
 

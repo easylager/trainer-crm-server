@@ -357,6 +357,21 @@
       var HUB_RHYTHM_DISMISS_DAYS_SHORT = 1;
       var HUB_RHYTHM_DISMISS_DAYS_LONG = 2;
       var HUB_RHYTHM_DISMISS_DAYS_GROWTH = 14;
+      /**
+       * TASK-029: hint ids whose «Не сейчас» is server-owned (trainer_hint_dismissals) —
+       * must match DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS in trainer_hint_dismissal_use_cases.py.
+       * Everything else still uses the localStorage fallback below.
+       */
+      var HUB_SERVER_DISMISSIBLE_HINT_IDS = [
+        'referral_growth',
+        'open_loop_free_next',
+        'slots_next_week',
+        'template',
+        'client_notes',
+        'open_loop_no_telegram',
+      ];
+      /** DEC-002/DEC-004: urgent hints are never dismissible, on client or server. */
+      var HUB_URGENT_NON_DISMISSIBLE_HINT_IDS = ['open_loop_no_next', 'slots_this_week'];
       /** Max growth/education rhythm rows; urgent rhythm + operational never capped. */
       var HUB_RHYTHM_GROWTH_MAX = 2;
       var HUB_RHYTHM_URGENT_MIN_PRIORITY = 90;
@@ -1394,6 +1409,11 @@
       }
 
       function isRhythmHintDismissed(hintId) {
+        if (HUB_URGENT_NON_DISMISSIBLE_HINT_IDS.indexOf(hintId) !== -1) return false;
+        if (HUB_SERVER_DISMISSIBLE_HINT_IDS.indexOf(hintId) !== -1) {
+          var snoozes = hubOnboardingData && hubOnboardingData.active_hint_snoozes;
+          return !!(snoozes && snoozes.indexOf(hintId) !== -1);
+        }
         return getRhythmDismissUntilMs(hintId) > Date.now();
       }
 
@@ -1616,7 +1636,8 @@
           }
           out.push(openLoopCand);
         }
-        if (openLoopNoUpcoming > 0 && !isRhythmHintDismissed('open_loop_no_next')) {
+        /* DEC-002/DEC-005: open_loop_no_next is urgent — never gated by dismiss, fallback included. */
+        if (openLoopNoUpcoming > 0) {
           var hasFutureAvailSlots = !!d.has_future_available_slots;
           var noNextBase =
             openLoopNoUpcoming +
@@ -2075,7 +2096,7 @@
             primaryLabel: cand.ctaLabel || 'Открыть',
             secondaryLabel: cand.cta2Label || null,
             candidate: cand,
-            dismissible: true,
+            dismissible: HUB_URGENT_NON_DISMISSIBLE_HINT_IDS.indexOf(cand.id) === -1,
           });
         });
 
@@ -2266,25 +2287,31 @@
       }
 
       function dismissHubInboxRhythmItem(hintId) {
-        if (!hintId) return;
-        var days;
-        if (
-          hintId === 'share_link' ||
-          hintId === 'referral_growth' ||
-          hintId === 'open_loop_free_next_growth'
-        ) {
-          days = HUB_RHYTHM_DISMISS_DAYS_GROWTH;
-        } else if (
-          hintId === 'template' ||
-          hintId === 'client_notes' ||
-          hintId === 'catalog_publication' ||
-          hintId === 'subscription_lapsed'
-        ) {
-          days = HUB_RHYTHM_DISMISS_DAYS_LONG;
+        if (!hintId || HUB_URGENT_NON_DISMISSIBLE_HINT_IDS.indexOf(hintId) !== -1) return;
+        if (HUB_SERVER_DISMISSIBLE_HINT_IDS.indexOf(hintId) !== -1) {
+          /* Optimistic: server owns the snooze duration, so just mark it locally and let the
+             next bootstrap/checklist refresh confirm it — same request never blocks the render. */
+          if (hubOnboardingData) {
+            var snoozes = (hubOnboardingData.active_hint_snoozes || []).slice();
+            if (snoozes.indexOf(hintId) === -1) snoozes.push(hintId);
+            hubOnboardingData.active_hint_snoozes = snoozes;
+          }
+          fetch(apiUrlWithQuery('/trainer/hub/rhythm-hint/dismiss'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ hint_id: hintId }),
+          }).catch(function () {});
         } else {
-          days = HUB_RHYTHM_DISMISS_DAYS_SHORT;
+          var days;
+          if (hintId === 'share_link' || hintId === 'open_loop_free_next_growth') {
+            days = HUB_RHYTHM_DISMISS_DAYS_GROWTH;
+          } else if (hintId === 'catalog_publication' || hintId === 'subscription_lapsed') {
+            days = HUB_RHYTHM_DISMISS_DAYS_LONG;
+          } else {
+            days = HUB_RHYTHM_DISMISS_DAYS_SHORT;
+          }
+          setRhythmDismissUntilMs(hintId, Date.now() + days * 24 * 60 * 60 * 1000);
         }
-        setRhythmDismissUntilMs(hintId, Date.now() + days * 24 * 60 * 60 * 1000);
         applyHubRhythmResolver();
         renderHubSummaryHints();
       }
@@ -2321,6 +2348,7 @@
           return;
         }
         if (item.kind === 'rhythm') {
+          trackHubGuidanceEvent('hint_clicked', item.id);
           if (item.candidate) {
             runRhythmCandidateAction(item.candidate);
           } else if (item.primary_action) {
@@ -2592,6 +2620,20 @@
         initTrainerPendingInboxModule();
       }
 
+      /**
+       * TASK-028: fire-and-forget guidance telemetry — showed → clicked/dismissed pairing.
+       * Never blocks or delays the action it's attached to (посылается до навигации,
+       * не дожидаясь ответа) and never throws into the caller (EDGE-002/AC-007).
+       */
+      function trackHubGuidanceEvent(event, itemId, surface) {
+        if (!getInitData()) return;
+        fetch(apiUrlWithQuery('/trainer/hub/inbox-event'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify({ event: event, item_id: itemId || null, surface: surface || 'hub' }),
+        }).catch(function () {});
+      }
+
       function wireHubActionInboxEvents(host, visibleItems) {
         if (hubActionInboxWired) return;
         hubActionInboxWired = true;
@@ -2717,13 +2759,21 @@
           .catch(function () { /* сеть отвалилась — переспросим в следующий раз */ });
       }
 
+      /** TASK-028: показ карточки трекается один раз на смену её `key`, не на каждый ре-рендер. */
+      var hubNextStepLastTrackedKey = null;
+
       /** Одна карточка, одно действие. Нет карточки — секция скрыта целиком. */
       function renderHubNextStep(step) {
         var host = document.getElementById('hubNextStep');
         if (!host) return;
         if (!step) {
           host.setAttribute('hidden', 'hidden');
+          hubNextStepLastTrackedKey = null;
           return;
+        }
+        if (step.key && step.key !== hubNextStepLastTrackedKey) {
+          hubNextStepLastTrackedKey = step.key;
+          trackHubGuidanceEvent('next_step_shown', step.key);
         }
         var titleEl = document.getElementById('hubNextStepTitle');
         var bodyEl = document.getElementById('hubNextStepBody');
@@ -2753,6 +2803,10 @@
       }
 
       function runHubNextStepAction(step, action) {
+        trackHubGuidanceEvent(
+          action === 'dismiss' ? 'next_step_dismissed' : 'next_step_clicked',
+          step && step.key
+        );
         if (action === 'open_onboarding') {
           navigateTo('trainer-onboarding');
           return;

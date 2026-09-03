@@ -319,6 +319,13 @@ async def replace_templates_for_day(
                     "aid": indiv_aid,
                 },
             )
+    if minute_to_capacity:
+        from src.application.trainer_feature_tracking import (
+            FEATURE_WEEKLY_TEMPLATE,
+            record_feature_first_use,
+        )
+
+        await record_feature_first_use(session, trainer_id, FEATURE_WEEKLY_TEMPLATE)
     await session.commit()
 
 

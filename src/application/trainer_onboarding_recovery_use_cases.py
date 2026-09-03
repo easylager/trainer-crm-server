@@ -37,6 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.trainer_client_invite_tracking import sql_trainer_has_real_booking
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
 from src.infrastructure.db.models import (
@@ -92,15 +93,17 @@ def determine_onboarding_stage(
     profile_complete: bool,
     moderation_submitted: bool,
     has_moderation_feedback: bool,
-    has_any_booking: bool,
+    has_real_booking: bool,
 ) -> str | None:
     """
     Pure: map checklist flags to a stuck-stage id, or None if the trainer is not actionable right
     now (fully onboarded, or waiting on admin review with nothing left for them to do).
     """
-    # Первая запись — практика уже работает. Старая серия («добить анкету») здесь
-    # умолкает: тарифы и «что не входит» — отдельный мягкий пинг после записи.
-    if has_any_booking:
+    # Первая настоящая запись — практика уже работает. Старая серия («добить анкету») здесь
+    # умолкает: тарифы и «что не входит» — отдельный мягкий пинг после записи. Читаем
+    # has_real_booking, а не has_any_booking (TASK-027) — иначе одна тестовая или мгновенно
+    # отменённая запись молча гасит всю серию реактивации ровно тому, кому она нужнее всего.
+    if has_real_booking:
         return None
     if trainer_status == TRAINER_STATUS_ACTIVE:
         return STAGE_NO_BOOKING
@@ -134,15 +137,24 @@ def _pick_due_step(
 
 
 async def _list_segment_candidates(session: AsyncSession) -> list[dict[str, Any]]:
-    """Telegram-linked trainers in the onboarding-reactivation segment (status shape only)."""
+    """
+    Telegram-linked trainers in the onboarding-reactivation segment (status shape only).
+
+    The "no real booking yet" exclusion must match ``has_real_booking`` in the checklist
+    (TASK-027) — a sandbox demo or an instantly-voided booking must not silence this whole
+    series, and a real booking that was later cancelled must not resurrect a trainer into it.
+    Both this SQL-level filter and ``determine_onboarding_stage``'s own gate below must read
+    the same signal: if the SQL admits a candidate but the stage resolver still checks the
+    old ``has_any_booking``, the trainer is silently dropped a second time.
+    """
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT t.id, t.telegram_id, t.created_at
             FROM trainers t
             WHERE t.telegram_id IS NOT NULL
               AND t.status IN (:status_pending_profile, :status_active)
-              AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.trainer_id = t.id)
+              AND NOT {sql_trainer_has_real_booking()}
             """
         ),
         {
@@ -186,7 +198,7 @@ async def list_onboarding_candidates(session: AsyncSession) -> list[OnboardingCa
             profile_complete=bool(checklist.get("profile_complete")),
             moderation_submitted=bool(checklist.get("moderation_submitted")),
             has_moderation_feedback=has_feedback,
-            has_any_booking=bool(checklist.get("has_any_booking")),
+            has_real_booking=bool(checklist.get("has_real_booking")),
         )
         if stage is None:
             continue

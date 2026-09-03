@@ -3,8 +3,20 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``profile_complete`` = moderation submission tier (8 criteria); ``full_profile_complete`` = dossier (12).
 ``tt_minimal_complete`` = 5-field TTV gate (schedule/bookings in Mini App before activation).
 ``has_upcoming_booking`` mirrors hub upcoming list logic (pending/confirmed on future-ended slots).
-``has_any_booking`` = ever created a booking row for this trainer (includes ``cancelled`` / ``declined``)
-so onboarding «первая запись» does not regress after cancel.
+``has_any_booking`` = ever created a booking row for this trainer (includes ``cancelled`` /
+``declined`` / sandbox). Deliberately unfiltered: a sandbox demo booking (the «Попробовать
+на примере» onboarding path) must still flip this to True — activation parity with the real
+flow, so trying the sandbox once actually feels like progress instead of the product still
+saying «нет записей» right after (see ``tests/integration/test_sandbox_isolation.py``).
+This is *not* the flag to gate «has a real client yet» decisions on — use
+``has_real_booking`` for that (TASK-027): a real, non-sandbox booking not in
+(``cancelled``/``declined``/``trainer_removed``), OR the one-time
+``trainer_profiles.first_booking_milestone_at`` flag already claimed — so it does not
+regress once a real booking was completed and later cancelled, while a sandbox demo or an
+instantly-voided booking never counts as one in the first place. The old, single
+``has_any_booking`` used to be read for both purposes at once — that conflation is exactly
+what silently muted the share-link card and the reactivation series for trainers who had
+only tried the sandbox demo or had a booking voided before it ever happened.
 ``has_completed_booking`` = at least one booking with status ``completed`` (hub nudge: client notes).
 ``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
 ``schedule_unlocked`` is True for every linked, non-deactivated trainer (onboarding v2:
@@ -48,6 +60,7 @@ from src.application.organization_capabilities import (
     resolve_solo_trainer_capabilities,
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
+from src.application.trainer_client_invite_tracking import sql_trainer_has_real_booking
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
 from src.infrastructure.db.models import (
     TRAINER_STATUS_ACTIVE,
@@ -101,6 +114,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "has_future_available_slots": False,
         "has_future_slots": False,
         "has_any_booking": False,
+        "has_real_booking": False,
         "has_upcoming_booking": False,
         "has_confirmed_booking": False,
         "has_completed_booking": False,
@@ -144,6 +158,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         # Center manager path: skip solo «первая запись» onboarding (hub step 2)
         # and «в каталог» (hub step 3) — карточку студийного тренера публикует не он сам.
         out["has_any_booking"] = True
+        out["has_real_booking"] = True
         out["moderation_submitted"] = True
         out["slots_locked_reason"] = None
         out["bookings_locked_reason"] = None
@@ -318,6 +333,12 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         {"tid": trainer_id},
     )
     out["has_any_booking"] = bool(r2.scalar())
+
+    r2b = await session.execute(
+        text(f"SELECT {sql_trainer_has_real_booking(trainer_id_expr=':tid')}"),
+        {"tid": trainer_id},
+    )
+    out["has_real_booking"] = bool(r2b.scalar())
 
     r_upcoming = await session.execute(
         text(

@@ -2703,7 +2703,13 @@ async def _list_digest_candidates_for_kind(
 ) -> list[dict]:
     """
     Trainers eligible for today's digest (kind='daily' or 'weekly'):
-    digest_enabled + telegram set + active + haven't received this kind today yet.
+    digest_enabled + telegram set + not deactivated + haven't received this kind today yet.
+
+    Onboarding v2: `status = 'active'` means "listed in the public catalog", not "working" —
+    a trainer stays `pending_profile` for weeks by product design (catalog invite waits for
+    5 real bookings). Gating the digest on catalog status silenced it for the entire trial;
+    the only status that should close this channel is an explicit admin deactivation.
+
     Returns id, telegram_id, digest_send_time, push_notification_start_hour,
     push_notification_end_hour; caller resolves send_at + decides firing.
     """
@@ -2724,7 +2730,7 @@ async def _list_digest_candidates_for_kind(
                AND ds.kind = :k
             WHERE t.digest_enabled = true
               AND t.telegram_id IS NOT NULL
-              AND t.status = 'active'
+              AND t.status <> 'deactivated'
               AND ds.id IS NULL
             """
         ),

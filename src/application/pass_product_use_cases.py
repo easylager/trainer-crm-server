@@ -503,6 +503,12 @@ async def create_pass_product(
             ),
             {"pid": pk, "kind": kind},
         )
+    from src.application.trainer_feature_tracking import (
+        FEATURE_PASS_PRODUCT_CREATED,
+        record_feature_first_use,
+    )
+
+    await record_feature_first_use(session, trainer_id, FEATURE_PASS_PRODUCT_CREATED)
     await session.commit()
     return pk
 
@@ -846,6 +852,9 @@ async def issue_pass_to_client(
         },
     )
     row = r.fetchone()
+    from src.application.trainer_feature_tracking import FEATURE_PASS_ISSUED, record_feature_first_use
+
+    await record_feature_first_use(session, trainer_id, FEATURE_PASS_ISSUED)
     await session.commit()
     issued_at = row[5]
 

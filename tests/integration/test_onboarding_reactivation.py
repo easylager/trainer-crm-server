@@ -122,6 +122,55 @@ async def _give_first_booking(session: AsyncSession, trainer_id: int) -> None:
     )
 
 
+async def _give_non_real_booking(
+    session: AsyncSession, trainer_id: int, *, is_sandbox: bool = False, status: str = "confirmed"
+) -> None:
+    """TASK-027: a sandbox demo or an instantly-voided booking — must NOT drop the trainer
+    out of the reactivation segment, unlike a real booking (``_give_first_booking`` above)."""
+    from datetime import date, time
+
+    service_id = await require_seed_service_id(session)
+    tg = unique_test_telegram_id()
+    phone, phone_normalized = belarus_test_phone(tg)
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'Test', 'Client', :phone, :phone_normalized) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "phone_normalized": phone_normalized},
+    )
+    (client_id,) = r.fetchone()
+    r = await session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked') RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": date.today() + timedelta(days=1)},
+    )
+    (slot_id,) = r.fetchone()
+    await session.execute(
+        text(
+            """
+            INSERT INTO bookings (trainer_id, client_id, slot_id, service_id, status, is_sandbox)
+            VALUES (:tid, :cid, :sid, :svc, :st, :sb)
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "cid": client_id,
+            "sid": slot_id,
+            "svc": service_id,
+            "st": status,
+            "sb": is_sandbox,
+        },
+    )
+    await session.commit()
+
+
 # --- tests -------------------------------------------------------------------
 
 
@@ -155,6 +204,34 @@ async def test_active_with_a_booking_is_not_a_candidate(db_session: AsyncSession
     candidates = await list_onboarding_candidates(db_session)
     mine = [c for c in candidates if c.trainer_id == tid]
     assert mine == [], "Trainer with a first booking must drop out of the reactivation segment"
+
+
+@pytest.mark.asyncio
+async def test_active_with_only_sandbox_booking_stays_a_candidate(
+    db_session: AsyncSession,
+) -> None:
+    """TASK-027 AC-004: a sandbox demo must not mute the whole reactivation series."""
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), status=TRAINER_STATUS_ACTIVE)
+    await _give_non_real_booking(db_session, tid, is_sandbox=True, status="confirmed")
+
+    candidates = await list_onboarding_candidates(db_session)
+    mine = [c for c in candidates if c.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].stage == STAGE_NO_BOOKING
+
+
+@pytest.mark.asyncio
+async def test_active_with_only_cancelled_booking_stays_a_candidate(
+    db_session: AsyncSession,
+) -> None:
+    """TASK-027 AC-004: a booking voided before it happened must not mute the series either."""
+    tid = await _create_trainer(db_session, telegram_id=_next_tg(), status=TRAINER_STATUS_ACTIVE)
+    await _give_non_real_booking(db_session, tid, is_sandbox=False, status="cancelled")
+
+    candidates = await list_onboarding_candidates(db_session)
+    mine = [c for c in candidates if c.trainer_id == tid]
+    assert len(mine) == 1
+    assert mine[0].stage == STAGE_NO_BOOKING
 
 
 @pytest.mark.asyncio

@@ -91,7 +91,9 @@ def resolve_trainer_next_step(
 
     has_week = int(checklist.get("weekly_template_count") or 0) > 0
     has_slots = bool(checklist.get("has_future_slots"))
-    has_booking = bool(checklist.get("has_any_booking"))
+    # has_real_booking (not has_any_booking): a sandbox demo or an instantly-voided booking
+    # must not hide the «отправьте ссылку ученику» card — see TASK-027.
+    has_booking = bool(checklist.get("has_real_booking"))
     real_bookings = int(checklist.get("real_bookings_count") or 0)
     in_catalog = bool(checklist.get("is_active")) and bool(checklist.get("is_catalog_visible"))
 

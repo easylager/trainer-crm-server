@@ -404,7 +404,10 @@ async def _list_trainer_facts(
                 ORDER BY MAX(s.slot_date) DESC, c.id ASC
                 LIMIT 1
             ) d ON true
-            WHERE t.status = 'active'
+            -- Onboarding v2: `status='active'` means "listed in the catalog", not "working" —
+            -- a working trainer stays `pending_profile` for weeks by design. Only an explicit
+            -- admin deactivation should close this channel.
+            WHERE t.status <> 'deactivated'
               AND t.telegram_id IS NOT NULL
               AND (lp.last_at IS NULL OR lp.last_at < :cutoff)
             ORDER BY t.id
@@ -482,7 +485,7 @@ async def _list_client_facts(
                     b.id AS booking_id,
                     s.slot_date,
                     s.start_time,
-                    s.duration_minutes,
+                    (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
                     TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')) AS trainer_name,
                     a.name AS arena_name
                 FROM bookings b

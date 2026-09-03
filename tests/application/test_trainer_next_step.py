@@ -27,6 +27,7 @@ def _checklist(**over) -> dict:
         "weekly_template_count": 0,
         "has_future_slots": False,
         "has_any_booking": False,
+        "has_real_booking": False,
         "real_bookings_count": 0,
         "arena_count": 0,
         "arena_work_format": None,
@@ -35,6 +36,12 @@ def _checklist(**over) -> dict:
         "is_catalog_visible": False,
     }
     base.update(over)
+    # TASK-027: resolve_trainer_next_step reads has_real_booking, not has_any_booking
+    # (a sandbox demo intentionally still flips the latter — activation parity). Every
+    # test written before that distinction existed sets has_any_booking to mean «есть
+    # реальная запись» — mirror it here unless a test explicitly cares about the split.
+    if "has_real_booking" not in over and "has_any_booking" in over:
+        base["has_real_booking"] = over["has_any_booking"]
     return base
 
 

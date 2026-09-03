@@ -33,14 +33,18 @@
   function renderActivationFunnel(af) {
     if (!af || !af.created) return '<div class="adm-empty">Нет данных</div>';
 
+    /* Онбординг v2: модерация гейтит каталог, а не инструменты тренера (см. TASK-026) —
+       первая реальная запись у большинства тренеров случается раньше, чем публикация
+       в каталоге, а не после неё. Порядок шагов отражает это, иначе процент "выпадения"
+       перед публикацией в каталоге был бы отрицательным и нечитаемым. */
     var steps = [
       { key: 'created',              label: 'Создан аккаунт тренера' },
       { key: 'linked_telegram',      label: 'Привязал Telegram' },
       { key: 'has_template',         label: 'Настроил шаблон расписания' },
       { key: 'copied_invite',        label: 'Скопировал ссылку для клиентов' },
-      { key: 'submitted_moderation', label: 'Отправил профиль на проверку' },
-      { key: 'activated',            label: 'Активирован (status = active)' },
       { key: 'has_first_booking',    label: 'Первая реальная запись' },
+      { key: 'submitted_moderation', label: 'Отправил профиль на проверку' },
+      { key: 'activated',            label: 'Опубликован в каталоге (status = active)' },
     ];
 
     var top = af.created || 1;
@@ -210,6 +214,58 @@
 
   /* ── CORRELATION TABLE (THE KEY) ─────────────────────────────────── */
 
+  /** TASK-028: per-hint показ/клик/отказ за последние 30 дней. Простая таблица, без чарта. */
+  function renderHintFunnel(rows) {
+    if (!rows || !rows.length) return '<div class="adm-empty">Нет данных за последние 30 дней</div>';
+    var html = '<table class="adm-table"><thead><tr>' +
+      '<th>Подсказка</th><th class="num">Показов</th><th class="num">Кликов</th>' +
+      '<th class="num">% клика</th><th class="num">Отказов</th><th class="num">% отказа</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(function (row) {
+      var shown = row.shown || 0;
+      var clickPct = shown > 0 ? Math.round((row.clicked / shown) * 100) : 0;
+      var dismissPct = shown > 0 ? Math.round((row.dismissed / shown) * 100) : 0;
+      html += '<tr>' +
+        '<td>' + A.escapeHtml(row.item_id || '—') + '</td>' +
+        '<td class="num">' + A.formatNum(shown) + '</td>' +
+        '<td class="num">' + A.formatNum(row.clicked || 0) + '</td>' +
+        '<td class="num">' + clickPct + '%</td>' +
+        '<td class="num">' + A.formatNum(row.dismissed || 0) + '</td>' +
+        '<td class="num">' + dismissPct + '%</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  /** TASK-028: гистограмма «сколько функций из N тронул тренер» на день 7 и день 14. */
+  function renderFeatureAdoption(adoption) {
+    if (!adoption) return '<div class="adm-empty">Нет данных</div>';
+    var total = adoption.total_features || 11;
+    function tableFor(rows) {
+      if (!rows || !rows.length) return '<div class="adm-empty">Нет тренеров нужного возраста</div>';
+      var trainersTotal = rows.reduce(function (s, r) { return s + (r.trainers || 0); }, 0);
+      var html = '<table class="adm-table"><thead><tr>' +
+        '<th>Функций тронуто (из ' + total + ')</th><th class="num">Тренеров</th><th class="num">%</th>' +
+        '</tr></thead><tbody>';
+      rows.forEach(function (row) {
+        var pct = trainersTotal > 0 ? Math.round((row.trainers / trainersTotal) * 100) : 0;
+        html += '<tr>' +
+          '<td>' + A.formatNum(row.features_touched) + '</td>' +
+          '<td class="num">' + A.formatNum(row.trainers) + '</td>' +
+          '<td class="num">' + pct + '%</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table>';
+      return html;
+    }
+    var html = '<div class="pa-corr-title" style="margin-bottom:8px">День 7</div>';
+    html += tableFor(adoption.day7);
+    html += '<div class="pa-corr-title" style="margin:16px 0 8px">День 14</div>';
+    html += tableFor(adoption.day14);
+    return html;
+  }
+
   function renderCorrelation(corr) {
     if (!corr || corr.length === 0) return '<div class="adm-empty">Недостаточно данных (нужны тренеры, активные ≥14 дней)</div>';
 
@@ -318,7 +374,7 @@
     html += '<div class="pa-section" id="s-proof">';
     html += '<div class="adm-section-title">2 · Доказательство ценности</div>';
     html += '<div class="adm-card">';
-    html += '<div style="font-size:12px;color:var(--tg-theme-hint-color);margin-bottom:12px">% активных тренеров, которые дошли до каждого ценностного момента.</div>';
+    html += '<div style="font-size:12px;color:var(--tg-theme-hint-color);margin-bottom:12px">% работающих тренеров (без деактивированных), которые дошли до каждого ценностного момента.</div>';
     html += renderProofOfValue(d.proof_of_value);
     html += '</div>';
     html += '</div>';
@@ -359,6 +415,19 @@
       '★ = топ-3 leading indicator.' +
       '</div>';
     html += renderCorrelation(d.correlation);
+    html += '</div>';
+    html += '</div>';
+
+    /* Section 7: Ведение — воронка подсказок и адаптация функций (TASK-028) */
+    html += '<div class="pa-section" id="s-guidance">';
+    html += '<div class="adm-section-title">7 · Ведение — подсказки и функции</div>';
+    html += '<div class="adm-card">';
+    html += '<div class="pa-corr-title">Воронка подсказок (последние 30 дней)</div>';
+    html += renderHintFunnel(d.hint_funnel);
+    html += '</div>';
+    html += '<div class="adm-card" style="margin-top:12px">';
+    html += '<div class="pa-corr-title">Сколько функций тронул тренер</div>';
+    html += renderFeatureAdoption(d.feature_adoption);
     html += '</div>';
     html += '</div>';
 
