@@ -238,7 +238,19 @@ async def test_second_run_reports_already_done_and_echoes_the_saved_week(
     data = resp.json()
     assert data["already_done"] is True
     assert data["week_is_suggestion"] is False
-    assert data["week"] == [{"day_of_week": 3, "hours": [6, 21], "arena_id": None}]
+    assert data["week"] == [
+        {
+            "day_of_week": 3,
+            "hours": [6, 21],
+            "arena_id": None,
+            # Full precision — this is what the screen sends back, and what keeps a 13:25
+            # slot from becoming 13:00 on the next «Сохранить».
+            "slots": [
+                {"start_minute": 6 * 60, "duration_minutes": 60, "arena_id": None},
+                {"start_minute": 21 * 60, "duration_minutes": 60, "arena_id": None},
+            ],
+        }
+    ]
     assert data["selected_service_ids"] == [service_id]
 
 
@@ -524,3 +536,140 @@ async def test_get_after_multi_arena_post_reports_multi_arena_true(app_use_test_
     assert week_by_day[0]["arena_id"] == zamok
     assert week_by_day[0]["hours"] == [11]
     assert week_by_day[2]["arena_id"] == manege
+
+
+# ---------------------------------------------------------------------------
+# TASK-021: экран переоткрываем — «Сохранить» не должен ничего разрушать
+# ---------------------------------------------------------------------------
+
+
+async def _add_template_row(
+    db_session,
+    trainer_id: int,
+    *,
+    dow: int,
+    start: str,
+    duration: int = 60,
+    capacity: int = 1,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+) -> None:
+    from datetime import time as _time
+
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_schedule_templates "
+            "(trainer_id, day_of_week, start_time, duration_minutes, capacity, service_id, arena_id) "
+            "VALUES (:t, :d, :s, :dur, :cap, :svc, :a)"
+        ),
+        {
+            "t": trainer_id,
+            "d": dow,
+            "s": _time.fromisoformat(start),
+            "dur": duration,
+            "cap": capacity,
+            "svc": service_id,
+            "a": arena_id,
+        },
+    )
+    await db_session.commit()
+
+
+async def _template_rows(db_session, trainer_id: int) -> list[tuple]:
+    r = await db_session.execute(
+        text(
+            "SELECT day_of_week, start_time, duration_minutes, capacity, arena_id "
+            "FROM trainer_schedule_templates WHERE trainer_id = :t "
+            "ORDER BY day_of_week, start_time"
+        ),
+        {"t": trainer_id},
+    )
+    return [
+        (int(x[0]), str(x[1]), int(x[2]), int(x[3]), int(x[4]) if x[4] is not None else None)
+        for x in r.fetchall()
+    ]
+
+
+def _echo_back(week: list[dict]) -> list[dict]:
+    """Ровно то, что делает экран, когда тренер нажал «Сохранить», ничего не тронув."""
+    return [{"day_of_week": d["day_of_week"], "slots": d["slots"]} for d in week]
+
+
+@pytest.mark.asyncio
+async def test_reopening_and_saving_changes_nothing(app_use_test_db, db_session) -> None:
+    """
+    Сквозной круг через HTTP: слот на :25, групповая строка и день с двумя площадками
+    переживают повторное «Сохранить» без единого изменения.
+    """
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_row = r.fetchone()
+    if not city_row:
+        pytest.skip("need cities in DB")
+    city_id = int(city_row[0])
+    arenas = []
+    for name in ("Каток A (тест)", "Каток B (тест)"):
+        ra = await db_session.execute(
+            text("INSERT INTO arenas (city_id, name, is_active) VALUES (:c, :n, true) RETURNING id"),
+            {"c": city_id, "n": name},
+        )
+        arenas.append(int(ra.fetchone()[0]))
+    await db_session.commit()
+
+    await _add_template_row(db_session, trainer_id, dow=0, start="13:25:00")
+    await _add_template_row(db_session, trainer_id, dow=1, start="07:00:00", arena_id=arenas[0])
+    await _add_template_row(db_session, trainer_id, dow=1, start="19:00:00", arena_id=arenas[1])
+    await _add_template_row(
+        db_session, trainer_id, dow=3, start="10:00:00", capacity=8, service_id=service_id
+    )
+    before = await _template_rows(db_session, trainer_id)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            get_resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+            assert get_resp.status_code == 200
+            week = get_resp.json()["week"]
+            post_resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": _echo_back(week),
+                    "duration_minutes": 60,
+                },
+            )
+
+    assert post_resp.status_code == 200, post_resp.text
+    assert await _template_rows(db_session, trainer_id) == before
+
+
+@pytest.mark.asyncio
+async def test_get_reports_full_precision_and_every_venue(app_use_test_db, db_session) -> None:
+    """GET отдаёт минуты и площадку на каждый слот — иначе экран не сможет их вернуть."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_row = r.fetchone()
+    if not city_row:
+        pytest.skip("need cities in DB")
+    ra = await db_session.execute(
+        text("INSERT INTO arenas (city_id, name, is_active) VALUES (:c, :n, true) RETURNING id"),
+        {"c": int(city_row[0]), "n": "Каток точного времени"},
+    )
+    arena_id = int(ra.fetchone()[0])
+    await db_session.commit()
+    await _add_template_row(
+        db_session, trainer_id, dow=0, start="13:25:00", duration=45, arena_id=arena_id
+    )
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(QUICK_SETUP_URL, headers={"X-Telegram-Init-Data": "mock"})
+
+    week = resp.json()["week"]
+    assert week[0]["slots"] == [
+        {"start_minute": 13 * 60 + 25, "duration_minutes": 45, "arena_id": arena_id}
+    ]

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_schedule_preset import (
     allowed_start_minutes_from_preset,
     fixed_slot_duration_minutes,
+    get_arena_schedule_preset_raw,
     get_schedule_grid_preset_for_trainer,
     get_schedule_grid_preset_for_trainer_arena,
     validate_duration_for_preset,
@@ -119,6 +120,40 @@ async def delete_template(session: AsyncSession, trainer_id: int, template_id: i
     return deleted
 
 
+def _hhmm(minutes: int) -> str:
+    """Minutes-from-midnight as HH:MM — for error messages a trainer has to act on."""
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+async def _presets_by_arena(
+    session: AsyncSession,
+    arena_ids: set[int | None],
+    trainer_preset: dict,
+) -> dict[int | None, dict]:
+    """
+    Grid preset per venue for one day's rows.
+
+    ``None`` means the row stores ``arena_id`` NULL — «wherever the trainer works by default» —
+    so it is judged by the trainer's own grid, exactly as materialization will resolve it.
+    """
+    out: dict[int | None, dict] = {None: trainer_preset}
+    for aid in arena_ids:
+        if aid is None or aid in out:
+            continue
+        out[aid] = await get_arena_schedule_preset_raw(session, int(aid))
+    return out
+
+
+async def _arena_names(session: AsyncSession, arena_ids: set[int]) -> dict[int, str]:
+    if not arena_ids:
+        return {}
+    r = await session.execute(
+        text("SELECT id, name FROM arenas WHERE id = ANY(:ids)"),
+        {"ids": sorted(arena_ids)},
+    )
+    return {int(row[0]): row[1] for row in r.fetchall()}
+
+
 async def replace_templates_for_day(
     session: AsyncSession,
     trainer_id: int,
@@ -129,6 +164,7 @@ async def replace_templates_for_day(
     group_arena_id: int | None = None,
     minute_to_duration: dict[int, int] | None = None,
     minute_to_arena_id: dict[int, int] | None = None,
+    only_capacity_one: bool = False,
 ) -> None:
     """
     Set template for one day: replace all template rows for that weekday.
@@ -138,13 +174,20 @@ async def replace_templates_for_day(
     ``minute_to_arena_id``: optional venue per individual start minute (capacity 1); stored on template row,
     reproduced on generated slots; omitted key → ``arena_id`` NULL → materialization uses trainer default arena.
     ``minute_to_duration``: optional per-start duration (minutes). When any start is off the arena grid or
-    durations differ, preset start-grid validation is skipped (same idea as calendar ``slot_entries``);
-    each distinct duration is still checked against fixed-duration preset rules.
+    durations differ, preset start-grid validation is skipped (same idea as calendar ``slot_entries``).
+    Each row's duration is checked against the preset of **its own** arena — a trainer working two
+    venues with different fixed durations must be able to save both in one day.
+
+    ``only_capacity_one``: replace **individual** rows only and leave group rows (capacity > 1)
+    of that weekday alone. For callers that cannot express group classes at all — onboarding —
+    a full replace silently deletes a surface they never showed the trainer. Surviving rows still
+    take part in the overlap check, so an individual slot can never be laid over a group class.
     Single transaction.
     """
     svc_map = minute_to_service_id or {}
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     allowed = allowed_start_minutes_from_preset(preset)
+    default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     dur_map: dict[int, int] = {}
     for m in minute_to_capacity.keys():
         mi = int(m)
@@ -152,30 +195,84 @@ async def replace_templates_for_day(
             dur_map[mi] = max(15, min(480, int(minute_to_duration[mi])))
         else:
             dur_map[mi] = max(15, min(480, int(duration_minutes)))
+
+    # Which venue does each row belong to? Individual rows carry their own (NULL = the trainer's
+    # default, resolved at materialization); group rows all sit on ``group_arena_id``.
+    row_arena: dict[int, int | None] = {}
+    for m in minute_to_capacity.keys():
+        mi = int(m)
+        if int(minute_to_capacity[m]) > 1:
+            row_arena[mi] = int(group_arena_id) if group_arena_id is not None else default_arena
+        else:
+            row_arena[mi] = (minute_to_arena_id or {}).get(mi)
+    presets_by_arena = await _presets_by_arena(session, set(row_arena.values()), preset)
+    arena_names = await _arena_names(session, {a for a in row_arena.values() if a is not None})
+
+    # Duration is checked against the preset of the row's OWN arena. Reading a single preset for
+    # the whole call (the trainer's primary) made a second venue with a different fixed duration
+    # unsavable, and said so in a message naming neither venue nor value.
+    for mi in sorted(dur_map.keys()):
+        fixed = fixed_slot_duration_minutes(presets_by_arena[row_arena[mi]])
+        if fixed is None or dur_map[mi] == fixed:
+            continue
+        aid = row_arena[mi]
+        where = f"«{arena_names[aid]}»" if aid in arena_names else "этой площадки"
+        raise ValueError(
+            f"{_hhmm(mi)}: длительность на {where} зафиксирована — {fixed} мин, "
+            f"а в слоте {dur_map[mi]} мин."
+        )
+
+    # Start alignment stays a whole-day check against the trainer's grid: «Точное время» places
+    # starts off it on purpose, and one off-grid start relaxes the day. An empty day has nothing
+    # to align — it is a clear, not a schedule.
     off_grid = any(int(m) not in allowed for m in minute_to_capacity.keys())
     unique_durs = {dur_map[int(m)] for m in minute_to_capacity.keys()}
     loose_alignment = off_grid or len(unique_durs) > 1
-    if loose_alignment:
-        for dm in unique_durs:
-            validate_duration_for_preset(int(dm), preset)
-    else:
+    if minute_to_capacity and not loose_alignment:
         validate_start_minutes_for_preset(set(minute_to_capacity.keys()), preset)
-        validate_duration_for_preset(int(duration_minutes), preset)
 
-    intervals = sorted((int(m), int(m) + dur_map[int(m)]) for m in minute_to_capacity.keys())
+    # Each interval carries its own arena so a collision can be named, not just reported —
+    # with two venues in one day, «слоты пересекаются» stopped being enough to act on.
+    intervals: list[tuple[int, int, int | None]] = sorted(
+        (int(m), int(m) + dur_map[int(m)], row_arena[int(m)]) for m in minute_to_capacity.keys()
+    )
+    if only_capacity_one:
+        # Rows this call will not delete are still part of the day and must not be overlapped.
+        r_keep = await session.execute(
+            text("""
+                SELECT start_time, duration_minutes, arena_id
+                FROM trainer_schedule_templates
+                WHERE trainer_id = :tid AND day_of_week = :dow AND capacity > 1
+            """),
+            {"tid": trainer_id, "dow": day_of_week},
+        )
+        for row in r_keep.fetchall():
+            m0 = minutes_from_time(row[0])
+            keep_arena = int(row[2]) if row[2] is not None else None
+            intervals.append((m0, m0 + int(row[1]), keep_arena))
+            if keep_arena is not None and keep_arena not in arena_names:
+                arena_names.update(await _arena_names(session, {keep_arena}))
+        intervals.sort()
     for i in range(len(intervals)):
         for j in range(i + 1, len(intervals)):
-            a0, a1 = intervals[i]
-            b0, b1 = intervals[j]
+            a0, a1, a_aid = intervals[i]
+            b0, b1, b_aid = intervals[j]
             if _intervals_overlap_half_open(a0, a1, b0, b1):
-                raise ValueError("Интервалы слотов в шаблоне пересекаются.")
+                a_where = f"«{arena_names[a_aid]}»" if a_aid in arena_names else "по умолчанию"
+                b_where = f"«{arena_names[b_aid]}»" if b_aid in arena_names else "по умолчанию"
+                raise ValueError(
+                    f"{_hhmm(a0)}–{_hhmm(a1)} ({a_where}) пересекается с "
+                    f"{_hhmm(b0)}–{_hhmm(b1)} ({b_where})."
+                )
 
-    default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     await session.execute(
-        text("""
+        text(
+            """
             DELETE FROM trainer_schedule_templates
             WHERE trainer_id = :tid AND day_of_week = :dow
-        """),
+            """
+            + (" AND capacity = 1" if only_capacity_one else "")
+        ),
         {"tid": trainer_id, "dow": day_of_week},
     )
     for m in sorted(minute_to_capacity.keys()):

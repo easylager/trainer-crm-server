@@ -127,11 +127,18 @@
     /* 'none' | 'single' | 'multi' */
     arenaMode: 'none',
     singleArenaId: null,
-    /* Площадки, отмеченные в режиме «Несколько» — порядок = порядок вкладок. */
+    /* Площадки, отмеченные в режиме «Несколько» — порядок = порядок вкладок-кистей.
+       Не больше трёх: столько цветов умеет показать сетка одновременно. */
     multiArenaIds: [],
     activeArenaTab: null,
-    /* Map<dayOfWeek, {hours: number[], arenaId: number|null}> */
+    /* Map<dayOfWeek, {arenaByHour: {hour: arenaId|null}}> — что сетка умеет нарисовать.
+       В режимах «пока не указывать»/«одна площадка» arenaId один и тот же (или null) на
+       всех клетках; в «нескольких» на клетку — своя площадка, отсюда и кисть, а не вкладка. */
     week: {},
+    /* Слоты, которые эта сетка нарисовать не может: минута не с начала часа (13:25),
+       вторая площадка внутри дня, час вне окна площадки. Экран их показывает, считает
+       и возвращает на сервер нетронутыми — раньше «Сохранить» их молча удалял. */
+    carried: [],
     durationMinutes: 60,
     hoursExpanded: false,
     alreadyDone: false,
@@ -147,8 +154,8 @@
       'obTitle', 'obServices', 'obDuration', 'obDurationLockedNote',
       'obArenaMode', 'obArenaSingleWrap', 'obArenaSingleSearch', 'obArenaSingleList',
       'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaTabs',
-      'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint',
-      'obDoneTitle', 'obDoneLead',
+      'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
+      'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink',
     ].forEach(function (id) { el[id] = byId(id); });
   }
 
@@ -242,18 +249,43 @@
    * (см. _day_grid в trainer_quick_setup_use_cases.py).
    */
   function syncDurationLock() {
-    var arena = currentGridArena();
-    var fixed = arena ? arena.fixed_duration_minutes : null;
-    if (fixed) {
-      if (el.obDuration) el.obDuration.hidden = true;
-      if (el.obDurationLockedNote) {
-        el.obDurationLockedNote.hidden = false;
-        el.obDurationLockedNote.textContent =
-          'На площадке «' + arena.name + '» длительность зафиксирована: ' + fixed + ' мин. Выбирать не нужно.';
+    var arenas = activeArenas();
+    if (arenas.length <= 1) {
+      var arena = arenas[0] || null;
+      var fixed = arena ? arena.fixed_duration_minutes : null;
+      if (fixed) {
+        if (el.obDuration) el.obDuration.hidden = true;
+        if (el.obDurationLockedNote) {
+          el.obDurationLockedNote.hidden = false;
+          el.obDurationLockedNote.textContent =
+            'На площадке «' + arena.name + '» длительность зафиксирована: ' + fixed + ' мин. Выбирать не нужно.';
+        }
+      } else {
+        if (el.obDuration) { el.obDuration.hidden = false; renderDuration(); }
+        if (el.obDurationLockedNote) el.obDurationLockedNote.hidden = true;
       }
-    } else {
-      if (el.obDuration) { el.obDuration.hidden = false; renderDuration(); }
-      if (el.obDurationLockedNote) el.obDurationLockedNote.hidden = true;
+      return;
+    }
+    /* Несколько площадок — у каждой своё правило. Зафиксированные объясняем по имени;
+       если хоть одна оставляет выбор, чипы остаются — они относятся именно к ней. */
+    var fixedParts = [];
+    var hasOpen = false;
+    arenas.forEach(function (a) {
+      if (a.fixed_duration_minutes) fixedParts.push('«' + a.name + '» — ' + a.fixed_duration_minutes + ' мин');
+      else hasOpen = true;
+    });
+    if (el.obDurationLockedNote) {
+      if (fixedParts.length) {
+        el.obDurationLockedNote.hidden = false;
+        el.obDurationLockedNote.textContent = 'Зафиксировано: ' + fixedParts.join(', ') + '.' +
+          (hasOpen ? ' На остальных площадках — выбор ниже.' : ' Выбирать не нужно.');
+      } else {
+        el.obDurationLockedNote.hidden = true;
+      }
+    }
+    if (el.obDuration) {
+      if (hasOpen) { el.obDuration.hidden = false; renderDuration(); }
+      else el.obDuration.hidden = true;
     }
   }
 
@@ -270,11 +302,54 @@
     return (arena && arena.grid_kind === 'hourly_minute') ? (arena.minute_offset || 0) : 0;
   }
 
-  /** Площадка, чью сетку сейчас рисует грид: выбранная «одна» или активная вкладка «нескольких». */
-  function currentGridArena() {
+  /** Площадки, чью сетку сейчас рисует грид: [] / [одна] / до трёх выбранных «кистей». */
+  function activeArenas() {
+    if (state.arenaMode === 'single') {
+      var a = arenaById(state.singleArenaId);
+      return a ? [a] : [];
+    }
+    if (state.arenaMode === 'multi') {
+      return state.multiArenaIds.map(arenaById).filter(function (a) { return !!a; });
+    }
+    return [];
+  }
+
+  /** Площадка, которой красит тап прямо сейчас — «одна» целиком или активная кисть «нескольких». */
+  function currentBrushArena() {
     if (state.arenaMode === 'single') return arenaById(state.singleArenaId);
     if (state.arenaMode === 'multi') return arenaById(state.activeArenaTab);
     return null;
+  }
+
+  /** Общее смещение минут для строк сетки, или null, если у выбранных площадок оно разное —
+      тогда подпись часа остаётся голой, а реальная минута видна на самой клетке. */
+  function commonOffset(arenas) {
+    if (!arenas.length) return 0;
+    var first = arenaOffset(arenas[0]);
+    var same = arenas.every(function (a) { return arenaOffset(a) === first; });
+    return same ? first : null;
+  }
+
+  /* Порядковый индекс площадки среди выбранных кистей — держит цвет клетки и её вкладки
+     стабильными, пока сама площадка не снята из списка. Максимум три: см. toggleMultiArena. */
+  function arenaColorIndex(arenaId) {
+    var i = state.multiArenaIds.indexOf(arenaId);
+    return i >= 0 ? i : 0;
+  }
+
+  /* Нецветовой различитель клетки (AC-005): 1–2 буквы названия площадки. Цвет один не считается
+     ответом — в тёмной теме Telegram на 7×N клетках он теряется, буква — нет. */
+  function arenaInitial(arena) {
+    if (!arena || !arena.name) return '';
+    var parts = arena.name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    return (parts[0] || '').charAt(0).toUpperCase();
+  }
+
+  function applyArenaColor(cellEl, arena) {
+    if (!arena) return;
+    cellEl.classList.add('ob-cell--arena-' + arenaColorIndex(arena.id));
+    cellEl.textContent = arenaInitial(arena);
   }
 
   function arenaMetaLabel(arena) {
@@ -361,15 +436,16 @@
     state.singleArenaId = arenaId;
     var arena = arenaById(arenaId);
     /* Одна площадка — значит одна на всю неделю. Переключение переносит уже отмеченные
-       дни на новую площадку (обрезая часы, которые её сетке не подходят), а не оставляет
+       часы на новую площадку (обрезая те, что её сетке не подходят), а не оставляет
        их привязанными к прежней — иначе выбор «одна площадка» ничего бы не значил. */
     Object.keys(state.week).forEach(function (dow) {
       var d = state.week[dow];
       if (!d) return;
-      var hrs = clampHoursToArena(d.hours, arena);
+      var hrs = clampHoursToArena(Object.keys(d.arenaByHour).map(Number), arena);
       if (!hrs.length) { delete state.week[dow]; return; }
-      d.hours = hrs;
-      d.arenaId = arenaId;
+      var next = {};
+      hrs.forEach(function (h) { next[h] = arenaId; });
+      d.arenaByHour = next;
     });
     haptic('light');
     renderArenaSingleList();
@@ -378,19 +454,33 @@
     syncCta();
   }
 
+  /* Больше трёх кистей на сетке не различить: цвет и буква на клетке 7×N клеток начинают
+     повторяться, а не добавлять ясность. Честный ответ — не тащить в онбординг больше трёх,
+     остальные площадки тренер добавит в «Расписании» уже после сохранения. */
+  var MAX_BRUSH_ARENAS = 3;
+
   function toggleMultiArena(arenaId) {
     var i = state.multiArenaIds.indexOf(arenaId);
     if (i >= 0) {
-      /* Снимаем площадку — дни под ней освобождаются целиком: иначе в расписании
-         останутся часы для площадки, которую тренер только что убрал из списка. */
+      /* Снимаем площадку — её клетки освобождаются, остальные площадки того же дня остаются:
+         блокировка теперь на уровне клетки, а не всего дня. */
       state.multiArenaIds.splice(i, 1);
       Object.keys(state.week).forEach(function (dow) {
-        if (state.week[dow] && state.week[dow].arenaId === arenaId) delete state.week[dow];
+        var d = state.week[dow];
+        if (!d) return;
+        Object.keys(d.arenaByHour).forEach(function (h) {
+          if (d.arenaByHour[h] === arenaId) delete d.arenaByHour[h];
+        });
+        if (!Object.keys(d.arenaByHour).length) delete state.week[dow];
       });
       if (state.activeArenaTab === arenaId) {
         state.activeArenaTab = state.multiArenaIds.length ? state.multiArenaIds[0] : null;
       }
     } else {
+      if (state.multiArenaIds.length >= MAX_BRUSH_ARENAS) {
+        note('Пока можно закрасить сетку не больше чем тремя площадками — остальные добавите в «Расписании» после сохранения.', true);
+        return;
+      }
       state.multiArenaIds.push(arenaId);
       if (state.activeArenaTab == null) state.activeArenaTab = arenaId;
     }
@@ -402,6 +492,9 @@
     syncCta();
   }
 
+  /* Кисти над сеткой: раньше это были вкладки, переключающие видимый день на арену.
+     Теперь сетка одна на всю неделю и показывает все выбранные площадки сразу — кнопка
+     здесь выбирает не «что показать», а «чем красит следующий тап». */
   function renderArenaTabs() {
     if (!el.obArenaTabs) return;
     el.obArenaTabs.innerHTML = '';
@@ -410,14 +503,33 @@
       return;
     }
     el.obArenaTabs.hidden = false;
-    state.multiArenaIds.forEach(function (aid) {
+    el.obArenaTabs.setAttribute('role', 'group');
+    state.multiArenaIds.forEach(function (aid, idx) {
       var arena = arenaById(aid);
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ob-arena-tab';
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', state.activeArenaTab === aid ? 'true' : 'false');
-      b.textContent = arena ? arena.name : ('Площадка #' + aid);
+      b.className = 'ob-arena-tab ob-arena-tab--arena-' + idx;
+      b.setAttribute('aria-pressed', state.activeArenaTab === aid ? 'true' : 'false');
+      var swatch = document.createElement('span');
+      swatch.className = 'ob-arena-tab__swatch';
+      swatch.textContent = arenaInitial(arena);
+      swatch.setAttribute('aria-hidden', 'true');
+      b.appendChild(swatch);
+      var label = document.createElement('span');
+      label.className = 'ob-arena-tab__label';
+      label.textContent = arena ? arena.name : ('Площадка #' + aid);
+      b.appendChild(label);
+      var meta = arena ? arenaMetaLabel(arena) : '';
+      if (meta) {
+        var metaEl = document.createElement('span');
+        metaEl.className = 'ob-arena-tab__meta';
+        metaEl.textContent = meta;
+        b.appendChild(metaEl);
+      }
+      b.setAttribute(
+        'aria-label',
+        'Красить площадкой «' + (arena ? arena.name : aid) + '»' + (meta ? ' (' + meta + ')' : '')
+      );
       b.onclick = function () {
         if (state.activeArenaTab === aid) return;
         state.activeArenaTab = aid;
@@ -443,29 +555,27 @@
   function setArenaMode(mode) {
     if (state.arenaMode === mode) return;
     state.arenaMode = mode;
-    /* Переключение режима не сносит уже отмеченные часы — только площадку у них. */
-    Object.keys(state.week).forEach(function (dow) {
-      if (state.week[dow]) state.week[dow].arenaId = null;
-    });
-    if (mode === 'single') {
+    if (mode === 'multi') {
+      state.singleArenaId = null;
+      /* Клетка в режиме «нескольких» обязана знать свою кисть — начинаем чистый лист:
+         сначала отмечаем площадки, потом красим сетку под каждой из них. */
+      Object.keys(state.week).forEach(function (dow) { delete state.week[dow]; });
+    } else {
       state.multiArenaIds = [];
       state.activeArenaTab = null;
-      if (state.singleArenaId != null) {
-        var arena = arenaById(state.singleArenaId);
-        Object.keys(state.week).forEach(function (dow) {
-          var d = state.week[dow];
-          if (!d) return;
-          var hrs = clampHoursToArena(d.hours, arena);
-          if (!hrs.length) { delete state.week[dow]; return; }
-          d.hours = hrs;
-          d.arenaId = state.singleArenaId;
-        });
-      }
-    } else if (mode === 'multi') {
-      state.singleArenaId = null;
-      /* В мульти-режиме день без своей вкладки показать нельзя — начинаем чистый лист:
-         сначала отмечаем площадки, потом расставляем часы под каждой из них. */
-      Object.keys(state.week).forEach(function (dow) { delete state.week[dow]; });
+      /* Переключение на «одну»/«пока не указывать» не сносит уже отмеченные часы —
+         только площадку у них (и обрезает те, что не влезают в новую площадку). */
+      var arena = mode === 'single' ? arenaById(state.singleArenaId) : null;
+      Object.keys(state.week).forEach(function (dow) {
+        var d = state.week[dow];
+        if (!d) return;
+        var hrs = Object.keys(d.arenaByHour).map(Number);
+        if (mode === 'single' && state.singleArenaId != null) hrs = clampHoursToArena(hrs, arena);
+        if (!hrs.length) { delete state.week[dow]; return; }
+        var next = {};
+        hrs.forEach(function (h) { next[h] = mode === 'single' ? state.singleArenaId : null; });
+        d.arenaByHour = next;
+      });
     }
     haptic('light');
     renderArenaMode();
@@ -484,10 +594,16 @@
     return hour + ':' + mm;
   }
 
-  function visibleHours(arena) {
-    if (arena) {
+  /** Объединённый рабочий диапазон выбранных площадок — дыр не бывает, только их общая крайняя рамка. */
+  function visibleHours(arenas) {
+    if (arenas && arenas.length) {
+      var lo = null, hi = null;
+      arenas.forEach(function (a) {
+        if (lo == null || a.hour_start < lo) lo = a.hour_start;
+        if (hi == null || a.hour_end > hi) hi = a.hour_end;
+      });
       var out = [];
-      for (var h = arena.hour_start; h <= arena.hour_end; h++) out.push(h);
+      for (var h = lo; h <= hi; h++) out.push(h);
       return out;
     }
     if (state.hoursExpanded) return HOURS_ALL;
@@ -495,7 +611,7 @@
        иначе он «потеряет» свою же отметку и решит, что она не сохранилась. */
     var used = {};
     Object.keys(state.week).forEach(function (d) {
-      (state.week[d].hours || []).forEach(function (hh) { used[hh] = true; });
+      dayHours(d).forEach(function (hh) { used[hh] = true; });
     });
     var core = HOURS_ALL.filter(function (hh) {
       return HOURS_CORE.indexOf(hh) >= 0 || used[hh];
@@ -503,34 +619,113 @@
     return core.length ? core : HOURS_CORE;
   }
 
+  /* ── Аксессоры по клетке: (день, час) → площадка. Единая модель для всех трёх режимов —
+     «одна»/«пока не указывать» просто хранят одну и ту же площадку (или null) в каждой
+     занятой клетке дня, «несколько» хранит свою в каждой. ── */
   function dayHours(dow) {
     var d = state.week[dow];
-    return d ? d.hours : [];
+    return d ? Object.keys(d.arenaByHour).map(Number).sort(function (a, b) { return a - b; }) : [];
   }
-  function dayArenaId(dow) {
+  /** Площадка клетки: undefined — клетка пуста, null/id — чем закрашена. */
+  function cellArena(dow, hour) {
     var d = state.week[dow];
-    return d ? d.arenaId : null;
+    if (!d || !(hour in d.arenaByHour)) return undefined;
+    return d.arenaByHour[hour];
   }
-  function setDayHours(dow, hours, arenaId) {
-    if (!hours.length) { delete state.week[dow]; return; }
-    state.week[dow] = { hours: hours, arenaId: arenaId };
+  function setCellArena(dow, hour, arenaId) {
+    var d = state.week[dow];
+    if (!d) { d = state.week[dow] = { arenaByHour: {} }; }
+    d.arenaByHour[hour] = arenaId;
+  }
+  function clearCell(dow, hour) {
+    var d = state.week[dow];
+    if (!d) return;
+    delete d.arenaByHour[hour];
+    if (!Object.keys(d.arenaByHour).length) delete state.week[dow];
   }
 
   function totalSelectedCells() {
     var n = 0;
-    Object.keys(state.week).forEach(function (d) { n += state.week[d].hours.length; });
+    Object.keys(state.week).forEach(function (d) { n += Object.keys(state.week[d].arenaByHour).length; });
     return n;
   }
 
-  function syncWeekHint(arena) {
+  /** Всё, что уедет на сервер: отмеченное в сетке плюс перенесённое как есть. */
+  function totalSlots() {
+    return totalSelectedCells() + state.carried.length;
+  }
+
+  function minuteLabel(minute) {
+    var h = Math.floor(minute / 60);
+    var m = minute % 60;
+    return h + ':' + (m < 10 ? '0' + m : String(m));
+  }
+
+  /**
+   * Слот ложится на сетку онбординга?
+   *
+   * Сетка умеет ровно одно: целый час плюс смещение площадки. Всё, что в него не попадает —
+   * своя минута, чужая площадка внутри дня, час вне окна — экран нарисовать не может, но и
+   * потерять не имеет права: тренер настроил это в «Расписании».
+   */
+  function slotFitsGrid(dow, slot, arenasById) {
+    var arena = slot.arenaId != null ? arenasById(slot.arenaId) : null;
+    if (slot.arenaId != null && !arena) return false;
+    var off = arenaOffset(arena);
+    if (slot.startMinute % 60 !== off) return false;
+    if (!arena) return true;
+    var h = Math.floor(slot.startMinute / 60);
+    return h >= arena.hour_start && h <= arena.hour_end;
+  }
+
+  function renderCarried() {
+    if (!el.obCarried) return;
+    if (!state.carried.length) {
+      el.obCarried.hidden = true;
+      el.obCarried.innerHTML = '';
+      return;
+    }
+    var byDay = {};
+    state.carried.forEach(function (c) {
+      (byDay[c.dow] = byDay[c.dow] || []).push(c);
+    });
+    var parts = [];
+    Object.keys(byDay).sort(function (a, b) { return a - b; }).forEach(function (dow) {
+      var times = byDay[dow]
+        .sort(function (a, b) { return a.startMinute - b.startMinute; })
+        .map(function (c) {
+          var arena = arenaById(c.arenaId);
+          return minuteLabel(c.startMinute) + (arena ? ' · ' + arena.name : '');
+        });
+      parts.push(
+        '<div class="ob-carried__row"><span class="ob-carried__day">' + DAY_LABELS[dow] +
+        '</span><span class="ob-carried__times">' + times.join(', ') + '</span></div>'
+      );
+    });
+    el.obCarried.innerHTML =
+      '<p class="ob-carried__title">Уже настроено в «Расписании» — оставляем как есть:</p>' +
+      parts.join('') +
+      '<p class="ob-carried__hint">Эти окна сюда не помещаются: своё время начала или другая ' +
+      'площадка в тот же день. Менять их — в разделе «Расписание».</p>';
+    el.obCarried.hidden = false;
+  }
+
+  function syncWeekHint(arenas) {
     if (!el.obWeekHint) return;
     var later = 'Можно не всё сразу — потом подкорректируете :)';
-    if (arena) {
+    if (arenas.length === 1) {
+      var arena = arenas[0];
       var off = arenaOffset(arena);
       var offTxt = off ? ('с :' + (off < 10 ? '0' + off : off)) : 'с начала часа';
       el.obWeekHint.textContent =
         '«' + arena.name + '»: ' + offTxt + ', ' +
         arena.hour_start + ':00–' + arena.hour_end + ':00. ' + later;
+    } else if (arenas.length > 1) {
+      var bits = arenas.map(function (a) {
+        var o = arenaOffset(a);
+        return '«' + a.name + '» — ' + (o ? ('с :' + (o < 10 ? '0' + o : o)) : 'с начала часа');
+      });
+      el.obWeekHint.textContent = bits.join('; ') + '. Красьте той площадкой, что выбрана вверху.';
     } else if (state.alreadyDone) {
       el.obWeekHint.textContent = 'Можно поправить, если что-то изменилось.';
     } else {
@@ -538,21 +733,21 @@
     }
   }
 
-  /* Контекст площадки для текущей отрисовки грида — читается делегированными pointer-
-     хендлерами ниже, чтобы красить ячейки во время drag без полной перерисовки грида. */
-  var currentCtxArenaId = null;
+  /* Текущая кисть — читается делегированными pointer-хендлерами ниже, чтобы красить
+     ячейки во время drag без перерисовки всего грида. */
+  var currentBrushArenaId = null;
 
   function renderGrid() {
     if (!el.obGrid) return;
-    var arena = currentGridArena();
-    var offset = arenaOffset(arena);
-    var ctxArenaId = arena ? arena.id : null;
-    currentCtxArenaId = ctxArenaId;
-    var hours = visibleHours(arena);
-    syncWeekHint(arena);
+    var arenas = activeArenas();
+    var brush = currentBrushArena();
+    currentBrushArenaId = brush ? brush.id : null;
+    var offset = commonOffset(arenas);
+    var hours = visibleHours(arenas);
+    syncWeekHint(arenas);
     if (el.obGridMore) {
-      /* У площадки уже есть свой явный рабочий диапазон — расширять нечего. */
-      el.obGridMore.hidden = !!arena;
+      /* У выбранных площадок уже есть свой явный рабочий диапазон — расширять нечего. */
+      el.obGridMore.hidden = arenas.length > 0;
     }
 
     el.obGrid.innerHTML = '';
@@ -573,52 +768,70 @@
       el.obGrid.appendChild(hcell);
 
       for (var dow = 0; dow < 7; dow++) {
-        el.obGrid.appendChild(makeCell(dow, h, ctxArenaId, offset));
+        el.obGrid.appendChild(makeCell(dow, h));
       }
     });
+    renderCarried();
     syncGridCount();
   }
 
-  function makeCell(dow, hour, ctxArenaId, offset) {
+  /**
+   * Одна клетка = один час одного дня. В режиме «нескольких» клетка, уже закрашенная
+   * ЧУЖОЙ кистью, — только для чтения: тренер физически не может быть в этот час на
+   * двух аренах, и это видно на самой клетке, а не спрятано за вкладкой (DEC-004).
+   */
+  function makeCell(dow, hour) {
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'ob-cell';
     b.dataset.dow = dow;
     b.dataset.hour = hour;
 
-    var existingArena = dayArenaId(dow);
-    var hours = dayHours(dow);
-    /* Мульти-режим: день, уже занятый другой вкладкой, здесь только для чтения — иначе
-       один день незаметно оказался бы разбит между двумя площадками одновременно. */
-    var taken = state.arenaMode === 'multi' && existingArena != null &&
-      existingArena !== ctxArenaId && hours.length > 0;
-    if (taken) {
+    var occ = cellArena(dow, hour);
+    var multi = state.arenaMode === 'multi';
+    var locked = multi && occ !== undefined && occ !== currentBrushArenaId;
+
+    if (locked) {
+      var owner = arenaById(occ);
       b.className += ' ob-cell--taken';
+      applyArenaColor(b, owner);
       b.disabled = true;
-      var owner = arenaById(existingArena);
-      b.setAttribute('aria-label', DAY_LABELS[dow] + ' — занято: ' + (owner ? owner.name : 'другая площадка'));
+      b.setAttribute(
+        'aria-label',
+        DAY_LABELS[dow] + ', ' + hourLabel(hour, arenaOffset(owner)) +
+          ' — занято: ' + (owner ? owner.name : 'другая площадка')
+      );
       return b;
     }
 
-    var on = hours.indexOf(hour) >= 0 && existingArena === ctxArenaId;
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, offset));
+    var pressed = occ !== undefined;
+    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    if (pressed && multi) applyArenaColor(b, arenaById(occ));
+    /* Реальная минута клетки: занятой — её собственной площадки, пустой в режиме
+       «нескольких» — той, что закрасит следующий тап (AC-008). */
+    var realOffset = pressed ? arenaOffset(arenaById(occ)) : (multi ? arenaOffset(arenaById(currentBrushArenaId)) : 0);
+    b.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, realOffset));
     /* Клики/тапы и протягивание пальцем обрабатываются делегированно на el.obGrid —
        см. bindGridDrag(). Так одну ячейку можно закрасить без перерисовки всего грида. */
     return b;
   }
 
-  /** Проставляет/снимает значение для одной ячейки и синхронизирует state.week. */
-  function paintCell(cellEl, ctxArenaId, value) {
+  /** Проставляет/снимает кисть на одной ячейке и синхронизирует state.week. */
+  function paintCell(cellEl, brushArenaId, value) {
     var dow = parseInt(cellEl.dataset.dow, 10);
     var hour = parseInt(cellEl.dataset.hour, 10);
-    var cur = dayHours(dow).slice();
-    var i = cur.indexOf(hour);
-    if (value && i < 0) cur.push(hour);
-    else if (!value && i >= 0) cur.splice(i, 1);
-    else return false;
-    setDayHours(dow, cur, ctxArenaId);
+    if (value) setCellArena(dow, hour, brushArenaId);
+    else clearCell(dow, hour);
     cellEl.setAttribute('aria-pressed', value ? 'true' : 'false');
+    /* В одну ячейку (без перерисовки всей сетки) makeCell() не заглядывает — цвет/букву
+       кисти нужно проставить/снять здесь же, иначе клетка красится только логически. */
+    if (state.arenaMode === 'multi') {
+      cellEl.className = cellEl.className.replace(/\bob-cell--arena-\d\b/g, '').trim();
+      cellEl.textContent = '';
+      if (value) applyArenaColor(cellEl, arenaById(brushArenaId));
+      var realOffset = value ? arenaOffset(arenaById(brushArenaId)) : arenaOffset(arenaById(currentBrushArenaId));
+      cellEl.setAttribute('aria-label', DAY_LABELS[dow] + ', ' + hourLabel(hour, realOffset));
+    }
     return true;
   }
 
@@ -679,7 +892,7 @@
       if (e.cancelable) e.preventDefault();
       var value = cellEl.getAttribute('aria-pressed') !== 'true';
       dragPaint = {
-        arenaId: currentCtxArenaId,
+        arenaId: currentBrushArenaId,
         value: value,
         key: cellRowCol(cellEl),
         pointerId: e.pointerId,
@@ -687,7 +900,7 @@
       try {
         el.obGrid.setPointerCapture(e.pointerId);
       } catch (errCapture) { /* */ }
-      if (paintCell(cellEl, currentCtxArenaId, value)) {
+      if (paintCell(cellEl, currentBrushArenaId, value)) {
         haptic('light');
         syncGridCount();
         syncCta();
@@ -703,7 +916,7 @@
       var cellEl = e.target.closest && e.target.closest('.ob-cell');
       if (!cellEl || cellEl.disabled) return;
       var value = cellEl.getAttribute('aria-pressed') !== 'true';
-      paintCell(cellEl, currentCtxArenaId, value);
+      paintCell(cellEl, currentBrushArenaId, value);
       haptic('light');
       syncGridCount();
       syncCta();
@@ -712,7 +925,7 @@
 
   function syncGridCount() {
     if (!el.obGridCount) return;
-    var n = totalSelectedCells();
+    var n = totalSlots();
     el.obGridCount.textContent = n
       ? (n + ' ' + slotsWord(n) + ' в неделю')
       : 'Ничего не отмечено';
@@ -730,11 +943,11 @@
       el.obCta.disabled = true;
       return;
     }
-    var ok = state.selectedServices.length > 0 && arenaStepValid() && totalSelectedCells() > 0;
+    var ok = state.selectedServices.length > 0 && arenaStepValid() && totalSlots() > 0;
     el.obCta.disabled = !ok;
     if (!state.selectedServices.length) note('Выберите, что вы тренируете.');
     else if (!arenaStepValid()) note('Выберите площадку или переключитесь на «Пока не указывать».');
-    else if (!totalSelectedCells()) note('Отметьте хотя бы одно время.');
+    else if (!totalSlots()) note('Отметьте хотя бы одно время.');
     else note('');
   }
 
@@ -752,34 +965,67 @@
         state.arenas = data.arenas || [];
         state.durationMinutes = data.duration_minutes || 60;
         state.alreadyDone = !!data.already_done;
+        /* Разбор недели: слот попадает в сетку, только если а) лежит на своей часовой сетке
+           и б) его площадка входит в первые три различные площадки недели — столько кистей
+           сетка умеет показать сразу. Остальное уезжает в state.carried и возвращается на
+           сервер нетронутым — раньше вторая площадка внутри дня терялась целиком. */
+        var byId = function (id) { return arenaById(id); };
+        var flatSlots = [];
         (data.week || []).forEach(function (d) {
-          state.week[d.day_of_week] = {
-            hours: (d.hours || []).slice(),
-            arenaId: d.arena_id != null ? d.arena_id : null,
-          };
+          var dow = d.day_of_week;
+          if (!d.slots) {
+            /* Старый ответ без slots — читаем часы, как читали раньше. */
+            (d.hours || []).forEach(function (h) {
+              var legacyArena = d.arena_id != null ? d.arena_id : null;
+              flatSlots.push({
+                dow: dow,
+                startMinute: h * 60 + arenaOffset(byId(legacyArena)),
+                durationMinutes: null,
+                arenaId: legacyArena,
+              });
+            });
+            return;
+          }
+          d.slots.forEach(function (raw) {
+            flatSlots.push({
+              dow: dow,
+              startMinute: raw.start_minute,
+              durationMinutes: raw.duration_minutes != null ? raw.duration_minutes : null,
+              arenaId: raw.arena_id != null ? raw.arena_id : null,
+            });
+          });
         });
 
-        /* Режим при повторном открытии — производная от того, что реально сохранено,
-           а не отдельный флаг: «несколько» значит «в неделе больше одной площадки». */
-        if (data.multi_arena) {
-          state.arenaMode = 'multi';
-          var seen = {};
-          state.multiArenaIds = [];
-          Object.keys(state.week).forEach(function (dow) {
-            var aid = state.week[dow].arenaId;
-            if (aid != null && !seen[aid]) { seen[aid] = true; state.multiArenaIds.push(aid); }
-          });
-          state.activeArenaTab = state.multiArenaIds.length ? state.multiArenaIds[0] : null;
-        } else {
-          var singleId = null;
-          Object.keys(state.week).some(function (dow) {
-            if (state.week[dow].arenaId != null) { singleId = state.week[dow].arenaId; return true; }
-            return false;
-          });
-          if (singleId != null) {
-            state.arenaMode = 'single';
-            state.singleArenaId = singleId;
+        var paintableArenas = [];
+        flatSlots.forEach(function (slot) {
+          if (
+            slot.arenaId != null &&
+            paintableArenas.indexOf(slot.arenaId) < 0 &&
+            paintableArenas.length < MAX_BRUSH_ARENAS &&
+            slotFitsGrid(slot.dow, slot, byId)
+          ) {
+            paintableArenas.push(slot.arenaId);
           }
+        });
+        flatSlots.forEach(function (slot) {
+          var fits = slotFitsGrid(slot.dow, slot, byId);
+          var paintable = fits && (slot.arenaId == null || paintableArenas.indexOf(slot.arenaId) >= 0);
+          if (paintable) {
+            setCellArena(slot.dow, Math.floor(slot.startMinute / 60), slot.arenaId);
+          } else {
+            state.carried.push(slot);
+          }
+        });
+
+        /* Режим при повторном открытии — производная от того, что реально сохранено и
+           уместилось на сетку, а не отдельный флаг. */
+        if (paintableArenas.length > 1) {
+          state.arenaMode = 'multi';
+          state.multiArenaIds = paintableArenas.slice();
+          state.activeArenaTab = paintableArenas[0];
+        } else if (paintableArenas.length === 1) {
+          state.arenaMode = 'single';
+          state.singleArenaId = paintableArenas[0];
         }
 
         var name = (data.first_name || '').trim();
@@ -828,9 +1074,32 @@
     syncCta();
     note('Создаём расписание…');
 
-    var days = Object.keys(state.week).map(function (d) {
-      var row = state.week[d];
-      return { day_of_week: parseInt(d, 10), hours: row.hours, arena_id: row.arenaId };
+    /* Каждая закрашенная клетка идёт явным стартом — своя минута (час + смещение её
+       площадки) и своя площадка на слот, а не общий час/арена на день. Только так один
+       день может нести две площадки: часовая сетка-шорткат этого не умеет в принципе. */
+    var byDay = {};
+    function pushSlot(dow, startMinute, durationMinutes, arenaId) {
+      (byDay[dow] = byDay[dow] || []).push({
+        start_minute: startMinute,
+        duration_minutes: durationMinutes,
+        arena_id: arenaId,
+      });
+    }
+    Object.keys(state.week).forEach(function (d) {
+      var dow = parseInt(d, 10);
+      var arenaByHour = state.week[d].arenaByHour;
+      Object.keys(arenaByHour).forEach(function (h) {
+        var hour = parseInt(h, 10);
+        var arenaId = arenaByHour[h];
+        pushSlot(dow, hour * 60 + arenaOffset(arenaById(arenaId)), null, arenaId);
+      });
+    });
+    /* Перенесённые слоты идут как есть — их точное время и есть то, ради чего они перенесены. */
+    state.carried.forEach(function (c) {
+      pushSlot(c.dow, c.startMinute, c.durationMinutes, c.arenaId);
+    });
+    var days = Object.keys(byDay).map(function (d) {
+      return { day_of_week: parseInt(d, 10), slots: byDay[d] };
     });
 
     fetch(apiUrl('/trainer/onboarding/quick-setup'), {
@@ -898,6 +1167,19 @@
     if (el.obSkip) {
       el.obSkip.hidden = !link;
       el.obSkip.onclick = goHub;
+    }
+    /* Только тем, у кого реально есть время вне часовой сетки — остальным строка
+       была бы просто шумом (DEC-002: «Точное время» в онбординг не тащим). */
+    if (el.obDoneScheduleLink) {
+      var needsSchedule = state.carried.length > 0;
+      el.obDoneScheduleLink.hidden = !needsSchedule;
+      if (needsSchedule) {
+        el.obDoneScheduleLink.onclick = function (e) {
+          e.preventDefault();
+          window.location.href = 'schedule-editor' +
+            (currentInit() ? '?init_data=' + encodeURIComponent(currentInit()) : '');
+        };
+      }
     }
   }
 

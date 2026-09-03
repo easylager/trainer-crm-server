@@ -7833,11 +7833,15 @@ async def get_trainer_onboarding_quick_setup(
     selected = [int(row[0]) for row in r_mine.fetchall()]
 
     # capacity = 1: individual template rows only — quick-setup never writes group rows, and a
-    # group row's hour bucket leaking into this grid would confuse the onboarding picker.
+    # group row's hour bucket leaking into this grid would confuse the onboarding picker. Group
+    # rows are also never deleted by the save that follows (``only_capacity_one``).
+    #
+    # Full precision on purpose: reading the hour and dropping the minutes turned a 13:25 slot
+    # into 13:00 the moment the trainer re-opened this screen and pressed «Сохранить».
     r_tpl = await session.execute(
         text(
             """
-            SELECT day_of_week, EXTRACT(HOUR FROM start_time)::int AS h, arena_id
+            SELECT day_of_week, start_time, duration_minutes, arena_id
             FROM trainer_schedule_templates
             WHERE trainer_id = :tid AND capacity = 1
             ORDER BY day_of_week, start_time
@@ -7845,16 +7849,26 @@ async def get_trainer_onboarding_quick_setup(
         ),
         {"tid": trainer_id},
     )
+    existing_slots: dict[int, list[dict[str, Any]]] = {}
     existing: dict[int, list[int]] = {}
-    # First arena_id seen per day wins the label — onboarding only ever wrote one venue per day;
-    # a day edited later in schedule-editor to mix venues shows its first venue here, which is a
-    # reasonable "mostly true" label for a re-opened onboarding screen, not the source of truth.
     existing_day_arena: dict[int, int] = {}
     for row in r_tpl.fetchall():
         dow = int(row[0])
-        existing.setdefault(dow, []).append(int(row[1]))
-        if row[2] is not None and dow not in existing_day_arena:
-            existing_day_arena[dow] = int(row[2])
+        start_minute = int(row[1].hour) * 60 + int(row[1].minute)
+        arena_id = int(row[3]) if row[3] is not None else None
+        existing_slots.setdefault(dow, []).append(
+            {
+                "start_minute": start_minute,
+                "duration_minutes": int(row[2]),
+                "arena_id": arena_id,
+            }
+        )
+        # ``hours`` / ``arena_id`` below are the legacy shape, kept one release so a Mini App
+        # still running the previous script keeps rendering a week instead of an empty grid.
+        # Lossy by nature — that is why the client prefers ``slots``.
+        existing.setdefault(dow, []).append(start_minute // 60)
+        if arena_id is not None and dow not in existing_day_arena:
+            existing_day_arena[dow] = arena_id
 
     # Candidate arenas for the picker: platform-wide (small dataset — this is a single-region
     # product), each with its real grid so the client can render the right hour labels and lock
@@ -7900,7 +7914,12 @@ async def get_trainer_onboarding_quick_setup(
 
     trainer = await get_trainer(session, trainer_id) or {}
     first_name = ((trainer.get("profile") or {}).get("first_name") or "").strip()
-    distinct_arenas_in_week = {a for a in existing_day_arena.values()}
+    distinct_arenas_in_week = {
+        s["arena_id"]
+        for rows in existing_slots.values()
+        for s in rows
+        if s["arena_id"] is not None
+    }
 
     return {
         "trainer_id": trainer_id,
@@ -7909,11 +7928,16 @@ async def get_trainer_onboarding_quick_setup(
         "selected_service_ids": selected,
         "week": (
             [
-                {"day_of_week": d, "hours": h, "arena_id": existing_day_arena.get(d)}
-                for d, h in sorted(existing.items())
+                {
+                    "day_of_week": d,
+                    "hours": sorted(set(existing.get(d, []))),
+                    "arena_id": existing_day_arena.get(d),
+                    "slots": existing_slots[d],
+                }
+                for d in sorted(existing_slots)
             ]
-            if existing
-            else [{**row, "arena_id": None} for row in suggested_week()]
+            if existing_slots
+            else [{**row, "arena_id": None, "slots": []} for row in suggested_week()]
         ),
         "week_is_suggestion": not existing,
         "already_done": bool(existing),
