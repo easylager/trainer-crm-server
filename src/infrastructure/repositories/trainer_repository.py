@@ -849,6 +849,51 @@ class TrainerRepository:
         row = r.fetchone()
         return int(row[0])
 
+    async def find_matching_education_entry(
+        self,
+        trainer_id: int,
+        *,
+        education_type: str,
+        institution_name: str,
+        program_or_title: str,
+        start_year: int | None,
+        end_year: int | None,
+        supersedes_id: int | None,
+    ) -> int | None:
+        """
+        Existing row with the same key fields (and same supersedes_id — i.e. the same
+        "slot": a brand-new entry, or a revision of the same approved row). Guards against
+        double-submit races (double tap, retried request) creating a visible duplicate —
+        there is no DB unique constraint on trainer_education for these fields.
+        """
+        r = await self._session.execute(
+            text(
+                """
+                SELECT id FROM trainer_education
+                WHERE trainer_id = :tid
+                  AND education_type = :education_type
+                  AND lower(trim(institution_name)) = lower(trim(:institution_name))
+                  AND lower(trim(program_or_title)) = lower(trim(:program_or_title))
+                  AND start_year IS NOT DISTINCT FROM :start_year
+                  AND end_year IS NOT DISTINCT FROM :end_year
+                  AND supersedes_id IS NOT DISTINCT FROM :supersedes_id
+                ORDER BY id
+                LIMIT 1
+                """
+            ),
+            {
+                "tid": trainer_id,
+                "education_type": education_type,
+                "institution_name": institution_name,
+                "program_or_title": program_or_title,
+                "start_year": start_year,
+                "end_year": end_year,
+                "supersedes_id": supersedes_id,
+            },
+        )
+        row = r.fetchone()
+        return int(row[0]) if row else None
+
     async def get_education_entry(self, trainer_id: int, education_id: int) -> dict[str, Any] | None:
         """Get education entry by trainer/id."""
         r = await self._session.execute(

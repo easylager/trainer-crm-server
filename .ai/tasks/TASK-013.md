@@ -1,10 +1,10 @@
 ---
 task_id: TASK-013
 title: Копирайт зовёт в слэш-команды, которых нет в меню бота
-status: READY
-phase: clarify
+status: COMPLETE
+phase: done
 created_at: 2026-08-31
-updated_at: 2026-08-31
+updated_at: 2026-09-04
 ---
 
 # Task
@@ -65,21 +65,23 @@ Chain: `clarify → plan → implement → verify`
 ## Acceptance Criteria
 
 - **AC-001** — Все 7 живых сообщений, ссылающихся на `/guide` как единственный путь к помощи (`TRAINER_START_WELCOME`, `TRAINER_LINK_SUCCESS_ACTIVE`, `TRAINER_LINK_TELEGRAM_CONFLICT`, `TRAINER_AFTER_LINK_STEP_AWAITING_ACTIVATION`, `TRAINER_AFTER_LINK_STEP_DEACTIVATED`, `TRAINER_GATE_AWAITING_ACTIVATION`, `TRAINER_GATE_DEACTIVATED`), отправляются с inline-клавиатурой, содержащей кнопку помощи/поддержки (переиспользуя `_trainer_guide_keyboard()` — «💬 Написать в поддержку» + «FAQ», `trainer_handlers.py:820-830`), а не только текстовым упоминанием команды. Голый текст «/guide» в копирайте по возможности убирается или заменяется на нейтральную фразу («Вопросы — кнопка ниже»), поскольку кнопка становится основным путём.
-  Status: CONFIRMED (решение делегировано автором задачи)
-  Verification: manual/static (ревью текста + reply_markup на каждом из 7 call site) + automated/integration (unit-тест, что `event.answer`/`message.answer` для этих путей передаёт reply_markup с кнопкой поддержки)
+  Status: VERIFIED
+  Verification: 5 живых констант (awaiting-* удалены в onboarding v2) без `/guide`; call site’ы + gate middleware передают `trainer_guide_keyboard()`; `tests/bot/test_task_013_guide_support_keyboard.py`
 
 - **AC-002** — Меню слэш-команд остаётся пустым: `set_default_trainer_commands_without_stats` и `sync_trainer_linked_chat_menu` (`trainer_menu_commands.py`) не меняются. Команда `/guide` остаётся зарегистрированным рабочим хендлером при ручном вводе — не убирается, просто перестаёт быть единственным анонсированным путём.
-  Status: CONFIRMED
-  Verification: manual/static (diff не касается `trainer_menu_commands.py`)
+  Status: VERIFIED
+  Verification: static — `trainer_menu_commands.py` не в diff
 
 - **AC-003** — `TRAINER_GATE_DEACTIVATED` (аккаунт деактивирован — гейт режет почти весь функционал, единственный канал связи) обязательно получает кнопку поддержки в этой же правке, не откладывается на отдельную задачу.
-  Status: CONFIRMED
-  Verification: manual/static
+  Status: VERIFIED
+  Verification: middleware + `/start` gate path + unit test
 
 ## Edge Cases
 
 - `TRAINER_GATE_AWAITING_ACTIVATION`/`TRAINER_GATE_DEACTIVATED` сегодня отправляются через `trainer_gate_middleware.py:196,228` (`event.answer(trainer_gate_message(state, trainer))`) без `reply_markup` вообще — при добавлении кнопки нужно завести `reply_markup` на этом общем call site, не только поправить текст в `messages.py`.
+  Status: RESOLVED — keyboard on both message and callback gate replies
 - `_trainer_guide_keyboard()` объявлена в `trainer_handlers.py` — если `trainer_gate_middleware.py` не может импортировать её напрямую (риск circular import), может понадобиться вынести функцию в `messages.py` или отдельный модуль клавиатур; это техническое решение — за `/plan`.
+  Status: RESOLVED — `src/bot/trainer_guide_keyboard.py`
 
 ## Assumptions
 
@@ -88,9 +90,12 @@ Chain: `clarify → plan → implement → verify`
   2. Дешевле, чем казалось на этапе review: реальный периметр правки — не «десятки строк», а 7 конкретных констант, и готовое решение (`_trainer_guide_keyboard()`) уже существует и используется в `/guide` — переиспользование, не изобретение нового.
   3. Соответствует уже установленному в продукте принципу «одна точка входа через кнопку», а не через набор текстовых команд.
 - `/home` и `/profile` из исходной формулировки задачи фактически уже не проблема: `/home` больше не упоминается текстом (после несвязанной правки `TRAINER_AFTER_LINK_HERO`), `/profile` нигде не упоминается текстуально. Задача по факту — только про `/guide`.
+- На момент реализации (2026-09-04) константы `TRAINER_AFTER_LINK_STEP_AWAITING_ACTIVATION` и `TRAINER_GATE_AWAITING_ACTIVATION` уже отсутствуют в коде (onboarding v2) — живой периметр: 5 сообщений.
 
 ## Execution History
 
 - **TASK_CREATED** — заведена по результатам ревью онбординга тренера от 2026-08-31
 - **PHASE_STARTED** | clarify — делегировано автору задачи как business-analyst/copywriter decision («up to you»)
 - **PHASE_COMPLETED** | clarify — 3 AC, все CONFIRMED (решение принято, не оставлено открытым); открытых вопросов не осталось. Уточнён реальный периметр (7 живых констант вместо предполагаемых «десятков строк»; `/home`/`/profile` уже не актуальны, `TRAINER_LINK_SUCCESS` — мёртвый код)
+- **PHASE_COMPLETED** | plan/implement/verify — 2026-09-04 — `trainer_guide_keyboard.py`; copy без `/guide`; reply_markup на welcome/conflict/gate; 20 related tests passed; AC 3/3 VERIFIED
+- **TASK_COMPLETE** — 2026-09-04

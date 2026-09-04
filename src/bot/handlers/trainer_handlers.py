@@ -41,6 +41,7 @@ from src.application.booking_use_cases import (
     is_slot_end_in_past_local,
     list_bookings_for_trainer,
     list_trainer_clients,
+    mark_booking_confirmed_notified,
     set_booking_trainer_review,
     trainer_has_access_to_client,
     trainer_repeat_booking_same_time_next_week,
@@ -120,6 +121,12 @@ from src.bot.trainer_bot_state import (
     trainer_support_awaiting,
 )
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
+from src.bot.trainer_guide_keyboard import (
+    TRAINER_FAQ_CALLBACK,
+    TRAINER_SUPPORT_CALLBACK,
+    merge_inline_keyboards,
+    trainer_guide_keyboard,
+)
 from src.bot.trainer_menu_commands import sync_trainer_linked_chat_menu
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.shared.config import Settings
@@ -236,8 +243,6 @@ TRAINER_REPEAT_WEEK_PREFIX = "trainer_repeat_week:"
 BOOKING_ADD_NOTE_PREFIX = "booking_add_note:"
 BOOKING_NOTIFY_RELAY_WRITE_PREFIX = "bkrly:"
 GUIDE_CALLBACK = "guide"
-TRAINER_SUPPORT_CALLBACK = "trainer:support"
-TRAINER_FAQ_CALLBACK = "trainer:faq"
 TRAINER_INVITE_CALLBACK = "trainer:invite"
 
 # Human-readable trainer.status (aligned with admin TRAINER_STATUS_LABELS)
@@ -278,13 +283,6 @@ def _trainer_moderation_profile_approved_reply_markup() -> InlineKeyboardMarkup 
             ],
         ]
     )
-
-
-def _trainer_faq_webapp_url() -> str | None:
-    base = (Settings().webapp_base_url or "").rstrip("/")
-    if base.lower().startswith("https://"):
-        return f"{base}/webapp/trainer-faq"
-    return None
 
 
 def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
@@ -582,7 +580,11 @@ async def _cmd_collective_claim(message: Message, session, token: str) -> None:
     )
     if trainer_id is None:
         if link_err == "telegram_other_trainer":
-            await message.answer(msg.TRAINER_LINK_TELEGRAM_CONFLICT, parse_mode=ParseMode.HTML)
+            await message.answer(
+                msg.TRAINER_LINK_TELEGRAM_CONFLICT,
+                parse_mode=ParseMode.HTML,
+                reply_markup=trainer_guide_keyboard(),
+            )
         else:
             await message.answer(msg.TRAINER_COLLECTIVE_CLAIM_NEED_LINK, parse_mode=ParseMode.HTML)
         return
@@ -619,7 +621,11 @@ async def _cmd_collective_invite(message: Message, session, token: str) -> None:
     )
     if trainer_id is None:
         if link_err == "telegram_other_trainer":
-            await message.answer(msg.TRAINER_LINK_TELEGRAM_CONFLICT, parse_mode=ParseMode.HTML)
+            await message.answer(
+                msg.TRAINER_LINK_TELEGRAM_CONFLICT,
+                parse_mode=ParseMode.HTML,
+                reply_markup=trainer_guide_keyboard(),
+            )
         else:
             await message.answer(msg.TRAINER_COLLECTIVE_INVITE_INVALID, parse_mode=ParseMode.HTML)
         return
@@ -710,10 +716,16 @@ async def cmd_start(message: Message) -> None:
                     if tid and pending_referrer_id:
                         await record_referral_attribution(session, pending_referrer_id, tid)
                     if state == TrainerAccessState.ACTIVE:
-                        await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
+                        await message.answer(
+                            msg.TRAINER_START_WELCOME,
+                            reply_markup=trainer_guide_keyboard(),
+                        )
                         await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
                     else:
-                        await message.answer(trainer_gate_message(state, trainer))
+                        await message.answer(
+                            trainer_gate_message(state, trainer),
+                            reply_markup=trainer_guide_keyboard(),
+                        )
                     return
                 else:
                     # Not linked yet: issue landing token for referral flow
@@ -842,7 +854,7 @@ async def cmd_start(message: Message) -> None:
                         await message.answer(
                             msg.TRAINER_LINK_SUCCESS_ACTIVE,
                             parse_mode=ParseMode.HTML,
-                            reply_markup=kb_active,
+                            reply_markup=merge_inline_keyboards(kb_active, trainer_guide_keyboard()),
                         )
                 else:
                     if trial_welcome:
@@ -855,16 +867,23 @@ async def cmd_start(message: Message) -> None:
                             parse_mode=ParseMode.HTML,
                             reply_markup=kb_onboarding,
                         )
+                    onboarding_html = trainer_first_link_onboarding_html(state, trainer)
+                    onboarding_kb = (
+                        trainer_guide_keyboard()
+                        if state == TrainerAccessState.DEACTIVATED
+                        else kb_onboarding
+                    )
                     await message.answer(
-                        trainer_first_link_onboarding_html(state, trainer),
+                        onboarding_html,
                         parse_mode=ParseMode.HTML,
-                        reply_markup=kb_onboarding,
+                        reply_markup=onboarding_kb,
                     )
                 await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
             elif link_out.error == "telegram_other_trainer":
                 await message.answer(
                     msg.TRAINER_LINK_TELEGRAM_CONFLICT,
                     parse_mode=ParseMode.HTML,
+                    reply_markup=trainer_guide_keyboard(),
                 )
             else:
                 await message.answer(msg.TRAINER_LINK_INVALID)
@@ -874,7 +893,7 @@ async def cmd_start(message: Message) -> None:
         await _respond_to_not_linked_trainer(message)
         return
     if state == TrainerAccessState.ACTIVE:
-        await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
+        await message.answer(msg.TRAINER_START_WELCOME, reply_markup=trainer_guide_keyboard())
         await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
         return
     await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
@@ -887,21 +906,8 @@ async def cmd_start(message: Message) -> None:
     await message.answer(
         trainer_gate_message(state, trainer),
         parse_mode=ParseMode.HTML,
-        reply_markup=welcome_kb,
+        reply_markup=merge_inline_keyboards(welcome_kb, trainer_guide_keyboard()),
     )
-
-
-def _trainer_guide_keyboard() -> InlineKeyboardMarkup:
-    """Support + FAQ Mini App (HTTPS); без HTTPS — callback-заглушка."""
-    rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)],
-    ]
-    faq_url = _trainer_faq_webapp_url()
-    if faq_url:
-        rows.append([InlineKeyboardButton(text="FAQ", web_app=WebAppInfo(url=faq_url))])
-    else:
-        rows.append([InlineKeyboardButton(text="FAQ", callback_data=TRAINER_FAQ_CALLBACK)])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @router.message(Command("guide"))
@@ -918,7 +924,7 @@ async def cmd_guide(message: Message) -> None:
     await message.answer(
         msg.TRAINER_GUIDE,
         parse_mode=ParseMode.HTML,
-        reply_markup=_trainer_guide_keyboard(),
+        reply_markup=trainer_guide_keyboard(),
     )
 
 
@@ -2420,14 +2426,25 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             booking_id=int(info["id"]),
             webapp_base_url=settings.webapp_base_url,
         )
+        sent = False
         try:
             await client_bot.send_message(
                 chat_id=client_tid,
                 text=text_client,
                 reply_markup=reply_markup,
             )
+            sent = True
+        except Exception as e:
+            # Booking stays confirmed either way; run_booking_confirmed_notifier_loop retries
+            # delivery (see booking_use_cases.get_pending_booking_confirmed_notifications).
+            logger.warning(
+                "Booking-confirmed notify to client %s (booking_id=%s): %s", client_tid, booking_id, e
+            )
         finally:
             await client_bot.session.close()
+        if sent:
+            async with async_session_factory() as session:
+                await mark_booking_confirmed_notified(session, booking_id)
     await _send_first_booking_milestone_followups(
         callback.message,
         trainer_id,
@@ -3677,7 +3694,7 @@ async def on_guide_callback(callback: CallbackQuery) -> None:
     await callback.message.answer(
         msg.TRAINER_GUIDE,
         parse_mode=ParseMode.HTML,
-        reply_markup=_trainer_guide_keyboard(),
+        reply_markup=trainer_guide_keyboard(),
     )
 
 
@@ -3845,7 +3862,11 @@ async def fallback(message: Message) -> None:
         return
     if not trainer_may_use_bot_workflows(state):
         await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
-        await message.answer(trainer_gate_message(state, trainer), parse_mode=ParseMode.HTML)
+        await message.answer(
+            trainer_gate_message(state, trainer),
+            parse_mode=ParseMode.HTML,
+            reply_markup=trainer_guide_keyboard(),
+        )
         return
     await sync_trainer_linked_chat_menu(message.bot, message.chat.id)
     await message.answer(msg.TRAINER_FALLBACK)

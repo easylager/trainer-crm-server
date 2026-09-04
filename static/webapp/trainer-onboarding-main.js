@@ -154,6 +154,7 @@
       'obTitle', 'obServices', 'obDuration', 'obDurationLockedNote',
       'obArenaMode', 'obArenaSingleWrap', 'obArenaSingleSearch', 'obArenaSingleList',
       'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaTabs',
+      'obArenaMissingLink',
       'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
       'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink',
     ].forEach(function (id) { el[id] = byId(id); });
@@ -1240,6 +1241,18 @@
       (currentInit() ? '?init_data=' + encodeURIComponent(currentInit()) : '');
   }
 
+  /**
+   * TASK-046: the onboarding picker is intentionally platform-wide with no city question
+   * (см. .ai/RESEARCH-onboarding-multi-arena.md) — creating a new arena needs a city, which
+   * this screen deliberately never asks. Rather than bolt a second arena-creation form with
+   * different rules onto the one-gesture first screen, send the trainer to the profile's
+   * «Арены» section, where city is already known and the real create form lives.
+   */
+  function goAddMissingArena() {
+    window.location.href = 'trainer-profile' +
+      (currentInit() ? '?init_data=' + encodeURIComponent(currentInit()) : '');
+  }
+
   function bind() {
     if (el.obCta) el.obCta.onclick = submit;
     bindGridDrag();
@@ -1257,6 +1270,12 @@
     }
     if (el.obArenaSingleSearch) el.obArenaSingleSearch.oninput = renderArenaSingleList;
     if (el.obArenaMultiSearch) el.obArenaMultiSearch.oninput = renderArenaMultiList;
+    if (el.obArenaMissingLink) {
+      el.obArenaMissingLink.onclick = function (e) {
+        e.preventDefault();
+        goAddMissingArena();
+      };
+    }
   }
 
   cacheEls();

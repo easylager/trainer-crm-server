@@ -464,6 +464,74 @@ def build_client_trainer_booked_you_inline_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
+def format_client_booking_rescheduled_html(
+    *,
+    old_date: str,
+    old_day: str,
+    old_time: str,
+    new_date: str,
+    new_day: str,
+    new_time: str,
+    trainer_name: str,
+    service_name: str | None,
+    booking_price_cents: int | None,
+    price_tier_label: str | None,
+    arena_name: str | None,
+    arena_address: str | None,
+    duration_minutes: int | None,
+    expected_payment_class: str | None = None,
+) -> str:
+    """Rich HTML message for client when trainer reschedules their booking (ParseMode.HTML).
+
+    One combined «reschedule» push instead of a cancellation push + a fresh booking push —
+    same занятие, просто другое время, чтобы перенос не читался как two unrelated events.
+    """
+    parts: list[str] = [
+        "🔄 <b>Занятие переехало!</b>\n\n",
+        f"👤 <b>Тренер:</b> <b>{html.escape(trainer_name)}</b>\n",
+        f"📅 Было: <s>{html.escape(old_date)} ({html.escape(old_day)}) · {html.escape(old_time)}</s>\n",
+    ]
+    dur_part = f" – <b>{int(duration_minutes)}</b> мин" if duration_minutes is not None else ""
+    parts.append(
+        f"📅 Стало: <b>{html.escape(new_date)}</b> ({html.escape(new_day)}) · "
+        f"<b>{html.escape(new_time)}</b>{dur_part}\n"
+    )
+
+    svc_lines: list[str] = []
+    svc = (service_name or "").strip()
+    if svc:
+        if (price_tier_label or "").strip():
+            svc_lines.append(f"🎯 <b>Услуга:</b> {html.escape(svc)} · тариф: <b>{html.escape(price_tier_label)}</b>")
+        else:
+            svc_lines.append(f"🎯 <b>Услуга:</b> {html.escape(svc)}")
+    elif (price_tier_label or "").strip():
+        svc_lines.append(f"🎯 Тариф: <b>{html.escape(price_tier_label)}</b>")
+    pay_line = format_client_upcoming_payment_display_html(
+        expected_payment_class=expected_payment_class,
+        booking_price_cents=booking_price_cents,
+    )
+    if pay_line:
+        svc_lines.append(pay_line)
+    if svc_lines:
+        parts.append("\n" + "\n".join(svc_lines) + "\n")
+
+    venue_lines: list[str] = []
+    an = (arena_name or "").strip()
+    aa = (arena_address or "").strip()
+    if an and aa:
+        venue_lines.append(f"📍 <b>Место:</b> <b>{html.escape(an)}</b>")
+        venue_lines.append(html.escape(aa))
+    elif an:
+        venue_lines.append(f"📍 <b>Место:</b> <b>{html.escape(an)}</b>")
+    elif aa:
+        venue_lines.append(f"📍 <b>Место:</b> {html.escape(aa)}")
+    if venue_lines:
+        parts.append("\n" + "\n".join(venue_lines) + "\n")
+
+    parts.append("\nВсё остальное без изменений — просто отметьте новое время себе в календаре. До встречи! 🙌")
+    return "".join(parts)
+
+
 TRAINER_RESPOND_SUCCESS = "Отклик отправлен. Клиент увидит тебя в списке и сможет записаться или написать."
 TRAINER_RESPOND_PROMPT_COMMENT = (
     "Напиши комментарий для клиента (необязательно).\n\n"
@@ -2249,20 +2317,20 @@ TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
 TRAINER_START_WELCOME = (
     "👋 Привет!\n\n"
     "Вы в боте как тренер. Откройте <b>«Обзор»</b> слева от поля ввода — там все разделы в мини-приложении.\n\n"
-    "Коротко по разделам: /guide"
+    "Вопросы — кнопка ниже."
 )
 TRAINER_ONLY_VIA_SITE = "Этот бот только для тренеров. Подключение по ссылке с сайта."
 TRAINER_REGISTRATION_UNAVAILABLE = "Регистрация временно недоступна. Попробуйте позже."
 # После привязки по ссылке: без обещания полного меню (гейт может быть закрыт).
 TRAINER_LINK_SUCCESS = (
     "Аккаунт привязан к этому Telegram.\n\n"
-    "Чеклист «Первые шаги» — в «Обзор». Помощь: /guide"
+    "Чеклист «Первые шаги» — в «Обзор». Вопросы — кнопка ниже."
 )
 # Только если тренер уже active — честно про все пункты меню.
 TRAINER_LINK_SUCCESS_ACTIVE = (
     "✅ <b>Telegram подключён</b>\n\n"
     "Основное — кнопка <b>«Обзор»</b> слева от поля ввода: расписание, заявки, клиенты и остальное в мини-приложении. "
-    "Коротко по разделам: /guide"
+    "Вопросы — кнопка ниже."
 )
 # Онбординг v2. Первое сообщение — не приветствие, а предложение с одним действием.
 # Ни слова про CRM, анкету, проверку и тариф: всё это в первую минуту переводит человека
@@ -2274,7 +2342,7 @@ TRAINER_AFTER_LINK_HERO = (
     "Нажмите <b>«Начать»</b> ниже."
 )
 TRAINER_AFTER_LINK_STEP_DEACTIVATED = (
-    "Аккаунт деактивирован. Если это ошибка — напишите в поддержку через /guide."
+    "Аккаунт деактивирован. Если это ошибка — напишите в поддержку (кнопка ниже)."
 )
 # Кнопка под первым сообщением (Web App → страница быстрой настройки).
 TRAINER_ONBOARDING_START_BUTTON = "Начать"
@@ -2282,7 +2350,7 @@ TRAINER_LINK_INVALID = "Ссылка недействительна или уж�
 TRAINER_LINK_TELEGRAM_CONFLICT = (
     "Этот Telegram уже привязан к <b>другому</b> профилю тренера в системе.\n\n"
     "Если ты уже работаешь в боте — просто открой чат и нажми «Обзор» (команда /start без ссылки). "
-    "Если это ошибка — напиши в поддержку: /guide"
+    "Если это ошибка — напиши в поддержку (кнопка ниже)."
 )
 # После первой привязки по ссылке: активируется полный доступ на пробный период.
 TRAINER_WELCOME_TRIAL_ACTIVATED = (
@@ -2407,9 +2475,11 @@ TRAINER_INVITE_ERR_PROFILE_INCOMPLETE = (
 # Trainer: access gate.
 # Онбординг v2: гейта на работу больше нет. Осталось два случая — «это не ваш бот» и «аккаунт выключен».
 TRAINER_GATE_CALLBACK_BLOCKED = (
-    "Действие недоступно для этого аккаунта. Напишите в поддержку: /guide"
+    "Действие недоступно для этого аккаунта. Напишите в поддержку."
 )
-TRAINER_GATE_DEACTIVATED = "Аккаунт деактивирован. Если это ошибка — напишите в поддержку: /guide."
+TRAINER_GATE_DEACTIVATED = (
+    "Аккаунт деактивирован. Если это ошибка — напишите в поддержку (кнопка ниже)."
+)
 TRAINER_PROFILE_CARD = (
     "<b>Профиль тренера #{trainer_id}</b>\n"
     "Статус в системе: <b>{status_label}</b>\n\n"
@@ -2646,6 +2716,17 @@ TRAINER_CREATE_BOOKING_DONE = (
     "⏰ <b>Напоминания клиенту:</b> {reminder_plan}\n"
     "📩 <b>Подтверждение клиенту:</b> {client_confirmation}\n"
     "📝 <b>Заметка:</b> можно добавить сразу кнопкой ниже."
+)
+TRAINER_RESCHEDULE_BOOKING_DONE = (
+    "🔄 Перенесли запись клиента <b>{client_name}</b>.\n\n"
+    "📅 Было: <s>{old_date} ({old_day}) {old_time}</s>\n"
+    "📅 Стало: <b>{date}</b> ({day}) {time}\n\n"
+    "⏰ <b>Напоминания клиенту:</b> {reminder_plan}\n"
+    "📩 <b>Клиент:</b> {client_confirmation}\n"
+    "📝 <b>Заметка:</b> можно добавить сразу кнопкой ниже."
+)
+TRAINER_RESCHEDULE_CLIENT_CONFIRMATION_QUEUED = (
+    "получит одно уведомление о переносе (новое время, адрес и кнопка «Мои записи») — без лишних сообщений об отмене"
 )
 # Onboarding «Попробовать на примере» — отдельный пуш, без жаргона «Детали записи» и без кнопки заметки.
 TRAINER_CREATE_BOOKING_SANDBOX_DONE = (

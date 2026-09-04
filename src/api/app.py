@@ -1129,6 +1129,19 @@ def webapp_client_home_main_js(request: Request):
     )
 
 
+@app.get("/webapp/client-profile-switcher.js")
+def webapp_client_profile_switcher_js(request: Request):
+    """EPIC1: profile chip + «Добавить ребёнка» (+ X-Profile-Id fetch patch)."""
+    path = _WEBAPP_DIR / "client-profile-switcher.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-trainer-profile.css")
 def webapp_trainer_profile_css(request: Request):
     """Trainer profile page styles (split from trainer-profile.html). Use ``?v=…`` for long cache."""

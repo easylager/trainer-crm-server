@@ -3171,3 +3171,14 @@
     .arena-setup-status--warn {
       color: #c0392b;
     }
+    .arena-unconfirmed-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.4;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, #c0392b 14%, transparent);
+      color: #c0392b;
+      vertical-align: middle;
+    }

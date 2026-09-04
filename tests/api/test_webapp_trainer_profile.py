@@ -450,3 +450,152 @@ async def test_webapp_trainer_catalog_visibility_patch_ok_for_active_trainer(
         get_rest = await client.get(f"/api/trainers/{trainer_id}")
     assert get_rest.status_code == 200
     assert get_rest.json().get("is_catalog_visible") is False
+
+
+# --- TASK-046: trainer self-service arena creation --------------------------------------
+
+
+async def _trainer_with_city(db_session, *, city_id: int) -> tuple[int, int]:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Арена", "last_name": "Тест", "city_id": city_id}},
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+    return trainer_id, tg
+
+
+@pytest.mark.asyncio
+async def test_arena_setup_mode_create_creates_real_arena_and_hides_from_public_until_confirmed(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            create_resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Новый каток", "address": "ул. Тестовая, 10"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            body = create_resp.json()
+            assert body["status"] == "created"
+            arena_id = body["arena_id"]
+            assert arena_id in (body["trainer"].get("arena_ids") or [])
+
+            # AC-004: visible to the trainer's own (authenticated) arena list right away.
+            trainer_arenas_resp = await client.get(
+                "/api/webapp/trainer/profile/arenas",
+                headers={"X-Telegram-Init-Data": "mock"},
+                params={"city_id": cid},
+            )
+            assert trainer_arenas_resp.status_code == 200
+            trainer_ids = [a["id"] for a in trainer_arenas_resp.json()["items"]]
+            assert arena_id in trainer_ids
+
+        # AC-004: NOT visible in the public client catalog until confirmed.
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            public_resp = await client.get("/api/public/arenas", params={"city_id": cid})
+        assert public_resp.status_code == 200
+        public_ids = [a["id"] for a in public_resp.json()["items"]]
+        assert arena_id not in public_ids
+
+
+@pytest.mark.asyncio
+async def test_arena_setup_mode_create_duplicate_warns_then_confirm_creates(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Дубль Арена", "address": "ул. Первая, 1"},
+            )
+            assert first.status_code == 200
+            first_arena_id = first.json()["arena_id"]
+
+            dup = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "дубль   арена", "address": "ул. Вторая, 2"},
+            )
+            assert dup.status_code == 200
+            dup_body = dup.json()
+            assert dup_body["status"] == "duplicate_warning"
+            assert dup_body["duplicates"][0]["arena_id"] == first_arena_id
+
+            confirmed = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "mode": "create",
+                    "arena_name": "дубль   арена",
+                    "address": "ул. Вторая, 2",
+                    "confirm_duplicate": True,
+                },
+            )
+            assert confirmed.status_code == 200
+            assert confirmed.json()["status"] == "created"
+            assert confirmed.json()["arena_id"] != first_arena_id
+
+
+@pytest.mark.asyncio
+async def test_arena_setup_mode_request_no_longer_supported(
+    app_use_test_db,
+    db_session,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+    trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "request", "arena_name": "Старый путь"},
+            )
+    assert resp.status_code == 422

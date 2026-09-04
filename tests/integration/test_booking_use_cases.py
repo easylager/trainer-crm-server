@@ -20,10 +20,12 @@ from src.application.booking_use_cases import (
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     claim_client_trainer_booked_notification,
+    get_pending_booking_confirmed_notifications,
     get_pending_trainer_booked_notifications,
     list_bookings_to_complete,
     list_pending_reminders,
     mark_booking_completed_and_notify,
+    mark_booking_confirmed_notified,
     mark_reminder_sent,
 )
 from src.infrastructure.repositories import TrainerRepository
@@ -570,7 +572,12 @@ async def test_group_slot_cancel_frees_space(db_session: AsyncSession) -> None:
 async def test_confirm_pending_sets_client_trainer_booked_notified_no_duplicate_queue(
     db_session: AsyncSession,
 ) -> None:
-    """Trainer confirm sends rich client push elsewhere; do not enqueue «Вас записали» loop for same booking."""
+    """
+    Trainer confirm sends the rich client push separately (only after it actually succeeds —
+    see mark_booking_confirmed_notified); confirm_booking itself must not enqueue the «Вас
+    записали» fallback loop for the same booking (it touches notified_at to close that race
+    even before the confirm push is sent — see confirm_booking's own docstring).
+    """
     tomorrow = date.today() + timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, tomorrow, time(10, 0), time(11, 0)
@@ -586,19 +593,108 @@ async def test_confirm_pending_sets_client_trainer_booked_notified_no_duplicate_
     )
     assert booking_id is not None
     r0 = await db_session.execute(
-        text("SELECT client_notified_trainer_booked_at FROM bookings WHERE id = :id"),
+        text("SELECT client_notified_trainer_booked_at, notified_at FROM bookings WHERE id = :id"),
         {"id": booking_id},
     )
-    assert r0.scalar() is None
+    row0 = r0.fetchone()
+    assert row0[0] is None
+    assert row0[1] is None
     info = await confirm_booking(db_session, booking_id, trainer_id)
     assert info is not None
     r1 = await db_session.execute(
+        text("SELECT client_notified_trainer_booked_at, notified_at FROM bookings WHERE id = :id"),
+        {"id": booking_id},
+    )
+    row1 = r1.fetchone()
+    assert row1[0] is None, "not notified yet — only a successful send may set this"
+    assert row1[1] is not None, "confirm_booking must touch notified_at to close the race with the other loop"
+    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
+    assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
+
+    await mark_booking_confirmed_notified(db_session, booking_id)
+    r2 = await db_session.execute(
         text("SELECT client_notified_trainer_booked_at FROM bookings WHERE id = :id"),
         {"id": booking_id},
     )
-    assert r1.scalar() is not None
-    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
-    assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
+    assert r2.scalar() is not None
+
+
+@pytest.mark.asyncio
+async def test_pending_booking_confirmed_notifications_retries_undelivered_confirm_push(
+    db_session: AsyncSession,
+) -> None:
+    """
+    Regression: a booking confirm_booking marked confirmed but whose «Ваша запись подтверждена»
+    push never went out (e.g. run_booking_confirmed_notifier_loop's earlier retry attempt failed
+    too) must keep showing up here — this is the safety net that used to be missing entirely,
+    the client was just never notified once client_notified_trainer_booked_at got set regardless
+    of send success.
+    """
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(12, 0), time(13, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=False,
+    )
+    assert booking_id is not None
+    info = await confirm_booking(db_session, booking_id, trainer_id)
+    assert info is not None
+
+    pending = await get_pending_booking_confirmed_notifications(db_session, limit=50)
+    ids = [int(p["id"]) for p in pending]
+    assert int(booking_id) in ids
+    row = next(p for p in pending if int(p["id"]) == int(booking_id))
+    assert int(row["trainer_id"]) == int(trainer_id)
+    assert row["client_telegram_id"] is not None
+
+    await mark_booking_confirmed_notified(db_session, booking_id)
+    pending_after = await get_pending_booking_confirmed_notifications(db_session, limit=50)
+    assert all(int(p["id"]) != int(booking_id) for p in pending_after)
+
+
+@pytest.mark.asyncio
+async def test_notify_client_booking_confirmed_returns_false_on_send_failure(
+    db_session: AsyncSession,
+) -> None:
+    """Send failure must return False, not raise — callers rely on this to decide whether to retry."""
+    from unittest.mock import AsyncMock, patch
+
+    from src.application.booking_confirm_client_notify import notify_client_booking_confirmed_by_trainer
+
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(9, 0), time(10, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session, slot_id, trainer_id, client_id, service_id=service_id, created_by_trainer=False
+    )
+    assert booking_id is not None
+    info = await confirm_booking(db_session, booking_id, trainer_id)
+    assert info is not None
+
+    with patch("src.application.booking_confirm_client_notify.Bot") as MockBot:
+        inst = MockBot.return_value
+        inst.send_message = AsyncMock(side_effect=RuntimeError("telegram down"))
+        inst.session = AsyncMock()
+        inst.session.close = AsyncMock()
+        ok = await notify_client_booking_confirmed_by_trainer(db_session, trainer_id, booking_id, info)
+    assert ok is False
+
+    with patch("src.application.booking_confirm_client_notify.Bot") as MockBot:
+        inst = MockBot.return_value
+        inst.send_message = AsyncMock()
+        inst.session = AsyncMock()
+        inst.session.close = AsyncMock()
+        ok2 = await notify_client_booking_confirmed_by_trainer(db_session, trainer_id, booking_id, info)
+    assert ok2 is True
 
 
 @pytest.mark.asyncio

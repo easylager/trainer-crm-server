@@ -19,11 +19,17 @@ class CatalogRepository:
         self._session = session
 
     async def list_cities(self) -> list[dict[str, Any]]:
-        """Active cities only, ordered by sort_order, then id."""
+        """Active cities only, ordered by sort_order, then id.
+
+        ``country`` (TASK-043) lets callers resolve display currency client-side without an
+        extra request — e.g. price input suffix on the profile screen.
+        """
         r = await self._session.execute(
-            text("SELECT id, name, sort_order FROM cities WHERE is_active ORDER BY sort_order, id")
+            text("SELECT id, name, sort_order, country FROM cities WHERE is_active ORDER BY sort_order, id")
         )
-        return [{"id": row[0], "name": row[1], "sort_order": row[2]} for row in r.fetchall()]
+        return [
+            {"id": row[0], "name": row[1], "sort_order": row[2], "country": row[3]} for row in r.fetchall()
+        ]
 
     _SERVICE_TRAINER_COUNT_SQL = f"""
         SELECT COUNT(DISTINCT t.id)::int
@@ -81,7 +87,7 @@ class CatalogRepository:
         ]
 
     async def list_arenas(
-        self, city_id: int, *, service_id: int | None = None
+        self, city_id: int, *, service_id: int | None = None, include_unconfirmed: bool = False
     ) -> list[dict[str, Any]]:
         """
         Active arenas in a city with address and coords for map link.
@@ -89,14 +95,20 @@ class CatalogRepository:
         When ``service_id`` is set, each row includes ``trainer_count``: distinct active
         catalog-visible trainers in ``city_id`` who offer that service and list the arena
         in ``trainer_arenas`` (matches catalog arena filter semantics).
+
+        ``include_unconfirmed``: trainer-created arenas start ``is_confirmed=false``
+        (TASK-046) — visible to trainers of the same city (pass ``True``, e.g. the
+        authenticated trainer profile screen), hidden from the public client catalog
+        (default ``False``, e.g. ``GET /api/public/arenas``) until an admin confirms.
         """
+        confirmed_filter = "" if include_unconfirmed else "AND is_confirmed"
         if service_id is None:
             r = await self._session.execute(
                 text(
-                    """
-                    SELECT id, city_id, name, sort_order, address, latitude, longitude
+                    f"""
+                    SELECT id, city_id, name, sort_order, address, latitude, longitude, is_confirmed
                     FROM arenas
-                    WHERE city_id = :cid AND is_active
+                    WHERE city_id = :cid AND is_active {confirmed_filter}
                     ORDER BY sort_order, id
                     """
                 ),
@@ -111,11 +123,13 @@ class CatalogRepository:
                     "address": row[4],
                     "latitude": row[5],
                     "longitude": row[6],
+                    "is_confirmed": bool(row[7]),
                 }
                 for row in r.fetchall()
             ]
 
         tw = _CATALOG_TRAINER_WHERE
+        confirmed_filter_a = "" if include_unconfirmed else "AND a.is_confirmed"
         r = await self._session.execute(
             text(
                 f"""
@@ -127,6 +141,7 @@ class CatalogRepository:
                     a.address,
                     a.latitude,
                     a.longitude,
+                    a.is_confirmed,
                     COALESCE(cnt.trainer_count, 0) AS trainer_count
                 FROM arenas a
                 LEFT JOIN (
@@ -141,7 +156,7 @@ class CatalogRepository:
                         ON ar.id = ta.arena_id AND ar.city_id = :city_id AND ar.is_active
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
-                WHERE a.city_id = :city_id AND a.is_active
+                WHERE a.city_id = :city_id AND a.is_active {confirmed_filter_a}
                 ORDER BY COALESCE(cnt.trainer_count, 0) DESC, a.sort_order, a.id
                 """
             ),
@@ -156,7 +171,8 @@ class CatalogRepository:
                 "address": row[4],
                 "latitude": row[5],
                 "longitude": row[6],
-                "trainer_count": int(row[7]),
+                "is_confirmed": bool(row[7]),
+                "trainer_count": int(row[8]),
             }
             for row in r.fetchall()
         ]

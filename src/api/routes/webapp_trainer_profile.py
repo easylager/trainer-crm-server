@@ -36,7 +36,7 @@ from src.application.trainer_profile_pending import (
     trainer_has_pending_text_revision,
     trainer_has_photo_pending_revision,
 )
-from src.application.catalog_use_cases import list_cities, list_services
+from src.application.catalog_use_cases import list_arenas, list_cities, list_services
 from src.application.arena_schedule_preset import (
     get_schedule_grid_preset_for_trainer,
     normalize_trainer_schedule_grid_step,
@@ -45,8 +45,8 @@ from src.application.arena_schedule_preset import (
 from src.application.trainer_notification_prefs import validate_push_notification_window
 from src.application.trainer_arena_setup_use_cases import (
     set_trainer_arena_mobile,
-    submit_trainer_arena_request,
 )
+from src.application.trainer_arena_create_use_cases import create_trainer_arena
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -197,7 +197,13 @@ class WebappTrainerPhotoPresignBody(BaseModel):
 class TrainerArenaSetupBody(BaseModel):
     mode: str = Field(..., min_length=1, max_length=32)
     arena_name: str | None = Field(default=None, max_length=200)
-    note: str | None = Field(default=None, max_length=800)
+    address: str | None = Field(default=None, max_length=512)
+    confirm_duplicate: bool = False
+    city_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="City for create mode when profile.city_id is unset or trainer changed city without Save.",
+    )
 
 
 @router.post("/trainer/profile/arena-setup")
@@ -206,31 +212,76 @@ async def post_trainer_arena_setup_for_webapp(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
-    """When public arena list is empty: mobile format or request a new venue (TTV gate)."""
+    """
+    Arena self-service (TASK-046): mobile format, or create a real arena directly.
+
+    ``mode=create`` writes a real ``arenas`` row (``is_confirmed=false``) and auto-attaches
+    it to the trainer — no waiting on support/admin to use it (AC-002/AC-003). Superseded
+    the old ``mode=request`` text-only support ticket (AC-006), which no longer exists.
+    """
     trainer_id = await _linked_trainer_id(session, principal)
     mode = (body.mode or "").strip().lower()
     if mode == "mobile":
         trainer = await set_trainer_arena_mobile(session, trainer_id)
-    elif mode == "request":
+        if not trainer:
+            raise HTTPException(status_code=404, detail="Trainer not found")
+        readiness = moderation_readiness_dict(
+            trainer,
+            trainer_status=(trainer.get("status") or "").strip() or None,
+        )
+        return {"trainer": trainer, "moderation_readiness": readiness}
+    if mode == "create":
         try:
-            trainer = await submit_trainer_arena_request(
+            result = await create_trainer_arena(
                 session,
                 trainer_id,
-                arena_name=body.arena_name or "",
-                note=body.note,
-                telegram_id=principal.user_id if principal.user_id else None,
+                name=body.arena_name or "",
+                address=body.address or "",
+                confirm_duplicate=body.confirm_duplicate,
+                city_id=body.city_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    else:
-        raise HTTPException(status_code=422, detail="mode must be mobile or request")
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail="Trainer not found") from exc
+        if result.get("status") == "duplicate_warning":
+            return result
+        trainer = result.get("trainer")
+        if not trainer:
+            raise HTTPException(status_code=404, detail="Trainer not found")
+        readiness = moderation_readiness_dict(
+            trainer,
+            trainer_status=(trainer.get("status") or "").strip() or None,
+        )
+        return {
+            "status": "created",
+            "arena_id": result.get("arena_id"),
+            "trainer": trainer,
+            "moderation_readiness": readiness,
+        }
+    raise HTTPException(status_code=422, detail="mode must be mobile or create")
+
+
+@router.get("/trainer/profile/arenas")
+async def get_trainer_profile_arenas_for_webapp(
+    city_id: int = Query(..., ge=1),
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+):
+    """
+    Arenas for the trainer's own arena picker (TASK-046 AC-004): unlike
+    ``GET /api/public/arenas`` (client catalog), includes trainer-created arenas still
+    awaiting admin confirmation — the creator and other trainers of the same city can
+    select and use them right away.
+    """
+    trainer_id = await _linked_trainer_id(session, principal)
+    trainer = await get_trainer(session, trainer_id)
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
-    readiness = moderation_readiness_dict(
-        trainer,
-        trainer_status=(trainer.get("status") or "").strip() or None,
-    )
-    return {"trainer": trainer, "moderation_readiness": readiness}
+    # Picker may show arenas for a city selected in the form before Save (draft city).
+    # Authenticated trainer is allowed to browse any city they can pick in the dropdown.
+    items = await list_arenas(session, city_id, include_unconfirmed=True)
+    return {"items": items}
 
 
 @router.get("/trainer/profile")
