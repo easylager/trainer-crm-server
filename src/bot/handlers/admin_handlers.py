@@ -22,6 +22,11 @@ from src.application.support_use_cases import (
     reply_support_message,
 )
 from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
+from src.application.admin_arena_moderation import (
+    approve_arena,
+    list_arenas_pending_moderation,
+    reject_arena,
+)
 from src.application.booking_problem_admin_use_cases import (
     count_booking_problem_reports_for_admin,
     list_booking_problem_reports_for_admin,
@@ -121,6 +126,10 @@ logger = logging.getLogger(__name__)
 ADMIN_APPROVE_PREFIX = "admin:approve:"
 ADMIN_REJECT_PREFIX = "admin:reject:"
 ADMIN_NEEDS_EDIT_PREFIX = "admin:needs_edit:"
+
+# TASK-046: trainer-created arena moderation queue (separate from trainer profile moderation above).
+ADMIN_ARENA_APPROVE_PREFIX = "admin:arena:approve:"
+ADMIN_ARENA_REJECT_PREFIX = "admin:arena:reject:"
 
 # In-memory state: admin user_id -> trainer_id (awaiting moderation feedback text)
 _admin_awaiting_feedback: dict[int, int] = {}
@@ -2317,6 +2326,100 @@ async def on_needs_edit(callback: CallbackQuery) -> None:
     _admin_awaiting_feedback[user_id] = trainer_id
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(msg.ADMIN_NEEDS_EDIT_PROMPT)
+    await callback.answer()
+
+
+def _format_admin_arena_pending_caption(arena: dict) -> str:
+    """TASK-046: short text card for one trainer-created arena awaiting confirmation."""
+    name_esc = html.escape((arena.get("name") or "—").strip())
+    address_esc = html.escape((arena.get("address") or "—").strip())
+    city_esc = html.escape((arena.get("city_name") or "—").strip())
+    coords = arena.get("latitude"), arena.get("longitude")
+    coords_str = f"{coords[0]:.5f}, {coords[1]:.5f}" if coords[0] is not None and coords[1] is not None else "не определены"
+    trainer_name = (arena.get("trainer_name") or "").strip()
+    trainer_tg = arena.get("trainer_telegram_id")
+    trainer_line = trainer_name or (f"id={arena.get('trainer_id')}" if arena.get("trainer_id") else "—")
+    if trainer_tg:
+        trainer_line += f" (<code>{html.escape(str(trainer_tg))}</code>)"
+    return (
+        f"<b>Новая арена #{arena['id']}</b>\n"
+        f"Название: {name_esc}\n"
+        f"Город: {city_esc}\n"
+        f"Адрес: {address_esc}\n"
+        f"Координаты: {coords_str}\n"
+        f"Добавил тренер: {trainer_line}"
+    )
+
+
+@router.message(Command("pending_arenas"))
+async def cmd_pending_arenas(message: Message) -> None:
+    """TASK-046: post-hoc moderation queue for arenas trainers created themselves."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    async with async_session_factory() as session:
+        pending = await list_arenas_pending_moderation(session)
+    if not pending:
+        await message.answer("Нет арен, ожидающих подтверждения.")
+        return
+    for arena in pending:
+        caption = _format_admin_arena_pending_caption(arena)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text=msg.ADMIN_BUTTON_APPROVE,
+                callback_data=f"{ADMIN_ARENA_APPROVE_PREFIX}{arena['id']}",
+            ),
+            InlineKeyboardButton(
+                text=msg.ADMIN_BUTTON_REJECT,
+                callback_data=f"{ADMIN_ARENA_REJECT_PREFIX}{arena['id']}",
+            ),
+        ]])
+        await message.answer(caption, reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_ARENA_APPROVE_PREFIX))
+async def on_arena_approve(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    arena_id = safe_parse_id(callback.data[len(ADMIN_ARENA_APPROVE_PREFIX):])
+    if arena_id is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        ok = await approve_arena(session, arena_id, user_id)
+    if ok:
+        audit_log("arena.approved", ACTOR_ADMIN_BOT, user_id, {"arena_id": arena_id})
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(f"Арена #{arena_id} подтверждена — теперь видна в каталоге.")
+    else:
+        await callback.message.answer(f"Не удалось подтвердить арену #{arena_id}.")
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_ARENA_REJECT_PREFIX))
+async def on_arena_reject(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    arena_id = safe_parse_id(callback.data[len(ADMIN_ARENA_REJECT_PREFIX):])
+    if arena_id is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        ok = await reject_arena(session, arena_id)
+    if ok:
+        audit_log("arena.rejected", ACTOR_ADMIN_BOT, user_id, {"arena_id": arena_id})
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(
+            f"Арена #{arena_id} отклонена и деактивирована"
+            " (если её уже использовал тренер, у него она тоже стала недоступна)."
+        )
+    else:
+        await callback.message.answer(f"Не удалось отклонить арену #{arena_id}.")
     await callback.answer()
 
 

@@ -150,13 +150,22 @@ class TrainerLinkToken(Base):
 
 
 class City(Base):
-    """City for filtering trainers. Admin fills; trainer profile has one city."""
+    """City for filtering trainers. Admin fills; trainer profile has one city.
+
+    ``country`` (ISO 3166-1 alpha-2: ``BY``/``RU``) drives display currency —
+    see ``src.shared.currency.resolve_currency``. ``price_group`` selects which row of
+    the subscription pricing tables applies (``BY_BASE``/``RU_BASE``/``RU_MOSCOW``/...) —
+    see ``src.shared.currency.PRICE_GROUP_BY_COUNTRY``. Both default to the original
+    all-Belarus behavior; only "Москва/МО" and "Санкт-Петербург/ЛО" differ so far.
+    """
     __tablename__ = "cities"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    country: Mapped[str] = mapped_column(String(2), server_default="BY", nullable=False)
+    price_group: Mapped[str] = mapped_column(String(16), server_default="BY_BASE", nullable=False)
 
 
 class Arena(Base):
@@ -171,6 +180,12 @@ class Arena(Base):
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    is_confirmed: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
@@ -1120,15 +1135,20 @@ class TrainerInvoice(Base):
 
 
 class SubscriptionTierPricing(Base):
-    """Admin-editable pricing for subscription tiers (crm/online/analytics)."""
+    """Admin-editable pricing for subscription tiers (crm/online/analytics).
+
+    One row per (tier, price_group) — ``price_group`` (e.g. ``BY_BASE``/``RU_BASE``/
+    ``RU_MOSCOW``) lets the same tier have different prices for different city groups,
+    resolved via ``src.shared.currency.resolve_price_group``.
+    """
     __tablename__ = "subscription_tier_pricing"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tier: Mapped[str] = mapped_column(
         Enum(*SUBSCRIPTION_TIERS, name="subscription_tier_enum", create_constraint=False),
         nullable=False,
-        unique=True,
     )
+    price_group: Mapped[str] = mapped_column(String(16), server_default="BY_BASE", nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
     currency: Mapped[str] = mapped_column(String(8), server_default="BYN", nullable=False)
     period_days: Mapped[int] = mapped_column(Integer(), nullable=False)
@@ -1139,6 +1159,10 @@ class SubscriptionTierPricing(Base):
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("tier", "price_group", name="uq_subscription_tier_pricing_tier_group"),
+    )
 
 
 class SubscriptionTierPricingAudit(Base):
@@ -1155,18 +1179,28 @@ class SubscriptionTierPricingAudit(Base):
 
 
 class SubscriptionModulePeriodPricing(Base):
-    """Surcharge pricing per module (online, analytics, groups) for 1/3/12 month periods."""
+    """Surcharge pricing per module (online, analytics, groups) for 1/3/12 month periods.
+
+    One row per (module, period_months, price_group) — see ``SubscriptionTierPricing``.
+    """
 
     __tablename__ = "subscription_module_period_pricing"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     module: Mapped[str] = mapped_column(String(32), nullable=False)
     period_months: Mapped[int] = mapped_column(Integer(), nullable=False)
+    price_group: Mapped[str] = mapped_column(String(16), server_default="BY_BASE", nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
     period_days: Mapped[int] = mapped_column(Integer(), nullable=False)
     currency: Mapped[str] = mapped_column(String(8), server_default="BYN", nullable=False)
     name_ru: Mapped[str] = mapped_column(String(128), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "module", "period_months", "price_group", name="uq_subscription_module_period_group"
+        ),
+    )
 
 
 # --- Support: messages from clients/trainers to admins ---

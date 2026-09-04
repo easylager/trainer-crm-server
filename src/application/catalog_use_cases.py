@@ -25,9 +25,17 @@ async def list_arenas(
     city_id: int,
     *,
     service_id: int | None = None,
+    include_unconfirmed: bool = False,
 ) -> list[dict[str, Any]]:
-    """Arenas in a city; optional service_id adds per-arena trainer_count for catalog filter UX."""
-    return await CatalogRepository(session).list_arenas(city_id, service_id=service_id)
+    """
+    Arenas in a city; optional service_id adds per-arena trainer_count for catalog filter UX.
+
+    ``include_unconfirmed=True`` also returns trainer-created arenas pending moderation
+    (TASK-046) — only for authenticated trainer-facing callers, never the public catalog.
+    """
+    return await CatalogRepository(session).list_arenas(
+        city_id, service_id=service_id, include_unconfirmed=include_unconfirmed
+    )
 
 
 async def list_catalog_scenarios(

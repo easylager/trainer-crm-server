@@ -446,3 +446,38 @@ async def test_confirm_batch_confirms_pending(app_use_test_db, db_session) -> No
     assert bid in body["confirmed"]
     r = await db_session.execute(text("SELECT status FROM bookings WHERE id = :id"), {"id": bid})
     assert r.scalar_one() == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_confirm_batch_one_notify_failure_does_not_abort_the_rest(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Regression: a single booking's confirm-push raising (rate limit, transient network) used to
+    abort the whole batch loop with no try/except — every booking after the failing one in the
+    batch stayed confirmed in the DB but silently never got a push, with no way to tell.
+    """
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    bid1 = await _insert_pending_booking(db_session, trainer_id)
+    bid2 = await _insert_pending_booking(db_session, trainer_id)
+    with patch_trainer_webapp_init(tg), patch(
+        "src.api.routes.webapp.notify_client_booking_confirmed_by_trainer",
+        new=AsyncMock(side_effect=[RuntimeError("telegram down"), True]),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/bookings/confirm-batch",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"booking_ids": [bid1, bid2]},
+            )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["confirmed_count"] == 2
+    assert set(body["confirmed"]) == {bid1, bid2}
+    r = await db_session.execute(
+        text("SELECT id, status FROM bookings WHERE id = ANY(:ids)"), {"ids": [bid1, bid2]}
+    )
+    statuses = dict(r.fetchall())
+    assert statuses[bid1] == "confirmed"
+    assert statuses[bid2] == "confirmed"

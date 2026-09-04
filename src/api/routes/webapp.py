@@ -36,6 +36,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
 from src.shared.byr_currency_display import BYR_SIGN
+from src.shared.currency import resolve_trainer_currency, resolve_trainer_price_group
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 from src.shared.profile_phone import coerce_required_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
@@ -52,6 +53,7 @@ from src.application.booking_confirm_client_notify import notify_client_booking_
 from src.application.booking_client_no_show_notifications import (
     send_booking_client_no_show_telegram_notifications,
 )
+from src.application.booking_reschedule_notify import try_send_client_booking_reschedule_push
 from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_no_show_use_cases import (
     get_trainer_booking_client_no_show_options,
@@ -71,6 +73,7 @@ from src.application.booking_use_cases import (
     client_rebook_trainer_targets,
     confirm_booking,
     confirm_bookings_batch,
+    mark_booking_confirmed_notified,
     coerce_service_id_and_name_for_trainer_catalog,
     count_trainer_client_sessions,
     count_trainer_client_upcoming,
@@ -674,6 +677,83 @@ async def _send_trainer_post_booking_feedback(
     except Exception as e:
         logger.warning(
             "MiniApp trainer booking: failed trainer post-action push (booking_id=%s trainer_tg_id=%s): %s",
+            booking_id,
+            trainer_telegram_id,
+            e,
+        )
+    finally:
+        await trainer_bot.session.close()
+
+
+async def _send_trainer_reschedule_feedback(
+    *,
+    session: AsyncSession,
+    trainer_id: int,
+    trainer_telegram_id: int | None,
+    booking_id: int,
+    client_id: int,
+    slot_date,
+    start_time,
+    old_slot_date,
+    old_start_time,
+) -> None:
+    """Best-effort trainer push after a reschedule: one «перенесено» card, not a create-feedback card."""
+    if trainer_telegram_id is None:
+        return
+    client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
+    first_name = (client_card or {}).get("first_name") or ""
+    last_name = (client_card or {}).get("last_name") or ""
+    client_name = f"{first_name} {last_name}".strip() or "Клиент"
+    client_tg_id = (client_card or {}).get("telegram_id")
+
+    old_date_str = old_slot_date.strftime("%d.%m") if old_slot_date and hasattr(old_slot_date, "strftime") else "—"
+    old_day_str = TRAINER_DAYS[old_slot_date.weekday()] if old_slot_date and hasattr(old_slot_date, "weekday") else ""
+    old_time_str = _format_time_hhmm(old_start_time)
+    date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
+    day_str = TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
+    time_str = _format_time_hhmm(start_time)
+
+    trainer_bot = Bot(
+        token=Settings().telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        reminder_plan = await format_trainer_reminder_plan_for_client_day(
+            session,
+            client_id=client_id,
+            slot_date=slot_date,
+            client_has_telegram=bool(client_tg_id),
+        )
+        client_confirmation = "не применимо: у клиента не привязан Telegram"
+        if client_tg_id:
+            client_confirmation = msg.TRAINER_RESCHEDULE_CLIENT_CONFIRMATION_QUEUED
+        done_text = msg.TRAINER_RESCHEDULE_BOOKING_DONE.format(
+            client_name=html.escape(client_name),
+            old_date=old_date_str,
+            old_day=old_day_str,
+            old_time=old_time_str,
+            date=date_str,
+            day=day_str,
+            time=time_str,
+            reminder_plan=html.escape(reminder_plan),
+            client_confirmation=html.escape(client_confirmation),
+        )
+        keyboard_rows: list[list[InlineKeyboardButton]] = [
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                    callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+                )
+            ]
+        ]
+        await trainer_bot.send_message(
+            chat_id=trainer_telegram_id,
+            text=done_text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
+        )
+    except Exception as e:
+        logger.warning(
+            "MiniApp trainer booking: failed trainer reschedule push (booking_id=%s trainer_tg_id=%s): %s",
             booking_id,
             trainer_telegram_id,
             e,
@@ -4050,8 +4130,9 @@ async def get_trainer_subscription_tier_catalog(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     await ensure_trainer_welcome_trial(session, trainer_id)
     
-    tiers = await get_subscription_tier_catalog(session)
-    constructor = await get_subscription_constructor_catalog(session)
+    price_group = await resolve_trainer_price_group(session, trainer_id)
+    tiers = await get_subscription_tier_catalog(session, price_group)
+    constructor = await get_subscription_constructor_catalog(session, price_group)
     # Same flag as stub-confirm: no free activation when real payments are enforced.
     settings_cat = Settings()
     mock_enabled = settings_cat.payment_sandbox
@@ -4166,7 +4247,7 @@ async def post_trainer_subscription_bepaid_checkout(
 
     result = await create_checkout(
         amount_cents=amount_cents,
-        currency="BYN",
+        currency=await resolve_trainer_currency(session, trainer_id),
         description=plan_name[:255],
         tracking_id=tracking_id,
         return_url=return_url,
@@ -4226,6 +4307,7 @@ async def post_trainer_subscription_invoice_request(
         "referral_bonus_days_applied": int(inv.get("referral_bonus_days_applied") or 0),
         "amount_cents_before_referral": inv.get("amount_cents_before_referral"),
         "referral_fully_covered": bool(int(inv["amount_cents"]) <= 0 and int(inv.get("referral_bonus_days_applied") or 0) > 0),
+        "currency": inv.get("currency") or "BYN",
     }
 
 
@@ -6047,7 +6129,13 @@ async def post_trainer_booking_confirm(
     info = await confirm_booking(session, booking_id, trainer_id)
     if not info:
         raise HTTPException(status_code=400, detail="Booking not found or not pending")
-    await notify_client_booking_confirmed_by_trainer(session, trainer_id, booking_id, info)
+    try:
+        if await notify_client_booking_confirmed_by_trainer(session, trainer_id, booking_id, info):
+            await mark_booking_confirmed_notified(session, booking_id)
+    except Exception:
+        # Booking is already confirmed regardless — don't 500 the trainer over a push hiccup.
+        # run_booking_confirmed_notifier_loop retries delivery to the client.
+        logger.exception("Confirm notify failed for booking_id=%s", booking_id)
     return {
         "success": True,
         "first_booking_milestone": bool(info.get("first_booking_milestone")),
@@ -6075,7 +6163,13 @@ async def post_trainer_bookings_confirm_batch(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     batch = await confirm_bookings_batch(session, trainer_id, body.booking_ids)
     for bid, info in zip(batch["confirmed"], batch["confirmed_infos"], strict=False):
-        await notify_client_booking_confirmed_by_trainer(session, trainer_id, int(bid), info)
+        # One booking's push must never abort the rest of the batch — each id already
+        # committed as confirmed; run_booking_confirmed_notifier_loop retries any miss here.
+        try:
+            if await notify_client_booking_confirmed_by_trainer(session, trainer_id, int(bid), info):
+                await mark_booking_confirmed_notified(session, int(bid))
+        except Exception:
+            logger.exception("Confirm-batch notify failed for booking_id=%s", bid)
     return {
         "success": batch["confirmed_count"] > 0,
         "confirmed": batch["confirmed"],
@@ -6250,6 +6344,10 @@ class TrainerQuickBookingBody(BaseModel):
     service_price_variant_id: int | None = None
     #: Onboarding «пример»: excluded from stats/milestones; no reminders / post-booking bot nudge.
     is_sandbox: bool = False
+    #: Set when this create is the «new slot» half of a reschedule (see startRescheduleFromBooking
+    #: in schedule-editor-main.js). Server cancels this booking and sends ONE combined reschedule
+    #: push instead of a separate cancellation push + a fresh booking push.
+    reschedule_source_booking_id: int | None = None
 
 
 class TrainerCreateClientBody(BaseModel):
@@ -7638,6 +7736,32 @@ async def post_trainer_booking_quick(
             detail="Sandbox-запись возможна только на тестового клиента",
         )
 
+    # Reschedule: resolve the old slot's date/time up front (for "было → стало" copy) and
+    # confirm the source booking is still ours to cancel, before creating the new one.
+    reschedule_source_id: int | None = None
+    old_slot_date = None
+    old_start_time = None
+    if body.reschedule_source_booking_id is not None:
+        r_old = await session.execute(
+            text(
+                """
+                SELECT s.slot_date, s.start_time
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.id = :bid AND b.trainer_id = :tid AND b.status IN ('pending', 'confirmed')
+                """
+            ),
+            {"bid": int(body.reschedule_source_booking_id), "tid": trainer_id},
+        )
+        row_old = r_old.fetchone()
+        if not row_old:
+            raise HTTPException(
+                status_code=400,
+                detail="Исходная запись для переноса не найдена — возможно, она уже отменена.",
+            )
+        reschedule_source_id = int(body.reschedule_source_booking_id)
+        old_slot_date, old_start_time = row_old[0], row_old[1]
+
     try:
         result = await create_trainer_quick_booking(
             session,
@@ -7666,26 +7790,59 @@ async def post_trainer_booking_quick(
     if not body.is_sandbox:
         if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
             await generate_reminders_for_booking(session, booking_id)
-    await _notify_client_trainer_booked_after_create(
-        session,
-        int(booking_id),
-        is_sandbox=bool(body.is_sandbox),
-        slot_date=(slot or {}).get("slot_date"),
-        end_time=(slot or {}).get("end_time"),
-    )
-    # Sandbox: no client reminders; trainer still gets the same first-booking celebration when applicable.
-    await _send_trainer_post_booking_feedback(
-        session=session,
-        trainer_id=trainer_id,
-        trainer_telegram_id=notify_tid,
-        booking_id=int(booking_id),
-        client_id=int(body.client_id),
-        slot_date=(slot or {}).get("slot_date"),
-        start_time=(slot or {}).get("start_time"),
-        first_booking_milestone=first_booking_milestone,
-        share_catalog_tip=share_catalog_tip,
-        is_sandbox=bool(body.is_sandbox),
-    )
+
+    if reschedule_source_id is not None:
+        # notify_client=False: the old booking's cancellation is folded into the single
+        # reschedule push below, so the generic «Запись отменена тренером» push never queues.
+        await cancel_booking(session, reschedule_source_id, trainer_id, notify_client=False)
+        settings_resched = Settings()
+        client_bot_resched = Bot(
+            token=settings_resched.telegram_bot_token_client,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await try_send_client_booking_reschedule_push(
+                session,
+                client_bot_resched,
+                int(booking_id),
+                old_slot_date=old_slot_date,
+                old_start_time=old_start_time,
+                webapp_base_url=settings_resched.webapp_base_url,
+            )
+        finally:
+            await client_bot_resched.session.close()
+        await _send_trainer_reschedule_feedback(
+            session=session,
+            trainer_id=trainer_id,
+            trainer_telegram_id=notify_tid,
+            booking_id=int(booking_id),
+            client_id=int(body.client_id),
+            slot_date=(slot or {}).get("slot_date"),
+            start_time=(slot or {}).get("start_time"),
+            old_slot_date=old_slot_date,
+            old_start_time=old_start_time,
+        )
+    else:
+        await _notify_client_trainer_booked_after_create(
+            session,
+            int(booking_id),
+            is_sandbox=bool(body.is_sandbox),
+            slot_date=(slot or {}).get("slot_date"),
+            end_time=(slot or {}).get("end_time"),
+        )
+        # Sandbox: no client reminders; trainer still gets the same first-booking celebration when applicable.
+        await _send_trainer_post_booking_feedback(
+            session=session,
+            trainer_id=trainer_id,
+            trainer_telegram_id=notify_tid,
+            booking_id=int(booking_id),
+            client_id=int(body.client_id),
+            slot_date=(slot or {}).get("slot_date"),
+            start_time=(slot or {}).get("start_time"),
+            first_booking_milestone=first_booking_milestone,
+            share_catalog_tip=share_catalog_tip,
+            is_sandbox=bool(body.is_sandbox),
+        )
     return {
         "success": True,
         "booking_id": booking_id,
@@ -9063,7 +9220,7 @@ async def post_trainer_collective_subscription_bepaid_checkout(
 
     result = await create_checkout(
         amount_cents=amount_cents,
-        currency="BYN",
+        currency=await resolve_trainer_currency(session, trainer_id),
         description=plan_name[:255],
         tracking_id=tracking_id,
         return_url=return_url,

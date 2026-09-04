@@ -18,11 +18,11 @@
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <link rel="preload" href="client-home-main.js?v=202608315" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202609046" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
   <script src="mini-app-client-shell.js?v=202608315"></script>
-  <script src="client-profile-switcher.js?v=202609042"></script>
+  <script src="client-profile-switcher.js?v=202609046"></script>
   <script defer src="mini-app-client-home.js?v=202608315"></script>
 </head>
 <body class="hub-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
@@ -30,10 +30,11 @@
 
     <!-- Hero — короткий заголовок по сценарию; без маркетинговых блоков -->
     <div class="hub-hero" id="hubHero">
-      <!-- EPIC1 Slice 6: profile chip (self + guardian/child profiles) — client-profile-switcher.js -->
-      <div id="clientProfileSwitcherMount" style="position:absolute;top:18px;right:18px;z-index:2;"></div>
-      <!-- Real content (hidden during initial loading via .hub-body--loading on <body>). -->
-      <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
+      <!-- EPIC1: greeting + profile chip share one row (no absolute overlap). -->
+      <div class="hub-hero-top">
+        <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
+        <div id="clientProfileSwitcherMount" class="hub-hero-profile-switcher"></div>
+      </div>
       <h1 class="hub-hero-title" id="hubHeroTitle">Добро пожаловать!</h1>
       <p class="hub-hero-sub" id="hubHeroSub" style="display:none;"></p>
       <div id="hubHeroActions" class="hub-hero-actions" hidden></div>

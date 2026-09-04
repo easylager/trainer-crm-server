@@ -1006,12 +1006,22 @@
         return !msg;
       }
 
-      /** Same rules as PATCH / ProfilePatch; no side effects. */
-      function collectProfileFieldErrors(parsed) {
+      /** Same rules as PATCH / ProfilePatch; no side effects.
+       *  draft=true (PDEC-001): Save may persist partial profile — do not require
+       *  first/last/city/phone presence (moderation_readiness still gates catalog).
+       *  Format/range errors on filled fields still block Save.
+       */
+      function collectProfileFieldErrors(parsed, opts) {
+        opts = opts || {};
+        var draft = !!opts.draft;
         var pr = parsed.profile;
         var errs = [];
-        if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
-        if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
+        var fn = pr.first_name != null ? String(pr.first_name).trim() : '';
+        var ln = pr.last_name != null ? String(pr.last_name).trim() : '';
+        if (!draft) {
+          if (!fn) errs.push(['first_name', 'Укажите имя.']);
+          if (!ln) errs.push(['last_name', 'Укажите фамилию.']);
+        }
         var birthEl = document.getElementById('birth_date');
         var birthDisplay = birthEl ? String(birthEl.value || '').trim() : '';
         if (birthDisplay && birthDisplay.length !== 10) {
@@ -1020,10 +1030,20 @@
           var birthDateMsg = validateBirthDateMessage(pr.birth_date || birthDisplay);
           if (birthDateMsg) errs.push(['birth_date', birthDateMsg]);
         }
-        if (pr.city_id == null || pr.city_id === '' || Number(pr.city_id) < 1) errs.push(['city_id', 'Выберите город из списка.']);
+        var cityRaw = pr.city_id;
+        var hasCity = cityRaw != null && cityRaw !== '' && Number(cityRaw) >= 1;
+        if (!draft) {
+          if (!hasCity) errs.push(['city_id', 'Выберите город из списка.']);
+        } else if (cityRaw != null && cityRaw !== '' && !hasCity) {
+          errs.push(['city_id', 'Выберите город из списка.']);
+        }
         var ph = normalizePhoneClient(pr.phone);
         var pmsg = validatePhoneMessage(ph);
-        if (pmsg) errs.push(['phone', pmsg]);
+        if (!draft) {
+          if (pmsg) errs.push(['phone', pmsg]);
+        } else if (ph) {
+          if (pmsg) errs.push(['phone', pmsg]);
+        }
         if ((pr.contacts && String(pr.contacts).length) > MAX_DESCRIPTION_CHARS) {
           errs.push(['contacts', 'Текст контактов не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.']);
         }
@@ -1251,7 +1271,8 @@
         } catch (e) {
           return false;
         }
-        if (collectProfileFieldErrors(parsed).length) return false;
+        /* Draft save (PDEC-001): allow city-only / partial edits without full анкета. */
+        if (collectProfileFieldErrors(parsed, { draft: true }).length) return false;
         if (!servicesPricesValid(parsed)) return false;
         if (!serviceDescriptionsLengthOk(parsed)) return false;
         if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
@@ -1267,7 +1288,7 @@
         } catch (e) {
           return 'Проверьте форму.';
         }
-        var pe = collectProfileFieldErrors(parsed);
+        var pe = collectProfileFieldErrors(parsed, { draft: true });
         if (pe.length) return pe[0][1];
         if (!servicesPricesValid(parsed)) return SERVICES_PRICE_HINT_RU;
         if (!serviceDescriptionsLengthOk(parsed)) {
@@ -1351,7 +1372,7 @@
       }
 
       function clientValidateProfile(parsed) {
-        var errs = collectProfileFieldErrors(parsed);
+        var errs = collectProfileFieldErrors(parsed, { draft: true });
         if (!servicesPricesValid(parsed)) {
           errs.push(['services', SERVICES_PRICE_HINT_RU]);
         }
@@ -4088,6 +4109,16 @@
       }
 
       /** Per-tier prices from loaded trainer.services (codes -> number|null). */
+      // TASK-043/047: price-input suffix follows the trainer's own city currency
+      // (RU cities → ₽), instead of a hardcoded 'BYN'. `state.cities` items carry
+      // `country` from CatalogRepository.list_cities().
+      function getPriceSuffixForTrainer() {
+        var cityId = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
+        if (cityId == null) return 'BYN';
+        var city = (state.cities || []).find(function(c) { return Number(c.id) === Number(cityId); });
+        return (city && city.country === 'RU') ? '₽' : 'BYN';
+      }
+
       function getServiceTierPricesByCode(serviceId) {
         var out = {};
         SERVICE_TIER_DEFS.forEach(function(d) { out[d.code] = null; });
@@ -4413,7 +4444,7 @@
             if (hasPrice) inp.value = String(pv);
             var suf = document.createElement('span');
             suf.className = 'price-suffix';
-            suf.textContent = 'BYN';
+            suf.textContent = getPriceSuffixForTrainer();
             pw.appendChild(inp);
             pw.appendChild(suf);
             tr.appendChild(tchk);
@@ -4466,12 +4497,12 @@
           gInp.min = '0';
           gInp.id = 'price_group_' + id;
           gInp.disabled = !isSelected;
-          gInp.setAttribute('aria-label', 'Цена за человека на групповом занятии, BYN');
+          gInp.setAttribute('aria-label', 'Цена за человека на групповом занятии, ' + getPriceSuffixForTrainer());
           var gpv = getGroupPriceValue(id);
           if (gpv != null && !isNaN(gpv)) gInp.value = String(gpv);
           var gsuf = document.createElement('span');
           gsuf.className = 'price-suffix';
-          gsuf.textContent = 'BYN';
+          gsuf.textContent = getPriceSuffixForTrainer();
           gpw.appendChild(gInp);
           gpw.appendChild(gsuf);
           gRow.appendChild(gSpacer);
@@ -4750,75 +4781,131 @@
         box.appendChild(sstat);
       }
 
-      function renderArenaRequestForm(box) {
+      function renderArenaDuplicateWarning(dupBox, duplicates, doSubmit) {
+        dupBox.hidden = false;
+        dupBox.innerHTML = '';
+        var msg = document.createElement('p');
+        msg.style.margin = '0 0 8px';
+        msg.textContent =
+          duplicates.length === 1
+            ? 'Похоже, такая площадка уже есть: «' +
+              (duplicates[0].name || '') +
+              '»' +
+              (duplicates[0].address ? ' (' + duplicates[0].address + ')' : '') +
+              '.'
+            : 'Похоже, такие площадки уже есть в списке.';
+        dupBox.appendChild(msg);
+
+        duplicates.forEach(function(d) {
+          var useBtn = document.createElement('button');
+          useBtn.type = 'button';
+          useBtn.className = 'filter-btn arena-empty-btn';
+          useBtn.style.marginBottom = '6px';
+          useBtn.textContent = 'Выбрать «' + (d.name || ('Арена #' + d.arena_id)) + '»';
+          useBtn.addEventListener('click', function() {
+            selectExistingArenaCheckbox(d.arena_id);
+          });
+          dupBox.appendChild(useBtn);
+        });
+
+        var again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        again.textContent = 'Всё равно создать новую';
+        again.addEventListener('click', function() {
+          doSubmit(true);
+        });
+        dupBox.appendChild(again);
+      }
+
+      function selectExistingArenaCheckbox(arenaId) {
+        renderArenas();
+        var cb = document.getElementById('arena_' + arenaId);
+        if (cb) {
+          cb.checked = true;
+          cb.dispatchEvent(new Event('change'));
+        }
+      }
+
+      function renderArenaCreateForm(box) {
         box.innerHTML = '';
         clearArenaSetupMessages();
         var title = document.createElement('p');
         title.className = 'hint arena-empty-lead';
-        title.textContent =
-          'Название площадки отправим команде — добавят в справочник и свяжутся при необходимости.';
+        title.textContent = 'Арена появится в расписании сразу — команда проверит её позже.';
         box.appendChild(title);
 
         var nameWrap = document.createElement('div');
         nameWrap.className = 'field';
         var nameLab = document.createElement('label');
         nameLab.textContent = 'Название площадки';
-        nameLab.setAttribute('for', 'arenaRequestName');
+        nameLab.setAttribute('for', 'arenaCreateName');
         var nameInp = document.createElement('input');
         nameInp.type = 'text';
-        nameInp.id = 'arenaRequestName';
+        nameInp.id = 'arenaCreateName';
         nameInp.className = 'input';
-        nameInp.maxLength = 200;
+        nameInp.maxLength = 128;
         nameInp.placeholder = 'Например, Ледовый дворец на ул. …';
-        var prevReq = (state.trainer.arena_request_text || '').split(' — ')[0];
-        if (prevReq) nameInp.value = prevReq;
         nameWrap.appendChild(nameLab);
         nameWrap.appendChild(nameInp);
         box.appendChild(nameWrap);
 
-        var noteWrap = document.createElement('div');
-        noteWrap.className = 'field';
-        var noteLab = document.createElement('label');
-        noteLab.textContent = 'Адрес или комментарий (необязательно)';
-        noteLab.setAttribute('for', 'arenaRequestNote');
-        var noteInp = document.createElement('textarea');
-        noteInp.id = 'arenaRequestNote';
-        noteInp.className = 'input arena-request-note';
-        noteInp.maxLength = 800;
-        noteInp.rows = 3;
-        noteWrap.appendChild(noteLab);
-        noteWrap.appendChild(noteInp);
-        box.appendChild(noteWrap);
+        var addrWrap = document.createElement('div');
+        addrWrap.className = 'field';
+        var addrLab = document.createElement('label');
+        addrLab.textContent = 'Адрес';
+        addrLab.setAttribute('for', 'arenaCreateAddress');
+        var addrInp = document.createElement('input');
+        addrInp.type = 'text';
+        addrInp.id = 'arenaCreateAddress';
+        addrInp.className = 'input';
+        addrInp.maxLength = 512;
+        addrInp.placeholder = 'Улица, дом';
+        addrWrap.appendChild(addrLab);
+        addrWrap.appendChild(addrInp);
+        box.appendChild(addrWrap);
+
+        var dupBox = document.createElement('div');
+        dupBox.id = 'arenaDuplicateWarning';
+        dupBox.className = 'arena-setup-status arena-setup-status--warn';
+        dupBox.hidden = true;
+        box.appendChild(dupBox);
 
         var actions = document.createElement('div');
         actions.className = 'arena-empty-actions-row';
         var submit = document.createElement('button');
         submit.type = 'button';
         submit.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
-        submit.textContent = 'Отправить заявку';
+        submit.textContent = 'Добавить арену';
         var back = document.createElement('button');
         back.type = 'button';
         back.className = 'filter-btn arena-empty-btn';
-        back.textContent = 'Назад';
+        back.textContent = 'Отмена';
         back.addEventListener('click', function() {
-          renderArenaEmptyActions(true);
+          renderArenaAddEntryPoint(true);
         });
-        submit.addEventListener('click', function() {
+
+        function doSubmit(confirmDuplicate) {
           var nm = (nameInp.value || '').trim();
+          var addr = (addrInp.value || '').trim();
           var er = document.getElementById('err_arena_setup');
-          if (!nm) {
+          if (!nm || !addr) {
             if (er) {
-              er.textContent = 'Укажите название площадки.';
+              er.textContent = !nm ? 'Укажите название площадки.' : 'Укажите адрес площадки.';
               er.hidden = false;
             }
-            nameInp.focus();
+            (!nm ? nameInp : addrInp).focus();
             return;
           }
+          dupBox.hidden = true;
           submit.disabled = true;
           postArenaSetup({
-            mode: 'request',
+            mode: 'create',
             arena_name: nm,
-            note: (noteInp.value || '').trim() || null,
+            address: addr,
+            confirm_duplicate: !!confirmDuplicate,
+            /* Selected city from the form — may not be PATCH'ed yet (PDEC-001 / draft). */
+            city_id: (state.trainer.profile && state.trainer.profile.city_id) || null,
           })
             .then(function(o) {
               submit.disabled = false;
@@ -4827,6 +4914,10 @@
                   er.textContent = arenaSetupErrorDetail(o.data, o.status);
                   er.hidden = false;
                 }
+                return;
+              }
+              if (o.data && o.data.status === 'duplicate_warning') {
+                renderArenaDuplicateWarning(dupBox, o.data.duplicates || [], doSubmit);
                 return;
               }
               afterArenaSetupSuccess(o.data);
@@ -4838,18 +4929,19 @@
                 er.hidden = false;
               }
             });
-        });
+        }
+
+        submit.addEventListener('click', function() { doSubmit(false); });
         actions.appendChild(submit);
         actions.appendChild(back);
         box.appendChild(actions);
-        renderArenaSupportBlock(box);
       }
 
-      function renderArenaEmptyActions(hasCity) {
+      function renderArenaAddEntryPoint(hasCity) {
         var box = document.getElementById('arenaEmptyActions');
         if (!box) return;
         box.innerHTML = '';
-        if (!hasCity || (state.trainer.arena_ids || []).length) {
+        if (!hasCity) {
           box.hidden = true;
           return;
         }
@@ -4865,35 +4957,28 @@
         if (fmt === 'pending_request') {
           var txt = (state.trainer.arena_request_text || '').trim();
           showArenaSetupStatus(
-            'Заявка отправлена' +
-              (txt ? ': «' + txt + '».' : '.') +
-              ' Пока команда добавляет площадку, можно настроить расписание.',
+            'Ранее вы отправляли заявку на площадку' +
+              (txt ? ': «' + txt + '»' : '') +
+              '. Теперь можно добавить её сразу — не дожидаясь ответа.',
             'ok'
           );
-          var again = document.createElement('button');
-          again.type = 'button';
-          again.className = 'filter-btn arena-empty-btn';
-          again.textContent = 'Изменить заявку';
-          again.addEventListener('click', function() {
-            renderArenaRequestForm(box);
-          });
-          box.appendChild(again);
-          return;
         }
 
         var lead = document.createElement('p');
         lead.className = 'hint arena-empty-lead';
-        lead.textContent = 'Если вашей площадки нет в списке — выберите, как продолжить:';
+        lead.textContent = (state.trainer.arena_ids || []).length
+          ? 'Не нашли нужную площадку в списке?'
+          : 'Если вашей площадки нет в списке — выберите, как продолжить:';
         box.appendChild(lead);
 
-        var btnRequest = document.createElement('button');
-        btnRequest.type = 'button';
-        btnRequest.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
-        btnRequest.textContent = 'Моей площадки нет в списке';
-        btnRequest.addEventListener('click', function() {
-          renderArenaRequestForm(box);
+        var btnCreate = document.createElement('button');
+        btnCreate.type = 'button';
+        btnCreate.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        btnCreate.textContent = 'Моей площадки нет в списке';
+        btnCreate.addEventListener('click', function() {
+          renderArenaCreateForm(box);
         });
-        box.appendChild(btnRequest);
+        box.appendChild(btnCreate);
 
         var btnMobile = document.createElement('button');
         btnMobile.type = 'button';
@@ -4943,13 +5028,13 @@
           emptyBox.innerHTML = '';
         }
         clearArenaSetupMessages();
+        var hasCity = !!(state.trainer.profile && state.trainer.profile.city_id);
         var selected = {};
         (state.trainer.arena_ids || []).forEach(function(id) {
           selected[id] = true;
         });
         if (!state.arenasList.length) {
           hint.style.display = 'block';
-          var hasCity = !!(state.trainer.profile && state.trainer.profile.city_id);
           hint.textContent = hasCity
             ? 'Нет арен для выбранного города.'
             : 'Выберите город — появится список доступных арен.';
@@ -4958,41 +5043,54 @@
             pwrap.innerHTML = '';
             pwrap.style.display = 'none';
           }
-          renderArenaEmptyActions(hasCity);
-          return;
-        }
-        hint.style.display = 'none';
-        state.arenasList.forEach(function(a) {
-          var row = document.createElement('div');
-          row.className = 'arena-row';
-          var isSelected = !!selected[a.id];
-          if (isSelected) row.classList.add('arena-active');
-          
-          var cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.id = 'arena_' + a.id;
-          cb.checked = isSelected;
-          cb.addEventListener('change', function() {
-            row.classList.toggle('arena-active', cb.checked);
-            updatePrimaryArenaUi();
-            setDirty();
+        } else {
+          hint.style.display = 'none';
+          state.arenasList.forEach(function(a) {
+            var row = document.createElement('div');
+            row.className = 'arena-row';
+            var isSelected = !!selected[a.id];
+            if (isSelected) row.classList.add('arena-active');
+
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'arena_' + a.id;
+            cb.checked = isSelected;
+            cb.addEventListener('change', function() {
+              row.classList.toggle('arena-active', cb.checked);
+              updatePrimaryArenaUi();
+              setDirty();
+            });
+
+            var lab = document.createElement('label');
+            lab.htmlFor = 'arena_' + a.id;
+            lab.textContent = a.name || ('Арена #' + a.id);
+            if (a.is_confirmed === false) {
+              lab.appendChild(document.createTextNode(' '));
+              var badge = document.createElement('span');
+              badge.className = 'arena-unconfirmed-badge';
+              badge.textContent = 'на проверке';
+              lab.appendChild(badge);
+            }
+
+            row.appendChild(cb);
+            row.appendChild(lab);
+            wrap.appendChild(row);
           });
-          
-          var lab = document.createElement('label');
-          lab.htmlFor = 'arena_' + a.id;
-          lab.textContent = a.name || ('Арена #' + a.id);
-          
-          row.appendChild(cb);
-          row.appendChild(lab);
-          wrap.appendChild(row);
-        });
-        updatePrimaryArenaUi();
+          updatePrimaryArenaUi();
+        }
+        // TASK-046 AC-001: the "add arena" entry point is always available — not only
+        // when the city's arena list happens to be empty.
+        renderArenaAddEntryPoint(hasCity);
       }
 
       function loadArenasForCity(cityId) {
         state.arenasList = [];
         if (!cityId) return Promise.resolve();
-        return fetch('/api/public/arenas?city_id=' + encodeURIComponent(cityId))
+        // Authenticated endpoint (unlike /api/public/arenas): also includes the trainer's
+        // own unconfirmed arenas (TASK-046 AC-004) — they're not in the public catalog yet.
+        var base = apiUrl('/trainer/profile/arenas');
+        var sep = base.indexOf('?') >= 0 ? '&' : '?';
+        return fetch(base + sep + 'city_id=' + encodeURIComponent(cityId), { headers: headers() })
           .then(function(r) { return r.json(); })
           .then(function(data) {
             state.arenasList = data.items || [];
@@ -5024,6 +5122,10 @@
         });
         citySel.onchange = function() {
           var cid = citySel.value ? Number(citySel.value) : null;
+          // Арены и «добавить арену» должны реагировать на выбранный в дропдауне город сразу,
+          // а не только после «Сохранить» — иначе город уже виден в списке арен, а кнопка
+          // добавления площадки ещё нет (renderArenas читает state.trainer.profile.city_id).
+          if (state.trainer.profile) state.trainer.profile.city_id = cid;
           loadArenasForCity(cid).then(function() {
             state.trainer.arena_ids = [];
             renderArenas();
@@ -5245,13 +5347,16 @@
           setObFlowNextBusy(true, 'save');
         }
         var pr = parsed.profile;
+        var fnTrim = pr.first_name != null ? String(pr.first_name).trim() : '';
+        var lnTrim = pr.last_name != null ? String(pr.last_name).trim() : '';
         var body = {
           profile: {
-            first_name: pr.first_name,
-            last_name: pr.last_name,
+            /* Empty names → null so ProfilePatch does not reject "" on draft saves (PDEC-001). */
+            first_name: fnTrim || null,
+            last_name: lnTrim || null,
             birth_date: pr.birth_date,
             city_id: pr.city_id,
-            phone: pr.phone || '',
+            phone: pr.phone || null,
             contacts: pr.contacts || '',
             description: pr.description || '',
             experience_years: pr.experience_years,

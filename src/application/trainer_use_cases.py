@@ -820,6 +820,22 @@ async def create_trainer_education(
     if not await repo.exists(trainer_id):
         return None
     _validate_education_payload(payload)
+    institution_name = (payload["institution_name"] or "").strip()
+    program_or_title = (payload["program_or_title"] or "").strip()
+    dup_id = await repo.find_matching_education_entry(
+        trainer_id,
+        education_type=payload["education_type"],
+        institution_name=institution_name,
+        program_or_title=program_or_title,
+        start_year=payload.get("start_year"),
+        end_year=payload.get("end_year"),
+        supersedes_id=None,
+    )
+    if dup_id is not None:
+        # Same submit landed twice (double tap / retried request) — reuse the existing row
+        # instead of inserting a visible duplicate.
+        existing = await repo.get_education_entry(trainer_id, dup_id)
+        return {"id": dup_id, "moderation_status": (existing or {}).get("moderation_status", "pending_moderation")}
     document_photos = _normalize_education_document_photos_for_trainer(
         trainer_id,
         payload.get("document_photos"),
@@ -865,6 +881,19 @@ async def update_trainer_education(
     )
     _validate_education_payload(merged)
     if current.get("moderation_status") == "approved":
+        dup_id = await repo.find_matching_education_entry(
+            trainer_id,
+            education_type=merged["education_type"],
+            institution_name=(merged.get("institution_name") or "").strip(),
+            program_or_title=(merged.get("program_or_title") or "").strip(),
+            start_year=merged.get("start_year"),
+            end_year=merged.get("end_year"),
+            supersedes_id=education_id,
+        )
+        if dup_id is not None:
+            # Same edit submitted twice (double tap / retried request) — reuse the pending
+            # revision already created instead of inserting a visible duplicate.
+            return {"id": dup_id, "moderation_status": "pending_moderation", "revision_created": True}
         new_id = await repo.create_education_revision(trainer_id, education_id, payload=merged)
         await repo.clear_moderation_submitted_at(trainer_id)
         await session.commit()

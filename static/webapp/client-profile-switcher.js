@@ -143,9 +143,10 @@
     style.id = STYLE_ID;
     style.textContent =
       '.cps-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;' +
-      'border-radius:999px;border:none;background:var(--tg-theme-secondary-bg-color,#2c2c2e);' +
+      'max-width:100%;border-radius:999px;border:none;background:var(--tg-theme-secondary-bg-color,#2c2c2e);' +
       'color:var(--tg-theme-text-color,#fff);font-family:inherit;font-size:14px;font-weight:600;' +
       'cursor:pointer;}' +
+      '.cps-chip__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
       '.cps-chip__avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;' +
       'justify-content:center;background:var(--tg-theme-button-color,#45B9BB);' +
       'color:var(--app-cta-text,#fff);font-size:13px;font-weight:700;flex-shrink:0;}' +
@@ -217,7 +218,7 @@
     mount.innerHTML =
       '<button type="button" class="cps-chip" id="cpsChipBtn" aria-haspopup="dialog">' +
       '<span class="cps-chip__avatar">' + esc(initial(p)) + '</span>' +
-      '<span>' + esc(displayName(p)) + '</span>' +
+      '<span class="cps-chip__name">' + esc(displayName(p)) + '</span>' +
       ICON_CHEVRON +
       '</button>';
     var btn = document.getElementById('cpsChipBtn');

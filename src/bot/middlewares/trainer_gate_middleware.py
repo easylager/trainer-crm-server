@@ -31,6 +31,7 @@ from src.bot.trainer_bot_state import (
     trainer_support_awaiting,
 )
 from src.bot.trainer_gate_text import trainer_gate_message
+from src.bot.trainer_guide_keyboard import trainer_guide_keyboard
 from src.infrastructure.db import async_session_factory
 
 bench_log = logging.getLogger("trainer_bot.bench")
@@ -193,7 +194,10 @@ class TrainerGateMiddleware(BaseMiddleware):
             return await handler(event, data)
         if trainer_may_use_bot_workflows(state):
             return await handler(event, data)
-        await event.answer(trainer_gate_message(state, trainer))
+        await event.answer(
+            trainer_gate_message(state, trainer),
+            reply_markup=trainer_guide_keyboard(),
+        )
         return None
 
     async def _handle_callback(
@@ -225,5 +229,8 @@ class TrainerGateMiddleware(BaseMiddleware):
         await event.answer(msg.TRAINER_GATE_CALLBACK_BLOCKED, show_alert=True)
         if event.message:
             await event.bot.send_chat_action(chat_id=event.message.chat.id, action=ChatAction.TYPING)
-            await event.message.answer(trainer_gate_message(state, trainer))
+            await event.message.answer(
+                trainer_gate_message(state, trainer),
+                reply_markup=trainer_guide_keyboard(),
+            )
         return None

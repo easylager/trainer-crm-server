@@ -1549,6 +1549,88 @@ async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -
     await claim_client_trainer_booked_notification(session, int(booking_id))
 
 
+_PENDING_BOOKING_CONFIRMED_NOTIFY_SQL = """
+    SELECT b.id, b.trainer_id, c.telegram_id, s.slot_date, s.start_time, s.end_time,
+           srv.name AS service_name,
+           COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+           price_tier_kind,
+           a.name AS arena_name, a.address AS arena_address,
+           a.latitude, a.longitude,
+           (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
+    FROM bookings b
+    JOIN clients c ON c.id = b.client_id
+    JOIN slots s ON s.id = b.slot_id
+    JOIN trainers t ON t.id = b.trainer_id
+    LEFT JOIN services srv ON srv.id = b.service_id
+    LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+    LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+    LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
+    WHERE b.status = 'confirmed'
+      AND b.client_notified_trainer_booked_at IS NULL
+      AND b.notified_at IS NOT NULL
+      AND c.telegram_id IS NOT NULL
+      AND NOT b.is_sandbox
+      AND NOT c.is_sandbox
+    ORDER BY b.id
+    LIMIT :lim
+"""
+
+
+async def get_pending_booking_confirmed_notifications(
+    session: AsyncSession, limit: int = 50
+) -> list[dict]:
+    """
+    Confirmed bookings (trainer confirmed a client's self-book request) whose «Ваша запись
+    подтверждена!» push has not been delivered yet — retry target for
+    ``run_booking_confirmed_notifier_loop``.
+
+    ``confirm_booking`` no longer sets ``client_notified_trainer_booked_at`` itself: only a
+    successful send does (see ``notify_client_booking_confirmed_by_trainer``). Without this
+    retry a single failed send (rate limit, transient network blip) meant the client was
+    silently never notified — the flag would still block both this push and the separate
+    «Вас записали…» fallback forever. ``notified_at IS NOT NULL`` scopes this to bookings that
+    went through the pending-request trainer-notify step, i.e. actually reached ``confirm_booking``.
+    """
+    r = await session.execute(
+        text(_PENDING_BOOKING_CONFIRMED_NOTIFY_SQL),
+        {"lim": limit},
+    )
+    out: list[dict] = []
+    for row in r.fetchall():
+        ptk = normalize_price_tier_kind(row[8])
+        out.append(
+            {
+                "id": row[0],
+                "trainer_id": int(row[1]),
+                "client_telegram_id": row[2],
+                "slot_date": row[3],
+                "start_time": row[4],
+                "end_time": row[5],
+                "service_name": (row[6] or "").strip() or None,
+                "booking_price_cents": row[7],
+                "price_tier_label": price_tier_label_ru(ptk) if ptk else None,
+                "arena_name": (row[9] or "").strip() or None,
+                "arena_address": (row[10] or "").strip() or None,
+                "map_link": _map_link(row[11], row[12]),
+                "trainer_telegram_id": int(row[13]) if row[13] is not None else None,
+                "first_booking_milestone": False,
+            }
+        )
+    return out
+
+
+async def mark_booking_confirmed_notified(session: AsyncSession, booking_id: int) -> None:
+    """Mark that the «Ваша запись подтверждена!» push was delivered for this booking."""
+    await session.execute(
+        text(
+            "UPDATE bookings SET client_notified_trainer_booked_at = NOW() "
+            "WHERE id = :id AND client_notified_trainer_booked_at IS NULL"
+        ),
+        {"id": int(booking_id)},
+    )
+    await session.commit()
+
+
 async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> list[dict]:
     """
     Reminders due to send: status=pending, send_at <= now.
@@ -4598,8 +4680,20 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     On success set status='confirmed' and return booking + slot + client contact info
     for notification flows. Returns None when booking is not confirmable (not found / wrong trainer / wrong status).
 
-    Sets ``client_notified_trainer_booked_at`` so ``get_pending_trainer_booked_notifications`` does not send
-    the separate «Вас записали…» push: the client already receives «Ваша запись подтверждена!» from the bot/API.
+    Does NOT set ``client_notified_trainer_booked_at`` — the caller must do that only after
+    ``notify_client_booking_confirmed_by_trainer`` (or the retry loop) actually delivers the
+    «Ваша запись подтверждена!» push. Setting it here unconditionally used to permanently mask
+    delivery failures: the flag blocks both this push and the «Вас записали…» fallback from
+    ``get_pending_trainer_booked_notifications``, so a single failed send meant the client was
+    silently never notified. See ``get_pending_booking_confirmed_notifications`` for the retry.
+
+    Does touch ``notified_at`` (only if it was still NULL): trainer confirming from the Mini
+    App's own pending-requests list, before the async «new booking» push loop ever set it, would
+    otherwise leave ``notified_at`` NULL — which is exactly the guard
+    ``get_pending_trainer_booked_notifications`` uses to decide a booking is eligible for the
+    unrelated «Вас записали…» fallback. Without this, that loop and this confirm's own send could
+    race and double-notify the client during the (usually sub-second) gap before this confirm's
+    send completes.
     """
     # PostgreSQL: UPDATE ... FROM ... RETURNING can only return columns from the updated table
     r = await session.execute(
@@ -4607,7 +4701,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
             """
             UPDATE bookings b
             SET status = 'confirmed',
-                client_notified_trainer_booked_at = CURRENT_TIMESTAMP
+                notified_at = COALESCE(b.notified_at, CURRENT_TIMESTAMP)
             FROM slots s
             WHERE b.slot_id = s.id
               AND b.id = :bid

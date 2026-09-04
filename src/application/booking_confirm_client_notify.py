@@ -1,6 +1,8 @@
 """Client Telegram notification after trainer confirms a pending booking."""
 from __future__ import annotations
 
+import logging
+
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -12,6 +14,7 @@ from src.bot import messages as msg
 from src.shared.config import Settings
 
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+logger = logging.getLogger(__name__)
 
 
 async def notify_client_booking_confirmed_by_trainer(
@@ -19,11 +22,19 @@ async def notify_client_booking_confirmed_by_trainer(
     trainer_id: int,
     booking_id: int,
     info: dict,
-) -> None:
-    """Send «Ваша запись подтверждена» to the client bot — same semantics as webapp confirm route."""
+) -> bool:
+    """
+    Send «Ваша запись подтверждена» to the client bot — same semantics as webapp confirm route.
+
+    Returns True once Telegram accepted the message. Callers must only mark the booking as
+    notified (``client_notified_trainer_booked_at``) on a True return — a caught send failure
+    here used to still leave that flag set, which meant the client silently never got any
+    confirmation and the fallback «Вас записали» push couldn't retry either (both blocked by
+    the same flag). See ``get_pending_booking_confirmed_notifications`` for the retry loop.
+    """
     client_tid = info.get("client_telegram_id")
     if not client_tid:
-        return
+        return False
     d = info["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
     dow = TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
@@ -67,5 +78,11 @@ async def notify_client_booking_confirmed_by_trainer(
             text=text_client,
             reply_markup=reply_markup,
         )
+    except Exception as e:
+        logger.warning(
+            "Booking-confirmed notify to client %s (booking_id=%s): %s", client_tid, booking_id, e
+        )
+        return False
     finally:
         await client_bot.session.close()
+    return True

@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, time, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -1724,6 +1724,125 @@ async def test_trainer_booking_quick_creates_slot_and_booking(
     row = r2.fetchone()
     assert row is not None
     assert int(row[0]) == int(slot_id)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_reschedule_cancels_old_as_one_combined_notification(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """
+    reschedule_source_booking_id: server cancels the old booking with notify_client=False
+    (no separate «отменена» push queued) and claims the new booking's «booked» notification
+    slot itself (so the 30s background poller does not also send its own copy) — the two
+    HTTP calls the old trainer-clients flow used to make collapse into one.
+    """
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=11)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'Resched', 'Client', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+
+    mock_send = AsyncMock()
+    with patch_trainer_webapp_init(tg):
+        with patch("src.api.routes.webapp.Bot") as MockBot:
+            inst = MockBot.return_value
+            inst.send_message = mock_send
+            inst.session = AsyncMock()
+            inst.session.close = AsyncMock()
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp_old = await client.post(
+                    "/api/webapp/trainer/booking/quick",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                    json={
+                        "slot_date": d0.isoformat(),
+                        "start_hour": 9,
+                        "duration_minutes": 60,
+                        "client_id": client_id,
+                        "service_id": service_id,
+                    },
+                )
+                assert resp_old.status_code == 200
+                old_booking_id = resp_old.json()["booking_id"]
+
+                mock_send.reset_mock()
+                resp_new = await client.post(
+                    "/api/webapp/trainer/booking/quick",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                    json={
+                        "slot_date": d0.isoformat(),
+                        "start_hour": 15,
+                        "duration_minutes": 60,
+                        "client_id": client_id,
+                        "service_id": service_id,
+                        "reschedule_source_booking_id": old_booking_id,
+                    },
+                )
+    assert resp_new.status_code == 200
+    new_booking_id = resp_new.json()["booking_id"]
+    assert int(new_booking_id) != int(old_booking_id)
+
+    r_old = await db_session.execute(
+        text("SELECT status FROM bookings WHERE id = :id"),
+        {"id": old_booking_id},
+    )
+    assert r_old.fetchone()[0] == "cancelled"
+
+    from src.application.booking_use_cases import get_pending_cancel_notification_for_booking
+
+    pending_cancel = await get_pending_cancel_notification_for_booking(db_session, old_booking_id)
+    assert pending_cancel is None, "reschedule must not queue the generic cancellation push"
+
+    r_new = await db_session.execute(
+        text("SELECT client_notified_trainer_booked_at FROM bookings WHERE id = :id"),
+        {"id": new_booking_id},
+    )
+    assert r_new.fetchone()[0] is not None, "reschedule push must claim the new booking's notify slot"
+
+    # Exactly one push to the client and one to the trainer — not a cancel push + a booked push.
+    assert mock_send.await_count == 2
+    texts = [c.kwargs.get("text", "") for c in mock_send.await_args_list]
+    client_text = next(t for t in texts if "Тренер:" in t)
+    trainer_text = next(t for t in texts if "Клиент:" in t)
+    assert "переехало" in client_text
+    assert "Вас записали" not in client_text
+    assert "отменена" not in client_text
+    assert "Перенесли запись клиента" in trainer_text
 
 
 @pytest.mark.asyncio

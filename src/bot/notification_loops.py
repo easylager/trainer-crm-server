@@ -21,6 +21,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.application.booking_payment_notice import load_booking_deduction_snapshot
 from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.booking_payment_notice import load_pass_sessions_remaining_after_booking
+from src.application.booking_confirm_client_notify import notify_client_booking_confirmed_by_trainer
 from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_use_cases import (
     can_trainer_repeat_booking_same_time_next_week,
@@ -31,6 +32,7 @@ from src.application.booking_use_cases import (
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     get_pending_booking_cancel_notifications,
+    get_pending_booking_confirmed_notifications,
     get_pending_completed_for_trainer,
     get_pending_trainer_booked_notifications,
     get_trainer_telegram_id,
@@ -43,6 +45,7 @@ from src.application.booking_use_cases import (
     list_pending_reminders,
     mark_client_booking_completion_push_sent,
     mark_booking_completed_and_notify,
+    mark_booking_confirmed_notified,
     mark_booking_notified,
     mark_confirm_reminder_sent,
     mark_trainer_session_wrapup_sent,
@@ -603,6 +606,7 @@ CANCEL_NOTIFIER_INTERVAL_SEC = 15
 RESPONSE_NOTIFIER_INTERVAL_SEC = 20
 NO_RESPONSE_REMINDER_INTERVAL_SEC = 60 * 60
 TRAINER_BOOKED_NOTIFIER_INTERVAL_SEC = 30
+BOOKING_CONFIRMED_NOTIFIER_INTERVAL_SEC = 30
 INACTIVE_CLIENT_INTERVAL_SEC = 60 * 60 * 6
 BOOKING_NOTIFIER_INTERVAL_SEC = 15
 REQUEST_NOTIFIER_INTERVAL_SEC = 20
@@ -1819,6 +1823,30 @@ async def run_trainer_booked_notifier_loop(client_bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Trainer-booked notifier: %s", e)
+
+
+async def run_booking_confirmed_notifier_loop(client_bot: Bot) -> None:
+    """
+    Retry «Ваша запись подтверждена!» for bookings ``confirm_booking`` confirmed but whose push
+    never got delivered (rate limit, transient network blip) — see
+    ``get_pending_booking_confirmed_notifications`` for why this can't rely on the immediate
+    send alone.
+    """
+    while True:
+        await asyncio.sleep(BOOKING_CONFIRMED_NOTIFIER_INTERVAL_SEC)
+        try:
+            if not is_within_notification_hours():
+                continue
+            async with async_session_factory() as session:
+                pending = await get_pending_booking_confirmed_notifications(session)
+                for p in pending:
+                    bid = int(p["id"])
+                    if await notify_client_booking_confirmed_by_trainer(session, int(p["trainer_id"]), bid, p):
+                        await mark_booking_confirmed_notified(session, bid)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Booking-confirmed notifier: %s", e)
 
 
 async def run_inactive_client_loop(client_bot: Bot) -> None:
