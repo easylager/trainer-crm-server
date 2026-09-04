@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from src.api.app import app
 from src.api.deps import get_session
@@ -120,6 +121,9 @@ def _apply_test_session_factory(factory):
     Replace async_session_factory everywhere tests might resolve it.
     ``from pkg import async_session_factory`` binds the object at import time; patching only
     ``session`` module leaves ``db`` package and ``notification_loops`` pointing at the old maker.
+
+    Do not patch route modules (e.g. webapp): they intentionally open a *second* session for
+    fan-out. Binding those to the same test connection causes «another operation is in progress».
     """
     import src.api.app as app_mod
     import src.bot.notification_loops as nl_mod
@@ -149,6 +153,26 @@ def _restore_test_session_factory(old: dict) -> None:
     db_pkg.async_session_factory = old["db"]
     app_mod.async_session_factory = old["app"]
     nl_mod.async_session_factory = old["nl"]
+
+
+async def _dispose_global_async_engines() -> None:
+    """
+    Drop pooled asyncpg connections on process-wide engines.
+    With function-scoped loops those connections were bound to a closed loop and surfaced as
+    «Future attached to a different loop» on the next pool_pre_ping.
+    """
+    import src.infrastructure.db.session as session_mod
+
+    await session_mod.engine.dispose()
+    try:
+        import src.application.platform_audit_use_cases as audit_mod
+    except ImportError:
+        return
+    engine = getattr(audit_mod, "_audit_engine", None)
+    if engine is not None:
+        await engine.dispose()
+        audit_mod._audit_engine = None
+        audit_mod._audit_sessionmaker = None
 
 
 def _make_session_factory_with_rollback(conn):
@@ -185,6 +209,24 @@ def unique_test_telegram_id() -> int:
     return 6_000_000_000 + (uuid.uuid4().int % 999_999_999)
 
 
+@pytest.fixture(autouse=True)
+async def _reset_global_async_db_engines() -> AsyncGenerator[None, None]:
+    """
+    Clear app/audit asyncpg pools around every test.
+
+    Route fan-out still uses the process-wide engine; those connections bind to the
+    current event loop. Disposing before the loop closes prevents the next test from
+    hitting pool_pre_ping on a dead loop («Future attached to a different loop»).
+    """
+    from src.api.middleware.http_limits import reset_http_limiters_for_tests
+
+    await _dispose_global_async_engines()
+    reset_http_limiters_for_tests()
+    yield
+    await _dispose_global_async_engines()
+    reset_http_limiters_for_tests()
+
+
 @pytest.fixture
 async def _test_db_core() -> AsyncGenerator[dict, None]:
     """
@@ -195,9 +237,11 @@ async def _test_db_core() -> AsyncGenerator[dict, None]:
     asyncpg connection causes «another operation is in progress» and teardown failures.
     """
     settings = Settings()
+    # NullPool: never reuse connections across requests/tasks inside a test.
     engine = create_async_engine(
         settings.database_url,
         echo=settings.debug,
+        poolclass=NullPool,
     )
     if os.environ.get("PYTEST_DISABLE_TRANSACTION_ROLLBACK", "").strip() == "1":
         factory = async_sessionmaker(
