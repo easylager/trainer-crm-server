@@ -39,15 +39,15 @@ jobs:
 
       - name: Format check (black)
         run: black --check src/ tests/ --diff
-        continue-on-error: true  # Will be enforced after codebase cleanup
+        continue-on-error: true  # Soft until formatting is cleaned up
 
       - name: Linter (ruff)
+        # Hard gate: fails the job. Debt rules are ignored in pyproject.toml (v1).
         run: ruff check src/ tests/
-        continue-on-error: true  # Will be enforced after codebase cleanup
 
       - name: Type checker (mypy)
         run: mypy src/ --ignore-missing-imports --no-implicit-optional --warn-unused-configs
-        continue-on-error: true  # Type hints are improving, so don't fail the build yet
+        continue-on-error: true  # Soft until types are cleaned up
 
   # ──────────────────────────────────────────────────────
   # SECURITY: Code vulnerabilities and dependencies
@@ -177,9 +177,10 @@ jobs:
       - name: Run tests
         run: pytest tests/ -m "not collective" -v --tb=short --cov=src --cov-report=xml --cov-report=term
 
-      - name: Check coverage threshold (70%)
-        run: |
-          coverage report --fail-under=70 || echo "Coverage below 70% threshold"
+      - name: Check coverage threshold (floor)
+        # Real gate. Current suite sits ~40% on CI; raise toward 60–70 in follow-ups.
+        # Do not swallow failures with `|| echo` — that made the threshold decorative.
+        run: coverage report --fail-under=40
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
