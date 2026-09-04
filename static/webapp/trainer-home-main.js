@@ -1,11 +1,12 @@
     (function() {
-      var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) {
-        /* tg.ready() + expand() are called earlier (inline after splash HTML)
-           to eliminate the Telegram robot loading flash. Guard against double-call. */
+      function initTelegramChrome(tg) {
+        /* tg.ready() + раскрытие вызываются раньше (mini-app-full-height.js и inline после сплеша).
+           Guard against double-call. */
         if (!window.__tgReadyCalled) {
-          if (typeof tg.ready  === 'function') tg.ready();
-          if (typeof tg.expand === 'function') tg.expand();
+          if (typeof tg.ready === 'function') tg.ready();
+          if (typeof window.tgOpenFullHeight === 'function') window.tgOpenFullHeight(tg);
+          else if (typeof tg.expand === 'function') tg.expand();
+          window.__tgReadyCalled = true;
         }
         if (typeof window.__applyTrainerHomeTheme === 'function') window.__applyTrainerHomeTheme();
         try {
@@ -15,6 +16,13 @@
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
           if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
         } catch (e) {}
+      }
+      /* SDK подключён с async — без ожидания этот блок молча пропускался бы на медленной сети. */
+      if (typeof window.tgWhenReady === 'function') {
+        window.tgWhenReady(initTelegramChrome);
+      } else {
+        var tgNow = window.Telegram && window.Telegram.WebApp;
+        if (tgNow) initTelegramChrome(tgNow);
       }
 
       /**

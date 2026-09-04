@@ -4,29 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
-  <!-- Call ready() before telegram.org: iOS WebView already injects Telegram.WebApp;
-       a blocking telegram.org fetch leaves the Mini App on the splash forever. -->
-  <script>
-    (function () {
-      function go() {
-        try {
-          var tg = window.Telegram && window.Telegram.WebApp;
-          if (!tg) return;
-          if (typeof tg.ready === 'function') tg.ready();
-          if (typeof tg.expand === 'function') tg.expand();
-          window.__tgReadyCalled = true;
-        } catch (e) { /* */ }
-      }
-      go();
-    })();
-  </script>
+  <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
+       mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
+       без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
+  <script src="mini-app-full-height.js?v=202609044"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
   <script src="mini-app-trainer-theme.js?v=202608315"></script>
   <script src="mini-app-telegram-chrome.js?v=202609016"></script>
   <script src="mini-app-phone-field.js?v=202608315"></script>
-  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -47,7 +35,7 @@
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <link rel="preload" href="trainer-home-main.js?v=202609027" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202609043" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202609012" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
@@ -263,19 +251,31 @@
   -->
   <script>
     (function() {
-      try {
+      /* tgWhenReady: SDK подключён с async и здесь может ещё отсутствовать — иначе ready(),
+         раскрытие и цвета шапки молча пропускались бы (приложение висело полушторкой). */
+      function init(tg) {
+        try {
+          if (typeof tg.ready === 'function') tg.ready();
+          if (typeof window.tgOpenFullHeight === 'function') {
+            window.tgOpenFullHeight(tg);
+          } else if (typeof tg.expand === 'function') {
+            tg.expand();
+          }
+          /* Sync header/bg color with our splash bg — prevents color flash on app open */
+          var isDark = document.documentElement.classList.contains('hub-is-dark');
+          var bgHex  = isDark ? '#0B0C0E' : '#F1F3F2';
+          try { if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex); } catch(e) {}
+          try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
+          try { if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex); } catch(e) {}
+          window.__tgReadyCalled = true;
+        } catch(e) {}
+      }
+      if (typeof window.tgWhenReady === 'function') {
+        window.tgWhenReady(init);
+      } else {
         var tg = window.Telegram && window.Telegram.WebApp;
-        if (!tg) return;
-        if (typeof tg.ready   === 'function') tg.ready();
-        if (typeof tg.expand  === 'function') tg.expand();
-        /* Sync header/bg color with our splash bg — prevents color flash on app open */
-        var isDark = document.documentElement.classList.contains('hub-is-dark');
-        var bgHex  = isDark ? '#0B0C0E' : '#F1F3F2';
-        try { if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex); } catch(e) {}
-        try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
-        try { if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex); } catch(e) {}
-        window.__tgReadyCalled = true;
-      } catch(e) {}
+        if (tg) init(tg);
+      }
     })();
   </script>
 
@@ -914,7 +914,7 @@
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
   <script src="mini-app-trainer-pending-inbox.js?v=202608315"></script>
   <script src="trainer-booking-context.js?v=202608315"></script>
-  <script defer src="trainer-home-main.js?v=202609027"></script>
+  <script defer src="trainer-home-main.js?v=202609043"></script>
   <script defer src="mini-app-trainer-shell.js?v=202609012"></script>
 </body>
 </html>
