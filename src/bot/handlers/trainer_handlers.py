@@ -77,7 +77,7 @@ from src.application.trainer_access_state import (
     get_trainer_access_state,
     trainer_may_use_bot_workflows,
 )
-from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
+from src.application.trainer_link import consume_link_token, get_trainer_id_for_webapp_trainer_operations
 from src.application.referral_use_cases import (
     get_trainer_id_by_referral_code,
     record_referral_attribution,
@@ -413,7 +413,7 @@ async def _complete_trainer_booking_decline(
     """Decline pending booking and notify client. Returns True on success."""
     try:
         async with async_session_factory() as session:
-            trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+            trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await reply.answer(msg.TRAINER_ONLY_VIA_SITE)
             return False
@@ -926,7 +926,7 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
     """Two messages: HTML intro + plain text block the trainer can forward to clients."""
     settings = Settings()
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await chat_message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1192,7 +1192,7 @@ async def cmd_editor(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1417,7 +1417,7 @@ async def cmd_bookings(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1448,7 +1448,7 @@ async def cmd_clients(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1477,7 +1477,7 @@ async def cmd_requests(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1513,7 +1513,7 @@ async def cmd_stats(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     base = (Settings().webapp_base_url or "").rstrip("/")
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1585,7 +1585,7 @@ async def cmd_passes(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1631,7 +1631,7 @@ async def cmd_subscription(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -1674,7 +1674,7 @@ async def cmd_referral(message: Message) -> None:
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -1718,7 +1718,7 @@ async def show_schedule(callback: CallbackQuery) -> None:
     await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1739,7 +1739,7 @@ async def show_slots_from_schedule(callback: CallbackQuery) -> None:
     await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1763,7 +1763,7 @@ async def schedule_create_booking_start(callback: CallbackQuery) -> None:
     await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -1826,7 +1826,7 @@ async def schedule_create_booking_choose_client(callback: CallbackQuery) -> None
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2006,7 +2006,7 @@ async def schedule_create_booking_choose_tariff(callback: CallbackQuery) -> None
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2083,7 +2083,7 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2103,7 +2103,7 @@ async def show_bookings(callback: CallbackQuery) -> None:
     await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2127,7 +2127,7 @@ async def show_bookings_page(callback: CallbackQuery) -> None:
         page = 0
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2150,7 +2150,7 @@ async def show_booking_detail(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2223,7 +2223,7 @@ async def on_make_recurring_trainer(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2268,7 +2268,7 @@ async def on_remove_recurring(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2289,7 +2289,7 @@ async def show_write_booking_link(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2319,7 +2319,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2448,7 +2448,7 @@ async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2478,7 +2478,7 @@ async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2514,7 +2514,7 @@ async def on_decline_booking_start(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2571,7 +2571,7 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2618,7 +2618,7 @@ async def on_trainer_repeat_week(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2662,7 +2662,7 @@ async def on_feedback_booking_trainer(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2685,7 +2685,7 @@ async def on_booking_add_note_start(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2740,7 +2740,7 @@ async def on_booking_notify_relay_write(callback: CallbackQuery) -> None:
     await callback.answer()
     await sweep_idle_relay_sessions_and_notify()
     async with async_session_factory() as session:
-        trainer_row_id = await get_trainer_id_by_telegram_id(session, tg_id)
+        trainer_row_id = await get_trainer_id_for_webapp_trainer_operations(session, tg_id)
         if not trainer_row_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2846,7 +2846,7 @@ async def on_request_respond_comment_message(message: Message) -> None:
     if request_id is None:
         return
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2869,7 +2869,7 @@ async def show_requests(callback: CallbackQuery) -> None:
     await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2894,7 +2894,7 @@ async def show_requests_page(callback: CallbackQuery) -> None:
         offset = 0
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -2919,7 +2919,7 @@ async def show_request_detail(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -2974,7 +2974,7 @@ async def _trainer_open_relay_chat_for_client_request(
             if callback.message:
                 await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
             return
-        trainer_row_id = await get_trainer_id_by_telegram_id(session, trainer_telegram_id)
+        trainer_row_id = await get_trainer_id_for_webapp_trainer_operations(session, trainer_telegram_id)
         if not trainer_row_id:
             if callback.message:
                 await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
@@ -3076,7 +3076,7 @@ async def on_request_respond(callback: CallbackQuery) -> None:
     if request_id is None:
         return
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3097,7 +3097,7 @@ async def on_request_respond_skip(callback: CallbackQuery) -> None:
         _request_respond_state.pop(telegram_id, None)
         return
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         _request_respond_state.pop(telegram_id, None)
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
@@ -3123,7 +3123,7 @@ async def on_request_decline(callback: CallbackQuery) -> None:
     if request_id is None:
         return
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3149,7 +3149,7 @@ async def on_request_remind_slots(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3168,7 +3168,7 @@ async def on_request_book_client(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3217,7 +3217,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3425,7 +3425,7 @@ async def schedule_choose_time(callback: CallbackQuery) -> None:
     state = _schedule_add_state.get(telegram_id) or {}
     state["day"] = day
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if state.get("week_start"):
             # Week: load all existing slots (available + booked); booked are shown with ✓ but not toggleable
             if trainer_id:
@@ -3504,7 +3504,7 @@ async def schedule_done_times(callback: CallbackQuery) -> None:
     hours = state.get("hours") or set()
     await callback.answer()
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3541,7 +3541,7 @@ async def schedule_cancel_add(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     _schedule_add_state.pop(telegram_id, None)
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
@@ -3581,7 +3581,7 @@ async def schedule_apply_this_week(callback: CallbackQuery) -> None:
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3603,7 +3603,7 @@ async def schedule_apply_next_week(callback: CallbackQuery) -> None:
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3628,7 +3628,7 @@ async def schedule_delete(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3646,7 +3646,7 @@ async def slot_delete(callback: CallbackQuery) -> None:
     if slot_id is None:
         return
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             await callback.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3733,7 +3733,7 @@ async def relay_trainer_begin_reply(callback: CallbackQuery) -> None:
         return
     await sweep_idle_relay_sessions_and_notify()
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, uid)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, uid)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3757,7 +3757,7 @@ async def relay_trainer_close_chat(callback: CallbackQuery) -> None:
         return
     c_tg: int | None = None
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, uid)
+        trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, uid)
         if not trainer_id:
             await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
@@ -3808,7 +3808,7 @@ async def fallback(message: Message) -> None:
             await message.answer("Текст пустой — напишите ответ текстом.")
             return
         async with async_session_factory() as session:
-            trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+            trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
         if not trainer_id:
             clear_trainer_relay_reply_pending(telegram_id)
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
