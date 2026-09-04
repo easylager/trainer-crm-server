@@ -385,6 +385,12 @@
     getActiveProfileId: function () {
       return state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
     },
+    getDefaultProfileId: function () {
+      return state.defaultProfileId;
+    },
+    getProfiles: function () {
+      return state.profiles.slice();
+    },
     init: function () {
       return loadProfiles().then(function () {
         var mount = document.getElementById('clientProfileSwitcherMount');

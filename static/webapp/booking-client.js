@@ -200,6 +200,11 @@
     var initData = opts.initData != null ? opts.initData : getInitData();
     var headers = authHeaders(initData, { 'Content-Type': 'application/json' });
     if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+    // Explicit acting profile for this booking (form override). Always set when known so a
+    // race with the global fetch patch cannot drop X-Profile-Id.
+    if (opts.profileId != null && opts.profileId !== '') {
+      headers['X-Profile-Id'] = String(opts.profileId);
+    }
     emitBookingAnalytics('booking_submitted', { slot_id: opts.body && opts.body.slot_id });
     return fetch(apiUrl('/api/webapp/client/booking', initData), {
       method: 'POST',
