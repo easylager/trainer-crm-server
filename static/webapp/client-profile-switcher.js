@@ -4,12 +4,11 @@
  * Two jobs in one file, both self-contained (no build step, matches this codebase's
  * plain-JS static/webapp/*.js convention):
  *
- * 1. Attach `X-Profile-Id` to every `/api/webapp/client/*` fetch once the visitor has
- *    switched away from their own (default) profile — a global `window.fetch` patch, so
- *    pages that only include this script (no chip UI) still send the right header without
- *    touching each page's own fetch call sites. Silent no-op for the overwhelming majority
- *    of accounts that never add a child profile: no header is ever sent, current behavior
- *    is unchanged byte-for-byte.
+ * 1. Attach `X-Profile-Id` to every `/api/webapp/client/*` fetch for the acting profile
+ *    (`activeProfileId ?? defaultProfileId`) — including when that profile is the account
+ *    default (e.g. a child set as default). A global `window.fetch` patch so pages that
+ *    only include this script still send the right header without touching each page's
+ *    fetch call sites. Before profiles load (or with no profiles yet), no header is sent.
  * 2. On pages that opt in with a `#clientProfileSwitcherMount` element, render the current
  *    profile chip + a bottom sheet to switch profiles or add a child
  *    (GET/POST /client/profiles, PATCH .../default — see .ai/EPIC1-client-multi-profile.md).
@@ -48,20 +47,22 @@
   }
 
   /* ── fetch patch ──────────────────────────────────────────────────── */
+  // Always attach X-Profile-Id for the acting profile (active ?? default), including when
+  // that profile is the account default. Omitting the header when active === default made
+  // the server resolve self (telegram) instead of a default child — silent wrong bookings.
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   if (nativeFetch) {
     window.fetch = function (input, init) {
       try {
-        if (
-          typeof input === 'string' &&
-          input.indexOf('/api/webapp/client/') !== -1 &&
-          state.activeProfileId != null &&
-          state.activeProfileId !== state.defaultProfileId
-        ) {
-          init = init || {};
-          var headers = init.headers ? Object.assign({}, init.headers) : {};
-          headers['X-Profile-Id'] = String(state.activeProfileId);
-          init = Object.assign({}, init, { headers: headers });
+        if (typeof input === 'string' && input.indexOf('/api/webapp/client/') !== -1) {
+          var actingId =
+            state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
+          if (actingId != null) {
+            init = init || {};
+            var headers = init.headers ? Object.assign({}, init.headers) : {};
+            headers['X-Profile-Id'] = String(actingId);
+            init = Object.assign({}, init, { headers: headers });
+          }
         }
       } catch (e) {
         /* a broken tag must never block the actual request */
