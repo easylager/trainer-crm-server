@@ -318,13 +318,18 @@ body {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 16px;
+  box-sizing: border-box;
+  min-width: 18px;
+  width: auto;
   height: 16px;
-  margin-right: 5px;
+  padding: 0 3px;
+  margin-right: 6px;
   border-radius: 4px;
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
+  letter-spacing: -0.02em;
+  overflow: hidden;
   vertical-align: -3px;
 }
 .svc-badge .arena-mono { margin-right: 0; }

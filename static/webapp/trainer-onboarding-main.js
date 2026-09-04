@@ -339,12 +339,19 @@
   }
 
   /* Нецветовой различитель клетки (AC-005): 1–2 буквы названия площадки. Цвет один не считается
-     ответом — в тёмной теме Telegram на 7×N клетках он теряется, буква — нет. */
+     ответом — в тёмной теме Telegram на 7×N клетках он теряется, буква — нет.
+     Short first tokens (ТЦ, ТРЦ, ФОК) are shared acronyms — use the distinctive next word
+     («Замок» → «З»), not a duplicate «ТЦ» or glued «ТЗТЦ Замок». */
   function arenaInitial(arena) {
     if (!arena || !arena.name) return '';
     var parts = arena.name.trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    if (parts[0].length <= 3 && parts.length >= 2) {
+      return parts[1].charAt(0).toUpperCase();
+    }
+    if (parts[0].length <= 3) return parts[0].slice(0, 2).toUpperCase();
     if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    return (parts[0] || '').charAt(0).toUpperCase();
+    return parts[0].charAt(0).toUpperCase();
   }
 
   function applyArenaColor(cellEl, arena) {

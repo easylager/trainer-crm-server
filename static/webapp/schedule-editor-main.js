@@ -240,17 +240,22 @@
         return i >= 0 ? i : 0;
       }
 
-      /** Нецветовой различитель площадки (см. AC-005 в онбординге, trainer-onboarding-main.js):
-          1–2 буквы названия — не цвет, тема этого продукта кодирует цветом только действие/состояние. */
+      /** Нецветовой различитель площадки для компактных клеток (онбординг / сетка без полного имени).
+          1–2 буквы — не цвет. Short first tokens (ТЦ, ТРЦ) are shared acronyms: use the next word
+          («Замок» → «З») so two «ТЦ …» venues stay distinct. Not shown next to the full arena name. */
       function scheduleEditorArenaInitial(name) {
         var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return '';
+        if (parts[0].length <= 3 && parts.length >= 2) {
+          return parts[1].charAt(0).toUpperCase();
+        }
+        if (parts[0].length <= 3) return parts[0].slice(0, 2).toUpperCase();
         if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-        return (parts[0] || '').charAt(0).toUpperCase();
+        return parts[0].charAt(0).toUpperCase();
       }
 
-      /** Компактный монограмм-бейдж площадки: буква + плотность заливки тем же тилом
-          (сплошная / контур / штрих, цикл по 3 — см. .arena-mono в mini-app-components.css),
-          тот же приём, что и в онбординге, только без ограничения в 3 площадки. */
+      /** Компактный монограмм-бейдж — только там, где полного названия нет (клетки сетки).
+          Рядом с полным «ТЦ Замок» буква не нужна и читается как опечатка в имени. */
       function scheduleEditorArenaMonogramHtml(arenaId, arenaLabel) {
         if (!scheduleEditorIsMultiArena()) return '';
         var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
@@ -262,15 +267,15 @@
         return '<span class="arena-mono arena-mono--p' + pat + '" aria-hidden="true">' + escapeHtml(initial) + '</span>';
       }
 
-      /** Несколько связанных площадок — показывает к какой арене относится слот. Одна арена: не показываем. */
+      /** Несколько связанных площадок — полное имя арены. Одна арена: строку не показываем. */
       function scheduleEditorSlotVenueLine(s) {
         if (!scheduleEditorIsMultiArena() || !s) return '';
         var v = String(s.venue_label || s.arena_label || scheduleEditorArenaNameById(s.arena_id) || '').trim();
         var vt = v ? escapeHtml(v) : '<span class="venue-muted">не указано</span>';
-        return '<div class="slot-venue">' + scheduleEditorArenaMonogramHtml(s.arena_id, v) + vt + '</div>';
+        return '<div class="slot-venue">' + vt + '</div>';
       }
 
-      /** Compact venue chip for precise-slot tags when multi-arena. */
+      /** Compact venue chip for precise-slot tags when multi-arena — label only, no letter badge. */
       function scheduleEditorArenaChipHtml(arenaId, arenaLabel) {
         if (!scheduleEditorIsMultiArena()) return '';
         var aid = arenaId != null && !isNaN(Number(arenaId)) ? Number(arenaId) : null;
@@ -279,7 +284,6 @@
         var short = scheduleEditorTruncateArenaLabel(full, 13);
         return (
           '<span class="svc-badge svc-badge--slate schedule-arena-chip" role="status" title="' + escapeHtml(full) + '">' +
-            scheduleEditorArenaMonogramHtml(aid, full) +
             '<span class="svc-badge-label">' + escapeHtml(short) + '</span>' +
           '</span>'
         );
@@ -7602,7 +7606,7 @@
           if (svcL || arL) {
             html += '<div class="slot-group-catalog-meta">';
             if (svcL) html += '<div class="slot-group-meta-line">' + escapeHtml(svcL) + '</div>';
-            if (arL) html += '<div class="slot-group-meta-line">' + scheduleEditorArenaMonogramHtml(s.arena_id, arL) + escapeHtml(arL) + '</div>';
+            if (arL) html += '<div class="slot-group-meta-line">' + escapeHtml(arL) + '</div>';
             html += '</div>';
           }
         }
