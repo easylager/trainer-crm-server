@@ -5120,7 +5120,6 @@ async def purge_past_booking_from_schedule_history(
         return False, "slot_not_past_or_invalid_status"
 
     slot_id = int(row[1])
-    client_tg = row[2]
     client_id_tr = int(row[3]) if row[3] is not None else None
     slot_date_tr = row[4]
 
@@ -5141,9 +5140,9 @@ async def purge_past_booking_from_schedule_history(
             session, client_id_tr, slot_date_tr, do_commit=False
         )
 
-    if client_tg is not None:
+    if client_id_tr is not None:
         repo = ClientTrainerEdgeRepository(session)
-        await repo.recompute_completed_booking_stats_for_global_edge(int(client_tg), trainer_id)
+        await repo.recompute_completed_booking_stats_for_global_edge(client_id_tr, trainer_id)
 
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)

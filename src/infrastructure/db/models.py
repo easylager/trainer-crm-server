@@ -335,7 +335,7 @@ class Service(Base):
 
 class ClientTrainerEdge(Base):
     """
-    One row per (telegram_id, trainer_id) pair — the live state of a client-trainer relationship.
+    One row per (client_id, trainer_id) pair — the live state of a client-trainer relationship.
 
     Design intent: edge-state, not a ledger of relation types.
     Orthogonal flags:
@@ -351,17 +351,27 @@ class ClientTrainerEdge(Base):
       created_at          — edge first created
 
     context_type / context_id: reserved for future scope; unused in APIs (always NULL until used).
-    Enforced uniquely on (telegram_id, trainer_id) — one logical relationship row per pair.
+    Enforced uniquely on (client_id, trainer_id) — one logical relationship row per pair
+    (EPIC1 Slice 5: was (telegram_id, trainer_id) — one row per Telegram account shared across
+    every client profile of that account. ``client_id`` is the real per-profile identity now, so a
+    guardian/child profile gets its own "мой тренер"/saved/notify state instead of the parent's.
+    ``telegram_id`` stays NOT NULL and keeps storing the *account's* Telegram id — still needed to
+    address push notifications, since a guardian profile has no Telegram chat of its own).
     """
     __tablename__ = "client_trainer_edges"
     __table_args__ = (
         UniqueConstraint(
-            "telegram_id", "trainer_id",
+            "client_id", "trainer_id",
             name="uq_client_trainer_pair",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     telegram_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("client_sessions.telegram_id", ondelete="CASCADE"),
@@ -471,6 +481,35 @@ class ClientFamilyAccessMember(Base):
     member_telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     invited_by_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --- Client profile links: one account can act as several profiles (self + children) ---
+# Orthogonal to ClientFamilyAccessMember above: that table is "several Telegram accounts
+# share ONE clients row" (e.g. both parents see the same kid's bookings). This table is the
+# mirror case — "one Telegram account acts as SEVERAL clients rows" (one parent, several kids,
+# each with independent booking history). See .ai/DECISION-multi-profile-clients.md.
+CLIENT_PROFILE_ROLE_SELF = "self"
+CLIENT_PROFILE_ROLE_GUARDIAN = "guardian"
+
+
+class ClientProfileLink(Base):
+    """Which Telegram/VK account (``account_telegram_id``) may act as which client profile."""
+
+    __tablename__ = "client_profile_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_telegram_id", "profile_client_id", name="uq_client_profile_links_account_profile"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    account_telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False, index=True)
+    profile_client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False, server_default=CLIENT_PROFILE_ROLE_GUARDIAN)
+    is_default: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -72,7 +72,8 @@ async def bind_client_invite_trainer_context(
         service_id=service_id,
         trainer_id=int(trainer_id),
     )
-    await set_primary_trainer(telegram_id, int(trainer_id), session)
+    if resolved_client_id is not None:
+        await set_primary_trainer(int(resolved_client_id), telegram_id, int(trainer_id), session)
 
     if roster_created and resolved_client_id is not None:
         await notify_trainer_client_registered_from_invite(

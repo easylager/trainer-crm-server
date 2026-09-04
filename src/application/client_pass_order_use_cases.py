@@ -17,6 +17,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_request_use_cases import create_client_request
 from src.application.client_session_use_cases import get_session as read_client_bot_session
+from src.application.client_profile_use_cases import resolve_acting_client_id
 from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.pass_product_use_cases import (
@@ -117,12 +118,18 @@ async def _trainer_city_and_request_service_for_pass(
     return city_id, sid
 
 
-async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int) -> dict:
+async def get_primary_pass_order_catalog(
+    session: AsyncSession, telegram_id: int, client_id: int | None = None
+) -> dict:
     """
     Active pass products for the client's derived primary trainer (same rules as hub).
     Empty trainer_id when no primary or trainer has no active products.
+
+    ``client_id``: the acting profile (EPIC1 Slice 5) — defaults to the account's own row when
+    omitted, so existing callers keep today's behavior unchanged.
     """
-    edges = await get_all_edges(telegram_id, session)
+    resolved_client_id = client_id if client_id is not None else await get_client_id_by_telegram_id(session, telegram_id)
+    edges = await get_all_edges(resolved_client_id, session) if resolved_client_id is not None else []
     sess_row = await read_client_bot_session(telegram_id, session)
     session_tid = int(sess_row["selected_trainer_id"]) if sess_row and sess_row.get("selected_trainer_id") else None
     book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
@@ -171,12 +178,12 @@ async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int
 
 async def _pending_pass_order_exists(
     session: AsyncSession,
-    telegram_id: int,
+    client_id: int,
     trainer_id: int,
     pass_product_id: int,
 ) -> bool:
     needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
-    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    cid = client_id
     if cid is None:
         return False
     r = await session.execute(
@@ -197,13 +204,13 @@ async def _pending_pass_order_exists(
 
 async def _pass_order_sent_today_exists(
     session: AsyncSession,
-    telegram_id: int,
+    client_id: int,
     trainer_id: int,
     pass_product_id: int,
 ) -> bool:
     """Any pass-order request for this product today (calendar day Europe/Minsk), any status."""
     needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
-    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    cid = client_id
     if cid is None:
         return False
     r = await session.execute(
@@ -234,11 +241,11 @@ async def submit_pass_product_order_request(
     Creates a personalized client_request for the primary trainer.
     Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
     """
-    resolved = await get_client_id_by_telegram_id(session, int(telegram_id))
+    resolved = await resolve_acting_client_id(session, int(telegram_id), int(client_id))
     if resolved is None or int(resolved) != int(client_id):
         return {"ok": False, "error": "client_mismatch"}
 
-    edges = await get_all_edges(telegram_id, session)
+    edges = await get_all_edges(client_id, session)
     sess_row = await read_client_bot_session(telegram_id, session)
     session_tid = int(sess_row["selected_trainer_id"]) if sess_row and sess_row.get("selected_trainer_id") else None
     book_tid, book_svc = await client_latest_booking_primary_candidate(session, telegram_id)
@@ -268,10 +275,10 @@ async def submit_pass_product_order_request(
     if service_id is None:
         return {"ok": False, "error": "trainer_service_missing"}
 
-    if await _pending_pass_order_exists(session, telegram_id, trainer_id, pass_product_id):
+    if await _pending_pass_order_exists(session, client_id, trainer_id, pass_product_id):
         return {"ok": False, "error": "duplicate_pending"}
 
-    if await _pass_order_sent_today_exists(session, telegram_id, trainer_id, pass_product_id):
+    if await _pass_order_sent_today_exists(session, client_id, trainer_id, pass_product_id):
         return {"ok": False, "error": "daily_limit"}
 
     price_txt = f"{(price_cents / 100):.2f}".rstrip("0").rstrip(".")

@@ -28,7 +28,7 @@ from src.application.client_trainer_primary_graph import (
     compute_primary_edge_meta,
     hub_booking_primary_ids,
 )
-from src.application.client_use_cases import get_or_create_client
+from src.application.client_use_cases import get_client_id_by_telegram_id, get_or_create_client
 from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.subscription_use_cases import create_trial_subscription
 from src.application.trainer_schedule_use_cases import replace_slots_for_day
@@ -1721,7 +1721,7 @@ async def test_client_hub_primary_uses_last_booking_not_latest_save(
             assert latest[0] == tid_booked
             assert upcoming[0] is None
 
-            edges = await get_all_edges(ctg, db_session)
+            edges = await get_all_edges(client_id, db_session)
             bp_tid, bp_svc = hub_booking_primary_ids(
                 upcoming[0], upcoming[1], latest[0], latest[1]
             )
@@ -1819,7 +1819,8 @@ async def test_client_hub_primary_keeps_booking_trainer_after_cancel(
     assert latest == (tid_booked, service_id)
     assert upcoming == (None, None)
 
-    edges = await get_all_edges(ctg, db_session)
+    hub_client_id = await get_client_id_by_telegram_id(db_session, ctg)
+    edges = await get_all_edges(hub_client_id, db_session)
     bp_tid, bp_svc = hub_booking_primary_ids(upcoming[0], upcoming[1], latest[0], latest[1])
     primary_edge, primary_src = compute_primary_edge_meta(
         edges,

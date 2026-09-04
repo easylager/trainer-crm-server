@@ -316,13 +316,24 @@ async def replace_client_request_with_new(
     old_request_id: int,
     client_telegram_id: int,
     new_comment: str | None,
+    *,
+    acting_client_id: int | None = None,
 ) -> int | None:
     """
     Delete old request and create new one with same city/service, new comment.
     Trainers get a new notification (pending request notifier picks it up).
     Returns new request id or None if old request not found / not owned by client.
+
+    ``acting_client_id``: callers that already resolved the acting profile (e.g. the client
+    Mini App's X-Profile-Id) pass it here so the ownership check matches that profile instead
+    of re-deriving the account's own row from ``client_telegram_id`` — needed for a guardian
+    profile's own requests. Telegram bot callers (no profile concept) omit it.
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return None
     r = await session.execute(
@@ -740,11 +751,20 @@ async def list_my_requests_with_responses(
     session: AsyncSession,
     client_telegram_id: int,
     limit: int = 30,
+    *,
+    acting_client_id: int | None = None,
 ) -> list[dict]:
     """
     Client's requests with list of responding trainers (id, name, telegram_id for link).
+
+    ``acting_client_id``: see ``replace_client_request_with_new`` — pass an already-resolved
+    profile id to list that profile's requests instead of the account's own row.
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return []
     await archive_client_requests_fulfilled_by_bookings(session, client_telegram_id)

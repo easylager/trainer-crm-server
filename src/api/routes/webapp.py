@@ -123,6 +123,12 @@ from src.application.family_access_use_cases import (
     list_family_access_members_api,
     revoke_family_member,
 )
+from src.application.client_profile_use_cases import (
+    create_guardian_profile,
+    list_accessible_profiles,
+    resolve_acting_client_id,
+    set_default_profile,
+)
 from src.application.trainer_client_relay_use_cases import (
     RELAY_SENDER_TRAINER,
     assert_trainer_may_use_relay,
@@ -434,6 +440,20 @@ def _trainer_bot_notify_telegram_id(principal: MiniAppPrincipal) -> int | None:
     return None
 
 
+def _parse_profile_id_header(x_profile_id: str | None) -> int | None:
+    """
+    Malformed/stale ``X-Profile-Id`` must never 422 the request — ``resolve_acting_client_id``
+    already falls back to the account's own profile for an unknown id, so an unparsable one
+    gets the same treatment rather than a validation error.
+    """
+    if not x_profile_id:
+        return None
+    try:
+        return int(x_profile_id)
+    except ValueError:
+        return None
+
+
 async def _ensure_client_for_webapp_miniapp(
     session: AsyncSession,
     principal: MiniAppPrincipal,
@@ -442,14 +462,26 @@ async def _ensure_client_for_webapp_miniapp(
     phone: str | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
+    requested_profile_id: int | None = None,
 ) -> int:
     """
     Mini App: client row must have first_name (last_name optional).
     If profile already has first_name, only phone is updated when provided.
     Otherwise first_name is taken from body or host user payload (Telegram initData / VK launch).
+
+    ``requested_profile_id``: when it resolves to a profile distinct from the account's own
+    row (a guardian/child profile — see resolve_acting_client_id), that row already has a
+    name from its creation at ``POST /client/profiles`` — act on it directly rather than
+    running the self-registration bootstrap below, which would wrongly touch the parent's row.
     """
     catalog_tid = client_catalog_telegram_key(principal)
     vk_uid = int(principal.user_id) if principal.platform == MiniAppPlatform.MAX else None
+
+    if requested_profile_id is not None:
+        own_id = await get_client_id_by_telegram_id(session, catalog_tid)
+        resolved = await resolve_acting_client_id(session, catalog_tid, requested_profile_id)
+        if resolved is not None and resolved != own_id:
+            return resolved
 
     profile = await get_client_profile_basic(session, catalog_tid)
     if principal.platform == MiniAppPlatform.TELEGRAM:
@@ -1317,6 +1349,7 @@ async def _client_slots_after_self_book_window(
     trainer_id: int,
     client_telegram_id: int,
     slots: list[dict],
+    requested_profile_id: int | None = None,
 ) -> tuple[list[dict], str | None]:
     """Per-trainer client daypart filter; applied after shared trainer slots cache."""
     from src.application.client_booking_daypart_use_cases import (
@@ -1324,7 +1357,7 @@ async def _client_slots_after_self_book_window(
         get_client_booking_daypart,
     )
 
-    cid = await get_client_id_by_telegram_id(session, client_telegram_id)
+    cid = await resolve_acting_client_id(session, client_telegram_id, requested_profile_id)
     if cid is None:
         return slots, None
     daypart = await get_client_booking_daypart(session, trainer_id, int(cid))
@@ -1357,6 +1390,7 @@ async def get_client_slots(
         None,
         description="Comma-separated arena IDs (OR); filters serialized slots",
     ),
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
@@ -1371,6 +1405,7 @@ async def get_client_slots(
     book button without query param): then group slots for that service are included.
     """
     client_telegram_id = client_catalog_telegram_key(principal)
+    requested_profile_id = _parse_profile_id_header(x_profile_id)
     arena_filter = _client_slots_arena_ids_query_param(arena_ids)
 
     if not await trainer_allows_online_booking(session, trainer_id):
@@ -1413,7 +1448,7 @@ async def get_client_slots(
     if cached_slots is not None:
         arena_slots = _filter_client_slots_payload_by_arenas(cached_slots, arena_filter)
         filtered_slots, daypart = await _client_slots_after_self_book_window(
-            session, trainer_id, client_telegram_id, arena_slots
+            session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
         )
         return {
             "trainer_name": trainer_name_val,
@@ -1484,7 +1519,7 @@ async def get_client_slots(
     set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
     arena_slots = _filter_client_slots_payload_by_arenas(serialized_full, arena_filter)
     filtered_slots, daypart = await _client_slots_after_self_book_window(
-        session, trainer_id, client_telegram_id, arena_slots
+        session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
     )
     return {
         "trainer_name": trainer_name_val,
@@ -1519,17 +1554,25 @@ async def _client_booking_post_create_effects(
     telegram_id: int,
     trainer_id: int,
     service_id: int,
+    client_id: int,
 ) -> None:
     """
     Edge counters + reminder rows after the booking row is committed.
     Runs in BackgroundTasks so the HTTP client gets JSON quickly (reduces false «network error» when
     the connection drops after the DB work but before the response is fully delivered).
+
+    ``client_id`` is the resolved acting profile (self or a guardian child) — edge counters must
+    attribute to that profile, not the account, so a child's booking strengthens the child's
+    "мой тренер" signal rather than leaking into the parent's. The catalog session sync and push
+    notification below stay ``telegram_id``-addressed: both are chat/UI concerns tied to the
+    Telegram account, and a guardian profile has no Telegram chat of its own to notify.
     """
     try:
         from src.infrastructure.db.session import async_session_factory
 
         async with async_session_factory() as s:
             await record_booking_edge(
+                client_id,
                 telegram_id,
                 trainer_id,
                 completed=False,
@@ -1566,16 +1609,18 @@ async def post_client_booking(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    x_profile_id: str | None = Header(None),
 ):
     """
     Create booking from client Mini App. Auth: client bot initData.
-    
+
     Requires trainer to have tier >= 'online' for self-booking.
     Phone required. service_id required (or from request).
     Optional ``Idempotency-Key``: repeat submits within 24h return the same JSON (slot already taken
     is avoided when the first request succeeded but the client did not receive the body).
     """
     telegram_id = client_catalog_telegram_key(principal)
+    requested_profile_id = _parse_profile_id_header(x_profile_id)
     raw = cred.raw
     ik = (idempotency_key or "").strip()
     idem_cache_key = (f"bkc{telegram_id}_{ik}"[:64]) if ik else ""
@@ -1636,6 +1681,7 @@ async def post_client_booking(
         phone=phone,
         first_name=body.first_name,
         last_name=body.last_name,
+        requested_profile_id=requested_profile_id,
     )
 
     if not client_booking_attempt_allowed(telegram_id):
@@ -1724,6 +1770,7 @@ async def post_client_booking(
         int(telegram_id),
         int(trainer_id),
         int(service_id),
+        int(client_id),
     )
     return out
 
@@ -1731,11 +1778,13 @@ async def post_client_booking(
 @router.get("/client/session")
 async def get_client_session_state(
     for_trainer_id: int | None = Query(None, description="When set, suggested_service_id_for_trainer uses this trainer."),
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Return client session with resolved names (city, service, arena, trainer) for catalog UI. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
+    requested_profile_id = _parse_profile_id_header(x_profile_id)
     profile = await get_client_profile_basic(session, telegram_id)
     needs_profile_name = not bool(profile and (profile.get("first_name") or "").strip())
     row = await get_client_session(telegram_id, session)
@@ -1792,7 +1841,7 @@ async def get_client_session_state(
     tid_for_suggest_int: int | None = int(tid_for_suggest) if tid_for_suggest else None
     client_row_id: int | None = None
     if tid_for_suggest_int is not None:
-        client_row_id = await get_client_id_by_telegram_id(session, telegram_id)
+        client_row_id = await resolve_acting_client_id(session, telegram_id, requested_profile_id)
         if client_row_id is not None:
             suggested_sid = await get_trainer_client_latest_booking_service_id(
                 session, tid_for_suggest_int, client_row_id
@@ -2022,6 +2071,7 @@ async def post_client_request(
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
+    x_profile_id: str | None = Header(None),
 ):
     """Create a client request (from catalog Mini App). Auth: client initData. Returns request_id so UI can show success before closing."""
     telegram_id = client_catalog_telegram_key(principal)
@@ -2032,6 +2082,7 @@ async def post_client_request(
         phone=None,
         first_name=body.first_name,
         last_name=body.last_name,
+        requested_profile_id=_parse_profile_id_header(x_profile_id),
     )
     comment = (body.comment or "").strip() or None
     request_id = await create_client_request(
@@ -2095,12 +2146,14 @@ class ClientPassOrderRequestBody(BaseModel):
 
 @router.get("/client/pass-order/catalog")
 async def get_client_pass_order_catalog_endpoint(
+    x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Active pass products for the client's derived primary trainer (order-via-request UX)."""
     telegram_id = client_catalog_telegram_key(principal)
-    return await get_primary_pass_order_catalog(session, telegram_id)
+    client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
+    return await get_primary_pass_order_catalog(session, telegram_id, client_id)
 
 
 @router.post("/client/pass-order/request")
@@ -2111,6 +2164,7 @@ async def post_client_pass_order_request(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    x_profile_id: str | None = Header(None),
 ):
     """Create a personalized «purchase pass» client_request to the primary trainer."""
     telegram_id = client_catalog_telegram_key(principal)
@@ -2128,6 +2182,7 @@ async def post_client_pass_order_request(
         phone=None,
         first_name=None,
         last_name=None,
+        requested_profile_id=_parse_profile_id_header(x_profile_id),
     )
     result = await submit_pass_product_order_request(
         session,
@@ -2185,12 +2240,14 @@ class ClientCertOrderRequestBody(BaseModel):
 
 @router.get("/client/cert-order/catalog")
 async def get_client_cert_order_catalog_endpoint(
+    x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Active certificate products for the client's derived primary trainer (order-via-request UX)."""
     telegram_id = client_catalog_telegram_key(principal)
-    return await get_primary_cert_order_catalog(session, telegram_id)
+    client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
+    return await get_primary_cert_order_catalog(session, telegram_id, client_id)
 
 
 @router.post("/client/cert-order/request")
@@ -2201,6 +2258,7 @@ async def post_client_cert_order_request(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    x_profile_id: str | None = Header(None),
 ):
     """Create a personalized «order certificate» client_request to the primary trainer."""
     telegram_id = client_catalog_telegram_key(principal)
@@ -2218,6 +2276,7 @@ async def post_client_cert_order_request(
         phone=None,
         first_name=None,
         last_name=None,
+        requested_profile_id=_parse_profile_id_header(x_profile_id),
     )
     result = await submit_certificate_product_order_request(
         session,
@@ -2314,7 +2373,12 @@ async def post_client_family_access_invite(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
-    """Primary Telegram holder creates a one-time invite link (t.me client bot welcome_t_*)."""
+    """
+    Primary Telegram holder creates a one-time invite link (t.me client bot welcome_t_*).
+
+    Deliberately not X-Profile-Id-aware: household sharing is a property of the account's
+    own row, not of whichever child profile happens to be selected in the switcher.
+    """
     telegram_id = client_catalog_telegram_key(principal)
     cid = await get_client_id_by_telegram_id(session, telegram_id)
     if cid is None:
@@ -2363,8 +2427,70 @@ async def post_client_family_access_revoke(
     return {"ok": True}
 
 
+class ClientProfileCreateBody(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=64)
+    last_name: str | None = Field(None, max_length=64)
+
+
+@router.get("/client/profiles")
+async def get_client_profiles(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """
+    Profiles this account can act as (self + any children added via «Добавить ребёнка»),
+    plus the family-shared profile from /client/family-access if the account was invited
+    that way. See .ai/EPIC1-client-multi-profile.md.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+    items = await list_accessible_profiles(session, telegram_id)
+    default_profile_id = next((p["client_id"] for p in items if p["is_default"]), None)
+    return {"items": items, "default_profile_id": default_profile_id}
+
+
+@router.post("/client/profiles")
+async def post_client_profiles(
+    body: ClientProfileCreateBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Add an independent profile (e.g. a second child) under this account."""
+    telegram_id = client_catalog_telegram_key(principal)
+    phone = await get_client_phone_for_webapp(session, telegram_id)
+    try:
+        new_client_id = await create_guardian_profile(
+            session,
+            telegram_id,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            phone=phone,
+        )
+    except ValueError as exc:
+        if str(exc) == "guardian_profile_limit_reached":
+            raise HTTPException(status_code=409, detail="Достигнут лимит добавленных профилей.") from None
+        raise HTTPException(status_code=400, detail="Укажите имя.") from None
+    await session.commit()
+    return {"client_id": new_client_id}
+
+
+@router.patch("/client/profiles/{profile_client_id:int}/default")
+async def patch_client_profile_default(
+    profile_client_id: int,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Mark one of the account's accessible profiles as the one opened by default."""
+    telegram_id = client_catalog_telegram_key(principal)
+    ok = await set_default_profile(session, telegram_id, profile_client_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Профиль недоступен для этого аккаунта.")
+    await session.commit()
+    return {"ok": True}
+
+
 @router.get("/client/activity-stats")
 async def get_client_activity_stats(
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
@@ -2373,19 +2499,25 @@ async def get_client_activity_stats(
     rolling 30-day rhythm vs prior window, upcoming count, next numeric milestone.
     """
     telegram_id = client_catalog_telegram_key(principal)
-    client_id = await get_client_id_by_telegram_id(session, telegram_id)
+    client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
     return await get_client_activity_snapshot(session, client_id=client_id)
 
 
 @router.get("/client/hub/bootstrap")
 async def get_client_hub_bootstrap(
+    x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """
     Single round-trip for client home: bookings by day + requests + session edges + activity snippet.
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
+
+    ``bookings``/``requests``/``_hub_session`` (saved/primary trainer) stay account-scoped —
+    keyed by Telegram id in modules outside this file (client_trainer_edges is Slice 5's job);
+    only ``activity``/``passes`` resolve through the selected profile today.
     """
     telegram_id = client_catalog_telegram_key(principal)
+    requested_profile_id = _parse_profile_id_header(x_profile_id)
 
     async def _bookings() -> dict:
         async with async_session_factory() as s:
@@ -2396,12 +2528,21 @@ async def get_client_hub_bootstrap(
             return await _client_requests_list_payload(s, telegram_id)
 
     async def _hub_session() -> dict[str, Any]:
-        """Legacy: selected_trainer_id + edge graph fields + saved_trainers preview for home strip."""
+        """
+        Legacy: selected_trainer_id + edge graph fields + saved_trainers preview for home strip.
+
+        ``edges``/``explicit_primary`` now resolve through the selected profile (EPIC1 Slice 5).
+        The booking-history-derived candidates below (``book_*``/``upcoming_*``/``rebook_raw``)
+        stay account-scoped — they live in booking_use_cases.py, outside this slice's boundary —
+        so the computed primary can still be nudged by the account's own booking history even
+        while viewing a child profile with no bookings of its own yet.
+        """
         async with async_session_factory() as s:
             await reset_orphan_client_miniapp_trainer_pointers(s, telegram_id)
             row = await read_client_bot_session(telegram_id, s)
             tid = (row or {}).get("selected_trainer_id")
-            edges = await get_all_trainer_edges(telegram_id, s)
+            hub_session_client_id = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+            edges = await get_all_trainer_edges(hub_session_client_id, s) if hub_session_client_id else []
             session_tid = int(tid) if tid is not None else None
             if session_tid is not None and await trainer_id_belongs_to_telegram(
                 s, session_tid, telegram_id
@@ -2415,7 +2556,9 @@ async def get_client_hub_bootstrap(
             bp_tid, bp_svc = _hub_booking_primary_ids(
                 upcoming_tid, upcoming_svc, book_tid, book_svc
             )
-            explicit_primary = await get_primary_trainer_edge(telegram_id, s)
+            explicit_primary = (
+                await get_primary_trainer_edge(hub_session_client_id, s) if hub_session_client_id else None
+            )
             primary_edge, primary_src = _compute_primary_edge_meta(
                 edges,
                 session_tid,
@@ -2506,7 +2649,7 @@ async def get_client_hub_bootstrap(
     async def _activity() -> dict[str, Any]:
         """Light motivation snippet for hub ribbon (week streak + total completed)."""
         async with async_session_factory() as s:
-            cid = await get_client_id_by_telegram_id(s, telegram_id)
+            cid = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
             snap = await get_client_activity_snapshot(s, client_id=cid)
             return {
                 "streak_weeks": int(snap.get("streak_weeks") or 0),
@@ -2516,7 +2659,7 @@ async def get_client_hub_bootstrap(
     async def _passes() -> list[dict]:
         """Active pass instances — included in bootstrap to avoid a separate round-trip from the hub."""
         async with async_session_factory() as s:
-            cid = await get_client_id_by_telegram_id(s, telegram_id)
+            cid = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
             if not cid:
                 return []
             return await list_client_pass_instances(s, cid)
@@ -2623,12 +2766,13 @@ async def get_client_share_trainer(
 
 @router.get("/client/passes")
 async def get_client_passes(
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
     """List current client's pass instances (my passes). Auth: client initData. One query with JOINs."""
     telegram_id = client_catalog_telegram_key(principal)
-    client_id = await get_client_id_by_telegram_id(session, telegram_id)
+    client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
     if not client_id:
         return {"items": []}
     items = await list_client_pass_instances(session, client_id)
@@ -2637,12 +2781,13 @@ async def get_client_passes(
 
 @router.get("/client/certificates")
 async def get_client_certificates(
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
     """List current client's certificate instances (my certificates). Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
-    client_id = await get_client_id_by_telegram_id(session, telegram_id)
+    client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
     if not client_id:
         return {"items": []}
     items = await list_client_certificate_instances(session, client_id)
@@ -2694,6 +2839,7 @@ class ClientCertificateActivateBody(BaseModel):
 @router.post("/client/certificates/activate")
 async def post_client_certificate_activate(
     body: ClientCertificateActivateBody,
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
@@ -2704,7 +2850,7 @@ async def post_client_certificate_activate(
     Auth: client initData.
     """
     client_tid = client_catalog_telegram_key(principal)
-    client_id = await get_client_id_by_telegram_id(session, client_tid)
+    client_id = await resolve_acting_client_id(session, client_tid, _parse_profile_id_header(x_profile_id))
     if not client_id:
         raise HTTPException(status_code=403, detail="Client not found")
     code = (body.code or "").strip()
@@ -2847,15 +2993,15 @@ class ClientRequestPatchBody(BaseModel):
 async def patch_client_request(
     request_id: int,
     body: ClientRequestPatchBody,
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Replace request with new comment (re-create so trainers get new notification). Auth: client initData."""
     from src.application.client_request_comment_display import client_request_comment_editable
-    from src.application.client_use_cases import get_client_id_by_telegram_id
 
     telegram_id = client_catalog_telegram_key(principal)
-    cid = await get_client_id_by_telegram_id(session, telegram_id)
+    cid = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
     if cid is None:
         raise HTTPException(status_code=403, detail="Client not found")
     r = await session.execute(
@@ -2873,11 +3019,11 @@ async def patch_client_request(
             detail="Заявки на абонемент и сертификат пока нельзя редактировать. Удалите заявку и оформите новую.",
         )
     new_id = await replace_client_request_with_new(
-        session, request_id, telegram_id, body.comment
+        session, request_id, telegram_id, body.comment, acting_client_id=int(cid)
     )
     if new_id is None:
         raise HTTPException(status_code=404, detail="Request not found")
-    items = await list_my_requests_with_responses(session, telegram_id)
+    items = await list_my_requests_with_responses(session, telegram_id, acting_client_id=int(cid))
     req = next((r for r in items if r["id"] == new_id), None)
     if not req:
         return {"success": True, "request": None}
@@ -5420,7 +5566,7 @@ async def post_client_self_register(
         service_id=service_id,
         trainer_id=int(body.trainer_id),
     )
-    await uc_set_primary_trainer(telegram_id, int(body.trainer_id), session)
+    await uc_set_primary_trainer(int(client_id), telegram_id, int(body.trainer_id), session)
     await session.commit()
 
     notify_event = None
@@ -9315,6 +9461,7 @@ async def post_client_collective_session_booking(
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
+    x_profile_id: str | None = Header(None),
 ) -> dict[str, Any]:
     """Client books a studio_central center session (PAYG, W2)."""
     telegram_id = client_catalog_telegram_key(principal)
@@ -9325,6 +9472,7 @@ async def post_client_collective_session_booking(
         phone=(body.phone or "").strip() or None,
         first_name=body.first_name,
         last_name=body.last_name,
+        requested_profile_id=_parse_profile_id_header(x_profile_id),
     )
     if not client_id:
         raise HTTPException(status_code=400, detail="Client profile required")
@@ -9730,6 +9878,7 @@ async def post_client_collective_pass_order_request(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    x_profile_id: str | None = Header(None),
 ):
     """Create a personalized center pass purchase request to the collective owner."""
     telegram_id = client_catalog_telegram_key(principal)
@@ -9747,6 +9896,7 @@ async def post_client_collective_pass_order_request(
         phone=None,
         first_name=None,
         last_name=None,
+        requested_profile_id=_parse_profile_id_header(x_profile_id),
     )
     result = await submit_collective_pass_product_order_request(
         session,

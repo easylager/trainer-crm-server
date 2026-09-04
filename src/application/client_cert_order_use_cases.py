@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.booking_use_cases import client_latest_booking_primary_candidate
 from src.application.client_request_use_cases import create_client_request
 from src.application.client_session_use_cases import get_session as read_client_bot_session
+from src.application.client_profile_use_cases import resolve_acting_client_id
 from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.client_trainer_primary_graph import compute_primary_edge_meta
 from src.application.client_use_cases import get_client_id_by_telegram_id
@@ -122,9 +123,17 @@ async def _trainer_city_and_min_service(
     return city_id, sid
 
 
-async def get_primary_cert_order_catalog(session: AsyncSession, telegram_id: int) -> dict:
-    """Active certificate products for the client's derived primary trainer (same primary rules as pass-order catalog)."""
-    edges = await get_all_edges(telegram_id, session)
+async def get_primary_cert_order_catalog(
+    session: AsyncSession, telegram_id: int, client_id: int | None = None
+) -> dict:
+    """
+    Active certificate products for the client's derived primary trainer (same primary rules as pass-order catalog).
+
+    ``client_id``: the acting profile (EPIC1 Slice 5) — defaults to the account's own row when
+    omitted, so existing callers keep today's behavior unchanged.
+    """
+    resolved_client_id = client_id if client_id is not None else await get_client_id_by_telegram_id(session, telegram_id)
+    edges = await get_all_edges(resolved_client_id, session) if resolved_client_id is not None else []
     sess_row = await read_client_bot_session(telegram_id, session)
     session_tid = (
         int(sess_row["selected_trainer_id"])
@@ -170,12 +179,12 @@ async def get_primary_cert_order_catalog(session: AsyncSession, telegram_id: int
 
 async def _pending_cert_order_exists(
     session: AsyncSession,
-    telegram_id: int,
+    client_id: int,
     trainer_id: int,
     certificate_product_id: int,
 ) -> bool:
     needle = f"{CERT_ORDER_LINE_PREFIX}{int(certificate_product_id)}"
-    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    cid = client_id
     if cid is None:
         return False
     r = await session.execute(
@@ -196,12 +205,12 @@ async def _pending_cert_order_exists(
 
 async def _cert_order_sent_today_exists(
     session: AsyncSession,
-    telegram_id: int,
+    client_id: int,
     trainer_id: int,
     certificate_product_id: int,
 ) -> bool:
     needle = f"{CERT_ORDER_LINE_PREFIX}{int(certificate_product_id)}"
-    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    cid = client_id
     if cid is None:
         return False
     r = await session.execute(
@@ -235,7 +244,7 @@ async def submit_certificate_product_order_request(
     Creates a personalized client_request for the primary trainer.
     Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
     """
-    resolved = await get_client_id_by_telegram_id(session, int(telegram_id))
+    resolved = await resolve_acting_client_id(session, int(telegram_id), int(client_id))
     if resolved is None or int(resolved) != int(client_id):
         return {"ok": False, "error": "client_mismatch"}
 
@@ -245,7 +254,7 @@ async def submit_certificate_product_order_request(
     if not rname:
         return {"ok": False, "error": "recipient_name_required"}
 
-    edges = await get_all_edges(telegram_id, session)
+    edges = await get_all_edges(client_id, session)
     sess_row = await read_client_bot_session(telegram_id, session)
     session_tid = (
         int(sess_row["selected_trainer_id"])
@@ -273,10 +282,10 @@ async def submit_certificate_product_order_request(
     if service_id is None:
         return {"ok": False, "error": "trainer_service_missing"}
 
-    if await _pending_cert_order_exists(session, telegram_id, trainer_id, certificate_product_id):
+    if await _pending_cert_order_exists(session, client_id, trainer_id, certificate_product_id):
         return {"ok": False, "error": "duplicate_pending"}
 
-    if await _cert_order_sent_today_exists(session, telegram_id, trainer_id, certificate_product_id):
+    if await _cert_order_sent_today_exists(session, client_id, trainer_id, certificate_product_id):
         return {"ok": False, "error": "daily_limit"}
 
     pname = (prod["name"] or "").strip() or "Подарочный сертификат"

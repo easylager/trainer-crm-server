@@ -23,8 +23,14 @@ from src.application.demand_signals_use_cases import record_catalog_favorite
 
 
 # ── write ──────────────────────────────────────────────────────────────────────
+#
+# EPIC1 Slice 5: edges are keyed by ``client_id`` (the acting profile), not ``telegram_id``
+# (the account) — a guardian/child profile gets its own "мой тренер"/saved/notify state.
+# ``telegram_id`` is still threaded through because new rows need it (repo.ensure_edge) and
+# because it addresses the account's Telegram chat for push (client_sessions sync, notify).
 
 async def save_trainer(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
@@ -36,7 +42,7 @@ async def save_trainer(
     """
     repo = ClientTrainerEdgeRepository(session)
     edge, became_saved = await repo.set_saved(
-        telegram_id, trainer_id, saved=True, catalog_service_id=catalog_service_id
+        client_id, telegram_id, trainer_id, saved=True, catalog_service_id=catalog_service_id
     )
     if became_saved:
         await record_catalog_favorite(session, trainer_id=trainer_id, source="catalog", payload=None)
@@ -45,18 +51,20 @@ async def save_trainer(
 
 
 async def unsave_trainer(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
 ) -> dict[str, Any]:
     """Remove bookmark. Idempotent."""
     repo = ClientTrainerEdgeRepository(session)
-    edge, _ = await repo.set_saved(telegram_id, trainer_id, saved=False)
+    edge, _ = await repo.set_saved(client_id, telegram_id, trainer_id, saved=False)
     await session.commit()
     return edge
 
 
 async def set_primary_trainer(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
@@ -64,10 +72,11 @@ async def set_primary_trainer(
     """
     Promote trainer to primary (global scope).
     Previous primary is demoted automatically; other flags stay untouched.
-    Also syncs legacy selected_trainer_id for backward compat.
+    Also syncs legacy selected_trainer_id for backward compat (account-level, not per-profile —
+    the classic bot UI has no profile concept).
     """
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_primary(telegram_id, trainer_id)
+    edge = await repo.set_primary(client_id, telegram_id, trainer_id)
 
     # Keep legacy session field in sync so old bot flows still work
     await session.execute(
@@ -83,12 +92,13 @@ async def set_primary_trainer(
 
 
 async def unset_primary_trainer(
+    client_id: int,
     telegram_id: int,
     session: AsyncSession,
 ) -> None:
     """Remove primary designation entirely (no trainer is "main" now)."""
     repo = ClientTrainerEdgeRepository(session)
-    await repo.unset_primary(telegram_id)
+    await repo.unset_primary(client_id)
     await session.execute(
         __import__("sqlalchemy").text("""
             UPDATE client_sessions
@@ -115,12 +125,13 @@ async def purge_client_trainer_hub_signals_on_roster_detach(
     if telegram_id is None:
         return
     tid = int(trainer_id)
+    cid = int(client_id)
     tg = int(telegram_id)
     repo = ClientTrainerEdgeRepository(session)
-    await repo.set_saved(tg, tid, saved=False)
-    edge = await repo.get(tg, tid)
+    await repo.set_saved(cid, tg, tid, saved=False)
+    edge = await repo.get(cid, tid)
     if edge and edge.get("is_primary"):
-        await repo.unset_primary(tg)
+        await repo.unset_primary(cid)
     await session.execute(
         text("""
             UPDATE client_sessions
@@ -135,25 +146,27 @@ async def purge_client_trainer_hub_signals_on_roster_detach(
 
 
 async def subscribe_notify_slots(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
 ) -> dict[str, Any]:
     """Subscribe client to one-shot slot-availability notification for a trainer."""
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_notify_slots(telegram_id, trainer_id, notify=True)
+    edge = await repo.set_notify_slots(client_id, telegram_id, trainer_id, notify=True)
     await session.commit()
     return edge
 
 
 async def unsubscribe_notify_slots(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
 ) -> dict[str, Any]:
     """Cancel slot-availability subscription. Idempotent."""
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_notify_slots(telegram_id, trainer_id, notify=False)
+    edge = await repo.set_notify_slots(client_id, telegram_id, trainer_id, notify=False)
     await session.commit()
     return edge
 
@@ -201,6 +214,7 @@ async def notify_slot_waitlist(
 
 
 async def record_booking_edge(
+    client_id: int,
     telegram_id: int,
     trainer_id: int,
     completed: bool = False,
@@ -217,6 +231,7 @@ async def record_booking_edge(
         return
     repo = ClientTrainerEdgeRepository(session)
     await repo.record_booking(
+        client_id,
         telegram_id,
         trainer_id,
         completed=completed,
@@ -228,36 +243,36 @@ async def record_booking_edge(
 # ── read ───────────────────────────────────────────────────────────────────────
 
 async def get_edge(
-    telegram_id: int,
+    client_id: int,
     trainer_id: int,
     session: AsyncSession,
 ) -> dict[str, Any] | None:
     """Single edge for (client, trainer); None if no relationship yet."""
-    return await ClientTrainerEdgeRepository(session).get(telegram_id, trainer_id)
+    return await ClientTrainerEdgeRepository(session).get(client_id, trainer_id)
 
 
 async def get_all_edges(
-    telegram_id: int,
+    client_id: int,
     session: AsyncSession,
 ) -> list[dict[str, Any]]:
     """All edges for client, ordered by recency."""
-    return await ClientTrainerEdgeRepository(session).list_for_client(telegram_id)
+    return await ClientTrainerEdgeRepository(session).list_for_client(client_id)
 
 
 async def get_saved_edges(
-    telegram_id: int,
+    client_id: int,
     session: AsyncSession,
 ) -> list[dict[str, Any]]:
     """Only saved (bookmarked) edges, ordered by saved_at desc."""
-    return await ClientTrainerEdgeRepository(session).list_saved(telegram_id)
+    return await ClientTrainerEdgeRepository(session).list_saved(client_id)
 
 
 async def get_primary_edge(
-    telegram_id: int,
+    client_id: int,
     session: AsyncSession,
 ) -> dict[str, Any] | None:
     """Primary edge for global context; None if no primary set."""
-    return await ClientTrainerEdgeRepository(session).get_primary(telegram_id)
+    return await ClientTrainerEdgeRepository(session).get_primary(client_id)
 
 
 async def trainer_display_hints_by_ids(

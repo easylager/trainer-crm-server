@@ -1,9 +1,13 @@
 """
 Infrastructure: client ↔ trainer edge-state persistence.
 
-One row per (telegram_id, trainer_id) pair globally (nullable context_* reserved — unused).
+One row per (client_id, trainer_id) pair globally (nullable context_* reserved — unused).
+``client_id`` is the per-profile identity (EPIC1 Slice 5); ``telegram_id`` is carried along
+only to populate new rows and to address push notifications (list_slot_subscribers) — a
+guardian/child profile has no Telegram chat of its own, so notifications always go to the
+account's telegram_id regardless of which profile the edge belongs to.
 
-All inserts use ON CONFLICT (telegram_id, trainer_id).
+All inserts use ON CONFLICT (client_id, trainer_id).
 """
 from datetime import datetime, timezone
 from typing import Any
@@ -13,20 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 _SELECT_EDGE = """
     SELECT
-        id, telegram_id, trainer_id,
+        id, client_id, telegram_id, trainer_id,
         is_saved, is_primary, notify_when_slots, completed_count,
         saved_at, notify_when_slots_at,
         last_booking_at, last_completed_at, last_interaction_at,
         last_booking_service_id, saved_catalog_service_id,
         context_type, context_id, created_at
     FROM client_trainer_edges
-    WHERE telegram_id = :tid AND trainer_id = :trainer_id
+    WHERE client_id = :cid AND trainer_id = :trainer_id
       AND context_type IS NOT DISTINCT FROM :ctx_type
       AND context_id   IS NOT DISTINCT FROM :ctx_id
 """
 
 _ROW_KEYS = (
-    "id", "telegram_id", "trainer_id",
+    "id", "client_id", "telegram_id", "trainer_id",
     "is_saved", "is_primary", "notify_when_slots", "completed_count",
     "saved_at", "notify_when_slots_at",
     "last_booking_at", "last_completed_at", "last_interaction_at",
@@ -41,8 +45,8 @@ def _row_to_dict(row) -> dict[str, Any]:
 
 def _merge_dup_edges(by_trainer_priority: dict[int, dict[str, Any]], row: tuple) -> None:
     """
-    Postgres UNIQUE on (telegram_id, trainer_id, context_*) historically allowed duplicate
-    (tid, trainer) rows when contexts were NULL. Keep the row with the largest id (newest wins).
+    Postgres UNIQUE on (client_id, trainer_id, context_*) historically allowed duplicate
+    (cid, trainer) rows when contexts were NULL. Keep the row with the largest id (newest wins).
     """
     d = _row_to_dict(row)
     tid = int(d["trainer_id"])
@@ -82,7 +86,7 @@ class ClientTrainerEdgeRepository:
 
     async def get(
         self,
-        telegram_id: int,
+        client_id: int,
         trainer_id: int,
         context_type: str | None = None,
         context_id: int | None = None,
@@ -90,34 +94,34 @@ class ClientTrainerEdgeRepository:
         """Single edge; None if not found."""
         r = await self._s.execute(
             text(_SELECT_EDGE),
-            {"tid": telegram_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
         )
         row = r.fetchone()
         return _row_to_dict(row) if row else None
 
-    async def list_for_client(self, telegram_id: int) -> list[dict[str, Any]]:
+    async def list_for_client(self, client_id: int) -> list[dict[str, Any]]:
         """All edges for a client, ordered by interaction recency desc."""
         r = await self._s.execute(
             text("""
                 SELECT
-                    id, telegram_id, trainer_id,
+                    id, client_id, telegram_id, trainer_id,
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
                     last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
-                WHERE telegram_id = :tid
+                WHERE client_id = :cid
                 ORDER BY COALESCE(last_interaction_at, created_at) DESC
             """),
-            {"tid": telegram_id},
+            {"cid": client_id},
         )
         rows = r.fetchall()
         return _rows_to_list_dedupe_by_trainer(rows)
 
     async def get_primary(
         self,
-        telegram_id: int,
+        client_id: int,
         context_type: str | None = None,
         context_id: int | None = None,
     ) -> dict[str, Any] | None:
@@ -125,39 +129,39 @@ class ClientTrainerEdgeRepository:
         r = await self._s.execute(
             text("""
                 SELECT
-                    id, telegram_id, trainer_id,
+                    id, client_id, telegram_id, trainer_id,
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
                     last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
-                WHERE telegram_id = :tid AND is_primary = true
+                WHERE client_id = :cid AND is_primary = true
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
                 LIMIT 1
             """),
-            {"tid": telegram_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "ctx_type": context_type, "ctx_id": context_id},
         )
         row = r.fetchone()
         return _row_to_dict(row) if row else None
 
-    async def list_saved(self, telegram_id: int) -> list[dict[str, Any]]:
+    async def list_saved(self, client_id: int) -> list[dict[str, Any]]:
         """All edges with is_saved = true, ordered by saved_at desc."""
         r = await self._s.execute(
             text("""
                 SELECT
-                    id, telegram_id, trainer_id,
+                    id, client_id, telegram_id, trainer_id,
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
                     last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
-                WHERE telegram_id = :tid AND is_saved = true
+                WHERE client_id = :cid AND is_saved = true
                 ORDER BY COALESCE(saved_at, created_at) DESC
             """),
-            {"tid": telegram_id},
+            {"cid": client_id},
         )
         rows = r.fetchall()
         return _rows_to_list_dedupe_by_trainer(
@@ -169,6 +173,7 @@ class ClientTrainerEdgeRepository:
 
     async def ensure_edge(
         self,
+        client_id: int,
         telegram_id: int,
         trainer_id: int,
         context_type: str | None = None,
@@ -177,16 +182,17 @@ class ClientTrainerEdgeRepository:
         """Ensure edge exists; return current state (inserted or existing)."""
         await self._s.execute(
             text("""
-                INSERT INTO client_trainer_edges (telegram_id, trainer_id, context_type, context_id)
-                VALUES (:tid, :trainer_id, :ctx_type, :ctx_id)
-                ON CONFLICT (telegram_id, trainer_id) DO NOTHING
+                INSERT INTO client_trainer_edges (client_id, telegram_id, trainer_id, context_type, context_id)
+                VALUES (:cid, :tid, :trainer_id, :ctx_type, :ctx_id)
+                ON CONFLICT (client_id, trainer_id) DO NOTHING
             """),
-            {"tid": telegram_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "tid": telegram_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
         )
-        return await self.get(telegram_id, trainer_id, context_type, context_id)  # type: ignore[return-value]
+        return await self.get(client_id, trainer_id, context_type, context_id)  # type: ignore[return-value]
 
     async def set_saved(
         self,
+        client_id: int,
         telegram_id: int,
         trainer_id: int,
         saved: bool,
@@ -200,8 +206,8 @@ class ClientTrainerEdgeRepository:
         Returns ``(edge_row, became_saved)`` where ``became_saved`` is True only when the client
         transitions to saved (was not saved before, now saved) — for one-shot trainer push.
         """
-        await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
-        prev = await self.get(telegram_id, trainer_id, context_type, context_id)
+        await self.ensure_edge(client_id, telegram_id, trainer_id, context_type, context_id)
+        prev = await self.get(client_id, trainer_id, context_type, context_id)
         was_saved = bool(prev and prev.get("is_saved"))
         now = datetime.now(timezone.utc)
         await self._s.execute(
@@ -216,23 +222,24 @@ class ClientTrainerEdgeRepository:
                         ELSE NULL END,
                     last_interaction_at = GREATEST(last_interaction_at,
                         CAST(:now_ts AS TIMESTAMP WITH TIME ZONE))
-                WHERE telegram_id = :tid AND trainer_id = :trainer_id
+                WHERE client_id = :cid AND trainer_id = :trainer_id
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
             """),
             {
-                "tid": telegram_id, "trainer_id": trainer_id,
+                "cid": client_id, "trainer_id": trainer_id,
                 "saved": saved, "now": now, "now_ts": now,
                 "svc_id": catalog_service_id,
                 "ctx_type": context_type, "ctx_id": context_id,
             },
         )
-        edge = await self.get(telegram_id, trainer_id, context_type, context_id)  # type: ignore[assignment]
+        edge = await self.get(client_id, trainer_id, context_type, context_id)  # type: ignore[assignment]
         became_saved = bool(saved and not was_saved)
         return edge, became_saved
 
     async def set_primary(
         self,
+        client_id: int,
         telegram_id: int,
         trainer_id: int,
         context_type: str | None = None,
@@ -242,34 +249,34 @@ class ClientTrainerEdgeRepository:
         Set trainer as primary for this context scope.
         Demotes previous primary (if any) — is_primary = false without touching any other flags.
         """
-        await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
+        await self.ensure_edge(client_id, telegram_id, trainer_id, context_type, context_id)
         await self._s.execute(
             text("""
                 UPDATE client_trainer_edges
                 SET is_primary = false
-                WHERE telegram_id = :tid AND is_primary = true
+                WHERE client_id = :cid AND is_primary = true
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
                   AND trainer_id   != :trainer_id
             """),
-            {"tid": telegram_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
         )
         await self._s.execute(
             text("""
                 UPDATE client_trainer_edges
                 SET is_primary = true,
                     last_interaction_at = GREATEST(last_interaction_at, now())
-                WHERE telegram_id = :tid AND trainer_id = :trainer_id
+                WHERE client_id = :cid AND trainer_id = :trainer_id
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
             """),
-            {"tid": telegram_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "trainer_id": trainer_id, "ctx_type": context_type, "ctx_id": context_id},
         )
-        return await self.get(telegram_id, trainer_id, context_type, context_id)  # type: ignore[return-value]
+        return await self.get(client_id, trainer_id, context_type, context_id)  # type: ignore[return-value]
 
     async def unset_primary(
         self,
-        telegram_id: int,
+        client_id: int,
         context_type: str | None = None,
         context_id: int | None = None,
     ) -> None:
@@ -278,15 +285,16 @@ class ClientTrainerEdgeRepository:
             text("""
                 UPDATE client_trainer_edges
                 SET is_primary = false
-                WHERE telegram_id = :tid AND is_primary = true
+                WHERE client_id = :cid AND is_primary = true
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
             """),
-            {"tid": telegram_id, "ctx_type": context_type, "ctx_id": context_id},
+            {"cid": client_id, "ctx_type": context_type, "ctx_id": context_id},
         )
 
     async def record_booking(
         self,
+        client_id: int,
         telegram_id: int,
         trainer_id: int,
         completed: bool = False,
@@ -297,10 +305,10 @@ class ClientTrainerEdgeRepository:
         booking_service_id: int | None = None,
     ) -> None:
         """Update edge counters/timestamps when a booking is created or completed."""
-        await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
+        await self.ensure_edge(client_id, telegram_id, trainer_id, context_type, context_id)
         ts = booked_at or datetime.now(timezone.utc)
         params: dict = {
-            "tid": telegram_id,
+            "cid": client_id,
             "trainer_id": trainer_id,
             "ts": ts,
             "completed": completed,
@@ -327,7 +335,7 @@ class ClientTrainerEdgeRepository:
                             CAST(:ts AS TIMESTAMP WITH TIME ZONE))
                         ELSE last_completed_at
                     END{service_sql}
-                WHERE telegram_id = :tid AND trainer_id = :trainer_id
+                WHERE client_id = :cid AND trainer_id = :trainer_id
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
             """
@@ -337,12 +345,13 @@ class ClientTrainerEdgeRepository:
 
     async def set_notify_slots(
         self,
+        client_id: int,
         telegram_id: int,
         trainer_id: int,
         notify: bool,
     ) -> dict[str, Any]:
         """Subscribe/unsubscribe client from slot-availability push. One-shot by design."""
-        await self.ensure_edge(telegram_id, trainer_id)
+        await self.ensure_edge(client_id, telegram_id, trainer_id)
         now = datetime.now(timezone.utc)
         await self._s.execute(
             text("""
@@ -353,21 +362,22 @@ class ClientTrainerEdgeRepository:
                         ELSE NULL END,
                     last_interaction_at = GREATEST(last_interaction_at,
                         CAST(:now AS TIMESTAMP WITH TIME ZONE))
-                WHERE telegram_id = :tid AND trainer_id = :trainer_id
+                WHERE client_id = :cid AND trainer_id = :trainer_id
             """),
-            {"tid": telegram_id, "trainer_id": trainer_id, "notify": notify, "now": now},
+            {"cid": client_id, "trainer_id": trainer_id, "notify": notify, "now": now},
         )
-        return await self.get(telegram_id, trainer_id)  # type: ignore[return-value]
+        return await self.get(client_id, trainer_id)  # type: ignore[return-value]
 
     async def list_slot_subscribers(self, trainer_id: int) -> list[dict[str, Any]]:
         """
         All clients subscribed to slot notifications for this trainer.
-        Returns lightweight dicts with just telegram_id — enough for sending messages.
+        Returns lightweight dicts including telegram_id — enough for sending messages
+        (always the account's chat, even for a guardian/child profile's subscription).
         """
         r = await self._s.execute(
             text("""
                 SELECT
-                    id, telegram_id, trainer_id,
+                    id, client_id, telegram_id, trainer_id,
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
@@ -382,7 +392,7 @@ class ClientTrainerEdgeRepository:
 
     async def recompute_completed_booking_stats_for_global_edge(
         self,
-        telegram_id: int,
+        client_id: int,
         trainer_id: int,
     ) -> None:
         """
@@ -399,17 +409,16 @@ class ClientTrainerEdgeRepository:
                         COUNT(*) FILTER (WHERE b.status = 'completed')::int AS cnt,
                         MAX(b.created_at) FILTER (WHERE b.status = 'completed') AS last_at
                     FROM bookings b
-                    INNER JOIN clients c ON c.id = b.client_id
-                    WHERE c.telegram_id = :tg
+                    WHERE b.client_id = :cid
                       AND b.trainer_id = :tid
                       AND NOT b.is_sandbox
                 ) AS src
-                WHERE e.telegram_id = :tg
+                WHERE e.client_id = :cid
                   AND e.trainer_id = :tid
                   AND e.context_type IS NULL
                   AND e.context_id IS NULL
             """),
-            {"tg": telegram_id, "tid": trainer_id},
+            {"cid": client_id, "tid": trainer_id},
         )
 
     async def clear_slot_subscriptions(self, trainer_id: int) -> int:
