@@ -744,6 +744,19 @@ def webapp_schedule_editor_css(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-full-height.js")
+def webapp_mini_app_full_height_js(request: Request):
+    """Wait for async Telegram SDK, then ready()+expand() — entry Mini Apps (no fullscreen)."""
+    path = _WEBAPP_DIR / "mini-app-full-height.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-telegram-chrome.js")
 def webapp_mini_app_telegram_chrome_js():
     """Telegram WebView quirks (focus, chrome); loaded by all Mini App HTML pages."""

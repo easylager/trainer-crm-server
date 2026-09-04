@@ -1,7 +1,11 @@
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
       if (tg) {
-        tg.expand();
+        // expand() only — requestFullscreen() puts content under the iOS status bar / Telegram ✕⋯ chrome.
+        try {
+          if (tg.isFullscreen === true && typeof tg.exitFullscreen === 'function') tg.exitFullscreen();
+        } catch (eFs) { /* */ }
+        try { tg.expand(); } catch (eExp) { /* */ }
         // Reply-keyboard Web App: initData may appear after first tick; call ready() again once it does (see callReadyWhenInitDataReady).
         try { tg.ready(); } catch (e) {}
       }
@@ -2108,26 +2112,15 @@
       function applyTrainerBookingCreateSuccess(_apiData, toastMsg) {
         document.getElementById('modalBookClient').style.display = 'none';
         clearBookSlotModalState();
-        var msg = toastMsg || 'Запись создана';
-        var oldBookingIdToCancel = state.rescheduleSourceBookingId;
+        var wasReschedule = state.rescheduleSourceBookingId != null;
+        var msg = wasReschedule ? 'Запись перенесена' : (toastMsg || 'Запись создана');
         state.rescheduleSourceBookingId = null;
         if (notifyTrainerClientsEmbed({ type: 'quickbook_success', message: msg })) {
           updateTelegramBack();
           return;
         }
-        if (oldBookingIdToCancel) {
-          postJsonTrainer('/trainer/bookings/' + oldBookingIdToCancel + '/cancel', null)
-            .then(function() {
-              loadSlots();
-              showToast('Запись перенесена');
-            })
-            .catch(function() {
-              loadSlots();
-              showToast('Новая запись создана, но старую не удалось отменить. Проверьте запись вручную.');
-            });
-          updateTelegramBack();
-          return;
-        }
+        /* Server already cancelled the old booking + sent one combined «перенос» push
+           when reschedule_source_booking_id was set — no separate /cancel call needed. */
         loadSlots();
         showToast(msg);
         updateTelegramBack();
@@ -2433,6 +2426,9 @@
         }
         if (state.bookPriceVariantId != null) {
           o.service_price_variant_id = state.bookPriceVariantId;
+        }
+        if (state.rescheduleSourceBookingId != null) {
+          o.reschedule_source_booking_id = state.rescheduleSourceBookingId;
         }
         return o;
       }

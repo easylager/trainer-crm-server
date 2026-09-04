@@ -1335,7 +1335,14 @@
     (function() {
       'use strict';
       var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        /* expand() only — also leave fullscreen if a previous page entered it. */
+        try {
+          if (tg.isFullscreen === true && typeof tg.exitFullscreen === 'function') tg.exitFullscreen();
+        } catch (eFs) { /* */ }
+        try { tg.expand(); } catch (eExp) { /* */ }
+      }
 
       /** Telegram theme + same tokens as head script (constitution #0B0C0E / #F1F3F2). */
       function syncSubscriptionTheme() {

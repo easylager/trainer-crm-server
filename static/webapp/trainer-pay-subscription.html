@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="theme.css?v=202608315" />
+  <link rel="stylesheet" href="theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <style>
-    /* Shell: theme.css?v=202608270 + mini-app-components.css?v=202608264 */
+    /* Shell: theme.css?v=202609041 + mini-app-components.css?v=202608264 */
     body {
       font-family: var(--app-font-sans);
       padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
@@ -205,7 +205,7 @@
 
   </style>
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
 </head>
 <body class="ar-pilot ar-pilot--trainer-pay-subscription">
@@ -246,7 +246,14 @@
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        /* expand() only — requestFullscreen() puts content under status bar / Telegram chrome. */
+        try {
+          if (tg.isFullscreen === true && typeof tg.exitFullscreen === 'function') tg.exitFullscreen();
+        } catch (eFs) { /* */ }
+        try { if (typeof tg.expand === 'function') tg.expand(); } catch (eExp) { /* */ }
+      }
       function initData() { return (tg && tg.initData) ? tg.initData : ''; }
       function headers() {
         var h = { 'Accept': 'application/json' };
