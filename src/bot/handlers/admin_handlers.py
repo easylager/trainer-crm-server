@@ -2363,7 +2363,7 @@ async def on_admin_message(message: Message) -> None:
                                 InlineKeyboardButton(
                                     text=msg.TRAINER_SUPPORT_REPLY_GO_PAY,
                                     web_app=WebAppInfo(
-                                        url=f"{base}/webapp/trainer-pay-subscription"
+                                        url=f"{base}/webapp/trainer-subscription"
                                     ),
                                 ),
                             ],

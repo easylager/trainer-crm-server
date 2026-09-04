@@ -1249,8 +1249,8 @@
     <div class="sub-hero sub-head">
       <div class="sub-hero-inner">
         <p class="sub-hero-kicker">Ваша подписка</p>
-        <h1 class="sub-hero-title">Соберите тариф под себя</h1>
-        <p class="sub-hero-sub">CRM работает как ядро. Добавьте только то, что нужно — онлайн-запись, аналитику или группы.</p>
+        <h1 class="sub-hero-title">Выберите тариф</h1>
+        <p class="sub-hero-sub">Три готовых варианта — от расписания и клиентской базы до полной аналитики. Нужно что-то своё — соберите вручную ниже.</p>
       </div>
     </div>
 
@@ -1273,10 +1273,11 @@
       </button>
     </div>
 
-    <div id="constructorPanel" class="constructor-panel is-empty" aria-live="polite"></div>
-
     <p class="preset-hint">Готовые пакеты</p>
     <div id="tiersContainer" class="tiers-container"></div>
+
+    <p class="preset-hint">Настроить тариф вручную</p>
+    <div id="constructorPanel" class="constructor-panel is-empty" aria-live="polite"></div>
   </div>
 
   <!-- Invoice requested (ERIP / manual) — no instant activation -->
@@ -1813,7 +1814,12 @@
           status = statusData;
           renderTiers();
           renderConstructor();
-          if (constructor && constructor.base && selectedTier == null) {
+          // Presets ("Готовые пакеты") are the default entry point — a trainer who hasn't
+          // decided yet shouldn't have to assemble a tariff from scratch first (EPIC2 Slice 4).
+          // Constructor only pre-selects itself when the trainer's real current setup can't be
+          // expressed as one of the named tiers — today that means the "groups" module, which
+          // no preset includes.
+          if (constructor && constructor.base && selectedTier == null && status && status.modules && status.modules.groups) {
             checkoutMode = 'constructor';
           }
           initPeriodSelector();

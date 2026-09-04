@@ -418,15 +418,6 @@ def webapp_trainer_pass_products_page():
     return _webapp_file_response(path)
 
 
-@app.get("/webapp/trainer-pay-subscription")
-def webapp_trainer_pay_subscription_page():
-    """Serve the trainer 'Pay subscription' Mini App: redirects to payment_url from API."""
-    path = _WEBAPP_DIR / "trainer-pay-subscription.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
 @app.get("/webapp/trainer-subscription")
 def webapp_trainer_subscription_page():
     """Serve the trainer 'Subscription tiers' Mini App: CRM/Online/Analytics tier selection."""

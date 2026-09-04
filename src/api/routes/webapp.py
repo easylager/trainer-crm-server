@@ -296,11 +296,7 @@ from src.application.subscription_invoice_admin_notify import notify_admins_new_
 from src.application.subscription_use_cases import (
     confirm_subscription_invoice_after_payment,
     create_catalog_subscription_invoice_for_trainer,
-    create_subscription_invoice,
     ensure_trainer_welcome_trial,
-    get_paid_plan_id,
-    get_pending_subscription_invoice,
-    list_paid_subscription_plans,
 )
 from src.application.subscription_tier_use_cases import (
     get_subscription_constructor_catalog,
@@ -3988,110 +3984,6 @@ async def post_admin_support_reply(
     return {"ok": True}
 
 
-@router.get("/trainer/subscription-plans")
-async def get_trainer_subscription_plans(
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """List paid subscription plans for trainer to choose (Месяц, 3 месяца, Год, 1.5 года). Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    plans = await list_paid_subscription_plans(session)
-    return {"plans": plans}
-
-
-@router.get("/trainer/subscription-payment-url")
-async def get_trainer_subscription_payment_url(
-    plan_id: int | None = Query(None, description="Chosen plan id; if omitted, use pending invoice or default plan"),
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    Create (or reuse pending) invoice and return payment_url. When plan_id is set, create invoice for that plan
-    (period: next after current subscription or from now). Response includes plan_name, period for clarity.
-    """
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    plan_name: str | None = None
-    period_start = period_end = None
-    referral_bonus_days_applied = 0
-    amount_cents_before_referral: int | None = None
-    if plan_id is not None:
-        inv = await create_subscription_invoice(session, trainer_id, plan_id)
-        if not inv:
-            raise HTTPException(status_code=400, detail="Invalid plan or could not create invoice")
-        invoice_id = inv["invoice_id"]
-        amount_cents = inv["amount_cents"]
-        period_start = inv["period_start"]
-        period_end = inv["period_end"]
-        plan_name = inv.get("plan_name")
-        referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
-        amount_cents_before_referral = inv.get("amount_cents_before_referral")
-    else:
-        pending = await get_pending_subscription_invoice(session, trainer_id)
-        if pending:
-            invoice_id = pending["invoice_id"]
-            amount_cents = pending["amount_cents"]
-            period_start = pending["period_start"]
-            period_end = pending["period_end"]
-            plan_name = pending.get("plan_name")
-            referral_bonus_days_applied = int(pending.get("referral_bonus_days_applied") or 0)
-            amount_cents_before_referral = pending.get("amount_cents_before_referral")
-        else:
-            default_plan_id = await get_paid_plan_id(session)
-            if not default_plan_id:
-                raise HTTPException(status_code=400, detail="No paid subscription plan configured")
-            inv = await create_subscription_invoice(session, trainer_id, default_plan_id)
-            if not inv:
-                raise HTTPException(status_code=400, detail="Could not create subscription invoice")
-            invoice_id = inv["invoice_id"]
-            amount_cents = inv["amount_cents"]
-            period_start = inv["period_start"]
-            period_end = inv["period_end"]
-            plan_name = inv.get("plan_name")
-            referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
-            amount_cents_before_referral = inv.get("amount_cents_before_referral")
-    settings = Settings()
-    webapp_base = (settings.webapp_base_url or "").rstrip("/")
-    api_base = (settings.api_base_url or webapp_base).rstrip("/")
-    return_url = f"{webapp_base}/webapp/trainer-pay-subscription?payment_success=1"
-    notification_url = f"{api_base}/api/webhooks/bepaid"
-    tracking_id = f"inv_{invoice_id}"
-
-    def _date_str(d):
-        if d is None:
-            return None
-        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
-
-    base_out: dict = {
-        "invoice_id": invoice_id,
-        "amount_cents": amount_cents,
-        "plan_name": plan_name or "Подписка",
-        "period_start": _date_str(period_start),
-        "period_end": _date_str(period_end),
-        "referral_bonus_days_applied": referral_bonus_days_applied,
-        "amount_cents_before_referral": amount_cents_before_referral,
-        "referral_fully_covered": bool(amount_cents <= 0 and referral_bonus_days_applied > 0),
-    }
-    if amount_cents <= 0:
-        base_out["payment_url"] = None
-        return base_out
-
-    result = await create_checkout(
-        amount_cents=amount_cents,
-        currency="BYN",
-        description=(plan_name or "Подписка")[:255],
-        tracking_id=tracking_id,
-        return_url=return_url,
-        notification_url=notification_url,
-        success_url=return_url,
-    )
-    base_out["payment_url"] = result["payment_url"]
-    return base_out
-
-
 class SubscriptionStubConfirmBody(BaseModel):
     invoice_id: int
 
@@ -4208,7 +4100,6 @@ async def post_trainer_subscription_bepaid_checkout(
 ):
     """
     bePaid: create catalog invoice for tier bundle or CRM+modules constructor, return gateway checkout URL.
-    Mini App uses this instead of trainer-pay-subscription (legacy plan_id list) when checkout_mode=bepaid.
     """
     settings = Settings()
     if settings.payment_sandbox:
@@ -4250,7 +4141,7 @@ async def post_trainer_subscription_bepaid_checkout(
 
     webapp_base = (settings.webapp_base_url or "").rstrip("/")
     api_base = (settings.api_base_url or webapp_base).rstrip("/")
-    return_url = f"{webapp_base}/webapp/trainer-pay-subscription?payment_success=1"
+    return_url = f"{webapp_base}/webapp/trainer-subscription?payment_success=1"
     notification_url = f"{api_base}/api/webhooks/bepaid"
     tracking_id = f"inv_{invoice_id}"
 

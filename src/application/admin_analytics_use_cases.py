@@ -687,7 +687,13 @@ async def get_admin_growth_stats(session: AsyncSession) -> dict:
 # ──────────────────────────────────────────────────────────────────────────
 
 async def get_admin_retention_stats(session: AsyncSession) -> dict:
-    """Churn rate, expiring subs, sleeping trainers, revival, retention curve by signup cohort."""
+    """Churn rate, expiring subs, sleeping trainers, revival, retention curve by signup cohort.
+
+    All population filters below use ``status <> 'deactivated'``, not ``status = 'active'`` —
+    the latter means "listed in the public catalog" (onboarding v2), not "working"; most
+    trainers stay ``pending_profile`` for weeks by design, so gating retention/churn on
+    catalog status would silently exclude them (see TASK-026, get_admin_product_analytics).
+    """
     today = date.today()
 
     # 1) Churn (subscription level): subs that ended in last 30d AND the trainer has
@@ -847,7 +853,7 @@ async def get_admin_retention_stats(session: AsyncSession) -> dict:
                         WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled','declined')
                     ) AS last_book
                     FROM trainers t
-                    WHERE t.status = 'active'
+                    WHERE t.status <> 'deactivated'
                 ) sub
                 """
             )
@@ -868,7 +874,7 @@ async def get_admin_retention_stats(session: AsyncSession) -> dict:
                     t.created_at
                 FROM trainers t
                 LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
-                WHERE t.status = 'active'
+                WHERE t.status <> 'deactivated'
                   AND COALESCE(
                         (SELECT MAX(b.created_at) FROM bookings b
                          WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled','declined')),
@@ -948,7 +954,7 @@ async def get_admin_retention_stats(session: AsyncSession) -> dict:
                 SELECT
                     TO_CHAR(date_trunc('month', t.created_at), 'YYYY-MM') AS cohort,
                     COUNT(*)::int                                          AS cohort_size,
-                    SUM(CASE WHEN t.status = 'active' THEN 1 ELSE 0 END)::int AS still_active
+                    SUM(CASE WHEN t.status <> 'deactivated' THEN 1 ELSE 0 END)::int AS still_active
                 FROM trainers t
                 WHERE t.created_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '5 months'
                 GROUP BY cohort
@@ -993,7 +999,11 @@ async def get_admin_retention_stats(session: AsyncSession) -> dict:
 # ──────────────────────────────────────────────────────────────────────────
 
 async def get_admin_engagement_stats(session: AsyncSession) -> dict:
-    """DAU/WAU/MAU proxies (booking activity), feature adoption, top active trainers, day-of-week heat."""
+    """DAU/WAU/MAU proxies (booking activity), feature adoption, top active trainers, day-of-week heat.
+
+    Feature-adoption denominators use ``status <> 'deactivated'`` — ``status = 'active'`` means
+    catalog-published, not working (see get_admin_retention_stats).
+    """
     today = date.today()
 
     # 1) Active trainer proxies — distinct trainers with any non-cancelled booking activity.
@@ -1025,7 +1035,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
     certs_users = 0
     try:
         r = await session.execute(
-            text("SELECT COUNT(*)::int FROM trainers WHERE status = 'active'")
+            text("SELECT COUNT(*)::int FROM trainers WHERE status <> 'deactivated'")
         )
         trainers_active = int(r.scalar() or 0)
 
@@ -1034,7 +1044,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                 """
                 SELECT COUNT(DISTINCT tg.trainer_id)::int
                 FROM training_groups tg
-                JOIN trainers t ON t.id = tg.trainer_id AND t.status = 'active'
+                JOIN trainers t ON t.id = tg.trainer_id AND t.status <> 'deactivated'
                 WHERE tg.status NOT IN ('archived', 'cancelled')
                 """
             )
@@ -1048,7 +1058,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                     COUNT(DISTINCT ts.trainer_id) FILTER (WHERE (ts.modules->>'online')::boolean = true)    AS online,
                     COUNT(DISTINCT ts.trainer_id) FILTER (WHERE (ts.modules->>'analytics')::boolean = true) AS analytics
                 FROM trainer_subscriptions ts
-                JOIN trainers t ON t.id = ts.trainer_id AND t.status = 'active'
+                JOIN trainers t ON t.id = ts.trainer_id AND t.status <> 'deactivated'
                 WHERE ts.status IN (:s1, :s2)
                   AND ts.expires_at > CURRENT_TIMESTAMP
                 """
@@ -1065,7 +1075,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                 SELECT COUNT(DISTINCT tpp.trainer_id)::int
                 FROM pass_instances pi
                 JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
-                JOIN trainers t ON t.id = tpp.trainer_id AND t.status = 'active'
+                JOIN trainers t ON t.id = tpp.trainer_id AND t.status <> 'deactivated'
                 WHERE pi.status = 'active' AND pi.sessions_remaining > 0
                 """
             )
@@ -1077,7 +1087,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                 """
                 SELECT COUNT(DISTINCT ci.trainer_id)::int
                 FROM certificate_instances ci
-                JOIN trainers t ON t.id = ci.trainer_id AND t.status = 'active'
+                JOIN trainers t ON t.id = ci.trainer_id AND t.status <> 'deactivated'
                 WHERE ci.status IN ('issued', 'activated')
                 """
             )
@@ -1719,10 +1729,11 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                       AND COALESCE(b.is_sandbox, false) = false
                       AND s.slot_date >= CURRENT_DATE - 7
                 ),
+                -- Working trainers, not only catalog-published (see get_admin_retention_stats).
                 all_active AS (
                     SELECT t.id AS trainer_id
                     FROM trainers t
-                    WHERE t.status = 'active'
+                    WHERE t.status <> 'deactivated'
                 ),
                 booking_counts AS (
                     SELECT b.trainer_id, COUNT(*) AS cnt
@@ -1809,7 +1820,8 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                             WHERE tde.trainer_id = t.id AND tde.kind = 'catalog_favorite'
                         )                                                           AS got_save
                     FROM trainers t
-                    WHERE t.status = 'active'
+                    -- Working trainers, not only catalog-published (see get_admin_retention_stats).
+                    WHERE t.status <> 'deactivated'
                       AND t.created_at < NOW() - INTERVAL '14 days'
                 )
                 SELECT
@@ -1978,7 +1990,12 @@ async def _get_hint_funnel_and_feature_adoption(
 # ──────────────────────────────────────────────────────────────────────────
 
 async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
-    """Segments, trial→paid, expiring paid, top by bookings, sleeping payers."""
+    """Segments, trial→paid, expiring paid, top by bookings, sleeping payers.
+
+    Trainer population filters use ``status <> 'deactivated'`` — ``status = 'active'`` means
+    catalog-published, not working (see get_admin_retention_stats); a paying/trial trainer
+    stuck in ``pending_profile`` must still count here.
+    """
     paying = 0
     trial = 0
     live_7d = 0
@@ -1993,7 +2010,7 @@ async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
                     COUNT(DISTINCT ts.trainer_id) FILTER (WHERE ts.status = :s_active)::int AS paying,
                     COUNT(DISTINCT ts.trainer_id) FILTER (WHERE ts.status = :s_trial)::int AS trial
                 FROM trainer_subscriptions ts
-                JOIN trainers t ON t.id = ts.trainer_id AND t.status = 'active'
+                JOIN trainers t ON t.id = ts.trainer_id AND t.status <> 'deactivated'
                 WHERE ts.expires_at > CURRENT_TIMESTAMP
                   AND ts.started_at <= CURRENT_TIMESTAMP
                 """
@@ -2012,7 +2029,7 @@ async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
             SELECT COUNT(DISTINCT b.trainer_id)::int
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            JOIN trainers t ON t.id = b.trainer_id AND t.status = 'active'
+            JOIN trainers t ON t.id = b.trainer_id AND t.status <> 'deactivated'
             WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '6 days'
@@ -2032,7 +2049,7 @@ async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
                   ON ts.trainer_id = t.id
                  AND ts.status = :s_active
                  AND ts.expires_at > CURRENT_TIMESTAMP
-                WHERE t.status = 'active'
+                WHERE t.status <> 'deactivated'
                   AND NOT EXISTS (
                     SELECT 1 FROM bookings b
                     JOIN slots s ON s.id = b.slot_id
@@ -2195,7 +2212,7 @@ async def get_admin_trainers_hub_stats(session: AsyncSession) -> dict:
                       AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                       AND NOT b.is_sandbox
                 ) lb ON true
-                WHERE t.status = 'active'
+                WHERE t.status <> 'deactivated'
                   AND (lb.last_slot IS NULL OR lb.last_slot < CURRENT_DATE - INTERVAL '14 days')
                 ORDER BY lb.last_slot ASC NULLS FIRST, t.id
                 LIMIT 20

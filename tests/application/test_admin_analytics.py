@@ -394,7 +394,10 @@ async def test_engagement_feature_share_never_exceeds_100_percent(db_session: As
 
 
 @pytest.mark.asyncio
-async def test_engagement_online_module_ignores_non_active_trainer(db_session: AsyncSession) -> None:
+async def test_engagement_online_module_counts_pending_profile_trainer(db_session: AsyncSession) -> None:
+    """EPIC2 Slice 2: engagement/feature-adoption must not require status='active' (catalog
+    publication) — a paying pending_profile trainer is working and must be counted, same fix
+    as TASK-026 already applied to get_admin_product_analytics."""
     before = await get_admin_engagement_stats(db_session)
     plan_id = await _insert_subscription_plan(db_session)
     pending_tid = await _insert_trainer(db_session, status="pending_profile")
@@ -410,8 +413,8 @@ async def test_engagement_online_module_ignores_non_active_trainer(db_session: A
     after = await get_admin_engagement_stats(db_session)
     online_before = next(f for f in before["feature_usage"] if f["feature"] == "online")
     online_after = next(f for f in after["feature_usage"] if f["feature"] == "online")
-    assert online_after["users"] == online_before["users"]
-    assert after["trainers_active"] == before["trainers_active"]
+    assert online_after["users"] == online_before["users"] + 1
+    assert after["trainers_active"] == before["trainers_active"] + 1
 
 
 async def _insert_confirmed_booking(session: AsyncSession, trainer_id: int, *, days_ago: int = 0) -> int:
