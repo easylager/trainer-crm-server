@@ -3652,12 +3652,22 @@ async def list_bookings_for_client(
     session: AsyncSession,
     client_telegram_id: int,
     limit: int = 50,
+    *,
+    acting_client_id: int | None = None,
 ) -> list[dict]:
     """List client's active (upcoming) bookings only — pending, not completed/cancelled; slot end still in the future.
 
     Slot end uses Europe/Minsk wall time (same as trainer hub / reminders), not DB session timezone.
-    Arena: booking.arena_id, then slot.arena_id, then trainer primary / MIN(trainer_arenas); not arbitrary ta row."""
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    Arena: booking.arena_id, then slot.arena_id, then trainer primary / MIN(trainer_arenas); not arbitrary ta row.
+
+    ``acting_client_id``: when set (e.g. guardian/child profile from ``X-Profile-Id``), list that
+    profile's bookings instead of resolving the account's own row from ``client_telegram_id``.
+    """
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return []
     r = await session.execute(
@@ -3763,6 +3773,7 @@ async def list_booking_history_for_client(
     offset: int = 0,
     limit: int = 20,
     trainer_id: int | None = None,
+    acting_client_id: int | None = None,
 ) -> tuple[list[dict], bool]:
     """List client's booking history — the complement of ``list_bookings_for_client``.
 
@@ -3771,8 +3782,14 @@ async def list_booking_history_for_client(
     A booking cancelled for a future slot must not vanish from both lists — it shows up
     here immediately rather than waiting for the slot to pass. Newest first. Sandbox excluded.
     Returns ``(rows, has_more)``; fetches one extra row to detect a next page without a COUNT(*).
+
+    ``acting_client_id``: see ``list_bookings_for_client``.
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return [], False
     lim = max(1, min(int(limit), 100))
@@ -3883,13 +3900,21 @@ async def list_booking_history_for_client(
 async def list_client_booking_trainer_options(
     session: AsyncSession,
     client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
 ) -> list[dict]:
     """Distinct trainers the client has any (non-sandbox) booking with — source for the trainer chips.
 
     Deliberately NOT ``client_trainer_edges``: an edge can exist from a "saved" trainer with zero
     bookings, which would render a chip with nothing behind it. Ordered by most recent activity.
+
+    ``acting_client_id``: see ``list_bookings_for_client``.
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return []
     r = await session.execute(

@@ -158,3 +158,226 @@ async def test_booking_with_header_when_child_is_default_still_lands_on_child(
     booked_for = int(r.scalar_one())
     assert booked_for == child_id
     assert booked_for != parent_id
+
+
+async def _seed_upcoming_booking(
+    db_session, *, trainer_id: int, client_id: int, service_id: int, hour: int = 10
+) -> int:
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (
+                :tid,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date + 2,
+                make_time(:h, 0, 0),
+                make_time(:h, 0, 0) + INTERVAL '1 hour',
+                'booked'
+            )
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "h": hour},
+    )
+    (slot_id,) = r_slot.fetchone()
+    r_booking = await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed') RETURNING id
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    (booking_id,) = r_booking.fetchone()
+    await db_session.commit()
+    return int(booking_id)
+
+
+async def _seed_past_booking(
+    db_session, *, trainer_id: int, client_id: int, service_id: int, hour: int = 10
+) -> int:
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (
+                :tid,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date - 1,
+                make_time(:h, 0, 0),
+                make_time(:h, 0, 0) + INTERVAL '1 hour',
+                'booked'
+            )
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "h": hour},
+    )
+    (slot_id,) = r_slot.fetchone()
+    r_booking = await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed') RETURNING id
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    (booking_id,) = r_booking.fetchone()
+    await db_session.commit()
+    return int(booking_id)
+
+
+@pytest.mark.asyncio
+async def test_get_client_bookings_scoped_to_x_profile_id(app_use_test_db, db_session) -> None:
+    """Parent booking A + child booking B; with X-Profile-Id=child, list returns only B."""
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    parent_bid = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=parent_id, service_id=service_id, hour=10
+    )
+    child_bid = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=12
+    )
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_child = await client.get(
+                "/api/webapp/client/bookings",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+            r_parent = await client.get(
+                "/api/webapp/client/bookings",
+                headers=_client_auth_headers(),
+            )
+
+    assert r_child.status_code == 200 and r_parent.status_code == 200
+    child_ids = [b["id"] for d in r_child.json().get("days") or [] for b in d.get("bookings") or []]
+    parent_ids = [b["id"] for d in r_parent.json().get("days") or [] for b in d.get("bookings") or []]
+    assert child_ids == [child_bid]
+    assert parent_bid in parent_ids
+    assert child_bid not in parent_ids
+
+
+@pytest.mark.asyncio
+async def test_get_client_bookings_history_scoped_to_x_profile_id(app_use_test_db, db_session) -> None:
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Папа")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Ваня")
+
+    parent_bid = await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=parent_id, service_id=service_id, hour=10
+    )
+    child_bid = await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=14
+    )
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_child = await client.get(
+                "/api/webapp/client/bookings/history",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+
+    assert r_child.status_code == 200
+    ids = [b["id"] for d in r_child.json().get("days") or [] for b in d.get("bookings") or []]
+    assert child_bid in ids
+    assert parent_bid not in ids
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_bookings_scoped_to_child_profile(app_use_test_db, db_session) -> None:
+    """Hub bootstrap bookings path uses acting profile (same helpers as GET /client/bookings).
+
+    Fan-out sessions in hub bootstrap open a second connection (see conftest), so we assert
+    scoping on the shared payload helper and only smoke-check the HTTP shape/header.
+    """
+    from src.api.routes.webapp_client_payloads import client_bookings_days_payload
+    from src.application.client_profile_use_cases import resolve_acting_client_id
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    parent_bid = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=parent_id, service_id=service_id, hour=11
+    )
+    child_bid = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=15
+    )
+
+    acting = await resolve_acting_client_id(db_session, tid, child_id)
+    assert acting == child_id
+    scoped = await client_bookings_days_payload(
+        db_session, tid, acting_client_id=acting
+    )
+    ids = [b["id"] for d in scoped.get("days") or [] for b in d.get("bookings") or []]
+    assert child_bid in ids
+    assert parent_bid not in ids
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "bookings" in body and "requests" in body
+
+
+@pytest.mark.asyncio
+async def test_get_client_requests_scoped_to_x_profile_id(app_use_test_db, db_session) -> None:
+    """GET /client/requests with child header lists only the child's requests."""
+    from tests.api.test_webapp_client_miniapp_integration import _require_seed_ids
+
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Дочь")
+
+            r_parent_req = await client.post(
+                "/api/webapp/client/request",
+                json={"city_id": cid, "service_id": sid, "comment": "родитель"},
+                headers=_client_auth_headers(),
+            )
+            r_child_req = await client.post(
+                "/api/webapp/client/request",
+                json={"city_id": cid, "service_id": sid, "comment": "ребёнок"},
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+            assert r_parent_req.status_code == 200 and r_child_req.status_code == 200
+            parent_rid = r_parent_req.json()["request_id"]
+            child_rid = r_child_req.json()["request_id"]
+
+            listed = await client.get(
+                "/api/webapp/client/requests",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+
+    assert listed.status_code == 200
+    ids = [item["id"] for item in listed.json().get("items") or []]
+    assert child_rid in ids
+    assert parent_rid not in ids

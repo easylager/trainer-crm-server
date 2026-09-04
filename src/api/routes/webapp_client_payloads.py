@@ -115,9 +115,16 @@ def serialize_client_request(req: dict) -> dict:
     }
 
 
-async def client_bookings_days_payload(session: AsyncSession, telegram_id: int) -> dict:
+async def client_bookings_days_payload(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
+) -> dict:
     """Shared JSON body for GET /client/bookings, trainer-edges, and client hub bootstrap."""
-    bookings = await list_bookings_for_client(session, telegram_id)
+    bookings = await list_bookings_for_client(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
     if not bookings:
         return {"days": []}
 
@@ -142,10 +149,16 @@ async def client_booking_history_days_payload(
     offset: int = 0,
     limit: int = 20,
     trainer_id: int | None = None,
+    acting_client_id: int | None = None,
 ) -> dict:
     """Shared JSON body for GET /client/bookings/history — same day-grouping as upcoming, plus has_more."""
     bookings, has_more = await list_booking_history_for_client(
-        session, telegram_id, offset=offset, limit=limit, trainer_id=trainer_id
+        session,
+        telegram_id,
+        offset=offset,
+        limit=limit,
+        trainer_id=trainer_id,
+        acting_client_id=acting_client_id,
     )
     if not bookings:
         return {"days": [], "has_more": False}
@@ -164,13 +177,27 @@ async def client_booking_history_days_payload(
     return {"days": days_list, "has_more": has_more}
 
 
-async def client_booking_trainer_options_payload(session: AsyncSession, telegram_id: int) -> list[dict]:
+async def client_booking_trainer_options_payload(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
+) -> list[dict]:
     """Flat trainer list (id + name) for the booking-history/upcoming trainer chips."""
-    options = await list_client_booking_trainer_options(session, telegram_id)
+    options = await list_client_booking_trainer_options(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
     return [{"trainer_id": o["trainer_id"], "trainer_name": o["trainer_name"]} for o in options]
 
 
-async def client_requests_list_payload(session: AsyncSession, telegram_id: int) -> dict:
+async def client_requests_list_payload(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
+) -> dict:
     """Shared JSON body for GET /client/requests and client hub bootstrap."""
-    items = await list_my_requests_with_responses(session, telegram_id)
+    items = await list_my_requests_with_responses(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
     return {"items": [serialize_client_request(r) for r in items]}
