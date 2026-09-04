@@ -307,7 +307,14 @@ class TestMockCheckout:
             expires_at,
         )
 
+        # TASK-044: set_subscription_constructor_after_mock_payment now resolves the
+        # trainer's price_group (city → cities.country/price_group) before pricing lookups.
+        # No profile row in this mock → resolver falls back to BY/BY_BASE (today's default).
+        mock_price_group_result = MagicMock()
+        mock_price_group_result.fetchone.return_value = None
+
         mock_session.execute.side_effect = [
+            mock_price_group_result,
             mock_base_pricing,
             mock_online_pricing,
             mock_active_result,

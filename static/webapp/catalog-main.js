@@ -829,7 +829,7 @@
           inp.value = String(tier.id);
           var pb = tier.price_byn;
           var priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
-          var priceHtml = escapeHtml(priceNum) + ' BYN';
+          var priceHtml = escapeHtml(priceNum) + ' <i class="nbrb-icon">&#xe901;</i>';
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';

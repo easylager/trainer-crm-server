@@ -8,10 +8,14 @@
       .replace(/"/g, '&quot;');
   }
 
-  function formatPriceBynHtml(priceByn) {
+  // TASK-043: currency defaults to 'BYN' so every existing single-arg call keeps its
+  // exact prior markup except the BYN glyph (now the NBRB icon font, see theme.css,
+  // instead of the text "BYN"). Pass 'RUB' for a RU-city trainer's price.
+  function formatPriceBynHtml(priceByn, currency) {
     if (priceByn == null) return escapeHtml('по запросу');
     var num = priceByn === Math.floor(priceByn) ? String(priceByn) : priceByn.toFixed(2);
-    return escapeHtml(num) + ' BYN';
+    if (currency === 'RUB') return escapeHtml(num) + ' ₽';
+    return escapeHtml(num) + ' <i class="nbrb-icon">&#xe901;</i>';
   }
 
   function buildRatingText(profile) {
@@ -88,7 +92,7 @@
 
   window.TrainerCardShared = {
     escapeHtml: escapeHtml,
-    formatPriceByn: formatPriceByn,
+    formatPriceByn: formatPriceBynHtml,
     buildRatingText: buildRatingText,
     buildServicesListHtml: buildServicesListHtml,
     buildArenasListHtml: buildArenasListHtml,

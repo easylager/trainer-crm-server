@@ -1,12 +1,21 @@
 """
-Belarusian ruble **amount display** for plain text (Telegram HTML, API error strings, digest).
+Ruble **amount display** for plain text (Telegram HTML, API error strings, digest).
 
 ISO 4217 ``BYN`` remains in JSON ``currency``, DB columns, and OpenAPI. Configure human suffix via
 ``Settings.byr_display_sign`` (env ``BYR_DISPLAY_SIGN``), e.g. ``Br`` for a shorter Latin label.
+
+TASK-043: both functions take an optional ``currency`` (default ``"BYN"``, so every existing call
+keeps its exact prior output). Pass ``"RUB"`` for a RU-city trainer/client — resolved via
+``src.shared.currency`` — to show the ruble sign (₽) instead. Names keep the historical "byn" for
+now (see TASK-043 DEC-001 on not renaming widely-used identifiers without a concrete need).
 """
 from __future__ import annotations
 
 _byr_sign_cache: str | None = None
+
+_CURRENCY_DISPLAY_SUFFIX: dict[str, str] = {
+    "RUB": "₽",
+}
 
 
 def _resolve_byr_display_sign() -> str:
@@ -34,9 +43,15 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def format_rubles_byn_display(byn: float | int) -> str:
-    """Whole or fractional rubles + configured display suffix."""
-    sign = _resolve_byr_display_sign()
+def _resolve_display_suffix(currency: str) -> str:
+    if currency == "BYN":
+        return _resolve_byr_display_sign()
+    return _CURRENCY_DISPLAY_SUFFIX.get(currency, currency)
+
+
+def format_rubles_byn_display(byn: float | int, currency: str = "BYN") -> str:
+    """Whole or fractional amount + currency suffix (BYN uses the configured display sign)."""
+    sign = _resolve_display_suffix(currency)
     x = float(byn)
     if x == int(x):
         return f"{int(x)} {sign}"
@@ -44,9 +59,9 @@ def format_rubles_byn_display(byn: float | int) -> str:
     return f"{s} {sign}"
 
 
-def format_kopeks_byn_display(cents: int) -> str:
+def format_kopeks_byn_display(cents: int, currency: str = "BYN") -> str:
     """Kopecks → rubles string with comma kopecks when needed (digest / receipts style)."""
-    sign = _resolve_byr_display_sign()
+    sign = _resolve_display_suffix(currency)
     if int(cents) <= 0:
         return f"0 {sign}"
     rubles, kop = divmod(int(cents), 100)

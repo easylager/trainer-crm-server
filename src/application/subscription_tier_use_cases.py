@@ -12,6 +12,7 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.currency import DEFAULT_PRICE_GROUP, resolve_trainer_price_group
 from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_TRIAL,
@@ -239,17 +240,23 @@ async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int
     return SUBSCRIPTION_TIER_CRM
 
 
-async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[str, Any]:
+async def get_subscription_constructor_catalog(
+    session: AsyncSession, price_group: str = DEFAULT_PRICE_GROUP
+) -> dict[str, Any]:
     """
     CRM base (subscription_tier_pricing.crm) + module surcharges (subscription_module_period_pricing).
+
+    ``price_group`` (TASK-043/044) selects which region's price row to use — resolve via
+    ``src.shared.currency.resolve_trainer_price_group`` for the trainer viewing the catalog.
+    Falls back to ``BY_BASE`` (today's only market) when not passed.
     """
     result = await session.execute(
         text("""
             SELECT tier, currency, name_ru, short_description_ru, bullets_json, display_order
             FROM subscription_tier_pricing
-            WHERE is_active = true AND tier = :crm
+            WHERE is_active = true AND tier = :crm AND price_group = :pg
         """),
-        {"crm": SUBSCRIPTION_TIER_CRM},
+        {"crm": SUBSCRIPTION_TIER_CRM, "pg": price_group},
     )
     base_row = result.fetchone()
     if not base_row:
@@ -259,11 +266,12 @@ async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[st
         text("""
             SELECT stpp.period_months, stpp.price_cents, stpp.period_days
             FROM subscription_tier_period_pricing stpp
-            INNER JOIN subscription_tier_pricing stp ON stp.tier = stpp.tier
-            WHERE stpp.tier = :crm AND stp.is_active = true
+            INNER JOIN subscription_tier_pricing stp
+                ON stp.tier = stpp.tier AND stp.price_group = stpp.price_group
+            WHERE stpp.tier = :crm AND stpp.price_group = :pg AND stp.is_active = true
             ORDER BY stpp.period_months
         """),
-        {"crm": SUBSCRIPTION_TIER_CRM},
+        {"crm": SUBSCRIPTION_TIER_CRM, "pg": price_group},
     )
     base_prices: dict[str, int] = {}
     base_days: dict[str, int] = {}
@@ -287,8 +295,10 @@ async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[st
         text("""
             SELECT module, period_months, price_cents, period_days, currency, name_ru
             FROM subscription_module_period_pricing
+            WHERE price_group = :pg
             ORDER BY module, period_months
-        """)
+        """),
+        {"pg": price_group},
     )
     by_mod: dict[str, dict[str, Any]] = {}
     for mod, pm, cents, days, cur, name_ru in result.fetchall():
@@ -314,11 +324,13 @@ async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[st
     return {"base": base, "modules": modules_sorted}
 
 
-async def get_subscription_tier_catalog(session: AsyncSession) -> list[dict]:
+async def get_subscription_tier_catalog(
+    session: AsyncSession, price_group: str = DEFAULT_PRICE_GROUP
+) -> list[dict]:
     """
     Backward-compatible: three legacy tier cards built from constructor (crm-only, crm+online, crm+online+analytics).
     """
-    ctor = await get_subscription_constructor_catalog(session)
+    ctor = await get_subscription_constructor_catalog(session, price_group)
     base = ctor.get("base")
     mod_list = ctor.get("modules") or []
     if not base:
@@ -556,20 +568,27 @@ async def get_tier_period_pricing(
     session: AsyncSession,
     tier: SubscriptionTier,
     period_months: int,
+    price_group: str = DEFAULT_PRICE_GROUP,
 ) -> dict | None:
-    """Return price and renewal length for (tier, billing period). Server is source of truth for checkout."""
+    """Return price and renewal length for (tier, billing period). Server is source of truth for checkout.
+
+    ``price_group`` (TASK-043/044) picks the region's row — see
+    ``src.shared.currency.resolve_trainer_price_group``. Defaults to ``BY_BASE``.
+    """
     if period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
         return None
     result = await session.execute(
         text("""
             SELECT stpp.price_cents, stp.currency, stpp.period_days, stp.name_ru
             FROM subscription_tier_period_pricing stpp
-            INNER JOIN subscription_tier_pricing stp ON stp.tier = stpp.tier
+            INNER JOIN subscription_tier_pricing stp
+                ON stp.tier = stpp.tier AND stp.price_group = stpp.price_group
             WHERE stpp.tier = :tier
               AND stpp.period_months = :pm
+              AND stpp.price_group = :pg
               AND stp.is_active = true
         """),
-        {"tier": tier, "pm": period_months},
+        {"tier": tier, "pm": period_months, "pg": price_group},
     )
     row = result.fetchone()
     if not row:
@@ -586,17 +605,18 @@ async def get_module_period_pricing(
     session: AsyncSession,
     module: str,
     period_months: int,
+    price_group: str = DEFAULT_PRICE_GROUP,
 ) -> dict | None:
-    """Surcharge for one module (online / analytics / groups)."""
+    """Surcharge for one module (online / analytics / groups). ``price_group`` — see get_tier_period_pricing."""
     if module not in SUBSCRIPTION_MODULES or period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
         return None
     result = await session.execute(
         text("""
             SELECT price_cents, period_days, currency, name_ru
             FROM subscription_module_period_pricing
-            WHERE module = :m AND period_months = :pm
+            WHERE module = :m AND period_months = :pm AND price_group = :pg
         """),
-        {"m": module, "pm": period_months},
+        {"m": module, "pm": period_months, "pg": price_group},
     )
     row = result.fetchone()
     if not row:
@@ -623,7 +643,8 @@ async def set_subscription_constructor_after_mock_payment(
     if period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
         return None
     mods = normalize_modules_dict(modules)
-    base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months)
+    price_group = await resolve_trainer_price_group(session, trainer_id)
+    base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months, price_group)
     if not base:
         return None
     total_cents = int(base["price_cents"])
@@ -632,7 +653,7 @@ async def set_subscription_constructor_after_mock_payment(
     for key in SUBSCRIPTION_MODULES:
         if not mods.get(key):
             continue
-        mp = await get_module_period_pricing(session, key, period_months)
+        mp = await get_module_period_pricing(session, key, period_months, price_group)
         if not mp:
             return None
         total_cents += int(mp["price_cents"])
@@ -792,15 +813,19 @@ async def get_trainer_booking_availability(session: AsyncSession, trainer_id: in
 
 
 async def _fetch_period_prices_for_tier(session: AsyncSession, tier: str) -> list[dict]:
-    """Rows from subscription_tier_period_pricing for one tier."""
+    """Rows from subscription_tier_period_pricing for one tier.
+
+    Admin UI only manages ``BY_BASE`` pricing (TASK-043/044) — RU rows are seeded directly,
+    not yet editable here (see TASK-044 scope note).
+    """
     result = await session.execute(
         text("""
             SELECT id, period_months, price_cents, period_days
             FROM subscription_tier_period_pricing
-            WHERE tier = :tier
+            WHERE tier = :tier AND price_group = :pg
             ORDER BY period_months
         """),
-        {"tier": tier},
+        {"tier": tier, "pg": DEFAULT_PRICE_GROUP},
     )
     return [
         {"id": r[0], "period_months": r[1], "price_cents": r[2], "period_days": r[3]}
@@ -837,9 +862,9 @@ async def fetch_tier_pricing_for_admin(session: AsyncSession, tier: str) -> dict
                 name_ru, short_description_ru, bullets_json,
                 display_order, is_active, created_at, updated_at
             FROM subscription_tier_pricing
-            WHERE tier = :tier
+            WHERE tier = :tier AND price_group = :pg
         """),
-        {"tier": tier},
+        {"tier": tier, "pg": DEFAULT_PRICE_GROUP},
     )
     row = result.fetchone()
     if not row:
@@ -849,7 +874,10 @@ async def fetch_tier_pricing_for_admin(session: AsyncSession, tier: str) -> dict
 
 
 async def list_subscription_tier_pricing_for_admin(session: AsyncSession) -> list[dict]:
-    """Get all tier pricing records for admin editing (including inactive)."""
+    """Get all tier pricing records for admin editing (including inactive).
+
+    Scoped to ``BY_BASE`` — see ``_fetch_period_prices_for_tier`` docstring.
+    """
     result = await session.execute(
         text("""
             SELECT
@@ -857,8 +885,10 @@ async def list_subscription_tier_pricing_for_admin(session: AsyncSession) -> lis
                 name_ru, short_description_ru, bullets_json,
                 display_order, is_active, created_at, updated_at
             FROM subscription_tier_pricing
+            WHERE price_group = :pg
             ORDER BY display_order ASC
-        """)
+        """),
+        {"pg": DEFAULT_PRICE_GROUP},
     )
     rows = result.fetchall()
     out: list[dict] = []
@@ -891,9 +921,9 @@ async def update_subscription_tier_pricing(
             SELECT id, price_cents, period_days, name_ru, short_description_ru,
                    bullets_json, display_order, is_active
             FROM subscription_tier_pricing
-            WHERE tier = :tier
+            WHERE tier = :tier AND price_group = :pg
         """),
-        {"tier": tier},
+        {"tier": tier, "pg": DEFAULT_PRICE_GROUP},
     )
     row = result.fetchone()
     if not row:
@@ -911,7 +941,7 @@ async def update_subscription_tier_pricing(
     }
 
     updates = []
-    params: dict = {"tier": tier}
+    params: dict = {"tier": tier, "price_group": DEFAULT_PRICE_GROUP}
     changed_fields: dict = {}
 
     if name_ru is not None and name_ru != old_values["name_ru"]:
@@ -956,9 +986,9 @@ async def update_subscription_tier_pricing(
             cur = await session.execute(
                 text("""
                     SELECT id, price_cents FROM subscription_tier_period_pricing
-                    WHERE tier = :tier AND period_months = :pm
+                    WHERE tier = :tier AND period_months = :pm AND price_group = :pg
                 """),
-                {"tier": tier, "pm": pm},
+                {"tier": tier, "pm": pm, "pg": DEFAULT_PRICE_GROUP},
             )
             crow = cur.fetchone()
             if not crow or crow[1] == new_cents:
@@ -998,7 +1028,10 @@ async def update_subscription_tier_pricing(
     if updates:
         updates.append("updated_at = NOW()")
         await session.execute(
-            text(f"UPDATE subscription_tier_pricing SET {', '.join(updates)} WHERE tier = :tier"),
+            text(
+                f"UPDATE subscription_tier_pricing SET {', '.join(updates)} "
+                "WHERE tier = :tier AND price_group = :price_group"
+            ),
             params,
         )
         if changed_fields:

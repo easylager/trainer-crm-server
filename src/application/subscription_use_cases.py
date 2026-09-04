@@ -15,6 +15,7 @@ from src.application.platform_settings_use_cases import (
     get_platform_int,
 )
 from src.shared.config import Settings
+from src.shared.currency import resolve_trainer_price_group
 from src.application.subscription_tier_use_cases import (
     SUBSCRIPTION_BILLING_PERIOD_MONTHS,
     SUBSCRIPTION_MODULE_ANALYTICS,
@@ -535,23 +536,26 @@ async def create_catalog_subscription_invoice_for_trainer(
     else:
         return None
 
+    price_group = await resolve_trainer_price_group(session, trainer_id)
     if bundle_tier is not None:
-        tp = await get_tier_period_pricing(session, bundle_tier, period_months)  # type: ignore[arg-type]
+        tp = await get_tier_period_pricing(session, bundle_tier, period_months, price_group)  # type: ignore[arg-type]
         if not tp:
             return None
         total_cents = int(tp["price_cents"])
         period_days = int(tp["period_days"])
         plan_label = str(tp.get("name_ru") or bundle_tier)
+        currency = str(tp["currency"])
     else:
-        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months)
+        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months, price_group)
         if not base:
             return None
         total_cents = int(base["price_cents"])
         period_days = int(base["period_days"])
+        currency = str(base["currency"])
         for key in SUBSCRIPTION_MODULES:
             if not mods.get(key):
                 continue
-            mp = await get_module_period_pricing(session, key, period_months)
+            mp = await get_module_period_pricing(session, key, period_months, price_group)
             if not mp:
                 return None
             total_cents += int(mp["price_cents"])
@@ -636,6 +640,7 @@ async def create_catalog_subscription_invoice_for_trainer(
         "checkout_bundle_tier": bundle_tier,
         "referral_bonus_days_applied": bonus_days,
         "amount_cents_before_referral": list_cents,
+        "currency": currency,
     }
 
 
@@ -877,7 +882,8 @@ async def admin_grant_subscription_for_invoice(
     if status in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE) and final_pm is not None:
         if final_pm not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
             return None
-        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, final_pm)
+        price_group = await resolve_trainer_price_group(session, int(tid))
+        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, final_pm, price_group)
         if not base:
             return None
         new_total = int(base["price_cents"])
@@ -885,7 +891,7 @@ async def admin_grant_subscription_for_invoice(
         for key in SUBSCRIPTION_MODULES:
             if not final_modules.get(key):
                 continue
-            mp = await get_module_period_pricing(session, key, final_pm)
+            mp = await get_module_period_pricing(session, key, final_pm, price_group)
             if not mp:
                 return None
             new_total += int(mp["price_cents"])
