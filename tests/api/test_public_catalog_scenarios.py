@@ -7,7 +7,11 @@ from src.api.app import app
 
 
 @pytest.mark.asyncio
-async def test_public_catalog_scenarios_returns_ice_defaults() -> None:
+async def test_public_catalog_scenarios_returns_ice_defaults(app_use_test_db) -> None:
+    """
+    Needs ``app_use_test_db`` so the ASGI app shares the test engine/loop.
+    Without it CI flakes with ``Future attached to a different loop``.
+    """
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/public/catalog-scenarios")
     assert resp.status_code == 200

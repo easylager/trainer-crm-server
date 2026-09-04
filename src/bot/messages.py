@@ -12,6 +12,10 @@ Voice (UX):
 from __future__ import annotations
 
 import html
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aiogram.types import InlineKeyboardMarkup
 
 from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display, format_rubles_byn_display
 from src.shared.validation import truncate_text

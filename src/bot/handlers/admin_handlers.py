@@ -2539,7 +2539,7 @@ async def on_admin_message(message: Message) -> None:
 async def cmd_referral_balance(message: Message) -> None:
     """Check referral balance for a trainer: /referral_balance <trainer_id>"""
     user_id = message.from_user.id if message.from_user else 0
-    if user_id not in ADMIN_IDS:
+    if not _is_admin(user_id):
         return
     text = (message.text or "").strip()
     parts = text.split()
@@ -2567,7 +2567,7 @@ async def cmd_referral_balance(message: Message) -> None:
 async def cmd_referral_adjust(message: Message) -> None:
     """Adjust referral credit: /referral_adjust <trainer_id> <days> [note]"""
     user_id = message.from_user.id if message.from_user else 0
-    if user_id not in ADMIN_IDS:
+    if not _is_admin(user_id):
         return
     text = (message.text or "").strip()
     parts = text.split(maxsplit=3)

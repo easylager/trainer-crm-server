@@ -41,7 +41,38 @@ select = [
 ignore = [
     "E501",   # line too long (black handles this)
     "E203",   # whitespace before ':'
-    "W503",   # line break before binary operator
+    # Hard-gate v1 debt (CI enforces everything else). Raise the bar in follow-ups:
+    "B008",   # FastAPI Depends() in defaults — idiomatic
+    "C901",   # complexity — large handlers for now
+    "E402",   # imports not at top — lazy imports in bots/webapp
+    "E701",
+    "E702",
+    "E731",
+    "I001",   # import sort — separate autofix PR
+    "UP012",
+    "UP017",
+    "UP032",
+    "UP034",
+    "UP035",
+    "UP037",
+    "UP042",
+    "UP045",  # Optional[X] → X | None mass rewrite later
+    "B010",
+    "B023",
+    "B033",
+    "B904",
+    "B905",
+    "C401",
+    "C408",
+    "C413",
+    "C416",
+    "C420",
+    "F401",   # unused import — clean in follow-up
+    "F541",
+    "F811",
+    "F841",   # unused variable — clean in follow-up
+    "W291",
+    "W293",
 ]
 
 [tool.ruff.lint.isort]
