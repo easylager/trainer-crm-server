@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
 from src.application.client_use_cases import get_client_id_by_telegram_id
+from src.application.client_profile_use_cases import (
+    resolve_client_notify_contact,
+    sql_client_notify_telegram_id,
+)
 from src.application.family_access_use_cases import list_family_access_telegram_ids_for_reminders
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
 from src.application.certificate_use_cases import redeem_certificate_balance_for_booking
@@ -1428,7 +1432,7 @@ def _trainer_booked_notification_row_to_dict(row) -> dict:
 
 
 _TRAINER_BOOKED_NOTIFY_SELECT_SQL = """
-    SELECT b.id, c.telegram_id,
+    SELECT b.id, """ + sql_client_notify_telegram_id("c") + """ AS client_telegram_id,
            COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер') AS trainer_name,
            b.trainer_id,
            s.slot_date, s.start_time, s.end_time,
@@ -1479,7 +1483,7 @@ async def claim_client_trainer_booked_notification(
               AND b.client_notified_trainer_booked_at IS NULL
               AND b.notified_at IS NULL
               AND b.recurring_client_slot_id IS NULL
-              AND c.telegram_id IS NOT NULL
+              AND """ + sql_client_notify_telegram_id("c") + """ IS NOT NULL
               AND NOT b.is_sandbox
               AND NOT c.is_sandbox
               AND b.status = 'confirmed'
@@ -1531,7 +1535,7 @@ async def get_pending_trainer_booked_notifications(
             WHERE b.client_notified_trainer_booked_at IS NULL
               AND b.notified_at IS NULL
               AND b.recurring_client_slot_id IS NULL
-              AND c.telegram_id IS NOT NULL
+              AND {sql_client_notify_telegram_id("c")} IS NOT NULL
               AND NOT b.is_sandbox -- Sandbox bookings never push to clients (demo identity).
               AND NOT c.is_sandbox
               AND b.status = 'confirmed' -- Only confirmed bookings get this push.
@@ -1550,7 +1554,8 @@ async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -
 
 
 _PENDING_BOOKING_CONFIRMED_NOTIFY_SQL = """
-    SELECT b.id, b.trainer_id, c.telegram_id, s.slot_date, s.start_time, s.end_time,
+    SELECT b.id, b.trainer_id, """ + sql_client_notify_telegram_id("c") + """ AS client_telegram_id,
+           s.slot_date, s.start_time, s.end_time,
            srv.name AS service_name,
            COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
            price_tier_kind,
@@ -1568,7 +1573,7 @@ _PENDING_BOOKING_CONFIRMED_NOTIFY_SQL = """
     WHERE b.status = 'confirmed'
       AND b.client_notified_trainer_booked_at IS NULL
       AND b.notified_at IS NOT NULL
-      AND c.telegram_id IS NOT NULL
+      AND """ + sql_client_notify_telegram_id("c") + """ IS NOT NULL
       AND NOT b.is_sandbox
       AND NOT c.is_sandbox
     ORDER BY b.id
@@ -1915,13 +1920,19 @@ async def get_trainer_booking_detail_payload(
     ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
     tier_label = price_tier_label_ru(ptk) if ptk else None
     pc_eff = row[22] if len(row) > 22 else None
+    contact = await resolve_client_notify_contact(
+        session,
+        client_id=int(row[2]) if row[2] is not None else 0,
+        telegram_id=row[3],
+        phone=row[5] or "",
+    )
     return {
         "id": row[0],
         "slot_id": row[1],
         "client_id": int(row[2]) if row[2] is not None else None,
-        "client_telegram_id": row[3],
+        "client_telegram_id": contact["client_telegram_id"],
         "client_telegram_username": (row[4] or "").strip() or None,
-        "client_phone": row[5] or "",
+        "client_phone": contact["client_phone"] or "",
         "client_first_name": row[6],
         "client_last_name": row[7],
         "client_comment": row[8],
@@ -1941,6 +1952,7 @@ async def get_trainer_booking_detail_payload(
         "booking_price_cents": int(pc_eff) if pc_eff is not None else None,
         "price_tier_label": tier_label,
         "is_sandbox": bool(row[24]) if len(row) > 24 else False,
+        "booked_via_guardian": bool(contact.get("booked_via_guardian")),
     }
 
 
@@ -4800,12 +4812,18 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     cn_raw = (row2[5] or "").strip() if row2[5] else ""
     st_t, en_t = row2[9], row2[10]
     duration_minutes = _slot_wall_duration_minutes(st_t, en_t)
+    contact = await resolve_client_notify_contact(
+        session,
+        client_id=int(row2[2]) if row2[2] is not None else 0,
+        telegram_id=row2[3],
+        phone=row2[4] or "",
+    )
     return {
         "id": row2[0],
         "slot_id": row2[1],
         "client_id": row2[2],
-        "client_telegram_id": row2[3],
-        "client_phone": row2[4] or "",
+        "client_telegram_id": contact["client_telegram_id"],
+        "client_phone": contact["client_phone"] or "",
         "client_name": cn_raw or None,
         "client_comment": row2[6],
         "created_at": row2[7],
@@ -4825,6 +4843,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "share_catalog_tip": st_tip,
         "is_sandbox": bool(row2[20]),
         "client_is_sandbox": bool(row2[21]),
+        "booked_via_guardian": bool(contact.get("booked_via_guardian")),
     }
 
 

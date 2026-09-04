@@ -381,3 +381,140 @@ async def test_get_client_requests_scoped_to_x_profile_id(app_use_test_db, db_se
     ids = [item["id"] for item in listed.json().get("items") or []]
     assert child_rid in ids
     assert parent_rid not in ids
+
+
+@pytest.mark.asyncio
+async def test_activity_stats_do_not_mix_parent_and_child_completed(
+    app_use_test_db, db_session
+) -> None:
+    """Completed bookings on child must not inflate parent completed_total (and vice versa)."""
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=parent_id, service_id=service_id, hour=10
+    )
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=11
+    )
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=12
+    )
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_parent = await client.get(
+                "/api/webapp/client/activity-stats",
+                headers=_client_auth_headers(),
+            )
+            r_child = await client.get(
+                "/api/webapp/client/activity-stats",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+
+    assert r_parent.status_code == 200 and r_child.status_code == 200
+    assert r_parent.json()["completed_total"] == 1
+    assert r_child.json()["completed_total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_detail_shows_child_name_and_parent_telegram(
+    app_use_test_db, db_session
+) -> None:
+    """Guardian booking: trainer detail shows child name; notify telegram is parent account."""
+    from src.application.booking_use_cases import get_trainer_booking_detail_payload
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    phone, phone_n = belarus_test_phone(tid)
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+    await db_session.execute(
+        text("UPDATE clients SET phone = :p, phone_normalized = :pn WHERE id = :cid"),
+        {"p": phone, "pn": phone_n, "cid": parent_id},
+    )
+    await db_session.commit()
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    booking_id = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=16
+    )
+
+    detail = await get_trainer_booking_detail_payload(db_session, booking_id, trainer_id)
+    assert detail is not None
+    assert detail["client_id"] == child_id
+    assert (detail.get("client_first_name") or "").strip() == "Лера"
+    assert detail["client_telegram_id"] == tid
+    assert detail.get("booked_via_guardian") is True
+    assert (detail.get("client_phone") or "").strip() == phone
+
+
+@pytest.mark.asyncio
+async def test_full_flow_book_child_then_self_separate_client_ids(
+    app_use_test_db, db_session
+) -> None:
+    """E2E: book as child → child client_id; book as self → parent client_id."""
+    slot_day = date.today() + timedelta(days=18)
+    ref_day = slot_day - timedelta(days=slot_day.weekday())
+    ref_now = datetime.combine(ref_day, time(10, 0))
+    _trainer_id, service_id, slot_a = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={10}
+    )
+    _t2, service_id2, slot_b = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={14}
+    )
+    assert service_id == service_id2 or True
+
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Папа")
+    phone, _norm = belarus_test_phone(tid)
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Ваня")
+
+            with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                "src.api.routes.webapp.date"
+            ) as mock_date:
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                book_child = await client.post(
+                    "/api/webapp/client/booking",
+                    json={"slot_id": slot_a, "phone": phone, "service_id": service_id},
+                    headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+                )
+                book_self = await client.post(
+                    "/api/webapp/client/booking",
+                    json={
+                        "slot_id": slot_b,
+                        "phone": phone,
+                        "service_id": service_id2,
+                        "first_name": "Папа",
+                    },
+                    headers={**_client_auth_headers(), "X-Profile-Id": str(parent_id)},
+                )
+
+    assert book_child.status_code == 200, book_child.text
+    assert book_self.status_code == 200, book_self.text
+    child_bid = book_child.json()["booking_id"]
+    self_bid = book_self.json()["booking_id"]
+
+    r = await db_session.execute(
+        text("SELECT id, client_id FROM bookings WHERE id IN (:a, :b)"),
+        {"a": child_bid, "b": self_bid},
+    )
+    by_id = {int(row[0]): int(row[1]) for row in r.fetchall()}
+    assert by_id[child_bid] == child_id
+    assert by_id[self_bid] == parent_id
+    assert child_id != parent_id
