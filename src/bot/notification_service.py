@@ -38,6 +38,7 @@ from src.bot.notification_loops import (
     run_weekly_sunday_digest_loop,
     run_care_pulse_loop,
 )
+from src.ingestion.loop import run_ice_ingest_scheduler_loop
 from src.shared.config import get_settings, Settings
 from src.shared.notification_hours import set_notification_quiet_hours_bypass
 from src.shared.sentry_init import init_sentry
@@ -113,6 +114,7 @@ async def main() -> None:
     other_tasks = [
         asyncio.create_task(run_certificate_email_outbox_loop(), name="certificate_email_outbox"),
         asyncio.create_task(run_recurring_materialization_loop(), name="recurring_materialization"),
+        asyncio.create_task(run_ice_ingest_scheduler_loop(), name="ice_ingest_scheduler"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 
