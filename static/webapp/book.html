@@ -786,7 +786,6 @@
     <div id="bookForProfileBlock" class="form-block" style="display:none;">
       <label for="bookForProfileSelect">Кого записываем?</label>
       <select id="bookForProfileSelect" aria-label="Кого записываем"></select>
-      <button type="button" id="bookAddChildBtn" class="btn-secondary" style="margin-top:8px;display:none;">Добавить ребёнка</button>
     </div>
     <div id="bookNameBlock" class="form-block" style="display: none;">
       <label for="bookFirstName">Имя *</label>
@@ -1027,14 +1026,12 @@
       function populateBookForProfileSelect() {
         var block = document.getElementById('bookForProfileBlock');
         var sel = document.getElementById('bookForProfileSelect');
-        var addBtn = document.getElementById('bookAddChildBtn');
         if (!block || !sel) return;
         if (!bookProfiles.length) {
           block.style.display = 'none';
           return;
         }
         block.style.display = 'block';
-        if (addBtn) addBtn.style.display = 'block';
         var preferred =
           bookActingProfileId != null
             ? bookActingProfileId
@@ -1075,55 +1072,6 @@
           bookProfiles = [];
         }
         populateBookForProfileSelect();
-      }
-
-      async function bookAddChildInline() {
-        var firstName = window.prompt('Имя ребёнка');
-        if (firstName == null) return;
-        firstName = String(firstName).trim();
-        if (!firstName) {
-          alert('Укажите имя.');
-          return;
-        }
-        var lastName = window.prompt('Фамилия (необязательно)', '') || '';
-        lastName = String(lastName).trim();
-        var initData = tg?.initData || '';
-        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
-        if (initData) headers['X-Telegram-Init-Data'] = initData;
-        try {
-          var res = await fetch('/api/webapp/client/profiles', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-              first_name: firstName,
-              last_name: lastName || null,
-            }),
-          });
-          var body = await res.json().catch(function () { return {}; });
-          if (!res.ok) {
-            alert(
-              res.status === 409
-                ? 'Достигнут лимит добавленных профилей.'
-                : (typeof body.detail === 'string' && body.detail) || 'Не удалось добавить профиль.'
-            );
-            return;
-          }
-          var newId = Number(body.client_id);
-          // Override for this booking only — do not PATCH default / hub localStorage.
-          bookProfiles = bookProfiles.concat([
-            {
-              client_id: newId,
-              first_name: firstName,
-              last_name: lastName || null,
-              role: 'guardian',
-              is_default: false,
-            },
-          ]);
-          bookActingProfileId = newId;
-          populateBookForProfileSelect();
-        } catch (e) {
-          alert('Ошибка сети. Попробуйте ещё раз.');
-        }
       }
 
       const BOOK_NOTICE_PREFIX = 'В стоимость не входят:';
@@ -2337,8 +2285,6 @@
             updateBookNameFields();
           };
         }
-        var bookAddBtn = document.getElementById('bookAddChildBtn');
-        if (bookAddBtn) bookAddBtn.onclick = function () { bookAddChildInline(); };
         if (!trainerId) return;
         try {
           if (requestId == null) {

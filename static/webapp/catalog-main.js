@@ -281,14 +281,12 @@
       function populateCatalogBookForProfileSelect() {
         var block = document.getElementById('catalogBookForProfileBlock');
         var sel = document.getElementById('catalogBookForProfileSelect');
-        var addBtn = document.getElementById('catalogBookAddChildBtn');
         if (!block || !sel) return;
         if (!catalogBookProfiles.length) {
           block.style.display = 'none';
           return;
         }
         block.style.display = 'block';
-        if (addBtn) addBtn.style.display = 'block';
         var preferred =
           catalogActingProfileId != null
             ? catalogActingProfileId
@@ -332,59 +330,6 @@
           })
           .then(function () {
             populateCatalogBookForProfileSelect();
-          });
-      }
-
-      function catalogAddChildInline() {
-        var firstName = window.prompt('Имя ребёнка');
-        if (firstName == null) return;
-        firstName = String(firstName).trim();
-        if (!firstName) {
-          alert('Укажите имя.');
-          return;
-        }
-        var lastName = window.prompt('Фамилия (необязательно)', '') || '';
-        lastName = String(lastName).trim();
-        var initData = tg ? tg.initData : '';
-        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
-        if (initData) headers['X-Telegram-Init-Data'] = initData;
-        fetch('/api/webapp/client/profiles', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({
-            first_name: firstName,
-            last_name: lastName || null,
-          }),
-        })
-          .then(function (res) {
-            return res.json().then(function (body) {
-              return { ok: res.ok, status: res.status, body: body };
-            });
-          })
-          .then(function (res) {
-            if (!res.ok) {
-              alert(
-                res.status === 409
-                  ? 'Достигнут лимит добавленных профилей.'
-                  : (typeof res.body.detail === 'string' && res.body.detail) || 'Не удалось добавить профиль.'
-              );
-              return;
-            }
-            var newId = Number(res.body.client_id);
-            catalogBookProfiles = catalogBookProfiles.concat([
-              {
-                client_id: newId,
-                first_name: firstName,
-                last_name: lastName || null,
-                role: 'guardian',
-                is_default: false,
-              },
-            ]);
-            catalogActingProfileId = newId;
-            populateCatalogBookForProfileSelect();
-          })
-          .catch(function () {
-            alert('Ошибка сети. Попробуйте ещё раз.');
           });
       }
 
@@ -6338,8 +6283,6 @@
             updateBookingNameFieldsVisibility();
           });
         }
-        var addBtn = document.getElementById('catalogBookAddChildBtn');
-        if (addBtn) addBtn.addEventListener('click', catalogAddChildInline);
       })();
 
       document.getElementById('btnSubmitBooking').onclick = function() {
