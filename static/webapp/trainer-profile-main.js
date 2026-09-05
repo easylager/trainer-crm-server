@@ -2346,7 +2346,11 @@
                     el = document.querySelector('input[name="primary_arena"]');
                   }
                 }
-                if (!el) el = document.getElementById('arenasWrap') || document.getElementById('arenaHint');
+                if (!el) {
+                  el = document.getElementById('arenaSearchInput')
+                    || document.getElementById('arenasWrap')
+                    || document.getElementById('arenaHint');
+                }
               }
               if (el) focusElForProfileField(el, arDetails);
               return;

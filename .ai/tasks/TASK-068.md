@@ -223,4 +223,5 @@ Verification method: automated/unit (гейты) + manual/exploratory (пове�
 - **PHASE_COMPLETED** — plan: Technical Plan / Design Context / Test Strategy записаны. S3–S7 отложены. Пользователь велел сразу реализовывать.
 - **PHASE_STARTED** — implement: S1+S2 на `feat/TASK-068-profile-data-guards`.
 - **SLICE_DONE** — S1+S2: серверный контракт omit/`[]` покрыт тестами (3 passed); JS — канонические arena_ids, reload после create, confirm смены города, omit unchanged, цена «по запросу» не блокирует Save. TTV-тесты зелёные (37).
-- **SLICE_DONE** — S3: пикер профиля = поиск имя+адрес, чипы, звезда = основная, «Добавить „…“» при пустом результате. Инпут поиска в статическом HTML (не пересобирается). Флаг `?arena_picker=legacy`. S4–S7 не начаты.
+- **SLICE_DONE** — S3: пикер профиля = поиск имя+адрес, чипы, звезда = основная, «Добавить „…“» при пустом результате. Инпут поиска в статическом HTML (не пересобирается). Флаг `?arena_picker=legacy`.
+- **SLICE_DONE** — S4: анкета разделена на «Рабочее» (имя/город/телефон/услуги/арены, открыто) и «Витрина» (о себе/опыт/образование, свёрнуто, без required-dot). S5–S7 не начаты.

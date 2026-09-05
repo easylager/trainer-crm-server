@@ -772,3 +772,20 @@ def test_profile_arena_picker_markup_and_legacy_flag() -> None:
     assert "appendArenaCreateCta" in js
     assert "setPrimaryArena" in js
 
+
+def test_profile_workplace_vitrine_ia() -> None:
+    """S4: workplace blocks stay open; vitrine is collapsed and not marked required."""
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    assert 'id="profileWorkplaceLabel"' in html
+    assert 'id="profileVitrineLabel"' in html
+    assert html.find('id="profileServicesCollapse"') < html.find('id="profileNavAbout"')
+    assert html.find('id="profileNavArenas"') < html.find('id="profileNavAbout"')
+    assert 'id="profileNavAbout" open' not in html
+    assert 'id="profileNavExp" open' not in html
+    assert 'for="description"><span class="required-dot"' not in html
+    assert 'for="experience_years"><span class="required-dot"' not in html
+    assert 'for="education"><span class="required-dot"' not in html
+    assert 'for="first_name"><span class="required-dot"' in html
+    assert 'for="city_id"><span class="required-dot"' in html
+    assert 'for="phone"><span class="required-dot"' in html
+

@@ -26,8 +26,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202609052" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609052" />
+  <link rel="preload" href="trainer-profile-main.js?v=202609053" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609053" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
@@ -103,14 +103,16 @@
     <nav id="profileFormNav" class="profile-form-nav" aria-label="Разделы анкеты" hidden>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="anketaStart">Основное</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavContacts">Контакты</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavAbout">О себе</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavExp">Опыт</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileEducationCollapse">Образование</button>
-      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
-      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
     </nav>
 
     <div id="tab-form" class="tab-pane active">
+      <p class="profile-group-label" id="profileWorkplaceLabel">Рабочее</p>
+      <p class="profile-group-hint">Нужно, чтобы ученики могли записаться.</p>
       <details class="profile-collapse" id="anketaStart" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Основное</span>
@@ -174,51 +176,6 @@
         </div>
       </details>
 
-      <details class="profile-collapse" id="profileNavAbout" open>
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">О себе</span>
-        </summary>
-        <div class="card">
-          <div class="field">
-            <label for="description"><span class="required-dot"></span>Описание</label>
-            <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
-            <div class="field-hint" id="descriptionMeta">
-              <span id="descCharCount">0</span> / 5000
-              <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
-              <span id="descMinHint">мин. 25 символов</span>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details class="profile-collapse" id="profileNavExp" open>
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">Опыт и квалификация</span>
-        </summary>
-        <div class="card">
-          <div class="field">
-            <label for="experience_years"><span class="required-dot"></span>Опыт работы, лет</label>
-            <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
-          </div>
-          <div class="field">
-            <label for="education"><span class="required-dot"></span>Образование</label>
-            <select id="education"><option value="">Выберите категорию</option></select>
-          </div>
-        </div>
-      </details>
-
-      <details class="profile-collapse" id="profileEducationCollapse">
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">Подробное образование</span>
-        </summary>
-        <div class="card" id="educationEntriesWrap">
-          <p class="hint" style="margin: 0 0 14px;">По желанию: вуз, курсы, сертификаты — для карточки в каталоге.</p>
-          <div id="educationEntries"></div>
-          <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
-          <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
-        </div>
-      </details>
-
       <details class="profile-collapse" id="profileServicesCollapse" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Услуги и цены</span>
@@ -260,6 +217,57 @@
           <p class="field-error" id="err_arena_setup" role="status" hidden style="margin-top:8px;"></p>
           <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
           <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
+        </div>
+      </details>
+
+      <p class="profile-group-label" id="profileVitrineLabel">Витрина</p>
+      <p class="profile-group-hint">Нужно для публикации в каталоге — можно заполнить позже.</p>
+
+      <details class="profile-collapse" id="profileNavAbout">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">О себе</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="description">Описание</label>
+            <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
+            <div class="field-hint" id="descriptionMeta">
+              <span id="descCharCount">0</span> / 5000
+              <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
+              <span id="descMinHint">для каталога, мин. 25 символов</span>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="profile-collapse" id="profileNavExp">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Опыт и квалификация</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="experience_years">Опыт работы, лет</label>
+            <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
+          </div>
+          <div class="field">
+            <label for="education">Образование</label>
+            <select id="education"><option value="">Выберите категорию</option></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="profile-collapse" id="profileEducationCollapse">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Подробное образование</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card" id="educationEntriesWrap">
+          <p class="hint" style="margin: 0 0 14px;">По желанию: вуз, курсы, сертификаты — для карточки в каталоге.</p>
+          <div id="educationEntries"></div>
+          <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
+          <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
         </div>
       </details>
     </div>
@@ -533,7 +541,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202609052"></script>
+  <script defer src="trainer-profile-main.js?v=202609053"></script>
   <script defer src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>
