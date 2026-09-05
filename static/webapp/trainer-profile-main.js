@@ -292,6 +292,18 @@
       function profileBlockTourOnBackClick() {
         if (!state.profileBlockTourActive) return;
         if (state.profileFocusedTask) {
+          var railF = profileBlockTourEnsureRail();
+          var currF = profileBlockTourEffectiveStepKey();
+          var ixF = railF.indexOf(currF);
+          if (ixF > 0) {
+            try {
+              var aeF = document.activeElement;
+              if (aeF && aeF.blur) aeF.blur();
+            } catch (eBkF) {}
+            state.profileBlockTourDisplayedStepOverride = railF[ixF - 1];
+            syncProfileBlockTourBar();
+            return;
+          }
           finishFocusedProfileTask();
           return;
         }
@@ -2015,7 +2027,7 @@
         syncProfileFormNavVisibility(tab);
       }
 
-      /** Соответствует html.profile-block-tour--on { scroll-padding-top } — для решения «скроллить или нет». */
+      /** Соответствует overlay #onboardingFlow — для решения «скроллить или нет». */
       function getHtmlScrollPaddingTopPx() {
         try {
           var s = getComputedStyle(document.documentElement).scrollPaddingTop;
@@ -2429,6 +2441,30 @@
           title: 'Где вы тренируете',
           subtitle: 'Выберите арены из списка или укажите, если вашей площадки там нет.',
         },
+        photo: {
+          containerId: 'profileNavPhoto',
+          tabId: 'form',
+          title: 'Фото',
+          subtitle: 'Лицо на карточке в каталоге. Можно пропустить и добавить позже.',
+        },
+        about: {
+          containerId: 'profileNavAbout',
+          tabId: 'form',
+          title: 'О себе',
+          subtitle: 'Пара предложений, чтобы ученик понял, как вы работаете.',
+        },
+        experience: {
+          containerId: 'profileNavExp',
+          tabId: 'form',
+          title: 'Опыт',
+          subtitle: 'Сколько лет тренируете и какая квалификация — для карточки в каталоге.',
+        },
+        education: {
+          containerId: 'profileEducationCollapse',
+          tabId: 'form',
+          title: 'Образование',
+          subtitle: 'По желанию: вуз, курсы, сертификаты.',
+        },
       };
 
       var PROFILE_FOCUSED_TASKS = {
@@ -2437,6 +2473,14 @@
           title: 'Указать цены',
           subtitle: 'Пока ученик видит «по запросу». Можно пропустить — запись от этого не зависит.',
           stepLabel: 'Цены',
+          nextSave: 'Сохранить',
+          nextDone: 'Готово',
+        },
+        vitrine: {
+          rail: ['photo', 'about', 'experience', 'education'],
+          title: 'Карточка для каталога',
+          subtitle: 'Это витрина, не кабинет. Можно пропустить любой шаг — записи уже идут.',
+          stepLabel: 'Витрина',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
@@ -2645,27 +2689,54 @@
             return;
           }
           obFlowOpen();
+          var railF = profileBlockTourEnsureRail();
+          var currKeyF = profileBlockTourEffectiveStepKey();
+          var idxF = railF.indexOf(currKeyF);
+          if (idxF < 0) {
+            idxF = 0;
+            currKeyF = railF[0];
+          }
+          var defF = OB_FLOW_STEP_DEFS[currKeyF] || {};
           var titleElF = document.getElementById('obFlowTitle');
-          if (titleElF) titleElF.textContent = spec ? spec.title : 'Указать цены';
+          if (titleElF) titleElF.textContent = defF.title || (spec ? spec.title : '');
           var subElF = document.getElementById('obFlowSubtitle');
-          if (subElF) subElF.textContent = spec ? spec.subtitle : '';
+          if (subElF) subElF.textContent = defF.subtitle || (spec ? spec.subtitle : '');
           var stepElF = document.getElementById('obFlowStepLabel');
-          if (stepElF) stepElF.textContent = spec ? spec.stepLabel : '';
+          if (stepElF) {
+            stepElF.textContent = railF.length > 1
+              ? ('Шаг ' + (idxF + 1) + ' из ' + railF.length + ' · ' + (spec ? spec.stepLabel : ''))
+              : (spec ? spec.stepLabel : '');
+          }
           var dotsF = document.getElementById('obFlowDots');
           if (dotsF) {
             dotsF.innerHTML = '';
-            dotsF.hidden = true;
+            if (railF.length > 1) {
+              dotsF.hidden = false;
+              var diF;
+              for (diF = 0; diF < railF.length; diF++) {
+                var dotF = document.createElement('span');
+                var clsF = 'ob-flow__dot';
+                if (diF === idxF) clsF += ' ob-flow__dot--current';
+                else if (diF < idxF) clsF += ' ob-flow__dot--done';
+                dotF.className = clsF;
+                dotsF.appendChild(dotF);
+              }
+              dotsF.setAttribute('aria-valuemax', String(railF.length));
+              dotsF.setAttribute('aria-valuenow', String(idxF + 1));
+            } else {
+              dotsF.hidden = true;
+            }
           }
           var closeBtnF = document.getElementById('obFlowClose');
           if (closeBtnF) closeBtnF.setAttribute('aria-label', 'Пропустить');
           var backBtnF = document.getElementById('obFlowBack');
           if (backBtnF) {
             backBtnF.hidden = false;
-            backBtnF.textContent = 'Не сейчас';
+            backBtnF.textContent = idxF > 0 ? 'Назад' : 'Не сейчас';
             backBtnF.setAttribute('aria-hidden', 'false');
-            backBtnF.setAttribute('aria-label', 'Пропустить');
+            backBtnF.setAttribute('aria-label', idxF > 0 ? 'Предыдущий шаг' : 'Пропустить');
           }
-          obFlowMountStep((spec && spec.rail[0]) || 'services');
+          obFlowMountStep(currKeyF || 'services');
           syncProfileBlockTourNextCta();
           syncProfileTourBarInset();
           return;
@@ -2795,7 +2866,13 @@
         var label = 'Далее';
         if (state.profileBlockTourActive && state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
           var fspec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
-          label = profileBlockTourNeedsSave() ? fspec.nextSave : fspec.nextDone;
+          var frail = profileBlockTourEnsureRail();
+          var isLastF = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === frail.length - 1;
+          if (profileBlockTourNeedsSave()) {
+            label = isLastF ? fspec.nextSave : 'Сохранить и дальше';
+          } else {
+            label = isLastF ? fspec.nextDone : 'Далее';
+          }
         } else if (state.profileBlockTourActive) {
           /* На последнем шаге кнопка обещает финал, а не ещё один экран. */
           var rail = profileBlockTourEnsureRail();
@@ -2947,7 +3024,7 @@
             save();
             return;
           }
-          state.profileBlockTourSessionVisitedLastForward = true;
+          profileBlockTourAdvanceOneStep(stepAtClick, []);
           syncProfileBlockTourBar();
           return;
         }
@@ -3025,8 +3102,9 @@
       function profileBlockTourAfterSave() {
         if (!state.profileBlockTourActive) return;
         if (state.profileFocusedTask) {
+          var advanceKeyF = state.profileBlockTourAdvanceFromKey;
           profileBlockTourClearAdvanceStash();
-          state.profileBlockTourSessionVisitedLastForward = true;
+          if (advanceKeyF != null) profileBlockTourAdvanceOneStep(advanceKeyF, []);
           syncProfileBlockTourBar();
           return;
         }

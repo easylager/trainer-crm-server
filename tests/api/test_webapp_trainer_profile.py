@@ -803,3 +803,20 @@ def test_profile_focused_prices_task_contract() -> None:
     assert "finishFocusedProfileTask" in js
     assert "get('task')" in js
 
+
+def test_profile_focused_vitrine_task_contract() -> None:
+    """S7 / AC-008: catalog CTA opens the vitrine overlay, not the seven-section form."""
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    js_home = (_PROFILE_WEBAPP / "trainer-home-main.js").read_text(encoding="utf-8")
+    css = (_PROFILE_WEBAPP / "mini-app-trainer-profile.css").read_text(encoding="utf-8")
+    assert "vitrine:" in js
+    assert "containerId: 'profileNavPhoto'" in js
+    assert "containerId: 'profileNavAbout'" in js
+    assert 'id="profileNavPhoto"' in html
+    assert "task=vitrine" in js_home
+    assert "from=hub" in js_home
+    assert "navigateTo('trainer-profile')" not in js_home
+    assert "navigateToWithHash('trainer-profile'" not in js_home
+    assert ".profile-block-tour-bar" not in css
+

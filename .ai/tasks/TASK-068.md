@@ -2,7 +2,7 @@
 task_id: TASK-068
 title: Профиль тренера — дехаос формы и связка поиск/создание арен
 status: IN_PROGRESS
-phase: implement
+phase: design-review
 created_at: 2026-09-05
 updated_at: 2026-09-05
 branch: feat/TASK-068-profile-data-guards
@@ -225,4 +225,7 @@ Verification method: automated/unit (гейты) + manual/exploratory (пове�
 - **SLICE_DONE** — S1+S2: серверный контракт omit/`[]` покрыт тестами (3 passed); JS — канонические arena_ids, reload после create, confirm смены города, omit unchanged, цена «по запросу» не блокирует Save. TTV-тесты зелёные (37).
 - **SLICE_DONE** — S3: пикер профиля = поиск имя+адрес, чипы, звезда = основная, «Добавить „…“» при пустом результате. Инпут поиска в статическом HTML (не пересобирается). Флаг `?arena_picker=legacy`.
 - **SLICE_DONE** — S4: анкета разделена на «Рабочее» (имя/город/телефон/услуги/арены, открыто) и «Витрина» (о себе/опыт/образование, свёрнуто, без required-dot).
-- **SLICE_DONE** — S5: «Указать цены» на экране «Готово» открывает оверлей `?task=prices` и возвращает на Done; пуши D+1/8/21 ведут туда же (`from=hub`). S6–S7 не начаты.
+- **SLICE_DONE** — S5: «Указать цены» на экране «Готово» открывает оверлей `?task=prices` и возвращает на Done; пуши D+1/8/21 ведут туда же (`from=hub`).
+- **SLICE_DONE** — S6: селектор города в шаге «где тренирую»; GET quick-setup отдаёт `cities` + `city_id` на аренах; поиск по имени/адресу без переписи города; инлайн `arena-setup` вместо редиректа в профиль. POST quick-setup пишет `city_id`.
+- **SLICE_DONE** — S7: `?task=vitrine` — рельс фото / о себе / опыт / образование; хаб «Хочу в каталог» и ритм-подсказка каталога ведут в оверлей, не в семисекционную анкету; мёртвые стили `.profile-block-tour-bar` удалены.
+- **PHASE_COMPLETED** — implement: S1–S7 на `feat/TASK-068-profile-data-guards`. Дальше design-review и ручная проверка в Telegram WebApp (пикер арен, оверлеи цен и витрины). TTV-гейты не менялись.
