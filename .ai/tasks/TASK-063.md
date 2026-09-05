@@ -1,8 +1,8 @@
 ---
 task_id: TASK-063
 title: Ручное наполнение первого города данными (операционная)
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-048, TASK-049, TASK-073]
 execution_mode: SUPERVISED
@@ -125,3 +125,4 @@ When SPEC fixtures land on the train, re-run `--apply` on `trainer_crm_test`. `v
 - **UNBLOCKED** (2026-09-04) — владелец продукта: первый город Минск; status → READY
 - **SPLIT** (2026-09-05) — ресёрч карточки/фото → TASK-073; 063 = загрузка в продукт + ручные слоты только без адаптера
 - **IN_PROGRESS** (2026-09-06) — CONTENT/SCHEMA ops loader `scripts/load_minsk_arena_cards.py` + tests. Dry-run parses 7 dossiers; apply on `trainer_crm_test` updates zamok; unknown amenities unset; no media; no prod writes. PR https://github.com/easylager/trainer-crm-server/pull/25 against `release/ice-discovery` (not merged).
+- **MERGED** (2026-09-06) — squash `493986f` into `release/ice-discovery`. CI green. Not merged to master. Follow-up: `--apply` on local DB; photos after grant; session etalon when SPEC fixtures are on the train.
