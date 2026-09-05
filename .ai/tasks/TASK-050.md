@@ -1,8 +1,8 @@
 ---
 task_id: TASK-050
 title: ice_sessions — сеансы льда и цены, ручной ввод в админке
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-048]
 execution_mode: SUPERVISED
@@ -103,3 +103,4 @@ Status: OPEN
 - **CANONICAL** (2026-09-05) — таблица = единый формат для руки и парсеров; три цены; клиент читает только МК/свободное
 - **IN_PROGRESS** (2026-09-06) — SCHEMA lane, branch `feat/TASK-050-ice-sessions` from `origin/release/ice-discovery` @ bed5a80, then FF to 696e9e8
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/23 base=`release/ice-discovery` SHA `b97f5e3`. Status stays IN_PROGRESS until coordinator merge.
+- **MERGED** (2026-09-06) — squash `6a801c5` into `release/ice-discovery`. CI green. Not merged to master.
