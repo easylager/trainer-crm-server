@@ -3984,29 +3984,52 @@ _SQL_PRIMARY_UPCOMING_BOOKING_STATUSES = (
 async def client_latest_booking_primary_candidate(
     session: AsyncSession,
     client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
 ) -> tuple[int | None, int | None]:
     """
     Trainer (and service_id) for the client's chronologically latest slot start — past or upcoming.
 
     Includes ``cancelled`` bookings so hub primary does not jump to «saved» after the client cancels.
     Used for «Сохранённые», rebook hints, and hub «Мой тренер» when there is no upcoming booking.
+
+    When ``acting_client_id`` is set (EPIC1 multi-profile hub), history is scoped to that profile row
+    instead of the account's self ``clients`` row resolved from ``client_telegram_id``.
     """
     return await _client_booking_primary_candidate_query(
-        session, client_telegram_id, upcoming_only=False
+        session,
+        client_telegram_id,
+        upcoming_only=False,
+        acting_client_id=acting_client_id,
     )
 
 
 async def client_upcoming_booking_primary_candidate(
     session: AsyncSession,
     client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
 ) -> tuple[int | None, int | None]:
     """
     Same as latest booking candidate but only slots that have not ended yet.
     Hub «Мой тренер» must not stick to a trainer after roster detach / past-only history.
     """
     return await _client_booking_primary_candidate_query(
-        session, client_telegram_id, upcoming_only=True
+        session,
+        client_telegram_id,
+        upcoming_only=True,
+        acting_client_id=acting_client_id,
     )
+
+
+async def _client_id_for_booking_history(
+    session: AsyncSession,
+    client_telegram_id: int,
+    acting_client_id: int | None,
+) -> int | None:
+    if acting_client_id is not None:
+        return int(acting_client_id)
+    return await get_client_id_by_telegram_id(session, int(client_telegram_id))
 
 
 async def _client_booking_primary_candidate_query(
@@ -4014,8 +4037,9 @@ async def _client_booking_primary_candidate_query(
     client_telegram_id: int,
     *,
     upcoming_only: bool,
+    acting_client_id: int | None = None,
 ) -> tuple[int | None, int | None]:
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = await _client_id_for_booking_history(session, client_telegram_id, acting_client_id)
     if cid is None:
         return None, None
     upcoming_clause = (
@@ -4064,6 +4088,7 @@ async def client_rebook_trainer_targets(
     client_telegram_id: int,
     *,
     limit: int = REBOOK_TRAINER_TARGETS_DEFAULT_LIMIT,
+    acting_client_id: int | None = None,
 ) -> list[tuple[int, int | None]]:
     """
     Distinct trainers the client has (non-cancelled) bookings with, newest per-trainer slot first —
@@ -4071,7 +4096,7 @@ async def client_rebook_trainer_targets(
 
     ``service_id`` is from that trainer's most recent booking (catalog deep-link hint).
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = await _client_id_for_booking_history(session, client_telegram_id, acting_client_id)
     if cid is None:
         return []
     lim = max(1, min(int(limit), 5))
