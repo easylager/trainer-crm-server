@@ -599,3 +599,152 @@ async def test_arena_setup_mode_request_no_longer_supported(
                 json={"mode": "request", "arena_name": "Старый путь"},
             )
     assert resp.status_code == 422
+
+
+# --- TASK-068 S1/S2: arena_ids omit vs empty; on-request services ----------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_profile_without_arena_ids_keeps_created_arena(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    _trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            create_resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Каток без PATCH арен", "address": "ул. Охраны, 1"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            arena_id = create_resp.json()["arena_id"]
+
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"profile": {"contacts": "tg @keep-arenas"}},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    assert arena_id in (get_resp.json()["trainer"].get("arena_ids") or [])
+
+
+@pytest.mark.asyncio
+async def test_patch_profile_empty_arena_ids_unlinks(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    _trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            create_resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Каток на снятие", "address": "ул. Пустая, 2"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            arena_id = create_resp.json()["arena_id"]
+
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"arena_ids": []},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    assert arena_id not in (get_resp.json()["trainer"].get("arena_ids") or [])
+
+
+@pytest.mark.asyncio
+async def test_patch_services_without_prices_keeps_on_request_service(
+    app_use_test_db,
+    db_session,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = r.scalar()
+    if sid is None:
+        pytest.skip("need seed services")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Цена", "last_name": "По запросу"}},
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"services": [{"service_id": sid, "price_tiers": []}]},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    services = get_resp.json()["trainer"].get("services") or []
+    match = next((s for s in services if int(s["service_id"]) == int(sid)), None)
+    assert match is not None
+    assert match.get("price_byn") is None
+    assert not (match.get("price_tiers") or [])

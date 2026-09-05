@@ -366,6 +366,13 @@
     }
     .service-block { margin-bottom: 14px; }
     .service-block:last-child { margin-bottom: 0; }
+    .svc-on-request-hint {
+      margin: -4px 12px 8px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color, #8a8a8a);
+    }
+    .svc-on-request-hint[hidden] { display: none; }
     .service-row:last-child { margin-bottom: 0; }
     .service-row.service-active {
       background: rgba(var(--accent-rgb), 0.08);

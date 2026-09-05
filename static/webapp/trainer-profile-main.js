@@ -1063,13 +1063,82 @@
         return errs;
       }
 
+      function canonicalArenaIds() {
+        var raw = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids : [];
+        var ids = [];
+        var seen = {};
+        raw.forEach(function(id) {
+          var n = Number(id);
+          if (!n || seen[n]) return;
+          seen[n] = true;
+          ids.push(n);
+        });
+        ids.sort(function(a, b) { return a - b; });
+        return ids;
+      }
+
+      function setCanonicalArenaIds(ids) {
+        if (!state.trainer) state.trainer = {};
+        state.trainer.arena_ids = (ids || []).slice();
+      }
+
+      function syncArenaIdsFromCheckboxes() {
+        var ids = [];
+        (state.arenasList || []).forEach(function(a) {
+          var cb = document.getElementById('arena_' + a.id);
+          if (cb && cb.checked) ids.push(a.id);
+        });
+        setCanonicalArenaIds(ids);
+      }
+
+      function arenaIdsEqual(a, b) {
+        var as = (a || []).map(Number).filter(Boolean).sort(function(x, y) { return x - y; });
+        var bs = (b || []).map(Number).filter(Boolean).sort(function(x, y) { return x - y; });
+        if (as.length !== bs.length) return false;
+        var i;
+        for (i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
+        return true;
+      }
+
+      function priceFieldInvalid(el) {
+        if (!el) return false;
+        var raw = (el.value || '').trim();
+        if (!raw) return false;
+        var n = Number(raw);
+        return isNaN(n) || n < 0;
+      }
+
+      function serviceRowIsOnRequest(serviceId) {
+        var cb = document.getElementById('svc_' + serviceId);
+        if (!cb || !cb.checked) return false;
+        var hasPrice = false;
+        SERVICE_TIER_ORDER.forEach(function(code) {
+          var pel = document.getElementById('price_tier_' + serviceId + '_' + code);
+          if (!pel) return;
+          var raw = (pel.value || '').trim();
+          if (!raw) return;
+          var n = Number(raw);
+          if (!isNaN(n) && n >= 0) hasPrice = true;
+        });
+        return !hasPrice;
+      }
+
+      function syncOnRequestHints() {
+        if (!state.servicesCatalog) return;
+        state.servicesCatalog.forEach(function(s) {
+          var el = document.getElementById('svc_on_request_' + s.id);
+          if (!el) return;
+          el.hidden = !serviceRowIsOnRequest(s.id);
+        });
+      }
+
       function serviceEntryPricesOk(entry) {
         var tiers = entry.price_tiers;
-        if (!tiers || !tiers.length) return false;
+        if (!tiers || !tiers.length) return true;
         var j;
         for (j = 0; j < tiers.length; j++) {
           var pb = tiers[j].price_byn;
-          if (pb == null || pb === '') return false;
+          if (pb == null || pb === '') continue;
           var n = Number(pb);
           if (isNaN(n) || n < 0) return false;
         }
@@ -1077,36 +1146,26 @@
       }
 
       /**
-       * Checked service: must have ≥1 tier checked, and every checked tier must have a valid BYN price.
-       * (Selecting two tariffs but filling only one must not pass.)
+       * Checked service may have no prices («по запросу»). Reject only a filled field
+       * that is not a number ≥ 0.
        */
       function domServicesPricesCoherent() {
         var coherent = true;
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (!cb || !cb.checked) return;
-          var anyTierChecked = false;
-          var everyCheckedHasValidPrice = true;
           SERVICE_TIER_ORDER.forEach(function(code) {
-            var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
             var pel = document.getElementById('price_tier_' + s.id + '_' + code);
-            if (tcb && tcb.checked) {
-              anyTierChecked = true;
-              if (!pel || pel.value.trim() === '') {
-                everyCheckedHasValidPrice = false;
-              } else {
-                var tn = Number(pel.value);
-                if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
-              }
-            }
+            if (priceFieldInvalid(pel)) coherent = false;
           });
-          if (!anyTierChecked || !everyCheckedHasValidPrice) coherent = false;
+          var gpel = document.getElementById('price_group_' + s.id);
+          if (priceFieldInvalid(gpel)) coherent = false;
         });
         return coherent;
       }
 
       var SERVICES_PRICE_HINT_RU =
-        'У каждого отмеченного тарифа должна быть указана цена в BYN. Лишний тариф снимите галочкой.';
+        'Цена — неотрицательное число. Пустое поле значит «по запросу».';
 
       /** Expand tiers and focus first missing price (or tariff) for onboarding clarity. */
       function focusFirstMissingServicePrice() {
@@ -1213,22 +1272,12 @@
           if (!cb) return;
           var invalid = false;
           if (cb.checked) {
-            var anyTierChecked = false;
-            var everyCheckedHasValidPrice = true;
             SERVICE_TIER_ORDER.forEach(function(code) {
-              var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
               var pel = document.getElementById('price_tier_' + s.id + '_' + code);
-              if (tcb && tcb.checked) {
-                anyTierChecked = true;
-                if (!pel || pel.value.trim() === '') {
-                  everyCheckedHasValidPrice = false;
-                } else {
-                  var tn = Number(pel.value);
-                  if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
-                }
-              }
+              if (priceFieldInvalid(pel)) invalid = true;
             });
-            if (!anyTierChecked || !everyCheckedHasValidPrice) invalid = true;
+            var gpel = document.getElementById('price_group_' + s.id);
+            if (priceFieldInvalid(gpel)) invalid = true;
           }
           if (grid) grid.classList.toggle('svc-tier-grid--error', invalid);
           if (tbody) {
@@ -1263,6 +1312,7 @@
             errEl.hidden = true;
           }
         }
+        syncOnRequestHints();
       }
 
       function isFormValidForSave() {
@@ -1318,13 +1368,8 @@
         } catch (eD) {}
         hint.hidden = false;
         if (!dirty) {
-          if (!domServicesPricesCoherent()) {
-            hint.textContent =
-              'Откройте «Тарифы» у отмеченных услуг: нужен хотя бы один тариф с ценой в BYN (или снимите лишнюю услугу).';
-          } else {
-            hint.textContent = '';
-            hint.hidden = true;
-          }
+          hint.textContent = '';
+          hint.hidden = true;
           return;
         }
         var sub = trainerProfileSaveBlockedExplanation();
@@ -1695,41 +1740,40 @@
                 if (!isNaN(p) && p >= 0) tiers.push({ tier_kind: code, price_byn: p });
               }
             });
-            if (tiers.length) {
-              var svcObj = { service_id: s.id, price_tiers: tiers };
-              var sdEl = document.getElementById('svc_desc_' + s.id);
-              var sdRaw = sdEl ? sdEl.value.trim() : '';
-              svcObj.description = sdRaw ? sdRaw : null;
-              var cnEl = document.getElementById('svc_client_notice_' + s.id);
-              var cnRaw = cnEl ? cnEl.value.trim() : '';
-              svcObj.client_notice = cnRaw ? cnRaw : null;
-              var gpel = document.getElementById('price_group_' + s.id);
-              if (gpel && gpel.value.trim() !== '') {
-                var gpg = Number(gpel.value);
-                if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
-              }
-              if (Object.prototype.hasOwnProperty.call(uiAccentByServiceId, s.id)) {
-                var uaRaw = uiAccentByServiceId[s.id];
-                if (uaRaw != null && String(uaRaw).trim()) {
-                  var uax = String(uaRaw).trim().toLowerCase();
-                  if (SERVICE_UI_ACCENT_SLUGS.indexOf(uax) >= 0) svcObj.ui_accent = uax;
-                }
-              }
-              services.push(svcObj);
+            var svcObj = { service_id: s.id, price_tiers: tiers };
+            var sdEl = document.getElementById('svc_desc_' + s.id);
+            var sdRaw = sdEl ? sdEl.value.trim() : '';
+            svcObj.description = sdRaw ? sdRaw : null;
+            var cnEl = document.getElementById('svc_client_notice_' + s.id);
+            var cnRaw = cnEl ? cnEl.value.trim() : '';
+            svcObj.client_notice = cnRaw ? cnRaw : null;
+            var gpel = document.getElementById('price_group_' + s.id);
+            if (gpel && gpel.value.trim() !== '') {
+              var gpg = Number(gpel.value);
+              if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
             }
+            if (Object.prototype.hasOwnProperty.call(uiAccentByServiceId, s.id)) {
+              var uaRaw = uiAccentByServiceId[s.id];
+              if (uaRaw != null && String(uaRaw).trim()) {
+                var uax = String(uaRaw).trim().toLowerCase();
+                if (SERVICE_UI_ACCENT_SLUGS.indexOf(uax) >= 0) svcObj.ui_accent = uax;
+              }
+            }
+            services.push(svcObj);
           }
         });
         services.sort(function(a, b) { return a.service_id - b.service_id; });
-        var arena_ids = [];
-        state.arenasList.forEach(function(a) {
-          var cb = document.getElementById('arena_' + a.id);
-          if (cb && cb.checked) arena_ids.push(a.id);
-        });
-        arena_ids.sort(function(a, b) { return a - b; });
+        var arena_ids = canonicalArenaIds();
         var primary_arena_id = null;
         if (arena_ids.length >= 2) {
           var pr = document.querySelector('input[name="primary_arena"]:checked');
           primary_arena_id = pr ? parseInt(pr.value, 10) : null;
+          if (primary_arena_id == null || arena_ids.indexOf(primary_arena_id) < 0) {
+            var curP = state.trainer && state.trainer.primary_arena_id != null
+              ? Number(state.trainer.primary_arena_id)
+              : null;
+            primary_arena_id = (curP != null && arena_ids.indexOf(curP) >= 0) ? curP : arena_ids[0];
+          }
         } else if (arena_ids.length === 1) {
           primary_arena_id = arena_ids[0];
         }
@@ -2288,7 +2332,7 @@
           containerId: 'profileServicesCollapse',
           tabId: 'form',
           title: 'Услуги и цены',
-          subtitle: 'Отметьте, что проводите, и поставьте цену — клиенты увидят прайс сразу.',
+          subtitle: 'Отметьте, что проводите. Цену можно оставить «по запросу» и заполнить позже.',
         },
         arenas: {
           containerId: 'profileNavArenas',
@@ -2711,7 +2755,7 @@
         if (stepAtClick === 'services' && !domServicesPricesCoherent()) {
           haptic('warning');
           setObFlowError(SERVICES_PRICE_HINT_RU);
-          showSaveToast('Укажите цену', SERVICES_PRICE_HINT_RU, 'warning');
+          showSaveToast('Проверьте цены', SERVICES_PRICE_HINT_RU, 'warning');
           try {
             syncServicesValidationUi();
           } catch (eSync) {}
@@ -4602,12 +4646,19 @@
 
           row.appendChild(head);
           row.appendChild(toggleBtn);
+          var onReq = document.createElement('p');
+          onReq.className = 'svc-on-request-hint';
+          onReq.id = 'svc_on_request_' + id;
+          onReq.textContent = 'Клиент видит: по запросу';
+          onReq.hidden = true;
           var block = document.createElement('div');
           block.className = 'service-block svc-pick__item';
           block.appendChild(row);
+          block.appendChild(onReq);
           block.appendChild(tierBody);
           wrap.appendChild(block);
         });
+        syncOnRequestHints();
       }
 
       function updatePrimaryArenaUi() {
@@ -4638,7 +4689,10 @@
         });
         wrap.innerHTML = html;
         wrap.querySelectorAll('input[name="primary_arena"]').forEach(function(inp) {
-          inp.addEventListener('change', function() { setDirty(); });
+          inp.addEventListener('change', function() {
+            if (state.trainer) state.trainer.primary_arena_id = parseInt(inp.value, 10);
+            setDirty();
+          });
         });
       }
 
@@ -4703,19 +4757,22 @@
       function afterArenaSetupSuccess(data) {
         if (data && data.trainer) state.trainer = data.trainer;
         if (data && data.moderation_readiness) state.moderation_readiness = data.moderation_readiness;
-        renderArenas();
-        renderModeration();
-        updateProgressRing();
-        syncProfileBlockTourBar();
-        if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
-          var missingRaw =
-            (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
-          var missing = profileBlockTourMissingStepKeys(missingRaw);
-          if (!profileBlockTourUiStepStillMissing('arenas', missing)) {
-            profileBlockTourAdvanceOneStep('arenas', missing);
-            syncProfileBlockTourBar();
+        var cid = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
+        loadArenasForCity(cid).then(function() {
+          renderArenas();
+          renderModeration();
+          updateProgressRing();
+          syncProfileBlockTourBar();
+          if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
+            var missingRaw =
+              (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+            var missing = profileBlockTourMissingStepKeys(missingRaw);
+            if (!profileBlockTourUiStepStillMissing('arenas', missing)) {
+              profileBlockTourAdvanceOneStep('arenas', missing);
+              syncProfileBlockTourBar();
+            }
           }
-        }
+        });
       }
 
       function renderArenaSupportBlock(box) {
@@ -5057,6 +5114,7 @@
             cb.checked = isSelected;
             cb.addEventListener('change', function() {
               row.classList.toggle('arena-active', cb.checked);
+              syncArenaIdsFromCheckboxes();
               updatePrimaryArenaUi();
               setDirty();
             });
@@ -5122,12 +5180,21 @@
         });
         citySel.onchange = function() {
           var cid = citySel.value ? Number(citySel.value) : null;
-          // Арены и «добавить арену» должны реагировать на выбранный в дропдауне город сразу,
-          // а не только после «Сохранить» — иначе город уже виден в списке арен, а кнопка
-          // добавления площадки ещё нет (renderArenas читает state.trainer.profile.city_id).
+          var prev = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
+          var hadArenas = canonicalArenaIds().length > 0;
+          if (hadArenas && cid !== prev) {
+            if (
+              !window.confirm(
+                'Сменить город? Выбранные площадки другого города будут сняты.'
+              )
+            ) {
+              citySel.value = prev ? String(prev) : '';
+              return;
+            }
+          }
           if (state.trainer.profile) state.trainer.profile.city_id = cid;
           loadArenasForCity(cid).then(function() {
-            state.trainer.arena_ids = [];
+            if (cid !== prev) setCanonicalArenaIds([]);
             renderArenas();
             setDirty();
           });
@@ -5366,16 +5433,20 @@
             group_classes_enabled: !!pr.group_classes_enabled,
           },
           services: parsed.services,
-          arena_ids: parsed.arena_ids,
         };
-        if (parsed.primary_arena_id != null) {
-          body.primary_arena_id = parsed.primary_arena_id;
-        }
-
         var snapObj = null;
         try {
           snapObj = state.snapshot ? JSON.parse(state.snapshot) : null;
         } catch (e) {}
+        var snapArenas = snapObj && snapObj.arena_ids ? snapObj.arena_ids : [];
+        if (!arenaIdsEqual(parsed.arena_ids, snapArenas)) {
+          body.arena_ids = parsed.arena_ids;
+        }
+        var snapPrimary = snapObj && snapObj.primary_arena_id != null ? Number(snapObj.primary_arena_id) : null;
+        var curPrimary = parsed.primary_arena_id != null ? Number(parsed.primary_arena_id) : null;
+        if (body.arena_ids || snapPrimary !== curPrimary) {
+          if (curPrimary != null) body.primary_arena_id = curPrimary;
+        }
         if (
           state.scheduleSettings &&
           !state.scheduleSettings.arena_grid_locked &&
