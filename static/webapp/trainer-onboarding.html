@@ -258,7 +258,13 @@
       padding: 8px 2px;
     }
     .ob-city {
-      margin: 12px 0 4px;
+      margin: 12px 0 18px;
+    }
+    /* Режим «одна / несколько / пропустить» — отдельно от услуг: после селекта города
+       нужен воздух, иначе чипсы визуально липнут к полю (см. onboarding QA). */
+    #obArenaMode.ob-chips {
+      gap: 10px 8px;
+      margin-bottom: 4px;
     }
     .ob-city-label {
       display: block;
