@@ -126,6 +126,9 @@ class Trainer(Base):
     arenas: Mapped[list["Arena"]] = relationship(
         "Arena", secondary="trainer_arenas", back_populates="trainers", lazy="raise"
     )
+    cities: Mapped[list["City"]] = relationship(
+        "City", secondary="trainer_cities", lazy="raise"
+    )
 
 
 class TrainerLinkToken(Base):
@@ -153,7 +156,9 @@ class TrainerLinkToken(Base):
 
 
 class City(Base):
-    """City for filtering trainers. Admin fills; trainer profile has one city.
+    """City for filtering trainers. Admin fills; trainer_profiles.city_id is the primary city.
+
+    Catalog membership is ``trainer_cities`` (profile city plus cities of public arenas).
 
     ``country`` (ISO 3166-1 alpha-2: ``BY``/``RU``) drives display currency —
     see ``src.shared.currency.resolve_currency``. ``price_group`` selects which row of
@@ -379,6 +384,23 @@ trainer_arenas_table = Table(
     Column("arena_id", ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False),
     Column("is_public", Boolean(), nullable=False, server_default=text("true")),
     UniqueConstraint("trainer_id", "arena_id", name="uq_trainer_arenas_trainer_arena"),
+)
+
+# Catalog geography: profile city (is_primary) plus cities of public trainer_arenas.
+trainer_cities_table = Table(
+    "trainer_cities",
+    Base.metadata,
+    Column("trainer_id", ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False),
+    Column("city_id", ForeignKey("cities.id", ondelete="CASCADE"), nullable=False),
+    Column("is_primary", Boolean(), nullable=False, server_default=text("false")),
+    UniqueConstraint("trainer_id", "city_id", name="uq_trainer_cities_trainer_city"),
+    Index("ix_trainer_cities_city_id", "city_id"),
+    Index(
+        "uq_trainer_cities_one_primary",
+        "trainer_id",
+        unique=True,
+        postgresql_where=text("is_primary"),
+    ),
 )
 
 

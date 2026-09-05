@@ -1088,6 +1088,12 @@
         return ids;
       }
 
+      function arenaIdsOutsideLoadedList() {
+        var loaded = {};
+        (state.arenasList || []).forEach(function(a) { loaded[Number(a.id)] = true; });
+        return canonicalArenaIds().filter(function(id) { return !loaded[id]; });
+      }
+
       function setCanonicalArenaIds(ids) {
         if (!state.trainer) state.trainer = {};
         state.trainer.arena_ids = (ids || []).slice();
@@ -1113,6 +1119,9 @@
         (state.arenasList || []).forEach(function(a) {
           var cb = document.getElementById('arena_' + a.id);
           if (cb && cb.checked) ids.push(a.id);
+        });
+        arenaIdsOutsideLoadedList().forEach(function(id) {
+          if (ids.indexOf(id) < 0) ids.push(id);
         });
         setCanonicalArenaIds(ids);
       }
@@ -5648,24 +5657,12 @@
         citySel.onchange = function() {
           var cid = citySel.value ? Number(citySel.value) : null;
           var prev = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
-          var hadArenas = canonicalArenaIds().length > 0;
-          if (hadArenas && cid !== prev) {
-            if (
-              !window.confirm(
-                'Сменить город? Выбранные площадки другого города будут сняты.'
-              )
-            ) {
-              citySel.value = prev ? String(prev) : '';
-              return;
-            }
-          }
           if (state.trainer.profile) state.trainer.profile.city_id = cid;
           if (cid !== prev) {
             state.arenaCreateOpen = false;
             resetArenaSearch();
           }
           loadArenasForCity(cid).then(function() {
-            if (cid !== prev) setCanonicalArenaIds([]);
             renderArenas();
             setDirty();
           });

@@ -543,8 +543,8 @@ async def ensure_trainer_schedule_arena_link(
     Guarantee a trainer_arenas row so EXISTS eligibility checks succeed.
 
     Missing links are created with is_public=false (schedule-only, not vitrine).
-    Allowed only for an active arena in the trainer's profile city (TASK-058 will
-    widen this to trainer_cities). Existing rows are left unchanged.
+    Allowed only for an active arena in trainer_cities (profile city plus cities of
+    public arenas). Existing rows are left unchanged.
 
     Returns None on success, or a Russian error string. Does not commit.
     """
@@ -558,21 +558,29 @@ async def ensure_trainer_schedule_arena_link(
     r = await session.execute(
         text(
             """
-            SELECT a.is_active, a.city_id, p.city_id
+            SELECT a.is_active, a.city_id
             FROM arenas a
-            LEFT JOIN trainer_profiles p ON p.trainer_id = :tid
             WHERE a.id = :aid
             """
         ),
-        {"tid": trainer_id, "aid": aid},
+        {"aid": aid},
     )
     row = r.fetchone()
     if row is None:
         return "Площадка не найдена"
-    is_active, arena_city_id, trainer_city_id = row[0], row[1], row[2]
+    is_active, arena_city_id = row[0], row[1]
     if not bool(is_active):
         return "Площадка неактивна"
-    if trainer_city_id is None or int(arena_city_id) != int(trainer_city_id):
+    r_city = await session.execute(
+        text(
+            """
+            SELECT 1 FROM trainer_cities
+            WHERE trainer_id = :tid AND city_id = :cid
+            """
+        ),
+        {"tid": trainer_id, "cid": int(arena_city_id)},
+    )
+    if r_city.fetchone() is None:
         return "Площадка в другом городе"
     await session.execute(
         text(

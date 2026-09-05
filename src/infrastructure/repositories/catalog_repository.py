@@ -58,7 +58,11 @@ class CatalogRepository:
                 )
             )
         else:
-            count_in_city = f"({self._SERVICE_TRAINER_COUNT_SQL} AND p.city_id = :city_id)"
+            count_in_city = (
+                f"({self._SERVICE_TRAINER_COUNT_SQL}"
+                " AND EXISTS (SELECT 1 FROM trainer_cities tc"
+                " WHERE tc.trainer_id = t.id AND tc.city_id = :city_id))"
+            )
             r = await self._session.execute(
                 text(
                     f"""
@@ -93,8 +97,10 @@ class CatalogRepository:
         Active arenas in a city with address and coords for map link.
 
         When ``service_id`` is set, each row includes ``trainer_count``: distinct active
-        catalog-visible trainers in ``city_id`` who offer that service and list the arena
-        in ``trainer_arenas`` with ``is_public = true`` (vitrine; schedule-only links do not count).
+        catalog-visible trainers who offer that service, list the arena in
+        ``trainer_arenas`` with ``is_public = true``, and have that city in
+        ``trainer_cities`` (profile city or a public arena city — not only
+        ``trainer_profiles.city_id``).
 
         ``include_unconfirmed``: trainer-created arenas start ``is_confirmed=false``
         (TASK-046) — visible to trainers of the same city (pass ``True``, e.g. the
@@ -166,12 +172,16 @@ class CatalogRepository:
                     FROM trainer_arenas ta
                     INNER JOIN trainers t ON t.id = ta.trainer_id AND {tw}
                     INNER JOIN trainer_profiles tp
-                        ON tp.trainer_id = t.id AND tp.city_id = :city_id
+                        ON tp.trainer_id = t.id
                     INNER JOIN trainer_services ts
                         ON ts.trainer_id = t.id AND ts.service_id = :service_id
                     INNER JOIN arenas ar
                         ON ar.id = ta.arena_id AND ar.city_id = :city_id AND ar.is_active
                     WHERE ta.is_public = true
+                      AND EXISTS (
+                          SELECT 1 FROM trainer_cities tc
+                          WHERE tc.trainer_id = t.id AND tc.city_id = :city_id
+                      )
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
                 WHERE a.city_id = :city_id AND a.is_active {confirmed_filter} {published_filter}
