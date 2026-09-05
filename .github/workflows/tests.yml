@@ -3,9 +3,9 @@ name: Tests
 
 on:
   push:
-    branches: [master, main, develop, staging]
+    branches: [master, main, develop, staging, release/**]
   pull_request:
-    branches: [master, main, develop, staging]
+    branches: [master, main, develop, staging, release/**]
 
 env:
   DATABASE_URL: postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test

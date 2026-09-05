@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -169,7 +170,12 @@ class City(Base):
 
 
 class Arena(Base):
-    """Venue/arena in a city: real place with address and optional coords for map link."""
+    """Venue/arena in a city: real place with address and optional coords for map link.
+
+    ``is_active`` is soft-delete. ``is_confirmed`` is post-hoc moderation of trainer-created
+    workplaces (TASK-046) — not the Ice Discovery vitrine flag. Publication of the catalog
+    card lives on ``ArenaProfile.status`` (draft|published|archived).
+    """
     __tablename__ = "arenas"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -190,6 +196,60 @@ class Arena(Base):
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
     )
+    profile: Mapped[Optional["ArenaProfile"]] = relationship(
+        back_populates="arena", uselist=False, lazy="raise"
+    )
+
+
+class ArenaProfile(Base):
+    """
+    Ice Discovery vitrine for one arena (1:1). Not parser config (see ice_parser_jobs).
+
+    ``status`` publishes the catalog card (draft|published|archived). It is not
+    ``arenas.is_confirmed``, which is post-hoc moderation of trainer-created workplaces.
+    ``slug`` is unique per city and must stay stable after first issue — do not edit from
+    admin without an explicit warning (future public URLs).
+    """
+
+    __tablename__ = "arena_profiles"
+    __table_args__ = (
+        UniqueConstraint("city_id", "slug", name="uq_arena_profiles_city_slug"),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_arena_profiles_status",
+        ),
+        CheckConstraint(
+            "season_start_month IS NULL OR (season_start_month BETWEEN 1 AND 12)",
+            name="ck_arena_profiles_season_start",
+        ),
+        CheckConstraint(
+            "season_end_month IS NULL OR (season_end_month BETWEEN 1 AND 12)",
+            name="ck_arena_profiles_season_end",
+        ),
+    )
+
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True
+    )
+    city_id: Mapped[int] = mapped_column(
+        ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slug: Mapped[str] = mapped_column(String(160), nullable=False)
+    district: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    timezone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    short_description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    social_urls: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+
+    arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table

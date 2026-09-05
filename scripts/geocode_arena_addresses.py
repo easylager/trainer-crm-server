@@ -31,9 +31,14 @@ import httpx
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from src.application.arena_profile import (
+    district_from_nominatim_address,
+    nominatim_result_matches_city,
+)
 from src.shared.config import Settings
 
 NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
 DEFAULT_SLEEP_SEC = 1.1
 
 
@@ -110,6 +115,131 @@ def geocode_nominatim(
     return lat, lon
 
 
+def reverse_geocode_nominatim(
+    client: httpx.Client,
+    *,
+    latitude: float,
+    longitude: float,
+    user_agent: str,
+) -> dict | None:
+    url = f"{NOMINATIM_REVERSE}?lat={latitude}&lon={longitude}&format=json&addressdetails=1"
+    r = client.get(
+        url,
+        headers={"User-Agent": user_agent, "Accept-Language": "ru,be,en"},
+    )
+    if r.status_code == 429:
+        raise RuntimeError("Nominatim rate-limited (429); increase --sleep or retry later.")
+    r.raise_for_status()
+    data = r.json()
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _run_reverse(args, engine, user_agent: str) -> None:
+    """Fill arena_profiles.district from existing coordinates. Never call from the web app."""
+    active_clause = "" if args.include_inactive else "AND a.is_active IS TRUE"
+    district_clause = "" if args.force else "AND (p.district IS NULL OR trim(p.district) = '')"
+    sql = text(
+        f"""
+        SELECT a.id, a.name, a.latitude, a.longitude, c.name AS city_name, p.district
+        FROM arenas a
+        JOIN cities c ON c.id = a.city_id
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        WHERE a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+        {active_clause}
+        {district_clause}
+        ORDER BY a.id
+        """
+    )
+    with Session(engine) as session:
+        rows = list(session.execute(sql).mappings().all())
+    if args.limit and args.limit > 0:
+        rows = rows[: args.limit]
+    if not rows:
+        print("Нет арен для обратного геокодинга (координаты, --force, --include-inactive).")
+        return
+
+    print(f"Обратный геокодинг: {len(rows)} арен (sleep={args.sleep}s, dry_run={args.dry_run}).")
+    updated = 0
+    skipped_city = 0
+    failed = 0
+    unusual: list[str] = []
+
+    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        for i, row in enumerate(rows):
+            aid = int(row["id"])
+            name = row["name"] or ""
+            city_name = row["city_name"] or ""
+            lat, lon = float(row["latitude"]), float(row["longitude"])
+            try:
+                payload = reverse_geocode_nominatim(
+                    client, latitude=lat, longitude=lon, user_agent=user_agent
+                )
+            except Exception as e:
+                print(f"[{aid}] {name!r} ERROR: {e}")
+                failed += 1
+                if i + 1 < len(rows):
+                    time.sleep(args.sleep)
+                continue
+            address = (payload or {}).get("address") if payload else None
+            district = district_from_nominatim_address(address if isinstance(address, dict) else None)
+            if not nominatim_result_matches_city(address if isinstance(address, dict) else None, city_name):
+                print(f"[{aid}] {name!r} — промах города (ожидали {city_name!r}), не пишем.")
+                skipped_city += 1
+            elif not district:
+                print(f"[{aid}] {name!r} — район не найден в ответе Nominatim.")
+                failed += 1
+            else:
+                if address and not address.get("city_district") and address.get("suburb"):
+                    unusual.append(f"[{aid}] {name}: suburb={district!r} (нет city_district)")
+                print(f"[{aid}] {name!r} → {district}")
+                if not args.dry_run:
+                    with Session(engine) as session:
+                        result = session.execute(
+                            text(
+                                """
+                                UPDATE arena_profiles
+                                SET district = :district
+                                WHERE arena_id = :id
+                                  AND (:force OR district IS NULL OR trim(district) = '')
+                                """
+                            ),
+                            {"district": district, "id": aid, "force": bool(args.force)},
+                        )
+                        session.commit()
+                        if result.rowcount:
+                            updated += 1
+                        else:
+                            print(f"[{aid}] нет строки arena_profiles — пропуск (нужен бэкфилл профиля).")
+            if i + 1 < len(rows):
+                time.sleep(args.sleep)
+
+    if unusual:
+        print("К просмотру глазами (микрорайон вместо округа):")
+        for line in unusual:
+            print(" ", line)
+    active_sql = text(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE a.is_active) AS active,
+          COUNT(*) FILTER (WHERE a.is_active AND p.district IS NOT NULL AND trim(p.district) <> '') AS with_district
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        """
+    )
+    with Session(engine) as session:
+        cov = session.execute(active_sql).mappings().one()
+    active = int(cov["active"] or 0)
+    with_d = int(cov["with_district"] or 0)
+    pct = (100.0 * with_d / active) if active else 0.0
+    print(f"Покрытие district у активных: {with_d}/{active} ({pct:.1f}%). Цель AC-002: ≥90%.")
+    if args.dry_run:
+        print(f"Готово (dry-run). Промах города: {skipped_city}, без района/ошибок: {failed}.")
+    else:
+        print(f"Готово. Районов записано: {updated}, промах города: {skipped_city}, ошибок: {failed}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Geocode arena addresses (Nominatim → DB).")
     parser.add_argument("--dry-run", action="store_true", help="Print results only, do not UPDATE.")
@@ -135,6 +265,11 @@ def main() -> None:
         action="store_true",
         help="Also process arenas with is_active = false.",
     )
+    parser.add_argument(
+        "--reverse",
+        action="store_true",
+        help="Fill arena_profiles.district from existing lat/lon (Nominatim reverse).",
+    )
     args = parser.parse_args()
 
     contact = (args.contact or os.environ.get("GEOCODE_CONTACT_EMAIL", "") or "").strip()
@@ -150,6 +285,10 @@ def main() -> None:
 
     settings = Settings()
     engine = create_engine(_db_url(settings))
+
+    if args.reverse:
+        _run_reverse(args, engine, user_agent)
+        return
 
     active_clause = "" if args.include_inactive else "AND a.is_active IS TRUE"
     null_clause = "" if args.force else "AND (a.latitude IS NULL OR a.longitude IS NULL)"

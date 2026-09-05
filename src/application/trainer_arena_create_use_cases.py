@@ -221,6 +221,9 @@ async def create_trainer_arena(
         ),
         {"trainer_id": trainer_id, "arena_id": arena_id},
     )
+    from src.application.arena_profile import ensure_arena_profile
+
+    await ensure_arena_profile(session, int(arena_id), city_id=city_id, name=nm)
     await session.commit()
     updated_trainer = await repo.get_by_id(trainer_id)
     return {"status": "created", "arena_id": arena_id, "trainer": updated_trainer}
