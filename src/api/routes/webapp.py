@@ -2617,8 +2617,8 @@ async def get_client_hub_bootstrap(
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
 
     ``bookings`` / ``requests`` / ``activity`` / ``passes`` resolve through the selected profile
-    (``X-Profile-Id``). ``_hub_session`` edges/saved trainers are profile-scoped; booking-history
-    primary candidates may still use account Telegram id (see inner docstring).
+    (``X-Profile-Id``). ``_hub_session`` edges/saved trainers and rebook/primary hints use the
+    same acting profile.
     """
     telegram_id = client_catalog_telegram_key(principal)
     requested_profile_id = _parse_profile_id_header(x_profile_id)
@@ -2641,11 +2641,9 @@ async def get_client_hub_bootstrap(
         """
         Legacy: selected_trainer_id + edge graph fields + saved_trainers preview for home strip.
 
-        ``edges``/``explicit_primary`` now resolve through the selected profile (EPIC1 Slice 5).
-        The booking-history-derived candidates below (``book_*``/``upcoming_*``/``rebook_raw``)
-        stay account-scoped — they live in booking_use_cases.py, outside this slice's boundary —
-        so the computed primary can still be nudged by the account's own booking history even
-        while viewing a child profile with no bookings of its own yet.
+        ``edges``/``explicit_primary`` resolve through the selected profile (EPIC1 Slice 5).
+        ``book_*`` / ``upcoming_*`` / ``rebook_raw`` use the same acting profile so hub
+        «Записаться снова» and primary-trainer hints match «Мои записи» for that person.
         """
         async with async_session_factory() as s:
             await reset_orphan_client_miniapp_trainer_pointers(s, telegram_id)
@@ -2658,11 +2656,15 @@ async def get_client_hub_bootstrap(
                 s, session_tid, telegram_id
             ):
                 session_tid = None
-            book_tid, book_svc = await client_latest_booking_primary_candidate(s, telegram_id)
-            upcoming_tid, upcoming_svc = await client_upcoming_booking_primary_candidate(
-                s, telegram_id
+            book_tid, book_svc = await client_latest_booking_primary_candidate(
+                s, telegram_id, acting_client_id=hub_session_client_id
             )
-            rebook_raw = await client_rebook_trainer_targets(s, telegram_id, limit=3)
+            upcoming_tid, upcoming_svc = await client_upcoming_booking_primary_candidate(
+                s, telegram_id, acting_client_id=hub_session_client_id
+            )
+            rebook_raw = await client_rebook_trainer_targets(
+                s, telegram_id, limit=3, acting_client_id=hub_session_client_id
+            )
             bp_tid, bp_svc = _hub_booking_primary_ids(
                 upcoming_tid, upcoming_svc, book_tid, book_svc
             )

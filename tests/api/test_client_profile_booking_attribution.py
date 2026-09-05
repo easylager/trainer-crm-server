@@ -352,6 +352,85 @@ async def test_hub_bootstrap_bookings_scoped_to_child_profile(app_use_test_db, d
 
 
 @pytest.mark.asyncio
+async def test_hub_bootstrap_rebook_scoped_to_child_profile(app_use_test_db, db_session) -> None:
+    """Hub «Записаться снова» / last_booking hints must follow the acting profile, not the account."""
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_parent, service_parent = await _seed_trainer_with_service(db_session)
+    trainer_child, service_child = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_parent, client_id=parent_id, service_id=service_parent, hour=10
+    )
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_child, client_id=child_id, service_id=service_child, hour=11
+    )
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r_child = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+            r_parent = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers=_client_auth_headers(),
+            )
+
+    assert r_child.status_code == 200 and r_parent.status_code == 200
+    cs_child = r_child.json().get("client_session") or {}
+    cs_parent = r_parent.json().get("client_session") or {}
+
+    child_rebook_ids = [t["trainer_id"] for t in cs_child.get("rebook_targets") or []]
+    parent_rebook_ids = [t["trainer_id"] for t in cs_parent.get("rebook_targets") or []]
+
+    assert trainer_child in child_rebook_ids
+    assert trainer_parent not in child_rebook_ids
+    assert trainer_parent in parent_rebook_ids
+    assert trainer_child not in parent_rebook_ids
+    assert cs_child.get("last_booking_trainer_id") == trainer_child
+    assert cs_parent.get("last_booking_trainer_id") == trainer_parent
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_rebook_empty_when_child_has_no_history(
+    app_use_test_db, db_session
+) -> None:
+    """Child profile with no bookings must not inherit parent's rebook strip."""
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=parent_id, service_id=service_id, hour=10
+    )
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+
+    assert r.status_code == 200, r.text
+    cs = r.json().get("client_session") or {}
+    assert cs.get("rebook_targets") in (None, [])
+    assert cs.get("last_booking_trainer_id") is None
+
+
+@pytest.mark.asyncio
 async def test_get_client_requests_scoped_to_x_profile_id(app_use_test_db, db_session) -> None:
     """GET /client/requests with child header lists only the child's requests."""
     from tests.api.test_webapp_client_miniapp_integration import _require_seed_ids
