@@ -114,6 +114,7 @@ from src.application.booking_use_cases import (
     normalize_trainer_client_list_tier_filter,
     patch_trainer_client_identity_for_card,
     resolve_arena_for_client_self_booking,
+    ensure_trainer_schedule_arena_link,
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
     trainer_client_roster_link_exists,
@@ -1051,12 +1052,7 @@ async def put_schedule_templates_day(
                 status_code=400,
                 detail="Выберите площадку для групповых слотов в шаблоне.",
             )
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": int(body.group_arena_id)},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, trainer_id, int(body.group_arena_id))
 
     minute_to_cap: dict[int, int] = {}
     minute_to_service: dict[int, int | None] = {}
@@ -1087,12 +1083,7 @@ async def put_schedule_templates_day(
             minute_to_service[sm] = None
             if s.arena_id is not None:
                 aid_cell = int(s.arena_id)
-                r_own = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": aid_cell},
-                )
-                if not r_own.fetchone():
-                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                await _require_schedule_arena_link(session, trainer_id, aid_cell)
                 minute_to_row_arena[sm] = aid_cell
     try:
         await replace_templates_for_day(
@@ -1192,6 +1183,44 @@ def _schedule_slot_intervals(body: ScheduleSlotsDayBody) -> list[tuple[time, tim
 _SLOT_RELATED_SNOOZE_HINT_IDS = ("slots_next_week", "open_loop_free_next")
 
 
+async def _require_schedule_arena_link(session: AsyncSession, trainer_id: int, arena_id: int) -> None:
+    """Auto-create a non-public trainer_arenas row, or 400 if the arena is ineligible."""
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+
+class TrainerArenaPublicBody(BaseModel):
+    is_public: bool
+
+
+@router.patch("/trainer/arenas/{arena_id:int}/public")
+async def patch_trainer_arena_public(
+    arena_id: int,
+    body: TrainerArenaPublicBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Toggle whether a linked arena appears on the trainer's catalog card (TASK-057)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    from src.infrastructure.repositories.trainer_repository import TrainerRepository
+
+    repo = TrainerRepository(session)
+    ok = await repo.set_trainer_arena_is_public(trainer_id, int(arena_id), bool(body.is_public))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Площадка не привязана к вашему профилю")
+    await session.commit()
+    trainer = await get_trainer(session, trainer_id)
+    return {
+        "ok": True,
+        "arena_id": int(arena_id),
+        "is_public": bool(body.is_public),
+        "trainer": trainer,
+    }
+
+
 async def _clear_slot_related_hint_snoozes(session: AsyncSession, trainer_id: int) -> None:
     """
     TASK-029 S3: saving slots is the server-side mirror of what the client used to do to its
@@ -1232,12 +1261,7 @@ async def post_schedule_slots(
         if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
             raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
     if body.arena_id is not None:
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": int(body.arena_id)},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, trainer_id, int(body.arena_id))
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
@@ -1275,12 +1299,7 @@ async def post_schedule_slots(
                         detail="Площадку на уровне одного слота можно задать только для индивидуальных слотов.",
                     )
                 aid_ent = int(entry.arena_id)
-                rchk_ent = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": aid_ent},
-                )
-                if not rchk_ent.fetchone():
-                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                await _require_schedule_arena_link(session, trainer_id, aid_ent)
                 per_slot_arena[start_m] = aid_ent
         try:
             await replace_slots_for_day(
@@ -7863,12 +7882,7 @@ async def post_trainer_booking(
             raise HTTPException(status_code=400, detail="Slot not found or not available")
     arena_id: int | None = body.arena_id
     if arena_id is not None:
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": booking_trainer_id, "aid": arena_id},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, booking_trainer_id, arena_id)
     booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
         session,
         slot_id=body.slot_id,
