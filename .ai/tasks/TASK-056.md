@@ -1,7 +1,8 @@
 ---
 task_id: TASK-056
 title: Место занятия — арена события, а не основная площадка тренера
-status: IN_PROGRESS
+status: MERGED
+phase: done
 phase: execute
 epic: EPIC3
 depends_on: []
@@ -99,3 +100,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B1/B3 из `DESIGN-ARENAS-CLIENT-APP.md` §6
 - **IN_PROGRESS** (2026-09-06) — branch `feat/TASK-056-booking-place` from `origin/release/ice-discovery` @ bed5a80; PLACE lane
 - **PR_OPEN** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/24 (base `release/ice-discovery`, commit d604680). Status stays IN_PROGRESS until coordinator merge.
+- **MERGED** (2026-09-06) — squash `932c39b` into `release/ice-discovery`. CI green. Not merged to master.
