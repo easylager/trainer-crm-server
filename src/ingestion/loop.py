@@ -25,10 +25,13 @@ async def run_ice_ingest_scheduler_loop() -> None:
         await asyncio.sleep(ICE_INGEST_LOOP_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                from src.ingestion.publish import SqlAlchemyIceSessionPublisher
+
                 scheduler = IceIngestScheduler(
                     store=SqlAlchemyParserJobStore(session),
                     recorder=SqlAlchemyScrapeRunRecorder(session),
                     registry=default_registry(),
+                    publisher=SqlAlchemyIceSessionPublisher(session),
                 )
                 outcomes = await scheduler.run_due(datetime.now(timezone.utc))
                 await session.commit()

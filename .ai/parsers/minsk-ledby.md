@@ -21,6 +21,7 @@
   "schedule_block_start": "МАССОВОЕ КАТАНИЕ",
   "schedule_block_stop": ["ОТРАБОТКА", "Далее"],
   "disco_marker": "*",
+  "prices_already_minor": true,
   "requires_by_egress": false
 }
 ```

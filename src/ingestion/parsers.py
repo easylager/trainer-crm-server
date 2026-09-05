@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA
 from src.ingestion.types import Extraction, ParserJob
 
 
@@ -26,21 +25,42 @@ class ParserRegistry:
         return self._parsers.get(parser_key)
 
 
-class MinskArenaSaleframeParser(IceParser):
-    """Compiling stub. Real ABWS extract is TASK-061."""
-
-    parser_key = PARSER_KEY_MINSK_ARENA
-
-    async def extract(self, job: ParserJob) -> Extraction:
-        return Extraction(
-            arena_id=job.arena_id,
-            parser_key=self.parser_key,
-            snapshot={"stub": True, "parser_key": self.parser_key},
-            slots=[],
-        )
-
-
 def default_registry() -> ParserRegistry:
+    from src.ingestion.adapters import (
+        ChizhovkaHtmlParser,
+        DiamondHtmlParser,
+        LedByHtmlParser,
+        MinskArenaSaleframeParser,
+        ZamokHtmlParser,
+    )
+
     registry = ParserRegistry()
-    registry.register(MinskArenaSaleframeParser())
+    for parser in (
+        MinskArenaSaleframeParser(),
+        ZamokHtmlParser(),
+        ChizhovkaHtmlParser(),
+        LedByHtmlParser(),
+        DiamondHtmlParser(),
+    ):
+        registry.register(parser)
     return registry
+
+
+from src.ingestion.adapters import (  # noqa: E402
+    ChizhovkaHtmlParser,
+    DiamondHtmlParser,
+    LedByHtmlParser,
+    MinskArenaSaleframeParser,
+    ZamokHtmlParser,
+)
+
+__all__ = [
+    "ChizhovkaHtmlParser",
+    "DiamondHtmlParser",
+    "IceParser",
+    "LedByHtmlParser",
+    "MinskArenaSaleframeParser",
+    "ParserRegistry",
+    "ZamokHtmlParser",
+    "default_registry",
+]
