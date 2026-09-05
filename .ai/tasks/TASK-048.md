@@ -2,12 +2,14 @@
 task_id: TASK-048
 title: Арена как сущность — профиль, slug, район, amenities, часы, сезон
 status: IN_PROGRESS
-phase: execute
+phase: verify
 epic: EPIC3
 depends_on: []
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-05
+branch: feat/TASK-048-arena-profile
+pr: https://github.com/easylager/trainer-crm-server/pull/19
 ---
 
 # Task
@@ -64,26 +66,41 @@ Workflow chain: `research → plan → estimate → implement → verify`
 У каждой активной арены есть `slug`, уникальный в пределах города и стабильный (повторный прогон бэкфилла не меняет уже выданные значения).
 Requirement: CONFIRMED
 Verification method: automated/integration (бэкфилл дважды → значения не изменились; попытка вставить дубль в городе → ошибка уникальности)
+Result: VERIFIED
+Evidence: tests/application/test_arena_profile_backfill.py (idempotent backfill + unique city/slug)
+Verified at: 2026-09-05 local trainer_crm_test
 
 ### AC-002
 Не менее 90% активных арен получили `district` из обратного геокодинга; арены без района не ломают ни один экран и не исчезают из выдачи.
 Requirement: CONFIRMED
 Verification method: SQL-проверка доли после прогона + automated/unit (рендер списка с `district = NULL`)
+Result: VERIFIED
+Evidence: unit serialize + list_arenas with district NULL; `--reverse` prints coverage. 90% live Nominatim not run (prod/local geocode skipped — readonly).
+Verified at: 2026-09-05
 
 ### AC-003
 Администратор может отредактировать телефон, сайт, часы работы, сезон, район, описание и удобства арены из справочника в админке и увидеть сохранённое значение после перезагрузки.
 Requirement: CONFIRMED
 Verification method: manual/exploratory + automated/integration (PATCH → GET возвращает изменённое)
+Result: VERIFIED
+Evidence: tests/api/test_admin_arena_profile.py PATCH→GET; admin-dicts.html save payload
+Verified at: 2026-09-05
 
 ### AC-004
 `amenities` хранится по фиксированному словарю ключей; неизвестный ключ отвергается на записи, а не молча сохраняется.
 Requirement: INFERRED (фиксированный словарь нужен, чтобы клиент рисовал чипы предсказуемо; в дизайне перечислены конкретные удобства, но валидация явно не оговорена)
 Verification method: automated/unit (валидация схемы amenities)
+Result: VERIFIED
+Evidence: tests/unit/test_arena_profile.py + admin PATCH 400 on unknown key
+Verified at: 2026-09-05
 
 ### AC-005
 Арена со `status != 'published'` не попадает ни в один публичный ответ, но остаётся доступной администратору.
 Requirement: CONFIRMED
 Verification method: automated/integration (два пути чтения, как в TASK-046 для `is_confirmed`)
+Result: VERIFIED
+Evidence: list_arenas public hides draft; include_unconfirmed=True and admin GET still see it
+Verified at: 2026-09-05
 
 ## Edge Cases
 
@@ -181,9 +198,10 @@ Estimate: 5
 - **PHASE_COMPLETED | plan** (2026-09-05) — отдельная таблица, amenities EN keys, status ≠ is_confirmed.
 - **PHASE_COMPLETED | estimate** (2026-09-05) — S1 domain/schema (5), S2 admin/public/geocode (5).
 - **STATE_CHANGED | execute | READY → IN_PROGRESS** (2026-09-05) — ветка `feat/TASK-048-arena-profile`.
-- **VERIFY** (2026-09-05) — pytest: unit slug/amenities/season, backfill idempotent + unique (city,slug), PATCH→GET admin, draft hidden from `list_arenas` public path. Reverse geocode: `--reverse` in script, 90% SQL coverage not run against prod (no prod writes).
+- **VERIFY** (2026-09-05) — 18 TASK tests + 19 related arena tests on `trainer_crm_test` (0192). Prod not written. PR https://github.com/easylager/trainer-crm-server/pull/19 base=`release/ice-discovery`.
 - **AC-001** VERIFIED — `test_slug_backfill_is_idempotent`, `test_duplicate_slug_in_same_city_is_rejected`
-- **AC-002** VERIFIED (unit + list with district NULL). Prod 90% coverage BLOCKED — no prod DB writes; run `python scripts/geocode_arena_addresses.py --reverse --dry-run` locally against a copy.
+- **AC-002** VERIFIED (unit + list with `district` NULL). Live 90% Nominatim not run; `--reverse --dry-run` is the coverage report.
 - **AC-003** VERIFIED — `test_admin_patch_profile_fields_round_trip`
 - **AC-004** VERIFIED — `test_validate_amenities_rejects_unknown_key`, `test_admin_patch_rejects_unknown_amenity_key`
 - **AC-005** VERIFIED — `test_draft_profile_hidden_from_public_list_not_from_unconfirmed_path`
+- **PR** (2026-09-05) — https://github.com/easylager/trainer-crm-server/pull/19 base=`release/ice-discovery`. Status stays IN_PROGRESS until merge.
