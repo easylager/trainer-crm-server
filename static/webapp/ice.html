@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Лёд</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=202609061"></script>
+  <link rel="stylesheet" href="theme.css?v=202609041" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609022" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
+    media="print"
+    onload="this.media='all'"
+  />
+  <noscript>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
+    />
+  </noscript>
+  <script src="mini-app-telegram-chrome.js?v=202609022"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609062" />
+  <script src="mini-app-client-shell.js?v=202609062"></script>
+  <script src="ice-tab-model.js?v=202609062"></script>
+</head>
+<body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
+  <div class="header client-app-header">
+    <h1 class="header-title client-app-header__title" id="headerTitle">Лёд</h1>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+    </div>
+  </div>
+
+  <div id="iceRoot" class="ice-tab">
+    <div class="ice-sec">
+      <div class="ice-cityrow">
+        <b class="ice-cityrow__name" id="iceCityName">📍 Город</b>
+        <button type="button" class="ice-cityrow__change" id="iceCityChange">Изменить</button>
+      </div>
+      <div class="ice-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input
+          type="search"
+          id="iceSearchInput"
+          placeholder="Каток, тренер или город"
+          autocomplete="off"
+          enterkeyhint="search"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </div>
+      <div class="ice-chips" id="iceIntentChips" role="group" aria-label="Намерение">
+        <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">⛸️ Покататься</button>
+        <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">🎯 Тренеры</button>
+        <button type="button" class="ice-chip" data-intent="group" aria-pressed="false">👥 Группы</button>
+      </div>
+      <p class="ice-hint" id="iceTrainersHint"></p>
+      <div class="ice-seg" id="iceViewSeg">
+        <button type="button" data-view="list" aria-pressed="true">Список</button>
+        <button type="button" data-view="map" aria-pressed="false">Карта</button>
+      </div>
+    </div>
+    <div class="ice-sec" id="iceListSec">
+      <p class="ice-eyebrow" id="iceCaption">Загрузка…</p>
+      <div class="ice-list" id="iceList"></div>
+    </div>
+    <div class="ice-sec" id="iceMapSec" hidden>
+      <p class="ice-map-note" id="iceMapNote"></p>
+    </div>
+    <div class="ice-sec" id="iceSearchSec" hidden>
+      <p class="ice-eyebrow">Результаты</p>
+      <div class="ice-results" id="iceSearchResults"></div>
+    </div>
+  </div>
+
+  <div class="ice-picker" id="iceCityPicker" hidden>
+    <h2>Город</h2>
+    <div class="ice-search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="iceCityFilter" placeholder="Найти город…" autocomplete="off" />
+    </div>
+    <button type="button" class="ice-geo" id="iceGeoBtn">◎ Определить по геолокации</button>
+    <div class="ice-picker__list" id="iceCityList"></div>
+  </div>
+
+  <script src="ice-tab.js?v=202609062"></script>
+</body>
+</html>

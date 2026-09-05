@@ -194,6 +194,16 @@ def webapp_arena_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/ice")
+@app.get("/webapp/ice.html")
+def webapp_ice_tab_page():
+    """TASK-053: Ice tab arena list Mini App."""
+    path = _WEBAPP_DIR / "ice.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-bookings")
 def webapp_trainer_bookings_page(request: Request):
     """Legacy URL: bookings merged into schedule editor Mini App."""
@@ -1014,6 +1024,45 @@ def webapp_arena_card_model_js(request: Request):
 def webapp_arena_card_js(request: Request):
     """TASK-052 arena card page logic. Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "arena-card.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ice-tab.css")
+def webapp_ice_tab_css(request: Request):
+    """TASK-053 Ice tab styles. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-tab.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ice-tab-model.js")
+def webapp_ice_tab_model_js(request: Request):
+    """TASK-053 Ice tab view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-tab-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ice-tab.js")
+def webapp_ice_tab_js(request: Request):
+    """TASK-053 Ice tab page logic. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-tab.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
