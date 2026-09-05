@@ -1,7 +1,7 @@
 ---
 task_id: TASK-048
 title: Арена как сущность — профиль, slug, район, amenities, часы, сезон
-status: IN_PROGRESS
+status: MERGED
 phase: verify
 epic: EPIC3
 depends_on: []
@@ -10,6 +10,7 @@ created_at: 2026-09-04
 updated_at: 2026-09-05
 branch: feat/TASK-048-arena-profile
 pr: https://github.com/easylager/trainer-crm-server/pull/19
+merge_sha: c90e5e00bb8d84c54e5aae488cdc7a5e3b825e04
 ---
 
 # Task
@@ -204,4 +205,5 @@ Estimate: 5
 - **AC-003** VERIFIED — `test_admin_patch_profile_fields_round_trip`
 - **AC-004** VERIFIED — `test_validate_amenities_rejects_unknown_key`, `test_admin_patch_rejects_unknown_amenity_key`
 - **AC-005** VERIFIED — `test_draft_profile_hidden_from_public_list_not_from_unconfirmed_path`
-- **PR** (2026-09-05) — https://github.com/easylager/trainer-crm-server/pull/19 base=`release/ice-discovery`. Status stays IN_PROGRESS until merge.
+- **PR** (2026-09-05) — https://github.com/easylager/trainer-crm-server/pull/19 base=`release/ice-discovery`.
+- **MERGED** (2026-09-05) — squash `c90e5e00bb8d84c54e5aae488cdc7a5e3b825e04` into `release/ice-discovery`. CI green. Not merged to master.
