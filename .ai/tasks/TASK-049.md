@@ -1,7 +1,7 @@
 ---
 task_id: TASK-049
 title: Медиа-слой и фотографии арен
-status: IN_PROGRESS
+status: MERGED
 phase: verify
 epic: EPIC3
 depends_on: [TASK-048]
@@ -10,6 +10,7 @@ created_at: 2026-09-04
 updated_at: 2026-09-05
 branch: feat/TASK-049-arena-media
 pr: https://github.com/easylager/trainer-crm-server/pull/20
+merge_sha: 79640f1586fbe4e743e021397197d0e89226cc34
 ---
 
 # Task
@@ -121,7 +122,8 @@ Status: OPEN
 - **AC-003** VERIFIED — upload payload exposes `thumb`/`card`/`hero` variant URLs; originals not stored
 - **AC-004** VERIFIED — `test_license_operator_requires_attribution_or_source`, `test_admin_upload_requires_license`, DB check `ck_media_license_source`
 - **AC-005** VERIFIED — `test_public_arena_without_photos_has_null_hero_and_empty_gallery` + admin placeholder
-- **PR** (2026-09-05) — https://github.com/easylager/trainer-crm-server/pull/20 base=`release/ice-discovery`. Status stays IN_PROGRESS until merged into the train.
+- **PR** (2026-09-05) — https://github.com/easylager/trainer-crm-server/pull/20 base=`release/ice-discovery`.
+- **MERGED** (2026-09-05) — squash `79640f1586fbe4e743e021397197d0e89226cc34` into `release/ice-discovery`. CI green. Not merged to master.
 
 ## Comprehension Tips
 
