@@ -1,4 +1,4 @@
-"""Ice ingest alarm loop. Runs inside notification_service, never inside uvicorn."""
+"""Ice ingest alarm loops. Run inside notification_service, never inside uvicorn."""
 from __future__ import annotations
 
 import asyncio
@@ -8,11 +8,13 @@ from datetime import datetime, timezone
 from src.ingestion.jobs import SqlAlchemyParserJobStore
 from src.ingestion.parsers import default_registry
 from src.ingestion.scheduler import IceIngestScheduler
-from src.ingestion.scrape_runs import LoggingScrapeRunRecorder
+from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
+from src.ingestion.ttl import purge_ice_scrape_ttl
 
 logger = logging.getLogger(__name__)
 
 ICE_INGEST_LOOP_INTERVAL_SEC = 60
+ICE_TTL_LOOP_INTERVAL_SEC = 3600
 
 
 async def run_ice_ingest_scheduler_loop() -> None:
@@ -25,7 +27,7 @@ async def run_ice_ingest_scheduler_loop() -> None:
             async with async_session_factory() as session:
                 scheduler = IceIngestScheduler(
                     store=SqlAlchemyParserJobStore(session),
-                    recorder=LoggingScrapeRunRecorder(),
+                    recorder=SqlAlchemyScrapeRunRecorder(session),
                     registry=default_registry(),
                 )
                 outcomes = await scheduler.run_due(datetime.now(timezone.utc))
@@ -36,3 +38,25 @@ async def run_ice_ingest_scheduler_loop() -> None:
             break
         except Exception:
             logger.exception("ice ingest scheduler tick failed")
+
+
+async def run_ice_scrape_ttl_loop() -> None:
+    """Purge scrape runs older than 90 days (keep last any + last ok) and stale slots."""
+    from src.infrastructure.db import async_session_factory
+
+    while True:
+        await asyncio.sleep(ICE_TTL_LOOP_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                stats = await purge_ice_scrape_ttl(session, now=datetime.now(timezone.utc))
+                await session.commit()
+                if stats.runs_deleted or stats.sessions_deleted:
+                    logger.info(
+                        "ice ttl deleted runs=%s sessions=%s",
+                        stats.runs_deleted,
+                        stats.sessions_deleted,
+                    )
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("ice scrape ttl tick failed")

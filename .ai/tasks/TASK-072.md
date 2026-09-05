@@ -1,15 +1,16 @@
 ---
 task_id: TASK-072
 title: ice_scrape_runs — статусы прогонов, TTL, процент успеха источника
-status: READY
-phase: plan
+status: IN_PROGRESS
+phase: execute
 epic: EPIC3
 depends_on: [TASK-071]
 execution_mode: SUPERVISED
 created_at: 2026-09-05
-updated_at: 2026-09-05
+updated_at: 2026-09-06
 city: Минск
 design: .ai/DESIGN-INGESTION-PARSERS-V1.md
+pr_url: https://github.com/easylager/trainer-crm-server/pull/31
 ---
 
 # Task
@@ -59,3 +60,4 @@ Verification method: automated/integration
 
 ## Execution History
 - **TASK_CREATED** (2026-09-05)
+- **IN_PROGRESS** (2026-09-06) — `ice_scrape_runs` persistence via `SqlAlchemyScrapeRunRecorder`, TTL loop in `notification_service`, success rate 7d/30d + «результата нет». Alembic `0198_ice_scrape_runs`. PR https://github.com/easylager/trainer-crm-server/pull/31

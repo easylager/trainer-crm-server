@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from src.application.ice_session_use_cases import IceSessionValidationError
@@ -44,8 +45,10 @@ class IceIngestScheduler:
         due_jobs = await self._store.list_due(now)
         for job in due_jobs:
             record = await self._run_one(job, now)
+            run_id = await self._recorder.record(record)
+            if run_id is not None:
+                record = replace(record, persisted_id=run_id)
             outcomes.append(record)
-            await self._recorder.record(record)
             await self._store.mark_attempted(
                 job.id,
                 last_run_at=now,
@@ -62,6 +65,7 @@ class IceIngestScheduler:
                 started_at=started,
                 finished_at=now,
                 error_message="requires_by_egress is not enabled on this worker",
+                error_code="requires_by_egress",
             )
         parser = self._registry.get(job.parser_key)
         if parser is None:
@@ -71,6 +75,7 @@ class IceIngestScheduler:
                 started_at=started,
                 finished_at=now,
                 error_message=f"unknown parser_key={job.parser_key!r}",
+                error_code="unknown_parser_key",
             )
         try:
             extraction = await parser.extract(job)
@@ -83,6 +88,7 @@ class IceIngestScheduler:
                 started_at=started,
                 finished_at=now,
                 error_message=str(exc),
+                error_code="validation_error",
             )
         except Exception as exc:  # noqa: BLE001 — one job must not block the queue
             logger.exception("parser %s failed for job %s", job.parser_key, job.id)
@@ -92,6 +98,7 @@ class IceIngestScheduler:
                 started_at=started,
                 finished_at=now,
                 error_message=str(exc),
+                error_code="extract_error",
             )
         status = RUN_STATUS_OK if validated else RUN_STATUS_EMPTY
         dropped = max(0, len(extraction.slots) - len(validated))
@@ -113,6 +120,7 @@ class IceIngestScheduler:
         started_at: datetime,
         finished_at: datetime,
         error_message: str | None = None,
+        error_code: str | None = None,
         slot_count: int = 0,
         slots_dropped: int = 0,
         snapshot=None,
@@ -128,4 +136,5 @@ class IceIngestScheduler:
             started_at=started_at,
             finished_at=finished_at,
             snapshot=snapshot,
+            error_code=error_code,
         )
