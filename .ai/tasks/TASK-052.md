@@ -8,6 +8,7 @@ depends_on: [TASK-051, TASK-049]
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 branch: feat/TASK-052-arena-card
+pr_url: https://github.com/easylager/trainer-crm-server/pull/29
 updated_at: 2026-09-06
 ---
 
@@ -115,4 +116,4 @@ Status: OPEN
 
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2; главный гейт эпика измеряется на этом экране
-- **IN_PROGRESS** (2026-09-06) — Mini App arena card on `feat/TASK-052-arena-card`. PR pending.
+- **IN_PROGRESS** (2026-09-06) — Mini App arena card on `feat/TASK-052-arena-card`. PR https://github.com/easylager/trainer-crm-server/pull/29 (base `release/ice-discovery`). Not merged.
