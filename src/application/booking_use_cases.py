@@ -177,15 +177,12 @@ async def _resolve_trainer_group_slot_booking_price(
     return (None, booking_price_cents, None)
 
 
-SQL_BOOKING_ARENA_DISPLAY = """COALESCE(
+BOOKING_ARENA_UNSPECIFIED_LABEL = "место уточняет тренер"
+
+SQL_BOOKING_ARENA_DISPLAY = f"""COALESCE(
     (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
     (SELECT a.name FROM arenas a WHERE a.id = s.arena_id),
-    (
-        SELECT string_agg(a.name, ', ' ORDER BY a.name)
-        FROM trainer_arenas ta
-        JOIN arenas a ON a.id = ta.arena_id
-        WHERE ta.trainer_id = b.trainer_id
-    )
+    '{BOOKING_ARENA_UNSPECIFIED_LABEL}'
 )"""
 
 # Single arena id for venue/map: booking override, then slot (fixed-venue / group), then trainer defaults.
@@ -1048,31 +1045,35 @@ async def get_trainer_primary_arena_resolved(session: AsyncSession, trainer_id: 
 async def resolve_arena_for_client_self_booking(
     session: AsyncSession,
     trainer_id: int,
-    session_arena_id: int | None,
+    slot_arena_id: int | None,
+    origin_arena_id: int | None = None,
 ) -> tuple[int | None, str | None, bool]:
     """
-    Self-booking from catalog: online slot always resolves to the trainer's primary venue.
-    - «Любая арена» or null session → primary.
-    - Filter by primary → primary.
-    - Filter by another trainer's arena (secondary): still book on primary; third flag True so UI
-      can explain that non-primary venues require a client request, not self-booking.
+    Self-booking venue is the slot's arena, not a silent primary override.
 
-    Returns (arena_id, error_code, used_primary_despite_non_primary_filter).
+    - Slot with arena_id → that arena (must be linked to the trainer).
+    - Slot without arena → trainer schedule default (primary, else MIN(trainer_arenas)).
+    - origin_arena_id is the catalog/card arena the client came from. It never replaces the
+      slot place; when it differs, the third flag is True so UI can warn before confirm.
+
+    Returns (arena_id, error_code, place_mismatch).
     error_code: no_venue | invalid_arena | None.
     """
-    primary = await get_trainer_primary_arena_resolved(session, trainer_id)
-    if primary is None:
-        return None, "no_venue", False
-    if session_arena_id is not None:
+    if slot_arena_id is not None:
         r = await session.execute(
             text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": session_arena_id},
+            {"tid": trainer_id, "aid": int(slot_arena_id)},
         )
         if not r.fetchone():
             return None, "invalid_arena", False
-        if session_arena_id != primary:
-            return primary, None, True
-    return primary, None, False
+        resolved = int(slot_arena_id)
+    else:
+        resolved = await get_trainer_primary_arena_resolved(session, trainer_id)
+        if resolved is None:
+            return None, "no_venue", False
+        resolved = int(resolved)
+    mismatch = origin_arena_id is not None and int(origin_arena_id) != resolved
+    return resolved, None, mismatch
 
 
 def compute_booking_reminder_schedule(

@@ -66,6 +66,7 @@
         slotsForTrainer: [],
         /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
         trainerSlotsArenaIds: [],
+        slotsEmptyOnFilterHint: '',
         /** When true, skip auto-pick from slot availability (URL arena or user toggled chips). */
         trainerSlotsArenaFilterExplicit: false,
         /** Deep link ?slot_id= — open booking form once slots for the card are loaded. */
@@ -204,6 +205,13 @@
         if (slotHtml) chunks.push(slotHtml);
         else if (label) {
           chunks.push('<div class="booking-venue-slot-lines">Площадка: ' + escapeHtml(label) + '</div>');
+        }
+        var mismatchNotice =
+          window.BookingClient && typeof window.BookingClient.formatPlaceMismatchNotice === 'function'
+            ? window.BookingClient.formatPlaceMismatchNotice(slot)
+            : '';
+        if (mismatchNotice) {
+          chunks.push('<p class="booking-place-mismatch">' + escapeHtml(mismatchNotice) + '</p>');
         }
         el.className = 'booking-venue-hint';
         if (!chunks.length) {
@@ -5680,6 +5688,7 @@
         return fetch('/api/webapp/client/slots?' + q, { headers: headers }).then(function(r) {
           return r.json().then(function(data) {
             if (!r.ok) throw new Error(data.detail || r.statusText);
+            state.slotsEmptyOnFilterHint = data && data.empty_on_filter ? (data.empty_on_filter_hint || '') : '';
             return data;
           });
         });
@@ -5862,8 +5871,12 @@
         var slots = state.slotsForTrainer;
         var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
         if (slots.length === 0) {
+          var emptyHint = (data && data.empty_on_filter_hint) || state.slotsEmptyOnFilterHint || '';
           slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
-          slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
+          slotsHtml +=
+            '<div class="slots-empty slots-empty-hint">' +
+            escapeHtml(emptyHint || 'Оставьте заявку — тренер предложит удобное время.') +
+            '</div>';
         } else {
           var showCount = Math.min(slots.length, 6);
           for (var i = 0; i < showCount; i++) {
@@ -6208,7 +6221,11 @@
         var slots = state.slotsForTrainer || [];
         
         if (slots.length === 0) {
-          list.innerHTML = '<div class="slots-empty">Нет слотов</div>';
+          var emptyHint = state.slotsEmptyOnFilterHint || '';
+          list.innerHTML =
+            '<div class="slots-empty">' +
+            escapeHtml(emptyHint || 'Нет слотов') +
+            '</div>';
           return;
         }
         
