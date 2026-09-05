@@ -745,27 +745,7 @@
         return out;
       }
 
-      /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
-      var MODERATION_CRITERIA_TOTAL_FALLBACK = 8;
       var MAX_EDUCATION_DOCUMENT_PHOTOS = 12;
-
-      /** Russian plural for "остался N критерий" (criteria, not form fields). */
-      function ruCriteriaWord(n) {
-        n = Math.floor(Math.abs(n));
-        var n100 = n % 100;
-        var n10 = n % 10;
-        if (n100 >= 11 && n100 <= 14) return 'критериев';
-        if (n10 === 1) return 'критерий';
-        if (n10 >= 2 && n10 <= 4) return 'критерия';
-        return 'критериев';
-      }
-
-      function ruOstalosCriteria(n) {
-        n = Math.floor(Math.abs(n));
-        if (n <= 0) return '';
-        if (n === 1) return 'Остался 1 критерий';
-        return 'Осталось ' + n + ' ' + ruCriteriaWord(n);
-      }
 
       function friendlyApiMsg(msg) {
         if (!msg) return 'Проверьте поля формы.';
@@ -2933,7 +2913,6 @@
             state.scheduleSettings = o.data.schedule_settings || null;
             renderScheduleSettingsPanel();
             renderModeration();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -3774,118 +3753,6 @@
           heroTap.setAttribute('aria-label', hasPhotoFromApi ? 'Изменить фото профиля' : 'Добавить фото профиля');
         }
 
-      }
-
-      function updateProgressRing() {
-        var d = state.moderation_readiness || {};
-        var missing = d.missing_fields || [];
-        var stTr = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim().toLowerCase() : '';
-        var ringEl = document.getElementById('progressRing');
-        /* Процент заполненности имеет смысл только как «сколько осталось до карточки в каталоге».
-           Тренеру, который в каталог не просился, это не цель, а укор: кабинет у него уже полный.
-           Кольцо возвращается в ту же секунду, когда он включает «Показывать в каталоге». */
-        if (ringEl) {
-          var hideRing = stTr === 'pending_profile' && !trainerWantsCatalogListing();
-          ringEl.hidden = hideRing;
-          if (hideRing) return;
-        }
-        var totalCriteria =
-          d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
-            ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
-            : MODERATION_CRITERIA_TOTAL_FALLBACK;
-        var filledCriteria = Math.max(0, totalCriteria - missing.length);
-        var percent = Math.round((filledCriteria / totalCriteria) * 100);
-        var fullTotal =
-          d.full_profile_criteria_total != null && !isNaN(Number(d.full_profile_criteria_total))
-            ? Math.max(1, Math.floor(Number(d.full_profile_criteria_total)))
-            : 12;
-        var fullMissing = d.full_profile_missing_fields || [];
-        var fullMissingLabels = d.full_profile_missing_labels_ru || [];
-        var hasFullProfileLabelList = Array.isArray(fullMissingLabels) && fullMissingLabels.length > 0;
-        var fullFilled = Math.max(0, fullTotal - fullMissing.length);
-        /** Для одобренного тренера кольцо — по полной карточке каталога (12 пунктов), не по готовности к модерации. */
-        var displayPercent =
-          stTr === 'active'
-            ? Math.round((fullFilled / fullTotal) * 100)
-            : percent;
-
-        var percentEl = document.getElementById('progressPercent');
-        var titleEl = document.getElementById('progressTitle');
-        var subtitleEl = document.getElementById('progressSubtitle');
-        var ringFill = document.querySelector('.progress-ring-fill');
-        var ringCircle = document.querySelector('.progress-ring-fill circle');
-        
-        if (percentEl) percentEl.textContent = displayPercent + '%';
-        
-        if (ringCircle) {
-          var circumference = 2 * Math.PI * 18;
-          var offset = circumference - (displayPercent / 100) * circumference;
-          ringCircle.style.strokeDashoffset = offset;
-        }
-        
-        if (ringFill) {
-          ringFill.classList.toggle('complete', displayPercent === 100);
-        }
-        
-        if (titleEl && subtitleEl) {
-          if (stTr === 'active') {
-            if (d.full_profile_complete === true) {
-              titleEl.textContent = 'Анкета готова!';
-              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
-            } else {
-              titleEl.textContent = 'Полнота карточки в каталоге';
-              subtitleEl.textContent =
-                'Заполнено ' +
-                fullFilled +
-                ' из ' +
-                fullTotal +
-                ' пунктов. Недостаёт ещё ' +
-                fullMissing.length +
-                ' — список на вкладке «Статус» (и во вкладке «Анкета»).';
-            }
-          } else if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
-            titleEl.textContent = 'Можно открыть расписание';
-            subtitleEl.textContent =
-              'Чтобы отправить анкету на проверку администратором, закройте ещё ' +
-              missing.length +
-              ' из ' +
-              totalCriteria +
-              ' пунктов — см. вкладку «Статус».';
-          } else if (percent === 100) {
-            if (d.full_profile_complete === false) {
-              titleEl.textContent = 'Готово к отправке на проверку';
-              subtitleEl.textContent = hasFullProfileLabelList
-                ? 'Для полноты карточки в каталоге можно дополнить ещё ' +
-                    fullMissing.length +
-                    ' из ' +
-                    fullTotal +
-                    ' — список во вкладке «Статус».'
-                : 'Для полноты карточки в каталоге можно дополнить ещё ' +
-                    fullMissing.length +
-                    ' из ' +
-                    fullTotal +
-                    ' — поля во вкладке «Анкета».';
-            } else {
-              titleEl.textContent = 'Анкета готова!';
-              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
-            }
-          } else if (percent >= 75) {
-            titleEl.textContent = 'Почти готово';
-            subtitleEl.textContent =
-              (ruOstalosCriteria(missing.length) || 'Остались пункты по списку') +
-              ' до отправки анкеты на проверку — см. «Статус»';
-          } else if (percent >= 50) {
-            titleEl.textContent = 'Хороший прогресс';
-            subtitleEl.textContent =
-              'Заполнено ' + filledCriteria + ' из ' + totalCriteria + ' пунктов для отправки анкеты на проверку — см. «Статус»';
-          } else {
-            titleEl.textContent = 'Заполнение профиля';
-            subtitleEl.textContent =
-              'Заполните пункты по списку во вкладке «Статус»: нужно ' +
-              totalCriteria +
-              ' обязательных полей, чтобы отправить анкету администратору на проверку';
-          }
-        }
       }
 
       function eduModLabelRu(st) {
@@ -5262,7 +5129,6 @@
         loadArenasForCity(cid).then(function() {
           renderArenas();
           renderModeration();
-          updateProgressRing();
           syncProfileBlockTourBar();
           if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
             var missingRaw =
@@ -5789,7 +5655,6 @@
             renderEducationEntries();
             renderModeration();
             renderModeratorFeedbackBanner();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -5844,7 +5709,6 @@
             renderEducationEntries();
             renderModeration();
             renderModeratorFeedbackBanner();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -6475,7 +6339,6 @@
               haptic('success');
               renderCatalogVisibility();
               renderModeration();
-              updateProgressRing();
               var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
               var body;
               if (st === 'active') {
