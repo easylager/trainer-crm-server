@@ -247,6 +247,147 @@
         return null;
       }
 
+      /** Page-local acting profile for catalog booking form (does not rewrite hub default). */
+      var catalogActingProfileId = null;
+      var catalogBookProfiles = [];
+
+      function catalogBookProfileDisplayName(p) {
+        if (!p) return 'Профиль';
+        var fn = (p.first_name || '').trim();
+        var ln = (p.last_name || '').trim();
+        return (fn + ' ' + ln).trim() || 'Профиль';
+      }
+
+      function getSelectedCatalogBookProfile() {
+        if (catalogActingProfileId == null) return null;
+        for (var i = 0; i < catalogBookProfiles.length; i++) {
+          if (catalogBookProfiles[i].client_id === catalogActingProfileId) return catalogBookProfiles[i];
+        }
+        return null;
+      }
+
+      function updateCatalogBookSubmitLabel() {
+        var btn = document.getElementById('btnSubmitBooking');
+        if (!btn) return;
+        var p = getSelectedCatalogBookProfile();
+        if (p && p.role === 'guardian') {
+          var name = (p.first_name || '').trim() || catalogBookProfileDisplayName(p);
+          btn.textContent = 'Записаться за ' + name;
+        } else {
+          btn.textContent = 'Записаться';
+        }
+      }
+
+      function populateCatalogBookForProfileSelect() {
+        var block = document.getElementById('catalogBookForProfileBlock');
+        var sel = document.getElementById('catalogBookForProfileSelect');
+        var addBtn = document.getElementById('catalogBookAddChildBtn');
+        if (!block || !sel) return;
+        if (!catalogBookProfiles.length) {
+          block.style.display = 'none';
+          return;
+        }
+        block.style.display = 'block';
+        if (addBtn) addBtn.style.display = 'block';
+        var preferred =
+          catalogActingProfileId != null
+            ? catalogActingProfileId
+            : (window.ClientProfileSwitcher && ClientProfileSwitcher.getActiveProfileId
+                ? ClientProfileSwitcher.getActiveProfileId()
+                : null);
+        if (preferred == null && catalogBookProfiles[0]) preferred = catalogBookProfiles[0].client_id;
+        catalogActingProfileId = preferred;
+        sel.innerHTML = catalogBookProfiles
+          .map(function (p) {
+            var label = catalogBookProfileDisplayName(p);
+            if (p.role === 'guardian') label += ' (ребёнок)';
+            else if (p.role === 'self') label += ' (вы)';
+            return (
+              '<option value="' +
+              p.client_id +
+              '"' +
+              (p.client_id === preferred ? ' selected' : '') +
+              '>' +
+              escapeHtml(label) +
+              '</option>'
+            );
+          })
+          .join('');
+        updateCatalogBookSubmitLabel();
+        updateBookingNameFieldsVisibility();
+      }
+
+      function loadCatalogBookProfiles() {
+        return Promise.resolve()
+          .then(function () {
+            if (window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function') {
+              return ClientProfileSwitcher.init().then(function (st) {
+                catalogBookProfiles = (st && st.profiles) || ClientProfileSwitcher.getProfiles() || [];
+              });
+            }
+            catalogBookProfiles = [];
+          })
+          .catch(function () {
+            catalogBookProfiles = [];
+          })
+          .then(function () {
+            populateCatalogBookForProfileSelect();
+          });
+      }
+
+      function catalogAddChildInline() {
+        var firstName = window.prompt('Имя ребёнка');
+        if (firstName == null) return;
+        firstName = String(firstName).trim();
+        if (!firstName) {
+          alert('Укажите имя.');
+          return;
+        }
+        var lastName = window.prompt('Фамилия (необязательно)', '') || '';
+        lastName = String(lastName).trim();
+        var initData = tg ? tg.initData : '';
+        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        fetch('/api/webapp/client/profiles', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName || null,
+          }),
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              return { ok: res.ok, status: res.status, body: body };
+            });
+          })
+          .then(function (res) {
+            if (!res.ok) {
+              alert(
+                res.status === 409
+                  ? 'Достигнут лимит добавленных профилей.'
+                  : (typeof res.body.detail === 'string' && res.body.detail) || 'Не удалось добавить профиль.'
+              );
+              return;
+            }
+            var newId = Number(res.body.client_id);
+            catalogBookProfiles = catalogBookProfiles.concat([
+              {
+                client_id: newId,
+                first_name: firstName,
+                last_name: lastName || null,
+                role: 'guardian',
+                is_default: false,
+              },
+            ]);
+            catalogActingProfileId = newId;
+            populateCatalogBookForProfileSelect();
+          })
+          .catch(function () {
+            alert('Ошибка сети. Попробуйте ещё раз.');
+          });
+      }
+
       /** Same path as tapping a slot row on the trainer card — service/tier can be changed on the form. */
       function openCatalogBookingFormForSlot(slot) {
         if (!slot) return false;
@@ -260,21 +401,23 @@
         var commentEl = document.getElementById('bookingComment');
         if (commentEl) commentEl.value = '';
         refreshClientPhoneForBookingForm(function() {
-          if (
-            state.selectedTrainer &&
-            (isHubDirectBookEntry() ||
-              state.bookingContextServiceId != null ||
-              state.lastCreatedBookingServiceId != null)
-          ) {
-            applyCatalogRepeatBookingDefaults(state.selectedTrainer);
-          }
-          prefillBookingPhoneField();
-          updateBookingVenueHint();
-          updateBookingFormServiceAndTiers();
-          if (window.BookingClient) {
-            window.BookingClient.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'catalog' });
-          }
-          showScreen('screenBookingForm');
+          loadCatalogBookProfiles().then(function () {
+            if (
+              state.selectedTrainer &&
+              (isHubDirectBookEntry() ||
+                state.bookingContextServiceId != null ||
+                state.lastCreatedBookingServiceId != null)
+            ) {
+              applyCatalogRepeatBookingDefaults(state.selectedTrainer);
+            }
+            prefillBookingPhoneField();
+            updateBookingVenueHint();
+            updateBookingFormServiceAndTiers();
+            if (window.BookingClient) {
+              window.BookingClient.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'catalog' });
+            }
+            showScreen('screenBookingForm');
+          });
         });
         return true;
       }
@@ -3635,7 +3778,9 @@
       function updateBookingNameFieldsVisibility() {
         var block = document.getElementById('bookingNameBlockCatalog');
         if (!block) return;
-        var show = !!state.needsProfileName;
+        var selected = getSelectedCatalogBookProfile();
+        var hideForGuardian = !!(selected && selected.role === 'guardian');
+        var show = !hideForGuardian && !!state.needsProfileName;
         block.style.display = show ? 'block' : 'none';
         if (show) {
           var f = document.getElementById('bookingFirstName');
@@ -6183,6 +6328,20 @@
         });
       })();
 
+      (function wireCatalogBookingProfileSelect() {
+        var sel = document.getElementById('catalogBookForProfileSelect');
+        if (sel) {
+          sel.addEventListener('change', function () {
+            var v = parseInt(sel.value, 10);
+            catalogActingProfileId = Number.isFinite(v) ? v : null;
+            updateCatalogBookSubmitLabel();
+            updateBookingNameFieldsVisibility();
+          });
+        }
+        var addBtn = document.getElementById('catalogBookAddChildBtn');
+        if (addBtn) addBtn.addEventListener('click', catalogAddChildInline);
+      })();
+
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
         if (!slot || !state.selectedTrainer) return;
@@ -6193,7 +6352,9 @@
           return;
         }
         var phone = phCheck.e164;
-        if (state.needsProfileName) {
+        var selectedProfile = getSelectedCatalogBookProfile();
+        var askName = state.needsProfileName && !(selectedProfile && selectedProfile.role === 'guardian');
+        if (askName) {
           var fn = (document.getElementById('bookingFirstName') && document.getElementById('bookingFirstName').value || '').trim();
           if (!fn) {
             alert('Укажите имя');
@@ -6212,11 +6373,11 @@
               comment: (document.getElementById('bookingComment').value || '').trim() || null,
               serviceId: effBookingSid,
               priceVariantId: state.catalogBookingPriceVariantId,
-              needsProfileName: state.needsProfileName,
-              firstName: state.needsProfileName
+              needsProfileName: askName,
+              firstName: askName
                 ? (document.getElementById('bookingFirstName').value || '').trim()
                 : null,
-              lastName: state.needsProfileName
+              lastName: askName
                 ? (document.getElementById('bookingLastName').value || '').trim()
                 : null,
             })
@@ -6226,7 +6387,7 @@
               comment: (document.getElementById('bookingComment').value || '').trim() || null,
             };
         if (!window.BookingClient) {
-          if (state.needsProfileName) {
+          if (askName) {
             payloadBody.first_name = (document.getElementById('bookingFirstName').value || '').trim();
             var ln = (document.getElementById('bookingLastName').value || '').trim();
             if (ln) payloadBody.last_name = ln;
@@ -6236,11 +6397,13 @@
             payloadBody.service_price_variant_id = state.catalogBookingPriceVariantId;
           }
         }
+        var actingProfileId = catalogActingProfileId;
         var submitFn = window.BookingClient
           ? window.BookingClient.submitBooking({
               body: payloadBody,
               initData: initData,
               idempotencyKey: state.catalogBookingIdempotencyKey,
+              profileId: actingProfileId,
             })
           : fetch('/api/webapp/client/booking', {
               method: 'POST',
@@ -6248,6 +6411,7 @@
                 var h = { 'Content-Type': 'application/json' };
                 if (initData) h['X-Telegram-Init-Data'] = initData;
                 h['Idempotency-Key'] = state.catalogBookingIdempotencyKey;
+                if (actingProfileId != null) h['X-Profile-Id'] = String(actingProfileId);
                 return h;
               })(),
               body: JSON.stringify(payloadBody),
