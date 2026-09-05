@@ -17,8 +17,8 @@
   <link rel="preload" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" as="style" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
-  <link rel="preload" href="client-home-main.js?v=202608315" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202609046" />
+  <link rel="preload" href="client-home-main.js?v=202609061" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202609061" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
   <script src="mini-app-client-shell.js?v=202609062"></script>
@@ -99,6 +99,9 @@
 
     <!-- Living panel under primary trainer: nearest slots + pass remainder + history line -->
     <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
+
+    <!-- TASK-055: one ice teaser row — hidden unless bootstrap has a future MK slot -->
+    <div id="hubIceTeaser" class="hub-ice-teaser-wrap" hidden></div>
 
     <!-- Discovery for new clients without primary trainer: real trainers carousel -->
     <section id="hubDiscovery" class="hub-discovery" hidden></section>
@@ -188,6 +191,7 @@
     <span class="hub-book-fab__label">Записаться</span>
   </button>
 
-  <script defer src="client-home-main.js?v=202608315"></script>
+  <script src="ice-teaser-model.js?v=202609061"></script>
+  <script defer src="client-home-main.js?v=202609061"></script>
 </body>
 </html>

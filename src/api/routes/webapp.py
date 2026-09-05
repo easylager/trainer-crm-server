@@ -218,6 +218,7 @@ from src.application.arena_profile import (
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
 )
+from src.application.arena_public_use_cases import get_hub_ice_teaser
 from src.application.arena_media import (
     ArenaMediaLimitError,
     InvalidArenaMediaOrderError,
@@ -2686,10 +2687,12 @@ async def get_client_activity_stats(
 async def get_client_hub_bootstrap(
     x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Single round-trip for client home: bookings by day + requests + session edges + activity snippet.
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
+    ``ice_teaser`` is the soonest future public_skate/open_ice slot in the session city, or null.
 
     ``bookings`` / ``requests`` / ``activity`` / ``passes`` resolve through the selected profile
     (``X-Profile-Id``). ``_hub_session`` edges/saved trainers and rebook/primary hints use the
@@ -2854,12 +2857,21 @@ async def get_client_hub_bootstrap(
     bookings, requests, client_session, activity, passes = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes()
     )
+    ice_teaser = None
+    try:
+        sess_row = await read_client_bot_session(telegram_id, session)
+        city_id = (sess_row or {}).get("city_id")
+        if city_id is not None:
+            ice_teaser = await get_hub_ice_teaser(session, city_id=int(city_id))
+    except Exception:
+        logger.exception("client hub ice teaser failed")
     return {
         "bookings": bookings,
         "requests": requests,
         "client_session": client_session,
         "activity": activity,
         "passes": passes,
+        "ice_teaser": ice_teaser,
         "platform": {
             "vertical_key": "ice",
             "ui": {

@@ -5881,6 +5881,10 @@
           var showCount = Math.min(slots.length, 6);
           for (var i = 0; i < showCount; i++) {
             var s = slots[i];
+            var place =
+              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+                : ((s.arena_name && String(s.arena_name).trim()) || '');
             slotsHtml +=
               '<button type="button" class="slot-row" data-slot-index="' +
               i +
@@ -5888,6 +5892,7 @@
               '<span class="slot-row-main"><span class="slot-row-line">' +
               formatSlotLabel(s) +
               '</span>' +
+              (place ? '<span class="slot-row-place">' + escapeHtml(place) + '</span>' : '') +
               slotGroupSpotsPillHtml(s) +
               '</span><span>→</span></button>';
           }
@@ -5938,10 +5943,31 @@
         document.getElementById('trainerDetailSecondary').innerHTML = '';
       }
 
+      function wireTrainerArenaChips(root) {
+        if (!root) return;
+        root.querySelectorAll('a.trainer-arena-chip[href]').forEach(function (link) {
+          link.addEventListener('click', function (ev) {
+            var href = link.getAttribute('href');
+            if (!href) return;
+            ev.preventDefault();
+            if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+              window.ClientShell.navigate(href);
+              return;
+            }
+            window.location.href = href;
+          });
+        });
+      }
+
       /**
-       * Multiple arenas: show primary + muted secondaries and a short client hint (request for other venues).
+       * Arenas on the trainer card: chips that open arena cards (TASK-055).
+       * Fallback keeps the pre-055 stack if the chips model is not loaded.
        */
       function buildTrainerArenasBlock(t) {
+        var chipsApi = window.TrainerArenaChips;
+        if (chipsApi && typeof chipsApi.buildTrainerArenaChips === 'function') {
+          return chipsApi.renderTrainerArenaChipsHtml(chipsApi.buildTrainerArenaChips(t));
+        }
         var ids = t.arena_ids || [];
         var names = t.arena_names || [];
         var n = ids.length;
@@ -6014,7 +6040,16 @@
         var arenaIds = t.arena_ids || [];
         var arenaStatClass = 'trainer-detail-stat';
         var arenaInnerHtml;
-        if (arenaIds.length > 1) {
+        var chipsHtml = '';
+        if (window.TrainerArenaChips) {
+          chipsHtml = window.TrainerArenaChips.renderTrainerArenaChipsHtml(
+            window.TrainerArenaChips.buildTrainerArenaChips(t)
+          );
+        }
+        if (chipsHtml) {
+          arenaStatClass += ' trainer-detail-stat--arenas trainer-detail-stat--chips';
+          arenaInnerHtml = chipsHtml;
+        } else if (arenaIds.length > 1) {
           arenaStatClass += ' trainer-detail-stat--arenas';
           arenaInnerHtml = buildTrainerArenasBlock(t);
         } else if (arenaIds.length === 1) {
@@ -6073,7 +6108,7 @@
         }
         statsParts.push(
           '<div class="' + arenaStatClass + '">' +
-            '<div class="trainer-detail-stat-label">Арены</div>' +
+            (chipsHtml ? '' : '<div class="trainer-detail-stat-label">Арены</div>') +
             arenaInnerHtml +
           '</div>'
         );
@@ -6149,6 +6184,7 @@
         var htmlAbout = buildTrainerAboutSectionHtml(desc, eduRows, profileEduDetail, profileExtraForDetail);
 
         document.getElementById('trainerDetailTop').innerHTML = htmlTop;
+        wireTrainerArenaChips(document.getElementById('trainerDetailTop'));
         var aboutEl = document.getElementById('trainerDetailAbout');
         if (aboutEl) {
           aboutEl.innerHTML = htmlAbout;
