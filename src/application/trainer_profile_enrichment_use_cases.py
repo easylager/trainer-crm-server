@@ -65,6 +65,14 @@ def render_profile_enrichment_nudge_text(step: str) -> str:
     return body
 
 
+PROFILE_ENRICHMENT_MINIAPP_PATH = "/webapp/trainer-profile?task=prices&from=hub"
+
+
+def profile_enrichment_webapp_url(base: str) -> str:
+    """Mini App URL for D+1/8/21 price nudges — focused overlay, not the full form."""
+    return f"{base.rstrip('/')}{PROFILE_ENRICHMENT_MINIAPP_PATH}"
+
+
 async def _list_sent_steps_for_trainer(session: AsyncSession, trainer_id: int) -> frozenset[str]:
     result = await session.execute(
         text("SELECT step FROM trainer_profile_nudges WHERE trainer_id = :tid"),
@@ -176,6 +184,8 @@ __all__ = [
     "compute_due_profile_enrichment_nudges",
     "list_profile_enrichment_candidates",
     "mark_profile_enrichment_nudge_sent",
+    "profile_enrichment_webapp_url",
+    "PROFILE_ENRICHMENT_MINIAPP_PATH",
     "render_profile_enrichment_nudge_text",
     "_pick_due_step",
 ]

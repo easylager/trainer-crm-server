@@ -147,6 +147,10 @@
         profileBlockTourSessionSealOrder: null,
         /** User completed the last seal step forward with gaps cleared (allows hub + moderation). */
         profileBlockTourSessionVisitedLastForward: false,
+        /** Focused overlay: `?task=prices` — one block, skippable, no TTV hub bounce. */
+        profileFocusedTask: null,
+        /** Where to go after the overlay: `onboarding` (Done screen) or `hub`. */
+        profileFocusedReturn: 'hub',
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
@@ -195,6 +199,11 @@
 
       /** Рельс сессии всегда полон — вызывать перед любым чтением (в т.ч. после reload страницы). */
       function profileBlockTourEnsureRail() {
+        if (state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
+          var focusedRail = PROFILE_FOCUSED_TASKS[state.profileFocusedTask].rail.slice();
+          state.profileBlockTourSessionSealOrder = focusedRail;
+          return focusedRail;
+        }
         var rail = state.profileBlockTourSessionSealOrder;
         if (!rail || rail.length !== PROFILE_TT_MINIMAL_WIZARD_ORDER.length) {
           rail = profileBlockTourBuildWizardRail();
@@ -282,6 +291,10 @@
 
       function profileBlockTourOnBackClick() {
         if (!state.profileBlockTourActive) return;
+        if (state.profileFocusedTask) {
+          finishFocusedProfileTask();
+          return;
+        }
         try {
           var ae = document.activeElement;
           if (ae && ae.blur) ae.blur();
@@ -2418,6 +2431,17 @@
         },
       };
 
+      var PROFILE_FOCUSED_TASKS = {
+        prices: {
+          rail: ['services'],
+          title: 'Указать цены',
+          subtitle: 'Пока ученик видит «по запросу». Можно пропустить — запись от этого не зависит.',
+          stepLabel: 'Цены',
+          nextSave: 'Сохранить',
+          nextDone: 'Готово',
+        },
+      };
+
       /** Последний смонтированный в слоте ключ шага — чтобы не перемонтировать одно и то же. */
       var obFlowCurrentMountKey = null;
 
@@ -2565,6 +2589,41 @@
         resetObFlowInsetCache();
       }
 
+      function startFocusedProfileTask(task, from) {
+        var spec = PROFILE_FOCUSED_TASKS[task];
+        if (!spec) return;
+        state.profileFocusedTask = task;
+        state.profileFocusedReturn = from === 'onboarding' ? 'onboarding' : 'hub';
+        state.profileBlockTourActive = true;
+        state.profileBlockTourHubRedirectScheduled = false;
+        profileBlockTourResetWizardStacks();
+        state.profileBlockTourSessionSealOrder = spec.rail.slice();
+        state.profileBlockTourDisplayedStepOverride = spec.rail[0];
+        state.profileBlockTourSessionVisitedLastForward = false;
+        syncProfileBlockTourBar();
+      }
+
+      function focusedTaskReturnUrl() {
+        if (state.profileFocusedReturn === 'onboarding') {
+          return webappPageUrl('trainer-onboarding?done=1');
+        }
+        return webappPageUrl('trainer-home');
+      }
+
+      function finishFocusedProfileTask() {
+        var dest = focusedTaskReturnUrl();
+        state.profileBlockTourActive = false;
+        state.profileFocusedTask = null;
+        state.profileFocusedReturn = 'hub';
+        profileBlockTourResetWizardStacks();
+        obFlowClose();
+        try {
+          window.location.href = dest;
+        } catch (eNav) {
+          window.location.href = dest;
+        }
+      }
+
       /**
        * Главная «синхронизация» визарда: вызывается из той же точки, где раньше был sticky-бар.
        * Имя оставлено для обратной совместимости с существующими call-site'ами.
@@ -2574,6 +2633,41 @@
           profileBlockTourResetWizardStacks();
           obFlowClose();
           syncProfileBlockTourNextCta();
+          return;
+        }
+        if (state.profileFocusedTask) {
+          var spec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
+          if (state.profileBlockTourSessionVisitedLastForward) {
+            if (state.profileBlockTourHubRedirectScheduled) return;
+            state.profileBlockTourHubRedirectScheduled = true;
+            haptic('success');
+            finishFocusedProfileTask();
+            return;
+          }
+          obFlowOpen();
+          var titleElF = document.getElementById('obFlowTitle');
+          if (titleElF) titleElF.textContent = spec ? spec.title : 'Указать цены';
+          var subElF = document.getElementById('obFlowSubtitle');
+          if (subElF) subElF.textContent = spec ? spec.subtitle : '';
+          var stepElF = document.getElementById('obFlowStepLabel');
+          if (stepElF) stepElF.textContent = spec ? spec.stepLabel : '';
+          var dotsF = document.getElementById('obFlowDots');
+          if (dotsF) {
+            dotsF.innerHTML = '';
+            dotsF.hidden = true;
+          }
+          var closeBtnF = document.getElementById('obFlowClose');
+          if (closeBtnF) closeBtnF.setAttribute('aria-label', 'Пропустить');
+          var backBtnF = document.getElementById('obFlowBack');
+          if (backBtnF) {
+            backBtnF.hidden = false;
+            backBtnF.textContent = 'Не сейчас';
+            backBtnF.setAttribute('aria-hidden', 'false');
+            backBtnF.setAttribute('aria-label', 'Пропустить');
+          }
+          obFlowMountStep((spec && spec.rail[0]) || 'services');
+          syncProfileBlockTourNextCta();
+          syncProfileTourBarInset();
           return;
         }
         var d = state.moderation_readiness || {};
@@ -2656,6 +2750,7 @@
         }
         var dots = document.getElementById('obFlowDots');
         if (dots) {
+          dots.hidden = false;
           dots.innerHTML = '';
           var di;
           for (di = 0; di < totalDots; di++) {
@@ -2675,6 +2770,8 @@
           /* «Назад» ровно тогда, когда слева по рельсу есть шаг — как показывают точки. */
           var canBack = idx > 0;
           backBtnEl.hidden = !canBack;
+          backBtnEl.textContent = 'Назад';
+          backBtnEl.setAttribute('aria-label', 'Предыдущий шаг');
           backBtnEl.setAttribute('aria-hidden', canBack ? 'false' : 'true');
         }
         /* Смонтировать актуальный блок, если сменился шаг. */
@@ -2696,7 +2793,10 @@
         if (nx.classList.contains('is-saving')) return;
         var textEl = document.getElementById('obFlowNextText');
         var label = 'Далее';
-        if (state.profileBlockTourActive) {
+        if (state.profileBlockTourActive && state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
+          var fspec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
+          label = profileBlockTourNeedsSave() ? fspec.nextSave : fspec.nextDone;
+        } else if (state.profileBlockTourActive) {
           /* На последнем шаге кнопка обещает финал, а не ещё один экран. */
           var rail = profileBlockTourEnsureRail();
           var isLast = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === rail.length - 1;
@@ -2828,6 +2928,29 @@
         var nxGate = document.getElementById('obFlowNext');
         if (nxGate && nxGate.classList.contains('is-saving')) return;
         var stepAtClick = profileBlockTourEffectiveStepKey();
+        if (state.profileFocusedTask) {
+          var dirtyF = false;
+          try {
+            dirtyF = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+          } catch (eDf) {}
+          if (dirtyF) {
+            var btnSvF = document.getElementById('btnSave');
+            if (!btnSvF || btnSvF.disabled) {
+              var whyF = profileBlockTourExplainSaveBlocked();
+              haptic('warning');
+              setObFlowError(whyF);
+              showSaveToast('Сначала дополните шаг', whyF, 'warning');
+              return;
+            }
+            setObFlowError('');
+            state.profileBlockTourAdvanceFromKey = stepAtClick;
+            save();
+            return;
+          }
+          state.profileBlockTourSessionVisitedLastForward = true;
+          syncProfileBlockTourBar();
+          return;
+        }
         if (stepAtClick === 'services' && !domServicesPricesCoherent()) {
           haptic('warning');
           setObFlowError(SERVICES_PRICE_HINT_RU);
@@ -2901,6 +3024,12 @@
       /** After PATCH profile: advance tour focus (next block after stashed step, or first missing). */
       function profileBlockTourAfterSave() {
         if (!state.profileBlockTourActive) return;
+        if (state.profileFocusedTask) {
+          profileBlockTourClearAdvanceStash();
+          state.profileBlockTourSessionVisitedLastForward = true;
+          syncProfileBlockTourBar();
+          return;
+        }
         var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
         var missing = profileBlockTourMissingStepKeys(missingRaw);
         var advanceKey = state.profileBlockTourAdvanceFromKey;
@@ -2930,8 +3059,21 @@
       }
 
       function maybeEnterProfileBlockTourFromQuery() {
+        var task = null;
+        var from = null;
         try {
           var sp = new URLSearchParams(window.location.search);
+          task = sp.get('task');
+          from = sp.get('from');
+          if (task && PROFILE_FOCUSED_TASKS[task]) {
+            sp.delete('task');
+            sp.delete('from');
+            var qsF = sp.toString();
+            var pathF = window.location.pathname + (qsF ? '?' + qsF : '') + (window.location.hash || '');
+            history.replaceState(null, '', pathF);
+            startFocusedProfileTask(task, from);
+            return;
+          }
           if (sp.get('onboarding') !== 'blocks') return;
           sp.delete('onboarding');
           var qs = sp.toString();
@@ -3033,6 +3175,10 @@
         bindProfileTourBarTap(closeBtn, function() {
           if (!state.profileBlockTourActive) {
             obFlowClose();
+            return;
+          }
+          if (state.profileFocusedTask) {
+            finishFocusedProfileTask();
             return;
           }
           /* Отложить онбординг: закрываем визард и уводим на хаб.

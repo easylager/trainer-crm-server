@@ -459,6 +459,28 @@
     }
     .ob-done-schedule-link:active { opacity: .7; }
 
+    .ob-done-prices {
+      margin: 18px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--app-muted);
+    }
+    .ob-done-prices-btn {
+      display: block;
+      margin: 8px 0 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 650;
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+    .ob-done-prices-btn:active { opacity: .7; }
+
     /* [hidden] должен побеждать display: атрибут hidden сам по себе слабее любого display. */
     .ob-skip[hidden] { display: none; }
     .ob-skip {
@@ -569,6 +591,8 @@
     <!-- Показываем только тем, у кого реально есть время вне часовой сетки (state.carried) —
          остальным эта строка была бы просто шумом. -->
     <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала (не с начала часа)? Настройте в «Расписании» →</a>
+    <p class="ob-done-prices" id="obDonePrices">Пока ученик видит «цена по запросу». Можно указать тариф сейчас — или пропустить.</p>
+    <button type="button" class="ob-done-prices-btn" id="obDonePricesBtn">Указать цены</button>
   </div>
 
   <div class="ob-foot" id="obFoot" hidden>
@@ -578,6 +602,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202609049"></script>
+<script src="trainer-onboarding-main.js?v=202609054"></script>
 </body>
 </html>

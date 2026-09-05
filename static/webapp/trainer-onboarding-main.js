@@ -110,6 +110,15 @@
     return '/api/webapp' + path + (raw ? '?init_data=' + encodeURIComponent(raw) : '');
   }
 
+  function pageUrl(pathWithQuery) {
+    var url = String(pathWithQuery || '');
+    var raw = currentInit();
+    if (raw) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
+    return url;
+  }
+
+  var OB_DONE_STORAGE_KEY = 'obDoneReturn';
+
   var DAY_LABELS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
   /* Ледовое утро начинается рано, вечер заканчивается поздно — но сразу показывать 6:00–22:00
      значит показать 112 клеток. Открываем ходовой диапазон, остальное — по кнопке.
@@ -156,7 +165,7 @@
       'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaTabs',
       'obArenaMissingLink',
       'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
-      'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink',
+      'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink', 'obDonePricesBtn',
     ].forEach(function (id) { el[id] = byId(id); });
   }
 
@@ -961,6 +970,7 @@
 
   /* ── Загрузка ── */
   function load() {
+    if (maybeRestoreDoneScreen()) return;
     fetch(apiUrl('/trainer/onboarding/quick-setup'), { headers: apiHeaders() })
       .then(function (r) {
         if (r.status === 403) throw new Error('forbidden');
@@ -1136,8 +1146,58 @@
       });
   }
 
-  /* ── Экран 2 ── */
+  function persistDonePayload(body) {
+    try {
+      sessionStorage.setItem(OB_DONE_STORAGE_KEY, JSON.stringify({
+        open_slots_ahead: body.open_slots_ahead || 0,
+        link: body.link || null,
+        share_text: body.share_text || null,
+        share_body: body.share_body || null,
+        needs_schedule: !!(body.needs_schedule || (state.carried && state.carried.length)),
+      }));
+    } catch (e) {}
+  }
+
+  function goSetPrices() {
+    persistDonePayload({
+      open_slots_ahead: state._doneOpenSlots,
+      link: state._doneLink,
+      share_text: state._doneShareText,
+      share_body: state._doneShareBody,
+      needs_schedule: !!(state.carried && state.carried.length),
+    });
+    window.location.href = pageUrl('trainer-profile?task=prices&from=onboarding');
+  }
+
+  function maybeRestoreDoneScreen() {
+    var sp;
+    try { sp = new URLSearchParams(window.location.search); } catch (e) { return false; }
+    if (!sp || sp.get('done') !== '1') return false;
+    var body = null;
+    try {
+      var raw = sessionStorage.getItem(OB_DONE_STORAGE_KEY);
+      if (raw) body = JSON.parse(raw);
+    } catch (e2) {}
+    if (body) {
+      if (el.obLoading) el.obLoading.style.display = 'none';
+      showDone(body);
+      return true;
+    }
+    fetch(apiUrl('/trainer/hub/universal-invite-link'), { headers: apiHeaders() })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (o) {
+        if (el.obLoading) el.obLoading.style.display = 'none';
+        showDone((o.ok && o.data) ? o.data : {});
+      })
+      .catch(function () {
+        if (el.obLoading) el.obLoading.style.display = 'none';
+        showDone({});
+      });
+    return true;
+  }
+
   function showDone(body) {
+    body = body || {};
     state.busy = false;
     if (el.obSetup) el.obSetup.hidden = true;
     if (el.obDone) el.obDone.classList.add('is-on');
@@ -1157,6 +1217,12 @@
     var link = body.link;
     var shareText = body.share_text || '';
     var shareBody = body.share_body || '';
+    state._doneOpenSlots = open;
+    state._doneLink = link;
+    state._doneShareText = shareText;
+    state._doneShareBody = shareBody;
+    persistDonePayload(body);
+    if (el.obFoot) el.obFoot.hidden = false;
     if (el.obCta) {
       if (link) {
         el.obCta.textContent = 'Отправить ученику';
@@ -1179,15 +1245,17 @@
     /* Только тем, у кого реально есть время вне часовой сетки — остальным строка
        была бы просто шумом (DEC-002: «Точное время» в онбординг не тащим). */
     if (el.obDoneScheduleLink) {
-      var needsSchedule = state.carried.length > 0;
+      var needsSchedule = !!(body.needs_schedule || (state.carried && state.carried.length));
       el.obDoneScheduleLink.hidden = !needsSchedule;
       if (needsSchedule) {
         el.obDoneScheduleLink.onclick = function (e) {
           e.preventDefault();
-          window.location.href = 'schedule-editor' +
-            (currentInit() ? '?init_data=' + encodeURIComponent(currentInit()) : '');
+          window.location.href = pageUrl('schedule-editor');
         };
       }
+    }
+    if (el.obDonePricesBtn) {
+      el.obDonePricesBtn.onclick = goSetPrices;
     }
   }
 
@@ -1244,8 +1312,7 @@
   }
 
   function goHub() {
-    window.location.href = 'trainer-home' +
-      (currentInit() ? '?init_data=' + encodeURIComponent(currentInit()) : '');
+    window.location.href = pageUrl('trainer-home');
   }
 
   /**

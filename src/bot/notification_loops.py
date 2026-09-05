@@ -2583,12 +2583,14 @@ def _profile_enrichment_keyboard() -> InlineKeyboardMarkup | None:
     base = (Settings().webapp_base_url or "").rstrip("/")
     if not base.lower().startswith("https://"):
         return None
+    from src.application.trainer_profile_enrichment_use_cases import profile_enrichment_webapp_url
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text=msg.TRAINER_PROFILE_ENRICH_NUDGE_BTN,
-                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-profile"),
+                    web_app=WebAppInfo(url=profile_enrichment_webapp_url(base)),
                 )
             ]
         ]

@@ -789,3 +789,17 @@ def test_profile_workplace_vitrine_ia() -> None:
     assert 'for="city_id"><span class="required-dot"' in html
     assert 'for="phone"><span class="required-dot"' in html
 
+
+def test_profile_focused_prices_task_contract() -> None:
+    """S5 / AC-008: prices overlay is a query task, not a dump into the full form."""
+    html_ob = (_PROFILE_WEBAPP / "trainer-onboarding.html").read_text(encoding="utf-8")
+    js_ob = (_PROFILE_WEBAPP / "trainer-onboarding-main.js").read_text(encoding="utf-8")
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    assert "Указать цены" in html_ob
+    assert "task=prices" in js_ob
+    assert "from=onboarding" in js_ob
+    assert "PROFILE_FOCUSED_TASKS" in js
+    assert "startFocusedProfileTask" in js
+    assert "finishFocusedProfileTask" in js
+    assert "get('task')" in js
+

@@ -3742,7 +3742,7 @@ TRAINER_PROFILE_ENRICH_NUDGE_P21 = (
     "☕ Цены в профиле по-прежнему по желанию.\n\n"
     "Когда удобно: услуги → тариф и что не входит в стоимость."
 )
-TRAINER_PROFILE_ENRICH_NUDGE_BTN = "Открыть профиль"
+TRAINER_PROFILE_ENRICH_NUDGE_BTN = "Указать цены"
 
 # Subscription tier access messages
 TRAINER_TIER_REQUIRED_CRM = (
