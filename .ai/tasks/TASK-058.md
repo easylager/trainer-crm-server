@@ -1,8 +1,8 @@
 ---
 task_id: TASK-058
 title: Тренер в нескольких городах — trainer_cities вместо одного city_id
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: []
 execution_mode: SUPERVISED
@@ -92,3 +92,4 @@ Status: RESOLVED
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B6
 - **IN_PROGRESS** (2026-09-06) — PLACE: trainer_cities + catalog EXISTS + scoped arena replace
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/30 (base `release/ice-discovery`; do not merge until 071 is on the train and `down_revision` is retargeted)
+- **MERGED** (2026-09-06) — squash `7e92156` → `release/ice-discovery`. Alembic `0197_trainer_cities` revises `0196_ice_parser_jobs`.

@@ -1,8 +1,8 @@
 ---
 task_id: TASK-071
 title: ice_parser_jobs + скедулер + абстрактная стратегия парсера
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-048, TASK-050]
 execution_mode: SUPERVISED
@@ -85,3 +85,4 @@ Verification method: static + unit (модуль импортируется во
 - **CANONICAL** (2026-09-05) — extract отдельно от transform/validate; единый DTO до публикации
 - **RUNTIME** (2026-09-05) — цикл в notification_service, не uvicorn; без Celery
 - **IN_PROGRESS** (2026-09-06) — PR https://github.com/easylager/trainer-crm-server/pull/28 against `release/ice-discovery`. Status stays IN_PROGRESS until merge. Not MERGED.
+- **MERGED** (2026-09-06) — squash `0200398` → `release/ice-discovery`. Scheduler in `notification_service`; stub scrape runs until TASK-072.

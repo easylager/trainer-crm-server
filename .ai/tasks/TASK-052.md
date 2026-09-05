@@ -1,8 +1,8 @@
 ---
 task_id: TASK-052
 title: Экран карточки арены в клиентском Mini App
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-051, TASK-049]
 execution_mode: SUPERVISED
@@ -117,3 +117,4 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2; главный гейт эпика измеряется на этом экране
 - **IN_PROGRESS** (2026-09-06) — Mini App arena card on `feat/TASK-052-arena-card`. PR https://github.com/easylager/trainer-crm-server/pull/29 (base `release/ice-discovery`). Not merged.
+- **MERGED** (2026-09-06) — squash `dcf63f4` → `release/ice-discovery`. Visual 360px/themes still to check on the running Mini App.
