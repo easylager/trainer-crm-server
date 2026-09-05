@@ -1,13 +1,14 @@
 ---
 task_id: TASK-053
 title: Таб «Лёд» — список арен, чипы намерения, поиск; каталог как линза
-status: READY
-phase: plan
+status: IN_PROGRESS
+phase: execute
 epic: EPIC3
 depends_on: [TASK-051]
 execution_mode: SUPERVISED
 created_at: 2026-09-04
-updated_at: 2026-09-04
+updated_at: 2026-09-06
+pr_url: https://github.com/easylager/trainer-crm-server/pull/32
 ---
 
 # Task
@@ -108,3 +109,4 @@ Status: OPEN
 
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 3
+- **IN_PROGRESS** (2026-09-06) — Ice tab UI on `feat/TASK-053-ice-tab`. PR https://github.com/easylager/trainer-crm-server/pull/32 (base `release/ice-discovery`). AC-002 stale: skate lens filters to future MK slots per epic 2026-09-05. Coordinator owns merge.
