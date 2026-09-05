@@ -1,8 +1,8 @@
 ---
 task_id: TASK-057
 title: Витрина и допуск — разделить trainer_arenas на «где меня искать» и «где мне можно вести»
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: []
 execution_mode: SUPERVISED
@@ -85,3 +85,4 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B5
 - **IN_PROGRESS** (2026-09-06) — PLACE: `trainer_arenas.is_public` DEFAULT true; auto-create `is_public=false` on slot/booking; catalog filters public only; profile chip toggle. EDGE-001 left open (hiding the last public arena can drop the trainer from catalog; no new empty-state). PR: https://github.com/easylager/trainer-crm-server/pull/27
+- **MERGED** (2026-09-06) — squash `498060c` into `release/ice-discovery`. CI green. Not merged to master.

@@ -1,8 +1,8 @@
 ---
 task_id: TASK-051
 title: Публичный read-only API арен и сеансов льда
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-048, TASK-050]
 execution_mode: SUPERVISED
@@ -111,3 +111,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2
 - **CANONICAL** (2026-09-05) — сеансы в API = ice_sessions, без формата источника
 - **IN_PROGRESS** (2026-09-06) — public read-only Ice API on `feat/TASK-051-public-ice-api`. PR https://github.com/easylager/trainer-crm-server/pull/26 (base `release/ice-discovery`). **AC-003 deviation (owner rule):** `intent=skate` lists an arena only when it has a future non-expired `public_skate|open_ice` session. `intent=coach|group` may return a larger set (B/C profile venues). Live line still changes with intent. Tier A/B/C is computed on read; no `data_tier` column.
+- **MERGED** (2026-09-06) — squash `be30612` into `release/ice-discovery`. CI green. Not merged to master.
