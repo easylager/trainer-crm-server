@@ -381,6 +381,38 @@ CLIENT_TRAINER_BOOKED_YOU = (
 )
 
 
+def format_client_booked_for_html(name: str | None) -> str:
+    """Guardian-profile line for client pushes: «запись для Леры». Empty for self."""
+    n = (name or "").strip()
+    if not n:
+        return ""
+    return f"👤 <b>Запись для:</b> {html.escape(n)}\n"
+
+
+def format_client_booking_cancelled_html(
+    *,
+    date: str,
+    day: str,
+    time: str,
+    by_trainer: bool,
+    booked_for_name: str | None = None,
+    has_rebook_button: bool = True,
+) -> str:
+    if by_trainer:
+        body = CLIENT_BOOKING_CANCELLED_BY_TRAINER.format(date=date, day=day, time=time)
+    elif has_rebook_button:
+        body = CLIENT_BOOKING_CANCELLED_BY_SELF.format(date=date, day=day, time=time)
+    else:
+        body = CLIENT_BOOKING_CANCELLED_BY_SELF_MENU.format(date=date, day=day, time=time)
+    line = format_client_booked_for_html(booked_for_name)
+    if not line:
+        return body
+    split_at = body.find("\n\n")
+    if split_at < 0:
+        return line + body
+    return body[: split_at + 2] + line + "\n" + body[split_at + 2 :]
+
+
 def format_client_trainer_booked_you_html(
     *,
     date: str,
@@ -395,12 +427,16 @@ def format_client_trainer_booked_you_html(
     duration_minutes: int | None,
     map_link: str | None,
     expected_payment_class: str | None = None,
+    booked_for_name: str | None = None,
 ) -> str:
     """Rich HTML message for client after trainer books them (ParseMode.HTML)."""
     parts: list[str] = [
         "📅 <b>Вас записали на занятие!</b>\n\n",
-        f"👤 <b>Тренер:</b> <b>{html.escape(trainer_name)}</b>\n",
     ]
+    booked = format_client_booked_for_html(booked_for_name)
+    if booked:
+        parts.append(booked + "\n")
+    parts.append(f"👤 <b>Тренер:</b> <b>{html.escape(trainer_name)}</b>\n")
     dur_part = f" – <b>{int(duration_minutes)}</b> мин" if duration_minutes is not None else ""
     parts.append(f"📅 <b>Когда:</b> <b>{html.escape(date)}</b> ({html.escape(day)}) · {html.escape(time)}{dur_part}\n")
 
@@ -484,6 +520,7 @@ def format_client_booking_rescheduled_html(
     arena_address: str | None,
     duration_minutes: int | None,
     expected_payment_class: str | None = None,
+    booked_for_name: str | None = None,
 ) -> str:
     """Rich HTML message for client when trainer reschedules their booking (ParseMode.HTML).
 
@@ -492,9 +529,14 @@ def format_client_booking_rescheduled_html(
     """
     parts: list[str] = [
         "🔄 <b>Занятие переехало!</b>\n\n",
-        f"👤 <b>Тренер:</b> <b>{html.escape(trainer_name)}</b>\n",
-        f"📅 Было: <s>{html.escape(old_date)} ({html.escape(old_day)}) · {html.escape(old_time)}</s>\n",
     ]
+    booked = format_client_booked_for_html(booked_for_name)
+    if booked:
+        parts.append(booked + "\n")
+    parts.append(f"👤 <b>Тренер:</b> <b>{html.escape(trainer_name)}</b>\n")
+    parts.append(
+        f"📅 Было: <s>{html.escape(old_date)} ({html.escape(old_day)}) · {html.escape(old_time)}</s>\n"
+    )
     dur_part = f" – <b>{int(duration_minutes)}</b> мин" if duration_minutes is not None else ""
     parts.append(
         f"📅 Стало: <b>{html.escape(new_date)}</b> ({html.escape(new_day)}) · "
@@ -1482,6 +1524,8 @@ def format_client_booking_reminder_text(
             if is_soon
             else "🔔 <b>Напоминание: занятие завтра</b>"
         )
+        booked = format_client_booked_for_html(s0.get("booked_for_name"))
+        booked_block = f"{booked}\n" if booked else ""
         service = (service_name or "").strip() or "—"
         pay_line = format_client_upcoming_payment_display_html(
             expected_payment_class=expected_payment_class,
@@ -1493,6 +1537,7 @@ def format_client_booking_reminder_text(
         address = (arena_address or "").strip() or "см. «Мои записи»"
         return (
             f"{title}\n\n"
+            f"{booked_block}"
             f"📅 <b>{html.escape(date)}</b> ({html.escape(day)}) · {html.escape(time_s)} – <b>{duration}</b> мин\n"
             f"🎯 <b>{html.escape(service)}</b>\n"
             f"{pay_line}\n"

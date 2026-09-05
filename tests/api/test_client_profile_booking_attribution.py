@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time, timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -161,7 +161,13 @@ async def test_booking_with_header_when_child_is_default_still_lands_on_child(
 
 
 async def _seed_upcoming_booking(
-    db_session, *, trainer_id: int, client_id: int, service_id: int, hour: int = 10
+    db_session,
+    *,
+    trainer_id: int,
+    client_id: int,
+    service_id: int,
+    hour: int = 10,
+    status: str = "confirmed",
 ) -> int:
     r_slot = await db_session.execute(
         text(
@@ -184,10 +190,10 @@ async def _seed_upcoming_booking(
         text(
             """
             INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
-            VALUES (:sid, :tid, :cid, :svc, 'confirmed') RETURNING id
+            VALUES (:sid, :tid, :cid, :svc, :st) RETURNING id
             """
         ),
-        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id, "st": status},
     )
     (booking_id,) = r_booking.fetchone()
     await db_session.commit()
@@ -518,3 +524,192 @@ async def test_full_flow_book_child_then_self_separate_client_ids(
     assert by_id[child_bid] == child_id
     assert by_id[self_bid] == parent_id
     assert child_id != parent_id
+
+
+@pytest.mark.asyncio
+async def test_cancel_child_booking_with_x_profile_id_succeeds(
+    app_use_test_db, db_session
+) -> None:
+    """Cancel of a guardian-child booking must honor X-Profile-Id (not self telegram)."""
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+
+    booking_id = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=15
+    )
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock()
+    mock_bot.session = MagicMock()
+    mock_bot.session.close = AsyncMock()
+
+    with patch_client_init_auth(tid):
+        with patch("src.api.routes.webapp.Bot", return_value=mock_bot):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                denied = await client.post(
+                    f"/api/webapp/client/bookings/{booking_id}/cancel",
+                    json={"reason": "болеет"},
+                    headers=_client_auth_headers(),
+                )
+                cancelled = await client.post(
+                    f"/api/webapp/client/bookings/{booking_id}/cancel",
+                    json={"reason": "болеет"},
+                    headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+                )
+
+    assert denied.status_code == 400, denied.text
+    assert cancelled.status_code == 200, cancelled.text
+    r = await db_session.execute(
+        text("SELECT status FROM bookings WHERE id = :bid"), {"bid": booking_id}
+    )
+    assert (r.scalar_one() or "").strip() == "cancelled"
+
+
+async def _guardian_child_setup(db_session, *, child_name: str = "Лера"):
+    from tests.application.test_list_bookings_for_trainer_hub import _seed_trainer_with_service
+
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tid = _fresh_client_telegram_id()
+    phone, phone_n = belarus_test_phone(tid)
+    parent_id = await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+    await db_session.execute(
+        text("UPDATE clients SET phone = :p, phone_normalized = :pn WHERE id = :cid"),
+        {"p": phone, "pn": phone_n, "cid": parent_id},
+    )
+    await db_session.commit()
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name=child_name)
+    return trainer_id, service_id, tid, phone, parent_id, child_id
+
+
+@pytest.mark.asyncio
+async def test_trainer_cancel_and_decline_and_completion_reach_parent_telegram(
+    app_use_test_db, db_session
+) -> None:
+    from src.application.booking_use_cases import (
+        cancel_booking,
+        decline_booking,
+        list_bookings_pending_client_completion_push,
+    )
+
+    trainer_id, service_id, tid, _phone, _parent_id, child_id = await _guardian_child_setup(
+        db_session
+    )
+    cancel_bid = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=10
+    )
+    decline_bid = await _seed_upcoming_booking(
+        db_session,
+        trainer_id=trainer_id,
+        client_id=child_id,
+        service_id=service_id,
+        hour=11,
+        status="pending",
+    )
+    complete_bid = await _seed_past_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=12
+    )
+
+    assert await cancel_booking(db_session, cancel_bid, trainer_id) is True
+    queued = await db_session.execute(
+        text(
+            "SELECT client_telegram_id FROM booking_cancel_notifications WHERE booking_id = :bid"
+        ),
+        {"bid": cancel_bid},
+    )
+    assert int(queued.scalar_one()) == tid
+
+    declined = await decline_booking(db_session, decline_bid, trainer_id)
+    assert declined is not None
+    assert declined["client_telegram_id"] == tid
+    assert (declined.get("client_phone") or "").strip()
+
+    pending_push = await list_bookings_pending_client_completion_push(db_session)
+    by_id = {int(row["id"]): row for row in pending_push}
+    assert complete_bid in by_id
+    assert by_id[complete_bid]["client_telegram_id"] == tid
+
+
+@pytest.mark.asyncio
+async def test_trainer_lists_show_parent_contact_for_child_profile(
+    app_use_test_db, db_session
+) -> None:
+    from datetime import date, timedelta
+
+    from src.application.booking_use_cases import (
+        active_booking_summaries_by_slot_for_trainer_range,
+        get_trainer_client_for_card,
+        list_bookings_for_trainer,
+        list_trainer_clients,
+    )
+
+    trainer_id, service_id, tid, phone, _parent_id, child_id = await _guardian_child_setup(
+        db_session
+    )
+    booking_id = await _seed_upcoming_booking(
+        db_session, trainer_id=trainer_id, client_id=child_id, service_id=service_id, hour=16
+    )
+
+    hub = await list_bookings_for_trainer(db_session, trainer_id)
+    hub_row = next(r for r in hub if int(r["id"]) == booking_id)
+    assert hub_row["client_telegram_id"] == tid
+    assert (hub_row.get("client_phone") or "").strip() == phone
+    assert (hub_row.get("client_first_name") or "").strip() == "Лера"
+
+    today = date.today()
+    summaries = await active_booking_summaries_by_slot_for_trainer_range(
+        db_session, trainer_id, today, today + timedelta(days=7)
+    )
+    mini = next(v for v in summaries.values() if int(v["booking_id"]) == booking_id)
+    assert mini["client_telegram_id"] == tid
+    assert (mini.get("client_phone") or "").strip() == phone
+
+    clients = await list_trainer_clients(db_session, trainer_id, limit=50)
+    card_list = next(r for r in clients if int(r["id"]) == child_id)
+    assert card_list["telegram_id"] == tid
+    assert card_list["in_bot"] is True
+    assert (card_list.get("phone") or "").strip() == phone
+
+    card = await get_trainer_client_for_card(db_session, trainer_id, child_id)
+    assert card is not None
+    assert card["telegram_id"] == tid
+    assert (card.get("phone") or "").strip() == phone
+
+
+@pytest.mark.asyncio
+async def test_get_client_request_for_booking_uses_acting_child_profile(
+    app_use_test_db, db_session
+) -> None:
+    from src.application.client_request_use_cases import get_client_request_for_booking
+    from tests.api.test_webapp_client_miniapp_integration import _require_seed_ids
+
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            child_id = await _add_child_profile(client, first_name="Лера")
+            created = await client.post(
+                "/api/webapp/client/request",
+                json={"city_id": cid, "service_id": sid, "comment": "для Леры"},
+                headers={**_client_auth_headers(), "X-Profile-Id": str(child_id)},
+            )
+    assert created.status_code == 200, created.text
+    request_id = int(created.json()["request_id"])
+
+    missing = await get_client_request_for_booking(db_session, request_id, tid)
+    assert missing is None
+    found = await get_client_request_for_booking(
+        db_session, request_id, tid, acting_client_id=child_id
+    )
+    assert found is not None
+    assert int(found["id"]) == request_id

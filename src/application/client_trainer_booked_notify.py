@@ -68,6 +68,7 @@ async def try_send_client_trainer_booked_push(
         duration_minutes=p.get("duration_minutes"),
         map_link=p.get("map_link"),
         expected_payment_class=payment_class,
+        booked_for_name=p.get("booked_for_name"),
     )
     kb = msg.build_client_trainer_booked_you_inline_keyboard(
         booking_id=bid,

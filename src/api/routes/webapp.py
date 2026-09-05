@@ -1730,7 +1730,12 @@ async def post_client_booking(
     client_request_id: int | None = None
     service_id: int
     if body.request_id is not None:
-        req = await get_client_request_for_booking(session, body.request_id, telegram_id)
+        acting_for_request = await resolve_acting_client_id(
+            session, telegram_id, requested_profile_id
+        )
+        req = await get_client_request_for_booking(
+            session, body.request_id, telegram_id, acting_client_id=acting_for_request
+        )
         if not req or not any(r.get("trainer_id") == trainer_id for r in req.get("responses") or []):
             raise HTTPException(status_code=400, detail="Request not found or trainer did not respond")
         client_request_id = body.request_id
@@ -2985,6 +2990,7 @@ async def post_client_booking_cancel(
     body: ClientCancelBookingBody,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    x_profile_id: str | None = Header(None),
 ):
     """Cancel own booking with optional reason. Auth: client initData. Notifies trainer immediately."""
     from src.application.booking_party_notifications import (
@@ -3003,12 +3009,16 @@ async def post_client_booking_cancel(
     # Trainer Telegram notify always; client self-confirm only when cancel is from Telegram Mini App
     # (MAX clients use a synthetic catalog key — no Telegram chat to confirm into).
     send_client_confirm = principal.platform == MiniAppPlatform.TELEGRAM
+    acting_client_id = await resolve_acting_client_id(
+        session, telegram_id, _parse_profile_id_header(x_profile_id)
+    )
     payload = await cancel_booking_by_client(
         session,
         booking_id,
         telegram_id,
         reason=body.reason,
         notify_client_confirm=send_client_confirm,
+        acting_client_id=acting_client_id,
     )
     if not payload:
         raise HTTPException(status_code=400, detail="Booking not found or already cancelled")

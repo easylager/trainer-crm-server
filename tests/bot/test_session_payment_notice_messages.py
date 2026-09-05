@@ -327,3 +327,71 @@ def test_trainer_confirmed_echo_pass_instead_of_price() -> None:
     )
     assert "Оплата: абонемент" in text
     assert "50,00" not in text
+
+
+def test_client_pushes_include_booked_for_child_name() -> None:
+    booked = msg.format_client_trainer_booked_you_html(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=None,
+        price_tier_label=None,
+        arena_name="Манеж",
+        arena_address=None,
+        duration_minutes=60,
+        map_link=None,
+        booked_for_name="Лера",
+    )
+    assert "Запись для" in booked
+    assert "Лера" in booked
+
+    reminder = msg.format_client_booking_reminder_text(
+        is_soon=False,
+        sessions=[
+            {
+                "date": "10.06",
+                "day": "Ср",
+                "time": "18:00",
+                "duration": 60,
+                "service_name": "Персональная",
+                "booking_price_cents": None,
+                "expected_payment_class": None,
+                "arena_name": "Манеж",
+                "arena_address": "ул. Тест",
+                "booked_for_name": "Лера",
+            }
+        ],
+    )
+    assert "Запись для" in reminder
+    assert "Лера" in reminder
+
+    moved = msg.format_client_booking_rescheduled_html(
+        old_date="10.06",
+        old_day="Ср",
+        old_time="18:00",
+        new_date="11.06",
+        new_day="Чт",
+        new_time="19:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=None,
+        price_tier_label=None,
+        arena_name="Манеж",
+        arena_address=None,
+        duration_minutes=60,
+        booked_for_name="Лера",
+    )
+    assert "Запись для" in moved
+    assert "Лера" in moved
+
+    cancelled = msg.format_client_booking_cancelled_html(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        by_trainer=True,
+        booked_for_name="Лера",
+    )
+    assert "Запись для" in cancelled
+    assert "Лера" in cancelled

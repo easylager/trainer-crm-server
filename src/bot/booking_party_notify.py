@@ -143,12 +143,14 @@ async def _send_client_cancel_confirm(bot: Bot, row: dict[str, Any]) -> None:
         trainer_id=pl.get("trainer_id"),
         service_id=pl.get("service_id"),
     )
-    cancel_tpl = (
-        msg.CLIENT_BOOKING_CANCELLED_BY_SELF
-        if reply_markup is not None
-        else msg.CLIENT_BOOKING_CANCELLED_BY_SELF_MENU
+    text = msg.format_client_booking_cancelled_html(
+        date=date_str,
+        day=day_label,
+        time=time_str,
+        by_trainer=False,
+        booked_for_name=pl.get("booked_for_name"),
+        has_rebook_button=reply_markup is not None,
     )
-    text = cancel_tpl.format(date=date_str, day=day_label, time=time_str)
     await bot.send_message(
         chat_id=int(row["recipient_telegram_id"]),
         text=text,

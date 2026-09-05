@@ -41,6 +41,24 @@ def sql_client_notify_telegram_id(alias: str = "c") -> str:
     )
 
 
+def sql_client_notify_phone(alias: str = "c") -> str:
+    """Own phone, else the account self-row phone (guardian child has no phone of their own)."""
+    return (
+        f"COALESCE("
+        f"NULLIF(TRIM({alias}.phone), ''), "
+        f"(SELECT NULLIF(TRIM(p.phone), '') FROM clients p "
+        f"WHERE p.telegram_id = {sql_client_notify_telegram_id(alias)} LIMIT 1))"
+    )
+
+
+def sql_client_booked_for_name(alias: str = "c") -> str:
+    """Child/guardian first name for client-push copy; NULL for self rows."""
+    return (
+        f"CASE WHEN {alias}.telegram_id IS NULL "
+        f"THEN NULLIF(TRIM({alias}.first_name), '') ELSE NULL END"
+    )
+
+
 async def get_account_telegram_id_for_profile(
     session: AsyncSession, profile_client_id: int
 ) -> int | None:
