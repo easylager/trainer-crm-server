@@ -8,6 +8,7 @@ depends_on: [TASK-051]
 execution_mode: AUTONOMOUS
 created_at: 2026-09-04
 updated_at: 2026-09-06
+pr_url: https://github.com/easylager/trainer-crm-server/pull/34
 ---
 
 # Task
@@ -83,4 +84,4 @@ Status: OPEN
 
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 3
-- **IN_PROGRESS** (2026-09-06) — UI lane: hub teaser «Лёд рядом» from `/client/hub/bootstrap` (session city, future MK only) + trainer-card arena chips with primary mark and «ещё M». Map (TASK-054) not touched.
+- **IN_PROGRESS** (2026-09-06) — UI lane: hub teaser «Лёд рядом» from `/client/hub/bootstrap` (session city, future MK only) + trainer-card arena chips with primary mark and «ещё M». Map (TASK-054) not touched. PR https://github.com/easylager/trainer-crm-server/pull/34 (not merged).
