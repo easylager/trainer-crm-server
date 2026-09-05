@@ -8,6 +8,8 @@ depends_on: []
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
+branch: feat/TASK-056-booking-place
+pr: https://github.com/easylager/trainer-crm-server/pull/24
 ---
 
 # Task
@@ -96,3 +98,4 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B1/B3 из `DESIGN-ARENAS-CLIENT-APP.md` §6
 - **IN_PROGRESS** (2026-09-06) — branch `feat/TASK-056-booking-place` from `origin/release/ice-discovery` @ bed5a80; PLACE lane
+- **PR_OPEN** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/24 (base `release/ice-discovery`, commit d604680). Status stays IN_PROGRESS until coordinator merge.
