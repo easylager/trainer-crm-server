@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606281';
+  var SHELL_VERSION = '202609061';
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
@@ -136,6 +136,7 @@
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
     if (key === 'client-home') return 'home';
+    if (key === 'arena') return 'catalog';
     if (key === 'catalog') {
       var q = global.location.search || '';
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
@@ -747,11 +748,40 @@
     prefetchBookAssets: prefetchBookAssets,
     readBookingsWarmCache: readBookingsWarmCache,
     writeBookingsWarmCache: writeBookingsWarmCache,
+    maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
     TAB_ICONS: TAB_ICONS,
   };
 
+  function readStartParam() {
+    var tg = getTg();
+    var fromTg = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+    if (fromTg) return String(fromTg);
+    try {
+      var hash = global.location.hash || '';
+      var m = /(?:^|[&#])tgWebAppStartParam=([^&]+)/.exec(hash);
+      if (m) return decodeURIComponent(m[1]);
+    } catch (e) { /* ignore */ }
+    try {
+      var qp = new URLSearchParams(global.location.search || '');
+      return qp.get('tgWebAppStartParam') || qp.get('startapp') || '';
+    } catch (e2) {
+      return '';
+    }
+  }
+
+  function maybeOpenArenaDeepLink() {
+    var key = pathnameKey();
+    if (key === 'arena') return false;
+    var sp = String(readStartParam() || '').trim();
+    var m = /^arena[_-](.+)$/i.exec(sp);
+    if (!m) return false;
+    navigate('arena?ref=' + encodeURIComponent(m[1]));
+    return true;
+  }
+
   function boot() {
     init();
+    if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
       scheduleCatalogNavigationPrefetch();
     }
