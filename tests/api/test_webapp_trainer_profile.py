@@ -1,5 +1,6 @@
 """Web App trainer profile API: initData auth, aggregate GET, PATCH (Part 1)."""
 import uuid
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -513,8 +514,11 @@ async def test_arena_setup_mode_create_creates_real_arena_and_hides_from_public_
                 params={"city_id": cid},
             )
             assert trainer_arenas_resp.status_code == 200
-            trainer_ids = [a["id"] for a in trainer_arenas_resp.json()["items"]]
+            trainer_items = trainer_arenas_resp.json()["items"]
+            trainer_ids = [a["id"] for a in trainer_items]
             assert arena_id in trainer_ids
+            created_row = next(a for a in trainer_items if a["id"] == arena_id)
+            assert created_row.get("address")
 
         # AC-004: NOT visible in the public client catalog until confirmed.
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -748,3 +752,23 @@ async def test_patch_services_without_prices_keeps_on_request_service(
     assert match is not None
     assert match.get("price_byn") is None
     assert not (match.get("price_tiers") or [])
+
+
+_PROFILE_WEBAPP = Path(__file__).resolve().parents[2] / "static" / "webapp"
+
+
+def test_profile_arena_picker_markup_and_legacy_flag() -> None:
+    """AC-005/006/009: search lives in static HTML; new picker is default; census is ?arena_picker=legacy."""
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    assert 'id="arenaPicker"' in html
+    assert 'id="arenaSearchInput"' in html
+    assert 'id="arenaChips"' in html
+    assert "getElementById('arenaSearchInput')" in js
+    assert "arena_picker" in js
+    assert "!== 'legacy'" in js
+    assert "function profileArenaPickerEnabled" in js
+    assert "updateArenaChips" in js
+    assert "appendArenaCreateCta" in js
+    assert "setPrimaryArena" in js
+

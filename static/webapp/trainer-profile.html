@@ -26,8 +26,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202609051" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609051" />
+  <link rel="preload" href="trainer-profile-main.js?v=202609052" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609052" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
@@ -235,7 +235,25 @@
           <span class="profile-collapse__title">Арены</span>
         </summary>
         <div class="card">
-          <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
+          <p class="hint" id="arenaHint">Выберите город — появится поиск площадок.</p>
+          <div id="arenaPicker" class="arena-picker" hidden>
+            <div id="arenaChips" class="arena-chips" hidden></div>
+            <div class="arena-picker-search">
+              <input
+                type="search"
+                id="arenaSearchInput"
+                class="arena-picker-search__input"
+                placeholder="Название или адрес"
+                autocomplete="off"
+                enterkeyhint="search"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-controls="arenaResults"
+              />
+            </div>
+            <div id="arenaResults" class="arena-results" role="listbox" aria-label="Площадки города"></div>
+          </div>
           <div id="arenasWrap"></div>
           <div id="arenaEmptyActions" class="arena-empty-actions" hidden></div>
           <p id="arenaSetupStatus" class="arena-setup-status" hidden role="status"></p>
@@ -515,7 +533,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202609051"></script>
+  <script defer src="trainer-profile-main.js?v=202609052"></script>
   <script defer src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>

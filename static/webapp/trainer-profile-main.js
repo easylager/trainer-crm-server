@@ -126,6 +126,9 @@
         cities: [],
         servicesCatalog: [],
         arenasList: [],
+        arenaSearchQuery: '',
+        arenaCreateOpen: false,
+        arenaSearchTimer: null,
         snapshot: null,
         scheduleSettings: null,
         scheduleGridSelectedStep: 15,
@@ -164,6 +167,9 @@
        * Серверные tt_minimal_missing_fields больше не содержат эти поля — порядок должен совпадать с продуктом.
        */
       var PROFILE_TT_MINIMAL_WIZARD_ORDER = ['anketa_main', 'phone', 'services', 'arenas'];
+      var ARENA_PICKER_MAX_RESULTS = 20;
+      var ARENA_PICKER_SEARCH_DEBOUNCE_MS = 120;
+      var arenaPickerBound = false;
       /** Stable RU labels by tour step key (do not depend on server array ordering). */
       var PROFILE_TT_BLOCK_LABELS_RU = {
         anketa_main: 'Основное',
@@ -1098,6 +1104,72 @@
         var i;
         for (i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
         return true;
+      }
+
+      /** Default on. `?arena_picker=legacy` restores the full checkbox census (AC-009). */
+      function profileArenaPickerEnabled() {
+        try {
+          return new URLSearchParams(window.location.search).get('arena_picker') !== 'legacy';
+        } catch (e) {
+          return true;
+        }
+      }
+
+      function escapeArenaHtml(s) {
+        return String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function normalizeArenaSearch(value) {
+        return String(value || '')
+          .toLowerCase()
+          .replace(/ё/g, 'е')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function arenaMatchesQuery(arena, query) {
+        var tokens = normalizeArenaSearch(query).split(' ').filter(Boolean);
+        if (!tokens.length) return true;
+        var hay = normalizeArenaSearch(
+          [(arena && arena.name) || '', (arena && arena.address) || ''].join(' ')
+        );
+        if (!hay) return false;
+        var i;
+        for (i = 0; i < tokens.length; i++) {
+          if (hay.indexOf(tokens[i]) < 0) return false;
+        }
+        return true;
+      }
+
+      function findArenaById(id) {
+        var n = Number(id);
+        var list = state.arenasList || [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].id) === n) return list[i];
+        }
+        return null;
+      }
+
+      function ensurePrimaryArena() {
+        if (!state.trainer) return;
+        var ids = canonicalArenaIds();
+        var cur = state.trainer.primary_arena_id != null ? Number(state.trainer.primary_arena_id) : null;
+        if (!ids.length) {
+          state.trainer.primary_arena_id = null;
+          return;
+        }
+        if (!cur || ids.indexOf(cur) < 0) state.trainer.primary_arena_id = ids[0];
+      }
+
+      function resetArenaSearch() {
+        state.arenaSearchQuery = '';
+        var inp = document.getElementById('arenaSearchInput');
+        if (inp) inp.value = '';
       }
 
       function priceFieldInvalid(el) {
@@ -4661,9 +4733,208 @@
         syncOnRequestHints();
       }
 
+      function toggleCanonicalArena(id, on) {
+        var ids = canonicalArenaIds();
+        var n = Number(id);
+        var i = ids.indexOf(n);
+        if (on && i < 0) ids.push(n);
+        if (!on && i >= 0) ids.splice(i, 1);
+        setCanonicalArenaIds(ids);
+        ensurePrimaryArena();
+        if (profileArenaPickerEnabled()) updateArenaPickerUi();
+        updatePrimaryArenaUi();
+        setDirty();
+      }
+
+      function setPrimaryArena(id) {
+        if (!state.trainer) return;
+        var n = Number(id);
+        if (canonicalArenaIds().indexOf(n) < 0) return;
+        state.trainer.primary_arena_id = n;
+        if (profileArenaPickerEnabled()) updateArenaChips();
+        setDirty();
+      }
+
+      function openArenaCreateForm(prefillName) {
+        var box = document.getElementById('arenaEmptyActions');
+        if (!box) return;
+        state.arenaCreateOpen = true;
+        box.hidden = false;
+        renderArenaCreateForm(box, { name: prefillName || '' });
+      }
+
+      function closeArenaCreateForm() {
+        state.arenaCreateOpen = false;
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        renderArenaAddEntryPoint(hasCity);
+      }
+
+      function bindArenaPicker() {
+        if (arenaPickerBound) return;
+        var inp = document.getElementById('arenaSearchInput');
+        if (!inp) return;
+        arenaPickerBound = true;
+        inp.addEventListener('input', function() {
+          state.arenaSearchQuery = inp.value;
+          if (state.arenaSearchTimer) clearTimeout(state.arenaSearchTimer);
+          state.arenaSearchTimer = setTimeout(function() {
+            state.arenaSearchTimer = null;
+            updateArenaResults();
+          }, ARENA_PICKER_SEARCH_DEBOUNCE_MS);
+        });
+        inp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') e.preventDefault();
+        });
+      }
+
+      function updateArenaChips() {
+        var chips = document.getElementById('arenaChips');
+        if (!chips) return;
+        var ids = canonicalArenaIds();
+        if (!ids.length) {
+          chips.innerHTML = '';
+          chips.hidden = true;
+          return;
+        }
+        chips.hidden = false;
+        var primary = state.trainer && state.trainer.primary_arena_id != null
+          ? Number(state.trainer.primary_arena_id)
+          : null;
+        var html = '';
+        ids.forEach(function(id) {
+          var a = findArenaById(id);
+          var name = (a && a.name) ? a.name : ('Арена #' + id);
+          var isPrimary = primary === id;
+          html += '<div class="arena-chip' + (isPrimary ? ' arena-chip--primary' : '') + '">';
+          html += '<span class="arena-chip__name">' + escapeArenaHtml(name) + '</span>';
+          if (ids.length > 1) {
+            html += '<button type="button" class="arena-chip__star" data-arena-star="' + id + '"'
+              + ' aria-pressed="' + (isPrimary ? 'true' : 'false') + '"'
+              + ' aria-label="' + (isPrimary ? 'Основная площадка' : 'Сделать основной') + '">★</button>';
+          }
+          html += '<button type="button" class="arena-chip__remove" data-arena-remove="' + id + '" aria-label="Убрать">×</button>';
+          html += '</div>';
+        });
+        chips.innerHTML = html;
+        chips.querySelectorAll('[data-arena-star]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            setPrimaryArena(btn.getAttribute('data-arena-star'));
+          });
+        });
+        chips.querySelectorAll('[data-arena-remove]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            toggleCanonicalArena(btn.getAttribute('data-arena-remove'), false);
+          });
+        });
+      }
+
+      function appendArenaCreateCta(results, query) {
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        createBtn.textContent = query
+          ? ('Добавить «' + query + '»')
+          : 'Нет в списке — добавить площадку';
+        createBtn.addEventListener('click', function() {
+          openArenaCreateForm(query || '');
+        });
+        results.appendChild(createBtn);
+      }
+
+      function updateArenaResults() {
+        var results = document.getElementById('arenaResults');
+        if (!results) return;
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        if (!hasCity) {
+          results.innerHTML = '';
+          return;
+        }
+        var inp = document.getElementById('arenaSearchInput');
+        var query = inp ? inp.value : (state.arenaSearchQuery || '');
+        state.arenaSearchQuery = query;
+        var qNorm = normalizeArenaSearch(query);
+        var selected = {};
+        canonicalArenaIds().forEach(function(id) { selected[id] = true; });
+
+        if (!qNorm) {
+          results.innerHTML = '';
+          var idle = document.createElement('p');
+          idle.className = 'arena-results-idle';
+          var n = (state.arenasList || []).length;
+          idle.textContent = n
+            ? ('Начните вводить название или адрес — в городе ' + n + ' площадок.')
+            : 'В этом городе пока нет площадок в справочнике.';
+          results.appendChild(idle);
+          if (!state.arenaCreateOpen) appendArenaCreateCta(results, '');
+          return;
+        }
+
+        var matches = [];
+        (state.arenasList || []).forEach(function(a) {
+          if (arenaMatchesQuery(a, query)) matches.push(a);
+        });
+
+        results.innerHTML = '';
+        if (!matches.length) {
+          var empty = document.createElement('p');
+          empty.className = 'arena-results-empty';
+          empty.textContent = 'Ничего не нашлось.';
+          results.appendChild(empty);
+          if (!state.arenaCreateOpen) appendArenaCreateCta(results, query.trim());
+          return;
+        }
+
+        var shown = matches.slice(0, ARENA_PICKER_MAX_RESULTS);
+        shown.forEach(function(a) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'arena-result' + (selected[a.id] ? ' is-selected' : '');
+          btn.setAttribute('role', 'option');
+          btn.setAttribute('aria-selected', selected[a.id] ? 'true' : 'false');
+          var nameEl = document.createElement('span');
+          nameEl.className = 'arena-result__name';
+          nameEl.textContent = a.name || ('Арена #' + a.id);
+          if (a.is_confirmed === false) {
+            nameEl.appendChild(document.createTextNode(' '));
+            var badge = document.createElement('span');
+            badge.className = 'arena-unconfirmed-badge';
+            badge.textContent = 'на проверке';
+            nameEl.appendChild(badge);
+          }
+          btn.appendChild(nameEl);
+          if (a.address) {
+            var addrEl = document.createElement('span');
+            addrEl.className = 'arena-result__addr';
+            addrEl.textContent = a.address;
+            btn.appendChild(addrEl);
+          }
+          btn.addEventListener('click', function() {
+            toggleCanonicalArena(a.id, !selected[a.id]);
+          });
+          results.appendChild(btn);
+        });
+        if (matches.length > ARENA_PICKER_MAX_RESULTS) {
+          var more = document.createElement('p');
+          more.className = 'arena-results-more';
+          more.textContent = 'Ещё ' + (matches.length - ARENA_PICKER_MAX_RESULTS) + ' — уточните запрос.';
+          results.appendChild(more);
+        }
+      }
+
+      function updateArenaPickerUi() {
+        bindArenaPicker();
+        updateArenaChips();
+        updateArenaResults();
+      }
+
       function updatePrimaryArenaUi() {
         var wrap = document.getElementById('primaryArenaWrap');
         if (!wrap) return;
+        if (profileArenaPickerEnabled()) {
+          wrap.style.display = 'none';
+          wrap.innerHTML = '';
+          return;
+        }
         var selected = [];
         state.arenasList.forEach(function(a) {
           var cb = document.getElementById('arena_' + a.id);
@@ -4757,6 +5028,8 @@
       function afterArenaSetupSuccess(data) {
         if (data && data.trainer) state.trainer = data.trainer;
         if (data && data.moderation_readiness) state.moderation_readiness = data.moderation_readiness;
+        state.arenaCreateOpen = false;
+        resetArenaSearch();
         var cid = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
         loadArenasForCity(cid).then(function() {
           renderArenas();
@@ -4876,6 +5149,18 @@
       }
 
       function selectExistingArenaCheckbox(arenaId) {
+        var n = Number(arenaId);
+        var ids = canonicalArenaIds();
+        if (n && ids.indexOf(n) < 0) ids.push(n);
+        setCanonicalArenaIds(ids);
+        ensurePrimaryArena();
+        state.arenaCreateOpen = false;
+        if (profileArenaPickerEnabled()) {
+          renderArenaAddEntryPoint(!!(state.trainer && state.trainer.profile && state.trainer.profile.city_id));
+          updateArenaPickerUi();
+          setDirty();
+          return;
+        }
         renderArenas();
         var cb = document.getElementById('arena_' + arenaId);
         if (cb) {
@@ -4884,7 +5169,8 @@
         }
       }
 
-      function renderArenaCreateForm(box) {
+      function renderArenaCreateForm(box, prefills) {
+        prefills = prefills || {};
         box.innerHTML = '';
         clearArenaSetupMessages();
         var title = document.createElement('p');
@@ -4903,6 +5189,7 @@
         nameInp.className = 'input';
         nameInp.maxLength = 128;
         nameInp.placeholder = 'Например, Ледовый дворец на ул. …';
+        if (prefills.name) nameInp.value = String(prefills.name);
         nameWrap.appendChild(nameLab);
         nameWrap.appendChild(nameInp);
         box.appendChild(nameWrap);
@@ -4939,7 +5226,7 @@
         back.className = 'filter-btn arena-empty-btn';
         back.textContent = 'Отмена';
         back.addEventListener('click', function() {
-          renderArenaAddEntryPoint(true);
+          closeArenaCreateForm();
         });
 
         function doSubmit(confirmDuplicate) {
@@ -4997,6 +5284,7 @@
       function renderArenaAddEntryPoint(hasCity) {
         var box = document.getElementById('arenaEmptyActions');
         if (!box) return;
+        if (state.arenaCreateOpen) return;
         box.innerHTML = '';
         if (!hasCity) {
           box.hidden = true;
@@ -5026,16 +5314,18 @@
         lead.textContent = (state.trainer.arena_ids || []).length
           ? 'Не нашли нужную площадку в списке?'
           : 'Если вашей площадки нет в списке — выберите, как продолжить:';
-        box.appendChild(lead);
+        if (!profileArenaPickerEnabled()) box.appendChild(lead);
 
-        var btnCreate = document.createElement('button');
-        btnCreate.type = 'button';
-        btnCreate.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
-        btnCreate.textContent = 'Моей площадки нет в списке';
-        btnCreate.addEventListener('click', function() {
-          renderArenaCreateForm(box);
-        });
-        box.appendChild(btnCreate);
+        if (!profileArenaPickerEnabled()) {
+          var btnCreate = document.createElement('button');
+          btnCreate.type = 'button';
+          btnCreate.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+          btnCreate.textContent = 'Моей площадки нет в списке';
+          btnCreate.addEventListener('click', function() {
+            openArenaCreateForm('');
+          });
+          box.appendChild(btnCreate);
+        }
 
         var btnMobile = document.createElement('button');
         btnMobile.type = 'button';
@@ -5072,20 +5362,54 @@
             });
         });
         box.appendChild(btnMobile);
-        renderArenaSupportBlock(box);
+        if (!profileArenaPickerEnabled()) renderArenaSupportBlock(box);
       }
 
       function renderArenas() {
         var wrap = document.getElementById('arenasWrap');
         var hint = document.getElementById('arenaHint');
         var emptyBox = document.getElementById('arenaEmptyActions');
-        wrap.innerHTML = '';
-        if (emptyBox) {
+        var picker = document.getElementById('arenaPicker');
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        if (wrap && !state.arenaCreateOpen) wrap.innerHTML = '';
+        if (emptyBox && !state.arenaCreateOpen) {
           emptyBox.hidden = true;
           emptyBox.innerHTML = '';
         }
-        clearArenaSetupMessages();
-        var hasCity = !!(state.trainer.profile && state.trainer.profile.city_id);
+        if (!state.arenaCreateOpen) clearArenaSetupMessages();
+
+        if (profileArenaPickerEnabled()) {
+          if (wrap) {
+            wrap.innerHTML = '';
+            wrap.hidden = true;
+          }
+          if (picker) picker.hidden = !hasCity;
+          if (hint) {
+            hint.style.display = hasCity ? 'none' : 'block';
+            hint.textContent = 'Выберите город — появится поиск площадок.';
+          }
+          var pickerPrimary = document.getElementById('primaryArenaWrap');
+          if (pickerPrimary) {
+            pickerPrimary.innerHTML = '';
+            pickerPrimary.style.display = 'none';
+          }
+          bindArenaPicker();
+          if (hasCity) updateArenaPickerUi();
+          else {
+            var chips = document.getElementById('arenaChips');
+            var results = document.getElementById('arenaResults');
+            if (chips) {
+              chips.innerHTML = '';
+              chips.hidden = true;
+            }
+            if (results) results.innerHTML = '';
+          }
+          if (!state.arenaCreateOpen) renderArenaAddEntryPoint(hasCity);
+          return;
+        }
+
+        if (picker) picker.hidden = true;
+        if (wrap) wrap.hidden = false;
         var selected = {};
         (state.trainer.arena_ids || []).forEach(function(id) {
           selected[id] = true;
@@ -5136,9 +5460,7 @@
           });
           updatePrimaryArenaUi();
         }
-        // TASK-046 AC-001: the "add arena" entry point is always available — not only
-        // when the city's arena list happens to be empty.
-        renderArenaAddEntryPoint(hasCity);
+        if (!state.arenaCreateOpen) renderArenaAddEntryPoint(hasCity);
       }
 
       function loadArenasForCity(cityId) {
@@ -5193,6 +5515,10 @@
             }
           }
           if (state.trainer.profile) state.trainer.profile.city_id = cid;
+          if (cid !== prev) {
+            state.arenaCreateOpen = false;
+            resetArenaSearch();
+          }
           loadArenasForCity(cid).then(function() {
             if (cid !== prev) setCanonicalArenaIds([]);
             renderArenas();
