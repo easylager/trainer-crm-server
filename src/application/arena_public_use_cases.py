@@ -482,6 +482,69 @@ async def list_public_ice_arenas(
     }
 
 
+async def get_hub_ice_teaser(
+    session: AsyncSession, *, city_id: int | None
+) -> dict[str, Any] | None:
+    """Soonest future public_skate|open_ice slot in the session city, or None.
+
+    Same MK filter as Ice tab intent=skate (tier A). No geolocation — distance
+    stays unset. Hub bootstrap uses this so home load stays one round-trip.
+    """
+    if city_id is None:
+        return None
+    now = datetime.now(timezone.utc)
+    params: dict[str, Any] = {
+        "now": now,
+        "st": STATUS_ACTIVE,
+        "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "city_id": int(city_id),
+    }
+    sql = f"""
+SELECT
+    a.id AS arena_id,
+    p.slug AS arena_slug,
+    a.name AS arena_name,
+    nxt.kind,
+    nxt.starts_at_utc,
+    nxt.local_date,
+    nxt.starts_at_local,
+    nxt.price_adult_minor,
+    nxt.currency_code
+FROM arenas a
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN LATERAL (
+    SELECT s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
+           s.price_adult_minor, s.currency_code
+    FROM ice_sessions s
+    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    ORDER BY s.starts_at_utc
+    LIMIT 1
+) nxt ON true
+WHERE a.is_active AND a.is_confirmed
+  AND a.city_id = :city_id
+  AND (p.status IS NULL OR p.status = :published)
+ORDER BY nxt.starts_at_utc, a.id
+LIMIT 1
+"""
+    row = (await session.execute(text(sql), params)).mappings().first()
+    if not row:
+        return None
+    local_date = row["local_date"]
+    starts_utc = row["starts_at_utc"]
+    return {
+        "arena_id": int(row["arena_id"]),
+        "arena_slug": row["arena_slug"],
+        "arena_name": row["arena_name"],
+        "kind": row["kind"],
+        "starts_at_utc": starts_utc.isoformat() if hasattr(starts_utc, "isoformat") else str(starts_utc),
+        "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
+        "starts_at_local": _hhmm(row["starts_at_local"]),
+        "price_adult_minor": row["price_adult_minor"],
+        "currency_code": row["currency_code"],
+        "distance_km": None,
+    }
+
+
 async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {

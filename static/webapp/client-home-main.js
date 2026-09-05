@@ -99,6 +99,30 @@
       }
 
       /** Duolingo-style streak line on hub; tap opens full «Ваша активность». */
+      function renderIceTeaser(payload) {
+        var mount = document.getElementById('hubIceTeaser');
+        if (!mount) return;
+        var model = window.IceTeaserModel;
+        if (!model || typeof model.formatIceTeaser !== 'function') {
+          mount.hidden = true;
+          mount.innerHTML = '';
+          return;
+        }
+        var view = model.formatIceTeaser(payload, new Date());
+        var html = model.renderIceTeaserHtml(view);
+        mount.innerHTML = html;
+        mount.hidden = !html;
+        var link = mount.querySelector('a.hub-ice-teaser');
+        if (link) {
+          link.addEventListener('click', function (ev) {
+            var href = link.getAttribute('href');
+            if (!href) return;
+            ev.preventDefault();
+            navigateTo(href);
+          });
+        }
+      }
+
       function renderStreakRibbon(activity) {
         var el = document.getElementById('hubStreakRibbon');
         if (!el) return;
@@ -1472,6 +1496,7 @@
           wordmarkEl.textContent = platformUi.hero_wordmark;
         }
         var cs = (hubMeta && hubMeta.client_session) || {};
+        renderIceTeaser(hubMeta && hubMeta.ice_teaser);
         // Support both legacy (selected_trainer_id) and new edge-based fields
         var primaryTrainerId = cs.primary_trainer_id != null ? cs.primary_trainer_id
           : (cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null);

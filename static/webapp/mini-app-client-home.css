@@ -2424,3 +2424,54 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
     animation: none;
   }
 }
+
+/* TASK-055: compact ice teaser — one amber row, not a marketing banner */
+.hub-ice-teaser-wrap {
+  margin: 0 18px 12px;
+}
+.hub-ice-teaser-wrap[hidden] {
+  display: none;
+}
+a.hub-ice-teaser {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 11px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--app-cta-fill) 55%, transparent);
+  background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-bg-color));
+  text-decoration: none;
+  color: inherit;
+  box-sizing: border-box;
+}
+.hub-ice-teaser__ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--tg-theme-bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.hub-ice-teaser__text {
+  min-width: 0;
+}
+.hub-ice-teaser__text b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 680;
+  color: var(--tg-theme-text-color);
+}
+.hub-ice-teaser__text span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--tg-theme-hint-color);
+}
+.hub-ice-teaser__chev {
+  color: var(--app-cta-fill);
+  font-size: 18px;
+  line-height: 1;
+}

@@ -601,6 +601,59 @@
       padding-top: 10px;
       border-top: 1px solid rgba(128, 128, 128, 0.18);
     }
+    .trainer-detail-stat--chips {
+      display: block;
+    }
+    .trainer-arena-chips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .trainer-arena-chips__eyebrow {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-arena-chips__row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    a.trainer-arena-chip {
+      flex: 0 0 auto;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--app-chip-line, rgba(128, 128, 128, 0.28));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+      background: var(--app-chip-bg, var(--tg-theme-bg-color));
+      text-decoration: none;
+    }
+    a.trainer-arena-chip[aria-pressed="true"] {
+      background: var(--app-cta-fill, var(--tg-theme-button-color));
+      border-color: var(--app-cta-fill, var(--tg-theme-button-color));
+      color: var(--app-cta-on-fill, var(--tg-theme-button-text-color));
+    }
+    .trainer-arena-chip--more {
+      flex: 0 0 auto;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px dashed rgba(128, 128, 128, 0.35);
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-row-place {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
     .trainer-detail-arena-slot-filter {
       padding: 0 2px 4px;
       margin-bottom: 8px;

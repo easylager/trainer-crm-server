@@ -1072,6 +1072,32 @@ def webapp_ice_tab_js(request: Request):
     )
 
 
+@app.get("/webapp/ice-teaser-model.js")
+def webapp_ice_teaser_model_js(request: Request):
+    """TASK-055 hub teaser view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-teaser-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-arena-chips-model.js")
+def webapp_trainer_arena_chips_model_js(request: Request):
+    """TASK-055 trainer-card arena chips view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-arena-chips-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-trainer-groups.css")
 def webapp_trainer_groups_css(request: Request):
     """Trainer training-groups Mini App styles (split from trainer-groups.html). Use ``?v=…`` for long cache."""
