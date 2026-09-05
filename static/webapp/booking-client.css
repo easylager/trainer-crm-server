@@ -10,6 +10,16 @@
   margin-top: 10px;
 }
 
+.booking-place-mismatch {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--tg-theme-text-color);
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+  border-radius: 10px;
+}
+
 .booking-screen-state--success #screenSuccess,
 .booking-screen-state--success .booking-success-panel {
   display: flex !important;

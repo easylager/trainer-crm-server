@@ -96,7 +96,7 @@ Shared module: [`booking-client.js`](../static/webapp/booking-client.js) + [`boo
 ### Success screen (both hosts)
 
 - Primary copy: «Вы записаны» + trainer confirmation hint
-- Secondary: venue override note when API returns `used_primary_venue_for_online_booking`
+- Secondary: venue mismatch note when slot/API returns `place_mismatch` (before confirm)
 - CTAs: «Мои записи» (bookings tab) + «Главная» / return origin via `BookingClient.resolveBookingReturn(from)`
 - book.html: tab bar appears **only on success** (`data-client-shell="tabs"`, forced tab «Записи»)
 

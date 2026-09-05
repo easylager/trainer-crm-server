@@ -217,6 +217,15 @@
     });
   }
 
+  function formatPlaceMismatchNotice(slot) {
+    if (!slot || !slot.place_mismatch) return '';
+    var name = (slot.arena_name && String(slot.arena_name).trim()) || '';
+    if (name) {
+      return 'Занятие пройдёт на площадке «' + name + '», а не на арене, с которой вы открыли запись.';
+    }
+    return 'Место занятия отличается от арены, с которой вы открыли запись.';
+  }
+
   function formatSuccessMessage(data, opts) {
     opts = opts || {};
     var main = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
@@ -224,9 +233,6 @@
     if (opts.requestId) {
       ctx =
         '<br><span class="booking-success-note">Запись связана с вашей заявкой и откликом тренера.</span>';
-    } else if (data && data.used_primary_venue_for_online_booking) {
-      ctx =
-        '<br><span class="booking-success-note">Запись на <strong>основную площадку</strong>. Для занятий на другой арене из фильтра используйте заявку — тренер запишет вас вручную.</span>';
     }
     var foot =
       '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
@@ -369,6 +375,7 @@
     validateBookingForm: validateBookingForm,
     buildBookingPayload: buildBookingPayload,
     submitBooking: submitBooking,
+    formatPlaceMismatchNotice: formatPlaceMismatchNotice,
     formatSuccessMessage: formatSuccessMessage,
     showBookingSuccess: showBookingSuccess,
     resolveBookingReturn: resolveBookingReturn,

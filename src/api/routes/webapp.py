@@ -1402,6 +1402,55 @@ def _client_slots_arena_ids_query_param(raw: str | None) -> frozenset[int] | Non
     return frozenset(out) if out else None
 
 
+def _client_slots_origin_arena_id(sess_row: dict | None) -> int | None:
+    if not sess_row:
+        return None
+    raw = sess_row.get("selected_arena_id")
+    if raw is None:
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _annotate_client_slots_place_mismatch(
+    rows: list[dict], origin_arena_id: int | None
+) -> list[dict]:
+    """Copy slot rows and flag when the slot place differs from the catalog origin arena."""
+    out: list[dict] = []
+    for row in rows:
+        copied = dict(row)
+        aid = copied.get("arena_id")
+        if origin_arena_id is None:
+            copied["place_mismatch"] = False
+        else:
+            try:
+                copied["place_mismatch"] = aid is None or int(aid) != int(origin_arena_id)
+            except (TypeError, ValueError):
+                copied["place_mismatch"] = True
+        out.append(copied)
+    return out
+
+
+CLIENT_SLOTS_EMPTY_ON_FILTER_HINT = (
+    "На этой площадке нет свободных слотов. Оставьте заявку — тренер предложит время, "
+    "или посмотрите слоты на других аренах."
+)
+
+
+def _client_slots_filter_empty_extras(
+    arena_filter: frozenset[int] | None, unfiltered_count: int, filtered_count: int
+) -> dict:
+    if not arena_filter or filtered_count > 0 or unfiltered_count <= 0:
+        return {}
+    return {
+        "empty_on_filter": True,
+        "empty_on_filter_hint": CLIENT_SLOTS_EMPTY_ON_FILTER_HINT,
+    }
+
+
 def _filter_client_slots_payload_by_arenas(rows: list[dict], arena_ids: frozenset[int] | None) -> list[dict]:
     """Post-filter serialized slot rows without burning a cache entry per arena combination."""
     if not arena_ids:
@@ -1524,8 +1573,8 @@ async def get_client_slots(
             trainer_name_val = (first + " " + last).strip() or trainer_name_val
 
     filter_service_id = int(service_id) if service_id is not None else None
+    sess_row = await read_client_bot_session(client_telegram_id, session)
     if filter_service_id is None:
-        sess_row = await read_client_bot_session(client_telegram_id, session)
         sess_tid = sess_row.get("selected_trainer_id") if sess_row else None
         sess_sid = sess_row.get("selected_service_id") if sess_row else None
         if (
@@ -1535,17 +1584,23 @@ async def get_client_slots(
         ):
             filter_service_id = int(sess_sid)
 
+    origin_arena_id = _client_slots_origin_arena_id(sess_row)
+
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
+        unfiltered_n = len(cached_slots)
         arena_slots = _filter_client_slots_payload_by_arenas(cached_slots, arena_filter)
         filtered_slots, daypart = await _client_slots_after_self_book_window(
             session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
         )
+        annotated = _annotate_client_slots_place_mismatch(filtered_slots, origin_arena_id)
+        extras = _client_slots_response_extras(daypart)
+        extras.update(_client_slots_filter_empty_extras(arena_filter, unfiltered_n, len(annotated)))
         return {
             "trainer_name": trainer_name_val,
-            "slots": filtered_slots,
+            "slots": annotated,
             "online_booking_available": True,
-            **_client_slots_response_extras(daypart),
+            **extras,
         }
 
     this_m = _this_week_monday()
@@ -1608,15 +1663,19 @@ async def get_client_slots(
             }
         )
     set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
+    unfiltered_n = len(serialized_full)
     arena_slots = _filter_client_slots_payload_by_arenas(serialized_full, arena_filter)
     filtered_slots, daypart = await _client_slots_after_self_book_window(
         session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
     )
+    annotated = _annotate_client_slots_place_mismatch(filtered_slots, origin_arena_id)
+    extras = _client_slots_response_extras(daypart)
+    extras.update(_client_slots_filter_empty_extras(arena_filter, unfiltered_n, len(annotated)))
     return {
         "trainer_name": trainer_name_val,
-        "slots": filtered_slots,
+        "slots": annotated,
         "online_booking_available": True,
-        **_client_slots_response_extras(daypart),
+        **extras,
     }
 
 
@@ -1791,47 +1850,29 @@ async def post_client_booking(
 
     slot_cap = max(1, int(slot.get("capacity") or 1))
     arena_for_booking: int | None = None
-    used_primary_despite_filter = False
+    place_mismatch = False
     if client_request_id is None:
         if slot_cap > 1:
             # Group: venue is stored on the slot; catalog/session arena filter does not apply.
             arena_for_booking = None
-            used_primary_despite_filter = False
+            place_mismatch = False
         else:
-            slot_arena_sa = slot.get("arena_id")
-            if slot_arena_sa is not None:
-                r_sa = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": int(slot_arena_sa)},
-                )
-                if not r_sa.fetchone():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Слот привязан к площадке, недоступной для этого тренера.",
-                    )
-                arena_for_booking = int(slot_arena_sa)
-                sess_row = await get_client_session(telegram_id, session)
-                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-                primary_sa = await get_trainer_primary_arena_resolved(session, trainer_id)
-                used_primary_despite_filter = bool(
-                    sess_arena is not None
-                    and primary_sa is not None
-                    and int(sess_arena) != int(primary_sa)
-                    and int(slot_arena_sa) == int(primary_sa)
-                )
+            sess_row = await get_client_session(telegram_id, session)
+            sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+            origin = int(sess_arena) if sess_arena is not None else None
+            slot_arena_raw = slot.get("arena_id")
+            slot_arena_int = int(slot_arena_raw) if slot_arena_raw is not None else None
+            resolved, err, place_mismatch = await resolve_arena_for_client_self_booking(
+                session, trainer_id, slot_arena_int, origin
+            )
+            if err == "no_venue":
+                # Onboarding v2: slots without a venue are valid — personal-link booking must not
+                # require a primary arena. Catalog browse still filters by city/arena upstream.
+                arena_for_booking = None
+                place_mismatch = False
+            elif err == "invalid_arena":
+                raise HTTPException(status_code=400, detail="Слот привязан к площадке, недоступной для этого тренера.")
             else:
-                sess_row = await get_client_session(telegram_id, session)
-                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-                resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
-                    session, trainer_id, sess_arena
-                )
-                if err == "no_venue":
-                    # Onboarding v2: slots without a venue are valid — personal-link booking must not
-                    # require a primary arena. Catalog browse still filters by city/arena upstream.
-                    arena_for_booking = None
-                    used_primary_despite_filter = False
-                elif err == "invalid_arena":
-                    raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
                 arena_for_booking = resolved
 
     try:
@@ -1856,8 +1897,8 @@ async def post_client_booking(
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
-    if client_request_id is None and used_primary_despite_filter:
-        out["used_primary_venue_for_online_booking"] = True
+    if client_request_id is None and place_mismatch:
+        out["place_mismatch"] = True
     if idem_cache_key:
         await set_idempotency_response(session, idem_cache_key, dict(out))
     background_tasks.add_task(

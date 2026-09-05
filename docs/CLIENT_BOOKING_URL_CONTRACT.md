@@ -31,11 +31,11 @@ Frozen entry points for client Mini App booking. **Do not break** without bot + 
 {
   "success": true,
   "booking_id": 456,
-  "used_primary_venue_for_online_booking": false
+  "place_mismatch": true
 }
 ```
 
-`used_primary_venue_for_online_booking` is present only when the client filtered a non-primary arena but the slot landed on the trainer's primary venue.
+`place_mismatch` is present only when the booked venue differs from the arena the client came from (catalog filter / arena card). Warn in the booking form before confirm; do not silently rewrite the slot place to the trainer's primary venue.
 
 ---
 
