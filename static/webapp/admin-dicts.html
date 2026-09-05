@@ -176,7 +176,7 @@
       font-size: 11px;
       color: var(--tg-theme-hint-color, #9ca3af);
     }
-    .field input, .field textarea {
+    .field input, .field textarea, .field select {
       width: 100%;
       border-radius: 8px;
       border: 1px solid rgba(148, 163, 184, 0.5);
@@ -191,11 +191,35 @@
       resize: vertical;
       line-height: 1.35;
     }
-    .field input:focus, .field textarea:focus {
+    .field input:focus, .field textarea:focus, .field select:focus {
       outline: none;
       border-color: rgba(59, 130, 246, 0.9);
       box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7);
     }
+    .field select {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 6px 8px;
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      font-family: inherit;
+    }
+    .amenity-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 4px;
+    }
+    .amenity-grid label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: inherit;
+    }
+    .amenity-grid input { width: auto; }
     .field-address { flex: 1; min-width: 0; }
     .field-hint {
       display: block;
@@ -463,6 +487,19 @@
         });
       }
 
+      var AMENITY_OPTIONS = [
+        ['skate_rental', 'Прокат'],
+        ['skate_sharpening', 'Заточка'],
+        ['parking', 'Парковка'],
+        ['locker_rooms', 'Раздевалки'],
+        ['cafe', 'Кафе'],
+        ['accessibility', 'Доступность']
+      ];
+
+      function escapeHtml(s) {
+        return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
       function renderArenas() {
         var card = document.getElementById('arenasCard');
         var btnAdd = document.getElementById('btnAddArena');
@@ -486,24 +523,55 @@
           var addr = (a.address || '').trim();
           var yandexUrl = addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '';
           var googleUrl = addr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr) : '';
+          var hours = (a.opening_hours && a.opening_hours.daily) || {};
+          var amenities = a.amenities || {};
+          var status = a.status || 'published';
           html += '<div class="arena-row" data-id="' + a.id + '">';
           html += '<div class="arena-header">';
           html += '<div>';
-          html += '<div class="arena-name">' + (a.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
-          html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + '</div>';
+          html += '<div class="arena-name">' + escapeHtml(a.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
+          html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + (a.slug ? ' · slug: ' + escapeHtml(a.slug) : '') + '</div>';
           html += '</div>';
           html += '<div style="display:flex;gap:4px;">';
           html += '<button class="icon-btn" data-role="' + (isActive ? 'deactivate' : 'activate') + '" data-id="' + a.id + '" title="' + (isActive ? 'Деактивировать' : 'Вернуть') + '">' + (isActive ? '⏸' : '▶') + '</button>';
-          html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить адрес этой арены на сервер">💾</button>';
+          html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить профиль арены">💾</button>';
           html += '</div>';
           html += '</div>';
           html += '<div class="field-row">';
           html += '<div class="field field-address">';
           html += '<label>Адрес (можно в несколько строк)</label>';
-          html += '<textarea data-field="address" rows="2" placeholder="Улица, дом, ориентиры">' + (a.address || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '</textarea>';
-          html += '<span class="field-hint">💾 Сохранить — записывает адрес этой арены в базу.</span>';
+          html += '<textarea data-field="address" rows="2" placeholder="Улица, дом, ориентиры">' + escapeHtml(a.address || '') + '</textarea>';
           html += '</div>';
           html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Район</label><input data-field="district" value="' + escapeHtml(a.district || '') + '" placeholder="Заводской"></div>';
+          html += '<div class="field"><label>Телефон</label><input data-field="phone" value="' + escapeHtml(a.phone || '') + '" placeholder="+375…"></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Сайт</label><input data-field="website_url" value="' + escapeHtml(a.website_url || '') + '" placeholder="https://"></div>';
+          html += '<div class="field"><label>Публикация</label><select data-field="status">';
+          ['draft','published','archived'].forEach(function(st) {
+            html += '<option value="' + st + '"' + (status === st ? ' selected' : '') + '>' + st + '</option>';
+          });
+          html += '</select></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field field-address"><label>Краткое описание</label>';
+          html += '<textarea data-field="short_description" rows="2">' + escapeHtml(a.short_description || '') + '</textarea></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Открыт с</label><input data-field="hours_open" placeholder="07:00" value="' + escapeHtml(hours.open || '') + '"></div>';
+          html += '<div class="field"><label>до</label><input data-field="hours_close" placeholder="23:00" value="' + escapeHtml(hours.close || '') + '"></div>';
+          html += '<div class="field"><label>Сезон с (мес.)</label><input data-field="season_start_month" type="number" min="1" max="12" value="' + (a.season_start_month || '') + '"></div>';
+          html += '<div class="field"><label>по (мес.)</label><input data-field="season_end_month" type="number" min="1" max="12" value="' + (a.season_end_month || '') + '"></div>';
+          html += '</div>';
+          html += '<div class="field"><label>Удобства</label><div class="amenity-grid">';
+          AMENITY_OPTIONS.forEach(function(pair) {
+            var checked = amenities[pair[0]] === true ? ' checked' : '';
+            html += '<label><input type="checkbox" data-amenity="' + pair[0] + '"' + checked + '> ' + pair[1] + '</label>';
+          });
+          html += '</div></div>';
+          html += '<span class="field-hint">💾 Сохранить — адрес и профиль. Slug после выдачи не меняется.</span>';
           html += '<div class="map-links">';
           if (yandexUrl) html += '<a href="' + yandexUrl + '" target="_blank" rel="noopener">Яндекс карта</a>';
           if (googleUrl) html += '<a href="' + googleUrl + '" target="_blank" rel="noopener">Google карта</a>';
@@ -518,9 +586,32 @@
             var row = btn.closest('.arena-row');
             if (!row) return;
             var addressEl = row.querySelector('textarea[data-field="address"], input[data-field="address"]');
-            var address = (addressEl && addressEl.value || '').trim();
-            sendJson('PATCH', '/admin/arenas/' + id, { address: address || null }).then(function() {
-              showToast('Адрес сохранён');
+            var openH = (row.querySelector('[data-field="hours_open"]') || {}).value || '';
+            var closeH = (row.querySelector('[data-field="hours_close"]') || {}).value || '';
+            var amenities = {};
+            row.querySelectorAll('[data-amenity]').forEach(function(cb) {
+              amenities[cb.getAttribute('data-amenity')] = !!cb.checked;
+            });
+            var seasonStart = (row.querySelector('[data-field="season_start_month"]') || {}).value;
+            var seasonEnd = (row.querySelector('[data-field="season_end_month"]') || {}).value;
+            var payload = {
+              address: (addressEl && addressEl.value || '').trim() || null,
+              district: ((row.querySelector('[data-field="district"]') || {}).value || '').trim() || null,
+              phone: ((row.querySelector('[data-field="phone"]') || {}).value || '').trim() || null,
+              website_url: ((row.querySelector('[data-field="website_url"]') || {}).value || '').trim() || null,
+              short_description: ((row.querySelector('[data-field="short_description"]') || {}).value || '').trim() || null,
+              status: (row.querySelector('[data-field="status"]') || {}).value || 'published',
+              season_start_month: seasonStart ? Number(seasonStart) : null,
+              season_end_month: seasonEnd ? Number(seasonEnd) : null,
+              amenities: amenities
+            };
+            if (openH.trim() || closeH.trim()) {
+              payload.opening_hours = { daily: { open: openH.trim() || null, close: closeH.trim() || null } };
+            } else {
+              payload.opening_hours = null;
+            }
+            sendJson('PATCH', '/admin/arenas/' + id, payload).then(function() {
+              showToast('Профиль арены сохранён');
               return loadArenas();
             }).catch(function(err) {
               showAlert(err.message || String(err));

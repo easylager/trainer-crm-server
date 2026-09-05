@@ -211,6 +211,12 @@ from src.application.client_trainer_edge_use_cases import (
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
+from src.application.arena_profile import (
+    InvalidAmenitiesError,
+    InvalidArenaProfileStatusError,
+    apply_admin_arena_profile_patch,
+    ensure_arena_profile,
+)
 from src.application.trainer_schedule_use_cases import this_week_monday, trainer_default_slot_arena_id
 from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
@@ -4659,6 +4665,17 @@ class AdminArenaPatchBody(BaseModel):
     longitude: float | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    phone: str | None = None
+    website_url: str | None = None
+    short_description: str | None = None
+    district: str | None = None
+    timezone: str | None = None
+    social_urls: dict[str, Any] | None = None
+    opening_hours: dict[str, Any] | None = None
+    season_start_month: int | None = None
+    season_end_month: int | None = None
+    amenities: dict[str, bool] | None = None
+    status: str | None = None
 
 
 @router.get("/admin/arenas")
@@ -4669,17 +4686,21 @@ async def get_admin_arenas(
     principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """List arenas for a city: id, name, address, lat/lon, sort_order, is_active."""
+    """List arenas for a city: dictionary fields plus catalog profile (TASK-048)."""
     from sqlalchemy import text
 
     q_like = f"%{(q or '').strip()}%" if (q or "").strip() else "%"
     sql = """
-        SELECT id, name, address, latitude, longitude, sort_order, is_active
-        FROM arenas
-        WHERE city_id = :cid
-        AND (is_active = :active_ok OR :include_inactive)
-        AND (name ILIKE :q_like OR (address IS NOT NULL AND address ILIKE :q_like))
-        ORDER BY sort_order, id
+        SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
+               p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
+               p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.amenities, p.status
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        WHERE a.city_id = :cid
+        AND (a.is_active = :active_ok OR :include_inactive)
+        AND (a.name ILIKE :q_like OR (a.address IS NOT NULL AND a.address ILIKE :q_like))
+        ORDER BY a.sort_order, a.id
     """
     params: dict[str, Any] = {
         "cid": city_id,
@@ -4699,6 +4720,18 @@ async def get_admin_arenas(
                 "longitude": row[4],
                 "sort_order": row[5],
                 "is_active": row[6],
+                "slug": row[7],
+                "district": row[8],
+                "timezone": row[9],
+                "short_description": row[10],
+                "phone": row[11],
+                "website_url": row[12],
+                "social_urls": row[13] or {},
+                "opening_hours": row[14],
+                "season_start_month": row[15],
+                "season_end_month": row[16],
+                "amenities": row[17] or {},
+                "status": row[18] or "published",
             }
             for row in rows
         ]
@@ -4740,6 +4773,7 @@ async def post_admin_arena(
         },
     )
     row = r.fetchone()
+    await ensure_arena_profile(session, int(row[0]), city_id=body.city_id, name=name)
     await session.commit()
     return {
         "id": row[0],
@@ -4793,12 +4827,30 @@ async def patch_admin_arena(
     if body.is_active is not None:
         updates.append("is_active = :is_active")
         params["is_active"] = body.is_active
-    if not updates:
+    profile_fields = body.model_dump(
+        exclude_unset=True,
+        exclude={"city_id", "name", "address", "latitude", "longitude", "sort_order", "is_active"},
+    )
+    if body.city_id is not None:
+        profile_fields["city_id"] = body.city_id
+    if not updates and not profile_fields:
         return {"ok": True}
-    q = "UPDATE arenas SET " + ", ".join(updates) + " WHERE id = :id"
-    r = await session.execute(text(q), params)
-    if r.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Arena not found")
+    if updates:
+        q = "UPDATE arenas SET " + ", ".join(updates) + " WHERE id = :id"
+        r = await session.execute(text(q), params)
+        if r.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Arena not found")
+    else:
+        exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
+        if not exists.fetchone():
+            raise HTTPException(status_code=404, detail="Arena not found")
+    if profile_fields:
+        try:
+            await apply_admin_arena_profile_patch(session, arena_id, profile_fields)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Arena not found") from None
+        except (InvalidAmenitiesError, InvalidArenaProfileStatusError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.commit()
     return {"ok": True}
 
