@@ -10,7 +10,7 @@ created_at: 2026-09-04
 updated_at: 2026-09-06
 city: Минск
 lane: CONTENT
-pr_url:
+pr_url: https://github.com/easylager/trainer-crm-server/pull/25
 ---
 
 # Task
@@ -124,4 +124,4 @@ When SPEC fixtures land on the train, re-run `--apply` on `trainer_crm_test`. `v
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2; статус BLOCKED до ответа на Q-001
 - **UNBLOCKED** (2026-09-04) — владелец продукта: первый город Минск; status → READY
 - **SPLIT** (2026-09-05) — ресёрч карточки/фото → TASK-073; 063 = загрузка в продукт + ручные слоты только без адаптера
-- **IN_PROGRESS** (2026-09-06) — CONTENT/SCHEMA ops loader `scripts/load_minsk_arena_cards.py` + tests. Dry-run parses 7 dossiers; apply on `trainer_crm_test` updates zamok; unknown amenities unset; no media; no prod writes. PR against `release/ice-discovery` (not merged).
+- **IN_PROGRESS** (2026-09-06) — CONTENT/SCHEMA ops loader `scripts/load_minsk_arena_cards.py` + tests. Dry-run parses 7 dossiers; apply on `trainer_crm_test` updates zamok; unknown amenities unset; no media; no prod writes. PR https://github.com/easylager/trainer-crm-server/pull/25 against `release/ice-discovery` (not merged).
