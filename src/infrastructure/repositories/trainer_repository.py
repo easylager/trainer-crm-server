@@ -254,15 +254,46 @@ class TrainerRepository:
                 {"tid": trainer_id, "sid": service_id, "ua": ui_accent},
             )
 
-    async def set_trainer_arenas(self, trainer_id: int, arena_ids: list[int]) -> None:
-        """Replace trainer's arenas with given ids, preserving is_public on surviving links."""
+    async def set_trainer_arenas(
+        self,
+        trainer_id: int,
+        arena_ids: list[int],
+        *,
+        replace_city_ids: list[int] | None = None,
+    ) -> None:
+        """Replace trainer's arenas with given ids, preserving is_public on surviving links.
+
+        When ``replace_city_ids`` is set (profile save), only arenas in those cities are
+        replaced. Arenas in other cities stay — the Mini App form only shows one city.
+        """
         r_flags = await self._session.execute(
-            text("SELECT arena_id, is_public FROM trainer_arenas WHERE trainer_id = :tid"),
+            text(
+                """
+                SELECT ta.arena_id, ta.is_public, a.city_id
+                FROM trainer_arenas ta
+                JOIN arenas a ON a.id = ta.arena_id
+                WHERE ta.trainer_id = :tid
+                """
+            ),
             {"tid": trainer_id},
         )
-        existing_public = {int(row[0]): bool(row[1]) for row in r_flags.fetchall()}
+        existing_rows = r_flags.fetchall()
+        existing_public = {int(row[0]): bool(row[1]) for row in existing_rows}
+        incoming = [int(aid) for aid in arena_ids]
+        if replace_city_ids is None:
+            final_ids = incoming
+        else:
+            scope = {int(cid) for cid in replace_city_ids}
+            keep: list[int] = []
+            seen: set[int] = set()
+            for arena_id, _is_public, city_id in existing_rows:
+                aid = int(arena_id)
+                if int(city_id) not in scope and aid not in seen:
+                    keep.append(aid)
+                    seen.add(aid)
+            final_ids = keep + [aid for aid in incoming if aid not in seen]
         await self._session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :tid"), {"tid": trainer_id})
-        for aid in arena_ids:
+        for aid in final_ids:
             await self._session.execute(
                 text("""
                     INSERT INTO trainer_arenas (trainer_id, arena_id, is_public)
@@ -1326,7 +1357,11 @@ class TrainerRepository:
             base += " INNER JOIN trainer_services ts ON ts.trainer_id = t.id AND ts.service_id = :service_id"
             params["service_id"] = service_id
         if city_id is not None:
-            where += " AND p.city_id = :city_id"
+            # EXISTS (not JOIN) so DISTINCT on the already-heavy catalog query does not fan out.
+            where += (
+                " AND EXISTS (SELECT 1 FROM trainer_cities tc"
+                " WHERE tc.trainer_id = t.id AND tc.city_id = :city_id)"
+            )
             params["city_id"] = city_id
         if effective_arena_ids is not None:
             # IN-list with explicit named placeholders (asyncpg-friendly; mirrors filter_days style).
