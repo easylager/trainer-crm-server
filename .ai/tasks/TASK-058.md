@@ -8,7 +8,7 @@ depends_on: []
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
-pr_url:
+pr_url: https://github.com/easylager/trainer-crm-server/pull/30
 ---
 
 # Task
@@ -91,3 +91,4 @@ Status: RESOLVED
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B6
 - **IN_PROGRESS** (2026-09-06) — PLACE: trainer_cities + catalog EXISTS + scoped arena replace
+- **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/30 (base `release/ice-discovery`; do not merge until 071 is on the train and `down_revision` is retargeted)
