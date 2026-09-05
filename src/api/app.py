@@ -184,6 +184,16 @@ def webapp_catalog_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/arena")
+@app.get("/webapp/arena.html")
+def webapp_arena_page():
+    """TASK-052: public Ice Discovery arena card Mini App."""
+    path = _WEBAPP_DIR / "arena.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-bookings")
 def webapp_trainer_bookings_page(request: Request):
     """Legacy URL: bookings merged into schedule editor Mini App."""
@@ -965,6 +975,45 @@ def webapp_catalog_css(request: Request):
 def webapp_catalog_main_js(request: Request):
     """Client catalog page logic (split from catalog.html). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "catalog-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/arena-card.css")
+def webapp_arena_card_css(request: Request):
+    """TASK-052 arena card styles. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "arena-card.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/arena-card-model.js")
+def webapp_arena_card_model_js(request: Request):
+    """TASK-052 arena card view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "arena-card-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/arena-card.js")
+def webapp_arena_card_js(request: Request):
+    """TASK-052 arena card page logic. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "arena-card.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

@@ -1,0 +1,288 @@
+/**
+ * TASK-052: arena card model — ribbon, prices, freshness, empty states.
+ * Run: node --test tests/js/arena-card-model.test.js
+ */
+'use strict';
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+
+const modelPath = path.resolve(
+  __dirname,
+  '../../static/webapp/arena-card-model.js'
+);
+
+function loadModel() {
+  const resolved = require.resolve(modelPath);
+  delete require.cache[resolved];
+  return require(modelPath);
+}
+
+describe('formatSessionPrices', () => {
+  it('renders adult, child and rental as three prices, not one string from the API', () => {
+    const { formatSessionPrices } = loadModel();
+    const text = formatSessionPrices({
+      price_adult_minor: 1200,
+      price_child_minor: 800,
+      price_rental_minor: 600,
+      currency_code: 'BYN',
+    });
+    assert.match(text, /взр/);
+    assert.match(text, /дет/);
+    assert.match(text, /прокат/);
+    assert.ok(!text.includes('12 / 8'));
+    assert.ok(text.includes('12'));
+    assert.ok(text.includes('8'));
+    assert.ok(text.includes('6'));
+  });
+
+  it('says без проката when rental is missing', () => {
+    const { formatSessionPrices } = loadModel();
+    const text = formatSessionPrices({
+      price_adult_minor: 2000,
+      price_child_minor: null,
+      price_rental_minor: null,
+      currency_code: 'BYN',
+    });
+    assert.match(text, /без проката/);
+    assert.match(text, /20/);
+  });
+});
+
+describe('formatFreshness', () => {
+  it('uses schedule_observed_at and source_label when both exist', () => {
+    const { formatFreshness } = loadModel();
+    const now = new Date('2026-09-06T12:00:00Z');
+    const text = formatFreshness(
+      {
+        schedule_observed_at: '2026-09-04T10:00:00+00:00',
+        source_label: 'сайт катка',
+        source_url: 'https://rink.example',
+      },
+      now
+    );
+    assert.match(text, /2 дн/);
+    assert.match(text, /сайт катка/);
+  });
+
+  it('does not invent a date when observed_at is missing', () => {
+    const { formatFreshness } = loadModel();
+    const text = formatFreshness(
+      {
+        schedule_observed_at: null,
+        source_label: null,
+        source_url: null,
+      },
+      new Date('2026-09-06T12:00:00Z')
+    );
+    assert.equal(text, null);
+  });
+});
+
+describe('sessionNowState', () => {
+  it('marks a session as live when now is between start and end', () => {
+    const { sessionNowState } = loadModel();
+    const state = sessionNowState(
+      {
+        starts_at_utc: '2026-09-06T10:00:00+00:00',
+        ends_at_utc: '2026-09-06T11:00:00+00:00',
+      },
+      new Date('2026-09-06T10:30:00Z')
+    );
+    assert.equal(state, 'live');
+  });
+
+  it('marks a session as upcoming before start', () => {
+    const { sessionNowState } = loadModel();
+    const state = sessionNowState(
+      {
+        starts_at_utc: '2026-09-06T10:00:00+00:00',
+        ends_at_utc: '2026-09-06T11:00:00+00:00',
+      },
+      new Date('2026-09-06T09:00:00Z')
+    );
+    assert.equal(state, 'upcoming');
+  });
+});
+
+describe('buildRibbonForDay', () => {
+  it('merges ice sessions and group lessons on one time axis', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [
+        {
+          id: 1,
+          kind: 'public_skate',
+          session_label: 'Массовое катание',
+          starts_at_local: '11:00',
+          starts_at_utc: '2026-09-06T08:00:00+00:00',
+          ends_at_utc: '2026-09-06T09:00:00+00:00',
+          price_adult_minor: 1200,
+          price_child_minor: 800,
+          price_rental_minor: 600,
+          currency_code: 'BYN',
+        },
+      ],
+      groups: [
+        {
+          id: 9,
+          name: 'Первый лёд',
+          trainer_id: 4,
+          spots_left: 2,
+          schedule_rules: [
+            { day_of_week: 0, start_time: '17:30', duration_minutes: 45 },
+          ],
+        },
+      ],
+      weekday: 0,
+      now: new Date('2026-09-06T06:00:00Z'),
+    });
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].nature, 'ice');
+    assert.equal(rows[0].cta, 'Билет на месте');
+    assert.equal(rows[0].ctaKind, 'ghost');
+    assert.equal(rows[1].nature, 'lesson');
+    assert.equal(rows[1].cta, 'Заявка');
+    assert.equal(rows[1].ctaKind, 'solid');
+    assert.ok(rows[0].time < rows[1].time);
+  });
+
+  it('labels a live ice session as идёт', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [
+        {
+          id: 2,
+          kind: 'open_ice',
+          starts_at_local: '10:00',
+          starts_at_utc: '2026-09-06T07:00:00+00:00',
+          ends_at_utc: '2026-09-06T08:00:00+00:00',
+          price_adult_minor: 2000,
+          currency_code: 'BYN',
+        },
+      ],
+      groups: [],
+      weekday: 6,
+      now: new Date('2026-09-06T07:20:00Z'),
+    });
+    assert.equal(rows[0].nowState, 'live');
+    assert.match(rows[0].meta, /идёт/i);
+  });
+});
+
+describe('buildWeekSummaries', () => {
+  it('shows Данных нет for a weekday with no sessions or lessons', () => {
+    const { buildWeekSummaries } = loadModel();
+    const days = buildWeekSummaries({
+      from: '2026-09-07',
+      to: '2026-09-10',
+      sessionDays: [
+        { local_date: '2026-09-07', sessions: [{ id: 1 }, { id: 2 }] },
+      ],
+      groups: [],
+    });
+    const empty = days.find((d) => d.localDate === '2026-09-08');
+    assert.ok(empty);
+    assert.equal(empty.empty, true);
+    assert.equal(empty.title, 'Данных нет');
+  });
+});
+
+describe('heroPhotoUrl', () => {
+  it('returns null when there is no hero so the UI can show a placeholder', () => {
+    const { heroPhotoUrl } = loadModel();
+    assert.equal(heroPhotoUrl({ hero: null, gallery: [] }), null);
+    assert.equal(heroPhotoUrl({}), null);
+  });
+
+  it('prefers hero variant then card then thumb', () => {
+    const { heroPhotoUrl } = loadModel();
+    assert.equal(
+      heroPhotoUrl({
+        hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } },
+      }),
+      '/h.jpg'
+    );
+  });
+});
+
+describe('trainerCta', () => {
+  it('uses Записаться only when can_book is true, otherwise Написать', () => {
+    const { trainerCta } = loadModel();
+    assert.deepEqual(trainerCta({ can_book: true }), {
+      label: 'Записаться',
+      kind: 'solid',
+    });
+    assert.deepEqual(trainerCta({ can_book: false }), {
+      label: 'Написать',
+      kind: 'ghost',
+    });
+  });
+});
+
+describe('buildBookingHref', () => {
+  it('preselects this arena on the catalog booking path', () => {
+    const { buildBookingHref } = loadModel();
+    const href = buildBookingHref({ trainerId: 15, arenaId: 42 });
+    assert.match(href, /catalog/);
+    assert.match(href, /trainer_id=15/);
+    assert.match(href, /arena_id=42/);
+    assert.match(href, /from=arena/);
+  });
+});
+
+describe('parseArenaRef', () => {
+  it('reads ?ref= then start_param arena_*', () => {
+    const { parseArenaRef } = loadModel();
+    assert.equal(parseArenaRef('?ref=chizhovka', null), 'chizhovka');
+    assert.equal(parseArenaRef('', 'arena_88'), '88');
+    assert.equal(parseArenaRef('?arena_id=12', 'arena_other'), '12');
+  });
+});
+
+describe('tierBlocks', () => {
+  it('level B asks to уточняется with phone and site; C does not promise a schedule', () => {
+    const { iceSectionMode } = loadModel();
+    assert.equal(iceSectionMode({ tier: 'A', hasSessions: true }), 'ribbon');
+    assert.equal(iceSectionMode({ tier: 'B', hasSessions: false }), 'pending');
+    assert.equal(iceSectionMode({ tier: 'C', hasSessions: false }), 'none');
+  });
+});
+
+describe('seasonClosedBanner', () => {
+  it('wins over the ribbon when the arena is out of season', () => {
+    const { seasonClosedBanner } = loadModel();
+    const text = seasonClosedBanner({
+      in_season: false,
+      season_end_month: 4,
+      season_start_month: 9,
+    });
+    assert.ok(text);
+    assert.match(text, /закрыт/i);
+  });
+
+  it('is null while in season', () => {
+    const { seasonClosedBanner } = loadModel();
+    assert.equal(
+      seasonClosedBanner({ in_season: true, season_start_month: 1, season_end_month: 12 }),
+      null
+    );
+  });
+});
+
+describe('amenityChips', () => {
+  it('lists only true amenities with prototype labels', () => {
+    const { amenityChips } = loadModel();
+    const chips = amenityChips({
+      skate_rental: true,
+      skate_sharpening: true,
+      parking: false,
+      locker_rooms: true,
+      cafe: true,
+    });
+    assert.deepEqual(chips, ['Прокат', 'Заточка', 'Раздевалки', 'Кафе']);
+  });
+});
