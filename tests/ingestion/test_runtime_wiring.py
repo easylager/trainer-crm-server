@@ -13,13 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_notification_service_creates_ingest_scheduler_task() -> None:
     source = inspect.getsource(notification_service.main)
     assert "run_ice_ingest_scheduler_loop" in source
+    assert "run_ice_scrape_ttl_loop" in source
     assert "asyncio.create_task" in source
 
 
 def test_ingest_loop_is_importable_from_worker_entrypoint() -> None:
-    from src.ingestion.loop import run_ice_ingest_scheduler_loop
+    from src.ingestion.loop import run_ice_ingest_scheduler_loop, run_ice_scrape_ttl_loop
 
     assert inspect.iscoroutinefunction(run_ice_ingest_scheduler_loop)
+    assert inspect.iscoroutinefunction(run_ice_scrape_ttl_loop)
 
 
 def test_scheduler_is_absent_from_fastapi_and_webapp() -> None:
@@ -28,4 +30,6 @@ def test_scheduler_is_absent_from_fastapi_and_webapp() -> None:
     for blob in (app_src, webapp_src):
         assert "IceIngestScheduler" not in blob
         assert "run_ice_ingest_scheduler_loop" not in blob
+        assert "run_ice_scrape_ttl_loop" not in blob
         assert "ice_ingest" not in blob
+        assert "ice_scrape_ttl" not in blob

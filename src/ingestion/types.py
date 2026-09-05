@@ -105,3 +105,6 @@ class ScrapeRunRecord:
     started_at: datetime
     finished_at: datetime
     snapshot: Any = None
+    persisted_id: int | None = None
+    http_status: int | None = None
+    error_code: str | None = None
