@@ -8,6 +8,7 @@ depends_on: []
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
+pr_url: https://github.com/easylager/trainer-crm-server/pull/27
 ---
 
 # Task
@@ -83,4 +84,4 @@ Status: OPEN
 
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 1; блокер B5
-- **IN_PROGRESS** (2026-09-06) — PLACE: `trainer_arenas.is_public` DEFAULT true; auto-create `is_public=false` on slot/booking; catalog filters public only; profile chip toggle. EDGE-001 left open (hiding the last public arena can drop the trainer from catalog; no new empty-state).
+- **IN_PROGRESS** (2026-09-06) — PLACE: `trainer_arenas.is_public` DEFAULT true; auto-create `is_public=false` on slot/booking; catalog filters public only; profile chip toggle. EDGE-001 left open (hiding the last public arena can drop the trainer from catalog; no new empty-state). PR: https://github.com/easylager/trainer-crm-server/pull/27
