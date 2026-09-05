@@ -22,7 +22,10 @@ from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.bot.middlewares.service_unavailable_middleware import ServiceUnavailableMiddleware
 from src.bot.middlewares.trainer_gate_middleware import TrainerGateMiddleware
 from src.bot.middlewares.trainer_menu_sync_middleware import TrainerMenuSyncMiddleware
-from src.bot.trainer_menu_commands import set_default_trainer_commands_without_stats
+from src.bot.trainer_menu_commands import (
+    restore_all_linked_trainer_hub_menu_buttons,
+    set_default_trainer_commands_without_stats,
+)
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
 from src.shared.sentry_init import init_sentry
@@ -57,6 +60,7 @@ async def main() -> None:
     )
     set_client_bot(client_bot)
     await setup_menu_and_commands(bot)
+    asyncio.create_task(restore_all_linked_trainer_hub_menu_buttons(bot))
     bench_cfg.configure(
         log_every_update=settings.trainer_bot_benchmark_log,
         slow_total_ms=settings.trainer_bot_benchmark_slow_ms,

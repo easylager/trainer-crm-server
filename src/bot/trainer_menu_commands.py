@@ -4,14 +4,24 @@ Trainer bot: no slash command menu — only per-chat «Обзор» Web App butt
 - Linked trainers: MenuButtonWebApp «Обзор» → trainer-home (requires HTTPS).
 - NOT_LINKED: empty commands, commands-style menu button without hub until welcome link.
 """
+import asyncio
+import logging
+
 from aiogram import Bot
 from aiogram.types import BotCommandScopeChat, BotCommandScopeDefault, MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
-from src.application.trainer_link import get_trainer_id_for_webapp_trainer_operations
+from src.application.trainer_link import (
+    get_trainer_id_for_webapp_trainer_operations,
+    list_linked_trainer_telegram_ids_for_hub_menu,
+)
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
+
+logger = logging.getLogger(__name__)
+
+_RESTORE_DELAY_SEC = 0.05
 
 
 async def set_default_trainer_commands_without_stats(bot: Bot) -> None:
@@ -59,3 +69,43 @@ async def ensure_trainer_hub_menu_button(bot: Bot, chat_id: int) -> None:
         tid = await get_trainer_id_for_webapp_trainer_operations(session, chat_id)
     if tid:
         await sync_trainer_linked_chat_menu(bot, chat_id)
+
+
+async def restore_all_linked_trainer_hub_menu_buttons(bot: Bot) -> None:
+    """
+    On startup after deploy: re-apply «Обзор» for every linked non-deactivated trainer.
+
+    Telegram does not notify clients when MenuButtonWebApp is dropped; this restores hub
+    access without asking trainers to message the bot or run /home.
+    """
+    base, src = mini_app_https_base(Settings())
+    if not base:
+        logger.warning("trainer_hub_menu_restore: skipped — no HTTPS mini-app base [%s]", src)
+        return
+
+    async with async_session_factory() as session:
+        chat_ids = await list_linked_trainer_telegram_ids_for_hub_menu(session)
+
+    if not chat_ids:
+        logger.info("trainer_hub_menu_restore: no linked trainers")
+        return
+
+    logger.info("trainer_hub_menu_restore: restoring «Обзор» for %s linked trainers", len(chat_ids))
+    ok = 0
+    failed = 0
+    for i, chat_id in enumerate(chat_ids):
+        try:
+            await sync_trainer_linked_chat_menu(bot, chat_id)
+            ok += 1
+        except Exception:
+            failed += 1
+            logger.warning("trainer_hub_menu_restore: failed chat_id=%s", chat_id, exc_info=True)
+        if i + 1 < len(chat_ids):
+            await asyncio.sleep(_RESTORE_DELAY_SEC)
+
+    logger.info(
+        "trainer_hub_menu_restore: done ok=%s failed=%s total=%s",
+        ok,
+        failed,
+        len(chat_ids),
+    )

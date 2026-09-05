@@ -276,3 +276,22 @@ async def get_trainer_id_for_webapp_trainer_operations_from_principal(
     if (row.get("status") or "").strip().lower() == TRAINER_STATUS_DEACTIVATED:
         return None
     return int(row["id"])
+
+
+async def list_linked_trainer_telegram_ids_for_hub_menu(session: AsyncSession) -> list[int]:
+    """Telegram chat ids for trainers who should have the per-chat «Обзор» hub menu button."""
+    from src.infrastructure.db.models import TRAINER_STATUS_DEACTIVATED
+
+    r = await session.execute(
+        text(
+            """
+            SELECT telegram_id
+            FROM trainers
+            WHERE telegram_id IS NOT NULL
+              AND lower(trim(status)) != :deactivated
+            ORDER BY id
+            """
+        ),
+        {"deactivated": TRAINER_STATUS_DEACTIVATED},
+    )
+    return [int(row[0]) for row in r.fetchall()]
