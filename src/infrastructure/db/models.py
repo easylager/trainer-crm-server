@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    Boolean,
     func,
     text,
 )
@@ -376,6 +377,7 @@ trainer_arenas_table = Table(
     Base.metadata,
     Column("trainer_id", ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False),
     Column("arena_id", ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False),
+    Column("is_public", Boolean(), nullable=False, server_default=text("true")),
     UniqueConstraint("trainer_id", "arena_id", name="uq_trainer_arenas_trainer_arena"),
 )
 

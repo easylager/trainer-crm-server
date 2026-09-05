@@ -536,6 +536,76 @@ async def resolve_service_id_for_generic_welcome_link(
     return requested_service_id, None
 
 
+async def ensure_trainer_schedule_arena_link(
+    session: AsyncSession, trainer_id: int, arena_id: int
+) -> str | None:
+    """
+    Guarantee a trainer_arenas row so EXISTS eligibility checks succeed.
+
+    Missing links are created with is_public=false (schedule-only, not vitrine).
+    Allowed only for an active arena in the trainer's profile city (TASK-058 will
+    widen this to trainer_cities). Existing rows are left unchanged.
+
+    Returns None on success, or a Russian error string. Does not commit.
+    """
+    aid = int(arena_id)
+    r_existing = await session.execute(
+        text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+        {"tid": trainer_id, "aid": aid},
+    )
+    if r_existing.fetchone():
+        return None
+    r = await session.execute(
+        text(
+            """
+            SELECT a.is_active, a.city_id, p.city_id
+            FROM arenas a
+            LEFT JOIN trainer_profiles p ON p.trainer_id = :tid
+            WHERE a.id = :aid
+            """
+        ),
+        {"tid": trainer_id, "aid": aid},
+    )
+    row = r.fetchone()
+    if row is None:
+        return "Площадка не найдена"
+    is_active, arena_city_id, trainer_city_id = row[0], row[1], row[2]
+    if not bool(is_active):
+        return "Площадка неактивна"
+    if trainer_city_id is None or int(arena_city_id) != int(trainer_city_id):
+        return "Площадка в другом городе"
+    await session.execute(
+        text(
+            """
+            INSERT INTO trainer_arenas (trainer_id, arena_id, is_public)
+            VALUES (:tid, :aid, false)
+            ON CONFLICT (trainer_id, arena_id) DO NOTHING
+            """
+        ),
+        {"tid": trainer_id, "aid": aid},
+    )
+    return None
+
+
+async def _trainer_may_use_booking_arena(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_id: int,
+    *,
+    created_by_trainer: bool,
+) -> bool:
+    rchk = await session.execute(
+        text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+        {"tid": trainer_id, "aid": int(arena_id)},
+    )
+    if rchk.fetchone():
+        return True
+    if not created_by_trainer:
+        return False
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    return err is None
+
+
 async def create_booking(
     session: AsyncSession,
     slot_id: int,
@@ -644,11 +714,9 @@ async def create_booking(
                 )
                 resolved_arena = rmin.scalar()
         else:
-            rchk = await session.execute(
-                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                {"tid": trainer_id, "aid": resolved_arena},
-            )
-            if not rchk.fetchone():
+            if not await _trainer_may_use_booking_arena(
+                session, trainer_id, resolved_arena, created_by_trainer=created_by_trainer
+            ):
                 return (None, (False, False))
     else:
         resolved_arena: int | None = arena_id
@@ -666,11 +734,9 @@ async def create_booking(
                 )
                 resolved_arena = rmin.scalar()
         else:
-            rchk = await session.execute(
-                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                {"tid": trainer_id, "aid": resolved_arena},
-            )
-            if not rchk.fetchone():
+            if not await _trainer_may_use_booking_arena(
+                session, trainer_id, resolved_arena, created_by_trainer=created_by_trainer
+            ):
                 return (None, (False, False))
     if (
         created_by_trainer
@@ -781,6 +847,10 @@ async def create_trainer_quick_booking(
     """
     from src.application.trainer_schedule_use_cases import ensure_individual_slot_for_quick_book
 
+    if arena_id is not None:
+        err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+        if err:
+            raise ValueError(err)
     slot_id = await ensure_individual_slot_for_quick_book(
         session,
         trainer_id,
@@ -2211,16 +2281,8 @@ async def update_trainer_booking_arena(
     if not policy.get("allowed"):
         code = "group_service_locked" if policy.get("service_locked") else "not_editable"
         return (None, code)
-    r = await session.execute(
-        text(
-            """
-            SELECT 1 FROM trainer_arenas
-            WHERE trainer_id = :tid AND arena_id = :aid
-            """
-        ),
-        {"tid": trainer_id, "aid": int(arena_id)},
-    )
-    if not r.fetchone():
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    if err:
         return (None, "invalid_arena")
     await session.execute(
         text(

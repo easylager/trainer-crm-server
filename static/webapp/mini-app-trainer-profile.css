@@ -714,6 +714,23 @@
       line-height: 1;
       cursor: pointer;
     }
+    .arena-chip__public {
+      flex-shrink: 0;
+      margin: 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: 11px;
+      line-height: 1.3;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .arena-chip__public[aria-pressed="false"] {
+      opacity: 0.75;
+    }
     .arena-chip__star[aria-pressed="true"] {
       color: rgb(var(--accent-rgb));
     }

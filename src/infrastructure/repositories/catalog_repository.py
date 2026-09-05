@@ -94,7 +94,7 @@ class CatalogRepository:
 
         When ``service_id`` is set, each row includes ``trainer_count``: distinct active
         catalog-visible trainers in ``city_id`` who offer that service and list the arena
-        in ``trainer_arenas`` (matches catalog arena filter semantics).
+        in ``trainer_arenas`` with ``is_public = true`` (vitrine; schedule-only links do not count).
 
         ``include_unconfirmed``: trainer-created arenas start ``is_confirmed=false``
         (TASK-046) — visible to trainers of the same city (pass ``True``, e.g. the
@@ -171,6 +171,7 @@ class CatalogRepository:
                         ON ts.trainer_id = t.id AND ts.service_id = :service_id
                     INNER JOIN arenas ar
                         ON ar.id = ta.arena_id AND ar.city_id = :city_id AND ar.is_active
+                    WHERE ta.is_public = true
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
                 WHERE a.city_id = :city_id AND a.is_active {confirmed_filter} {published_filter}
