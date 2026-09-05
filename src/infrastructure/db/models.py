@@ -21,6 +21,7 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -294,6 +295,79 @@ class Media(Base):
     source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+
+
+class IceSession(Base):
+    """Canonical public-skate / open-ice slot (TASK-050).
+
+    Admin manual entry and later parsers write the same columns after transform+validate.
+    Client Ice tab will read only ``public_skate`` and ``open_ice``. Recurrence instances
+    share ``recurrence_key``; cancelling one row must not resurrect on rematerialize.
+    """
+
+    __tablename__ = "ice_sessions"
+    __table_args__ = (
+        Index("ix_ice_sessions_arena_starts", "arena_id", "starts_at_utc"),
+        Index("ix_ice_sessions_local_date_arena", "local_date", "arena_id"),
+        Index(
+            "uq_ice_sessions_recurrence_date",
+            "recurrence_key",
+            "local_date",
+            unique=True,
+            postgresql_where=text("recurrence_key IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event')",
+            name="ck_ice_sessions_kind",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'cancelled', 'superseded')",
+            name="ck_ice_sessions_status",
+        ),
+        CheckConstraint(
+            "price_adult_minor IS NULL OR price_adult_minor >= 0",
+            name="ck_ice_sessions_price_adult",
+        ),
+        CheckConstraint(
+            "price_child_minor IS NULL OR price_child_minor >= 0",
+            name="ck_ice_sessions_price_child",
+        ),
+        CheckConstraint(
+            "price_rental_minor IS NULL OR price_rental_minor >= 0",
+            name="ck_ice_sessions_price_rental",
+        ),
+        CheckConstraint(
+            "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
+            name="ck_ice_sessions_duration",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    local_date: Mapped[date] = mapped_column(Date(), nullable=False)
+    starts_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    ends_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    price_adult_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_child_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_rental_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    currency_code: Mapped[str] = mapped_column(String(3), nullable=False)
+    price_note: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    session_label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    age_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    capacity_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    external_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
+    recurrence_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table

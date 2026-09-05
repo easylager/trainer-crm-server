@@ -280,6 +280,71 @@
       font-size: 22px;
       color: var(--tg-theme-hint-color, #9ca3af);
     }
+    .ice-week {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .ice-week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .ice-week-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+    }
+    .ice-day {
+      background: rgba(15, 23, 42, 0.45);
+      border-radius: 8px;
+      padding: 6px 4px;
+      min-height: 72px;
+    }
+    .ice-day-label {
+      font-size: 10px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      margin-bottom: 4px;
+    }
+    .ice-slot {
+      font-size: 10px;
+      background: rgba(46, 166, 255, 0.18);
+      border-radius: 6px;
+      padding: 3px 4px;
+      margin-bottom: 4px;
+      line-height: 1.25;
+    }
+    .ice-slot-cancelled { opacity: 0.45; text-decoration: line-through; }
+    .ice-slot button {
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      padding: 0 2px;
+      font-size: 11px;
+    }
+    .ice-add {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .ice-add input, .ice-add select {
+      width: 100%;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.7);
+      color: inherit;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    @media (max-width: 600px) {
+      .ice-week-days { grid-template-columns: 1fr 1fr; }
+    }
     .field-address { flex: 1; min-width: 0; }
     .field-hint {
       display: block;
@@ -485,7 +550,9 @@
         cityQ: '',
         cityIncludeInactive: false,
         arenaQ: '',
-        arenaIncludeInactive: false
+        arenaIncludeInactive: false,
+        iceWeekStart: {},
+        iceOpen: {}
       };
 
       function showAlert(text) {
@@ -499,6 +566,132 @@
         el.classList.add('visible');
         clearTimeout(el._toastT);
         el._toastT = setTimeout(function() { el.classList.remove('visible'); }, 2500);
+      }
+
+      var ICE_KIND_LABELS = {
+        public_skate: 'МК',
+        open_ice: 'Свободное',
+        rental: 'Аренда',
+        school_group: 'Школа',
+        event: 'Событие'
+      };
+      var ICE_DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+      function mondayIso(d) {
+        var day = d instanceof Date ? d : new Date(d);
+        var wd = (day.getDay() + 6) % 7;
+        day.setDate(day.getDate() - wd);
+        return day.toISOString().slice(0, 10);
+      }
+      function shiftWeek(iso, days) {
+        var d = new Date(iso + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      }
+      function shiftWeek(iso, days) {
+        var d = new Date(iso + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      }
+      function minorFromInput(el) {
+        var raw = (el && el.value || '').trim();
+        if (!raw) return null;
+        var n = Number(raw.replace(',', '.'));
+        if (!isFinite(n)) return null;
+        return Math.round(n * 100);
+      }
+      function icePanel(arenaId) {
+        return document.querySelector('.ice-week[data-arena-id="' + arenaId + '"]');
+      }
+      function renderIceWeek(arenaId, data) {
+        var el = icePanel(arenaId);
+        if (!el) return;
+        var weekStart = data.week_start;
+        state.iceWeekStart[arenaId] = weekStart;
+        var html = '<div class="ice-week-nav">';
+        html += '<button type="button" class="btn-ghost" data-ice="prev">←</button>';
+        html += '<span>Лёд · ' + weekStart + ' · ' + (data.currency_code || '') + '</span>';
+        html += '<span><button type="button" class="btn-ghost" data-ice="copy">Копировать неделю</button>';
+        html += '<button type="button" class="btn-ghost" data-ice="next">→</button></span></div>';
+        html += '<div class="ice-week-days">';
+        (data.days || []).forEach(function(day) {
+          html += '<div class="ice-day" data-date="' + day.local_date + '">';
+          html += '<div class="ice-day-label">' + (ICE_DOW[day.weekday] || '') + ' ' + day.local_date.slice(8) + '</div>';
+          (day.sessions || []).forEach(function(s) {
+            html += '<div class="ice-slot' + (s.status === 'cancelled' ? ' ice-slot-cancelled' : '') + '">';
+            html += escapeHtml((s.starts_at_local || '') + ' ' + (ICE_KIND_LABELS[s.kind] || s.kind));
+            html += '<button type="button" data-ice="del" data-session-id="' + s.id + '" title="Удалить">×</button>';
+            html += '</div>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+        html += '<div class="ice-add">';
+        html += '<input type="date" data-ice-field="local_date" value="' + weekStart + '">';
+        html += '<input type="time" data-ice-field="starts_at_local" value="11:00">';
+        html += '<input type="number" data-ice-field="duration_minutes" min="30" max="120" value="45" placeholder="мин">';
+        html += '<select data-ice-field="kind">';
+        ['public_skate','open_ice','rental','school_group','event'].forEach(function(k) {
+          html += '<option value="' + k + '">' + ICE_KIND_LABELS[k] + '</option>';
+        });
+        html += '</select>';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_adult" placeholder="взр. ' + (data.currency_code || '') + '">';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_child" placeholder="дет.">';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_rental" placeholder="прокат">';
+        html += '<label class="muted"><input type="checkbox" data-ice-field="repeat_weekly"> каждую неделю</label>';
+        html += '</div>';
+        html += '<button type="button" class="btn-ghost" data-ice="add" style="margin-top:6px">+ Сеанс</button>';
+        el.innerHTML = html;
+        el.querySelector('[data-ice="prev"]').addEventListener('click', function() {
+          loadIceWeek(arenaId, shiftWeek(weekStart, -7));
+        });
+        el.querySelector('[data-ice="next"]').addEventListener('click', function() {
+          loadIceWeek(arenaId, shiftWeek(weekStart, 7));
+        });
+        el.querySelector('[data-ice="copy"]').addEventListener('click', function() {
+          sendJson('POST', '/admin/arenas/' + arenaId + '/ice-sessions/copy-week', { from_week_start: weekStart })
+            .then(function(res) {
+              showToast('Скопировано: ' + (res.copied || 0));
+              return loadIceWeek(arenaId, shiftWeek(weekStart, 7));
+            })
+            .catch(function(err) { showAlert(err.message || String(err)); });
+        });
+        el.querySelectorAll('[data-ice="del"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            sendJson('DELETE', '/admin/ice-sessions/' + btn.getAttribute('data-session-id'), {})
+              .then(function() { return loadIceWeek(arenaId, weekStart); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        el.querySelector('[data-ice="add"]').addEventListener('click', function() {
+          var payload = {
+            local_date: (el.querySelector('[data-ice-field="local_date"]') || {}).value,
+            starts_at_local: (el.querySelector('[data-ice-field="starts_at_local"]') || {}).value,
+            duration_minutes: Number((el.querySelector('[data-ice-field="duration_minutes"]') || {}).value || 45),
+            kind: (el.querySelector('[data-ice-field="kind"]') || {}).value || 'public_skate',
+            price_adult_minor: minorFromInput(el.querySelector('[data-ice-field="price_adult"]')),
+            price_child_minor: minorFromInput(el.querySelector('[data-ice-field="price_child"]')),
+            price_rental_minor: minorFromInput(el.querySelector('[data-ice-field="price_rental"]')),
+            repeat_weekly: !!(el.querySelector('[data-ice-field="repeat_weekly"]') || {}).checked
+          };
+          sendJson('POST', '/admin/arenas/' + arenaId + '/ice-sessions', payload)
+            .then(function() {
+              showToast('Сеанс сохранён');
+              return loadIceWeek(arenaId, weekStart);
+            })
+            .catch(function(err) { showAlert(err.message || String(err)); });
+        });
+      }
+      function loadIceWeek(arenaId, weekStart) {
+        var start = weekStart || state.iceWeekStart[arenaId] || mondayIso(new Date());
+        return getJson('/admin/arenas/' + arenaId + '/ice-sessions?week_start=' + encodeURIComponent(start) + '&include_cancelled=true')
+          .then(function(data) {
+            var panel = icePanel(arenaId);
+            if (panel) panel.hidden = false;
+            state.iceOpen[arenaId] = true;
+            renderIceWeek(arenaId, data);
+          })
+          .catch(function(err) { showAlert(err.message || String(err)); });
       }
 
       function renderCities() {
@@ -605,6 +798,7 @@
           html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + (a.slug ? ' · slug: ' + escapeHtml(a.slug) : '') + '</div>';
           html += '</div>';
           html += '<div style="display:flex;gap:4px;">';
+          html += '<button class="icon-btn" data-role="ice-week" data-id="' + a.id + '" title="Сеансы льда">⛸</button>';
           html += '<button class="icon-btn" data-role="' + (isActive ? 'deactivate' : 'activate') + '" data-id="' + a.id + '" title="' + (isActive ? 'Деактивировать' : 'Вернуть') + '">' + (isActive ? '⏸' : '▶') + '</button>';
           html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить профиль арены">💾</button>';
           html += '</div>';
@@ -674,7 +868,8 @@
           html += '</select></div>';
           html += '<div class="field"><label>Источник / атрибуция</label><input data-field="photo_source" placeholder="URL или «Каток Замок»"></div>';
           html += '</div></div>';
-          html += '<span class="field-hint">💾 Сохранить — адрес и профиль. Slug после выдачи не меняется.</span>';
+          html += '<div class="ice-week" data-arena-id="' + a.id + '" hidden></div>';
+          html += '<span class="field-hint">💾 Сохранить — адрес и профиль. Slug после выдачи не меняется. ⛸ — сетка сеансов льда.</span>';
           html += '<div class="map-links">';
           if (yandexUrl) html += '<a href="' + yandexUrl + '" target="_blank" rel="noopener">Яндекс карта</a>';
           if (googleUrl) html += '<a href="' + googleUrl + '" target="_blank" rel="noopener">Google карта</a>';
@@ -790,6 +985,24 @@
               .then(function() { return loadArenas(); })
               .catch(function(err) { showAlert(err.message || String(err)); });
           });
+        });
+        card.querySelectorAll('.icon-btn[data-role="ice-week"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var arenaId = Number(btn.getAttribute('data-id'));
+            var panel = icePanel(arenaId);
+            if (!panel) return;
+            if (!panel.hidden && panel.innerHTML) {
+              panel.hidden = true;
+              delete state.iceOpen[arenaId];
+              return;
+            }
+            state.iceOpen[arenaId] = true;
+            loadIceWeek(arenaId);
+          });
+        });
+        Object.keys(state.iceOpen).forEach(function(id) {
+          var panel = icePanel(id);
+          if (panel) loadIceWeek(Number(id), state.iceWeekStart[id]);
         });
       }
 
