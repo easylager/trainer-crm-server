@@ -6,6 +6,7 @@ phase: execute
 epic: EPIC3
 depends_on: [TASK-048]
 execution_mode: SUPERVISED
+pr_url: https://github.com/easylager/trainer-crm-server/pull/23
 created_at: 2026-09-04
 updated_at: 2026-09-06
 ---
@@ -100,4 +101,5 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2
 - **CANONICAL** (2026-09-05) — таблица = единый формат для руки и парсеров; три цены; клиент читает только МК/свободное
-- **IN_PROGRESS** (2026-09-06) — SCHEMA lane, branch `feat/TASK-050-ice-sessions` from `origin/release/ice-discovery` @ bed5a80
+- **IN_PROGRESS** (2026-09-06) — SCHEMA lane, branch `feat/TASK-050-ice-sessions` from `origin/release/ice-discovery` @ bed5a80, then FF to 696e9e8
+- **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/23 base=`release/ice-discovery` SHA `b97f5e3`. Status stays IN_PROGRESS until coordinator merge.
