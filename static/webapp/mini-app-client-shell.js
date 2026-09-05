@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202609061';
+  var SHELL_VERSION = '202609062';
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
@@ -13,7 +13,7 @@
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
-    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
+    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7l14 10M19 7L5 17"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
@@ -136,7 +136,7 @@
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
     if (key === 'client-home') return 'home';
-    if (key === 'arena') return 'catalog';
+    if (key === 'arena' || key === 'ice') return 'catalog';
     if (key === 'catalog') {
       var q = global.location.search || '';
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
@@ -170,7 +170,7 @@
 
     var tabs = [
       { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
-      { id: 'catalog', label: 'Тренеры', path: 'catalog?tab=catalog', icon: TAB_ICONS.catalog },
+      { id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.catalog },
       { id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings },
       { id: 'more', label: 'Ещё', path: null, icon: TAB_ICONS.more },
     ];
@@ -192,6 +192,7 @@
           'pointerdown',
           function () {
             if (tab.id === 'catalog') {
+              prefetchIceAssets();
               prefetchCatalogAssets();
               prefetchCatalogWarmCache();
             } else {
@@ -557,6 +558,23 @@
   }
 
   /** Prefetch catalog bundles while user reads the hub — cuts cold-start on tab switch. */
+  function prefetchIceAssets() {
+    var base = webappBasePath();
+    var assets = [
+      { href: base + 'ice-tab.js?v=202609062', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202609062', as: 'script' },
+      { href: base + 'ice-tab.css?v=202609062', as: 'style' },
+    ];
+    assets.forEach(function (spec) {
+      if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = spec.href;
+      if (spec.as) link.as = spec.as;
+      document.head.appendChild(link);
+    });
+  }
+
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
@@ -645,6 +663,7 @@
 
   function scheduleCatalogNavigationPrefetch() {
     var run = function () {
+      prefetchIceAssets();
       prefetchCatalogAssets();
       prefetchCatalogWarmCache();
       prefetchBookingsAssets();
@@ -740,6 +759,7 @@
     hapticSuccess: hapticSuccess,
     prefetchCatalogWarmCache: prefetchCatalogWarmCache,
     prefetchCatalogAssets: prefetchCatalogAssets,
+    prefetchIceAssets: prefetchIceAssets,
     scheduleCatalogNavigationPrefetch: scheduleCatalogNavigationPrefetch,
     readCatalogWarmCache: readCatalogWarmCache,
     writeCatalogWarmCache: writeCatalogWarmCache,
