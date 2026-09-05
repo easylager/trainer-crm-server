@@ -66,8 +66,16 @@ def test_copy_says_what_to_do_without_urgency() -> None:
 
 def test_nudge_has_open_profile_button_label() -> None:
     from src.bot import messages as msg
+    from src.application.trainer_profile_enrichment_use_cases import (
+        PROFILE_ENRICHMENT_MINIAPP_PATH,
+        profile_enrichment_webapp_url,
+    )
 
-    assert msg.TRAINER_PROFILE_ENRICH_NUDGE_BTN == "Открыть профиль"
+    assert msg.TRAINER_PROFILE_ENRICH_NUDGE_BTN == "Указать цены"
+    assert "task=prices" in PROFILE_ENRICHMENT_MINIAPP_PATH
+    assert profile_enrichment_webapp_url("https://example.com") == (
+        "https://example.com/webapp/trainer-profile?task=prices&from=hub"
+    )
 
 
 async def _trainer_with_booking(

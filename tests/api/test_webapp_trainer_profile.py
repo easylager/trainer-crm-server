@@ -1,5 +1,6 @@
 """Web App trainer profile API: initData auth, aggregate GET, PATCH (Part 1)."""
 import uuid
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -513,8 +514,11 @@ async def test_arena_setup_mode_create_creates_real_arena_and_hides_from_public_
                 params={"city_id": cid},
             )
             assert trainer_arenas_resp.status_code == 200
-            trainer_ids = [a["id"] for a in trainer_arenas_resp.json()["items"]]
+            trainer_items = trainer_arenas_resp.json()["items"]
+            trainer_ids = [a["id"] for a in trainer_items]
             assert arena_id in trainer_ids
+            created_row = next(a for a in trainer_items if a["id"] == arena_id)
+            assert created_row.get("address")
 
         # AC-004: NOT visible in the public client catalog until confirmed.
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -599,3 +603,220 @@ async def test_arena_setup_mode_request_no_longer_supported(
                 json={"mode": "request", "arena_name": "Старый путь"},
             )
     assert resp.status_code == 422
+
+
+# --- TASK-068 S1/S2: arena_ids omit vs empty; on-request services ----------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_profile_without_arena_ids_keeps_created_arena(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    _trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            create_resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Каток без PATCH арен", "address": "ул. Охраны, 1"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            arena_id = create_resp.json()["arena_id"]
+
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"profile": {"contacts": "tg @keep-arenas"}},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    assert arena_id in (get_resp.json()["trainer"].get("arena_ids") or [])
+
+
+@pytest.mark.asyncio
+async def test_patch_profile_empty_arena_ids_unlinks(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r.scalar()
+    if cid is None:
+        pytest.skip("need seed cities")
+
+    async def _fake_geocode(address, city_name):
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_arena_create_use_cases._geocode_address",
+        _fake_geocode,
+    )
+
+    _trainer_id, tg = await _trainer_with_city(db_session, city_id=cid)
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            create_resp = await client.post(
+                "/api/webapp/trainer/profile/arena-setup",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"mode": "create", "arena_name": "Каток на снятие", "address": "ул. Пустая, 2"},
+            )
+            assert create_resp.status_code == 200, create_resp.text
+            arena_id = create_resp.json()["arena_id"]
+
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"arena_ids": []},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    assert arena_id not in (get_resp.json()["trainer"].get("arena_ids") or [])
+
+
+@pytest.mark.asyncio
+async def test_patch_services_without_prices_keeps_on_request_service(
+    app_use_test_db,
+    db_session,
+) -> None:
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = r.scalar()
+    if sid is None:
+        pytest.skip("need seed services")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Цена", "last_name": "По запросу"}},
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch(
+        "src.api.miniapp_auth.deps.verify_telegram_init_data_principal",
+        return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"services": [{"service_id": sid, "price_tiers": []}]},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+
+            get_resp = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_resp.status_code == 200
+    services = get_resp.json()["trainer"].get("services") or []
+    match = next((s for s in services if int(s["service_id"]) == int(sid)), None)
+    assert match is not None
+    assert match.get("price_byn") is None
+    assert not (match.get("price_tiers") or [])
+
+
+_PROFILE_WEBAPP = Path(__file__).resolve().parents[2] / "static" / "webapp"
+
+
+def test_profile_arena_picker_markup_and_legacy_flag() -> None:
+    """AC-005/006/009: search lives in static HTML; new picker is default; census is ?arena_picker=legacy."""
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    assert 'id="arenaPicker"' in html
+    assert 'id="arenaSearchInput"' in html
+    assert 'id="arenaChips"' in html
+    assert "getElementById('arenaSearchInput')" in js
+    assert "arena_picker" in js
+    assert "!== 'legacy'" in js
+    assert "function profileArenaPickerEnabled" in js
+    assert "updateArenaChips" in js
+    assert "appendArenaCreateCta" in js
+    assert "setPrimaryArena" in js
+
+
+def test_profile_workplace_vitrine_ia() -> None:
+    """S4: workplace blocks stay open; vitrine is collapsed and not marked required."""
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    assert 'id="profileWorkplaceLabel"' in html
+    assert 'id="profileVitrineLabel"' in html
+    assert html.find('id="profileServicesCollapse"') < html.find('id="profileNavAbout"')
+    assert html.find('id="profileNavArenas"') < html.find('id="profileNavAbout"')
+    assert 'id="profileNavAbout" open' not in html
+    assert 'id="profileNavExp" open' not in html
+    assert 'for="description"><span class="required-dot"' not in html
+    assert 'for="experience_years"><span class="required-dot"' not in html
+    assert 'for="education"><span class="required-dot"' not in html
+    assert 'for="first_name"><span class="required-dot"' in html
+    assert 'for="city_id"><span class="required-dot"' in html
+    assert 'for="phone"><span class="required-dot"' in html
+
+
+def test_profile_focused_prices_task_contract() -> None:
+    """S5 / AC-008: prices overlay is a query task, not a dump into the full form."""
+    html_ob = (_PROFILE_WEBAPP / "trainer-onboarding.html").read_text(encoding="utf-8")
+    js_ob = (_PROFILE_WEBAPP / "trainer-onboarding-main.js").read_text(encoding="utf-8")
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    assert "Указать цены" in html_ob
+    assert "task=prices" in js_ob
+    assert "from=onboarding" in js_ob
+    assert "PROFILE_FOCUSED_TASKS" in js
+    assert "startFocusedProfileTask" in js
+    assert "finishFocusedProfileTask" in js
+    assert "get('task')" in js
+
+
+def test_profile_focused_vitrine_task_contract() -> None:
+    """S7 / AC-008: catalog CTA opens the vitrine overlay, not the seven-section form."""
+    js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
+    html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
+    js_home = (_PROFILE_WEBAPP / "trainer-home-main.js").read_text(encoding="utf-8")
+    css = (_PROFILE_WEBAPP / "mini-app-trainer-profile.css").read_text(encoding="utf-8")
+    assert "vitrine:" in js
+    assert "containerId: 'profileNavPhoto'" in js
+    assert "containerId: 'profileNavAbout'" in js
+    assert 'id="profileNavPhoto"' in html
+    assert "task=vitrine" in js_home
+    assert "from=hub" in js_home
+    assert "navigateTo('trainer-profile')" not in js_home
+    assert "navigateToWithHash('trainer-profile'" not in js_home
+    assert ".profile-block-tour-bar" not in css
+

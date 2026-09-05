@@ -257,6 +257,88 @@
       color: var(--app-muted);
       padding: 8px 2px;
     }
+    .ob-city {
+      margin: 12px 0 18px;
+    }
+    /* Режим «одна / несколько / пропустить» — отдельно от услуг: после селекта города
+       нужен воздух, иначе чипсы визуально липнут к полю (см. onboarding QA). */
+    #obArenaMode.ob-chips {
+      gap: 10px 8px;
+      margin-bottom: 4px;
+    }
+    .ob-city-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--app-muted);
+      margin-bottom: 6px;
+    }
+    .ob-city-select,
+    .ob-arena-create input {
+      appearance: none;
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
+      -webkit-text-fill-color: var(--app-chip-text);
+      caret-color: var(--app-cta-fill);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 15px;
+    }
+    .ob-city-select:focus-visible,
+    .ob-arena-create input:focus-visible {
+      outline: 2px solid var(--app-cta-fill);
+      outline-offset: 1px;
+    }
+    .ob-arena-create[hidden] { display: none; }
+    .ob-arena-create {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--app-chip-line);
+      background: var(--app-surface-2, rgba(127,127,127,.08));
+    }
+    .ob-arena-create label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--app-muted);
+      margin: 10px 0 6px;
+    }
+    .ob-arena-create-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .ob-arena-create-status {
+      font-size: 13px;
+      margin: 8px 0 0;
+    }
+    .ob-arena-create-status.is-error { color: var(--app-danger, #c0392b); }
+    .ob-arena-create-dup {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--app-muted);
+    }
+    .ob-arena-create-cta {
+      appearance: none;
+      margin-top: 6px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px dashed var(--app-cta-fill);
+      background: transparent;
+      color: var(--app-cta-fill);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
 
     /* ── Окна из «Расписания», которые сетка не умеет нарисовать ── */
     .ob-carried[hidden] { display: none; }
@@ -459,6 +541,28 @@
     }
     .ob-done-schedule-link:active { opacity: .7; }
 
+    .ob-done-prices {
+      margin: 18px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--app-muted);
+    }
+    .ob-done-prices-btn {
+      display: block;
+      margin: 8px 0 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 650;
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+    .ob-done-prices-btn:active { opacity: .7; }
+
     /* [hidden] должен побеждать display: атрибут hidden сам по себе слабее любого display. */
     .ob-skip[hidden] { display: none; }
     .ob-skip {
@@ -518,26 +622,43 @@
     <section class="ob-step" aria-labelledby="obArenaModeTitle">
       <h2 class="ob-step-title" id="obArenaModeTitle">Где вы тренируете?</h2>
       <p class="ob-step-hint">Можно пропустить — расписание всё равно заработает.</p>
+      <div class="ob-city" id="obCityWrap">
+        <label class="ob-city-label" for="obCity">Город</label>
+        <select id="obCity" class="ob-city-select">
+          <option value="">Выберите город</option>
+        </select>
+      </div>
       <div class="ob-chips" id="obArenaMode" role="group" aria-labelledby="obArenaModeTitle">
         <button type="button" class="ob-chip" data-arena-mode="none">Пока не указывать</button>
         <button type="button" class="ob-chip" data-arena-mode="single">Одна площадка</button>
         <button type="button" class="ob-chip" data-arena-mode="multi">Несколько площадок</button>
       </div>
-      <p class="ob-step-hint">
-        Не нашли свою площадку в списке?
-        <a href="#" id="obArenaMissingLink">Добавьте её в профиле</a> — появится сразу.
-      </p>
+      <p class="ob-step-hint" id="obArenaNeedCity" hidden>Сначала выберите город — тогда появится поиск площадок.</p>
 
       <!-- Одна площадка: выбор одной из списка. -->
       <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>
-        <input type="text" class="ob-arena-search" id="obArenaSingleSearch" placeholder="Найти площадку" autocomplete="off">
+        <input type="text" class="ob-arena-search" id="obArenaSingleSearch" placeholder="Название или адрес" autocomplete="off">
         <div class="ob-arena-list" id="obArenaSingleList" role="listbox" aria-label="Площадки"></div>
       </div>
 
       <!-- Несколько площадок: сначала отмечаем, где работаем. -->
       <div id="obArenaMultiPickWrap" class="ob-arena-pick" hidden>
-        <input type="text" class="ob-arena-search" id="obArenaMultiSearch" placeholder="Найти площадку" autocomplete="off">
+        <input type="text" class="ob-arena-search" id="obArenaMultiSearch" placeholder="Название или адрес" autocomplete="off">
         <div class="ob-arena-list" id="obArenaMultiList" role="group" aria-label="Площадки, где вы работаете"></div>
+      </div>
+
+      <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
+        <p class="ob-step-hint" id="obArenaCreateLead">Не нашли площадку? Добавьте её — появится сразу, без ухода в профиль.</p>
+        <label for="obArenaCreateName">Название</label>
+        <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
+        <label for="obArenaCreateAddress">Адрес</label>
+        <input id="obArenaCreateAddress" type="text" maxlength="512" autocomplete="street-address">
+        <p id="obArenaCreateStatus" class="ob-arena-create-status" hidden></p>
+        <div id="obArenaCreateDup" class="ob-arena-create-dup" hidden></div>
+        <div class="ob-arena-create-actions">
+          <button type="button" class="ob-chip" id="obArenaCreateSubmit">Добавить площадку</button>
+          <button type="button" class="ob-chip" id="obArenaCreateCancel">Отмена</button>
+        </div>
       </div>
     </section>
 
@@ -569,6 +690,8 @@
     <!-- Показываем только тем, у кого реально есть время вне часовой сетки (state.carried) —
          остальным эта строка была бы просто шумом. -->
     <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала (не с начала часа)? Настройте в «Расписании» →</a>
+    <p class="ob-done-prices" id="obDonePrices">Пока ученик видит «цена по запросу». Можно указать тариф сейчас — или пропустить.</p>
+    <button type="button" class="ob-done-prices-btn" id="obDonePricesBtn">Указать цены</button>
   </div>
 
   <div class="ob-foot" id="obFoot" hidden>
@@ -578,6 +701,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202609049"></script>
+<script src="trainer-onboarding-main.js?v=202609055"></script>
 </body>
 </html>

@@ -126,6 +126,9 @@
         cities: [],
         servicesCatalog: [],
         arenasList: [],
+        arenaSearchQuery: '',
+        arenaCreateOpen: false,
+        arenaSearchTimer: null,
         snapshot: null,
         scheduleSettings: null,
         scheduleGridSelectedStep: 15,
@@ -144,6 +147,10 @@
         profileBlockTourSessionSealOrder: null,
         /** User completed the last seal step forward with gaps cleared (allows hub + moderation). */
         profileBlockTourSessionVisitedLastForward: false,
+        /** Focused overlay: `?task=prices` — one block, skippable, no TTV hub bounce. */
+        profileFocusedTask: null,
+        /** Where to go after the overlay: `onboarding` (Done screen) or `hub`. */
+        profileFocusedReturn: 'hub',
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
@@ -164,6 +171,9 @@
        * Серверные tt_minimal_missing_fields больше не содержат эти поля — порядок должен совпадать с продуктом.
        */
       var PROFILE_TT_MINIMAL_WIZARD_ORDER = ['anketa_main', 'phone', 'services', 'arenas'];
+      var ARENA_PICKER_MAX_RESULTS = 20;
+      var ARENA_PICKER_SEARCH_DEBOUNCE_MS = 120;
+      var arenaPickerBound = false;
       /** Stable RU labels by tour step key (do not depend on server array ordering). */
       var PROFILE_TT_BLOCK_LABELS_RU = {
         anketa_main: 'Основное',
@@ -189,6 +199,11 @@
 
       /** Рельс сессии всегда полон — вызывать перед любым чтением (в т.ч. после reload страницы). */
       function profileBlockTourEnsureRail() {
+        if (state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
+          var focusedRail = PROFILE_FOCUSED_TASKS[state.profileFocusedTask].rail.slice();
+          state.profileBlockTourSessionSealOrder = focusedRail;
+          return focusedRail;
+        }
         var rail = state.profileBlockTourSessionSealOrder;
         if (!rail || rail.length !== PROFILE_TT_MINIMAL_WIZARD_ORDER.length) {
           rail = profileBlockTourBuildWizardRail();
@@ -276,6 +291,22 @@
 
       function profileBlockTourOnBackClick() {
         if (!state.profileBlockTourActive) return;
+        if (state.profileFocusedTask) {
+          var railF = profileBlockTourEnsureRail();
+          var currF = profileBlockTourEffectiveStepKey();
+          var ixF = railF.indexOf(currF);
+          if (ixF > 0) {
+            try {
+              var aeF = document.activeElement;
+              if (aeF && aeF.blur) aeF.blur();
+            } catch (eBkF) {}
+            state.profileBlockTourDisplayedStepOverride = railF[ixF - 1];
+            syncProfileBlockTourBar();
+            return;
+          }
+          finishFocusedProfileTask();
+          return;
+        }
         try {
           var ae = document.activeElement;
           if (ae && ae.blur) ae.blur();
@@ -714,27 +745,7 @@
         return out;
       }
 
-      /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
-      var MODERATION_CRITERIA_TOTAL_FALLBACK = 8;
       var MAX_EDUCATION_DOCUMENT_PHOTOS = 12;
-
-      /** Russian plural for "остался N критерий" (criteria, not form fields). */
-      function ruCriteriaWord(n) {
-        n = Math.floor(Math.abs(n));
-        var n100 = n % 100;
-        var n10 = n % 10;
-        if (n100 >= 11 && n100 <= 14) return 'критериев';
-        if (n10 === 1) return 'критерий';
-        if (n10 >= 2 && n10 <= 4) return 'критерия';
-        return 'критериев';
-      }
-
-      function ruOstalosCriteria(n) {
-        n = Math.floor(Math.abs(n));
-        if (n <= 0) return '';
-        if (n === 1) return 'Остался 1 критерий';
-        return 'Осталось ' + n + ' ' + ruCriteriaWord(n);
-      }
 
       function friendlyApiMsg(msg) {
         if (!msg) return 'Проверьте поля формы.';
@@ -1063,13 +1074,148 @@
         return errs;
       }
 
+      function canonicalArenaIds() {
+        var raw = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids : [];
+        var ids = [];
+        var seen = {};
+        raw.forEach(function(id) {
+          var n = Number(id);
+          if (!n || seen[n]) return;
+          seen[n] = true;
+          ids.push(n);
+        });
+        ids.sort(function(a, b) { return a - b; });
+        return ids;
+      }
+
+      function setCanonicalArenaIds(ids) {
+        if (!state.trainer) state.trainer = {};
+        state.trainer.arena_ids = (ids || []).slice();
+      }
+
+      function syncArenaIdsFromCheckboxes() {
+        var ids = [];
+        (state.arenasList || []).forEach(function(a) {
+          var cb = document.getElementById('arena_' + a.id);
+          if (cb && cb.checked) ids.push(a.id);
+        });
+        setCanonicalArenaIds(ids);
+      }
+
+      function arenaIdsEqual(a, b) {
+        var as = (a || []).map(Number).filter(Boolean).sort(function(x, y) { return x - y; });
+        var bs = (b || []).map(Number).filter(Boolean).sort(function(x, y) { return x - y; });
+        if (as.length !== bs.length) return false;
+        var i;
+        for (i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
+        return true;
+      }
+
+      /** Default on. `?arena_picker=legacy` restores the full checkbox census (AC-009). */
+      function profileArenaPickerEnabled() {
+        try {
+          return new URLSearchParams(window.location.search).get('arena_picker') !== 'legacy';
+        } catch (e) {
+          return true;
+        }
+      }
+
+      function escapeArenaHtml(s) {
+        return String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function normalizeArenaSearch(value) {
+        return String(value || '')
+          .toLowerCase()
+          .replace(/ё/g, 'е')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function arenaMatchesQuery(arena, query) {
+        var tokens = normalizeArenaSearch(query).split(' ').filter(Boolean);
+        if (!tokens.length) return true;
+        var hay = normalizeArenaSearch(
+          [(arena && arena.name) || '', (arena && arena.address) || ''].join(' ')
+        );
+        if (!hay) return false;
+        var i;
+        for (i = 0; i < tokens.length; i++) {
+          if (hay.indexOf(tokens[i]) < 0) return false;
+        }
+        return true;
+      }
+
+      function findArenaById(id) {
+        var n = Number(id);
+        var list = state.arenasList || [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (Number(list[i].id) === n) return list[i];
+        }
+        return null;
+      }
+
+      function ensurePrimaryArena() {
+        if (!state.trainer) return;
+        var ids = canonicalArenaIds();
+        var cur = state.trainer.primary_arena_id != null ? Number(state.trainer.primary_arena_id) : null;
+        if (!ids.length) {
+          state.trainer.primary_arena_id = null;
+          return;
+        }
+        if (!cur || ids.indexOf(cur) < 0) state.trainer.primary_arena_id = ids[0];
+      }
+
+      function resetArenaSearch() {
+        state.arenaSearchQuery = '';
+        var inp = document.getElementById('arenaSearchInput');
+        if (inp) inp.value = '';
+      }
+
+      function priceFieldInvalid(el) {
+        if (!el) return false;
+        var raw = (el.value || '').trim();
+        if (!raw) return false;
+        var n = Number(raw);
+        return isNaN(n) || n < 0;
+      }
+
+      function serviceRowIsOnRequest(serviceId) {
+        var cb = document.getElementById('svc_' + serviceId);
+        if (!cb || !cb.checked) return false;
+        var hasPrice = false;
+        SERVICE_TIER_ORDER.forEach(function(code) {
+          var pel = document.getElementById('price_tier_' + serviceId + '_' + code);
+          if (!pel) return;
+          var raw = (pel.value || '').trim();
+          if (!raw) return;
+          var n = Number(raw);
+          if (!isNaN(n) && n >= 0) hasPrice = true;
+        });
+        return !hasPrice;
+      }
+
+      function syncOnRequestHints() {
+        if (!state.servicesCatalog) return;
+        state.servicesCatalog.forEach(function(s) {
+          var el = document.getElementById('svc_on_request_' + s.id);
+          if (!el) return;
+          el.hidden = !serviceRowIsOnRequest(s.id);
+        });
+      }
+
       function serviceEntryPricesOk(entry) {
         var tiers = entry.price_tiers;
-        if (!tiers || !tiers.length) return false;
+        if (!tiers || !tiers.length) return true;
         var j;
         for (j = 0; j < tiers.length; j++) {
           var pb = tiers[j].price_byn;
-          if (pb == null || pb === '') return false;
+          if (pb == null || pb === '') continue;
           var n = Number(pb);
           if (isNaN(n) || n < 0) return false;
         }
@@ -1077,36 +1223,26 @@
       }
 
       /**
-       * Checked service: must have ≥1 tier checked, and every checked tier must have a valid BYN price.
-       * (Selecting two tariffs but filling only one must not pass.)
+       * Checked service may have no prices («по запросу»). Reject only a filled field
+       * that is not a number ≥ 0.
        */
       function domServicesPricesCoherent() {
         var coherent = true;
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (!cb || !cb.checked) return;
-          var anyTierChecked = false;
-          var everyCheckedHasValidPrice = true;
           SERVICE_TIER_ORDER.forEach(function(code) {
-            var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
             var pel = document.getElementById('price_tier_' + s.id + '_' + code);
-            if (tcb && tcb.checked) {
-              anyTierChecked = true;
-              if (!pel || pel.value.trim() === '') {
-                everyCheckedHasValidPrice = false;
-              } else {
-                var tn = Number(pel.value);
-                if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
-              }
-            }
+            if (priceFieldInvalid(pel)) coherent = false;
           });
-          if (!anyTierChecked || !everyCheckedHasValidPrice) coherent = false;
+          var gpel = document.getElementById('price_group_' + s.id);
+          if (priceFieldInvalid(gpel)) coherent = false;
         });
         return coherent;
       }
 
       var SERVICES_PRICE_HINT_RU =
-        'У каждого отмеченного тарифа должна быть указана цена в BYN. Лишний тариф снимите галочкой.';
+        'Цена — неотрицательное число. Пустое поле значит «по запросу».';
 
       /** Expand tiers and focus first missing price (or tariff) for onboarding clarity. */
       function focusFirstMissingServicePrice() {
@@ -1213,22 +1349,12 @@
           if (!cb) return;
           var invalid = false;
           if (cb.checked) {
-            var anyTierChecked = false;
-            var everyCheckedHasValidPrice = true;
             SERVICE_TIER_ORDER.forEach(function(code) {
-              var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
               var pel = document.getElementById('price_tier_' + s.id + '_' + code);
-              if (tcb && tcb.checked) {
-                anyTierChecked = true;
-                if (!pel || pel.value.trim() === '') {
-                  everyCheckedHasValidPrice = false;
-                } else {
-                  var tn = Number(pel.value);
-                  if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
-                }
-              }
+              if (priceFieldInvalid(pel)) invalid = true;
             });
-            if (!anyTierChecked || !everyCheckedHasValidPrice) invalid = true;
+            var gpel = document.getElementById('price_group_' + s.id);
+            if (priceFieldInvalid(gpel)) invalid = true;
           }
           if (grid) grid.classList.toggle('svc-tier-grid--error', invalid);
           if (tbody) {
@@ -1263,6 +1389,7 @@
             errEl.hidden = true;
           }
         }
+        syncOnRequestHints();
       }
 
       function isFormValidForSave() {
@@ -1318,13 +1445,8 @@
         } catch (eD) {}
         hint.hidden = false;
         if (!dirty) {
-          if (!domServicesPricesCoherent()) {
-            hint.textContent =
-              'Откройте «Тарифы» у отмеченных услуг: нужен хотя бы один тариф с ценой в BYN (или снимите лишнюю услугу).';
-          } else {
-            hint.textContent = '';
-            hint.hidden = true;
-          }
+          hint.textContent = '';
+          hint.hidden = true;
           return;
         }
         var sub = trainerProfileSaveBlockedExplanation();
@@ -1695,41 +1817,40 @@
                 if (!isNaN(p) && p >= 0) tiers.push({ tier_kind: code, price_byn: p });
               }
             });
-            if (tiers.length) {
-              var svcObj = { service_id: s.id, price_tiers: tiers };
-              var sdEl = document.getElementById('svc_desc_' + s.id);
-              var sdRaw = sdEl ? sdEl.value.trim() : '';
-              svcObj.description = sdRaw ? sdRaw : null;
-              var cnEl = document.getElementById('svc_client_notice_' + s.id);
-              var cnRaw = cnEl ? cnEl.value.trim() : '';
-              svcObj.client_notice = cnRaw ? cnRaw : null;
-              var gpel = document.getElementById('price_group_' + s.id);
-              if (gpel && gpel.value.trim() !== '') {
-                var gpg = Number(gpel.value);
-                if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
-              }
-              if (Object.prototype.hasOwnProperty.call(uiAccentByServiceId, s.id)) {
-                var uaRaw = uiAccentByServiceId[s.id];
-                if (uaRaw != null && String(uaRaw).trim()) {
-                  var uax = String(uaRaw).trim().toLowerCase();
-                  if (SERVICE_UI_ACCENT_SLUGS.indexOf(uax) >= 0) svcObj.ui_accent = uax;
-                }
-              }
-              services.push(svcObj);
+            var svcObj = { service_id: s.id, price_tiers: tiers };
+            var sdEl = document.getElementById('svc_desc_' + s.id);
+            var sdRaw = sdEl ? sdEl.value.trim() : '';
+            svcObj.description = sdRaw ? sdRaw : null;
+            var cnEl = document.getElementById('svc_client_notice_' + s.id);
+            var cnRaw = cnEl ? cnEl.value.trim() : '';
+            svcObj.client_notice = cnRaw ? cnRaw : null;
+            var gpel = document.getElementById('price_group_' + s.id);
+            if (gpel && gpel.value.trim() !== '') {
+              var gpg = Number(gpel.value);
+              if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
             }
+            if (Object.prototype.hasOwnProperty.call(uiAccentByServiceId, s.id)) {
+              var uaRaw = uiAccentByServiceId[s.id];
+              if (uaRaw != null && String(uaRaw).trim()) {
+                var uax = String(uaRaw).trim().toLowerCase();
+                if (SERVICE_UI_ACCENT_SLUGS.indexOf(uax) >= 0) svcObj.ui_accent = uax;
+              }
+            }
+            services.push(svcObj);
           }
         });
         services.sort(function(a, b) { return a.service_id - b.service_id; });
-        var arena_ids = [];
-        state.arenasList.forEach(function(a) {
-          var cb = document.getElementById('arena_' + a.id);
-          if (cb && cb.checked) arena_ids.push(a.id);
-        });
-        arena_ids.sort(function(a, b) { return a - b; });
+        var arena_ids = canonicalArenaIds();
         var primary_arena_id = null;
         if (arena_ids.length >= 2) {
           var pr = document.querySelector('input[name="primary_arena"]:checked');
           primary_arena_id = pr ? parseInt(pr.value, 10) : null;
+          if (primary_arena_id == null || arena_ids.indexOf(primary_arena_id) < 0) {
+            var curP = state.trainer && state.trainer.primary_arena_id != null
+              ? Number(state.trainer.primary_arena_id)
+              : null;
+            primary_arena_id = (curP != null && arena_ids.indexOf(curP) >= 0) ? curP : arena_ids[0];
+          }
         } else if (arena_ids.length === 1) {
           primary_arena_id = arena_ids[0];
         }
@@ -1886,7 +2007,7 @@
         syncProfileFormNavVisibility(tab);
       }
 
-      /** Соответствует html.profile-block-tour--on { scroll-padding-top } — для решения «скроллить или нет». */
+      /** Соответствует overlay #onboardingFlow — для решения «скроллить или нет». */
       function getHtmlScrollPaddingTopPx() {
         try {
           var s = getComputedStyle(document.documentElement).scrollPaddingTop;
@@ -2230,7 +2351,11 @@
                     el = document.querySelector('input[name="primary_arena"]');
                   }
                 }
-                if (!el) el = document.getElementById('arenasWrap') || document.getElementById('arenaHint');
+                if (!el) {
+                  el = document.getElementById('arenaSearchInput')
+                    || document.getElementById('arenasWrap')
+                    || document.getElementById('arenaHint');
+                }
               }
               if (el) focusElForProfileField(el, arDetails);
               return;
@@ -2288,13 +2413,56 @@
           containerId: 'profileServicesCollapse',
           tabId: 'form',
           title: 'Услуги и цены',
-          subtitle: 'Отметьте, что проводите, и поставьте цену — клиенты увидят прайс сразу.',
+          subtitle: 'Отметьте, что проводите. Цену можно оставить «по запросу» и заполнить позже.',
         },
         arenas: {
           containerId: 'profileNavArenas',
           tabId: 'form',
           title: 'Где вы тренируете',
           subtitle: 'Выберите арены из списка или укажите, если вашей площадки там нет.',
+        },
+        photo: {
+          containerId: 'profileNavPhoto',
+          tabId: 'form',
+          title: 'Фото',
+          subtitle: 'Лицо на карточке в каталоге. Можно пропустить и добавить позже.',
+        },
+        about: {
+          containerId: 'profileNavAbout',
+          tabId: 'form',
+          title: 'О себе',
+          subtitle: 'Пара предложений, чтобы ученик понял, как вы работаете.',
+        },
+        experience: {
+          containerId: 'profileNavExp',
+          tabId: 'form',
+          title: 'Опыт',
+          subtitle: 'Сколько лет тренируете и какая квалификация — для карточки в каталоге.',
+        },
+        education: {
+          containerId: 'profileEducationCollapse',
+          tabId: 'form',
+          title: 'Образование',
+          subtitle: 'По желанию: вуз, курсы, сертификаты.',
+        },
+      };
+
+      var PROFILE_FOCUSED_TASKS = {
+        prices: {
+          rail: ['services'],
+          title: 'Указать цены',
+          subtitle: 'Пока ученик видит «по запросу». Можно пропустить — запись от этого не зависит.',
+          stepLabel: 'Цены',
+          nextSave: 'Сохранить',
+          nextDone: 'Готово',
+        },
+        vitrine: {
+          rail: ['photo', 'about', 'experience', 'education'],
+          title: 'Карточка для каталога',
+          subtitle: 'Это витрина, не кабинет. Можно пропустить любой шаг — записи уже идут.',
+          stepLabel: 'Витрина',
+          nextSave: 'Сохранить',
+          nextDone: 'Готово',
         },
       };
 
@@ -2445,6 +2613,41 @@
         resetObFlowInsetCache();
       }
 
+      function startFocusedProfileTask(task, from) {
+        var spec = PROFILE_FOCUSED_TASKS[task];
+        if (!spec) return;
+        state.profileFocusedTask = task;
+        state.profileFocusedReturn = from === 'onboarding' ? 'onboarding' : 'hub';
+        state.profileBlockTourActive = true;
+        state.profileBlockTourHubRedirectScheduled = false;
+        profileBlockTourResetWizardStacks();
+        state.profileBlockTourSessionSealOrder = spec.rail.slice();
+        state.profileBlockTourDisplayedStepOverride = spec.rail[0];
+        state.profileBlockTourSessionVisitedLastForward = false;
+        syncProfileBlockTourBar();
+      }
+
+      function focusedTaskReturnUrl() {
+        if (state.profileFocusedReturn === 'onboarding') {
+          return webappPageUrl('trainer-onboarding?done=1');
+        }
+        return webappPageUrl('trainer-home');
+      }
+
+      function finishFocusedProfileTask() {
+        var dest = focusedTaskReturnUrl();
+        state.profileBlockTourActive = false;
+        state.profileFocusedTask = null;
+        state.profileFocusedReturn = 'hub';
+        profileBlockTourResetWizardStacks();
+        obFlowClose();
+        try {
+          window.location.href = dest;
+        } catch (eNav) {
+          window.location.href = dest;
+        }
+      }
+
       /**
        * Главная «синхронизация» визарда: вызывается из той же точки, где раньше был sticky-бар.
        * Имя оставлено для обратной совместимости с существующими call-site'ами.
@@ -2454,6 +2657,68 @@
           profileBlockTourResetWizardStacks();
           obFlowClose();
           syncProfileBlockTourNextCta();
+          return;
+        }
+        if (state.profileFocusedTask) {
+          var spec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
+          if (state.profileBlockTourSessionVisitedLastForward) {
+            if (state.profileBlockTourHubRedirectScheduled) return;
+            state.profileBlockTourHubRedirectScheduled = true;
+            haptic('success');
+            finishFocusedProfileTask();
+            return;
+          }
+          obFlowOpen();
+          var railF = profileBlockTourEnsureRail();
+          var currKeyF = profileBlockTourEffectiveStepKey();
+          var idxF = railF.indexOf(currKeyF);
+          if (idxF < 0) {
+            idxF = 0;
+            currKeyF = railF[0];
+          }
+          var defF = OB_FLOW_STEP_DEFS[currKeyF] || {};
+          var titleElF = document.getElementById('obFlowTitle');
+          if (titleElF) titleElF.textContent = defF.title || (spec ? spec.title : '');
+          var subElF = document.getElementById('obFlowSubtitle');
+          if (subElF) subElF.textContent = defF.subtitle || (spec ? spec.subtitle : '');
+          var stepElF = document.getElementById('obFlowStepLabel');
+          if (stepElF) {
+            stepElF.textContent = railF.length > 1
+              ? ('Шаг ' + (idxF + 1) + ' из ' + railF.length + ' · ' + (spec ? spec.stepLabel : ''))
+              : (spec ? spec.stepLabel : '');
+          }
+          var dotsF = document.getElementById('obFlowDots');
+          if (dotsF) {
+            dotsF.innerHTML = '';
+            if (railF.length > 1) {
+              dotsF.hidden = false;
+              var diF;
+              for (diF = 0; diF < railF.length; diF++) {
+                var dotF = document.createElement('span');
+                var clsF = 'ob-flow__dot';
+                if (diF === idxF) clsF += ' ob-flow__dot--current';
+                else if (diF < idxF) clsF += ' ob-flow__dot--done';
+                dotF.className = clsF;
+                dotsF.appendChild(dotF);
+              }
+              dotsF.setAttribute('aria-valuemax', String(railF.length));
+              dotsF.setAttribute('aria-valuenow', String(idxF + 1));
+            } else {
+              dotsF.hidden = true;
+            }
+          }
+          var closeBtnF = document.getElementById('obFlowClose');
+          if (closeBtnF) closeBtnF.setAttribute('aria-label', 'Пропустить');
+          var backBtnF = document.getElementById('obFlowBack');
+          if (backBtnF) {
+            backBtnF.hidden = false;
+            backBtnF.textContent = idxF > 0 ? 'Назад' : 'Не сейчас';
+            backBtnF.setAttribute('aria-hidden', 'false');
+            backBtnF.setAttribute('aria-label', idxF > 0 ? 'Предыдущий шаг' : 'Пропустить');
+          }
+          obFlowMountStep(currKeyF || 'services');
+          syncProfileBlockTourNextCta();
+          syncProfileTourBarInset();
           return;
         }
         var d = state.moderation_readiness || {};
@@ -2536,6 +2801,7 @@
         }
         var dots = document.getElementById('obFlowDots');
         if (dots) {
+          dots.hidden = false;
           dots.innerHTML = '';
           var di;
           for (di = 0; di < totalDots; di++) {
@@ -2555,6 +2821,8 @@
           /* «Назад» ровно тогда, когда слева по рельсу есть шаг — как показывают точки. */
           var canBack = idx > 0;
           backBtnEl.hidden = !canBack;
+          backBtnEl.textContent = 'Назад';
+          backBtnEl.setAttribute('aria-label', 'Предыдущий шаг');
           backBtnEl.setAttribute('aria-hidden', canBack ? 'false' : 'true');
         }
         /* Смонтировать актуальный блок, если сменился шаг. */
@@ -2576,7 +2844,16 @@
         if (nx.classList.contains('is-saving')) return;
         var textEl = document.getElementById('obFlowNextText');
         var label = 'Далее';
-        if (state.profileBlockTourActive) {
+        if (state.profileBlockTourActive && state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
+          var fspec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
+          var frail = profileBlockTourEnsureRail();
+          var isLastF = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === frail.length - 1;
+          if (profileBlockTourNeedsSave()) {
+            label = isLastF ? fspec.nextSave : 'Сохранить и дальше';
+          } else {
+            label = isLastF ? fspec.nextDone : 'Далее';
+          }
+        } else if (state.profileBlockTourActive) {
           /* На последнем шаге кнопка обещает финал, а не ещё один экран. */
           var rail = profileBlockTourEnsureRail();
           var isLast = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === rail.length - 1;
@@ -2636,7 +2913,6 @@
             state.scheduleSettings = o.data.schedule_settings || null;
             renderScheduleSettingsPanel();
             renderModeration();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -2708,10 +2984,33 @@
         var nxGate = document.getElementById('obFlowNext');
         if (nxGate && nxGate.classList.contains('is-saving')) return;
         var stepAtClick = profileBlockTourEffectiveStepKey();
+        if (state.profileFocusedTask) {
+          var dirtyF = false;
+          try {
+            dirtyF = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+          } catch (eDf) {}
+          if (dirtyF) {
+            var btnSvF = document.getElementById('btnSave');
+            if (!btnSvF || btnSvF.disabled) {
+              var whyF = profileBlockTourExplainSaveBlocked();
+              haptic('warning');
+              setObFlowError(whyF);
+              showSaveToast('Сначала дополните шаг', whyF, 'warning');
+              return;
+            }
+            setObFlowError('');
+            state.profileBlockTourAdvanceFromKey = stepAtClick;
+            save();
+            return;
+          }
+          profileBlockTourAdvanceOneStep(stepAtClick, []);
+          syncProfileBlockTourBar();
+          return;
+        }
         if (stepAtClick === 'services' && !domServicesPricesCoherent()) {
           haptic('warning');
           setObFlowError(SERVICES_PRICE_HINT_RU);
-          showSaveToast('Укажите цену', SERVICES_PRICE_HINT_RU, 'warning');
+          showSaveToast('Проверьте цены', SERVICES_PRICE_HINT_RU, 'warning');
           try {
             syncServicesValidationUi();
           } catch (eSync) {}
@@ -2781,6 +3080,13 @@
       /** After PATCH profile: advance tour focus (next block after stashed step, or first missing). */
       function profileBlockTourAfterSave() {
         if (!state.profileBlockTourActive) return;
+        if (state.profileFocusedTask) {
+          var advanceKeyF = state.profileBlockTourAdvanceFromKey;
+          profileBlockTourClearAdvanceStash();
+          if (advanceKeyF != null) profileBlockTourAdvanceOneStep(advanceKeyF, []);
+          syncProfileBlockTourBar();
+          return;
+        }
         var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
         var missing = profileBlockTourMissingStepKeys(missingRaw);
         var advanceKey = state.profileBlockTourAdvanceFromKey;
@@ -2810,8 +3116,21 @@
       }
 
       function maybeEnterProfileBlockTourFromQuery() {
+        var task = null;
+        var from = null;
         try {
           var sp = new URLSearchParams(window.location.search);
+          task = sp.get('task');
+          from = sp.get('from');
+          if (task && PROFILE_FOCUSED_TASKS[task]) {
+            sp.delete('task');
+            sp.delete('from');
+            var qsF = sp.toString();
+            var pathF = window.location.pathname + (qsF ? '?' + qsF : '') + (window.location.hash || '');
+            history.replaceState(null, '', pathF);
+            startFocusedProfileTask(task, from);
+            return;
+          }
           if (sp.get('onboarding') !== 'blocks') return;
           sp.delete('onboarding');
           var qs = sp.toString();
@@ -2913,6 +3232,10 @@
         bindProfileTourBarTap(closeBtn, function() {
           if (!state.profileBlockTourActive) {
             obFlowClose();
+            return;
+          }
+          if (state.profileFocusedTask) {
+            finishFocusedProfileTask();
             return;
           }
           /* Отложить онбординг: закрываем визард и уводим на хаб.
@@ -3430,118 +3753,6 @@
           heroTap.setAttribute('aria-label', hasPhotoFromApi ? 'Изменить фото профиля' : 'Добавить фото профиля');
         }
 
-      }
-
-      function updateProgressRing() {
-        var d = state.moderation_readiness || {};
-        var missing = d.missing_fields || [];
-        var stTr = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim().toLowerCase() : '';
-        var ringEl = document.getElementById('progressRing');
-        /* Процент заполненности имеет смысл только как «сколько осталось до карточки в каталоге».
-           Тренеру, который в каталог не просился, это не цель, а укор: кабинет у него уже полный.
-           Кольцо возвращается в ту же секунду, когда он включает «Показывать в каталоге». */
-        if (ringEl) {
-          var hideRing = stTr === 'pending_profile' && !trainerWantsCatalogListing();
-          ringEl.hidden = hideRing;
-          if (hideRing) return;
-        }
-        var totalCriteria =
-          d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
-            ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
-            : MODERATION_CRITERIA_TOTAL_FALLBACK;
-        var filledCriteria = Math.max(0, totalCriteria - missing.length);
-        var percent = Math.round((filledCriteria / totalCriteria) * 100);
-        var fullTotal =
-          d.full_profile_criteria_total != null && !isNaN(Number(d.full_profile_criteria_total))
-            ? Math.max(1, Math.floor(Number(d.full_profile_criteria_total)))
-            : 12;
-        var fullMissing = d.full_profile_missing_fields || [];
-        var fullMissingLabels = d.full_profile_missing_labels_ru || [];
-        var hasFullProfileLabelList = Array.isArray(fullMissingLabels) && fullMissingLabels.length > 0;
-        var fullFilled = Math.max(0, fullTotal - fullMissing.length);
-        /** Для одобренного тренера кольцо — по полной карточке каталога (12 пунктов), не по готовности к модерации. */
-        var displayPercent =
-          stTr === 'active'
-            ? Math.round((fullFilled / fullTotal) * 100)
-            : percent;
-
-        var percentEl = document.getElementById('progressPercent');
-        var titleEl = document.getElementById('progressTitle');
-        var subtitleEl = document.getElementById('progressSubtitle');
-        var ringFill = document.querySelector('.progress-ring-fill');
-        var ringCircle = document.querySelector('.progress-ring-fill circle');
-        
-        if (percentEl) percentEl.textContent = displayPercent + '%';
-        
-        if (ringCircle) {
-          var circumference = 2 * Math.PI * 18;
-          var offset = circumference - (displayPercent / 100) * circumference;
-          ringCircle.style.strokeDashoffset = offset;
-        }
-        
-        if (ringFill) {
-          ringFill.classList.toggle('complete', displayPercent === 100);
-        }
-        
-        if (titleEl && subtitleEl) {
-          if (stTr === 'active') {
-            if (d.full_profile_complete === true) {
-              titleEl.textContent = 'Анкета готова!';
-              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
-            } else {
-              titleEl.textContent = 'Полнота карточки в каталоге';
-              subtitleEl.textContent =
-                'Заполнено ' +
-                fullFilled +
-                ' из ' +
-                fullTotal +
-                ' пунктов. Недостаёт ещё ' +
-                fullMissing.length +
-                ' — список на вкладке «Статус» (и во вкладке «Анкета»).';
-            }
-          } else if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
-            titleEl.textContent = 'Можно открыть расписание';
-            subtitleEl.textContent =
-              'Чтобы отправить анкету на проверку администратором, закройте ещё ' +
-              missing.length +
-              ' из ' +
-              totalCriteria +
-              ' пунктов — см. вкладку «Статус».';
-          } else if (percent === 100) {
-            if (d.full_profile_complete === false) {
-              titleEl.textContent = 'Готово к отправке на проверку';
-              subtitleEl.textContent = hasFullProfileLabelList
-                ? 'Для полноты карточки в каталоге можно дополнить ещё ' +
-                    fullMissing.length +
-                    ' из ' +
-                    fullTotal +
-                    ' — список во вкладке «Статус».'
-                : 'Для полноты карточки в каталоге можно дополнить ещё ' +
-                    fullMissing.length +
-                    ' из ' +
-                    fullTotal +
-                    ' — поля во вкладке «Анкета».';
-            } else {
-              titleEl.textContent = 'Анкета готова!';
-              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
-            }
-          } else if (percent >= 75) {
-            titleEl.textContent = 'Почти готово';
-            subtitleEl.textContent =
-              (ruOstalosCriteria(missing.length) || 'Остались пункты по списку') +
-              ' до отправки анкеты на проверку — см. «Статус»';
-          } else if (percent >= 50) {
-            titleEl.textContent = 'Хороший прогресс';
-            subtitleEl.textContent =
-              'Заполнено ' + filledCriteria + ' из ' + totalCriteria + ' пунктов для отправки анкеты на проверку — см. «Статус»';
-          } else {
-            titleEl.textContent = 'Заполнение профиля';
-            subtitleEl.textContent =
-              'Заполните пункты по списку во вкладке «Статус»: нужно ' +
-              totalCriteria +
-              ' обязательных полей, чтобы отправить анкету администратору на проверку';
-          }
-        }
       }
 
       function eduModLabelRu(st) {
@@ -4602,17 +4813,223 @@
 
           row.appendChild(head);
           row.appendChild(toggleBtn);
+          var onReq = document.createElement('p');
+          onReq.className = 'svc-on-request-hint';
+          onReq.id = 'svc_on_request_' + id;
+          onReq.textContent = 'Клиент видит: по запросу';
+          onReq.hidden = true;
           var block = document.createElement('div');
           block.className = 'service-block svc-pick__item';
           block.appendChild(row);
+          block.appendChild(onReq);
           block.appendChild(tierBody);
           wrap.appendChild(block);
         });
+        syncOnRequestHints();
+      }
+
+      function toggleCanonicalArena(id, on) {
+        var ids = canonicalArenaIds();
+        var n = Number(id);
+        var i = ids.indexOf(n);
+        if (on && i < 0) ids.push(n);
+        if (!on && i >= 0) ids.splice(i, 1);
+        setCanonicalArenaIds(ids);
+        ensurePrimaryArena();
+        if (profileArenaPickerEnabled()) updateArenaPickerUi();
+        updatePrimaryArenaUi();
+        setDirty();
+      }
+
+      function setPrimaryArena(id) {
+        if (!state.trainer) return;
+        var n = Number(id);
+        if (canonicalArenaIds().indexOf(n) < 0) return;
+        state.trainer.primary_arena_id = n;
+        if (profileArenaPickerEnabled()) updateArenaChips();
+        setDirty();
+      }
+
+      function openArenaCreateForm(prefillName) {
+        var box = document.getElementById('arenaEmptyActions');
+        if (!box) return;
+        state.arenaCreateOpen = true;
+        box.hidden = false;
+        renderArenaCreateForm(box, { name: prefillName || '' });
+      }
+
+      function closeArenaCreateForm() {
+        state.arenaCreateOpen = false;
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        renderArenaAddEntryPoint(hasCity);
+      }
+
+      function bindArenaPicker() {
+        if (arenaPickerBound) return;
+        var inp = document.getElementById('arenaSearchInput');
+        if (!inp) return;
+        arenaPickerBound = true;
+        inp.addEventListener('input', function() {
+          state.arenaSearchQuery = inp.value;
+          if (state.arenaSearchTimer) clearTimeout(state.arenaSearchTimer);
+          state.arenaSearchTimer = setTimeout(function() {
+            state.arenaSearchTimer = null;
+            updateArenaResults();
+          }, ARENA_PICKER_SEARCH_DEBOUNCE_MS);
+        });
+        inp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') e.preventDefault();
+        });
+      }
+
+      function updateArenaChips() {
+        var chips = document.getElementById('arenaChips');
+        if (!chips) return;
+        var ids = canonicalArenaIds();
+        if (!ids.length) {
+          chips.innerHTML = '';
+          chips.hidden = true;
+          return;
+        }
+        chips.hidden = false;
+        var primary = state.trainer && state.trainer.primary_arena_id != null
+          ? Number(state.trainer.primary_arena_id)
+          : null;
+        var html = '';
+        ids.forEach(function(id) {
+          var a = findArenaById(id);
+          var name = (a && a.name) ? a.name : ('Арена #' + id);
+          var isPrimary = primary === id;
+          html += '<div class="arena-chip' + (isPrimary ? ' arena-chip--primary' : '') + '">';
+          html += '<span class="arena-chip__name">' + escapeArenaHtml(name) + '</span>';
+          if (ids.length > 1) {
+            html += '<button type="button" class="arena-chip__star" data-arena-star="' + id + '"'
+              + ' aria-pressed="' + (isPrimary ? 'true' : 'false') + '"'
+              + ' aria-label="' + (isPrimary ? 'Основная площадка' : 'Сделать основной') + '">★</button>';
+          }
+          html += '<button type="button" class="arena-chip__remove" data-arena-remove="' + id + '" aria-label="Убрать">×</button>';
+          html += '</div>';
+        });
+        chips.innerHTML = html;
+        chips.querySelectorAll('[data-arena-star]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            setPrimaryArena(btn.getAttribute('data-arena-star'));
+          });
+        });
+        chips.querySelectorAll('[data-arena-remove]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            toggleCanonicalArena(btn.getAttribute('data-arena-remove'), false);
+          });
+        });
+      }
+
+      function appendArenaCreateCta(results, query) {
+        var createBtn = document.createElement('button');
+        createBtn.type = 'button';
+        createBtn.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+        createBtn.textContent = query
+          ? ('Добавить «' + query + '»')
+          : 'Нет в списке — добавить площадку';
+        createBtn.addEventListener('click', function() {
+          openArenaCreateForm(query || '');
+        });
+        results.appendChild(createBtn);
+      }
+
+      function updateArenaResults() {
+        var results = document.getElementById('arenaResults');
+        if (!results) return;
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        if (!hasCity) {
+          results.innerHTML = '';
+          return;
+        }
+        var inp = document.getElementById('arenaSearchInput');
+        var query = inp ? inp.value : (state.arenaSearchQuery || '');
+        state.arenaSearchQuery = query;
+        var qNorm = normalizeArenaSearch(query);
+        var selected = {};
+        canonicalArenaIds().forEach(function(id) { selected[id] = true; });
+
+        if (!qNorm) {
+          results.innerHTML = '';
+          var idle = document.createElement('p');
+          idle.className = 'arena-results-idle';
+          var n = (state.arenasList || []).length;
+          idle.textContent = n
+            ? ('Начните вводить название или адрес — в городе ' + n + ' площадок.')
+            : 'В этом городе пока нет площадок в справочнике.';
+          results.appendChild(idle);
+          if (!state.arenaCreateOpen) appendArenaCreateCta(results, '');
+          return;
+        }
+
+        var matches = [];
+        (state.arenasList || []).forEach(function(a) {
+          if (arenaMatchesQuery(a, query)) matches.push(a);
+        });
+
+        results.innerHTML = '';
+        if (!matches.length) {
+          var empty = document.createElement('p');
+          empty.className = 'arena-results-empty';
+          empty.textContent = 'Ничего не нашлось.';
+          results.appendChild(empty);
+          if (!state.arenaCreateOpen) appendArenaCreateCta(results, query.trim());
+          return;
+        }
+
+        var shown = matches.slice(0, ARENA_PICKER_MAX_RESULTS);
+        shown.forEach(function(a) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'arena-result' + (selected[a.id] ? ' is-selected' : '');
+          btn.setAttribute('role', 'option');
+          btn.setAttribute('aria-selected', selected[a.id] ? 'true' : 'false');
+          var nameEl = document.createElement('span');
+          nameEl.className = 'arena-result__name';
+          nameEl.textContent = a.name || ('Арена #' + a.id);
+          if (a.is_confirmed === false) {
+            nameEl.appendChild(document.createTextNode(' '));
+            var badge = document.createElement('span');
+            badge.className = 'arena-unconfirmed-badge';
+            badge.textContent = 'на проверке';
+            nameEl.appendChild(badge);
+          }
+          btn.appendChild(nameEl);
+          if (a.address) {
+            var addrEl = document.createElement('span');
+            addrEl.className = 'arena-result__addr';
+            addrEl.textContent = a.address;
+            btn.appendChild(addrEl);
+          }
+          btn.addEventListener('click', function() {
+            toggleCanonicalArena(a.id, !selected[a.id]);
+          });
+          results.appendChild(btn);
+        });
+        if (matches.length > ARENA_PICKER_MAX_RESULTS) {
+          var more = document.createElement('p');
+          more.className = 'arena-results-more';
+          more.textContent = 'Ещё ' + (matches.length - ARENA_PICKER_MAX_RESULTS) + ' — уточните запрос.';
+          results.appendChild(more);
+        }
+      }
+
+      function updateArenaPickerUi() {
+        bindArenaPicker();
+        updateArenaChips();
+        updateArenaResults();
       }
 
       function updatePrimaryArenaUi() {
         var wrap = document.getElementById('primaryArenaWrap');
         if (!wrap) return;
+        if (profileArenaPickerEnabled()) {
+          wrap.style.display = 'none';
+          wrap.innerHTML = '';
+          return;
+        }
         var selected = [];
         state.arenasList.forEach(function(a) {
           var cb = document.getElementById('arena_' + a.id);
@@ -4638,7 +5055,10 @@
         });
         wrap.innerHTML = html;
         wrap.querySelectorAll('input[name="primary_arena"]').forEach(function(inp) {
-          inp.addEventListener('change', function() { setDirty(); });
+          inp.addEventListener('change', function() {
+            if (state.trainer) state.trainer.primary_arena_id = parseInt(inp.value, 10);
+            setDirty();
+          });
         });
       }
 
@@ -4703,19 +5123,23 @@
       function afterArenaSetupSuccess(data) {
         if (data && data.trainer) state.trainer = data.trainer;
         if (data && data.moderation_readiness) state.moderation_readiness = data.moderation_readiness;
-        renderArenas();
-        renderModeration();
-        updateProgressRing();
-        syncProfileBlockTourBar();
-        if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
-          var missingRaw =
-            (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
-          var missing = profileBlockTourMissingStepKeys(missingRaw);
-          if (!profileBlockTourUiStepStillMissing('arenas', missing)) {
-            profileBlockTourAdvanceOneStep('arenas', missing);
-            syncProfileBlockTourBar();
+        state.arenaCreateOpen = false;
+        resetArenaSearch();
+        var cid = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
+        loadArenasForCity(cid).then(function() {
+          renderArenas();
+          renderModeration();
+          syncProfileBlockTourBar();
+          if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
+            var missingRaw =
+              (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+            var missing = profileBlockTourMissingStepKeys(missingRaw);
+            if (!profileBlockTourUiStepStillMissing('arenas', missing)) {
+              profileBlockTourAdvanceOneStep('arenas', missing);
+              syncProfileBlockTourBar();
+            }
           }
-        }
+        });
       }
 
       function renderArenaSupportBlock(box) {
@@ -4819,6 +5243,18 @@
       }
 
       function selectExistingArenaCheckbox(arenaId) {
+        var n = Number(arenaId);
+        var ids = canonicalArenaIds();
+        if (n && ids.indexOf(n) < 0) ids.push(n);
+        setCanonicalArenaIds(ids);
+        ensurePrimaryArena();
+        state.arenaCreateOpen = false;
+        if (profileArenaPickerEnabled()) {
+          renderArenaAddEntryPoint(!!(state.trainer && state.trainer.profile && state.trainer.profile.city_id));
+          updateArenaPickerUi();
+          setDirty();
+          return;
+        }
         renderArenas();
         var cb = document.getElementById('arena_' + arenaId);
         if (cb) {
@@ -4827,7 +5263,8 @@
         }
       }
 
-      function renderArenaCreateForm(box) {
+      function renderArenaCreateForm(box, prefills) {
+        prefills = prefills || {};
         box.innerHTML = '';
         clearArenaSetupMessages();
         var title = document.createElement('p');
@@ -4846,6 +5283,7 @@
         nameInp.className = 'input';
         nameInp.maxLength = 128;
         nameInp.placeholder = 'Например, Ледовый дворец на ул. …';
+        if (prefills.name) nameInp.value = String(prefills.name);
         nameWrap.appendChild(nameLab);
         nameWrap.appendChild(nameInp);
         box.appendChild(nameWrap);
@@ -4882,7 +5320,7 @@
         back.className = 'filter-btn arena-empty-btn';
         back.textContent = 'Отмена';
         back.addEventListener('click', function() {
-          renderArenaAddEntryPoint(true);
+          closeArenaCreateForm();
         });
 
         function doSubmit(confirmDuplicate) {
@@ -4940,6 +5378,7 @@
       function renderArenaAddEntryPoint(hasCity) {
         var box = document.getElementById('arenaEmptyActions');
         if (!box) return;
+        if (state.arenaCreateOpen) return;
         box.innerHTML = '';
         if (!hasCity) {
           box.hidden = true;
@@ -4969,16 +5408,18 @@
         lead.textContent = (state.trainer.arena_ids || []).length
           ? 'Не нашли нужную площадку в списке?'
           : 'Если вашей площадки нет в списке — выберите, как продолжить:';
-        box.appendChild(lead);
+        if (!profileArenaPickerEnabled()) box.appendChild(lead);
 
-        var btnCreate = document.createElement('button');
-        btnCreate.type = 'button';
-        btnCreate.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
-        btnCreate.textContent = 'Моей площадки нет в списке';
-        btnCreate.addEventListener('click', function() {
-          renderArenaCreateForm(box);
-        });
-        box.appendChild(btnCreate);
+        if (!profileArenaPickerEnabled()) {
+          var btnCreate = document.createElement('button');
+          btnCreate.type = 'button';
+          btnCreate.className = 'filter-btn arena-empty-btn arena-empty-btn--primary';
+          btnCreate.textContent = 'Моей площадки нет в списке';
+          btnCreate.addEventListener('click', function() {
+            openArenaCreateForm('');
+          });
+          box.appendChild(btnCreate);
+        }
 
         var btnMobile = document.createElement('button');
         btnMobile.type = 'button';
@@ -5015,20 +5456,54 @@
             });
         });
         box.appendChild(btnMobile);
-        renderArenaSupportBlock(box);
+        if (!profileArenaPickerEnabled()) renderArenaSupportBlock(box);
       }
 
       function renderArenas() {
         var wrap = document.getElementById('arenasWrap');
         var hint = document.getElementById('arenaHint');
         var emptyBox = document.getElementById('arenaEmptyActions');
-        wrap.innerHTML = '';
-        if (emptyBox) {
+        var picker = document.getElementById('arenaPicker');
+        var hasCity = !!(state.trainer && state.trainer.profile && state.trainer.profile.city_id);
+        if (wrap && !state.arenaCreateOpen) wrap.innerHTML = '';
+        if (emptyBox && !state.arenaCreateOpen) {
           emptyBox.hidden = true;
           emptyBox.innerHTML = '';
         }
-        clearArenaSetupMessages();
-        var hasCity = !!(state.trainer.profile && state.trainer.profile.city_id);
+        if (!state.arenaCreateOpen) clearArenaSetupMessages();
+
+        if (profileArenaPickerEnabled()) {
+          if (wrap) {
+            wrap.innerHTML = '';
+            wrap.hidden = true;
+          }
+          if (picker) picker.hidden = !hasCity;
+          if (hint) {
+            hint.style.display = hasCity ? 'none' : 'block';
+            hint.textContent = 'Выберите город — появится поиск площадок.';
+          }
+          var pickerPrimary = document.getElementById('primaryArenaWrap');
+          if (pickerPrimary) {
+            pickerPrimary.innerHTML = '';
+            pickerPrimary.style.display = 'none';
+          }
+          bindArenaPicker();
+          if (hasCity) updateArenaPickerUi();
+          else {
+            var chips = document.getElementById('arenaChips');
+            var results = document.getElementById('arenaResults');
+            if (chips) {
+              chips.innerHTML = '';
+              chips.hidden = true;
+            }
+            if (results) results.innerHTML = '';
+          }
+          if (!state.arenaCreateOpen) renderArenaAddEntryPoint(hasCity);
+          return;
+        }
+
+        if (picker) picker.hidden = true;
+        if (wrap) wrap.hidden = false;
         var selected = {};
         (state.trainer.arena_ids || []).forEach(function(id) {
           selected[id] = true;
@@ -5057,6 +5532,7 @@
             cb.checked = isSelected;
             cb.addEventListener('change', function() {
               row.classList.toggle('arena-active', cb.checked);
+              syncArenaIdsFromCheckboxes();
               updatePrimaryArenaUi();
               setDirty();
             });
@@ -5078,9 +5554,7 @@
           });
           updatePrimaryArenaUi();
         }
-        // TASK-046 AC-001: the "add arena" entry point is always available — not only
-        // when the city's arena list happens to be empty.
-        renderArenaAddEntryPoint(hasCity);
+        if (!state.arenaCreateOpen) renderArenaAddEntryPoint(hasCity);
       }
 
       function loadArenasForCity(cityId) {
@@ -5122,12 +5596,25 @@
         });
         citySel.onchange = function() {
           var cid = citySel.value ? Number(citySel.value) : null;
-          // Арены и «добавить арену» должны реагировать на выбранный в дропдауне город сразу,
-          // а не только после «Сохранить» — иначе город уже виден в списке арен, а кнопка
-          // добавления площадки ещё нет (renderArenas читает state.trainer.profile.city_id).
+          var prev = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
+          var hadArenas = canonicalArenaIds().length > 0;
+          if (hadArenas && cid !== prev) {
+            if (
+              !window.confirm(
+                'Сменить город? Выбранные площадки другого города будут сняты.'
+              )
+            ) {
+              citySel.value = prev ? String(prev) : '';
+              return;
+            }
+          }
           if (state.trainer.profile) state.trainer.profile.city_id = cid;
+          if (cid !== prev) {
+            state.arenaCreateOpen = false;
+            resetArenaSearch();
+          }
           loadArenasForCity(cid).then(function() {
-            state.trainer.arena_ids = [];
+            if (cid !== prev) setCanonicalArenaIds([]);
             renderArenas();
             setDirty();
           });
@@ -5168,7 +5655,6 @@
             renderEducationEntries();
             renderModeration();
             renderModeratorFeedbackBanner();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -5223,7 +5709,6 @@
             renderEducationEntries();
             renderModeration();
             renderModeratorFeedbackBanner();
-            updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -5366,16 +5851,20 @@
             group_classes_enabled: !!pr.group_classes_enabled,
           },
           services: parsed.services,
-          arena_ids: parsed.arena_ids,
         };
-        if (parsed.primary_arena_id != null) {
-          body.primary_arena_id = parsed.primary_arena_id;
-        }
-
         var snapObj = null;
         try {
           snapObj = state.snapshot ? JSON.parse(state.snapshot) : null;
         } catch (e) {}
+        var snapArenas = snapObj && snapObj.arena_ids ? snapObj.arena_ids : [];
+        if (!arenaIdsEqual(parsed.arena_ids, snapArenas)) {
+          body.arena_ids = parsed.arena_ids;
+        }
+        var snapPrimary = snapObj && snapObj.primary_arena_id != null ? Number(snapObj.primary_arena_id) : null;
+        var curPrimary = parsed.primary_arena_id != null ? Number(parsed.primary_arena_id) : null;
+        if (body.arena_ids || snapPrimary !== curPrimary) {
+          if (curPrimary != null) body.primary_arena_id = curPrimary;
+        }
         if (
           state.scheduleSettings &&
           !state.scheduleSettings.arena_grid_locked &&
@@ -5850,7 +6339,6 @@
               haptic('success');
               renderCatalogVisibility();
               renderModeration();
-              updateProgressRing();
               var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
               var body;
               if (st === 'active') {

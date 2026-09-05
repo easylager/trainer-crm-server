@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -456,7 +457,7 @@ async def _fresh_city_and_arenas(db_session) -> tuple[int, int, int]:
 async def test_get_lists_arenas_with_their_real_grid(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     await _bare_linked_trainer(db_session, tg)
-    _city_id, zamok, _manege = await _fresh_city_and_arenas(db_session)
+    city_id, zamok, _manege = await _fresh_city_and_arenas(db_session)
 
     with patch_trainer_webapp_init(tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -468,6 +469,10 @@ async def test_get_lists_arenas_with_their_real_grid(app_use_test_db, db_session
     assert zamok_row["minute_offset"] == 15
     assert zamok_row["hour_start"] == 10
     assert zamok_row["hour_end"] == 22
+    assert zamok_row["city_id"] == city_id
+    assert "address" in zamok_row
+    assert any(int(c["id"]) == city_id for c in data["cities"])
+    assert data["city_id"] is None
     assert data["linked_arena_ids"] == []
     assert data["multi_arena"] is False
 
@@ -673,3 +678,64 @@ async def test_get_reports_full_precision_and_every_venue(app_use_test_db, db_se
     assert week[0]["slots"] == [
         {"start_minute": 13 * 60 + 25, "duration_minutes": 45, "arena_id": arena_id}
     ]
+
+
+@pytest.mark.asyncio
+async def test_post_persists_optional_city_id(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+    city_id, _zamok, _manege = await _fresh_city_and_arenas(db_session)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": [{"day_of_week": 0, "hours": [10]}],
+                    "duration_minutes": 60,
+                    "city_id": city_id,
+                },
+            )
+    assert resp.status_code == 200, resp.text
+    r = await db_session.execute(
+        text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"),
+        {"t": trainer_id},
+    )
+    assert int(r.scalar()) == city_id
+
+
+@pytest.mark.asyncio
+async def test_post_rejects_unknown_city_id(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": [{"day_of_week": 0, "hours": [10]}],
+                    "duration_minutes": 60,
+                    "city_id": 9_999_999,
+                },
+            )
+    assert resp.status_code == 400
+
+
+def test_onboarding_city_and_inline_create_contract() -> None:
+    """S6 / AC-007: city lives in the arena step; missing rink is created here, not in profile."""
+    webapp = Path(__file__).resolve().parents[2] / "static" / "webapp"
+    html = (webapp / "trainer-onboarding.html").read_text(encoding="utf-8")
+    js = (webapp / "trainer-onboarding-main.js").read_text(encoding="utf-8")
+    assert 'id="obCity"' in html
+    assert 'id="obArenaCreateWrap"' in html
+    assert "Добавьте её в профиле" not in html
+    assert "goAddMissingArena" not in js
+    assert "arena-setup" in js
+    assert "city_id: state.cityId" in js

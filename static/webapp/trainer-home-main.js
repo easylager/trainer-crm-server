@@ -1973,14 +1973,7 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
-          /* Каталог — единственное, ради чего теперь заполняют анкету, поэтому ведём сразу
-             во вкладку статуса, где видно, чего не хватает карточке. */
-          var od2 = hubOnboardingData;
-          if (od2 && !od2.profile_complete) {
-            navigateToWithHash('trainer-profile', 'moderation');
-            return;
-          }
-          navigateTo('trainer-profile');
+          navigateTo('trainer-profile?task=vitrine&from=hub');
           return;
         }
         if (cand.action === 'trainer_referral') {
@@ -2849,7 +2842,7 @@
           return;
         }
         if (action === 'open_profile') {
-          navigateTo('trainer-profile');
+          navigateTo('trainer-profile?task=vitrine&from=hub');
           return;
         }
         if (action === 'share_link') {
@@ -2881,10 +2874,10 @@
         })
           .then(function () {
             if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            navigateTo('trainer-profile');
+            navigateTo('trainer-profile?task=vitrine&from=hub');
           })
           .catch(function () {
-            navigateTo('trainer-profile');
+            navigateTo('trainer-profile?task=vitrine&from=hub');
           });
       }
 

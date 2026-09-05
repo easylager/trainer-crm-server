@@ -26,8 +26,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202609045" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609040" />
+  <link rel="preload" href="trainer-profile-main.js?v=202609056" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609056" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
@@ -50,7 +50,7 @@
 
   <div id="mainContent" style="display:none;">
     <div class="profile-hero" id="profileHero">
-      <div class="hero-photo-wrap">
+      <div class="hero-photo-wrap" id="profileNavPhoto">
         <button type="button" class="hero-photo-tap" id="heroPhotoTap" aria-label="Добавить фото профиля">
           <div class="hero-photo-frame" id="heroPhotoDropZone">
             <img id="heroPhoto" class="hero-photo" alt="" style="display:none;" />
@@ -76,17 +76,6 @@
         <div class="hero-sub" id="heroSub">—</div>
         <div class="hero-stats" id="heroStats"></div>
       </div>
-      <div class="progress-ring" id="progressRing">
-        <div class="progress-ring-visual">
-          <svg class="progress-ring-bg" viewBox="0 0 44 44"><circle></circle></svg>
-          <svg class="progress-ring-fill" viewBox="0 0 44 44"><circle stroke-dasharray="113.1" stroke-dashoffset="113.1"></circle></svg>
-          <span class="progress-ring-percent" id="progressPercent">0%</span>
-        </div>
-        <div class="progress-ring-info">
-          <div class="progress-ring-title" id="progressTitle">Заполнение профиля</div>
-          <div class="progress-ring-subtitle" id="progressSubtitle">Заполните базовые поля, чтобы быстрее сделать первую запись.</div>
-        </div>
-      </div>
     </div>
 
     <div id="moderatorFeedbackBanner" class="card mod-feedback-banner" hidden role="alert">
@@ -103,14 +92,16 @@
     <nav id="profileFormNav" class="profile-form-nav" aria-label="Разделы анкеты" hidden>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="anketaStart">Основное</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavContacts">Контакты</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavAbout">О себе</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavExp">Опыт</button>
       <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileEducationCollapse">Образование</button>
-      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
-      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
     </nav>
 
     <div id="tab-form" class="tab-pane active">
+      <p class="profile-group-label" id="profileWorkplaceLabel">Рабочее</p>
+      <p class="profile-group-hint">Нужно, чтобы ученики могли записаться.</p>
       <details class="profile-collapse" id="anketaStart" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Основное</span>
@@ -174,57 +165,12 @@
         </div>
       </details>
 
-      <details class="profile-collapse" id="profileNavAbout" open>
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">О себе</span>
-        </summary>
-        <div class="card">
-          <div class="field">
-            <label for="description"><span class="required-dot"></span>Описание</label>
-            <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
-            <div class="field-hint" id="descriptionMeta">
-              <span id="descCharCount">0</span> / 5000
-              <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
-              <span id="descMinHint">мин. 25 символов</span>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details class="profile-collapse" id="profileNavExp" open>
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">Опыт и квалификация</span>
-        </summary>
-        <div class="card">
-          <div class="field">
-            <label for="experience_years"><span class="required-dot"></span>Опыт работы, лет</label>
-            <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
-          </div>
-          <div class="field">
-            <label for="education"><span class="required-dot"></span>Образование</label>
-            <select id="education"><option value="">Выберите категорию</option></select>
-          </div>
-        </div>
-      </details>
-
-      <details class="profile-collapse" id="profileEducationCollapse">
-        <summary class="profile-collapse__summary">
-          <span class="profile-collapse__title">Подробное образование</span>
-        </summary>
-        <div class="card" id="educationEntriesWrap">
-          <p class="hint" style="margin: 0 0 14px;">По желанию: вуз, курсы, сертификаты — для карточки в каталоге.</p>
-          <div id="educationEntries"></div>
-          <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
-          <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
-        </div>
-      </details>
-
       <details class="profile-collapse" id="profileServicesCollapse" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги и укажите цену — остальное можно дописать в профиле позже.</p>
+          <p class="hint svc-pick-lead" style="margin: 0 0 14px;">Отметьте услуги. Цену можно указать сейчас или позже — пока клиент увидит «по запросу».</p>
           <div id="servicesWrap"></div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
@@ -235,13 +181,82 @@
           <span class="profile-collapse__title">Арены</span>
         </summary>
         <div class="card">
-          <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
+          <p class="hint" id="arenaHint">Выберите город — появится поиск площадок.</p>
+          <div id="arenaPicker" class="arena-picker" hidden>
+            <div id="arenaChips" class="arena-chips" hidden></div>
+            <div class="arena-picker-search">
+              <input
+                type="search"
+                id="arenaSearchInput"
+                class="arena-picker-search__input"
+                placeholder="Название или адрес"
+                autocomplete="off"
+                enterkeyhint="search"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-controls="arenaResults"
+              />
+            </div>
+            <div id="arenaResults" class="arena-results" role="listbox" aria-label="Площадки города"></div>
+          </div>
           <div id="arenasWrap"></div>
           <div id="arenaEmptyActions" class="arena-empty-actions" hidden></div>
           <p id="arenaSetupStatus" class="arena-setup-status" hidden role="status"></p>
           <p class="field-error" id="err_arena_setup" role="status" hidden style="margin-top:8px;"></p>
           <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
           <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
+        </div>
+      </details>
+
+      <p class="profile-group-label" id="profileVitrineLabel">Витрина</p>
+      <p class="profile-group-hint">Нужно для публикации в каталоге — можно заполнить позже.</p>
+
+      <details class="profile-collapse" id="profileNavAbout">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">О себе</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="description">Описание</label>
+            <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
+            <div class="field-hint" id="descriptionMeta">
+              <span id="descCharCount">0</span> / 5000
+              <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
+              <span id="descMinHint">для каталога, мин. 25 символов</span>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="profile-collapse" id="profileNavExp">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Опыт и квалификация</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="experience_years">Опыт работы, лет</label>
+            <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
+          </div>
+          <div class="field">
+            <label for="education">Образование</label>
+            <select id="education"><option value="">Выберите категорию</option></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="profile-collapse" id="profileEducationCollapse">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Подробное образование</span>
+          <span class="profile-collapse__meta">для каталога</span>
+        </summary>
+        <div class="card" id="educationEntriesWrap">
+          <p class="hint" style="margin: 0 0 14px;">По желанию: вуз, курсы, сертификаты — для карточки в каталоге.</p>
+          <div id="educationEntries"></div>
+          <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
+          <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
         </div>
       </details>
     </div>
@@ -515,7 +530,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202609045"></script>
+  <script defer src="trainer-profile-main.js?v=202609056"></script>
   <script defer src="mini-app-trainer-home.js?v=202608315"></script>
 </body>
 </html>
