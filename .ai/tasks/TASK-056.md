@@ -3,7 +3,6 @@ task_id: TASK-056
 title: Место занятия — арена события, а не основная площадка тренера
 status: MERGED
 phase: done
-phase: execute
 epic: EPIC3
 depends_on: []
 execution_mode: SUPERVISED
