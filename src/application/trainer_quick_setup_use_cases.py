@@ -14,11 +14,11 @@ obvious, which is when we ask it:
 ===================  ==================================================
 field                asked at
 ===================  ==================================================
-arena                first booking («где встречаетесь?»)
+city                 optional, inside the onboarding «where» step (DEC-009)
+arena                optional in that same step; skippable «пока не указывать»
 phone                first cancellation or reschedule
-prices               first pass sale or price question
-city / bio           only when the trainer wants a catalog card
-photo                never asked — taken from the Telegram avatar on first /start
+prices               after schedule is ready (onboarding Done overlay)
+bio / photo          catalog vitrine after the practice is already working
 ===================  ==================================================
 
 A typical week is suggested rather than left blank: an empty grid is a form, a pre-filled grid
@@ -324,7 +324,12 @@ def parse_quick_setup_days(raw: list[dict[str, Any]] | None) -> list[QuickSetupD
     return out
 
 
-async def _apply_profile_settings(session: AsyncSession, trainer_id: int, duration_minutes: int) -> None:
+async def _apply_profile_settings(
+    session: AsyncSession,
+    trainer_id: int,
+    duration_minutes: int,
+    city_id: int | None = None,
+) -> None:
     """
     Write the session length the trainer picked; leave the booking window as a silent default.
 
@@ -337,20 +342,38 @@ async def _apply_profile_settings(session: AsyncSession, trainer_id: int, durati
     * ``min_hours_before_booking`` was never asked. It stays a default and is only filled when
       the profile row is created, so a trainer who tuned it keeps their value.
 
+    ``city_id`` is optional (DEC-009): set when the trainer picked a city in the arena step,
+    otherwise keep whatever is already on the profile. Never invent a city.
+
     Note the DB-level column defaults (45 / 3): the columns are effectively never NULL once a
     row exists, so COALESCE on the duration would silently keep 45 while generating 60-minute
     slots. That is exactly the bug this split avoids.
     """
+    if city_id is not None:
+        r = await session.execute(
+            text("SELECT id FROM cities WHERE id = :cid AND is_active = true"),
+            {"cid": int(city_id)},
+        )
+        if r.scalar() is None:
+            raise QuickSetupError("Выберите город из списка.")
     await session.execute(
         text(
             """
-            INSERT INTO trainer_profiles (trainer_id, session_duration_minutes, min_hours_before_booking)
-            VALUES (:tid, :dur, :win)
+            INSERT INTO trainer_profiles (
+                trainer_id, session_duration_minutes, min_hours_before_booking, city_id
+            )
+            VALUES (:tid, :dur, :win, :cid)
             ON CONFLICT (trainer_id) DO UPDATE SET
-                session_duration_minutes = EXCLUDED.session_duration_minutes
+                session_duration_minutes = EXCLUDED.session_duration_minutes,
+                city_id = COALESCE(EXCLUDED.city_id, trainer_profiles.city_id)
             """
         ),
-        {"tid": trainer_id, "dur": duration_minutes, "win": DEFAULT_MIN_HOURS_BEFORE_BOOKING},
+        {
+            "tid": trainer_id,
+            "dur": duration_minutes,
+            "win": DEFAULT_MIN_HOURS_BEFORE_BOOKING,
+            "cid": int(city_id) if city_id is not None else None,
+        },
     )
 
 
@@ -487,6 +510,7 @@ async def run_trainer_quick_setup(
     service_ids: list[int],
     days: list[QuickSetupDay],
     duration_minutes: int = DEFAULT_SESSION_DURATION_MINUTES,
+    city_id: int | None = None,
     today: date | None = None,
 ) -> QuickSetupResult:
     """
@@ -499,7 +523,7 @@ async def run_trainer_quick_setup(
         raise QuickSetupError("Длительность занятия должна быть от 15 до 480 минут.")
 
     await _set_services(session, trainer_id, service_ids)
-    await _apply_profile_settings(session, trainer_id, duration_minutes)
+    await _apply_profile_settings(session, trainer_id, duration_minutes, city_id=city_id)
 
     arena_ids_used = sorted(
         {

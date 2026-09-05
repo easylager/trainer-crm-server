@@ -8149,15 +8149,17 @@ async def get_trainer_onboarding_quick_setup(
         if arena_id is not None and dow not in existing_day_arena:
             existing_day_arena[dow] = arena_id
 
-    # Candidate arenas for the picker: platform-wide (small dataset — this is a single-region
-    # product), each with its real grid so the client can render the right hour labels and lock
-    # duration where the venue fixes one. Scoping by city would need a city question first, which
-    # defeats the point — the arena picker IS how a trainer without a city yet still gets a
-    # working, honest grid.
+    # Candidate arenas for the picker, each with city_id + grid so the Mini App can scope by
+    # the city the trainer just picked (DEC-009) and still lock hour labels / duration.
+    r_cities = await session.execute(
+        text("SELECT id, name FROM cities WHERE is_active = true ORDER BY sort_order, name, id")
+    )
+    cities = [{"id": int(row[0]), "name": row[1]} for row in r_cities.fetchall()]
+
     r_arenas = await session.execute(
         text(
             """
-            SELECT a.id, a.name, c.name AS city_name,
+            SELECT a.id, a.name, a.address, a.city_id, c.name AS city_name,
                    COALESCE(p.grid_kind, 'quarter_15') AS grid_kind,
                    COALESCE(p.minute_offset, 0) AS minute_offset,
                    COALESCE(p.hour_start, 6) AS hour_start,
@@ -8175,12 +8177,14 @@ async def get_trainer_onboarding_quick_setup(
         {
             "id": int(row[0]),
             "name": row[1],
-            "city_name": row[2],
-            "grid_kind": row[3],
-            "minute_offset": int(row[4]),
-            "hour_start": int(row[5]),
-            "hour_end": int(row[6]),
-            "fixed_duration_minutes": int(row[7]) if row[7] is not None else None,
+            "address": row[2] or "",
+            "city_id": int(row[3]),
+            "city_name": row[4],
+            "grid_kind": row[5],
+            "minute_offset": int(row[6]),
+            "hour_start": int(row[7]),
+            "hour_end": int(row[8]),
+            "fixed_duration_minutes": int(row[9]) if row[9] is not None else None,
         }
         for row in r_arenas.fetchall()
     ]
@@ -8192,7 +8196,9 @@ async def get_trainer_onboarding_quick_setup(
     linked_arena_ids = [int(row[0]) for row in r_linked.fetchall()]
 
     trainer = await get_trainer(session, trainer_id) or {}
-    first_name = ((trainer.get("profile") or {}).get("first_name") or "").strip()
+    profile = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
+    first_name = (profile.get("first_name") or "").strip()
+    city_id = int(profile["city_id"]) if profile.get("city_id") is not None else None
     distinct_arenas_in_week = {
         s["arena_id"]
         for rows in existing_slots.values()
@@ -8221,9 +8227,10 @@ async def get_trainer_onboarding_quick_setup(
         "week_is_suggestion": not existing,
         "already_done": bool(existing),
         "duration_minutes": (
-            (trainer.get("profile") or {}).get("session_duration_minutes")
-            or DEFAULT_SESSION_DURATION_MINUTES
+            profile.get("session_duration_minutes") or DEFAULT_SESSION_DURATION_MINUTES
         ),
+        "cities": cities,
+        "city_id": city_id,
         "arenas": arenas,
         "linked_arena_ids": linked_arena_ids,
         "primary_arena_id": trainer.get("primary_arena_id"),
@@ -8234,11 +8241,12 @@ async def get_trainer_onboarding_quick_setup(
 
 
 class TrainerQuickSetupBody(BaseModel):
-    """First-run payload: what the trainer coaches and when. No free text, no optional fields."""
+    """First-run payload: what the trainer coaches, where (optional city), and when."""
 
     service_ids: list[int] = Field(default_factory=list)
     days: list[dict[str, Any]] = Field(default_factory=list)
     duration_minutes: int = Field(default=60, ge=15, le=480)
+    city_id: int | None = Field(default=None, ge=1)
 
 
 @router.post("/trainer/onboarding/quick-setup")
@@ -8275,6 +8283,7 @@ async def post_trainer_onboarding_quick_setup(
             service_ids=[int(s) for s in body.service_ids],
             days=days,
             duration_minutes=int(body.duration_minutes),
+            city_id=int(body.city_id) if body.city_id is not None else None,
         )
     except QuickSetupError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
