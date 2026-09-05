@@ -864,12 +864,21 @@ async def get_client_request_for_booking(
     session: AsyncSession,
     request_id: int,
     client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
 ) -> dict | None:
     """
     Single request by id if owned by client (for linking booking from Mini App).
     Returns { "id", "service_id", "responses": [{"trainer_id"}, ...] } or None.
+
+    ``acting_client_id``: guardian/child profile from ``X-Profile-Id``; without it, ownership is
+    the account's self row (legacy telegram resolve).
     """
-    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    cid = (
+        int(acting_client_id)
+        if acting_client_id is not None
+        else await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    )
     if cid is None:
         return None
     r = await session.execute(

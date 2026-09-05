@@ -43,8 +43,12 @@ async def send_cancel_notification_payload(
         if start_time and hasattr(start_time, "strftime")
         else "—"
     )
-    text = msg.CLIENT_BOOKING_CANCELLED_BY_TRAINER.format(
-        date=date_str, day=day_str, time=time_str
+    text = msg.format_client_booking_cancelled_html(
+        date=date_str,
+        day=day_str,
+        time=time_str,
+        by_trainer=True,
+        booked_for_name=p.get("booked_for_name"),
     )
     try:
         await client_bot.send_message(chat_id=chat_id, text=text)

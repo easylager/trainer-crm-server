@@ -1730,7 +1730,12 @@ async def post_client_booking(
     client_request_id: int | None = None
     service_id: int
     if body.request_id is not None:
-        req = await get_client_request_for_booking(session, body.request_id, telegram_id)
+        acting_for_request = await resolve_acting_client_id(
+            session, telegram_id, requested_profile_id
+        )
+        req = await get_client_request_for_booking(
+            session, body.request_id, telegram_id, acting_client_id=acting_for_request
+        )
         if not req or not any(r.get("trainer_id") == trainer_id for r in req.get("responses") or []):
             raise HTTPException(status_code=400, detail="Request not found or trainer did not respond")
         client_request_id = body.request_id
@@ -2171,12 +2176,18 @@ async def post_client_request(
 
 @router.get("/client/requests")
 async def get_client_requests(
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List my requests with responses. Auth: client bot initData."""
     telegram_id = client_catalog_telegram_key(principal)
-    return await _client_requests_list_payload(session, telegram_id)
+    acting_client_id = await resolve_acting_client_id(
+        session, telegram_id, _parse_profile_id_header(x_profile_id)
+    )
+    return await _client_requests_list_payload(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
 
 
 # --- Client pass products (buy) and my passes ---
@@ -2406,13 +2417,21 @@ async def post_client_cert_order_request(
 
 @router.get("/client/bookings")
 async def get_client_bookings(
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List client's upcoming bookings grouped by day. Arena + address + map_link. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
-    payload = await _client_bookings_days_payload(session, telegram_id)
-    payload["trainer_options"] = await _client_booking_trainer_options_payload(session, telegram_id)
+    acting_client_id = await resolve_acting_client_id(
+        session, telegram_id, _parse_profile_id_header(x_profile_id)
+    )
+    payload = await _client_bookings_days_payload(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
+    payload["trainer_options"] = await _client_booking_trainer_options_payload(
+        session, telegram_id, acting_client_id=acting_client_id
+    )
     return payload
 
 
@@ -2421,13 +2440,22 @@ async def get_client_bookings_history(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     trainer_id: int | None = Query(None),
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List client's past/terminal bookings grouped by day, newest first. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
+    acting_client_id = await resolve_acting_client_id(
+        session, telegram_id, _parse_profile_id_header(x_profile_id)
+    )
     return await _client_booking_history_days_payload(
-        session, telegram_id, offset=offset, limit=limit, trainer_id=trainer_id
+        session,
+        telegram_id,
+        offset=offset,
+        limit=limit,
+        trainer_id=trainer_id,
+        acting_client_id=acting_client_id,
     )
 
 
@@ -2588,20 +2616,26 @@ async def get_client_hub_bootstrap(
     Single round-trip for client home: bookings by day + requests + session edges + activity snippet.
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
 
-    ``bookings``/``requests``/``_hub_session`` (saved/primary trainer) stay account-scoped —
-    keyed by Telegram id in modules outside this file (client_trainer_edges is Slice 5's job);
-    only ``activity``/``passes`` resolve through the selected profile today.
+    ``bookings`` / ``requests`` / ``activity`` / ``passes`` resolve through the selected profile
+    (``X-Profile-Id``). ``_hub_session`` edges/saved trainers are profile-scoped; booking-history
+    primary candidates may still use account Telegram id (see inner docstring).
     """
     telegram_id = client_catalog_telegram_key(principal)
     requested_profile_id = _parse_profile_id_header(x_profile_id)
 
     async def _bookings() -> dict:
         async with async_session_factory() as s:
-            return await _client_bookings_days_payload(s, telegram_id)
+            acting = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+            return await _client_bookings_days_payload(
+                s, telegram_id, acting_client_id=acting
+            )
 
     async def _requests() -> dict:
         async with async_session_factory() as s:
-            return await _client_requests_list_payload(s, telegram_id)
+            acting = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+            return await _client_requests_list_payload(
+                s, telegram_id, acting_client_id=acting
+            )
 
     async def _hub_session() -> dict[str, Any]:
         """
@@ -2956,6 +2990,7 @@ async def post_client_booking_cancel(
     body: ClientCancelBookingBody,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    x_profile_id: str | None = Header(None),
 ):
     """Cancel own booking with optional reason. Auth: client initData. Notifies trainer immediately."""
     from src.application.booking_party_notifications import (
@@ -2974,12 +3009,16 @@ async def post_client_booking_cancel(
     # Trainer Telegram notify always; client self-confirm only when cancel is from Telegram Mini App
     # (MAX clients use a synthetic catalog key — no Telegram chat to confirm into).
     send_client_confirm = principal.platform == MiniAppPlatform.TELEGRAM
+    acting_client_id = await resolve_acting_client_id(
+        session, telegram_id, _parse_profile_id_header(x_profile_id)
+    )
     payload = await cancel_booking_by_client(
         session,
         booking_id,
         telegram_id,
         reason=body.reason,
         notify_client_confirm=send_client_confirm,
+        acting_client_id=acting_client_id,
     )
     if not payload:
         raise HTTPException(status_code=400, detail="Booking not found or already cancelled")

@@ -1586,6 +1586,7 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "expected_payment_class": s.get("expected_payment_class"),
                                 "arena_name": s.get("arena_name"),
                                 "arena_address": s.get("arena_address"),
+                                "booked_for_name": s.get("booked_for_name"),
                             }
                         )
                     kind = p.get("kind") or ""

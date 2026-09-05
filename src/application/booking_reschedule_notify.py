@@ -76,6 +76,7 @@ async def try_send_client_booking_reschedule_push(
         arena_address=p.get("arena_address"),
         duration_minutes=p.get("duration_minutes"),
         expected_payment_class=payment_class,
+        booked_for_name=p.get("booked_for_name"),
     )
     kb = msg.build_client_trainer_booked_you_inline_keyboard(
         booking_id=bid,

@@ -55,14 +55,12 @@ async def is_primary_family_owner(
 
 async def list_family_access_telegram_ids_for_reminders(session: AsyncSession, primary_client_id: int) -> list[int]:
     """All Telegram chat ids that should receive booking reminders for this client row."""
-    r = await session.execute(
-        text("SELECT telegram_id FROM clients WHERE id = :cid LIMIT 1"),
-        {"cid": int(primary_client_id)},
-    )
-    row = r.fetchone()
+    from src.application.client_use_cases import get_client_telegram_id
+
     out: list[int] = []
-    if row and row[0] is not None:
-        out.append(int(row[0]))
+    own_or_account = await get_client_telegram_id(session, int(primary_client_id))
+    if own_or_account is not None:
+        out.append(int(own_or_account))
     r2 = await session.execute(
         text(
             """
@@ -75,7 +73,9 @@ async def list_family_access_telegram_ids_for_reminders(session: AsyncSession, p
     )
     for t in r2.fetchall():
         if t[0] is not None:
-            out.append(int(t[0]))
+            tid = int(t[0])
+            if tid not in out:
+                out.append(tid)
     return out
 
 

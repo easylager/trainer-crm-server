@@ -750,13 +750,24 @@ async def reset_orphan_client_miniapp_trainer_pointers(
 
 
 async def get_client_telegram_id(session: AsyncSession, client_id: int) -> int | None:
-    """Return telegram_id for client_id, or None if not linked (trainer-added client without Telegram)."""
+    """
+    Return telegram chat id for pushes / trainer contact for this clients row.
+
+    Prefer the row's own ``telegram_id``. When NULL (guardian/child profile, or a
+    trainer-added offline client that has a profile link), fall back to
+    ``client_profile_links.account_telegram_id`` so the parent account still gets
+    notifications.
+    """
     r = await session.execute(
         text("SELECT telegram_id FROM clients WHERE id = :cid"),
         {"cid": client_id},
     )
     row = r.fetchone()
-    return int(row[0]) if row and row[0] is not None else None
+    if row and row[0] is not None:
+        return int(row[0])
+    from src.application.client_profile_use_cases import get_account_telegram_id_for_profile
+
+    return await get_account_telegram_id_for_profile(session, int(client_id))
 
 
 async def get_client_profile_basic(

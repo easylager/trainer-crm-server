@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
-  <script src="client-profile-switcher.js?v=202609042"></script>
-  <script src="booking-client.js?v=202608315"></script>
+  <script src="client-profile-switcher.js?v=202609048"></script>
+  <script src="booking-client.js?v=202609048"></script>
   <script src="booking-deeplink.js?v=202608315"></script>
   <script src="mini-app-client-shell.js?v=202608315"></script>
   <style>
@@ -783,6 +783,11 @@
       <label>Категория цены</label>
       <div id="priceTierRadios" class="price-tier-radios"></div>
     </div>
+    <div id="bookForProfileBlock" class="form-block" style="display:none;">
+      <label for="bookForProfileSelect">Кого записываем?</label>
+      <select id="bookForProfileSelect" aria-label="Кого записываем"></select>
+      <button type="button" id="bookAddChildBtn" class="btn-secondary" style="margin-top:8px;display:none;">Добавить ребёнка</button>
+    </div>
     <div id="bookNameBlock" class="form-block" style="display: none;">
       <label for="bookFirstName">Имя *</label>
       <input type="text" id="bookFirstName" autocomplete="given-name" maxlength="64" placeholder="Как к вам обращаться" />
@@ -988,6 +993,138 @@
       /** Slot date/time on form — for summary refresh when service changes. */
       let bookFormSlotDateStr = null;
       let bookFormSlotTimeStr = null;
+      /** Page-local acting profile for this booking (does not rewrite hub default / localStorage). */
+      let bookActingProfileId = null;
+      let bookProfiles = [];
+
+      function bookProfileDisplayName(p) {
+        if (!p) return 'Профиль';
+        var fn = (p.first_name || '').trim();
+        var ln = (p.last_name || '').trim();
+        return (fn + ' ' + ln).trim() || 'Профиль';
+      }
+
+      function getSelectedBookProfile() {
+        if (bookActingProfileId == null) return null;
+        for (var i = 0; i < bookProfiles.length; i++) {
+          if (bookProfiles[i].client_id === bookActingProfileId) return bookProfiles[i];
+        }
+        return null;
+      }
+
+      function updateBookSubmitLabel() {
+        var btn = document.getElementById('btnSubmit');
+        if (!btn) return;
+        var p = getSelectedBookProfile();
+        if (p && p.role === 'guardian') {
+          var name = (p.first_name || '').trim() || bookProfileDisplayName(p);
+          btn.textContent = 'Записаться за ' + name;
+        } else {
+          btn.textContent = 'Записаться';
+        }
+      }
+
+      function populateBookForProfileSelect() {
+        var block = document.getElementById('bookForProfileBlock');
+        var sel = document.getElementById('bookForProfileSelect');
+        var addBtn = document.getElementById('bookAddChildBtn');
+        if (!block || !sel) return;
+        if (!bookProfiles.length) {
+          block.style.display = 'none';
+          return;
+        }
+        block.style.display = 'block';
+        if (addBtn) addBtn.style.display = 'block';
+        var preferred =
+          bookActingProfileId != null
+            ? bookActingProfileId
+            : (window.ClientProfileSwitcher && ClientProfileSwitcher.getActiveProfileId
+                ? ClientProfileSwitcher.getActiveProfileId()
+                : null);
+        if (preferred == null && bookProfiles[0]) preferred = bookProfiles[0].client_id;
+        bookActingProfileId = preferred;
+        sel.innerHTML = bookProfiles
+          .map(function (p) {
+            var label = bookProfileDisplayName(p);
+            if (p.role === 'guardian') label += ' (ребёнок)';
+            else if (p.role === 'self') label += ' (вы)';
+            return (
+              '<option value="' +
+              p.client_id +
+              '"' +
+              (p.client_id === preferred ? ' selected' : '') +
+              '>' +
+              escapeHtmlBook(label) +
+              '</option>'
+            );
+          })
+          .join('');
+        updateBookSubmitLabel();
+        updateBookNameFields();
+      }
+
+      async function loadBookProfiles() {
+        try {
+          if (window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function') {
+            var st = await ClientProfileSwitcher.init();
+            bookProfiles = (st && st.profiles) || ClientProfileSwitcher.getProfiles() || [];
+          } else {
+            bookProfiles = [];
+          }
+        } catch (e) {
+          bookProfiles = [];
+        }
+        populateBookForProfileSelect();
+      }
+
+      async function bookAddChildInline() {
+        var firstName = window.prompt('Имя ребёнка');
+        if (firstName == null) return;
+        firstName = String(firstName).trim();
+        if (!firstName) {
+          alert('Укажите имя.');
+          return;
+        }
+        var lastName = window.prompt('Фамилия (необязательно)', '') || '';
+        lastName = String(lastName).trim();
+        var initData = tg?.initData || '';
+        var headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        try {
+          var res = await fetch('/api/webapp/client/profiles', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              first_name: firstName,
+              last_name: lastName || null,
+            }),
+          });
+          var body = await res.json().catch(function () { return {}; });
+          if (!res.ok) {
+            alert(
+              res.status === 409
+                ? 'Достигнут лимит добавленных профилей.'
+                : (typeof body.detail === 'string' && body.detail) || 'Не удалось добавить профиль.'
+            );
+            return;
+          }
+          var newId = Number(body.client_id);
+          // Override for this booking only — do not PATCH default / hub localStorage.
+          bookProfiles = bookProfiles.concat([
+            {
+              client_id: newId,
+              first_name: firstName,
+              last_name: lastName || null,
+              role: 'guardian',
+              is_default: false,
+            },
+          ]);
+          bookActingProfileId = newId;
+          populateBookForProfileSelect();
+        } catch (e) {
+          alert('Ошибка сети. Попробуйте ещё раз.');
+        }
+      }
 
       const BOOK_NOTICE_PREFIX = 'В стоимость не входят:';
       function bookParseBookingJsonResponse(text) {
@@ -1595,8 +1732,12 @@
       function updateBookNameFields() {
         const block = document.getElementById('bookNameBlock');
         if (!block) return;
-        block.style.display = needsProfileName ? 'block' : 'none';
-        if (needsProfileName) {
+        // Guardian profiles already have a name on the server — never ask parent to re-enter it.
+        var selected = getSelectedBookProfile();
+        var hideForGuardian = !!(selected && selected.role === 'guardian');
+        var show = !hideForGuardian && needsProfileName;
+        block.style.display = show ? 'block' : 'none';
+        if (show) {
           const f = document.getElementById('bookFirstName');
           const l = document.getElementById('bookLastName');
           if (f) f.value = clientFirstName || '';
@@ -1702,6 +1843,7 @@
         bookFormSlotTimeStr = timeStr;
         try {
         await fetchClientSession();
+        await loadBookProfiles();
         updateBookNameFields();
         prefillBookPhoneField();
         await loadTrainerDetailForBook();
@@ -1966,7 +2108,10 @@
           return;
         }
         const phone = phCheck.e164;
-        if (needsProfileName) {
+        var selectedBookProfile = getSelectedBookProfile();
+        var askName =
+          needsProfileName && !(selectedBookProfile && selectedBookProfile.role === 'guardian');
+        if (askName) {
           const fn = (document.getElementById('bookFirstName') && document.getElementById('bookFirstName').value || '').trim();
           if (!fn) {
             alert('Укажите имя');
@@ -1994,13 +2139,13 @@
               requestId: requestId,
               serviceId: requestId ? null : effSid,
               priceVariantId: selectedPriceVariantId,
-              needsProfileName: needsProfileName,
-              firstName: needsProfileName ? (document.getElementById('bookFirstName').value || '').trim() : null,
-              lastName: needsProfileName ? (document.getElementById('bookLastName').value || '').trim() : null,
+              needsProfileName: askName,
+              firstName: askName ? (document.getElementById('bookFirstName').value || '').trim() : null,
+              lastName: askName ? (document.getElementById('bookLastName').value || '').trim() : null,
             })
           : { slot_id: window._selectedSlotId, phone: phone, comment: comment };
         if (!window.BookingClient) {
-          if (needsProfileName) {
+          if (askName) {
             payloadBody.first_name = (document.getElementById('bookFirstName').value || '').trim();
             const ln = (document.getElementById('bookLastName').value || '').trim();
             if (ln) payloadBody.last_name = ln;
@@ -2009,19 +2154,25 @@
           else if (effSid != null) payloadBody.service_id = effSid;
           if (selectedPriceVariantId != null) payloadBody.service_price_variant_id = selectedPriceVariantId;
         }
+        var actingProfileId = bookActingProfileId;
         var submitFn = window.BookingClient
           ? window.BookingClient.submitBooking({
               body: payloadBody,
               initData: initData,
               idempotencyKey: bookSubmitIdempotencyKey,
+              profileId: actingProfileId,
             })
           : fetch('/api/webapp/client/booking' + (initData ? '?init_data=' + encodeURIComponent(initData) : ''), {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': initData,
-                'Idempotency-Key': bookSubmitIdempotencyKey,
-              },
+              headers: (function () {
+                var h = {
+                  'Content-Type': 'application/json',
+                  'X-Telegram-Init-Data': initData,
+                  'Idempotency-Key': bookSubmitIdempotencyKey,
+                };
+                if (actingProfileId != null) h['X-Profile-Id'] = String(actingProfileId);
+                return h;
+              })(),
               body: JSON.stringify(payloadBody),
             }).then(function (res) {
               return res.text().then(function (text) {
@@ -2175,7 +2326,19 @@
 
       (async function init() {
         await fetchClientSession();
+        await loadBookProfiles();
         updateBookNameFields();
+        var bookForSel = document.getElementById('bookForProfileSelect');
+        if (bookForSel) {
+          bookForSel.onchange = function () {
+            var v = parseInt(bookForSel.value, 10);
+            bookActingProfileId = Number.isFinite(v) ? v : null;
+            updateBookSubmitLabel();
+            updateBookNameFields();
+          };
+        }
+        var bookAddBtn = document.getElementById('bookAddChildBtn');
+        if (bookAddBtn) bookAddBtn.onclick = function () { bookAddChildInline(); };
         if (!trainerId) return;
         try {
           if (requestId == null) {

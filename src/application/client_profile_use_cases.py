@@ -25,6 +25,114 @@ from src.infrastructure.db.models import CLIENT_PROFILE_ROLE_GUARDIAN, CLIENT_PR
 MAX_GUARDIAN_PROFILES_PER_ACCOUNT = 6
 
 
+def sql_client_notify_telegram_id(alias: str = "c") -> str:
+    """
+    SQL expression: client's own telegram_id, else the account that owns a profile link.
+
+    Guardian/child rows have ``telegram_id IS NULL`` — pushes and trainer «Написать» must
+    reach the parent account's chat via ``client_profile_links.account_telegram_id``.
+    """
+    return (
+        f"COALESCE("
+        f"{alias}.telegram_id, "
+        f"(SELECT l.account_telegram_id FROM client_profile_links l "
+        f"WHERE l.profile_client_id = {alias}.id "
+        f"ORDER BY CASE l.role WHEN 'self' THEN 0 ELSE 1 END, l.id LIMIT 1))"
+    )
+
+
+def sql_client_notify_phone(alias: str = "c") -> str:
+    """Own phone, else the account self-row phone (guardian child has no phone of their own)."""
+    return (
+        f"COALESCE("
+        f"NULLIF(TRIM({alias}.phone), ''), "
+        f"(SELECT NULLIF(TRIM(p.phone), '') FROM clients p "
+        f"WHERE p.telegram_id = {sql_client_notify_telegram_id(alias)} LIMIT 1))"
+    )
+
+
+def sql_client_booked_for_name(alias: str = "c") -> str:
+    """Child/guardian first name for client-push copy; NULL for self rows."""
+    return (
+        f"CASE WHEN {alias}.telegram_id IS NULL "
+        f"THEN NULLIF(TRIM({alias}.first_name), '') ELSE NULL END"
+    )
+
+
+async def get_account_telegram_id_for_profile(
+    session: AsyncSession, profile_client_id: int
+) -> int | None:
+    """Account Telegram id linked to this profile, if any (self or guardian)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT account_telegram_id
+            FROM client_profile_links
+            WHERE profile_client_id = :cid
+            ORDER BY CASE role WHEN 'self' THEN 0 ELSE 1 END, id
+            LIMIT 1
+            """
+        ),
+        {"cid": int(profile_client_id)},
+    )
+    row = r.fetchone()
+    return int(row[0]) if row and row[0] is not None else None
+
+
+async def resolve_client_notify_contact(
+    session: AsyncSession,
+    *,
+    client_id: int,
+    telegram_id: int | None,
+    phone: str | None,
+) -> dict[str, Any]:
+    """
+    Trainer-facing / push contact for a booking's ``client_id`` row.
+
+    Keeps the profile's own identity (name lives on the caller). When the row has no
+    Telegram (guardian child), resolves the parent account chat and, if needed, the
+    account self-row phone for contact display.
+    """
+    own_tid = int(telegram_id) if telegram_id is not None else None
+    own_phone = (phone or "").strip()
+    if own_tid is not None:
+        return {
+            "client_telegram_id": own_tid,
+            "client_phone": own_phone,
+            "booked_via_guardian": False,
+        }
+
+    account_tid = await get_account_telegram_id_for_profile(session, client_id)
+    if account_tid is None:
+        return {
+            "client_telegram_id": None,
+            "client_phone": own_phone,
+            "booked_via_guardian": False,
+        }
+
+    contact_phone = own_phone
+    if not contact_phone:
+        r = await session.execute(
+            text(
+                """
+                SELECT COALESCE(NULLIF(TRIM(c.phone), ''), '')
+                FROM clients c
+                WHERE c.telegram_id = :tid
+                LIMIT 1
+                """
+            ),
+            {"tid": account_tid},
+        )
+        row = r.fetchone()
+        contact_phone = (row[0] or "").strip() if row else ""
+
+    return {
+        "client_telegram_id": account_tid,
+        "client_phone": contact_phone,
+        "booked_via_guardian": True,
+    }
+
+
 async def _ensure_self_link(session: AsyncSession, account_telegram_id: int, client_id: int) -> None:
     """
     Lazily back-fill the ``self`` link for accounts created after the Slice 1 migration,
