@@ -11,6 +11,7 @@ from src.shared.config import Settings
 
 PHOTO_MAIN_MAX_SIZE = 800
 PHOTO_LIST_MAX_SIZE = 320
+PHOTO_HERO_MAX_SIZE = 1600
 COLLECTIVE_LOGO_MAX_SIZE = 400
 COLLECTIVE_COVER_MAX_SIZE = 1600
 COLLECTIVE_GALLERY_MAX_SIZE = 800
@@ -100,6 +101,47 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
             CacheControl=PHOTO_CACHE_CONTROL,
         )
     return file_key, file_key_list
+
+
+def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
+    """Save arena photo as JPEG thumb (~320), card (~800), hero (~1600). Returns keys + pixel size."""
+    hero_bytes = _resize_image(body, content_type or "", PHOTO_HERO_MAX_SIZE, PHOTO_MAIN_QUALITY) or body
+    card_bytes = _resize_image(hero_bytes, "image/jpeg", PHOTO_MAIN_MAX_SIZE, PHOTO_MAIN_QUALITY) or hero_bytes
+    thumb_bytes = _resize_image(card_bytes, "image/jpeg", PHOTO_LIST_MAX_SIZE, PHOTO_LIST_QUALITY) or card_bytes
+    width = height = None
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(body))
+        width, height = img.size
+    except Exception:
+        pass
+    base = f"arenas/{int(arena_id)}/{uuid.uuid4().hex}"
+    variants = {
+        "hero": f"{base}_hero.jpg",
+        "card": f"{base}_card.jpg",
+        "thumb": f"{base}_thumb.jpg",
+    }
+    payloads = {"hero": hero_bytes, "card": card_bytes, "thumb": thumb_bytes}
+    settings = Settings()
+    ct = "image/jpeg"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        for kind, key in variants.items():
+            path = root / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payloads[kind])
+        return {"storage_key": variants["hero"], "variants": variants, "width": width, "height": height}
+    client = _get_client()
+    for kind, key in variants.items():
+        client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=key,
+            Body=payloads[kind],
+            ContentType=ct,
+            CacheControl=PHOTO_CACHE_CONTROL,
+        )
+    return {"storage_key": variants["hero"], "variants": variants, "width": width, "height": height}
 
 
 def upload_collective_image(
@@ -264,9 +306,9 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Allowed prefixes: trainers/, collectives/.
+    Allowed prefixes: trainers/, collectives/, arenas/.
     """
-    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/"))
+    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/"))
 
 
 def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:

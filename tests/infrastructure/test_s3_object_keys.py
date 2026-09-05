@@ -34,6 +34,13 @@ def test_trainers_prefix_rejected(raw: str) -> None:
     assert resolve_object_key_under_prefixes(raw, ("trainers/",)) is None
 
 
+def test_arenas_prefix_ok() -> None:
+    assert (
+        resolve_object_key_under_prefixes("arenas/3/x_hero.jpg", ("trainers/", "arenas/"))
+        == "arenas/3/x_hero.jpg"
+    )
+
+
 def test_certificates_prefix_ok() -> None:
     assert (
         resolve_object_key_under_prefixes("certificates/42/7.pdf", ("certificates/",))

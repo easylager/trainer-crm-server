@@ -220,6 +220,66 @@
       color: inherit;
     }
     .amenity-grid input { width: auto; }
+    .arena-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .arena-photo {
+      width: 88px;
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.9);
+    }
+    .arena-photo img {
+      display: block;
+      width: 88px;
+      height: 64px;
+      object-fit: cover;
+    }
+    .arena-photo-placeholder {
+      width: 100%;
+      min-height: 64px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(30, 58, 95, 0.9), rgba(15, 23, 42, 0.95));
+      color: var(--tg-theme-hint-color, #9ca3af);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      text-align: center;
+    }
+    .arena-photo-hero {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: rgba(46, 166, 255, 0.9);
+      color: #fff;
+    }
+    .arena-photo-actions {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px 4px;
+    }
+    .arena-photo-add {
+      width: 88px;
+      height: 64px;
+      border-radius: 10px;
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 22px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
     .field-address { flex: 1; min-width: 0; }
     .field-hint {
       display: block;
@@ -387,6 +447,18 @@
         return fetchWithTimeout(url).then(function(r) {
           if (!r.ok) throw new Error(r.statusText);
           return r.json();
+        });
+      }
+      function sendForm(path, formData) {
+        var url = withInit(apiUrl(path));
+        return fetchWithTimeout(url, { method: 'POST', body: formData }, 30000).then(function(r) {
+          if (!r.ok) {
+            return r.json().catch(function() {}).then(function(err) {
+              var msg = (err && err.detail) || ('Ошибка ' + r.status);
+              throw new Error(msg);
+            });
+          }
+          return r.json().catch(function() { return {}; });
         });
       }
       function sendJson(method, path, body) {
@@ -571,6 +643,37 @@
             html += '<label><input type="checkbox" data-amenity="' + pair[0] + '"' + checked + '> ' + pair[1] + '</label>';
           });
           html += '</div></div>';
+          html += '<div class="field"><label>Фото (до 6). Первое опубликованное — hero. Не загружать картинки из поиска Google.</label>';
+          html += '<div class="arena-gallery" data-arena-id="' + a.id + '">';
+          var gallery = a.gallery || [];
+          if (!gallery.length) {
+            html += '<div class="arena-photo-placeholder">Нет фото — в карточке будет плейсхолдер</div>';
+          }
+          gallery.forEach(function(item, idx) {
+            var variants = item.variants || {};
+            var thumb = variants.thumb || variants.card || variants.hero || '';
+            html += '<div class="arena-photo" data-media-id="' + item.id + '">';
+            if (thumb) html += '<img src="' + escapeHtml(thumb) + '" alt="">';
+            else html += '<div class="arena-photo-placeholder"></div>';
+            if (idx === 0) html += '<span class="arena-photo-hero">hero</span>';
+            html += '<div class="arena-photo-actions">';
+            html += '<button type="button" class="btn-ghost" data-role="photo-up" data-id="' + a.id + '">↑</button>';
+            html += '<button type="button" class="btn-ghost" data-role="photo-down" data-id="' + a.id + '">↓</button>';
+            html += '<button type="button" class="btn-ghost" data-role="photo-del" data-id="' + a.id + '" data-media-id="' + item.id + '">×</button>';
+            html += '</div></div>';
+          });
+          if (gallery.length < 6) {
+            html += '<label class="arena-photo-add">+<input type="file" accept="image/*" data-role="photo-file" data-id="' + a.id + '" hidden></label>';
+          }
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Лицензия нового фото</label><select data-field="photo_license">';
+          [['own','своё'],['operator','оператор'],['user','пользователь'],['permitted','с разрешения']].forEach(function(opt) {
+            html += '<option value="' + opt[0] + '">' + opt[1] + '</option>';
+          });
+          html += '</select></div>';
+          html += '<div class="field"><label>Источник / атрибуция</label><input data-field="photo_source" placeholder="URL или «Каток Замок»"></div>';
+          html += '</div></div>';
           html += '<span class="field-hint">💾 Сохранить — адрес и профиль. Slug после выдачи не меняется.</span>';
           html += '<div class="map-links">';
           if (yandexUrl) html += '<a href="' + yandexUrl + '" target="_blank" rel="noopener">Яндекс карта</a>';
@@ -623,6 +726,67 @@
             var id = Number(btn.getAttribute('data-id'));
             var isAct = btn.getAttribute('data-role') === 'activate';
             sendJson('PATCH', '/admin/arenas/' + id, { is_active: isAct })
+              .then(function() { return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        card.querySelectorAll('[data-role="photo-file"]').forEach(function(input) {
+          input.addEventListener('change', function() {
+            var file = input.files && input.files[0];
+            if (!file) return;
+            var row = input.closest('.arena-row');
+            var arenaId = Number(input.getAttribute('data-id'));
+            var license = ((row && row.querySelector('[data-field="photo_license"]')) || {}).value || 'own';
+            var source = ((row && row.querySelector('[data-field="photo_source"]')) || {}).value || '';
+            var fd = new FormData();
+            fd.append('file', file);
+            fd.append('license', license);
+            if (license !== 'own') {
+              var trimmed = source.trim();
+              if (!trimmed) {
+                showAlert('Для лицензии не «своё» укажите URL источника или атрибуцию');
+                input.value = '';
+                return;
+              }
+              if (/^https?:\/\//i.test(trimmed)) fd.append('source_url', trimmed);
+              else fd.append('attribution', trimmed);
+            } else if (source.trim()) {
+              fd.append('attribution', source.trim());
+            }
+            sendForm('/admin/arenas/' + arenaId + '/photos', fd)
+              .then(function() { showToast('Фото загружено'); return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); })
+              .then(function() { input.value = ''; });
+          });
+        });
+        function galleryIds(galleryEl) {
+          return Array.prototype.map.call(galleryEl.querySelectorAll('.arena-photo[data-media-id]'), function(el) {
+            return Number(el.getAttribute('data-media-id'));
+          });
+        }
+        card.querySelectorAll('[data-role="photo-up"], [data-role="photo-down"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var gallery = btn.closest('.arena-gallery');
+            var photo = btn.closest('.arena-photo');
+            if (!gallery || !photo) return;
+            var ids = galleryIds(gallery);
+            var id = Number(photo.getAttribute('data-media-id'));
+            var idx = ids.indexOf(id);
+            var swap = btn.getAttribute('data-role') === 'photo-up' ? idx - 1 : idx + 1;
+            if (idx < 0 || swap < 0 || swap >= ids.length) return;
+            var tmp = ids[idx];
+            ids[idx] = ids[swap];
+            ids[swap] = tmp;
+            sendJson('PATCH', '/admin/arenas/' + btn.getAttribute('data-id') + '/photos', { ids: ids })
+              .then(function() { return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        card.querySelectorAll('[data-role="photo-del"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var arenaId = btn.getAttribute('data-id');
+            var mediaId = btn.getAttribute('data-media-id');
+            sendJson('DELETE', '/admin/arenas/' + arenaId + '/photos/' + mediaId, {})
               .then(function() { return loadArenas(); })
               .catch(function(err) { showAlert(err.message || String(err)); });
           });
