@@ -14,7 +14,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from src.application.trainer_link import get_trainer_id_by_telegram_id
+from src.application.trainer_link import get_trainer_id_for_webapp_trainer_operations
 from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.trainer_menu_commands import (
     reset_trainer_menu_for_unlinked,
@@ -65,7 +65,7 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
         t_read = time.perf_counter()
         try:
             async with async_session_factory() as session:
-                tid = await get_trainer_id_by_telegram_id(session, uid)
+                tid = await get_trainer_id_for_webapp_trainer_operations(session, uid)
         except Exception:
             logger.exception("trainer_menu_sync: DB lookup failed user_id=%s — skip menu mutation", uid)
             return await handler(event, data)

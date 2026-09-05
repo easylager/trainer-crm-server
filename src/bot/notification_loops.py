@@ -298,6 +298,16 @@ def _clear_hard_fail_throttle(kind: str, booking_id: int) -> None:
     _BOOKING_NOTIFY_HARD_FAIL_LAST_LOG_MONO.pop(f"{kind}:{int(booking_id)}", None)
 
 
+async def _refresh_trainer_menu_after_push(trainer_bot: Bot, chat_id: int) -> None:
+    """Telegram often drops MenuButtonWebApp after Mini App; restore «Обзор» on outbound pushes."""
+    try:
+        from src.bot.trainer_menu_commands import ensure_trainer_hub_menu_button
+
+        await ensure_trainer_hub_menu_button(trainer_bot, chat_id)
+    except Exception:
+        logger.exception("trainer_menu refresh after push failed chat_id=%s", chat_id)
+
+
 async def _deliver_trainer_booking_pending_notification(
     trainer_bot: Bot,
     *,
@@ -332,6 +342,7 @@ async def _deliver_trainer_booking_pending_notification(
             client_tid,
         )
         _clear_hard_fail_throttle("pending", booking_id)
+        await _refresh_trainer_menu_after_push(trainer_bot, chat_id)
         return True
     except Exception as first_exc:
         if not _is_telegram_inline_keyboard_bad_request(first_exc):
@@ -367,6 +378,7 @@ async def _deliver_trainer_booking_pending_notification(
             rej_full,
         )
         _clear_hard_fail_throttle("pending", booking_id)
+        await _refresh_trainer_menu_after_push(trainer_bot, chat_id)
         return True
     except Exception as second_exc:
         if not _is_telegram_inline_keyboard_bad_request(second_exc):
@@ -399,6 +411,7 @@ async def _deliver_trainer_booking_pending_notification(
             rej_cd,
         )
         _clear_hard_fail_throttle("pending", booking_id)
+        await _refresh_trainer_menu_after_push(trainer_bot, chat_id)
         return True
     except Exception as third_exc:
         if _emit_hard_fail_throttled("pending", booking_id):
@@ -973,6 +986,7 @@ async def _deliver_trainer_new_request_message(
 
     try:
         await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=kb)
+        await _refresh_trainer_menu_after_push(trainer_bot, tid)
     except Exception as e:
         err_l = str(e).lower()
         if kb and (
@@ -1438,6 +1452,7 @@ async def process_trainer_session_wrapup_round(
                     NOTIFICATION_TZ,
                 )
                 await mark_trainer_session_wrapup_sent(session, p["booking_id"])
+                await _refresh_trainer_menu_after_push(trainer_bot, trainer_tid)
             except Exception as e:
                 logger.warning(
                     "Session wrap-up send to trainer %s (booking_id=%s): %s",
@@ -3066,6 +3081,8 @@ async def run_care_pulse_loop(trainer_bot: Bot, client_bot: Bot) -> None:
                                 reply_markup=kb,
                                 disable_web_page_preview=True,
                             )
+                            if pulse.audience == CARE_PULSE_AUDIENCE_TRAINER:
+                                await _refresh_trainer_menu_after_push(trainer_bot, pulse.telegram_id)
                         except Exception as e:
                             logger.warning(
                                 "Care pulse %s to %s %s: %s",

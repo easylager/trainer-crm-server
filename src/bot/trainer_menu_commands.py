@@ -7,7 +7,9 @@ Trainer bot: no slash command menu — only per-chat «Обзор» Web App butt
 from aiogram import Bot
 from aiogram.types import BotCommandScopeChat, BotCommandScopeDefault, MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
+from src.application.trainer_link import get_trainer_id_for_webapp_trainer_operations
 from src.bot import messages as msg
+from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
 
@@ -44,3 +46,16 @@ async def sync_trainer_linked_chat_menu(bot: Bot, chat_id: int) -> None:
     """Linked trainer chat: hide slash menu, show only «Обзор» hub Web App button."""
     await bot.set_my_commands([], scope=BotCommandScopeChat(chat_id=chat_id))
     await sync_trainer_hub_menu_button(bot, chat_id)
+
+
+async def ensure_trainer_hub_menu_button(bot: Bot, chat_id: int) -> None:
+    """
+    Re-apply per-chat «Обзор» when Telegram drops MenuButtonWebApp (e.g. after Mini App close).
+
+    Use after outbound trainer pushes so the hub entry returns without waiting for the next
+    inbound message. chat_id for private chats equals the trainer telegram user id.
+    """
+    async with async_session_factory() as session:
+        tid = await get_trainer_id_for_webapp_trainer_operations(session, chat_id)
+    if tid:
+        await sync_trainer_linked_chat_menu(bot, chat_id)

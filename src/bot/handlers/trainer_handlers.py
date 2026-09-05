@@ -127,7 +127,7 @@ from src.bot.trainer_guide_keyboard import (
     merge_inline_keyboards,
     trainer_guide_keyboard,
 )
-from src.bot.trainer_menu_commands import sync_trainer_linked_chat_menu
+from src.bot.trainer_menu_commands import sync_trainer_linked_chat_menu, ensure_trainer_hub_menu_button
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -2657,6 +2657,8 @@ async def on_trainer_repeat_week(callback: CallbackQuery) -> None:
         else:
             text = msg.TRAINER_REPEAT_BOOKING_CREATE_FAILED
         await callback.message.answer(text)
+        if callback.message:
+            await ensure_trainer_hub_menu_button(callback.bot, callback.message.chat.id)
         return
     sd = out.get("slot_date")
     tm = out.get("start_time")
@@ -2667,6 +2669,8 @@ async def on_trainer_repeat_week(callback: CallbackQuery) -> None:
         msg.TRAINER_REPEAT_BOOKING_OK.format(date=date_str, day=day_str, time=time_str),
         parse_mode=ParseMode.HTML,
     )
+    if callback.message:
+        await ensure_trainer_hub_menu_button(callback.bot, callback.message.chat.id)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_BOOKING_TRAINER_PREFIX))
@@ -2836,6 +2840,7 @@ async def on_booking_note_message(message: Message) -> None:
     _trainer_booking_note_state.pop(telegram_id, None)
     trainer_booking_note_awaiting.discard(telegram_id)
     await message.answer(msg.TRAINER_ADD_BOOKING_NOTE_SAVED)
+    await ensure_trainer_hub_menu_button(message.bot, message.chat.id)
 
 
 @router.message(lambda m: m.from_user and m.from_user.id in _booking_decline_state)

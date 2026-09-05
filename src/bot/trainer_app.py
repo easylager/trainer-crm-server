@@ -77,12 +77,14 @@ async def main() -> None:
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.update.outer_middleware(TrainerBenchmarkMiddleware())
+    # Menu sync before gate: always re-apply «Обзор» for linked trainers even when gate blocks.
+    menu_sync = TrainerMenuSyncMiddleware()
+    dp.message.outer_middleware(menu_sync)
+    dp.callback_query.outer_middleware(menu_sync)
     # Gate on Dispatcher outer_middleware — wraps entire router tree so allowlist runs before handlers.
     trainer_gate = TrainerGateMiddleware()
     dp.message.outer_middleware(trainer_gate)
     dp.callback_query.outer_middleware(trainer_gate)
-    trainer_router.message.middleware(TrainerMenuSyncMiddleware())
-    trainer_router.callback_query.middleware(TrainerMenuSyncMiddleware())
     dp.include_router(trainer_router)
     # Outermost catch: DB down / MAINTENANCE_MODE → user-facing «технические работы».
     dp.update.outer_middleware(ServiceUnavailableMiddleware())

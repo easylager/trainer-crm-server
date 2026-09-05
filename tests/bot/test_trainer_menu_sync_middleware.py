@@ -39,7 +39,7 @@ async def test_menu_sync_always_runs_for_linked_even_when_recent(
 ) -> None:
     sync_mock = AsyncMock()
     monkeypatch.setattr(
-        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_by_telegram_id",
+        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_for_webapp_trainer_operations",
         AsyncMock(return_value=7),
     )
     monkeypatch.setattr(
@@ -59,12 +59,40 @@ async def test_menu_sync_always_runs_for_linked_even_when_recent(
 
 
 @pytest.mark.asyncio
+async def test_menu_sync_pending_profile_trainer_gets_hub_not_reset(
+    monkeypatch: pytest.MonkeyPatch, patch_menu_sync_session
+) -> None:
+    """Onboarding trainers are pending_profile, not status=active — they still need «Обзор»."""
+    sync_mock = AsyncMock()
+    reset_mock = AsyncMock()
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_for_webapp_trainer_operations",
+        AsyncMock(return_value=99),
+    )
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_menu_sync_middleware.sync_trainer_linked_chat_menu",
+        sync_mock,
+    )
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_menu_sync_middleware.reset_trainer_menu_for_unlinked",
+        reset_mock,
+    )
+    mw = TrainerMenuSyncMiddleware()
+    handler = AsyncMock(return_value="ok")
+    msg = _private_message()
+
+    await mw(handler, msg, {})
+    sync_mock.assert_awaited_once_with(msg.bot, 99)
+    reset_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_menu_sync_skips_reset_for_unlinked_when_throttled(
     monkeypatch: pytest.MonkeyPatch, patch_menu_sync_session
 ) -> None:
     reset_mock = AsyncMock()
     monkeypatch.setattr(
-        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_by_telegram_id",
+        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_for_webapp_trainer_operations",
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
@@ -89,7 +117,7 @@ async def test_menu_sync_db_failure_does_not_reset_menu(
     reset_mock = AsyncMock()
     sync_mock = AsyncMock()
     monkeypatch.setattr(
-        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_by_telegram_id",
+        "src.bot.middlewares.trainer_menu_sync_middleware.get_trainer_id_for_webapp_trainer_operations",
         AsyncMock(side_effect=RuntimeError("db down")),
     )
     monkeypatch.setattr(
