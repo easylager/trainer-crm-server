@@ -10229,6 +10229,8 @@ async def get_trainer_referred_list(
 
 from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
+from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 
 router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_training_groups_router)
+router.include_router(_admin_ice_sessions_router)
