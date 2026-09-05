@@ -7,7 +7,7 @@ EDGE-001: no profile city and no arenas → no trainer_cities rows (not a dummy 
 EDGE-002: partial unique index — at most one is_primary per trainer.
 
 Revision ID: 0197_trainer_cities
-Revises: 0195_trainer_arenas_is_public
+Revises: 0196_ice_parser_jobs
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 
 revision = "0197_trainer_cities"
-down_revision = "0195_trainer_arenas_is_public"
+down_revision = "0196_ice_parser_jobs"
 branch_labels = None
 depends_on = None
 
