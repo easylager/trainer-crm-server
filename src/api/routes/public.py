@@ -25,6 +25,7 @@ from src.application.catalog_use_cases import (
     list_cities,
     list_services,
 )
+from src.application.photo_cdn import photo_url_from_cdn
 from src.application.collective_use_cases import get_collective_by_slug, collective_location_payload
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.lifecycle_use_cases import resolve_lifecycle_snapshot
@@ -211,12 +212,7 @@ def _parse_arena_ids_csv(raw: str | None) -> list[int] | None:
 
 def _photo_url_from_cdn(file_key: str) -> str | None:
     """Build CDN URL for file_key if photo_cdn_base_url is set."""
-    base = (Settings().photo_cdn_base_url or "").strip().rstrip("/")
-    if not base or not file_key or ".." in file_key:
-        return None
-    if not file_key.startswith("trainers/"):
-        return None
-    return base + "/" + quote(file_key, safe="/")
+    return photo_url_from_cdn(file_key, Settings().photo_cdn_base_url)
 
 
 def _enrich_trainer_photo_urls(trainer: dict) -> bool:

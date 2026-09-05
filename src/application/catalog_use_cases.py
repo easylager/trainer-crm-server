@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_media import attach_arena_media_payloads
 from src.infrastructure.repositories import CatalogRepository
 
 
@@ -35,9 +36,11 @@ async def list_arenas(
     authenticated trainer-facing callers, never the public catalog.
     The public path also requires ``arena_profiles.status = 'published'`` (TASK-048).
     """
-    return await CatalogRepository(session).list_arenas(
+    items = await CatalogRepository(session).list_arenas(
         city_id, service_id=service_id, include_unconfirmed=include_unconfirmed
     )
+    await attach_arena_media_payloads(session, items)
+    return items
 
 
 async def list_catalog_scenarios(

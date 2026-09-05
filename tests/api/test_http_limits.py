@@ -50,6 +50,9 @@ def test_max_body_bytes_for_path():
     assert max_body_bytes_for_path("/api/webhooks/bepaid") >= max_body_bytes_for_path("/api/public/cities")
     assert max_body_bytes_for_path("/api/upload/photo") >= max_body_bytes_for_path("/api/trainers")
     assert max_body_bytes_for_path("/api/webapp/trainer/photos") >= max_body_bytes_for_path("/api/webapp/client/session")
+    assert max_body_bytes_for_path("/api/webapp/admin/arenas/9/photos") >= max_body_bytes_for_path(
+        "/api/webapp/admin/arenas/9"
+    )
 
 
 @pytest.mark.asyncio

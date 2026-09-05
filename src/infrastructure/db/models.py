@@ -252,6 +252,50 @@ class ArenaProfile(Base):
     arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")
 
 
+class Media(Base):
+    """Owner-typed image metadata (TASK-049). Files live in object storage; rows are not trainer_photos.
+
+    ``owner_type`` is polymorphic (arena|coach|collective). Arena photos use this table;
+    trainer catalog still reads ``trainer_photos``. Do not scrape search-engine images.
+    """
+
+    __tablename__ = "media"
+    __table_args__ = (
+        Index("ix_media_owner", "owner_type", "owner_id"),
+        CheckConstraint(
+            "owner_type IN ('arena', 'coach', 'collective')",
+            name="ck_media_owner_type",
+        ),
+        CheckConstraint(
+            "license IN ('own', 'operator', 'user', 'permitted')",
+            name="ck_media_license",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'published', 'rejected')",
+            name="ck_media_status",
+        ),
+        CheckConstraint(
+            "license = 'own' OR COALESCE(btrim(source_url), '') <> '' "
+            "OR COALESCE(btrim(attribution), '') <> ''",
+            name="ck_media_license_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    owner_id: Mapped[int] = mapped_column(Integer(), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    variants: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    width: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    blurhash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    license: Mapped[str] = mapped_column(String(20), nullable=False)
+    attribution: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+
+
 # M2M: trainer works at these arenas; filter catalog by arena via this table
 trainer_arenas_table = Table(
     "trainer_arenas",

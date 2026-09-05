@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -216,6 +216,15 @@ from src.application.arena_profile import (
     InvalidArenaProfileStatusError,
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
+)
+from src.application.arena_media import (
+    ArenaMediaLimitError,
+    InvalidArenaMediaOrderError,
+    InvalidMediaLicenseError,
+    attach_arena_media_payloads,
+    delete_arena_media,
+    reorder_arena_media,
+    upload_arena_media_from_bytes,
 )
 from src.application.trainer_schedule_use_cases import this_week_monday, trainer_default_slot_arena_id
 from src.application.recurring_use_cases import (
@@ -4710,32 +4719,32 @@ async def get_admin_arenas(
     }
     r = await session.execute(text(sql), params)
     rows = r.fetchall()
-    return {
-        "items": [
-            {
-                "id": row[0],
-                "name": row[1],
-                "address": row[2],
-                "latitude": row[3],
-                "longitude": row[4],
-                "sort_order": row[5],
-                "is_active": row[6],
-                "slug": row[7],
-                "district": row[8],
-                "timezone": row[9],
-                "short_description": row[10],
-                "phone": row[11],
-                "website_url": row[12],
-                "social_urls": row[13] or {},
-                "opening_hours": row[14],
-                "season_start_month": row[15],
-                "season_end_month": row[16],
-                "amenities": row[17] or {},
-                "status": row[18] or "published",
-            }
-            for row in rows
-        ]
-    }
+    items = [
+        {
+            "id": row[0],
+            "name": row[1],
+            "address": row[2],
+            "latitude": row[3],
+            "longitude": row[4],
+            "sort_order": row[5],
+            "is_active": row[6],
+            "slug": row[7],
+            "district": row[8],
+            "timezone": row[9],
+            "short_description": row[10],
+            "phone": row[11],
+            "website_url": row[12],
+            "social_urls": row[13] or {},
+            "opening_hours": row[14],
+            "season_start_month": row[15],
+            "season_end_month": row[16],
+            "amenities": row[17] or {},
+            "status": row[18] or "published",
+        }
+        for row in rows
+    ]
+    await attach_arena_media_payloads(session, items)
+    return {"items": items}
 
 
 @router.post("/admin/arenas")
@@ -4851,6 +4860,87 @@ async def patch_admin_arena(
             raise HTTPException(status_code=404, detail="Arena not found") from None
         except (InvalidAmenitiesError, InvalidArenaProfileStatusError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return {"ok": True}
+
+
+class AdminArenaMediaReorderBody(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
+@router.post("/admin/arenas/{arena_id:int}/photos")
+async def post_admin_arena_photo(
+    arena_id: int,
+    file: UploadFile = File(...),
+    license: str | None = Form(None),
+    source_url: str | None = Form(None),
+    attribution: str | None = Form(None),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload one arena photo (max 6). License required; do not scrape search images."""
+    body_bytes = await file.read()
+    try:
+        item = await upload_arena_media_from_bytes(
+            session,
+            arena_id,
+            body_bytes,
+            file.content_type or "image/jpeg",
+            license_key=license,
+            source_url=source_url,
+            attribution=attribution,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Arena not found") from None
+    except InvalidMediaLicenseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ArenaMediaLimitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code == "too_large":
+            raise HTTPException(status_code=413, detail="File too large") from exc
+        if code == "not_image":
+            raise HTTPException(status_code=400, detail="Not a valid image") from exc
+        raise HTTPException(status_code=400, detail=code) from exc
+    except Exception:
+        logger.exception("arena photo upload failed arena_id=%s", arena_id)
+        raise HTTPException(status_code=503, detail="Storage temporarily unavailable") from None
+    await session.commit()
+    return item
+
+
+@router.patch("/admin/arenas/{arena_id:int}/photos")
+async def patch_admin_arena_photos(
+    arena_id: int,
+    body: AdminArenaMediaReorderBody,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set gallery order. First published photo is the hero."""
+    exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
+    if not exists.fetchone():
+        raise HTTPException(status_code=404, detail="Arena not found")
+    try:
+        await reorder_arena_media(session, arena_id, body.ids)
+    except InvalidArenaMediaOrderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/arenas/{arena_id:int}/photos/{media_id:int}")
+async def delete_admin_arena_photo(
+    arena_id: int,
+    media_id: int,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove a gallery row. Object storage is left in place."""
+    try:
+        await delete_arena_media(session, arena_id, media_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Photo not found") from None
     await session.commit()
     return {"ok": True}
 
