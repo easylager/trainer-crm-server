@@ -870,3 +870,96 @@ async def search_public_ice(
             {"type": "city", "items": city_items},
         ],
     }
+
+
+_ICE_CITIES_SQL = """
+SELECT
+  c.id,
+  c.name,
+  c.sort_order,
+  c.country,
+  COUNT(DISTINCT rink.id)::int AS map_rink_count,
+  COUNT(DISTINCT coach.trainer_id)::int AS trainer_count,
+  AVG(rink.latitude) AS latitude,
+  AVG(rink.longitude) AS longitude
+FROM cities c
+LEFT JOIN (
+  SELECT a.city_id, a.id, a.latitude, a.longitude
+  FROM arenas a
+  LEFT JOIN arena_profiles p ON p.arena_id = a.id
+  WHERE a.is_active AND a.is_confirmed
+    AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+    AND (p.status IS NULL OR p.status = :published)
+) rink ON rink.city_id = c.id
+LEFT JOIN (
+  SELECT tc.city_id, tc.trainer_id
+  FROM trainer_cities tc
+  JOIN trainers t ON t.id = tc.trainer_id
+    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+  UNION
+  SELECT p.city_id, p.trainer_id
+  FROM trainer_profiles p
+  JOIN trainers t ON t.id = p.trainer_id
+    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+  WHERE p.city_id IS NOT NULL
+) coach ON coach.city_id = c.id
+WHERE c.is_active
+GROUP BY c.id, c.name, c.sort_order, c.country
+HAVING COUNT(DISTINCT rink.id) > 0 OR COUNT(DISTINCT coach.trainer_id) > 0
+ORDER BY c.sort_order, c.id
+"""
+
+
+async def list_ice_cities(session: AsyncSession) -> dict[str, Any]:
+    """Cities that belong on the Ice tab picker: a map rink and/or a catalog trainer."""
+    result = await session.execute(
+        text(_ICE_CITIES_SQL), {"published": ARENA_PROFILE_STATUS_PUBLISHED}
+    )
+    items: list[dict[str, Any]] = []
+    for row in result.mappings():
+        lat = row["latitude"]
+        lon = row["longitude"]
+        items.append(
+            {
+                "id": int(row["id"]),
+                "name": row["name"],
+                "sort_order": int(row["sort_order"] or 0),
+                "country": row["country"],
+                "map_rink_count": int(row["map_rink_count"] or 0),
+                "trainer_count": int(row["trainer_count"] or 0),
+                "latitude": float(lat) if lat is not None else None,
+                "longitude": float(lon) if lon is not None else None,
+            }
+        )
+    return {"items": items}
+
+
+async def record_ice_city_interest(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    intent: str | None = None,
+    source: str | None = None,
+) -> dict[str, Any] | None:
+    """Persist a client tap that they want skating in a city without map rinks."""
+    found = await session.execute(
+        text("SELECT 1 FROM cities WHERE id = :id AND is_active"),
+        {"id": int(city_id)},
+    )
+    if found.first() is None:
+        return None
+    intent_value = parse_intent(intent) if intent else INTENT_SKATE
+    src = str(source or "coming_soon_cta").strip()[:32] or "coming_soon_cta"
+    inserted = await session.execute(
+        text(
+            """
+            INSERT INTO ice_city_interest (city_id, intent, source)
+            VALUES (:city_id, :intent, :source)
+            RETURNING id
+            """
+        ),
+        {"city_id": int(city_id), "intent": intent_value, "source": src},
+    )
+    await session.commit()
+    return {"ok": True, "id": int(inserted.scalar_one())}
+
