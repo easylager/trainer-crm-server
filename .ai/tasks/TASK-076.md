@@ -60,6 +60,7 @@ Workflow chain: `research → plan → implement → design-review → verify`
 ### In Scope
 
 - `static/webapp/ice.html`, `ice-tab.js`, `ice-tab.css`, `ice-tab-model.js`
+- `src/api/app.py` — FileResponse для `ice-map.js` / `ice-map-model.js` (карта 404 без этого; координатор 2026-09-06)
 - `static/webapp/arena.html`, `arena-card.css` (и JS только если CTA/чипы завязаны на янтарь)
 - Чип `coach`: остаться на `ice.html`; не вызывать `ClientShell.navigate('catalog?tab=catalog')`
 - Список линзы «Тренеры» в том же хроме (поиск, город, список/карта как у Льда, карточки в языке `ice-acard`)
@@ -176,3 +177,4 @@ Verification: existing skate-lens tests
 - **IN_PROGRESS** (2026-09-06) — UI: Ice/arena chrome → `--app-cta-fill` / `--accent-rgb` (без `#c2761a`); чип «Тренеры» остаётся на `ice.html` и грузит `GET /api/public/trainers?city_id=`; тап по карточке — существующий `catalog?tab=catalog&trainer_id=`; skate lens без ослабления.
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/49 → `release/ice-discovery` (не master). Status IN_PROGRESS until merged.
 - **REVIEW_FIX** (2026-09-06) — coach map: no leftover rink pins, no `GET /api/public/ice/arenas` for the trainers lens; honest empty «Тренеров на карте нет». City-geo `buildListUrl({ near, intent: 'coach', limit: 1 })` unchanged.
+- **STAND_HOTFIX** (2026-09-06) — координатор: `GET /webapp/ice-map.js` и `ice-map-model.js` давали 404 (маршрутов не было, в отличие от ice-tab.js). Карта на стенде из-за этого не открывалась. Добавлены FileResponse + assert в `test_ice_tab_page_and_assets_served`. Не закоммичено — включить в этот PR.

@@ -1072,6 +1072,32 @@ def webapp_ice_tab_js(request: Request):
     )
 
 
+@app.get("/webapp/ice-map-model.js")
+def webapp_ice_map_model_js(request: Request):
+    """TASK-054 Ice map view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-map-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ice-map.js")
+def webapp_ice_map_js(request: Request):
+    """TASK-054 Ice map (Yandex). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-map.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/ice-teaser-model.js")
 def webapp_ice_teaser_model_js(request: Request):
     """TASK-055 hub teaser view-model (pure). Use ``?v=…`` for long cache."""

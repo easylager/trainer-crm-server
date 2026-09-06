@@ -92,11 +92,26 @@
     if (listSec) listSec.hidden = state.view !== 'list';
     if (mapSec) mapSec.hidden = state.view !== 'map';
     if (hint) hint.hidden = state.view === 'map';
-    if (state.view === 'map') showMap();
+    if (state.view === 'map') {
+      showMap();
+      if (mapSec && typeof mapSec.scrollIntoView === 'function') {
+        mapSec.scrollIntoView({ block: 'start' });
+      }
+    }
   }
 
   function showMap() {
-    if (!global.IceMap) return;
+    if (!global.IceMap) {
+      var emptyEl = $('iceMapEmpty');
+      var stageEl = $('iceMapStage');
+      if (stageEl) stageEl.hidden = true;
+      if (emptyEl && global.IceMapModel) {
+        emptyEl.hidden = false;
+        emptyEl.innerHTML =
+          '<strong>Карта не загрузилась</strong><p>Обновите страницу. Файл карты не подключился.</p>';
+      }
+      return;
+    }
     if (!mapCtl) {
       mapCtl = global.IceMap.mount({
         canvas: $('iceMapCanvas'),
@@ -114,7 +129,7 @@
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
           if (extra.cityId != null && extra.cityId !== '') opts.cityId = extra.cityId;
-          else if (!extra.bbox && state.cityId) opts.cityId = state.cityId;
+          else if (state.cityId) opts.cityId = state.cityId;
           return M.buildMapListUrl(opts);
         },
         fetchJson: fetchJson,
@@ -123,6 +138,9 @@
         },
         getCityId: function () {
           return state.cityId;
+        },
+        listReady: function () {
+          return !state.loading && !!state.cityId;
         },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
@@ -155,7 +173,9 @@
     var cta = M.listRowCta(item);
     if (cta) live += ' · ' + cta;
     return (
-      '<button type="button" class="ice-acard" data-href="' +
+      '<a class="ice-acard" href="' +
+      esc(href) +
+      '" data-href="' +
       esc(href) +
       '">' +
       '<span class="ice-acard__ph' +
@@ -179,14 +199,16 @@
       '">' +
       esc(live) +
       '</span>' +
-      '</span></button>'
+      '</span></a>'
     );
   }
 
   function renderTrainerCard(item) {
     var view = M.trainerCardView(item);
     return (
-      '<button type="button" class="ice-acard" data-href="' +
+      '<a class="ice-acard" href="' +
+      esc(view.href) +
+      '" data-href="' +
       esc(view.href) +
       '">' +
       '<span class="ice-acard__ph' +
@@ -206,7 +228,7 @@
       '">' +
       esc(view.live) +
       '</span>' +
-      '</span></button>'
+      '</span></a>'
     );
   }
 
@@ -473,7 +495,8 @@
   function onRootClick(ev) {
     var card = ev.target.closest('[data-href]');
     if (!card) return;
-    var href = card.getAttribute('data-href') || '';
+    var href = card.getAttribute('data-href') || card.getAttribute('href') || '';
+    if (card.tagName === 'A') ev.preventDefault();
     if (href.indexOf('city:') === 0) {
       applyCity({
         id: Number(card.getAttribute('data-city-id')),
@@ -616,6 +639,10 @@
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent) state.intent = saved.intent;
     if (saved && saved.view === 'map') state.view = 'map';
+    try {
+      var params = new URLSearchParams(global.location.search || '');
+      if (params.get('view') === 'map') state.view = 'map';
+    } catch (e) { /* */ }
     setChips();
     setViewToggle();
     resolveCity().then(function () {

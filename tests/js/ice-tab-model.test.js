@@ -48,6 +48,18 @@ describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
     assert.match(url, /intent=skate/);
     assert.ok(!url.includes('city_id='));
   });
+
+  it('map pan with a selected city always keeps city_id so other cities cannot appear', () => {
+    const { buildListUrl, buildMapListUrl } = loadModel();
+    const url = buildMapListUrl({
+      bbox: '53.8,27.4,54.0,27.7',
+      cityId: 2,
+      intent: 'skate',
+      limit: 50,
+    });
+    assert.match(url, /city_id=2/);
+    assert.match(url, /bbox=/);
+  });
 });
 
 describe('trainer catalog chip (TASK-076 AC-002)', () => {
