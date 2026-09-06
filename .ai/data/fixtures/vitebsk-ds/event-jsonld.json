@@ -1,0 +1,37 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Event",
+  "url": "/ru/vitebsk/event/massovoe-katanie-v-vitebskom-dvortse-sporta",
+  "name": "Массовое катание в Витебском дворце спорта",
+  "eventStatus": "https://schema.org/EventScheduled",
+  "startDate": "2026-09-05",
+  "endDate": "2026-09-06",
+  "location": {
+    "@type": "Place",
+    "name": "Ледовый Дворец Витебск",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "210038, Республика Беларусь, г. Витебск, пр-т Строителей, 23",
+      "addressLocality": "Витебск",
+      "addressRegion": "Витебская область",
+      "addressCountry": "Беларусь"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": "55.168938",
+      "longitude": "30.227016"
+    }
+  },
+  "description": "Каждое десятое катание совершенно БЕСПЛАТНО\r\n\r\nПрокат коньков на месте:\r\nдо 34 размера - 5 рублей\r\nот 35 размера - 10 рублей\r\nБронь коньков не производится, прокат начинает работать за 1 час до начала катания.",
+  "duration": "PT60M",
+  "offers": {
+    "@type": "AggregateOffer",
+    "availability": "http://schema.org/InStock",
+    "price": "7.00",
+    "lowPrice": "7.00",
+    "highPrice": "8.00",
+    "priceCurrency": "BYN",
+    "url": "/ru/vitebsk/event/massovoe-katanie-v-vitebskom-dvortse-sporta#tickets",
+    "validFrom": "2024-08-23T07:41:03+00:00"
+  }
+}

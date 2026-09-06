@@ -1,0 +1,138 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 41,
+  "city": "Островец",
+  "parser_key": "ostrovets_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-05T23:55:00+03:00",
+  "source_files": [
+    "katanie-na-konkah.html",
+    "prejskurant-cen.html"
+  ],
+  "default_duration_minutes": 45,
+  "child_price_on_page": true,
+  "notes": "Two weekly HTML tables. 'нет катаний' = no slot. Times are start-only (19.00). Duration 45 stated on page. Prices from prejskurant-cen Перечень № 8 (updated 2026-08-03): adult 6.00, child under 14 4.00, skate rental 5.00. ceny-na-uslugi is boxing hall — ignore. Drop days without times. Do not invent from July leftover captions.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-04",
+      "starts_at_local": "19:00",
+      "ends_at_local": "19:45",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-05",
+      "starts_at_local": "15:45",
+      "ends_at_local": "16:30",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-05",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:30",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-05",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-06",
+      "starts_at_local": "14:00",
+      "ends_at_local": "14:45",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-06",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-07",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:15",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-13",
+      "starts_at_local": "15:45",
+      "ends_at_local": "16:30",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-13",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:30",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-13",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 600,
+      "price_child_minor": 400,
+      "price_rental_minor": 500,
+      "session_label": null,
+      "age_note": "дети до 14 лет"
+    }
+  ]
+}

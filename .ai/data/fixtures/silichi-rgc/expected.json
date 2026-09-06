@@ -1,0 +1,15 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 16,
+  "city": "Силичи",
+  "parser_key": null,
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-05T23:55:00+03:00",
+  "source_files": [
+    "aktualnoe-vremya-raboti.html"
+  ],
+  "status": "empty",
+  "notes": "Hours page still reprints winter rink grid («С 14 декабря»). Capture day is 5 Sep — that grid is last season, not current MK. Do not publish December hours in September. Wait for a fresh opening post on silichy.by.",
+  "sessions": []
+}

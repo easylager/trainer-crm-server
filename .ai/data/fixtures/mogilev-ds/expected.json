@@ -1,0 +1,88 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 43,
+  "city": "Могилев",
+  "parser_key": "mogilev_hockey_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:05:00+03:00",
+  "source_files": [
+    "raspisanie.html",
+    "uslugi.html"
+  ],
+  "kind_keep_substring": "массовое катание",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-04",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-05",
+      "starts_at_local": "18:00",
+      "ends_at_local": "18:45",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-05",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:15",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-06",
+      "starts_at_local": "19:15",
+      "ends_at_local": "20:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-06",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детский до 6 лет",
+      "local_date": "2026-09-07",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:00",
+      "price_adult_minor": 800,
+      "price_child_minor": 500,
+      "price_rental_minor": 700
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 32,
+  "city": "Горки",
+  "parser_key": "gorki_home_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:51:00+03:00",
+  "source_files": [
+    "mass-skating-home-excerpt.html",
+    "uslugi.html"
+  ],
+  "default_duration_minutes": 45,
+  "notes": "MK block on gorkiled.by home. 1 Sep is resume announcement without a time. 4–5 Sep cancelled (tournament). Prices from /ru/uslugi 4.50/4.00/rental 3.50.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-02",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 450,
+      "price_child_minor": 400,
+      "price_rental_minor": 350,
+      "session_label": null,
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-03",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 450,
+      "price_child_minor": 400,
+      "price_rental_minor": 350,
+      "session_label": null,
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-06",
+      "starts_at_local": "17:00",
+      "ends_at_local": "17:45",
+      "price_adult_minor": 450,
+      "price_child_minor": 400,
+      "price_rental_minor": 350,
+      "session_label": null,
+      "age_note": "детский до 16 лет"
+    }
+  ]
+}
