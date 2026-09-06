@@ -26,9 +26,12 @@ _CADENCE_DELTA = {
 }
 
 
+def cadence_timedelta(cadence: str) -> timedelta:
+    return _CADENCE_DELTA.get(cadence, timedelta(days=1))
+
+
 def advance_next_run_at(cadence: str, from_dt: datetime) -> datetime:
-    delta = _CADENCE_DELTA.get(cadence, timedelta(days=1))
-    return from_dt + delta
+    return from_dt + cadence_timedelta(cadence)
 
 
 def job_from_row(row: Any) -> ParserJob:

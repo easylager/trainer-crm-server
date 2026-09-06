@@ -5,6 +5,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
+from src.ingestion.alerts import tick_ice_health_alerts, tick_ice_health_weekly_digest
 from src.ingestion.jobs import SqlAlchemyParserJobStore
 from src.ingestion.parsers import default_registry
 from src.ingestion.scheduler import IceIngestScheduler
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 ICE_INGEST_LOOP_INTERVAL_SEC = 60
 ICE_TTL_LOOP_INTERVAL_SEC = 3600
+ICE_HEALTH_ALERT_INTERVAL_SEC = 3600
+ICE_HEALTH_DIGEST_INTERVAL_SEC = 3600
 
 
 async def run_ice_ingest_scheduler_loop() -> None:
@@ -63,3 +66,39 @@ async def run_ice_scrape_ttl_loop() -> None:
             break
         except Exception:
             logger.exception("ice scrape ttl tick failed")
+
+
+async def run_ice_health_alert_loop() -> None:
+    """Hourly: silent sources (no ok past cadence×N) and stale-fact city threshold."""
+    from src.infrastructure.db import async_session_factory
+
+    while True:
+        await asyncio.sleep(ICE_HEALTH_ALERT_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                sent = await tick_ice_health_alerts(session, now=datetime.now(timezone.utc))
+                await session.commit()
+                if sent:
+                    logger.info("ice health alert sent")
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("ice health alert tick failed")
+
+
+async def run_ice_health_weekly_digest_loop() -> None:
+    """Sunday admin digest: silent sources, stale share, tier A count next to share."""
+    from src.infrastructure.db import async_session_factory
+
+    while True:
+        await asyncio.sleep(ICE_HEALTH_DIGEST_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                sent = await tick_ice_health_weekly_digest(session, now=datetime.now(timezone.utc))
+                await session.commit()
+                if sent:
+                    logger.info("ice health weekly digest sent")
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("ice health weekly digest tick failed")
