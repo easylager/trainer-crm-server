@@ -62,6 +62,62 @@
     );
   }
 
+  var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var SOCIAL_KEYS = [
+    ['instagram', 'Instagram'],
+    ['facebook', 'Facebook'],
+    ['vk', 'VK'],
+    ['telegram', 'Telegram'],
+  ];
+
+  function isoDate(value) {
+    var s = String(value || '').slice(0, 10);
+    return ISO_DATE_RE.test(s) ? s : null;
+  }
+
+  function addDaysYmd(iso, n) {
+    var d = parseLocalDate(iso);
+    if (!d) return null;
+    d.setDate(d.getDate() + n);
+    return ymd(d);
+  }
+
+  function dayTabFromIso(iso, todayIso) {
+    var date = isoDate(iso);
+    var today = isoDate(todayIso);
+    if (!date || !today) return 'today';
+    if (date === today) return 'today';
+    if (date === addDaysYmd(today, 1)) return 'tomorrow';
+    return date;
+  }
+
+  function ribbonIsoForDay(day, todayIso) {
+    if (day === 'week') return null;
+    var today = isoDate(todayIso);
+    if (day === 'tomorrow') return today ? addDaysYmd(today, 1) : null;
+    if (day === 'today' || !day) return today;
+    return isoDate(day) || today;
+  }
+
+  function practiceContacts(card) {
+    card = card || {};
+    var website = String(card.website_url || '').trim();
+    var desc = String(card.short_description || '').trim();
+    var socials = [];
+    var urls = card.social_urls && typeof card.social_urls === 'object' ? card.social_urls : {};
+    var i;
+    for (i = 0; i < SOCIAL_KEYS.length; i++) {
+      var key = SOCIAL_KEYS[i][0];
+      var href = String(urls[key] || '').trim();
+      if (href) socials.push({ key: key, label: SOCIAL_KEYS[i][1], href: href });
+    }
+    return {
+      shortDescription: desc || null,
+      website: website ? { href: website, label: 'Сайт катка' } : null,
+      socials: socials,
+    };
+  }
+
   function formatMinor(minor, currency) {
     if (minor == null || minor === '') return null;
     var n = Number(minor);
@@ -479,6 +535,9 @@
     trainerSubtitle: trainerSubtitle,
     parseLocalDate: parseLocalDate,
     ymd: ymd,
+    dayTabFromIso: dayTabFromIso,
+    ribbonIsoForDay: ribbonIsoForDay,
+    practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
   };
