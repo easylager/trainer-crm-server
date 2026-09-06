@@ -400,7 +400,7 @@
     }
     html += '<div style="font-size:11px;color:var(--tg-theme-hint-color);margin-top:10px">Ручные правки сеансов за 7д: ' +
       A.formatNum(h.manual_admin_sessions_7d || 0) +
-      ' · Калибровка точности: н/д (TASK-066)</div>';
+      ' · Калибровка точности: в воскресной сводке</div>';
     return html;
   }
 

@@ -1,7 +1,7 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** IN PROGRESS — R3a почти закрыт (062 на train); открыты карта (054) и калибровка (066)  
+**Статус:** IN PROGRESS — R3a + карта таба «Лёд» на train; дальше ключ Яндекса, DiaMond `<div>`-ячейки, BY-egress  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
 
@@ -259,4 +259,6 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-065_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/33 → `release/ice-discovery`. Seed jobs из переписи.
 - **TASK-055_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/34 → `release/ice-discovery`. Тизер на главной и чипы арен.
 - **TASK-061_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/35 → `release/ice-discovery`. Адаптеры Минска.
-- **TASK-062_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/36 squash `1cbfab1` → `release/ice-discovery`. Алерты тишины + доля A + воскресная сводка. Не в master. Калибровка точности — TASK-066.
+- **TASK-062_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/36 squash `1cbfab1` → `release/ice-discovery`. Алерты тишины + доля A + воскресная сводка. Не в master.
+- **TASK-054_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 squash `f216f46` → `release/ice-discovery`. Карта таба «Лёд» на Яндексе. Не в master.
+- **TASK-066_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/37 squash `bbbcf88` → `release/ice-discovery`. Калибровка Минска. DiaMond 7 слотов — follow-up адаптера.

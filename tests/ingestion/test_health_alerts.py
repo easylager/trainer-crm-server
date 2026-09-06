@@ -13,6 +13,7 @@ from src.application.arena_profile import ensure_arena_profile
 from src.ingestion.health import (
     DEFAULT_SILENCE_MULTIPLES,
     DEFAULT_STALE_SHARE_THRESHOLD,
+    IceHealthSnapshot,
     calibration_summary,
     city_booking_density,
     city_tier_shares,
@@ -446,12 +447,35 @@ async def test_booking_density_per_city(db_session) -> None:
     assert row.density_share == pytest.approx(0.5)
 
 
-# ── AC-004 / AC-005 / TASK-066 placeholder ────────────────────────────────
+# ── AC-004 / AC-005 / TASK-066 calibration line ────────────────────────────
 
 
-def test_calibration_summary_is_placeholder_for_task_066() -> None:
-    summary = calibration_summary()
-    assert summary is None or summary.get("available") is False
+def test_admin_calibration_summary_does_not_parse_fixtures() -> None:
+    """Admin analytics must not run the gold-set adapters on every page load."""
+    assert calibration_summary() is None
+
+
+def test_weekly_digest_prints_calibration_recall() -> None:
+    empty = IceHealthSnapshot(
+        silent_jobs=[],
+        stale_by_city=[],
+        tier_by_city=[],
+        density_by_city=[],
+        manual_admin_sessions_7d=0,
+        calibration={
+            "overall": {
+                "recall": 0.958,
+                "precision": 1.0,
+                "true_positives": 161,
+                "gold_count": 168,
+            }
+        },
+    )
+    body = format_weekly_digest(empty)
+    assert "recall 96%" in body
+    assert "precision 100%" in body
+    assert "161/168" in body
+    assert "TASK-066" not in body
 
 
 def test_price_totals_never_mix_currencies() -> None:
@@ -513,7 +537,7 @@ async def test_weekly_digest_lists_silent_stale_and_tier_a_change(db_session) ->
     assert "просроч" in body.lower() or "valid_until" in body.lower() or "устарев" in body.lower()
     assert "A" in body
     assert "%" in body
-    assert "TASK-066" in body or "калибр" in body.lower()
+    assert "калибр" in body.lower()
     assert "BYN+RUB" not in body
     assert "2000" not in body  # must not sum 1200 BYN + 800 RUB
 

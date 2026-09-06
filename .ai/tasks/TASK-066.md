@@ -1,7 +1,7 @@
 ---
 task_id: TASK-066
 title: Калибровочный набор и метрика точности извлечения
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-061]
@@ -81,3 +81,4 @@ Sessions with `"ambiguous": true` / `"exclude_from_scoring": true` are kept in g
 - **TASK_CREATED** (2026-09-04) — EPIC3
 - **CANONICAL** (2026-09-05) — сверка в формате ice_sessions; эталон = пилот Минска, не 20–30 любых; без LLM-промпта
 - **IN_PROGRESS** (2026-09-06) — PR https://github.com/easylager/trainer-crm-server/pull/37 against `release/ice-discovery`. Gold 7 Minsk MK fixtures; runner + CI floors; TASK-062 hook `metrics_for_digest`. Not merged. DiaMond 7 missed `<div>` MK cells left as TASK-061 follow-up.
+- **TASK-066_MERGED** (2026-09-06) — squash `bbbcf88` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/37. Не в master. DiaMond recall floor 0.84 — follow-up адаптера.

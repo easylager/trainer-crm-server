@@ -1,13 +1,14 @@
 ---
 task_id: TASK-054
 title: Карта арен — кластеризация, bbox, «рядом со мной» и переиспользуемый компонент выбора
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-051]
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
+pr_url: https://github.com/easylager/trainer-crm-server/pull/38
 blocked_reason: ""
 owner_decision: Yandex Maps JS API for Ice tab (2026-09-06). Ice-tab only this pass; prototype with live tiles before production module.
 ---
@@ -113,3 +114,4 @@ Status: OPEN
 - **IN_PROGRESS** (2026-09-06) — Ice-tab + прототип на Yandex JS API. Кластеры, bbox pan, «рядом со мной» только по кнопке, шит нашей карточки арены. Ключ: `YANDEX_MAPS_JS_API_KEY` / `GET /api/public/ice/map-config`. Без ключа — empty state, без OSM.
 - **WAIVED AC-004 / AC-005** (2026-09-06) — coordinator: "profile/onboarding later pass". Профиль тренера и онбординг не в этом PR.
 - **pr_url** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 — base `release/ice-discovery`. Not merged.
+- **TASK-054_MERGED** (2026-09-06) — squash `f216f46` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/38. Ice-tab only. AC-004/005 waived. Не в master. Живые тайлы нужен `YANDEX_MAPS_JS_API_KEY`.

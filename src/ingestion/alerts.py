@@ -5,6 +5,7 @@ import html
 import logging
 import os
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -122,11 +123,23 @@ def format_weekly_digest(snapshot: IceHealthSnapshot) -> str:
         f"Ручные правки сеансов за 7д: {snapshot.manual_admin_sessions_7d}",
     ]
     cal = snapshot.calibration if snapshot.calibration is not None else calibration_summary()
-    if cal:
-        lines.append(f"Калибровка точности: {html.escape(str(cal))}")
-    else:
-        lines.append("Калибровка точности: н/д (ожидается TASK-066)")
+    lines.append(_format_calibration_line(cal))
     return "\n".join(lines)
+
+
+def _format_calibration_line(cal: dict[str, Any] | None) -> str:
+    if not cal:
+        return "Калибровка точности: н/д"
+    overall = cal.get("overall") if isinstance(cal, dict) else None
+    if not isinstance(overall, dict) or overall.get("recall") is None:
+        return f"Калибровка точности: {html.escape(str(cal))}"
+    gold = int(overall.get("gold_count") or 0)
+    tp = int(overall.get("true_positives") or 0)
+    return (
+        f"Калибровка точности: recall {_pct_label(float(overall['recall']))} · "
+        f"precision {_pct_label(float(overall.get('precision')))} "
+        f"({tp}/{gold})"
+    )
 
 
 async def send_ice_health_to_admins(text_body: str, *, event: str) -> None:
@@ -197,6 +210,18 @@ def _minsk_now(now: datetime) -> datetime:
     return now.astimezone(ZoneInfo(NOTIFICATION_TZ))
 
 
+async def _calibration_for_digest() -> dict[str, Any] | None:
+    """Run gold-set scoring only on the weekly tick — not on every admin page load."""
+    try:
+        from src.ingestion.calibration import metrics_for_digest, run_calibration
+
+        report = await run_calibration()
+        return metrics_for_digest(report)
+    except Exception:
+        logger.exception("ice calibration for weekly digest failed")
+        return None
+
+
 async def tick_ice_health_weekly_digest(session: AsyncSession, *, now: datetime) -> str | None:
     """One Sunday message: silent sources, stale share, A count next to share."""
     global _last_weekly_digest_date
@@ -211,6 +236,9 @@ async def tick_ice_health_weekly_digest(session: AsyncSession, *, now: datetime)
     if _last_weekly_digest_date == today:
         return None
     snap = await ice_health_snapshot(session, now=now)
+    cal = await _calibration_for_digest()
+    if cal is not None:
+        snap = replace(snap, calibration=cal)
     body = format_weekly_digest(snap)
     await send_ice_health_to_admins(body, event="ice health weekly digest")
     _last_weekly_digest_date = today
