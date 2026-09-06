@@ -1,13 +1,14 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** код R1–R3 на `release/ice-discovery` (не в master). Осталось: живые слоты МК в приложении, человеческий гейт G-R2 и R4 BY-egress.  
+**Статус:** IN PROGRESS на **только** `release/ice-discovery`. Карточка / таб / карта — первый проход MERGED; close-out TASK-074 / TASK-075.  
+**Git lock (владелец 2026-09-06):** релиз **не скоро**. Запрещено агентам: PR base `master`, merge train → `master`, «release cut». Конец TASK = merge в `release/ice-discovery`.  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
 
 **Для агентов — ENTRYPOINT (читать первым):** [`ICE-DISCOVERY-AGENT-START.md`](./ICE-DISCOVERY-AGENT-START.md)  
 → затем [`ICE-DISCOVERY-AGENT-GIT.md`](./ICE-DISCOVERY-AGENT-GIT.md) → при нескольких агентах [`ICE-DISCOVERY-AGENT-LANES.md`](./ICE-DISCOVERY-AGENT-LANES.md) → `.ai/tasks/TASK-NNN.md`.  
-Конец задачи = **merge в `release/ice-discovery`**, не ai-toolkit `/verify`.  
+Конец задачи = **merge в `release/ice-discovery`**, не ai-toolkit `/verify`, **не** `master`.  
 Toolkit: **ai-toolkit-max** (`/research` → `/plan` → `/estimate` → `/execute … supervised` → `/verify`).  
 **SDD / релизы:** [`docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md`](../docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md)  
 **R1 plan:** [`docs/plans/2026-09-04-epic3-r1-foundation.md`](../docs/plans/2026-09-04-epic3-r1-foundation.md)
@@ -125,6 +126,8 @@ A. ДАННЫЕ АРЕНЫ            B. ПРАВДА О МЕСТЕ          C. 
 | [TASK-064](tasks/TASK-064.md) | Перепись источников Минск | D | — | Реестр, потолок A |
 | [TASK-065](tasks/TASK-065.md) | Импорт источников в jobs (не автопоиск 150) | D | 048, 071 | Seed из спайка |
 | [TASK-066](tasks/TASK-066.md) | Калибровка точности на эталоне | D | 061 | Регресс адаптеров |
+| [TASK-074](tasks/TASK-074.md) | Карточка арены — close-out vs прототип | C | 052 | 360px, «идёт», сезон, плейсхолдер |
+| [TASK-075](tasks/TASK-075.md) | Таб «Лёд» + карта — close-out vs прототип | C | 053, 054 | список + Яндекс-карта таба |
 
 **Отложено / не V1 Минска:** TASK-059 полный bus наблюдений (provenance-поля на `ice_sessions` достаточно для детерминированных адаптеров; полный слой — если появится второй источник на одну арену). TASK-060 очередь LLM. OCR картинок (бывший 068) — только если DiaMond PNG разъедется с ручной транскрипцией.
 
@@ -265,3 +268,5 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-061_FOLLOW_UP_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/39 squash `d37e6d0` → `release/ice-discovery`. DiaMond 44/44, в том числе два интервала в одной ячейке.
 - **ICE_UI_PROTOTYPE_PASS** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/40 squash `f34e49a` → `release/ice-discovery`. Живая строка взр/дет/прокат; МК без «Записаться».
 - **TASK-063_PHOTOS_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/41 squash `77d4b17` → `release/ice-discovery`. Официальные фото досье в loader.
+- **NO_MASTER_LOCK** (2026-09-06) — владелец: релиз не скоро; вся работа на `release/ice-discovery`; агентам запрещён PR/merge в `master`.
+- **UI_CLOSEOUT** (2026-09-06) — TASK-074 карточка vs прототип; TASK-075 таб+карта vs прототип. 052/053/054 = первый проход, не закрытие.
