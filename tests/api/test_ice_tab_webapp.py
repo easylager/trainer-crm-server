@@ -13,9 +13,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_ice_tab_model_node_unit() -> None:
-    """AC-001/003/004 + epic-corrected skate filter + EDGE-001/002."""
+    """AC-001/003/004 + epic-corrected skate filter + EDGE-001/002 + TASK-076 coach lens."""
     proc = subprocess.run(
-        ["node", "--test", "tests/js/ice-tab-model.test.js"],
+        [
+            "node",
+            "--test",
+            "tests/js/ice-tab-model.test.js",
+            "tests/js/ice-tab-tokens.test.js",
+            "tests/js/ice-map-model.test.js",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -32,10 +38,13 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
         js = await client.get("/webapp/ice-tab.js")
         css = await client.get("/webapp/ice-tab.css")
         model = await client.get("/webapp/ice-tab-model.js")
+        map_js = await client.get("/webapp/ice-map.js")
+        map_model = await client.get("/webapp/ice-map-model.js")
         alias = await client.get("/webapp/ice.html")
     assert html.status_code == 200, html.text
     body = html.text
     assert "ice-tab.js" in body
+    assert "ice-map.js" in body
     assert "catalog-main.js" not in body
     assert "Покататься" in body
     assert "Тренеры" in body
@@ -44,15 +53,20 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert js.status_code == 200
     assert css.status_code == 200
     assert model.status_code == 200
+    assert map_js.status_code == 200
+    assert map_model.status_code == 200
     assert alias.status_code == 200
     page_js = js.text + model.text + body
     assert "/api/public/ice/arenas" in page_js
+    assert "/api/public/trainers" in page_js
     assert "intent=skate" in page_js or "intent: 'skate'" in page_js or 'intent: "skate"' in page_js
     assert "arena?ref=" in page_js
     assert "computeTier" not in page_js
     assert "data_tier" not in page_js
     assert "formatLiveLine" in model.text
     assert "formatEmptyList" in model.text
+    assert "#c2761a" not in css.text.lower()
+    assert ".ice-sec[hidden]" in css.text
 
 
 def test_shell_second_tab_is_ice() -> None:
@@ -65,7 +79,15 @@ def test_shell_second_tab_is_ice() -> None:
     assert "label: 'Ещё'" in shell
     assert "label: 'Тренеры', path: 'catalog?tab=catalog'" not in shell
     ice_tab = (REPO_ROOT / "static/webapp/ice-tab.js").read_text(encoding="utf-8")
-    assert "catalog?tab=catalog" in ice_tab
+    ice_model = (REPO_ROOT / "static/webapp/ice-tab-model.js").read_text(encoding="utf-8")
+    assert "class=\"ice-acard\" href=\"" in ice_tab
+    assert "params.get('view') === 'map'" in ice_tab
+    assert "action.type === 'catalog'" not in ice_tab
+    assert "type: 'list', intent: INTENTS.coach" in ice_model or 'type: "list", intent: INTENTS.coach' in ice_model
+    assert "catalog?tab=catalog" in ice_model
+    assert "trainer_id=" in ice_model
+    assert "buildMapListUrl" in ice_tab
+    assert "buildListUrl({ near: near, intent: 'coach', limit: 1 })" in ice_tab
 
 
 def test_old_catalog_deep_links_still_wired() -> None:

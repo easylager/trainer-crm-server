@@ -179,6 +179,69 @@ describe('bbox load on pan (AC-002)', () => {
     );
     assert.equal(moved.fetch, true);
   });
+
+  it('keeps city_id on bbox pan so a world-sized viewport cannot load other cities', () => {
+    const { bboxFetchPayload } = loadModel();
+    const payload = bboxFetchPayload({
+      bbox: '-85,-180,85,180',
+      intent: 'skate',
+      cityId: 2,
+      limit: 50,
+    });
+    assert.equal(payload.fetch, true);
+    assert.equal(payload.cityId, 2);
+  });
+
+  it('treats a world-sized bbox as invalid for a city map', () => {
+    const { bboxExceedsCity, boundsToBbox } = loadModel();
+    assert.equal(bboxExceedsCity('-85,-180,85,180'), true);
+    assert.equal(bboxExceedsCity(boundsToBbox([[53.8, 27.4], [54.0, 27.7]])), false);
+  });
+});
+
+describe('city camera (selected city, not the world)', () => {
+  it('fits Minsk rinks to a city box and never to a world restrict', () => {
+    const { cityCameraFromItems } = loadModel();
+    const cam = cityCameraFromItems([
+      rink({ id: 1, latitude: 53.859, longitude: 27.627 }),
+      rink({ id: 2, latitude: 53.908, longitude: 27.55 }),
+      rink({ id: 3, latitude: 53.938, longitude: 27.49 }),
+    ]);
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(cam.center[0] > 53.7 && cam.center[0] < 54.1);
+    assert.ok(cam.center[1] > 27.3 && cam.center[1] < 27.8);
+    assert.ok(maxLat - minLat < 1, 'city span, not a country');
+    assert.ok(maxLon - minLon < 1.5);
+    assert.ok(minLat > 50 && maxLat < 56);
+    assert.ok(cam.minZoom >= 8);
+    assert.ok(cam.minZoom <= 10, 'must zoom out far enough to see the whole city');
+    assert.ok(cam.maxZoom <= 16);
+    assert.ok(cam.zoom <= 11, 'initial zoom is city, not street');
+  });
+
+  it('opens on a Minsk-sized box so the whole city fits, not just the rink hull', () => {
+    const { cityCameraFromItems } = loadModel();
+    const cam = cityCameraFromItems([
+      rink({ id: 2, latitude: 53.9394, longitude: 27.4685 }),
+      rink({ id: 3, latitude: 53.9165, longitude: 27.5478 }),
+      rink({ id: 6, latitude: 53.859, longitude: 27.627 }),
+    ]);
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(maxLat - minLat >= 0.2, 'north-south must cover Minsk, not three pins');
+    assert.ok(maxLon - minLon >= 0.38, 'east-west must cover Minsk');
+    assert.ok(minLat <= 53.83 && maxLat >= 53.96);
+    assert.ok(minLon <= 27.4 && maxLon >= 27.7);
+    assert.ok(cam.minZoom <= 10);
+  });
+
+  it('widens a single-rink city so the camera is still a town, not a building', () => {
+    const { cityCameraFromItems } = loadModel();
+    const cam = cityCameraFromItems([rink({ latitude: 55.19, longitude: 30.2 })]);
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(maxLat - minLat >= 0.1);
+    assert.ok(maxLon - minLon >= 0.15);
+    assert.ok(cam.center[0] > 55 && cam.center[0] < 55.4);
+  });
 });
 
 describe('рядом со мной (AC-003 + EDGE-001/002)', () => {
@@ -230,7 +293,7 @@ describe('рядом со мной (AC-003 + EDGE-001/002)', () => {
 });
 
 describe('bbox payload on pan (TASK-075 AC-002)', () => {
-  it('sends bbox + intent and omits city_id so the pan is not a second city query', () => {
+  it('sends bbox + intent + city_id so a pan cannot load another city', () => {
     const { bboxFetchPayload } = loadModel();
     const payload = bboxFetchPayload({
       bbox: '53.8,27.4,54.0,27.7',
@@ -242,8 +305,7 @@ describe('bbox payload on pan (TASK-075 AC-002)', () => {
     assert.equal(payload.bbox, '53.8,27.4,54.0,27.7');
     assert.equal(payload.intent, 'skate');
     assert.equal(payload.limit, 50);
-    assert.equal(Object.prototype.hasOwnProperty.call(payload, 'cityId'), false);
-    assert.equal(Object.prototype.hasOwnProperty.call(payload, 'city_id'), false);
+    assert.equal(payload.cityId, 3);
   });
 });
 
@@ -255,6 +317,27 @@ describe('pin sheet target (TASK-075 AC-002)', () => {
     assert.equal(target.opens, 'arena-card');
     assert.equal(target.yandexOrgCard, false);
     assert.equal(pinSheetTarget(rink({ id: 12, slug: null })).href, 'arena?ref=12');
+  });
+});
+
+describe('coach lens map (TASK-076 AC-002 follow-up)', () => {
+  it('does not fetch ice arenas or keep leftover rink pins under coach', () => {
+    const { bboxFetchPayload, mapStartDecision } = loadModel();
+    const payload = bboxFetchPayload({
+      bbox: '53.8,27.4,54.0,27.7',
+      intent: 'coach',
+      limit: 50,
+    });
+    assert.equal(payload.fetch, false);
+    const leftover = mapStartDecision({
+      key: 'live-key',
+      intent: 'coach',
+      listItems: [rink()],
+    });
+    assert.equal(leftover.showMap, false);
+    assert.notEqual(leftover.kind, 'map');
+    assert.match(leftover.empty.title, /тренер/i);
+    assert.match(leftover.empty.body, /список/i);
   });
 });
 

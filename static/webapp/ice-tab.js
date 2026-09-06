@@ -1,6 +1,7 @@
 /**
- * TASK-053 Ice tab page. Data: GET /api/public/ice/arenas + /api/public/search.
- * Trainer catalog stays a one-tap chip → catalog?tab=catalog (not catalog-main.js).
+ * TASK-053 / TASK-076 Ice tab page.
+ * Skate/group: GET /api/public/ice/arenas. Coach: GET /api/public/trainers (city list).
+ * Trainer card tap deep-links to catalog?tab=catalog&trainer_id=… — chip itself stays on ice.html.
  */
 (function (global) {
   'use strict';
@@ -91,11 +92,26 @@
     if (listSec) listSec.hidden = state.view !== 'list';
     if (mapSec) mapSec.hidden = state.view !== 'map';
     if (hint) hint.hidden = state.view === 'map';
-    if (state.view === 'map') showMap();
+    if (state.view === 'map') {
+      showMap();
+      if (mapSec && typeof mapSec.scrollIntoView === 'function') {
+        mapSec.scrollIntoView({ block: 'start' });
+      }
+    }
   }
 
   function showMap() {
-    if (!global.IceMap) return;
+    if (!global.IceMap) {
+      var emptyEl = $('iceMapEmpty');
+      var stageEl = $('iceMapStage');
+      if (stageEl) stageEl.hidden = true;
+      if (emptyEl && global.IceMapModel) {
+        emptyEl.hidden = false;
+        emptyEl.innerHTML =
+          '<strong>Карта не загрузилась</strong><p>Обновите страницу. Файл карты не подключился.</p>';
+      }
+      return;
+    }
     if (!mapCtl) {
       mapCtl = global.IceMap.mount({
         canvas: $('iceMapCanvas'),
@@ -113,8 +129,8 @@
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
           if (extra.cityId != null && extra.cityId !== '') opts.cityId = extra.cityId;
-          else if (!extra.bbox && state.cityId) opts.cityId = state.cityId;
-          return M.buildListUrl(opts);
+          else if (state.cityId) opts.cityId = state.cityId;
+          return M.buildMapListUrl(opts);
         },
         fetchJson: fetchJson,
         getIntent: function () {
@@ -123,29 +139,115 @@
         getCityId: function () {
           return state.cityId;
         },
+        listReady: function () {
+          return !state.loading && !!state.cityId;
+        },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
           if (href) shellNav(href);
         },
         onNearList: function (data) {
+          if (state.intent === 'coach') return;
           applyArenaPayload(data);
           renderList();
         },
       });
     }
-    mapCtl.setListItems(state.items);
+    mapCtl.setListItems(state.intent === 'coach' ? [] : state.items);
     mapCtl.start().then(function () {
       mapCtl.resize();
     });
   }
 
+  function acardThumbStyle(src) {
+    if (!src) return '';
+    return ' style="background-image:url(\'' + esc(src).replace(/'/g, '%27') + '\')"';
+  }
+
+  function renderArenaCard(item) {
+    var tone = M.liveTone(item);
+    var tier = String(item.tier || 'C').toUpperCase();
+    var thumb = item.thumb;
+    var live = M.formatLiveLine(item);
+    var href = M.arenaHref(item);
+    var cta = M.listRowCta(item);
+    if (cta) live += ' · ' + cta;
+    return (
+      '<a class="ice-acard" href="' +
+      esc(href) +
+      '" data-href="' +
+      esc(href) +
+      '">' +
+      '<span class="ice-acard__ph' +
+      (thumb ? '' : ' ice-acard__ph--empty') +
+      '"' +
+      acardThumbStyle(thumb) +
+      '></span>' +
+      '<span class="ice-acard__body">' +
+      '<span class="ice-acard__name">' +
+      esc(item.name) +
+      '<span class="ice-tier ice-tier--' +
+      tone +
+      '">' +
+      esc(tier) +
+      '</span></span>' +
+      '<span class="ice-acard__meta">' +
+      esc(M.formatMeta(item)) +
+      '</span>' +
+      '<span class="ice-live ice-live--' +
+      tone +
+      '">' +
+      esc(live) +
+      '</span>' +
+      '</span></a>'
+    );
+  }
+
+  function renderTrainerCard(item) {
+    var view = M.trainerCardView(item);
+    return (
+      '<a class="ice-acard" href="' +
+      esc(view.href) +
+      '" data-href="' +
+      esc(view.href) +
+      '">' +
+      '<span class="ice-acard__ph' +
+      (view.thumb ? '' : ' ice-acard__ph--empty') +
+      '"' +
+      acardThumbStyle(view.thumb) +
+      '></span>' +
+      '<span class="ice-acard__body">' +
+      '<span class="ice-acard__name">' +
+      esc(view.name) +
+      '</span>' +
+      '<span class="ice-acard__meta">' +
+      esc(view.meta) +
+      '</span>' +
+      '<span class="ice-live ice-live--' +
+      esc(view.tone || 'a') +
+      '">' +
+      esc(view.live) +
+      '</span>' +
+      '</span></a>'
+    );
+  }
+
   function renderList() {
     var list = $('iceList');
     var cap = $('iceCaption');
-    if (cap) cap.textContent = M.formatSortCaption({ total: state.total, items: state.items });
+    if (cap) {
+      cap.textContent = M.formatSortCaption({
+        total: state.total,
+        items: state.items,
+        intent: state.intent,
+      });
+    }
     if (!list) return;
     if (state.loading && !state.items.length) {
-      list.innerHTML = '<div class="ice-state">Загрузка катков…</div>';
+      list.innerHTML =
+        '<div class="ice-state">' +
+        (state.intent === 'coach' ? 'Загрузка тренеров…' : 'Загрузка катков…') +
+        '</div>';
       return;
     }
     if (!state.items.length) {
@@ -160,43 +262,7 @@
     }
     list.innerHTML = state.items
       .map(function (item) {
-        var tone = M.liveTone(item);
-        var tier = String(item.tier || 'C').toUpperCase();
-        var thumb = item.thumb
-          ? ' style="background-image:url(\'' + esc(item.thumb).replace(/'/g, '%27') + '\')"'
-          : '';
-        var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
-        var live = M.formatLiveLine(item);
-        var href = M.arenaHref(item);
-        var cta = M.listRowCta(item);
-        if (cta) live += ' · ' + cta;
-        return (
-          '<button type="button" class="ice-acard" data-href="' +
-          esc(href) +
-          '">' +
-          '<span class="' +
-          phClass +
-          '"' +
-          thumb +
-          '></span>' +
-          '<span class="ice-acard__body">' +
-          '<span class="ice-acard__name">' +
-          esc(item.name) +
-          '<span class="ice-tier ice-tier--' +
-          tone +
-          '">' +
-          esc(tier) +
-          '</span></span>' +
-          '<span class="ice-acard__meta">' +
-          esc(M.formatMeta(item)) +
-          '</span>' +
-          '<span class="ice-live ice-live--' +
-          tone +
-          '">' +
-          esc(live) +
-          '</span>' +
-          '</span></button>'
-        );
+        return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
   }
@@ -209,6 +275,13 @@
     state.cursor = data && data.next_cursor;
   }
 
+  function applyTrainerPayload(data) {
+    var incoming = (data && data.items) || [];
+    state.items = incoming.slice();
+    state.total = data && data.total != null ? data.total : incoming.length;
+    state.cursor = data && data.next_cursor;
+  }
+
   function fetchJson(url, opts) {
     opts = opts || {};
     return fetch(url, {
@@ -217,6 +290,26 @@
     }).then(function (r) {
       return r.ok ? r.json() : null;
     });
+  }
+
+  function onListLoaded() {
+    renderList();
+    if (!mapCtl) return;
+    if (state.intent === 'coach') {
+      mapCtl.setListItems([]);
+      if (state.view === 'map') mapCtl.start();
+      return;
+    }
+    mapCtl.setListItems(state.items);
+    if (state.view === 'map') mapCtl.refresh();
+  }
+
+  function loadFailed() {
+    var list = $('iceList');
+    if (list) {
+      list.innerHTML =
+        '<div class="ice-empty"><b>Не удалось загрузить список</b><p>Попробуйте ещё раз.</p></div>';
+    }
   }
 
   function loadArenas() {
@@ -232,17 +325,36 @@
       .then(function (data) {
         state.loading = false;
         applyArenaPayload(data);
-        renderList();
-        if (mapCtl) {
-          mapCtl.setListItems(state.items);
-          if (state.view === 'map') mapCtl.refresh();
-        }
+        onListLoaded();
       })
       .catch(function () {
         state.loading = false;
-        var list = $('iceList');
-        if (list) list.innerHTML = '<div class="ice-empty"><b>Не удалось загрузить список</b><p>Попробуйте ещё раз.</p></div>';
+        loadFailed();
       });
+  }
+
+  function loadTrainers() {
+    if (!state.cityId) return Promise.resolve();
+    state.loading = true;
+    renderList();
+    var url = M.buildTrainersUrl({
+      cityId: state.cityId,
+      limit: 50,
+    });
+    return fetchJson(url)
+      .then(function (data) {
+        state.loading = false;
+        applyTrainerPayload(data);
+        onListLoaded();
+      })
+      .catch(function () {
+        state.loading = false;
+        loadFailed();
+      });
+  }
+
+  function loadList() {
+    return state.intent === 'coach' ? loadTrainers() : loadArenas();
   }
 
   function applyCity(city) {
@@ -259,7 +371,7 @@
         body: JSON.stringify({ city_id: city.id }),
       }).catch(function () {});
     }
-    loadArenas();
+    loadList();
   }
 
   function renderCityPicker(filter) {
@@ -383,7 +495,8 @@
   function onRootClick(ev) {
     var card = ev.target.closest('[data-href]');
     if (!card) return;
-    var href = card.getAttribute('data-href') || '';
+    var href = card.getAttribute('data-href') || card.getAttribute('href') || '';
+    if (card.tagName === 'A') ev.preventDefault();
     if (href.indexOf('city:') === 0) {
       applyCity({
         id: Number(card.getAttribute('data-city-id')),
@@ -405,15 +518,11 @@
       btn.addEventListener('click', function () {
         var intent = btn.getAttribute('data-intent');
         var action = M.intentChipAction(intent);
-        if (action.type === 'catalog') {
-          persist();
-          shellNav(action.href);
-          return;
-        }
+        if (action.type !== 'list') return;
         state.intent = action.intent;
         setChips();
         persist();
-        loadArenas();
+        loadList();
       });
     });
 
@@ -528,8 +637,12 @@
     setChips();
     setViewToggle();
     var saved = M.loadIceState(global.sessionStorage);
-    if (saved && saved.intent && saved.intent !== 'coach') state.intent = saved.intent;
+    if (saved && saved.intent) state.intent = saved.intent;
     if (saved && saved.view === 'map') state.view = 'map';
+    try {
+      var params = new URLSearchParams(global.location.search || '');
+      if (params.get('view') === 'map') state.view = 'map';
+    } catch (e) { /* */ }
     setChips();
     setViewToggle();
     resolveCity().then(function () {

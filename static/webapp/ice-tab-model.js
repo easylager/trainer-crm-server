@@ -43,10 +43,40 @@
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
+  function mapShowsArenas(intent) {
+    return intent !== INTENTS.coach;
+  }
+
+  function buildMapListUrl(opts) {
+    opts = opts || {};
+    if (!mapShowsArenas(opts.intent)) return '';
+    return buildListUrl(opts);
+  }
+
+  function formatCoachMapEmpty() {
+    return {
+      title: 'Тренеров на карте нет',
+      body: 'Смотрите список. Карта катков остаётся у чипов «Покататься» и «Группы».',
+    };
+  }
+
   function buildSearchUrl(q, limit) {
     var params = ['q=' + encodeURIComponent(String(q || '').trim())];
     if (limit) params.push('limit=' + encodeURIComponent(String(limit)));
     return '/api/public/search?' + params.join('&');
+  }
+
+  function buildTrainersUrl(opts) {
+    opts = opts || {};
+    var params = ['order_by=rating'];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    params.push('limit=' + encodeURIComponent(String(opts.limit || 50)));
+    if (opts.offset != null && opts.offset !== '') {
+      params.push('offset=' + encodeURIComponent(String(opts.offset)));
+    }
+    return '/api/public/trainers?' + params.join('&');
   }
 
   function catalogHref() {
@@ -98,12 +128,57 @@
 
   function intentChipAction(intent) {
     if (intent === INTENTS.coach) {
-      return { type: 'catalog', href: catalogHref() };
+      return { type: 'list', intent: INTENTS.coach };
     }
     if (intent === INTENTS.group) {
       return { type: 'list', intent: INTENTS.group };
     }
     return { type: 'list', intent: INTENTS.skate };
+  }
+
+  function trainerPhotoUrl(item) {
+    var photos = (item && item.photos) || [];
+    var ph = photos[0] || {};
+    if (ph.list_url) return ph.list_url;
+    if (ph.url) return ph.url;
+    var fk = ph.file_key_list || ph.file_key;
+    if (fk) return '/api/public/photos/' + encodeURIComponent(fk);
+    if (item && item.thumb) return item.thumb;
+    return '';
+  }
+
+  function trainerDisplayName(item) {
+    if (!item) return 'Тренер';
+    if (item.name) return String(item.name);
+    var p = item.profile || {};
+    var name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+    return name || 'Тренер';
+  }
+
+  function trainerCardView(item) {
+    item = item || {};
+    var p = item.profile || {};
+    var parts = [];
+    if (item.primary_arena_name) parts.push(String(item.primary_arena_name));
+    var rating = p.rating_avg;
+    var count = Number(p.rating_count) || 0;
+    if (rating != null && count > 0) {
+      parts.push('★ ' + Number(rating).toFixed(1));
+    }
+    var live = item.can_book ? 'Записаться' : 'Открыть профиль';
+    var slots = Number(item.free_slots_14d);
+    if (slots > 0) {
+      live += ' · ' + slots + ' ' + pluralRu(slots, 'слот', 'слота', 'слотов');
+    }
+    return {
+      kind: 'trainer',
+      name: trainerDisplayName(item),
+      href: trainerHref(item),
+      thumb: trainerPhotoUrl(item),
+      meta: parts.join(' · '),
+      live: live,
+      tone: 'a',
+    };
   }
 
   function trainersMovedHint() {
@@ -214,7 +289,13 @@
     if (intent === INTENTS.group) {
       return {
         title: 'Групп с набором нет',
-        body: 'Площадки появятся, когда откроется набор. Чип «Тренеры» — каталог как раньше.',
+        body: 'Площадки появятся, когда откроется набор. Чип «Тренеры» — список тренеров города.',
+      };
+    }
+    if (intent === INTENTS.coach) {
+      return {
+        title: 'В этом городе пока нет тренеров',
+        body: 'Смените город или вернитесь к чипу «Покататься».',
       };
     }
     return {
@@ -227,6 +308,11 @@
     opts = opts || {};
     var total = Number(opts.total);
     if (isNaN(total)) total = (opts.items || []).length;
+    if (opts.intent === INTENTS.coach) {
+      var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
+      if (total === 0) return 'Пока нет тренеров · смените город или чип';
+      return total + ' ' + coachWord;
+    }
     var word = pluralRu(total, 'каток', 'катка', 'катков');
     var items = opts.items || [];
     var hasA = items.some(function (it) {
@@ -296,12 +382,17 @@
     ICE_STATE_KEY: ICE_STATE_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
+    buildMapListUrl: buildMapListUrl,
+    mapShowsArenas: mapShowsArenas,
+    formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
+    buildTrainersUrl: buildTrainersUrl,
     catalogHref: catalogHref,
     mapHref: mapHref,
     trainerHref: trainerHref,
     arenaHref: arenaHref,
     intentChipAction: intentChipAction,
+    trainerCardView: trainerCardView,
     hasFutureSkateSlot: hasFutureSkateSlot,
     filterSkateLens: filterSkateLens,
     listRowCta: listRowCta,

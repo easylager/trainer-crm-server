@@ -7,7 +7,6 @@
 
   var MM = global.IceMapModel;
   var ymapsLoad = null;
-  var MINSK = [53.902496, 27.561481];
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -253,9 +252,33 @@
       clusterer.add(marks);
     }
 
+    function showCoachEmpty() {
+      listItems = [];
+      mapItems = [];
+      selected = null;
+      nearestMode = false;
+      bboxState = null;
+      if (clusterer) syncObjects();
+      paintSheet(null);
+      showStage(false);
+      if (offMapEl) {
+        offMapEl.hidden = true;
+        offMapEl.textContent = '';
+      }
+      renderEmpty(emptyEl, MM.coachMapEmptyState());
+    }
+
     function fetchViewport() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return;
+      }
       if (!map || !opts.listUrl) return;
       var bbox = MM.boundsToBbox(map.getBounds());
+      if (MM.bboxExceedsCity(bbox)) {
+        applyCityCamera();
+        return;
+      }
       var payload = MM.bboxFetchPayload({
         bbox: bbox,
         intent: getIntent(),
@@ -265,18 +288,39 @@
       if (!payload.fetch) return;
       var plan = MM.planBboxFetch(bboxState, payload.bbox);
       if (!plan.fetch) return;
+      var url = listUrl({
+        bbox: payload.bbox,
+        intent: payload.intent,
+        limit: payload.limit,
+        cityId: payload.cityId != null ? payload.cityId : getCityId(),
+      });
+      if (!url) return;
       bboxState = plan;
-      fetchJson(
-        listUrl({
-          bbox: payload.bbox,
-          intent: payload.intent,
-          limit: payload.limit,
-        })
-      ).then(function (data) {
+      fetchJson(url).then(function (data) {
         mapItems = applyIntentFilter((data && data.items) || []);
         syncObjects();
         defaultSheet();
       });
+    }
+
+    function applyCityCamera() {
+      if (!map) return;
+      var cam = MM.cityCameraFromItems(listItems);
+      ignoreBounds = true;
+      map.options.set('restrictMapArea', cam.restrict);
+      map.options.set('minZoom', cam.minZoom);
+      map.options.set('maxZoom', cam.maxZoom);
+      var done = function () {
+        global.setTimeout(function () {
+          ignoreBounds = false;
+        }, 120);
+      };
+      map.setBounds(cam.restrict, { checkZoomRange: true, zoomMargin: 72 }).then(function () {
+        var z = map.getZoom();
+        if (z < cam.minZoom) map.setZoom(cam.minZoom);
+        if (z > cam.maxZoom) map.setZoom(cam.maxZoom);
+        done();
+      }, done);
     }
 
     function onBoundsChange() {
@@ -286,32 +330,7 @@
     }
 
     function fitCity() {
-      if (!map) return;
-      var onMap = MM.splitMapAndList(listItems).onMap;
-      ignoreBounds = true;
-      var done = function () {
-        global.setTimeout(function () {
-          ignoreBounds = false;
-          fetchViewport();
-        }, 80);
-      };
-      if (onMap.length >= 2) {
-        var bounds = onMap.map(function (it) {
-          return [Number(it.latitude), Number(it.longitude)];
-        });
-        map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 48 }).then(function () {
-          if (map.getZoom() > 14) map.setZoom(14);
-          done();
-        }, done);
-        return;
-      }
-      if (onMap.length === 1) {
-        map.setCenter([Number(onMap[0].latitude), Number(onMap[0].longitude)], 13);
-        done();
-        return;
-      }
-      map.setCenter(MINSK, 12);
-      done();
+      applyCityCamera();
     }
 
     function buildLayouts() {
@@ -328,17 +347,21 @@
     function createMap() {
       if (map || !canvas) return;
       buildLayouts();
+      var cam = MM.cityCameraFromItems(listItems);
       map = new ymaps.Map(
         canvas,
         {
-          center: MINSK,
-          zoom: 12,
+          center: cam.center,
+          zoom: cam.zoom,
           controls: ['zoomControl'],
         },
         {
           yandexMapDisablePoiInteractivity: true,
           suppressMapOpenBlock: true,
           suppressObsoleteBrowserNotifier: true,
+          restrictMapArea: cam.restrict,
+          minZoom: cam.minZoom,
+          maxZoom: cam.maxZoom,
         }
       );
       if (map.controls && map.controls.get('zoomControl')) {
@@ -367,11 +390,17 @@
     }
 
     function start() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return Promise.resolve();
+      }
       if (missingKey) {
         showMissing();
         return Promise.resolve();
       }
       if (map) {
+        hideEmpty(emptyEl);
+        showStage(true);
         map.container.fitToViewport();
         fetchViewport();
         return Promise.resolve();
@@ -387,13 +416,24 @@
           }
           keyResolved = resolved;
           started = true;
-          var decision = MM.mapStartDecision({ key: resolved, listItems: listItems });
+          var decision = MM.mapStartDecision({
+            key: resolved,
+            listItems: listItems,
+            intent: getIntent(),
+          });
           if (decision.kind === 'missing-key') {
             missingKey = true;
             showMissing();
             return;
           }
+          if (decision.kind === 'coach') {
+            showCoachEmpty();
+            return;
+          }
           if (decision.kind === 'no-arenas') {
+            if (typeof opts.listReady === 'function' && !opts.listReady()) {
+              return;
+            }
             showStage(false);
             renderEmpty(emptyEl, decision.empty);
             if (sheetEl) sheetEl.innerHTML = '';
@@ -404,6 +444,9 @@
             hideEmpty(emptyEl);
             showStage(true);
             createMap();
+            if (map && map.container && typeof map.container.fitToViewport === 'function') {
+              map.container.fitToViewport();
+            }
             mapItems = MM.splitMapAndList(listItems).onMap.slice();
             syncObjects();
             fitCity();
@@ -415,6 +458,7 @@
     }
 
     function onNearClick() {
+      if (getIntent() === 'coach') return;
       if (!nearMePolicyOk()) return;
       if (!navigator.geolocation) {
         paintGeoDenied();
@@ -515,17 +559,29 @@
       setListItems: function (items) {
         listItems = items || [];
         setOffMapNote();
-        if (map && !mapItems.length) {
-          mapItems = MM.splitMapAndList(listItems).onMap.slice();
-          syncObjects();
+        if (map) {
+          if (!listItems.length) {
+            mapItems = [];
+            selected = null;
+            syncObjects();
+            paintSheet(null);
+          } else if (!mapItems.length) {
+            mapItems = MM.splitMapAndList(listItems).onMap.slice();
+            syncObjects();
+          }
+          applyCityCamera();
         }
-        if (!map && started && !missingKey && listItems.length) {
+        if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
           start();
         }
       },
       refresh: function () {
         bboxState = null;
-        if (map) fetchViewport();
+        if (getIntent() === 'coach') {
+          start();
+          return;
+        }
+        if (map) applyCityCamera();
         else if (started) start();
       },
       resize: function () {

@@ -60,6 +60,8 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert js.status_code == 200
     assert css.status_code == 200
     assert "arena-row--lesson" in css.text
+    assert "#c2761a" not in css.text.lower()
+    assert "--app-cta-fill" in css.text
     assert model.status_code == 200
     assert alias.status_code == 200
     shell = (REPO_ROOT / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
