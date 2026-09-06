@@ -1,5 +1,5 @@
 ---
-task_id: TASK-082
+task_id: TASK-083
 title: BY-egress VPS для ledlife/junost — провижининг и подключение к скедулеру
 status: READY
 phase: plan
@@ -60,3 +60,4 @@ Verification: unit-тест на fallback-ветку
 
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — координатор: follow-up из PDEC-004 (`.ai/decisions.md`, PR #53) после подтверждения владельцем «свой VPS в Беларуси». Инфраструктура ещё не поднята — задача READY, не в работе.
+- **RENUMBERED** (2026-09-06) — TASK-082 → TASK-083: номер TASK-082 занят параллельным PR #56 («Ice map loader and hide empty Группы chip»), коллизия обнаружена координатором до мержа.
