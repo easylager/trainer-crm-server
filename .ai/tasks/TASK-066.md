@@ -8,6 +8,7 @@ depends_on: [TASK-061]
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
+pr_url: https://github.com/easylager/trainer-crm-server/pull/37
 ---
 
 # Task
@@ -79,4 +80,4 @@ Sessions with `"ambiguous": true` / `"exclude_from_scoring": true` are kept in g
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3
 - **CANONICAL** (2026-09-05) — сверка в формате ice_sessions; эталон = пилот Минска, не 20–30 любых; без LLM-промпта
-- **IN_PROGRESS** (2026-09-06) — gold set 7 Minsk MK fixtures; calibration runner + CI floors; TASK-062 hook `metrics_for_digest` / `python -m src.ingestion.calibration --check`. Did not merge. Did not rewrite diamond adapter (7 MK cells in `<div>` missed — TASK-061 follow-up). Led.by gold dropped 9 OXM times; one-line `руб.*;` → `руб\.;` price regex.
+- **IN_PROGRESS** (2026-09-06) — PR https://github.com/easylager/trainer-crm-server/pull/37 against `release/ice-discovery`. Gold 7 Minsk MK fixtures; runner + CI floors; TASK-062 hook `metrics_for_digest`. Not merged. DiaMond 7 missed `<div>` MK cells left as TASK-061 follow-up.
