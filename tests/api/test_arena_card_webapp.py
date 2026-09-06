@@ -1,6 +1,7 @@
 """TASK-052: arena card Mini App — page serve, model AC, booking preselects this arena."""
 from __future__ import annotations
 
+import re
 import subprocess
 import uuid
 from datetime import date, time, timedelta
@@ -47,6 +48,12 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
         alias = await client.get("/webapp/arena.html")
     assert html.status_code == 200, html.text
     body = html.text
+    root = re.search(r"<div[^>]*id=\"arenaRoot\"[^>]*>", body)
+    assert root, body
+    tag = root.group(0)
+    # mini-app-components.css hides [data-screen] unless .active — that blanks the card body.
+    if "data-screen" in tag:
+        assert re.search(r'\bactive\b', tag), tag
     assert "arena-card.js" in body
     page_js = js.text + model.text + body
     assert "Лента льда" in page_js
