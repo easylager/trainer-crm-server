@@ -149,6 +149,40 @@ describe('buildRibbonForDay', () => {
     assert.ok(rows[0].time < rows[1].time);
   });
 
+  it('never puts Записаться on public_skate or open_ice, even with external_url', () => {
+    const { buildRibbonForDay } = loadModel();
+    ['public_skate', 'open_ice'].forEach((kind) => {
+      const rows = buildRibbonForDay({
+        localDate: '2026-09-06',
+        sessions: [
+          {
+            id: 3,
+            kind,
+            starts_at_local: '11:00',
+            starts_at_utc: '2026-09-06T08:00:00+00:00',
+            ends_at_utc: '2026-09-06T09:00:00+00:00',
+            price_adult_minor: 1200,
+            price_child_minor: 800,
+            price_rental_minor: 600,
+            currency_code: 'BYN',
+            external_url: 'https://rink.example/tickets',
+            can_book: true,
+          },
+        ],
+        groups: [],
+        weekday: 0,
+        now: new Date('2026-09-06T06:00:00Z'),
+      });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].nature, 'ice');
+      assert.equal(rows[0].bookable, false);
+      assert.equal(rows[0].ctaKind, 'ghost');
+      assert.notEqual(rows[0].cta, 'Записаться');
+      assert.ok(!/запис/i.test(rows[0].cta));
+      assert.equal(rows[0].href, 'https://rink.example/tickets');
+    });
+  });
+
   it('labels a live ice session as идёт', () => {
     const { buildRibbonForDay } = loadModel();
     const rows = buildRibbonForDay({
@@ -206,6 +240,26 @@ describe('heroPhotoUrl', () => {
       }),
       '/h.jpg'
     );
+  });
+});
+
+describe('iceRowCta', () => {
+  it('is informational Билет на месте; external_url is a link, never booking', () => {
+    const { iceRowCta } = loadModel();
+    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), {
+      cta: 'Билет на месте',
+      ctaKind: 'ghost',
+      href: null,
+      bookable: false,
+    });
+    const linked = iceRowCta({
+      kind: 'open_ice',
+      external_url: 'https://chizhovka.example',
+    });
+    assert.equal(linked.cta, 'Билет на месте');
+    assert.equal(linked.ctaKind, 'ghost');
+    assert.equal(linked.bookable, false);
+    assert.equal(linked.href, 'https://chizhovka.example');
   });
 });
 

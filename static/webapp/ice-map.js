@@ -70,6 +70,9 @@
   }
 
   function liveText(item) {
+    if (global.IceTabModel && typeof global.IceTabModel.formatLiveLine === 'function') {
+      return global.IceTabModel.formatLiveLine(item);
+    }
     return (item && item.live && item.live.text) || (item && item.live_line) || '';
   }
 
@@ -93,6 +96,14 @@
       ? ' style="background-image:url(\'' + esc(item.thumb).replace(/'/g, '%27') + '\')"'
       : '';
     var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
+    var live = liveText(item);
+    var liveHtml = live
+      ? '<span class="ice-live ice-live--' +
+        tone +
+        '"><i class="ice-live__dot"></i>' +
+        esc(live) +
+        '</span>'
+      : '';
     return (
       '<button type="button" class="ice-acard ice-acard--sheet" data-href="' +
       esc(href || '') +
@@ -108,11 +119,9 @@
       esc(tier) +
       '</span></span><span class="ice-acard__meta">' +
       esc(meta) +
-      '</span><span class="ice-live ice-live--' +
-      tone +
-      '">' +
-      esc(liveText(item)) +
-      '</span></span></button>'
+      '</span>' +
+      liveHtml +
+      '</span></button>'
     );
   }
 

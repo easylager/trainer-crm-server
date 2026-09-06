@@ -147,8 +147,18 @@
     var cls = 'arena-row' + (row.nature === 'lesson' ? ' arena-row--lesson' : '') +
       (row.empty ? ' arena-row--empty' : '');
     var ctaCls = 'arena-cta arena-cta--' + (row.ctaKind || 'ghost');
-    var tag = row.nature === 'lesson' || row.openDay ? 'button' : 'div';
-    var extra = tag === 'button' ? ' type="button"' : '';
+    var tag = 'div';
+    var extra = '';
+    if (row.nature === 'lesson' || row.openDay) {
+      tag = 'button';
+      extra = ' type="button"';
+    } else if (row.nature === 'ice' && row.href && !row.empty) {
+      tag = 'a';
+      extra =
+        ' href="' +
+        esc(row.href) +
+        '" target="_blank" rel="noopener noreferrer"';
+    }
     if (row.nature === 'lesson' && row.group) {
       extra += ' data-action="group" data-trainer="' + esc(row.trainerId) + '" data-group="' + esc(row.group.id) + '"';
     }

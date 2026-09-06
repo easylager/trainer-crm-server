@@ -87,8 +87,10 @@
     });
     var listSec = $('iceListSec');
     var mapSec = $('iceMapSec');
+    var hint = $('iceTrainersHint');
     if (listSec) listSec.hidden = state.view !== 'list';
     if (mapSec) mapSec.hidden = state.view !== 'map';
+    if (hint) hint.hidden = state.view === 'map';
     if (state.view === 'map') showMap();
   }
 
@@ -148,15 +150,12 @@
       return;
     }
     if (!state.items.length) {
-      var emptyTitle =
-        state.intent === 'skate'
-          ? 'Сейчас нет массового катания'
-          : 'В этом городе пока нет катков';
+      var empty = M.formatEmptyList(state.intent);
       list.innerHTML =
         '<div class="ice-empty"><b>' +
-        esc(emptyTitle) +
+        esc(empty.title) +
         '</b><p>' +
-        esc(M.trainersMovedHint()) +
+        esc(empty.body) +
         '</p></div>';
       return;
     }
@@ -168,7 +167,7 @@
           ? ' style="background-image:url(\'' + esc(item.thumb).replace(/'/g, '%27') + '\')"'
           : '';
         var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
-        var live = (item.live && item.live.text) || item.live_line || '';
+        var live = M.formatLiveLine(item);
         var href = M.arenaHref(item);
         return (
           '<button type="button" class="ice-acard" data-href="' +

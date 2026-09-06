@@ -105,6 +105,95 @@
     return 'c';
   }
 
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n);
+  }
+
+  function isoDayUtc(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  function addDaysIso(iso, days) {
+    var bits = String(iso).split('-');
+    if (bits.length < 3) return iso;
+    var dt = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]) + days));
+    return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
+  }
+
+  function formatMinorAmount(minor) {
+    if (minor == null || minor === '' || isNaN(Number(minor))) return '';
+    var major = Number(minor) / 100;
+    return Number.isInteger(major) ? String(major) : major.toFixed(2).replace(/\.00$/, '');
+  }
+
+  function formatThreePrices(live) {
+    live = live || {};
+    var parts = [];
+    var adult = formatMinorAmount(live.price_adult_minor);
+    var child = formatMinorAmount(live.price_child_minor);
+    var rental = formatMinorAmount(live.price_rental_minor);
+    if (adult) parts.push('взр. ' + adult);
+    if (child) parts.push('дет. ' + child);
+    if (rental) parts.push('прокат +' + rental);
+    return parts.join(' · ');
+  }
+
+  function sessionWhenLabel(live, now) {
+    live = live || {};
+    var time = String(live.starts_at_local || '').slice(0, 5);
+    var localDate = String(live.local_date || '').slice(0, 10);
+    var today = isoDayUtc(now instanceof Date ? now : new Date());
+    var day = '';
+    if (localDate && localDate === today) day = 'Сегодня';
+    else if (localDate && localDate === addDaysIso(today, 1)) day = 'Завтра';
+    else if (localDate) day = localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+    return [day, time].filter(Boolean).join(' ');
+  }
+
+  function formatLiveLine(item, now) {
+    item = item || {};
+    var live = item.live || {};
+    var kind = String(live.kind || '');
+    if (kind === 'trainers' || kind === 'groups') {
+      return String(live.text || '').trim();
+    }
+    if (kind === 'session') {
+      var parts = [];
+      var when = sessionWhenLabel(live, now);
+      var prices = formatThreePrices(live);
+      var more = Number(live.more_count);
+      if (when) parts.push(when);
+      if (prices) parts.push(prices);
+      if (more > 0) {
+        parts.push('ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов'));
+      }
+      return parts.join(' · ');
+    }
+    var tier = String(item.tier || '').toUpperCase();
+    if (tier === 'C') return 'Есть в справочнике · данных пока нет';
+    if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
+    return String(live.text || item.live_line || 'Расписание уточняется').trim();
+  }
+
+  function formatEmptyList(intent) {
+    if (intent === INTENTS.skate) {
+      return {
+        title: 'Сейчас нет массового катания',
+        body: 'В этом городе нет будущих сеансов. Смените город или откройте чип «Тренеры».',
+      };
+    }
+    if (intent === INTENTS.group) {
+      return {
+        title: 'Групп с набором нет',
+        body: 'Площадки появятся, когда откроется набор. Чип «Тренеры» — каталог как раньше.',
+      };
+    }
+    return {
+      title: 'В этом городе пока нет катков',
+      body: 'Смените город или откройте чип «Тренеры».',
+    };
+  }
+
   function formatSortCaption(opts) {
     opts = opts || {};
     var total = Number(opts.total);
@@ -188,6 +277,9 @@
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,
     liveTone: liveTone,
+    formatThreePrices: formatThreePrices,
+    formatLiveLine: formatLiveLine,
+    formatEmptyList: formatEmptyList,
     formatSortCaption: formatSortCaption,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,

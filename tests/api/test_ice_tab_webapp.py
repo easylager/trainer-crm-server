@@ -51,6 +51,8 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "arena?ref=" in page_js
     assert "computeTier" not in page_js
     assert "data_tier" not in page_js
+    assert "formatLiveLine" in model.text
+    assert "formatEmptyList" in model.text
 
 
 def test_shell_second_tab_is_ice() -> None:

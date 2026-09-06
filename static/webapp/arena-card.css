@@ -198,6 +198,11 @@ body.ar-pilot--arena .client-app-header {
   color: inherit;
 }
 
+a.arena-row {
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .arena-row--lesson {
   border-left-color: var(--app-cta-fill, #c2761a);
 }
