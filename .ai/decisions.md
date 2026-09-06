@@ -54,3 +54,4 @@ Alternatives:
 Trade-off: Кто-то должен один раз поднять и потом изредка поддерживать VPS (patching, аптайм) — небольшой, но постоянный ops-хвост.
 Status: ACCEPTED
 Accepted: 2026-09-06 — свой VPS в Беларуси (hoster.by / A1 Cloud) + туннель к образу. Follow-up: завести отдельную TASK на провижининг перед включением `ledlife`/`junost` jobs.
+Correction (2026-09-06): фактически в `ice_parser_jobs` сегодня заблокирован только `ledlife` — `junost` описан в реестре, но ещё не засеян как job (TASK-065 lane). Рекомендация не меняется (VPS всё равно понадобится для `ledlife` сейчас и для `junost` позже), см. TASK-083.md.

@@ -39,12 +39,12 @@ updated_at: 2026-09-06
 ## Acceptance Criteria
 
 ### AC-001
-VPS в Беларуси поднят и туннель до `notification_service` работает; исходящий IP воркера для этих двух job подтверждён как BY (напр. через Globalping или запрос к сервису geo-IP с самого туннеля).
+VPS в Беларуси поднят и туннель до `notification_service` работает; исходящий IP воркера подтверждён как BY (напр. через Globalping или запрос к сервису geo-IP с самого туннеля).
 Status: OPEN
 Verification: ручная проверка + запись IP/провайдера в Execution History (без секретов в git)
 
 ### AC-002
-`ledlife` и `junost` jobs дают `ok`/`empty` прогон (не `blocked`/`error` из-за geo) минимум один раз на реальном сайте.
+`ledlife` job даёт `ok`/`empty` прогон (не `blocked`/`error` из-за geo) минимум один раз на реальном сайте. `junost` — тот же критерий, но только после того, как `junost_weekend_grid_v1` будет засеян в `ice_parser_jobs` (TASK-065 lane); до тех пор эта задача покрывает только `ledlife`.
 Status: OPEN
 Verification: запись в `ice_scrape_runs`, скрин/лог прогона
 
@@ -59,10 +59,11 @@ Verification: `tests/ingestion/test_scheduler.py::test_requires_by_egress_job_st
 - Источник флага в проде: `Settings.by_egress_proxy_url` (`src/shared/config.py`, env `BY_EGRESS_PROXY_URL`) → `src/ingestion/loop.py` передаёт `by_egress_configured=bool(get_settings().by_egress_proxy_url)` при создании планировщика внутри `notification_service`. Пусто/не задано → прежнее поведение (безопасный дефолт).
 - `.env.example` получил закомментированный плейсхолдер `BY_EGRESS_PROXY_URL` с пояснением — без реального значения.
 - Секреты (VPS-доступ, ключи туннеля) — только в реальном `.env`/секрет-хранилище, никогда в `.env.example` или в git.
-- Реестр парсеров: `.ai/data/minsk-parser-registry.yaml` (уже фиксирует, что оба сайта отдают BY-geo-block, спуфинг X-Forwarded-For не помог; `ledlife` = arena_id 5, `junost` = arena_id 8).
+- Реестр парсеров: `.ai/data/minsk-parser-registry.yaml` фиксирует BY-geo-block на обоих сайтах (спуфинг X-Forwarded-For не помог) — **но в `ice_parser_jobs` сегодня реально существует и заблокирован только `ledlife_origin_html_v1`** (arena_id 4, «Манеж»; проверено координатором 2026-09-06 напрямую в БД). `junost_weekend_grid_v1` описан в реестре, но ещё не засеян как job (TASK-065 lane) — эта задача снимает BY-egress-блокировку для `ledlife` сейчас; для `junost` то же самое понадобится **после** его сидинга в `ice_parser_jobs`, отдельным шагом, не одновременно. (Ранее здесь ошибочно стояло `ledlife` = arena_id 5 — это на самом деле `ledby_html_v1`/led.by, другой, уже включённый и здоровый сайт.)
 - **Мастер-скрипт для AC-001 (человеческие шаги):** `scripts/provision-by-egress-vps.sh` — интерактивный wizard, проводит владельца через выбор/оплату VPS (hoster.by / A1 Cloud), генерацию WireGuard-туннеля (или SSH `-D` фолбэк), проверку исходящего IP через ipinfo.io (сырой ответ печатается для ручной проверки — скрипт не доверяет себе на слово), запись `BY_EGRESS_PROXY_URL` в локальный `.env` и подсказку по включению `is_enabled` для job ledlife/junost. Не запускался целиком (блокируется на человеческом вводе/платном хостинге) — проверен `bash -n` и статической трассировкой.
 
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — координатор: follow-up из PDEC-004 (`.ai/decisions.md`, PR #53) после подтверждения владельцем «свой VPS в Беларуси». Инфраструктура ещё не поднята — задача READY, не в работе.
 - **RENUMBERED** (2026-09-06) — TASK-082 → TASK-083: номер TASK-082 занят параллельным PR #56 («Ice map loader and hide empty Группы chip»), коллизия обнаружена координатором до мержа.
 - **AC-003_VERIFIED** (2026-09-06) — конфигурационный fallback в `scheduler.py`/`config.py`/`loop.py` + два unit-теста; `scripts/provision-by-egress-vps.sh` создан для AC-001. AC-001/AC-002 остаются OPEN — требуют реального VPS и оплаты владельцем, агент их выполнить не может. `status` → `IN_PROGRESS` (не `MERGED`): инфраструктурная часть не сделана.
+- **PREMISE_CORRECTED** (2026-09-06) — G-R2 hardening pass поймал две фактические ошибки: (1) `ledlife` = arena_id 4 «Манеж», не 5 (5 — это `ledby_html_v1`/led.by, отдельный уже включённый и здоровый сайт); (2) `junost_weekend_grid_v1` есть только в `.ai/data/minsk-parser-registry.yaml`, в `ice_parser_jobs` его нет — сегодня заблокирован только `ledlife`. AC-002 и Technical Notes поправлены.
