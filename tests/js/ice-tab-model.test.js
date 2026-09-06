@@ -50,11 +50,13 @@ describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
   });
 });
 
-describe('trainer catalog chip (AC-001 / AC-006)', () => {
-  it('Тренеры chip is one tap into the existing catalog, not a new funnel', () => {
+describe('trainer catalog chip (TASK-076 AC-002)', () => {
+  it('Тренеры chip stays on ice.html as a list lens, not catalog navigate', () => {
     const { catalogHref, intentChipAction } = loadModel();
     assert.equal(catalogHref(), 'catalog?tab=catalog');
-    assert.deepEqual(intentChipAction('coach'), { type: 'catalog', href: 'catalog?tab=catalog' });
+    assert.deepEqual(intentChipAction('coach'), { type: 'list', intent: 'coach' });
+    assert.notEqual(intentChipAction('coach').type, 'catalog');
+    assert.equal(intentChipAction('coach').href, undefined);
     assert.deepEqual(intentChipAction('skate'), { type: 'list', intent: 'skate' });
     assert.deepEqual(intentChipAction('group'), { type: 'list', intent: 'group' });
   });
@@ -172,6 +174,14 @@ describe('formatEmptyList', () => {
     assert.ok(!empty.body.includes(trainersMovedHint()));
     assert.match(empty.body, /город|Тренер/i);
   });
+
+  it('coach empty stays in Ice chrome and does not send the user to catalog.html', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('coach');
+    assert.match(empty.title, /тренер/i);
+    assert.ok(!/catalog\.html/i.test(empty.title + empty.body));
+    assert.ok(!/воронк/i.test(empty.body));
+  });
 });
 
 describe('groupSearchResults (AC-004)', () => {
@@ -218,6 +228,16 @@ describe('hrefs', () => {
   it('trainer search hits reuse the old catalog deep link', () => {
     const { trainerHref } = loadModel();
     assert.equal(trainerHref({ id: 77 }), 'catalog?tab=catalog&trainer_id=77');
+  });
+
+  it('coach list reuses GET /api/public/trainers for the city, not a booking API', () => {
+    const { buildTrainersUrl } = loadModel();
+    const url = buildTrainersUrl({ cityId: 3, limit: 50 });
+    assert.match(url, /\/api\/public\/trainers/);
+    assert.match(url, /city_id=3/);
+    assert.match(url, /limit=50/);
+    assert.ok(!url.includes('/book'));
+    assert.ok(!url.includes('/api/webapp'));
   });
 
   it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {
@@ -276,6 +296,66 @@ describe('skate lens filter (TASK-075 AC-001)', () => {
     assert.equal(listRowCta({ live: { kind: 'session' } }), null);
     assert.equal(listRowCta({ live: { kind: 'public_skate' } }), null);
     assert.equal(listRowCta({ live: { kind: 'open_ice' } }), null);
+  });
+
+  it('Покататься still hides arenas without a future public_skate|open_ice slot', () => {
+    const { filterSkateLens } = loadModel();
+    const kept = filterSkateLens(
+      [
+        { id: 1, live: { kind: 'session' } },
+        { id: 2, live: { kind: 'trainers' } },
+        { id: 3, live: { kind: 'unknown' } },
+      ],
+      'skate'
+    );
+    assert.deepEqual(
+      kept.map((it) => it.id),
+      [1]
+    );
+  });
+});
+
+describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
+  const trainer = {
+    id: 77,
+    profile: {
+      first_name: 'Мария',
+      last_name: 'Иванова',
+      rating_avg: 4.8,
+      rating_count: 12,
+    },
+    photos: [{ list_url: '/api/public/photos/t.jpg', url: '/full.jpg' }],
+    primary_arena_name: 'Чижовка',
+    can_book: true,
+    free_slots_14d: 5,
+  };
+
+  it('maps public trainer payload into ice-acard fields and the existing profile deep-link', () => {
+    const { trainerCardView } = loadModel();
+    const view = trainerCardView(trainer);
+    assert.equal(view.name, 'Мария Иванова');
+    assert.equal(view.href, 'catalog?tab=catalog&trainer_id=77');
+    assert.equal(view.thumb, '/api/public/photos/t.jpg');
+    assert.match(view.meta, /Чижовка/);
+    assert.ok(!view.href.includes('ice.html'));
+    assert.equal(view.kind, 'trainer');
+  });
+
+  it('coach caption counts trainers, not rinks', () => {
+    const { formatSortCaption } = loadModel();
+    const text = formatSortCaption({
+      total: 2,
+      intent: 'coach',
+      items: [{ id: 1 }, { id: 2 }],
+    });
+    assert.match(text, /2/);
+    assert.match(text, /тренер/);
+    assert.ok(!/каток/.test(text));
+  });
+
+  it('does not put a booking CTA on MK rows even when rendering a mixed list', () => {
+    const { listRowCta } = loadModel();
+    assert.equal(listRowCta({ live: { kind: 'session' }, can_book: true }), null);
   });
 });
 

@@ -46,7 +46,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-cityrow__change {
   font-size: 13px;
   font-weight: 600;
-  color: #c2761a;
+  color: var(--glide-ink-teal, #0b6e70);
   background: none;
   border: 0;
   padding: 0;
@@ -113,9 +113,9 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: #c2761a;
-  border-color: #c2761a;
-  color: #fff;
+  background: var(--app-cta-fill, #45B9BB);
+  border-color: var(--app-cta-fill, #45B9BB);
+  color: var(--app-cta-text, #04262a);
 }
 
 .ice-hint {
@@ -253,8 +253,8 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-tier--a {
-  background: rgba(194, 118, 26, 0.16);
-  color: #c2761a;
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--glide-ink-teal, #0b6e70);
 }
 
 .ice-tier--b {
@@ -482,7 +482,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-ypin--a .ice-ypin__dot {
-  background: #c2761a;
+  background: var(--app-cta-fill, #45B9BB);
 }
 
 .ice-ypin--c .ice-ypin__dot {

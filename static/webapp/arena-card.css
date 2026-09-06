@@ -215,7 +215,7 @@ a.arena-row {
 }
 
 .arena-row--lesson {
-  border-left-color: var(--app-cta-fill, #c2761a);
+  border-left-color: var(--app-cta-fill, #45B9BB);
 }
 
 .arena-row--empty {
