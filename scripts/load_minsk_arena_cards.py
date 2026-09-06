@@ -534,10 +534,26 @@ def discover_dossiers(cards_dir: Path) -> list[Path]:
     paths = []
     for path in sorted(cards_dir.glob("minsk-*.md")):
         name = path.name.lower()
-        if "load-report" in name or name == "readme.md":
+        if "load-report" in name or "stand-report" in name or name == "readme.md":
             continue
         paths.append(path)
     return paths
+
+
+def parse_only_arena_ids(raw: str | None) -> frozenset[int] | None:
+    """Comma-separated arena_ids for a local apply subset. None = all dossiers."""
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text:
+        return frozenset()
+    out: set[int] = set()
+    for chunk in text.split(","):
+        piece = chunk.strip()
+        if not piece:
+            continue
+        out.add(int(piece))
+    return frozenset(out)
 
 
 def fixture_expected_path(slug: str, fixtures_dir: Path) -> Path | None:
@@ -1072,6 +1088,7 @@ async def run_load(
     seed_sessions: bool,
     report_path: Path | None,
     allow_local_dev: bool = False,
+    only_arena_ids: frozenset[int] | None = None,
 ) -> list[ArenaLoadResult]:
     started = time.perf_counter()
     dossiers = discover_dossiers(cards_dir)
@@ -1081,6 +1098,13 @@ async def run_load(
     missing_ids = [c.arena_id for c in cards if c.arena_id not in TARGET_ARENA_IDS]
     if missing_ids:
         raise SystemExit(f"unexpected arena_id values (refusing to invent/remap): {missing_ids}")
+    if only_arena_ids is not None:
+        unknown = sorted(only_arena_ids - set(TARGET_ARENA_IDS))
+        if unknown:
+            raise SystemExit(f"unknown --only-arena-ids (not in TARGET_ARENA_IDS): {unknown}")
+        cards = [c for c in cards if c.arena_id in only_arena_ids]
+        if not cards:
+            raise SystemExit("no dossiers left after --only-arena-ids filter")
 
     results: list[ArenaLoadResult] = []
     if apply:
@@ -1163,6 +1187,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow --apply against local database name trainer_crm (still refuses cloud/prod hosts).",
     )
+    parser.add_argument(
+        "--only-arena-ids",
+        default=None,
+        help="Comma-separated arena_ids to load (skip others). Local DB may not match prod CSV ids.",
+    )
     return parser
 
 
@@ -1180,6 +1209,7 @@ def main(argv: list[str] | None = None) -> int:
             seed_sessions=not args.no_seed_sessions,
             report_path=report_path,
             allow_local_dev=args.allow_local_dev_db,
+            only_arena_ids=parse_only_arena_ids(args.only_arena_ids),
         )
     )
     return 0
