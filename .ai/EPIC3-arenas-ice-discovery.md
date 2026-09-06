@@ -1,7 +1,7 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** IN PROGRESS на **только** `release/ice-discovery`. Карточка / таб / карта — первый проход MERGED; close-out TASK-074 / TASK-075.  
+**Статус:** IN PROGRESS на **только** `release/ice-discovery`. UI close-out 074/075 на train; дальше — ручной просмотр Mini App и живые слоты.  
 **Git lock (владелец 2026-09-06):** релиз **не скоро**. Запрещено агентам: PR base `master`, merge train → `master`, «release cut». Конец TASK = merge в `release/ice-discovery`.  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
@@ -271,3 +271,4 @@ TASK-053, TASK-054, TASK-055.
 - **NO_MASTER_LOCK** (2026-09-06) — владелец: релиз не скоро; вся работа на `release/ice-discovery`; агентам запрещён PR/merge в `master`.
 - **UI_CLOSEOUT** (2026-09-06) — TASK-074 карточка vs прототип; TASK-075 таб+карта vs прототип. 052/053/054 = первый проход, не закрытие.
 - **TASK-074_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/45 squash `3c66356` → `release/ice-discovery`. «идёт», плейсхолдер, сезон. Не в master.
+- **TASK-075_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/46 squash `e1e1c01` → `release/ice-discovery`. Линза «Покататься», bbox, пин → наша карточка, без OSM. Не в master.
