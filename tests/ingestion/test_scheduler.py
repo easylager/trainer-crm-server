@@ -136,12 +136,18 @@ async def test_requires_by_egress_job_is_not_extracted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_saleframe_stub_compiles_and_does_not_insert() -> None:
+async def test_saleframe_parser_extracts_without_inserting() -> None:
+    from pathlib import Path
+
     parser = MinskArenaSaleframeParser()
-    job = _job(parser_key=PARSER_KEY_MINSK_ARENA, config=dict(MINSK_ARENA_SALEFRAME_CONFIG))
+    cfg = dict(MINSK_ARENA_SALEFRAME_CONFIG)
+    cfg["fixture_dir"] = str(Path(".ai/data/fixtures/minsk-arena"))
+    job = _job(parser_key=PARSER_KEY_MINSK_ARENA, config=cfg)
     extraction = await parser.extract(job)
     assert extraction.parser_key == PARSER_KEY_MINSK_ARENA
-    assert extraction.slots == []
+    assert len(extraction.slots) == 2
+    source = Path("src/ingestion/adapters.py").read_text(encoding="utf-8")
+    assert "INSERT INTO ice_sessions" not in source
 
 
 @pytest.mark.asyncio

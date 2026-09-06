@@ -28,6 +28,7 @@
     "rental": "Прокат коньков 1 пара/1 сеанс*"
   },
   "drop_label_substrings": ["абонемент", "заточка", "пингвин", "морской котик", "карта посетителя"],
+  "prices_already_minor": true,
   "requires_by_egress": false
 }
 ```

@@ -50,7 +50,7 @@ def parse_price_to_minor(value: Any, *, already_minor: bool) -> int | None:
 
 def map_parser_kind(raw: str) -> str | None:
     key = (raw or "").strip().lower()
-    if key in {PARSER_KIND_PUBLIC_SKATE, "mk"}:
+    if key in {PARSER_KIND_PUBLIC_SKATE, "mk", "мк", "ма", "ба"}:
         return PARSER_KIND_PUBLIC_SKATE
     if key == PARSER_KIND_OPEN_ICE:
         return PARSER_KIND_OPEN_ICE

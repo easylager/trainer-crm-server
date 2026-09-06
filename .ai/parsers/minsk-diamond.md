@@ -24,6 +24,7 @@
   "drop_labels": ["ОХМ", "ШРС", "ТОРНАДО", "Тех.обслуживание", "ЗВЕЗДОЧКА", "МИР БЕЗ ГРАНИЦ", "КФК"],
   "disco_marker": "ДИСКОТЕКА",
   "default_duration_minutes": 45,
+  "prices_already_minor": true,
   "requires_by_egress": false
 }
 ```

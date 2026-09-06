@@ -22,6 +22,7 @@
   "kind": "public_skate",
   "keep_rink_labels": ["МА", "БА"],
   "drop_cell_substrings": ["билеты проданы"],
+  "prices_already_minor": true,
   "requires_by_egress": false
 }
 ```
