@@ -270,3 +270,4 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-063_PHOTOS_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/41 squash `77d4b17` → `release/ice-discovery`. Официальные фото досье в loader.
 - **NO_MASTER_LOCK** (2026-09-06) — владелец: релиз не скоро; вся работа на `release/ice-discovery`; агентам запрещён PR/merge в `master`.
 - **UI_CLOSEOUT** (2026-09-06) — TASK-074 карточка vs прототип; TASK-075 таб+карта vs прототип. 052/053/054 = первый проход, не закрытие.
+- **TASK-074_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/45 squash `3c66356` → `release/ice-discovery`. «идёт», плейсхолдер, сезон. Не в master.

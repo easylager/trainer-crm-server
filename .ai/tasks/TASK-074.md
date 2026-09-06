@@ -1,7 +1,7 @@
 ---
 task_id: TASK-074
 title: Карточка арены — закрыть vs прототип (edges, 360px, темы)
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-052]
@@ -77,3 +77,4 @@ Verification method: design-review (узкий viewport) + grep cache-buster
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — координатор: 052 MERGED как первый проход; close-out vs прототип. Train only.
 - **IN_PROGRESS** (2026-09-06) — TDD close-out: live session stays as «идёт» (past dropped), hero placeholder, seasonal «закрыт до …» over the ribbon, legend/stripe in the model. Visual 360px/themes still need a human screenshot.
+- **MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/45 squash `3c66356` → `release/ice-discovery`. Не в master. 360px/темы — ручной скриншот.
