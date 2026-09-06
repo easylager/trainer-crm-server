@@ -1,0 +1,111 @@
+{
+  "schema_version": "ice-calibration-v1",
+  "city": "Минск",
+  "notes": "Pilot MK gold set. Compare canonical ice_sessions, never widget HTML. See README.md.",
+  "items": [
+    {
+      "source_id": "minsk-arena",
+      "fixture_dir": ".ai/data/fixtures/minsk-arena",
+      "gold_file": "expected.json",
+      "parser_key": "minskarena_saleframe_v1",
+      "scoring": "adapter",
+      "now": "2026-09-05T09:00:00+00:00",
+      "source_files": ["calendar.json", "events.json", "init.json"],
+      "job_config": {}
+    },
+    {
+      "source_id": "minsk-zamok",
+      "fixture_dir": ".ai/data/fixtures/minsk-zamok",
+      "gold_file": "expected.json",
+      "parser_key": "zamok_html_v1",
+      "scoring": "adapter",
+      "now": "2026-09-05T06:00:00+00:00",
+      "source_files": ["ice-rink.html"],
+      "job_config": {
+        "url": "https://tczamok.by/entertainments/ice-rink",
+        "horizon_days": 7,
+        "slot_start_suffix": ":15",
+        "duration_minutes": 45,
+        "run_date": "2026-09-05"
+      }
+    },
+    {
+      "source_id": "minsk-chizhovka",
+      "fixture_dir": ".ai/data/fixtures/minsk-chizhovka",
+      "gold_file": "expected.json",
+      "parser_key": "chizhovka_html_v1",
+      "scoring": "adapter",
+      "now": "2026-08-30T12:00:00+00:00",
+      "source_files": ["schedule.html", "prices.html"],
+      "job_config": {
+        "schedule_url": "https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah",
+        "prices_url": "https://chizhovka-arena.by/czeny/katanie-na-konkah",
+        "default_duration_minutes": 60,
+        "keep_rink_labels": ["МА", "БА"],
+        "run_year": 2026
+      }
+    },
+    {
+      "source_id": "minsk-ledby",
+      "fixture_dir": ".ai/data/fixtures/minsk-ledby",
+      "gold_file": "expected.json",
+      "parser_key": "ledby_html_v1",
+      "scoring": "adapter",
+      "now": "2026-08-30T12:00:00+00:00",
+      "source_files": ["timetable.html", "mass_skating.html"],
+      "job_config": {
+        "schedule_url": "http://led.by/category/timetable/",
+        "prices_url": "http://led.by/mass_skating/"
+      }
+    },
+    {
+      "source_id": "minsk-diamond",
+      "fixture_dir": ".ai/data/fixtures/minsk-diamond",
+      "gold_file": "expected.json",
+      "parser_key": "diamond_html_v1",
+      "scoring": "adapter",
+      "now": "2026-09-04T12:00:00+00:00",
+      "source_files": ["ledovaya-arena.html"],
+      "job_config": {
+        "schedule_url": "https://diamondcity.by/ledovaya-arena",
+        "keep_labels": ["МК"],
+        "drop_labels": [
+          "ОХМ",
+          "ШРС",
+          "ТОРНАДО",
+          "Тех.обслуживание",
+          "ЗВЕЗДОЧКА",
+          "МИР БЕЗ ГРАНИЦ",
+          "КФК"
+        ],
+        "disco_marker": "ДИСКОТЕКА",
+        "default_duration_minutes": 45,
+        "run_year": 2026
+      }
+    },
+    {
+      "source_id": "minsk-junost",
+      "fixture_dir": ".ai/data/fixtures/minsk-junost",
+      "gold_file": "expected.json",
+      "parser_key": "junost_origin_html_v1",
+      "scoring": "blocked_empty",
+      "now": "2026-09-05T12:00:00+00:00",
+      "source_files": [
+        "junost-origin.html",
+        "hockey-skating.html",
+        "globalping-by-truncated.html"
+      ],
+      "job_config": {}
+    },
+    {
+      "source_id": "minsk-ledlife",
+      "fixture_dir": ".ai/data/fixtures/minsk-ledlife",
+      "gold_file": "expected.json",
+      "parser_key": "ledlife_origin_html_v1",
+      "scoring": "blocked_empty",
+      "now": "2026-09-05T12:00:00+00:00",
+      "source_files": ["massovye_kataniya-403.html"],
+      "job_config": {}
+    }
+  ]
+}

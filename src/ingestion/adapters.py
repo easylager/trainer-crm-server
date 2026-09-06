@@ -360,12 +360,12 @@ def _ledby_prices(html: str) -> dict[int, dict[str, Any]]:
     for duration, slide in zip(durations, slides):
         plain = html_unescape_cell(slide)
         weekday = re.search(
-            r"Взрослый\s*[—\-]\s*([\d,]+)\s*руб.*;\s*детский[^—\-]*[—\-]\s*([\d,]+)",
+            r"Взрослый\s*[—\-]\s*([\d,]+)\s*руб\.;\s*детский[^—\-]*[—\-]\s*([\d,]+)",
             plain,
             re.I,
         )
         weekend = re.search(
-            r"выходные[^:]*:\s*взрослый\s*[—\-]\s*([\d,]+)\s*руб.*;\s*детский[^—\-]*[—\-]\s*([\d,]+)",
+            r"выходные[^:]*:\s*взрослый\s*[—\-]\s*([\d,]+)\s*руб\.;\s*детский[^—\-]*[—\-]\s*([\d,]+)",
             plain,
             re.I,
         )
