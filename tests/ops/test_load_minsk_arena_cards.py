@@ -252,6 +252,12 @@ def test_session_plan_clips_to_seven_days(loader, tmp_path: Path) -> None:
     assert plan.valid_until.date() == date(2026, 9, 7)
 
 
+def test_parse_only_arena_ids(loader) -> None:
+    assert loader.parse_only_arena_ids(None) is None
+    assert loader.parse_only_arena_ids("2,3,5,6,7") == frozenset({2, 3, 5, 6, 7})
+    assert loader.parse_only_arena_ids(" 6 ") == frozenset({6})
+
+
 def test_refuses_production_database_url(loader) -> None:
     with pytest.raises(loader.ProdDatabaseError):
         loader.assert_local_database_url(
