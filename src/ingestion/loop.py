@@ -23,6 +23,7 @@ ICE_HEALTH_DIGEST_INTERVAL_SEC = 3600
 async def run_ice_ingest_scheduler_loop() -> None:
     """Poll ice_parser_jobs.next_run_at and run due strategies."""
     from src.infrastructure.db import async_session_factory
+    from src.shared.config import get_settings
 
     while True:
         await asyncio.sleep(ICE_INGEST_LOOP_INTERVAL_SEC)
@@ -35,6 +36,7 @@ async def run_ice_ingest_scheduler_loop() -> None:
                     recorder=SqlAlchemyScrapeRunRecorder(session),
                     registry=default_registry(),
                     publisher=SqlAlchemyIceSessionPublisher(session),
+                    by_egress_configured=bool(get_settings().by_egress_proxy_url),
                 )
                 outcomes = await scheduler.run_due(datetime.now(timezone.utc))
                 await session.commit()

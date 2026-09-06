@@ -33,6 +33,7 @@ class IceIngestScheduler:
         normalizer: IceSessionNormalizer | None = None,
         validator: IceSessionValidator | None = None,
         publisher: IceSessionPublisher | None = None,
+        by_egress_configured: bool = False,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -40,6 +41,10 @@ class IceIngestScheduler:
         self._normalizer = normalizer or IceSessionNormalizer()
         self._validator = validator or IceSessionValidator()
         self._publisher = publisher
+        # TASK-083 / PDEC-004: worker-level proof a real BY egress path (VPS tunnel) is
+        # wired up. job.config["requires_by_egress"] stays True forever once set — this
+        # only says the flag is now satisfied on *this* worker, never mutate the flag.
+        self._by_egress_configured = by_egress_configured
 
     async def run_due(self, now: datetime) -> list[ScrapeRunRecord]:
         if now.tzinfo is None:
@@ -69,7 +74,7 @@ class IceIngestScheduler:
     async def _run_one(self, job: ParserJob, now: datetime) -> tuple[ScrapeRunRecord, list]:
         started = now
         empty: list = []
-        if config_requires_by_egress(job.config):
+        if config_requires_by_egress(job.config) and not self._by_egress_configured:
             return (
                 self._record(
                     job,
