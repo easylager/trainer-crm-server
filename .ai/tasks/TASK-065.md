@@ -1,7 +1,7 @@
 ---
 task_id: TASK-065
 title: Seed ice_parser_jobs from the Minsk census (no auto-discovery of 150 rinks)
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-048, TASK-071]
@@ -9,6 +9,7 @@ execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
 city: Минск
+pr_url: https://github.com/easylager/trainer-crm-server/pull/33
 ---
 
 # Task
@@ -79,3 +80,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — старая формулировка `arena_sources` + автопоиск
 - **REFRAMED** (2026-09-06) — координатор: V1 = seed jobs из переписи; depends_on TASK-071, не TASK-059
 - **IN_PROGRESS** (2026-09-06) — идемпотентный импорт `ice_parser_jobs` из `.ai/data/minsk-parser-registry.yaml` + `.ai/parsers/minsk-*.md`. BY-egress jobs (Юность, ledlife) создаются выключенными. Skip (не МК) не получают job. EDGE-001: upsert обновляет seed 071, не дублирует unique `arena_id`. PR: https://github.com/easylager/trainer-crm-server/pull/33
+- **TASK-065_MERGED** (2026-09-06) — squash `5cb6488` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/33. Не в master.
