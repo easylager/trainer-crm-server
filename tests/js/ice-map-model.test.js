@@ -258,6 +258,27 @@ describe('pin sheet target (TASK-075 AC-002)', () => {
   });
 });
 
+describe('coach lens map (TASK-076 AC-002 follow-up)', () => {
+  it('does not fetch ice arenas or keep leftover rink pins under coach', () => {
+    const { bboxFetchPayload, mapStartDecision } = loadModel();
+    const payload = bboxFetchPayload({
+      bbox: '53.8,27.4,54.0,27.7',
+      intent: 'coach',
+      limit: 50,
+    });
+    assert.equal(payload.fetch, false);
+    const leftover = mapStartDecision({
+      key: 'live-key',
+      intent: 'coach',
+      listItems: [rink()],
+    });
+    assert.equal(leftover.showMap, false);
+    assert.notEqual(leftover.kind, 'map');
+    assert.match(leftover.empty.title, /тренер/i);
+    assert.match(leftover.empty.body, /список/i);
+  });
+});
+
 describe('map start without key or arenas (TASK-075 AC-004 + EDGE)', () => {
   it('missing key chooses no provider and never OSM/Leaflet', () => {
     const { chooseMapProvider, mapStartDecision } = loadModel();

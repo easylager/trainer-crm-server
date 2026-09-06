@@ -253,7 +253,27 @@
       clusterer.add(marks);
     }
 
+    function showCoachEmpty() {
+      listItems = [];
+      mapItems = [];
+      selected = null;
+      nearestMode = false;
+      bboxState = null;
+      if (clusterer) syncObjects();
+      paintSheet(null);
+      showStage(false);
+      if (offMapEl) {
+        offMapEl.hidden = true;
+        offMapEl.textContent = '';
+      }
+      renderEmpty(emptyEl, MM.coachMapEmptyState());
+    }
+
     function fetchViewport() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return;
+      }
       if (!map || !opts.listUrl) return;
       var bbox = MM.boundsToBbox(map.getBounds());
       var payload = MM.bboxFetchPayload({
@@ -265,14 +285,14 @@
       if (!payload.fetch) return;
       var plan = MM.planBboxFetch(bboxState, payload.bbox);
       if (!plan.fetch) return;
+      var url = listUrl({
+        bbox: payload.bbox,
+        intent: payload.intent,
+        limit: payload.limit,
+      });
+      if (!url) return;
       bboxState = plan;
-      fetchJson(
-        listUrl({
-          bbox: payload.bbox,
-          intent: payload.intent,
-          limit: payload.limit,
-        })
-      ).then(function (data) {
+      fetchJson(url).then(function (data) {
         mapItems = applyIntentFilter((data && data.items) || []);
         syncObjects();
         defaultSheet();
@@ -367,11 +387,17 @@
     }
 
     function start() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return Promise.resolve();
+      }
       if (missingKey) {
         showMissing();
         return Promise.resolve();
       }
       if (map) {
+        hideEmpty(emptyEl);
+        showStage(true);
         map.container.fitToViewport();
         fetchViewport();
         return Promise.resolve();
@@ -387,10 +413,18 @@
           }
           keyResolved = resolved;
           started = true;
-          var decision = MM.mapStartDecision({ key: resolved, listItems: listItems });
+          var decision = MM.mapStartDecision({
+            key: resolved,
+            listItems: listItems,
+            intent: getIntent(),
+          });
           if (decision.kind === 'missing-key') {
             missingKey = true;
             showMissing();
+            return;
+          }
+          if (decision.kind === 'coach') {
+            showCoachEmpty();
             return;
           }
           if (decision.kind === 'no-arenas') {
@@ -415,6 +449,7 @@
     }
 
     function onNearClick() {
+      if (getIntent() === 'coach') return;
       if (!nearMePolicyOk()) return;
       if (!navigator.geolocation) {
         paintGeoDenied();
@@ -515,16 +550,27 @@
       setListItems: function (items) {
         listItems = items || [];
         setOffMapNote();
-        if (map && !mapItems.length) {
-          mapItems = MM.splitMapAndList(listItems).onMap.slice();
-          syncObjects();
+        if (map) {
+          if (!listItems.length) {
+            mapItems = [];
+            selected = null;
+            syncObjects();
+            paintSheet(null);
+          } else if (!mapItems.length) {
+            mapItems = MM.splitMapAndList(listItems).onMap.slice();
+            syncObjects();
+          }
         }
-        if (!map && started && !missingKey && listItems.length) {
+        if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
           start();
         }
       },
       refresh: function () {
         bboxState = null;
+        if (getIntent() === 'coach') {
+          start();
+          return;
+        }
         if (map) fetchViewport();
         else if (started) start();
       },

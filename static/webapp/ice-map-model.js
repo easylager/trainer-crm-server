@@ -83,6 +83,13 @@
     };
   }
 
+  function coachMapEmptyState() {
+    return {
+      title: 'Тренеров на карте нет',
+      body: 'Смотрите список. Карта катков остаётся у чипов «Покататься» и «Группы».',
+    };
+  }
+
   function mapStartDecision(opts) {
     opts = opts || {};
     var provider = chooseMapProvider({ key: opts.key, query: opts.query, env: opts.env, windowKey: opts.windowKey });
@@ -93,6 +100,15 @@
         provider: 'none',
         fallback: 'none',
         empty: missingKeyState(),
+      };
+    }
+    if (trimStr(opts.intent) === 'coach') {
+      return {
+        kind: 'coach',
+        showMap: false,
+        provider: 'yandex',
+        fallback: 'none',
+        empty: coachMapEmptyState(),
       };
     }
     var items = opts.listItems || [];
@@ -143,6 +159,7 @@
     var bbox = trimStr(opts.bbox);
     if (!bbox) return { fetch: false };
     var intent = trimStr(opts.intent) || 'skate';
+    if (intent === 'coach') return { fetch: false };
     var limit = Number(opts.limit);
     if (!isFinite(limit) || limit <= 0) limit = 50;
     return {
@@ -375,6 +392,7 @@
     missingKeyState: missingKeyState,
     chooseMapProvider: chooseMapProvider,
     cityWithoutArenasState: cityWithoutArenasState,
+    coachMapEmptyState: coachMapEmptyState,
     mapStartDecision: mapStartDecision,
     geoDeniedState: geoDeniedState,
     afterGeoDenied: afterGeoDenied,

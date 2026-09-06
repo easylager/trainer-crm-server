@@ -43,6 +43,23 @@
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
+  function mapShowsArenas(intent) {
+    return intent !== INTENTS.coach;
+  }
+
+  function buildMapListUrl(opts) {
+    opts = opts || {};
+    if (!mapShowsArenas(opts.intent)) return '';
+    return buildListUrl(opts);
+  }
+
+  function formatCoachMapEmpty() {
+    return {
+      title: 'Тренеров на карте нет',
+      body: 'Смотрите список. Карта катков остаётся у чипов «Покататься» и «Группы».',
+    };
+  }
+
   function buildSearchUrl(q, limit) {
     var params = ['q=' + encodeURIComponent(String(q || '').trim())];
     if (limit) params.push('limit=' + encodeURIComponent(String(limit)));
@@ -365,6 +382,9 @@
     ICE_STATE_KEY: ICE_STATE_KEY,
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
+    buildMapListUrl: buildMapListUrl,
+    mapShowsArenas: mapShowsArenas,
+    formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
     catalogHref: catalogHref,

@@ -15,7 +15,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def test_ice_tab_model_node_unit() -> None:
     """AC-001/003/004 + epic-corrected skate filter + EDGE-001/002 + TASK-076 coach lens."""
     proc = subprocess.run(
-        ["node", "--test", "tests/js/ice-tab-model.test.js", "tests/js/ice-tab-tokens.test.js"],
+        [
+            "node",
+            "--test",
+            "tests/js/ice-tab-model.test.js",
+            "tests/js/ice-tab-tokens.test.js",
+            "tests/js/ice-map-model.test.js",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -72,6 +78,8 @@ def test_shell_second_tab_is_ice() -> None:
     assert "type: 'list', intent: INTENTS.coach" in ice_model or 'type: "list", intent: INTENTS.coach' in ice_model
     assert "catalog?tab=catalog" in ice_model
     assert "trainer_id=" in ice_model
+    assert "buildMapListUrl" in ice_tab
+    assert "buildListUrl({ near: near, intent: 'coach', limit: 1 })" in ice_tab
 
 
 def test_old_catalog_deep_links_still_wired() -> None:

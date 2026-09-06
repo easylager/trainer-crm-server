@@ -115,7 +115,7 @@
           if (extra.bbox) opts.bbox = extra.bbox;
           if (extra.cityId != null && extra.cityId !== '') opts.cityId = extra.cityId;
           else if (!extra.bbox && state.cityId) opts.cityId = state.cityId;
-          return M.buildListUrl(opts);
+          return M.buildMapListUrl(opts);
         },
         fetchJson: fetchJson,
         getIntent: function () {
@@ -135,7 +135,7 @@
         },
       });
     }
-    mapCtl.setListItems(state.items);
+    mapCtl.setListItems(state.intent === 'coach' ? [] : state.items);
     mapCtl.start().then(function () {
       mapCtl.resize();
     });
@@ -272,12 +272,14 @@
 
   function onListLoaded() {
     renderList();
-    if (mapCtl && state.intent !== 'coach') {
-      mapCtl.setListItems(state.items);
-      if (state.view === 'map') mapCtl.refresh();
-    } else if (mapCtl && state.view === 'map' && state.intent === 'coach') {
-      mapCtl.refresh();
+    if (!mapCtl) return;
+    if (state.intent === 'coach') {
+      mapCtl.setListItems([]);
+      if (state.view === 'map') mapCtl.start();
+      return;
     }
+    mapCtl.setListItems(state.items);
+    if (state.view === 'map') mapCtl.refresh();
   }
 
   function loadFailed() {

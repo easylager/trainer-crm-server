@@ -175,3 +175,4 @@ Verification: existing skate-lens tests
 - **PHASE_COMPLETED | plan** (2026-09-06)
 - **IN_PROGRESS** (2026-09-06) — UI: Ice/arena chrome → `--app-cta-fill` / `--accent-rgb` (без `#c2761a`); чип «Тренеры» остаётся на `ice.html` и грузит `GET /api/public/trainers?city_id=`; тап по карточке — существующий `catalog?tab=catalog&trainer_id=`; skate lens без ослабления.
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/49 → `release/ice-discovery` (не master). Status IN_PROGRESS until merged.
+- **REVIEW_FIX** (2026-09-06) — coach map: no leftover rink pins, no `GET /api/public/ice/arenas` for the trainers lens; honest empty «Тренеров на карте нет». City-geo `buildListUrl({ near, intent: 'coach', limit: 1 })` unchanged.

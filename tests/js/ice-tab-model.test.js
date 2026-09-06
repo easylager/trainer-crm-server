@@ -244,6 +244,31 @@ describe('hrefs', () => {
     const { mapHref } = loadModel();
     assert.equal(mapHref(), '');
   });
+
+  it('coach map listUrl does not hit ice/arenas; city-geo helper still may', () => {
+    const { buildMapListUrl, buildListUrl, mapShowsArenas, formatCoachMapEmpty } = loadModel();
+    assert.equal(mapShowsArenas('coach'), false);
+    assert.equal(mapShowsArenas('skate'), true);
+    assert.equal(mapShowsArenas('group'), true);
+    const coachMap = buildMapListUrl({
+      cityId: 3,
+      intent: 'coach',
+      bbox: '53.8,27.4,54.0,27.7',
+      limit: 50,
+    });
+    assert.equal(coachMap, '');
+    assert.ok(!String(coachMap).includes('/api/public/ice/arenas'));
+    const skateMap = buildMapListUrl({ cityId: 3, intent: 'skate', limit: 50 });
+    assert.match(skateMap, /\/api\/public\/ice\/arenas/);
+    assert.match(skateMap, /intent=skate/);
+    const geoBypass = buildListUrl({ near: '53.9,27.56', intent: 'coach', limit: 1 });
+    assert.match(geoBypass, /\/api\/public\/ice\/arenas/);
+    assert.match(geoBypass, /intent=coach/);
+    assert.match(geoBypass, /limit=1/);
+    const empty = formatCoachMapEmpty();
+    assert.match(empty.title, /тренер/i);
+    assert.match(empty.body, /список/i);
+  });
 });
 
 describe('skate lens filter (TASK-075 AC-001)', () => {
