@@ -46,7 +46,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-cityrow__change {
   font-size: 13px;
   font-weight: 600;
-  color: var(--glide-ink-teal, #0b6e70);
+  color: #c2761a;
   background: none;
   border: 0;
   padding: 0;
@@ -113,15 +113,19 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: var(--app-cta-fill, #45b9bb);
-  border-color: var(--app-cta-fill, #45b9bb);
-  color: var(--app-cta-text, #04262a);
+  background: #c2761a;
+  border-color: #c2761a;
+  color: #fff;
 }
 
 .ice-hint {
   margin: 0;
   font-size: 12.5px;
   color: var(--glide-hint, #5e6b6b);
+}
+
+.ice-hint[hidden] {
+  display: none;
 }
 
 .ice-seg {
@@ -225,6 +229,18 @@ body.ar-pilot--ice .client-app-header {
 .ice-live--c {
   color: var(--glide-hint, #5e6b6b);
   font-weight: 500;
+}
+
+.ice-live:empty {
+  display: none;
+}
+
+.ice-live__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: currentColor;
+  flex: 0 0 auto;
 }
 
 .ice-tier {
@@ -425,6 +441,11 @@ body.ar-pilot--ice .client-app-header {
   margin: -26px 12px 0;
   position: relative;
   z-index: 2;
+  padding-bottom: 8px;
+}
+
+.ice-map-sheet:empty {
+  min-height: 0;
 }
 
 .ice-acard--sheet {
@@ -469,6 +490,10 @@ body.ar-pilot--ice .client-app-header {
   opacity: 0.55;
   width: 11px;
   height: 11px;
+}
+
+.ice-ypin--b .ice-ypin__dot {
+  background: var(--ice-blue, #2a6e8f);
 }
 
 .ice-ypin__label {

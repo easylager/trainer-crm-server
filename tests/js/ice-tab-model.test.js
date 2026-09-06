@@ -108,6 +108,72 @@ describe('formatMeta / live tone (AC-003)', () => {
   });
 });
 
+describe('formatLiveLine (prototype: three prices, not mashed live.text)', () => {
+  const sessionItem = {
+    tier: 'A',
+    live: {
+      kind: 'session',
+      text: 'Сегодня 11:00 · 12 BYN · ещё 3 сеанса',
+      local_date: '2026-09-06',
+      starts_at_local: '11:00',
+      price_adult_minor: 1200,
+      price_child_minor: 800,
+      price_rental_minor: 600,
+      currency_code: 'BYN',
+      more_count: 3,
+    },
+    live_line: 'Сегодня 11:00 · 12 BYN · ещё 3 сеанса',
+  };
+
+  it('labels взр/дет/прокат from structured minors and ignores mashed live.text', () => {
+    const { formatLiveLine } = loadModel();
+    const text = formatLiveLine(sessionItem, new Date('2026-09-06T08:00:00Z'));
+    assert.match(text, /Сегодня 11:00/);
+    assert.match(text, /взр/);
+    assert.match(text, /дет/);
+    assert.match(text, /прокат/);
+    assert.match(text, /ещё 3/);
+    assert.ok(!text.includes('12 / 8'));
+    assert.ok(!/11:00 · 12 BYN/.test(text));
+  });
+
+  it('keeps trainer/group live.text as-is', () => {
+    const { formatLiveLine } = loadModel();
+    assert.equal(
+      formatLiveLine({
+        live: { kind: 'trainers', text: '4 тренера · 12 свободных слотов на неделе' },
+      }),
+      '4 тренера · 12 свободных слотов на неделе'
+    );
+    assert.equal(
+      formatLiveLine({ live: { kind: 'groups', text: '2 группы с набором' } }),
+      '2 группы с набором'
+    );
+  });
+
+  it('uses prototype B/C copy when there is no session', () => {
+    const { formatLiveLine } = loadModel();
+    assert.match(
+      formatLiveLine({ tier: 'B', live: { kind: 'unknown', text: 'Расписание уточняется' } }),
+      /телефон|сайт/
+    );
+    assert.match(
+      formatLiveLine({ tier: 'C', live: { kind: 'unknown', text: 'Расписание уточняется' } }),
+      /справочник/
+    );
+  });
+});
+
+describe('formatEmptyList', () => {
+  it('skate empty does not dump the trainers-moved hint into the list', () => {
+    const { formatEmptyList, trainersMovedHint } = loadModel();
+    const empty = formatEmptyList('skate');
+    assert.match(empty.title, /массового катания|катков/i);
+    assert.ok(!empty.body.includes(trainersMovedHint()));
+    assert.match(empty.body, /город|Тренер/i);
+  });
+});
+
 describe('groupSearchResults (AC-004)', () => {
   it('keeps arena / trainer / city groups with type labels', () => {
     const { groupSearchResults } = loadModel();

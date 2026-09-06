@@ -146,6 +146,16 @@
     return 'Массовое катание';
   }
 
+  function iceRowCta(session) {
+    var href = String((session && session.external_url) || '').trim() || null;
+    return {
+      cta: 'Билет на месте',
+      ctaKind: 'ghost',
+      href: href,
+      bookable: false,
+    };
+  }
+
   function hhmm(value) {
     if (!value) return '';
     return String(value).slice(0, 5);
@@ -164,13 +174,16 @@
       if (nowState === 'live') {
         meta = meta ? 'идёт · ' + meta : 'идёт';
       }
+      var cta = iceRowCta(s);
       rows.push({
         nature: 'ice',
         time: hhmm(s.starts_at_local),
         title: iceKindLabel(s),
         meta: meta,
-        cta: 'Билет на месте',
-        ctaKind: 'ghost',
+        cta: cta.cta,
+        ctaKind: cta.ctaKind,
+        href: cta.href,
+        bookable: false,
         nowState: nowState,
         session: s,
       });
@@ -193,6 +206,7 @@
           meta: age ? age + ' · ' + metaG : metaG,
           cta: 'Заявка',
           ctaKind: 'solid',
+          bookable: true,
           nowState: 'upcoming',
           group: g,
           trainerId: g.trainer_id,
@@ -410,6 +424,7 @@
     formatFreshness: formatFreshness,
     sessionNowState: sessionNowState,
     iceKindLabel: iceKindLabel,
+    iceRowCta: iceRowCta,
     buildRibbonForDay: buildRibbonForDay,
     buildWeekSummaries: buildWeekSummaries,
     heroPhotoUrl: heroPhotoUrl,

@@ -118,3 +118,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 2; главный гейт эпика измеряется на этом экране
 - **IN_PROGRESS** (2026-09-06) — Mini App arena card on `feat/TASK-052-arena-card`. PR https://github.com/easylager/trainer-crm-server/pull/29 (base `release/ice-discovery`). Not merged.
 - **MERGED** (2026-09-06) — squash `dcf63f4` → `release/ice-discovery`. Visual 360px/themes still to check on the running Mini App.
+- **UI_PROTOTYPE_PASS** (2026-09-06) — `feat/ice-ui-prototype-pass`: MK/open_ice rows keep ghost «Билет на месте» (external_url is a link, never «Записаться»); trainer/group CTAs unchanged.

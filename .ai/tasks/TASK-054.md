@@ -115,3 +115,4 @@ Status: OPEN
 - **WAIVED AC-004 / AC-005** (2026-09-06) — coordinator: "profile/onboarding later pass". Профиль тренера и онбординг не в этом PR.
 - **pr_url** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 — base `release/ice-discovery`. Not merged.
 - **TASK-054_MERGED** (2026-09-06) — squash `f216f46` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/38. Ice-tab only. AC-004/005 waived. Не в master. Живые тайлы нужен `YANDEX_MAPS_JS_API_KEY`.
+- **UI_PROTOTYPE_PASS** (2026-09-06) — pin sheet uses the same three-price live line; missing-key empty state unchanged (no OSM).
