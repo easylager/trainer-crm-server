@@ -10,7 +10,7 @@ created_at: 2026-09-04
 updated_at: 2026-09-06
 city: Минск
 design: .ai/DESIGN-INGESTION-PARSERS-V1.md
-pr_url: https://github.com/easylager/trainer-crm-server/pull/35
+pr_url: https://github.com/easylager/trainer-crm-server/pull/39
 ---
 
 # Task
@@ -86,3 +86,4 @@ Verification method: automated/integration (сравнить shape двух ар
 - **CANONICAL** (2026-09-05) — extract ≠ persist; общий transform/validate; один формат `ice_sessions`
 - **SPECS_IN** (2026-09-05) — SPEC: saleframe ABWS, 45 мин, цены уже minor, rental null; Замок; Чижовка
 - **IN_PROGRESS** (2026-09-06) — extract adapters + publisher; stacked on TASK-065. PR: https://github.com/easylager/trainer-crm-server/pull/35
+- **FOLLOW_UP** (2026-09-06) — DiaMond div-wrapped MK cells + dual-interval Thu 10 Sep; gold 44/44, SCORE_FLOORS recall 1.0. PR: https://github.com/easylager/trainer-crm-server/pull/39
