@@ -1,7 +1,7 @@
 ---
 task_id: TASK-062
 title: Здоровье данных — last_ok_at, алерты об устаревании, метрика доли арен уровня A
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-072]
@@ -92,3 +92,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 4
 - **DEPENDS_REFRAMED** (2026-09-06) — координатор: depends_on TASK-072 (MERGED), не TASK-059 (не V1). Источник истины — `ice_parser_jobs` + `ice_scrape_runs`.
 - **IN_PROGRESS** (2026-09-06) — silent-source alerts (cadence×N / per-job hours), stale-fact share, city A/B/C + WoW, booking density, weekly admin digest via `notification_service`. Calibration numbers left as TASK-066 placeholder. PR: https://github.com/easylager/trainer-crm-server/pull/36. Not MERGED.
+- **TASK-062_MERGED** (2026-09-06) — squash `1cbfab11197ab5ed429243e8e6734167f2c740fa` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/36. Не в master. `calibration_summary()` ещё stub для TASK-066.

@@ -1,7 +1,7 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** IN PROGRESS — карточка арены и скедулер на train; дальше таб «Лёд» и scrape_runs  
+**Статус:** IN PROGRESS — R3a почти закрыт (062 на train); открыты карта (054) и калибровка (066)  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
 
@@ -254,3 +254,9 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-058_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/30 squash `7e92156` → `release/ice-discovery`. trainer_cities. Не в master.
 - **TASK-064_MERGED** (2026-09-06) — перепись Минска закрыта (потолок A 7–9).
 - **TASK-065_REFRAMED** (2026-09-06) — seed jobs из реестра, не автопоиск 150 / не arena_sources.
+- **TASK-072_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/31 → `release/ice-discovery`. `ice_scrape_runs` + TTL + % ok.
+- **TASK-053_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/32 → `release/ice-discovery`. Таб «Лёд» список.
+- **TASK-065_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/33 → `release/ice-discovery`. Seed jobs из переписи.
+- **TASK-055_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/34 → `release/ice-discovery`. Тизер на главной и чипы арен.
+- **TASK-061_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/35 → `release/ice-discovery`. Адаптеры Минска.
+- **TASK-062_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/36 squash `1cbfab1` → `release/ice-discovery`. Алерты тишины + доля A + воскресная сводка. Не в master. Калибровка точности — TASK-066.
