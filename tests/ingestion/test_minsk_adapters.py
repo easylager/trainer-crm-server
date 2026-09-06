@@ -250,6 +250,48 @@ async def test_diamond_drops_oxm_school_and_ice_rental() -> None:
 
 
 @pytest.mark.asyncio
+async def test_diamond_dual_interval_mk_cell_yields_two_slots() -> None:
+    """One MK cell with two intervals (Thu 10 Sep) must become two public_skate slots."""
+    job = _diamond_job()
+    now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
+    extraction = await DiamondHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    thu = [
+        slot
+        for slot in slots
+        if slot.local_date == date(2026, 9, 10)
+        and slot.starts_at_local in {time(16, 45), time(17, 45)}
+    ]
+    by_start = {slot.starts_at_local: slot for slot in thu}
+    assert set(by_start) == {time(16, 45), time(17, 45)}
+    assert by_start[time(16, 45)].ends_at_local == time(17, 30)
+    assert by_start[time(17, 45)].ends_at_local == time(18, 30)
+    assert all(slot.kind == "public_skate" for slot in thu)
+    assert all(slot.session_label is None for slot in thu)
+
+
+@pytest.mark.asyncio
+async def test_diamond_extracts_all_gold_mk_slots() -> None:
+    """Gold 44 MK slots, including div-wrapped cells the span-only extractor skipped."""
+    expected = json.loads((_FIXTURES / "minsk-diamond/expected.json").read_text(encoding="utf-8"))
+    job = _diamond_job()
+    now = datetime(2026, 9, 4, 12, 0, tzinfo=timezone.utc)
+    extraction = await DiamondHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    gold_keys = {
+        (row["local_date"], row["starts_at_local"], row.get("session_label"))
+        for row in expected["sessions"]
+    }
+    got_keys = {
+        (slot.local_date.isoformat(), slot.starts_at_local.strftime("%H:%M"), slot.session_label)
+        for slot in slots
+    }
+    assert len(expected["sessions"]) == 44
+    assert got_keys == gold_keys
+    assert all(slot.kind == "public_skate" for slot in slots)
+
+
+@pytest.mark.asyncio
 async def test_empty_run_does_not_delete_future_slots(db_session) -> None:
     """AC-004: empty must not wipe future ice_sessions; rerun does not duplicate."""
     city = (await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))).scalar()

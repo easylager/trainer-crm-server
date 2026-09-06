@@ -390,7 +390,11 @@ def _ledby_prices(html: str) -> dict[int, dict[str, Any]]:
 
 
 def _parse_diamond_columns(html: str) -> list[tuple[str, list[str]]]:
-    """Regex extract of the 7-column MK grid (id irqsbii62)."""
+    """Regex extract of the 7-column MK grid (id irqsbii62).
+
+    Cells are ``.list__item`` wrappers. Text lives in ``span`` or ``div``
+    ``text-block-wrap-div``; a single MK cell may hold two intervals.
+    """
     start = html.find("id='irqsbii62_0'")
     if start < 0:
         start = html.find('id="irqsbii62_0"')
@@ -402,10 +406,8 @@ def _parse_diamond_columns(html: str) -> list[tuple[str, list[str]]]:
         if not title_match:
             continue
         title = html_unescape_cell(title_match.group(1))
-        items = [
-            html_unescape_cell(body)
-            for body in re.findall(r"list__item[^>]*>.*?text-block-wrap-div'\s*>(.*?)</span>", part, re.S)
-        ]
+        list_html = part.split("blocklist__item_text", 1)[0]
+        items = [html_unescape_cell(body) for body in re.split(r"<div class='list__item\b", list_html)[1:]]
         if title and items:
             columns.append((title, items))
             if len(columns) >= 7:
