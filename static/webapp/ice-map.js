@@ -7,7 +7,6 @@
 
   var MM = global.IceMapModel;
   var ymapsLoad = null;
-  var MINSK = [53.902496, 27.561481];
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -276,6 +275,10 @@
       }
       if (!map || !opts.listUrl) return;
       var bbox = MM.boundsToBbox(map.getBounds());
+      if (MM.bboxExceedsCity(bbox)) {
+        applyCityCamera();
+        return;
+      }
       var payload = MM.bboxFetchPayload({
         bbox: bbox,
         intent: getIntent(),
@@ -289,6 +292,7 @@
         bbox: payload.bbox,
         intent: payload.intent,
         limit: payload.limit,
+        cityId: payload.cityId != null ? payload.cityId : getCityId(),
       });
       if (!url) return;
       bboxState = plan;
@@ -299,6 +303,26 @@
       });
     }
 
+    function applyCityCamera() {
+      if (!map) return;
+      var cam = MM.cityCameraFromItems(listItems);
+      ignoreBounds = true;
+      map.options.set('restrictMapArea', cam.restrict);
+      map.options.set('minZoom', cam.minZoom);
+      map.options.set('maxZoom', cam.maxZoom);
+      var done = function () {
+        global.setTimeout(function () {
+          ignoreBounds = false;
+        }, 120);
+      };
+      map.setBounds(cam.restrict, { checkZoomRange: true, zoomMargin: 72 }).then(function () {
+        var z = map.getZoom();
+        if (z < cam.minZoom) map.setZoom(cam.minZoom);
+        if (z > cam.maxZoom) map.setZoom(cam.maxZoom);
+        done();
+      }, done);
+    }
+
     function onBoundsChange() {
       if (ignoreBounds) return;
       global.clearTimeout(boundsTimer);
@@ -306,32 +330,7 @@
     }
 
     function fitCity() {
-      if (!map) return;
-      var onMap = MM.splitMapAndList(listItems).onMap;
-      ignoreBounds = true;
-      var done = function () {
-        global.setTimeout(function () {
-          ignoreBounds = false;
-          fetchViewport();
-        }, 80);
-      };
-      if (onMap.length >= 2) {
-        var bounds = onMap.map(function (it) {
-          return [Number(it.latitude), Number(it.longitude)];
-        });
-        map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 48 }).then(function () {
-          if (map.getZoom() > 14) map.setZoom(14);
-          done();
-        }, done);
-        return;
-      }
-      if (onMap.length === 1) {
-        map.setCenter([Number(onMap[0].latitude), Number(onMap[0].longitude)], 13);
-        done();
-        return;
-      }
-      map.setCenter(MINSK, 12);
-      done();
+      applyCityCamera();
     }
 
     function buildLayouts() {
@@ -348,17 +347,21 @@
     function createMap() {
       if (map || !canvas) return;
       buildLayouts();
+      var cam = MM.cityCameraFromItems(listItems);
       map = new ymaps.Map(
         canvas,
         {
-          center: MINSK,
-          zoom: 12,
+          center: cam.center,
+          zoom: cam.zoom,
           controls: ['zoomControl'],
         },
         {
           yandexMapDisablePoiInteractivity: true,
           suppressMapOpenBlock: true,
           suppressObsoleteBrowserNotifier: true,
+          restrictMapArea: cam.restrict,
+          minZoom: cam.minZoom,
+          maxZoom: cam.maxZoom,
         }
       );
       if (map.controls && map.controls.get('zoomControl')) {
@@ -428,6 +431,9 @@
             return;
           }
           if (decision.kind === 'no-arenas') {
+            if (typeof opts.listReady === 'function' && !opts.listReady()) {
+              return;
+            }
             showStage(false);
             renderEmpty(emptyEl, decision.empty);
             if (sheetEl) sheetEl.innerHTML = '';
@@ -438,6 +444,9 @@
             hideEmpty(emptyEl);
             showStage(true);
             createMap();
+            if (map && map.container && typeof map.container.fitToViewport === 'function') {
+              map.container.fitToViewport();
+            }
             mapItems = MM.splitMapAndList(listItems).onMap.slice();
             syncObjects();
             fitCity();
@@ -560,6 +569,7 @@
             mapItems = MM.splitMapAndList(listItems).onMap.slice();
             syncObjects();
           }
+          applyCityCamera();
         }
         if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
           start();
@@ -571,7 +581,7 @@
           start();
           return;
         }
-        if (map) fetchViewport();
+        if (map) applyCityCamera();
         else if (started) start();
       },
       resize: function () {

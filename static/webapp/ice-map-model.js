@@ -167,6 +167,7 @@
       bbox: bbox,
       intent: intent,
       limit: limit,
+      cityId: opts.cityId != null && opts.cityId !== '' ? opts.cityId : null,
     };
   }
 
@@ -184,6 +185,61 @@
     var lat = item.latitude;
     var lon = item.longitude;
     return lat != null && lon != null && isFinite(Number(lat)) && isFinite(Number(lon));
+  }
+
+  function cityCameraFromItems(items, opts) {
+    opts = opts || {};
+    var pad = Number(opts.padDeg);
+    if (!isFinite(pad) || pad <= 0) pad = 0.08;
+    // Floor ≈ Minsk (~24×27 km). Rink hull of 3–5 pins is smaller and zooms the city away.
+    var minLatSpan = 0.22;
+    var minLonSpan = 0.42;
+    var fallback = opts.fallbackCenter;
+    if (!fallback || !isFinite(Number(fallback[0])) || !isFinite(Number(fallback[1]))) {
+      fallback = [53.902496, 27.561481];
+    }
+    var onMap = splitMapAndList(items).onMap;
+    var minLat;
+    var maxLat;
+    var minLon;
+    var maxLon;
+    if (onMap.length) {
+      var lats = onMap.map(function (it) {
+        return Number(it.latitude);
+      });
+      var lons = onMap.map(function (it) {
+        return Number(it.longitude);
+      });
+      minLat = Math.min.apply(null, lats) - pad;
+      maxLat = Math.max.apply(null, lats) + pad;
+      minLon = Math.min.apply(null, lons) - pad;
+      maxLon = Math.max.apply(null, lons) + pad;
+    } else {
+      minLat = Number(fallback[0]) - minLatSpan / 2;
+      maxLat = Number(fallback[0]) + minLatSpan / 2;
+      minLon = Number(fallback[1]) - minLonSpan / 2;
+      maxLon = Number(fallback[1]) + minLonSpan / 2;
+    }
+    if (maxLat - minLat < minLatSpan) {
+      var midLat = (minLat + maxLat) / 2;
+      minLat = midLat - minLatSpan / 2;
+      maxLat = midLat + minLatSpan / 2;
+    }
+    if (maxLon - minLon < minLonSpan) {
+      var midLon = (minLon + maxLon) / 2;
+      minLon = midLon - minLonSpan / 2;
+      maxLon = midLon + minLonSpan / 2;
+    }
+    return {
+      center: [(minLat + maxLat) / 2, (minLon + maxLon) / 2],
+      zoom: 10,
+      restrict: [
+        [minLat, minLon],
+        [maxLat, maxLon],
+      ],
+      minZoom: 9,
+      maxZoom: 16,
+    };
   }
 
   function splitMapAndList(items) {
@@ -291,6 +347,17 @@
     var x = Number(n);
     if (!isFinite(x)) return '';
     return String(x);
+  }
+
+  function bboxExceedsCity(bbox) {
+    var parts = String(bbox || '').split(',');
+    if (parts.length < 4) return false;
+    var minLat = Number(parts[0]);
+    var minLon = Number(parts[1]);
+    var maxLat = Number(parts[2]);
+    var maxLon = Number(parts[3]);
+    if (![minLat, minLon, maxLat, maxLon].every(isFinite)) return false;
+    return maxLat - minLat > 2 || maxLon - minLon > 3;
   }
 
   function boundsToBbox(bounds) {
@@ -407,6 +474,8 @@
     shortArenaName: shortArenaName,
     pinView: pinView,
     boundsToBbox: boundsToBbox,
+    cityCameraFromItems: cityCameraFromItems,
+    bboxExceedsCity: bboxExceedsCity,
     planBboxFetch: planBboxFetch,
     formatDistanceKm: formatDistanceKm,
     formatSheetMeta: formatSheetMeta,
