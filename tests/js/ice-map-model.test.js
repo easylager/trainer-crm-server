@@ -242,6 +242,14 @@ describe('city camera (selected city, not the world)', () => {
     assert.ok(maxLon - minLon >= 0.15);
     assert.ok(cam.center[0] > 55 && cam.center[0] < 55.4);
   });
+
+  it('does not fall back to Minsk when the selected city has no pins', () => {
+    const { cityCameraFromItems } = loadModel();
+    assert.equal(cityCameraFromItems([]), null);
+    const moscow = cityCameraFromItems([], { fallbackCenter: [55.7558, 37.6173] });
+    assert.ok(moscow.center[0] > 55.5 && moscow.center[0] < 56);
+    assert.ok(moscow.center[1] > 37 && moscow.center[1] < 38);
+  });
 });
 
 describe('рядом со мной (AC-003 + EDGE-001/002)', () => {

@@ -72,12 +72,6 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
     assert.deepEqual(intentChipAction('skate'), { type: 'list', intent: 'skate' });
     assert.deepEqual(intentChipAction('group'), { type: 'list', intent: 'group' });
   });
-
-  it('exposes a hint that the trainers catalog moved to the chip', () => {
-    const { trainersMovedHint } = loadModel();
-    assert.match(trainersMovedHint(), /Тренер/);
-    assert.match(trainersMovedHint(), /чип/);
-  });
 });
 
 describe('formatSortCaption (AC-003 + EDGE-002)', () => {
@@ -179,11 +173,11 @@ describe('formatLiveLine (prototype: three prices, not mashed live.text)', () =>
 });
 
 describe('formatEmptyList', () => {
-  it('skate empty does not dump the trainers-moved hint into the list', () => {
-    const { formatEmptyList, trainersMovedHint } = loadModel();
+  it('skate empty does not dump a catalog-moved banner into the list', () => {
+    const { formatEmptyList } = loadModel();
     const empty = formatEmptyList('skate');
     assert.match(empty.title, /массового катания|катков/i);
-    assert.ok(!empty.body.includes(trainersMovedHint()));
+    assert.ok(!/каталог тренеров теперь здесь/i.test(empty.title + empty.body));
     assert.match(empty.body, /город|Тренер/i);
   });
 
@@ -193,6 +187,15 @@ describe('formatEmptyList', () => {
     assert.match(empty.title, /тренер/i);
     assert.ok(!/catalog\.html/i.test(empty.title + empty.body));
     assert.ok(!/воронк/i.test(empty.body));
+  });
+
+  it('shows coming-soon when the city has trainers but no map rinks', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('skate', { trainerCount: 3, mapRinkCount: 0 });
+    assert.equal(empty.kind, 'coming-soon');
+    assert.match(empty.title, /скоро/i);
+    assert.match(empty.cta, /кататься/i);
+    assert.equal(formatEmptyList('skate', { trainerCount: 0, mapRinkCount: 0 }).kind, undefined);
   });
 });
 
@@ -393,6 +396,21 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
   it('does not put a booking CTA on MK rows even when rendering a mixed list', () => {
     const { listRowCta } = loadModel();
     assert.equal(listRowCta({ live: { kind: 'session' }, can_book: true }), null);
+  });
+});
+
+describe('group chip visibility', () => {
+  it('hides Группы until the city has at least one open group', () => {
+    const { shouldShowGroupChip, sanitizeIntent, buildGroupsProbeUrl } = loadModel();
+    assert.equal(shouldShowGroupChip(0), false);
+    assert.equal(shouldShowGroupChip(null), false);
+    assert.equal(shouldShowGroupChip(2), true);
+    assert.equal(sanitizeIntent('group', { hasGroups: false }), 'skate');
+    assert.equal(sanitizeIntent('group', { hasGroups: true }), 'group');
+    assert.equal(sanitizeIntent('coach', { hasGroups: false }), 'coach');
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /\/api\/public\/training-groups/);
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /city_id=2/);
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /limit=1/);
   });
 });
 

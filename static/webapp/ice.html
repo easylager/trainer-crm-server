@@ -26,10 +26,10 @@
   <script src="mini-app-telegram-chrome.js?v=202609022"></script>
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609068" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609071" />
   <script src="mini-app-client-shell.js?v=202609068"></script>
-  <script src="ice-tab-model.js?v=202609067"></script>
-  <script src="ice-map-model.js?v=2026090618"></script>
+  <script src="ice-tab-model.js?v=202609071"></script>
+  <script src="ice-map-model.js?v=202609071"></script>
 </head>
 <body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
   <div class="header client-app-header">
@@ -62,9 +62,8 @@
       <div class="ice-chips" id="iceIntentChips" role="group" aria-label="Намерение">
         <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">⛸️ Покататься</button>
         <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">🎯 Тренеры</button>
-        <button type="button" class="ice-chip" data-intent="group" aria-pressed="false">👥 Группы</button>
+        <button type="button" class="ice-chip" data-intent="group" aria-pressed="false" hidden>👥 Группы</button>
       </div>
-      <p class="ice-hint" id="iceTrainersHint"></p>
       <div class="ice-seg" id="iceViewSeg">
         <button type="button" data-view="list" aria-pressed="true">Список</button>
         <button type="button" data-view="map" aria-pressed="false">Карта</button>
@@ -78,7 +77,11 @@
       <div class="ice-map-empty" id="iceMapEmpty" hidden></div>
       <div class="ice-map-stage" id="iceMapStage">
         <div id="iceMapCanvas" class="ice-map-canvas" role="application" aria-label="Карта катков"></div>
-        <button type="button" class="ice-near" id="iceNearBtn">◎ Рядом со мной</button>
+        <div class="ice-map-loading" id="iceMapLoading" role="status" aria-live="polite">
+          <span class="ice-map-loading__spin" aria-hidden="true"></span>
+          <p>Загрузка карты…</p>
+        </div>
+        <button type="button" class="ice-near" id="iceNearBtn" hidden>◎ Рядом со мной</button>
       </div>
       <div class="ice-map-sheet" id="iceMapSheet"></div>
       <p class="ice-map-offmap" id="iceMapOffMap" hidden></p>
@@ -99,7 +102,7 @@
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
-  <script src="ice-map.js?v=2026090618"></script>
-  <script src="ice-tab.js?v=202609068"></script>
+  <script src="ice-map.js?v=202609071"></script>
+  <script src="ice-tab.js?v=202609071"></script>
 </body>
 </html>

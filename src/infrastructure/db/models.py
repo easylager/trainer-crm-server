@@ -376,6 +376,18 @@ class IceSession(Base):
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
 
 
+class IceCityInterest(Base):
+    """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
+
+    __tablename__ = "ice_city_interest"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False, server_default="skate")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 # M2M: trainer works at these arenas; filter catalog by arena via this table
 trainer_arenas_table = Table(
     "trainer_arenas",
