@@ -5,10 +5,13 @@ import importlib.util
 import json
 import sys
 import uuid
+from dataclasses import replace
 from datetime import date, timedelta
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from sqlalchemy import text
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -62,7 +65,14 @@ def test_dry_run_parses_all_seven_dossiers(cards) -> None:
         assert card.arena_id in EXPECTED_IDS.values()
         assert card.enough_facts
         assert card.status == "published"
-        assert all(p.action == "skip" for p in card.photo_decisions)
+
+    assert cards["minskarena"].publishable_photo_count == 0
+    assert cards["zamok"].publishable_photo_count == 6
+    assert cards["chizhovka"].publishable_photo_count == 3
+    assert cards["ledby"].publishable_photo_count == 6
+    assert cards["minsk-diamond"].publishable_photo_count == 2
+    assert cards["minsk-junost"].publishable_photo_count == 0
+    assert cards["minsk-ledlife"].publishable_photo_count == 0
 
 
 def test_zamok_is_the_fullest_card(cards) -> None:
@@ -86,8 +96,13 @@ def test_zamok_is_the_fullest_card(cards) -> None:
     assert zamok.social_urls["vk"].startswith("https://vk.com/")
     assert zamok.social_urls["instagram"]
     assert zamok.short_description
-    assert all(p.action == "skip" for p in zamok.photo_decisions)
-    assert any("нужно разрешение" in p.reason for p in zamok.photo_decisions)
+    assert zamok.publishable_photo_count == 6
+    assert all(
+        p.action == "upload"
+        for p in zamok.photo_decisions
+        if p.action != "skip"
+    )
+    assert any("arena media limit" in p.reason for p in zamok.photo_decisions)
 
 
 def test_unknown_amenities_stay_unset(cards) -> None:
@@ -104,15 +119,71 @@ def test_unknown_amenities_stay_unset(cards) -> None:
     assert diamond.social_urls == {}
 
 
-def test_photo_decisions_skip_cdn_and_diamond_wait_grant(cards) -> None:
+def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:
     diamond = cards["minsk-diamond"]
-    reasons = " ".join(p.reason for p in diamond.photo_decisions)
-    assert "wait for grant" in reasons
-    assert diamond.publishable_photo_count == 0
+    by_ref = {p.url_or_file: p for p in diamond.photo_decisions}
+    png = by_ref["photos/minsk-diamond/bannerled.png"]
+    assert png.action == "upload"
+    assert "wait for grant" not in png.reason.lower()
+    assert by_ref["https://diamondcity.by/d/photo_5386312898617402150_y_1.jpg"].action == "upload"
+    ig = by_ref["https://www.instagram.com/diamondcity.by/"]
+    assert ig.action == "skip"
+    assert "instagram" in ig.reason.lower() or "social" in ig.reason.lower()
+    assert diamond.publishable_photo_count == 2
     junost = cards["minsk-junost"]
-    assert any("403" in p.reason or "нужно разрешение" in p.reason for p in junost.photo_decisions)
+    assert junost.publishable_photo_count == 0
+    assert any("403" in p.reason or "instagram" in p.reason or "no photo" in p.reason for p in junost.photo_decisions)
     assert "junost.by origin 403" in junost.blockers[0]
     assert "ledlife.by origin 403" in cards["minsk-ledlife"].blockers[0]
+
+
+def test_official_operator_photo_is_accepted(loader) -> None:
+    """EPIC3 2026-09-06: verbal OK is enough; grant notes do not block official rink frames."""
+    decision = loader._decide_photo(
+        {
+            "file or url": "https://tczamok.by/files/entertainments/entertainment/2/katok-meta.jpg",
+            "license (own|operator|permitted)": "operator",
+            "attribution": "ТЦ «Замок», страница катка",
+            "note": "og:image; лёд. **нужно разрешение** на загрузку в продукт.",
+        },
+        slug="zamok",
+    )
+    assert decision is not None
+    assert decision.action == "upload"
+    assert decision.license == "operator"
+    assert "google" not in decision.reason.lower()
+
+
+def test_google_image_url_still_skipped(loader) -> None:
+    decision = loader._decide_photo(
+        {
+            "file or url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcExample",
+            "license (own|operator|permitted)": "operator",
+            "attribution": "ТЦ «Замок»",
+            "note": "",
+        },
+        slug="zamok",
+    )
+    assert decision is not None
+    assert decision.action == "skip"
+    assert "google" in decision.reason.lower()
+
+
+def test_diamond_local_png_accepted_for_presentation(loader) -> None:
+    """DiaMond bannerled.png is operator-hosted; presentation load must not wait for written grant."""
+    decision = loader._decide_photo(
+        {
+            "file or url": "photos/minsk-diamond/bannerled.png",
+            "license (own|operator|permitted)": "operator",
+            "attribution": "ТЦ DiaMond city, https://diamondcity.by/d/bannerled.png",
+            "note": "Скачан с origin оператора 2026-09-06. ждём grant",
+        },
+        slug="minsk-diamond",
+    )
+    assert decision is not None
+    assert decision.action == "upload"
+    assert decision.license == "operator"
+    assert "wait for grant" not in decision.reason.lower()
 
 
 def test_compact_phone_fits_column(loader) -> None:
@@ -256,6 +327,7 @@ async def test_apply_updates_zamok_profile_unknown_amenities_unset(
         fixtures_dir=tmp_path,
         seed_sessions=True,
         arena_id=arena_id,
+        fetch_photo=lambda _url: None,
     )
     await db_session.flush()
     assert result.error is None
@@ -311,3 +383,85 @@ async def test_apply_updates_zamok_profile_unknown_amenities_unset(
     assert seeded[0] == "etalon_073"
     assert seeded[1] == "public_skate"
     assert seeded[2] is not None
+
+
+def _png_bytes() -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (32, 24), color=(12, 80, 160)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_apply_uploads_diamond_local_png(
+    loader, cards, db_session, tmp_path: Path, monkeypatch
+) -> None:
+    city = (await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))).scalar()
+    if city is None:
+        pytest.skip("need seed cities")
+    ins = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (city_id, name, address, is_active, is_confirmed)
+            VALUES (:cid, :name, 'ул. Громова', true, true)
+            RETURNING id
+            """
+        ),
+        {"cid": int(city), "name": f"DiaMond-loader-{uuid.uuid4().hex[:8]}"},
+    )
+    arena_id = int(ins.scalar_one())
+    await db_session.flush()
+
+    png_dir = tmp_path / "photos" / "minsk-diamond"
+    png_dir.mkdir(parents=True)
+    (png_dir / "bannerled.png").write_bytes(_png_bytes())
+
+    def fake_upload(arena_id: int, _body: bytes, _content_type: str) -> dict:
+        token = uuid.uuid4().hex[:8]
+        variants = {
+            "thumb": f"arenas/{arena_id}/{token}_thumb.jpg",
+            "card": f"arenas/{arena_id}/{token}_card.jpg",
+            "hero": f"arenas/{arena_id}/{token}_hero.jpg",
+        }
+        return {"storage_key": variants["hero"], "variants": variants, "width": 32, "height": 24}
+
+    monkeypatch.setattr("src.infrastructure.s3.upload_arena_photo", fake_upload)
+
+    png_only = replace(
+        cards["minsk-diamond"],
+        photo_decisions=[
+            p
+            for p in cards["minsk-diamond"].photo_decisions
+            if p.url_or_file.endswith("bannerled.png")
+        ],
+    )
+    assert png_only.photo_decisions and png_only.photo_decisions[0].action == "upload"
+
+    result = await loader.apply_card(
+        db_session,
+        png_only,
+        fixtures_dir=tmp_path,
+        seed_sessions=False,
+        arena_id=arena_id,
+        repo_root=tmp_path,
+        fetch_photo=lambda _url: None,
+    )
+    await db_session.flush()
+    assert result.error is None
+    assert result.photos_uploaded == 1
+
+    media = (
+        await db_session.execute(
+            text(
+                """
+                SELECT license, attribution, source_url, status
+                FROM media WHERE owner_type = 'arena' AND owner_id = :id
+                """
+            ),
+            {"id": arena_id},
+        )
+    ).fetchone()
+    assert media is not None
+    assert media[0] == "operator"
+    assert media[1] and "DiaMond" in media[1]
+    assert media[2] and "diamondcity.by" in media[2]
+    assert media[3] == "published"

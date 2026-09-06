@@ -42,7 +42,7 @@ pr_url: https://github.com/easylager/trainer-crm-server/pull/25
 В Минске целевые МК-арены из TASK-073 загружены: профиль published, ≥1 лицензионное фото если досье его дало, слоты либо от парсера либо ручной эталон на 7 дней если адаптера нет.
 Requirement: CONFIRMED
 Verification method: SQL + сверка с досье
-Notes: Loader UPSERTs all 7 profiles as `published` from verified fields. **No media rows** — every photo is skip (нужно разрешение / wait-for-grant / no file). Session seed is implemented (`source_id=etalon_073`, ≤7 days) but **0 rows on this train** because SPEC `expected.json` is not on `release/ice-discovery`. Pytest seeds 1 zamok slot on `trainer_crm_test` (rolled back).
+Notes: Loader UPSERTs all 7 profiles as `published` from verified fields. **Photo follow-up 2026-09-06:** official operator frames from dossiers are would-upload / uploaded on `--apply` (verbal OK; grant notes do not block). Google/stock still skipped. Cap 6 per arena (TASK-049). Session seed is implemented (`source_id=etalon_073`, ≤7 days). Pytest seeds 1 zamok slot and 1 DiaMond media row on `trainer_crm_test` (rolled back).
 
 ### AC-002
 Для каждой заполненной арены записан источник расписания и дата, на которую данные верны.
@@ -91,11 +91,29 @@ Dry-run of 7 TASK-073 dossiers on `feat/TASK-063-load-minsk-cards`. Prod DB not 
 
 Mean operator time from a *ready* dossier (read card + dry-run + confirm photo/session decisions): **~2.4 min/arena**. Script parse mean **~0.2 ms/arena**; full batch dry-run **~2 ms**. Research time is TASK-073, not this task.
 
-### Photo decisions (no `media` inserts)
+### Photo follow-up (2026-09-06, presentation)
 
-All CDN uploads skipped. DiaMond `photos/minsk-diamond/bannerled.png` is operator-hosted locally but TASK-073 still said wait for grant — **not** inserted as published media. Google/search images are never downloaded.
+Owner decision in EPIC3: verbal OK is enough for demo. Grant notes («нужно разрешение» / «ждём grant») no longer skip official rink frames. Google/gstatic/stock still never.
+
+Dry-run would-upload counts (TASK-049 cap 6):
+
+| arena_id | slug | would-upload | still skip |
+|---|---|---|---|
+| 2 | minskarena | 0 | no photo |
+| 3 | zamok | **6** | 3 over media limit |
+| 4 | minsk-ledlife | 0 | gallery 403 + Instagram + empty |
+| 5 | ledby | **6** | — |
+| 6 | chizhovka | **3** | — |
+| 7 | minsk-diamond | **2** (incl. `photos/minsk-diamond/bannerled.png`) | Instagram |
+| 8 | minsk-junost | 0 | gallery 403 + Instagram + empty |
+
+`--apply` reads local dossier files first, then HTTP URLs already listed in the dossier (never search). `license=operator` + attribution / `source_url` on `media`. Prod/cloud DB still refused.
 
 Detail: `.ai/data/arena-cards/TASK-063-load-report.md`
+
+### Photo decisions (original 2026-09-06 load — all skipped)
+
+All CDN uploads skipped on the first merge. DiaMond PNG waited for grant. Superseded by the presentation follow-up above.
 
 ### Session seed
 
@@ -126,3 +144,4 @@ When SPEC fixtures land on the train, re-run `--apply` on `trainer_crm_test`. `v
 - **SPLIT** (2026-09-05) — ресёрч карточки/фото → TASK-073; 063 = загрузка в продукт + ручные слоты только без адаптера
 - **IN_PROGRESS** (2026-09-06) — CONTENT/SCHEMA ops loader `scripts/load_minsk_arena_cards.py` + tests. Dry-run parses 7 dossiers; apply on `trainer_crm_test` updates zamok; unknown amenities unset; no media; no prod writes. PR https://github.com/easylager/trainer-crm-server/pull/25 against `release/ice-discovery` (not merged).
 - **MERGED** (2026-09-06) — squash `493986f` into `release/ice-discovery`. CI green. Not merged to master. Follow-up: `--apply` on local DB; photos after grant; session etalon when SPEC fixtures are on the train.
+- **PHOTOS_FOLLOWUP** (2026-09-06) — EPIC3 owner: verbal OK enough for demo. Loader treats official operator image URLs + DiaMond `bannerled.png` as would-upload; Google/stock still skip; `--apply` uploads via TASK-049 `media` (local file first, then dossier URLs). Cap 6. Tests in `tests/ops/test_load_minsk_arena_cards.py`. PR https://github.com/easylager/trainer-crm-server/pull/41 against `release/ice-discovery`. Not merged. Not merged to master.

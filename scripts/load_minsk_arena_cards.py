@@ -7,8 +7,10 @@ Usage:
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply --report .ai/data/arena-cards/TASK-063-load-report.md
 
-Photos: no Google downloads, no CDN upload unless the dossier license is explicit
-and the note is not «нужно разрешение». DiaMond local PNG waits for grant (TASK-073).
+Photos: official rink site/socials and local dossier files are would-upload / uploaded on
+``--apply`` for demo (EPIC3 2026-09-06: verbal OK is enough). ``license`` must be
+own|operator|permitted; Google/gstatic/stock never. Grant notes do not block official frames.
+DiaMond ``photos/minsk-diamond/bannerled.png`` is loaded. Cap 6 photos per arena (TASK-049).
 Manual ice_sessions: optional 7-day public_skate/open_ice from fixture expected.json
 (source_id=etalon_073). Skip empty / 403-only fixtures. TASK-061 adapters are not used.
 """
@@ -24,8 +26,11 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Mapping
 from urllib.parse import urlparse
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 try:
     from zoneinfo import ZoneInfo
@@ -53,11 +58,17 @@ AMENITY_KEYS = frozenset(
     }
 )
 UNKNOWN_TOKENS = frozenset({"", "unknown", "—", "-", "–", "нет"})
-NEED_PERMISSION_RE = re.compile(
-    r"нужно разрешение|ждём разрешение|ждем разрешение|фото нет",
-    re.IGNORECASE,
-)
 GOOGLE_IMAGE_RE = re.compile(r"google\.(?:com|by)|gstatic\.com|googleapis\.com", re.I)
+STOCK_OR_AGGREGATOR_RE = re.compile(
+    r"unsplash\.com|shutterstock\.com|gettyimages\.|pinterest\.|yandex\.(?:ru|by|com)/images",
+    re.I,
+)
+SOCIAL_PROFILE_RE = re.compile(
+    r"(?:instagram\.com|facebook\.com|fb\.com|vk\.com|t\.me|telegram\.me)/",
+    re.I,
+)
+IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+ARENA_MEDIA_MAX = 6
 BY_BLOCKER_RE = re.compile(r"403|BY-egress|BY-blocker|nginx/1\.10", re.I)
 SEASON_START_RE = re.compile(r"season_start_month\s*=\s*(\d{1,2})", re.I)
 SEASON_END_RE = re.compile(r"season_end_month\s*=\s*(\d{1,2})", re.I)
@@ -91,7 +102,6 @@ SLUG_FIXTURE_DIRS = {
     "minsk-junost": ("minsk-junost",),
     "minsk-ledlife": ("minsk-ledlife",),
 }
-DIAMOND_WAIT_GRANT = "bannerled.png"
 LOCAL_DB_HOSTS = frozenset(
     {"localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"}
 )
@@ -173,6 +183,7 @@ class ArenaLoadResult:
     sessions_skipped: int = 0
     sessions_reason: str = ""
     photo_summary: str = ""
+    photos_uploaded: int = 0
     apply_ms: float = 0.0
     error: str | None = None
 
@@ -325,7 +336,62 @@ def parse_opening_hours(raw: str | None) -> dict[str, Any] | None:
     return payload
 
 
+def _asset_path(value: str) -> str:
+    if "://" in value:
+        return urlparse(value).path
+    return value.split("?", 1)[0]
+
+
+def _looks_like_image_ref(value: str) -> bool:
+    if is_unknown(value):
+        return False
+    suffix = Path(_asset_path(value)).suffix.lower()
+    return suffix in IMAGE_SUFFIXES
+
+
+def _first_http_url(text: str | None) -> str | None:
+    if not text:
+        return None
+    match = re.search(r"https?://[^\s)>\]]+", text)
+    if not match:
+        return None
+    return match.group(0).rstrip(").,;")
+
+
+def photo_source_url(decision: PhotoDecision) -> str | None:
+    """HTTP origin for media.source_url (TASK-049). Local files use attribution URL."""
+    ref = decision.url_or_file
+    if ref.startswith(("http://", "https://")):
+        return ref
+    return _first_http_url(decision.attribution)
+
+
+def _cap_arena_media(photos: list[PhotoDecision]) -> list[PhotoDecision]:
+    kept = 0
+    out: list[PhotoDecision] = []
+    for photo in photos:
+        if photo.action != "upload":
+            out.append(photo)
+            continue
+        if kept >= ARENA_MEDIA_MAX:
+            out.append(
+                PhotoDecision(
+                    photo.url_or_file,
+                    photo.license,
+                    photo.attribution,
+                    photo.note,
+                    "skip",
+                    f"arena media limit {ARENA_MEDIA_MAX}",
+                )
+            )
+            continue
+        kept += 1
+        out.append(photo)
+    return out
+
+
 def _decide_photo(row: Mapping[str, str], *, slug: str) -> PhotoDecision | None:
+    _ = slug  # call-site compatibility; decisions are URL/license based
     url = _cell(row.get("file or url") or row.get("file") or row.get("url") or "")
     license_raw = _cell(row.get("license (own|operator|permitted)") or row.get("license") or "")
     attribution = _cell(row.get("attribution") or "") or None
@@ -333,36 +399,28 @@ def _decide_photo(row: Mapping[str, str], *, slug: str) -> PhotoDecision | None:
     if is_unknown(url) and is_unknown(license_raw) and not note:
         return None
     license_val = None if is_unknown(license_raw) else license_raw.lower()
-    haystack = f"{url} {note}"
+    haystack = f"{url} {note} {attribution or ''}"
     if GOOGLE_IMAGE_RE.search(haystack):
         return PhotoDecision(url, license_val, attribution, note, "skip", "google/search image — never download")
+    if STOCK_OR_AGGREGATOR_RE.search(haystack):
+        return PhotoDecision(url, license_val, attribution, note, "skip", "stock/aggregator image — never download")
     if is_unknown(url):
         return PhotoDecision(url or "—", license_val, attribution, note, "skip", "no photo / waiting")
-    if DIAMOND_WAIT_GRANT in url.lower() or (
-        slug in {"minsk-diamond", "diamond"} and url.lower().endswith(".png")
-    ):
-        return PhotoDecision(
-            url,
-            license_val,
-            attribution,
-            note,
-            "skip",
-            "DiaMond local PNG is operator-hosted; TASK-073 wait for grant — not published in media",
-        )
-    if NEED_PERMISSION_RE.search(note) or NEED_PERMISSION_RE.search(url):
-        return PhotoDecision(url, license_val, attribution, note, "skip", "нужно разрешение / фото нет")
-    if "403" in haystack:
-        return PhotoDecision(url, license_val, attribution, note, "skip", "origin 403 — no file")
+    if SOCIAL_PROFILE_RE.search(url) and not _looks_like_image_ref(url):
+        return PhotoDecision(url, license_val, attribution, note, "skip", "instagram/social — never scrape")
+    if not _looks_like_image_ref(url):
+        reason = "origin 403 — no file" if "403" in haystack else "not an image file"
+        return PhotoDecision(url, license_val, attribution, note, "skip", reason)
     if license_val not in {"own", "operator", "permitted"}:
         return PhotoDecision(url, license_val, attribution, note, "skip", "license not explicit")
-    # Explicit license without a grant note still needs CDN bytes; this loader does not upload.
+    # EPIC3 2026-09-06: verbal OK is enough. Grant notes do not block official rink frames.
     return PhotoDecision(
         url,
         license_val,
         attribution,
         note,
-        "skip",
-        "license named but no transfer-of-rights / CDN upload in this loader",
+        "upload",
+        "official operator source — presentation (verbal OK 2026-09-06)",
     )
 
 
@@ -435,11 +493,13 @@ def parse_dossier(path: Path) -> ArenaCard:
         for key in fields
         if not is_unknown(fields[key].get("value"))
     }
-    photos = [
-        decision
-        for row in _parse_md_table(_section_after(md, "photos"))
-        if (decision := _decide_photo(row, slug=slug)) is not None
-    ]
+    photos = _cap_arena_media(
+        [
+            decision
+            for row in _parse_md_table(_section_after(md, "photos"))
+            if (decision := _decide_photo(row, slug=slug)) is not None
+        ]
+    )
     enough = enough_profile_facts(
         district=district,
         phone=phone,
@@ -615,6 +675,80 @@ def async_database_url(url: str) -> str:
     return url
 
 
+def _content_type_for(ref: str) -> str:
+    suffix = Path(_asset_path(ref)).suffix.lower()
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }.get(suffix, "image/jpeg")
+
+
+def resolve_local_photo_path(ref: str, *, root: Path) -> Path | None:
+    if is_unknown(ref) or ref.startswith(("http://", "https://")):
+        return None
+    cleaned = ref.strip().lstrip("./")
+    candidates = [
+        Path(ref) if os.path.isabs(ref) else None,
+        root / cleaned,
+        root / ".ai" / "data" / "arena-cards" / cleaned,
+        root / ".ai" / "data" / cleaned,
+    ]
+    for path in candidates:
+        if path is not None and path.is_file():
+            return path
+    return None
+
+
+def fetch_remote_photo_bytes(url: str, *, timeout: float = 8.0) -> bytes | None:
+    """GET a dossier URL. Never follow search/stock/social profile pages."""
+    if not url.startswith(("http://", "https://")):
+        return None
+    if GOOGLE_IMAGE_RE.search(url) or STOCK_OR_AGGREGATOR_RE.search(url):
+        return None
+    if SOCIAL_PROFILE_RE.search(url) and not _looks_like_image_ref(url):
+        return None
+    req = urllib_request.Request(
+        url,
+        headers={"User-Agent": "IceProCare-TASK-063/1.0 (arena card loader; operator demo)"},
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read(15 * 1024 * 1024 + 1)
+    except (urllib_error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    if not data or len(data) > 15 * 1024 * 1024:
+        return None
+    return data
+
+
+def resolve_photo_bytes(
+    decision: PhotoDecision,
+    *,
+    root: Path,
+    fetch: Callable[[str], bytes | None] | None = None,
+) -> tuple[bytes | None, str]:
+    """Local dossier file first; else HTTP URL already listed in the dossier."""
+    fetcher = fetch or fetch_remote_photo_bytes
+    local = resolve_local_photo_path(decision.url_or_file, root=root)
+    if local is not None:
+        return local.read_bytes(), _content_type_for(local.name)
+    if decision.url_or_file.startswith(("http://", "https://")) and _looks_like_image_ref(
+        decision.url_or_file
+    ):
+        body = fetcher(decision.url_or_file)
+        if body:
+            return body, _content_type_for(decision.url_or_file)
+    source = photo_source_url(decision)
+    if source and _looks_like_image_ref(source):
+        body = fetcher(source)
+        if body:
+            return body, _content_type_for(source)
+    return None, _content_type_for(decision.url_or_file)
+
+
 def profile_patch(card: ArenaCard) -> dict[str, Any]:
     return {
         "district": card.district,
@@ -637,9 +771,16 @@ async def apply_card(
     fixtures_dir: Path,
     seed_sessions: bool = True,
     arena_id: int | None = None,
+    repo_root: Path | None = None,
+    fetch_photo: Callable[[str], bytes | None] | None = None,
 ) -> ArenaLoadResult:
     from sqlalchemy import text
 
+    from src.application.arena_media import (
+        ArenaMediaLimitError,
+        InvalidMediaLicenseError,
+        upload_arena_media_from_bytes,
+    )
     from src.application.arena_profile import apply_admin_arena_profile_patch
     from src.application.ice_session_use_cases import (
         IceSessionDurationError,
@@ -684,6 +825,31 @@ async def apply_card(
             error=f"arena_id {target_id} not in DB",
             apply_ms=(time.perf_counter() - started) * 1000,
         )
+
+    photos_uploaded = 0
+    root = repo_root or ROOT
+    fetcher = fetch_photo or fetch_remote_photo_bytes
+    for photo in card.photo_decisions:
+        if photo.action != "upload":
+            continue
+        body, content_type = resolve_photo_bytes(photo, root=root, fetch=fetcher)
+        if not body:
+            continue
+        try:
+            await upload_arena_media_from_bytes(
+                session,
+                target_id,
+                body,
+                content_type,
+                license_key=photo.license,
+                source_url=photo_source_url(photo),
+                attribution=photo.attribution,
+            )
+        except (ArenaMediaLimitError, InvalidMediaLicenseError, LookupError, ValueError):
+            continue
+        photos_uploaded += 1
+    if photos_uploaded:
+        photo_summary = f"uploaded {photos_uploaded}; {photo_summary}"
 
     seeded = 0
     skipped = 0
@@ -822,6 +988,7 @@ async def apply_card(
         sessions_skipped=skipped,
         sessions_reason=sessions_reason,
         photo_summary=photo_summary,
+        photos_uploaded=photos_uploaded,
         apply_ms=(time.perf_counter() - started) * 1000,
     )
 
@@ -834,7 +1001,8 @@ def render_report(results: list[ArenaLoadResult], *, applied: bool, total_ms: fl
         f"- generated_at: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
         f"- wall_ms: {total_ms:.1f}",
         f"- source_id for manual slots: `{SOURCE_ETALON}`",
-        "- media: no CDN upload in this run (license not granted / нужно разрешение / DiaMond wait)",
+        "- media: official operator frames would-upload / upload on --apply "
+        "(verbal OK 2026-09-06; Google/stock never; grant notes do not block)",
         "",
         "| arena_id | slug | profile | photos | sessions | parse_ms | notes |",
         "|---|---|---|---|---|---|---|",
