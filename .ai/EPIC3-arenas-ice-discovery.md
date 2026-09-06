@@ -1,7 +1,7 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** IN PROGRESS — R3a + карта таба «Лёд» на train; дальше ключ Яндекса, DiaMond `<div>`-ячейки, BY-egress  
+**Статус:** IN PROGRESS — экраны прототипа на train (список, карта, карточка); дальше ключ Яндекса в `.env`, `--apply` фото локально, BY-egress  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
 
@@ -263,3 +263,5 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-054_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 squash `f216f46` → `release/ice-discovery`. Карта таба «Лёд» на Яндексе. Не в master.
 - **TASK-066_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/37 squash `bbbcf88` → `release/ice-discovery`. Калибровка Минска.
 - **TASK-061_FOLLOW_UP_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/39 squash `d37e6d0` → `release/ice-discovery`. DiaMond 44/44, в том числе два интервала в одной ячейке.
+- **ICE_UI_PROTOTYPE_PASS** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/40 squash `f34e49a` → `release/ice-discovery`. Живая строка взр/дет/прокат; МК без «Записаться».
+- **TASK-063_PHOTOS_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/41 squash `77d4b17` → `release/ice-discovery`. Официальные фото досье в loader.
