@@ -104,6 +104,16 @@ describe('sessionNowState', () => {
     );
     assert.equal(state, 'upcoming');
   });
+
+  it('is live at starts_at and past at ends_at (half-open interval)', () => {
+    const { sessionNowState } = loadModel();
+    const session = {
+      starts_at_utc: '2026-09-06T10:00:00+00:00',
+      ends_at_utc: '2026-09-06T11:00:00+00:00',
+    };
+    assert.equal(sessionNowState(session, new Date('2026-09-06T10:00:00Z')), 'live');
+    assert.equal(sessionNowState(session, new Date('2026-09-06T11:00:00Z')), 'past');
+  });
 });
 
 describe('buildRibbonForDay', () => {
@@ -141,9 +151,11 @@ describe('buildRibbonForDay', () => {
     });
     assert.equal(rows.length, 2);
     assert.equal(rows[0].nature, 'ice');
+    assert.equal(rows[0].stripe, 'ice');
     assert.equal(rows[0].cta, 'Билет на месте');
     assert.equal(rows[0].ctaKind, 'ghost');
     assert.equal(rows[1].nature, 'lesson');
+    assert.equal(rows[1].stripe, 'lesson');
     assert.equal(rows[1].cta, 'Заявка');
     assert.equal(rows[1].ctaKind, 'solid');
     assert.ok(rows[0].time < rows[1].time);
@@ -205,6 +217,71 @@ describe('buildRibbonForDay', () => {
     assert.equal(rows[0].nowState, 'live');
     assert.match(rows[0].meta, /идёт/i);
   });
+
+  it('keeps a live session as идёт and drops ones that already ended', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [
+        {
+          id: 1,
+          kind: 'public_skate',
+          session_label: 'Утреннее МК',
+          starts_at_local: '08:00',
+          starts_at_utc: '2026-09-06T05:00:00+00:00',
+          ends_at_utc: '2026-09-06T06:00:00+00:00',
+          price_adult_minor: 1200,
+          currency_code: 'BYN',
+        },
+        {
+          id: 2,
+          kind: 'public_skate',
+          session_label: 'Массовое катание',
+          starts_at_local: '10:00',
+          starts_at_utc: '2026-09-06T07:00:00+00:00',
+          ends_at_utc: '2026-09-06T08:00:00+00:00',
+          price_adult_minor: 1200,
+          currency_code: 'BYN',
+        },
+        {
+          id: 3,
+          kind: 'open_ice',
+          session_label: 'Свободный лёд',
+          starts_at_local: '19:00',
+          starts_at_utc: '2026-09-06T16:00:00+00:00',
+          ends_at_utc: '2026-09-06T17:00:00+00:00',
+          price_adult_minor: 2000,
+          currency_code: 'BYN',
+        },
+      ],
+      groups: [],
+      weekday: 6,
+      now: new Date('2026-09-06T07:20:00Z'),
+    });
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].nowState, 'live');
+    assert.equal(rows[0].title, 'Массовое катание');
+    assert.match(rows[0].meta, /идёт/i);
+    assert.equal(rows[1].nowState, 'upcoming');
+    assert.equal(rows[1].title, 'Свободный лёд');
+    assert.ok(!/идёт/i.test(rows[1].meta));
+  });
+});
+
+describe('ribbonLegend', () => {
+  it('matches the prototype legend under the ribbon', () => {
+    const { ribbonLegend } = loadModel();
+    const items = ribbonLegend();
+    assert.equal(items.length, 2);
+    assert.equal(items[0].nature, 'ice');
+    assert.equal(items[0].stripe, 'ice');
+    assert.match(items[0].text, /открытый лёд/);
+    assert.match(items[0].text, /информац/);
+    assert.equal(items[1].nature, 'lesson');
+    assert.equal(items[1].stripe, 'lesson');
+    assert.match(items[1].text, /занятие/);
+    assert.match(items[1].text, /записаться/i);
+  });
 });
 
 describe('buildWeekSummaries', () => {
@@ -240,6 +317,24 @@ describe('heroPhotoUrl', () => {
       }),
       '/h.jpg'
     );
+  });
+});
+
+describe('heroView', () => {
+  it('uses placeholder mode when there is no hero photo', () => {
+    const { heroView } = loadModel();
+    const view = heroView({ hero: null, gallery: [] });
+    assert.equal(view.mode, 'placeholder');
+    assert.equal(view.url, null);
+  });
+
+  it('uses photo mode when a hero variant exists', () => {
+    const { heroView } = loadModel();
+    const view = heroView({
+      hero: { variants: { hero: '/h.jpg' } },
+    });
+    assert.equal(view.mode, 'photo');
+    assert.equal(view.url, '/h.jpg');
   });
 });
 
@@ -315,7 +410,8 @@ describe('seasonClosedBanner', () => {
       season_start_month: 9,
     });
     assert.ok(text);
-    assert.match(text, /закрыт/i);
+    assert.match(text, /закрыт до/i);
+    assert.match(text, /сентября/);
   });
 
   it('is null while in season', () => {
@@ -324,6 +420,31 @@ describe('seasonClosedBanner', () => {
       seasonClosedBanner({ in_season: true, season_start_month: 1, season_end_month: 12 }),
       null
     );
+  });
+});
+
+describe('iceFeedView', () => {
+  it('shows закрыт до above the feed and hides the ribbon even when sessions exist', () => {
+    const { iceFeedView } = loadModel();
+    const view = iceFeedView({
+      card: { in_season: false, season_start_month: 9, tier: 'A' },
+      hasSessions: true,
+    });
+    assert.equal(view.mode, 'closed');
+    assert.equal(view.showRibbon, false);
+    assert.match(view.banner, /закрыт до/i);
+    assert.match(view.banner, /сентября/);
+  });
+
+  it('keeps the ribbon while the arena is in season and has sessions', () => {
+    const { iceFeedView } = loadModel();
+    const view = iceFeedView({
+      card: { in_season: true, tier: 'A' },
+      hasSessions: true,
+    });
+    assert.equal(view.mode, 'ribbon');
+    assert.equal(view.showRibbon, true);
+    assert.equal(view.banner, null);
   });
 });
 
