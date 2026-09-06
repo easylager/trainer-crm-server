@@ -1,8 +1,8 @@
 ---
 task_id: TASK-076
 title: Лёд = токены приложения; «Тренеры» остаётся в хроме Льда
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-053, TASK-074, TASK-075]
 execution_mode: SUPERVISED
@@ -178,3 +178,4 @@ Verification: existing skate-lens tests
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/49 → `release/ice-discovery` (не master). Status IN_PROGRESS until merged.
 - **REVIEW_FIX** (2026-09-06) — coach map: no leftover rink pins, no `GET /api/public/ice/arenas` for the trainers lens; honest empty «Тренеров на карте нет». City-geo `buildListUrl({ near, intent: 'coach', limit: 1 })` unchanged.
 - **STAND_HOTFIX** (2026-09-06) — координатор: `GET /webapp/ice-map.js` и `ice-map-model.js` давали 404 (маршрутов не было, в отличие от ice-tab.js). Карта на стенде из-за этого не открывалась. Добавлены FileResponse + assert в `test_ice_tab_page_and_assets_served`. Не закоммичено — включить в этот PR.
+- **MERGED** (2026-09-06) — squash `cbf7284` → `release/ice-discovery` (#49, включая STAND_HOTFIX). Не в master.

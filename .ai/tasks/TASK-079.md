@@ -1,8 +1,8 @@
 ---
 task_id: TASK-079
 title: Минск-Арена — официальные фото карточки (фасад комплекса)
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-073, TASK-063, TASK-077]
 execution_mode: SUPERVISED
@@ -53,3 +53,4 @@ Verification: script unchanged this TASK; apply used local `localhost:5432/train
 
 - **TASK_CREATED** (2026-09-06) — follow-up стенда: 4/5 thumbs, Минск-Арена skip.
 - **CONTENT** (2026-09-06) — ABWS `/api/v3/arena/home` objects «Арена» / «Конькобежный стадион» + `object-bg.jpg`. Amenities parking+cafe. Apply только id=2 на стенд 076. Branch not pushed.
+- **MERGED** (2026-09-06) — squash `e48cdf4` → `release/ice-discovery` (#51, "TASK-079: official Minsk-Arena photos for the arena card"). Не в master.

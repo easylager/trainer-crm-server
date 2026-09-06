@@ -1,8 +1,8 @@
 ---
 task_id: TASK-077
 title: На стенде — живые слоты МК и фото арен
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-049, TASK-061, TASK-063, TASK-065]
 execution_mode: SUPERVISED
@@ -128,3 +128,4 @@ Verification: markdown report in `.ai/data/arena-cards/`
 - **HUMAN_GATE** (2026-09-06) — нужен стенд владельца (Q-002), иначе некуда apply.
 - **PHASE_STARTED | execute** (2026-09-06) — DATA: local `trainer_crm` (localhost, not cloud). Migrations already 0198. Loader `--apply --allow-local-dev-db --only-arena-ids 2,3,5,6,7` (skip local arena 4 = Манеж). Live ingest for enabled MK jobs; junost/ledlife stay off. Skate API `city_id=2` → 5 items with live lines, 4 thumbs; minskarena photo skip (no ice/facade on origin). Report: `.ai/data/arena-cards/TASK-077-stand-report.md`.
 - **PR** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/50 (base `release/ice-discovery`). Coordinator merges.
+- **MERGED** (2026-09-06) — squash `34a6486` → `release/ice-discovery` (#50). Не в master.

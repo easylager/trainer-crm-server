@@ -1,7 +1,7 @@
 # EPIC3 — Арена как экран: лёд и тренеры в одном клиентском приложении
 
 **Дата создания:** 2026-09-04  
-**Статус:** IN PROGRESS на **только** `release/ice-discovery`. UI close-out 074/075 на train; дальше — ручной просмотр Mini App и живые слоты.  
+**Статус:** IN PROGRESS на **только** `release/ice-discovery`. 048–080 на train (кроме 059/060/067/068 — не этот эпик): токены приложения на Льде (076), живые слоты и фото на стенде (077), фото Минск-Арены (079), сайт/соцсети и «Открыть» день на карточке (080). Дальше — сверка гейтов R1–R3b вручную на стенде и открытые продуктовые вопросы (BY-egress, еженедельный обзор %, каток-партнёр).  
 **Git lock (владелец 2026-09-06):** релиз **не скоро**. Запрещено агентам: PR base `master`, merge train → `master`, «release cut». Конец TASK = merge в `release/ice-discovery`.  
 **Инициатива:** Ice Discovery (больше одного эпика по объёму; в трекере может оставаться «EPIC3»)  
 **Основание:** [`DESIGN-ARENAS-CLIENT-APP.md`](./DESIGN-ARENAS-CLIENT-APP.md), [`DESIGN-INGESTION-SYSTEM.md`](./DESIGN-INGESTION-SYSTEM.md), [`DESIGN-INGESTION-PARSERS-V1.md`](./DESIGN-INGESTION-PARSERS-V1.md), [`PRODUCT-ARCHITECTURE-2026.md`](./PRODUCT-ARCHITECTURE-2026.md) (§3–§11, F1–F6), [`RESEARCH-ARENAS-SCALE-2026-09-02.md`](./RESEARCH-ARENAS-SCALE-2026-09-02.md)
@@ -272,3 +272,8 @@ TASK-053, TASK-054, TASK-055.
 - **UI_CLOSEOUT** (2026-09-06) — TASK-074 карточка vs прототип; TASK-075 таб+карта vs прототип. 052/053/054 = первый проход, не закрытие.
 - **TASK-074_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/45 squash `3c66356` → `release/ice-discovery`. «идёт», плейсхолдер, сезон. Не в master.
 - **TASK-075_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/46 squash `e1e1c01` → `release/ice-discovery`. Линза «Покататься», bbox, пин → наша карточка, без OSM. Не в master.
+- **TASK-076_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/49 squash `cbf7284` → `release/ice-discovery`. Хром Льда/карточки на токенах приложения (teal, без `#c2761a`); чип «Тренеры» остаётся в `ice.html`, не уводит на `catalog.html`; попутно закрыт 404 у `ice-map.js`/`ice-map-model.js`. Не в master.
+- **TASK-077_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/50 squash `34a6486` → `release/ice-discovery`. Живые слоты МК и официальные фото загружены на локальный стенд (`--apply --allow-local-dev-db`); prod/cloud по-прежнему недоступен скриптам. Не в master.
+- **TASK-079_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/51 squash `e48cdf4` → `release/ice-discovery`. Официальные фото фасада Минск-Арены (ABWS) закрывают последний пробел линзы «Покататься» на стенде. Не в master.
+- **TASK-080_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/52 squash `b4454c0` → `release/ice-discovery`. Сайт/соцсети катка в блоке Practice; «Открыть» на дне недели ведёт на этот день, не на сегодня. Не в master.
+- **DOCS_STATUS_SYNC** (2026-09-06) — координатор: EPIC3.md и фронтматтер TASK-076/077/079/080 отставали от реального train (все четыре были смержены, но помечены `IN_PROGRESS`); синхронизировано без изменений кода.

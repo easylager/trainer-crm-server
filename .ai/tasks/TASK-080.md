@@ -1,8 +1,8 @@
 ---
 task_id: TASK-080
 title: Карточка арены — сайт/соцсети в Practice и «Открыть» день недели
-status: IN_PROGRESS
-phase: execute
+status: MERGED
+phase: done
 epic: EPIC3
 depends_on: [TASK-052, TASK-074]
 execution_mode: SUPERVISED
@@ -56,3 +56,4 @@ Branch from `origin/release/ice-discovery`. PR `--base release/ice-discovery`. N
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — Practice missing website/socials; week «Открыть» always opened today.
 - **IN_PROGRESS** (2026-09-06) — TDD helpers `practiceContacts`, `dayTabFromIso`, `ribbonIsoForDay`. 30/30 `tests/js/arena-card-model.test.js`.
+- **MERGED** (2026-09-06) — squash `b4454c0` → `release/ice-discovery` (#52, "TASK-080: show rink website on the card and open the tapped week day"). Не в master.
