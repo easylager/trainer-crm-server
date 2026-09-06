@@ -20,6 +20,13 @@ body.ar-pilot--arena .client-app-header {
   max-width: 480px;
   margin: 0 auto;
   overflow-x: hidden;
+  min-width: 0;
+}
+
+.arena-card *,
+.arena-card *::before,
+.arena-card *::after {
+  box-sizing: border-box;
 }
 
 .arena-hero {
@@ -54,7 +61,7 @@ body.ar-pilot--arena .client-app-header {
   width: 120%;
   height: 40%;
   transform: rotate(-8deg);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tg-theme-text-color, #fff) 18%, transparent), transparent);
   pointer-events: none;
 }
 
@@ -181,6 +188,8 @@ body.ar-pilot--arena .client-app-header {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .arena-row {
@@ -196,6 +205,8 @@ body.ar-pilot--arena .client-app-header {
   width: 100%;
   text-align: left;
   color: inherit;
+  min-width: 0;
+  overflow: hidden;
 }
 
 a.arena-row {
@@ -210,6 +221,11 @@ a.arena-row {
 .arena-row--empty {
   border-left-color: var(--glide-hint, #72868f);
   opacity: 0.7;
+}
+
+.arena-row--live .arena-row__m span {
+  color: var(--ice-blue, #2a6e8f);
+  font-weight: 620;
 }
 
 .arena-row__t {
@@ -497,13 +513,34 @@ a.arena-row {
 }
 
 @media (max-width: 360px) {
+  .arena-hero__txt {
+    padding-right: 16px;
+  }
+  .arena-days {
+    flex-wrap: wrap;
+  }
   .arena-row {
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-columns: 40px minmax(0, 1fr) minmax(0, auto);
     gap: 6px;
     padding: 8px;
+    min-width: 0;
   }
   .arena-cta {
     padding: 6px 8px;
     font-size: 11px;
+    white-space: normal;
+    max-width: 88px;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .arena-legend {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .arena-fake-row span {
+    white-space: normal;
+  }
+  .arena-coach {
+    grid-template-columns: 38px minmax(0, 1fr) minmax(0, auto);
   }
 }

@@ -171,12 +171,14 @@
       var s = sessions[i];
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
+      if (nowState === 'past') continue;
       if (nowState === 'live') {
         meta = meta ? 'идёт · ' + meta : 'идёт';
       }
       var cta = iceRowCta(s);
       rows.push({
         nature: 'ice',
+        stripe: 'ice',
         time: hhmm(s.starts_at_local),
         title: iceKindLabel(s),
         meta: meta,
@@ -201,6 +203,7 @@
         var age = g.catalog_pitch || '';
         rows.push({
           nature: 'lesson',
+          stripe: 'lesson',
           time: hhmm(rules[r].start_time),
           title: g.name || 'Группа',
           meta: age ? age + ' · ' + metaG : metaG,
@@ -302,6 +305,26 @@
     return v.hero || v.card || v.thumb || null;
   }
 
+  function heroView(card) {
+    var url = heroPhotoUrl(card);
+    return { mode: url ? 'photo' : 'placeholder', url: url };
+  }
+
+  function ribbonLegend() {
+    return [
+      {
+        nature: 'ice',
+        stripe: 'ice',
+        text: 'открытый лёд — только информация',
+      },
+      {
+        nature: 'lesson',
+        stripe: 'lesson',
+        text: 'занятие — можно записаться',
+      },
+    ];
+  }
+
   function trainerCta(trainer) {
     if (trainer && trainer.can_book) {
       return { label: 'Записаться', kind: 'solid' };
@@ -335,6 +358,20 @@
     var tier = String(opts.tier || '').toUpperCase();
     if (tier === 'C') return 'none';
     return 'pending';
+  }
+
+  function iceFeedView(opts) {
+    opts = opts || {};
+    var card = opts.card || {};
+    var banner = seasonClosedBanner(card);
+    if (banner) {
+      return { mode: 'closed', banner: banner, showRibbon: false };
+    }
+    var mode = iceSectionMode({
+      tier: opts.tier || card.tier,
+      hasSessions: opts.hasSessions,
+    });
+    return { mode: mode, banner: null, showRibbon: mode === 'ribbon' };
   }
 
   function seasonClosedBanner(card) {
@@ -428,10 +465,13 @@
     buildRibbonForDay: buildRibbonForDay,
     buildWeekSummaries: buildWeekSummaries,
     heroPhotoUrl: heroPhotoUrl,
+    heroView: heroView,
+    ribbonLegend: ribbonLegend,
     trainerCta: trainerCta,
     buildBookingHref: buildBookingHref,
     parseArenaRef: parseArenaRef,
     iceSectionMode: iceSectionMode,
+    iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,
     amenityChips: amenityChips,
     formatOpeningHours: formatOpeningHours,

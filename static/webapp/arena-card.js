@@ -105,10 +105,11 @@
 
   function renderHero() {
     var card = state.card;
-    var url = M.heroPhotoUrl(card);
+    var hero = M.heroView(card);
+    var url = hero.url;
     var gallery = card.gallery || [];
-    var n = gallery.length || (url ? 1 : 0);
-    var cls = 'arena-hero' + (url ? ' arena-hero--photo' : ' arena-hero--placeholder');
+    var n = gallery.length || (hero.mode === 'photo' ? 1 : 0);
+    var cls = 'arena-hero' + (hero.mode === 'photo' ? ' arena-hero--photo' : ' arena-hero--placeholder');
     var style = url ? ' style="background-image:url(\'' + esc(url).replace(/'/g, '%27') + '\')"' : '';
     var galleryHtml = n
       ? '<span class="arena-hero__gallery">' + (state.galleryIndex + 1) + ' / ' + n + ' фото</span>'
@@ -119,7 +120,7 @@
       '"' +
       style +
       '>' +
-      (url ? '<span class="arena-hero__shade"></span>' : '<span class="arena-hero__glare"></span>') +
+      (hero.mode === 'photo' ? '<span class="arena-hero__shade"></span>' : '<span class="arena-hero__glare"></span>') +
       '<span class="arena-hero__txt">' +
       '<h1>' +
       esc(card.name || 'Арена') +
@@ -144,7 +145,11 @@
   }
 
   function rowHtml(row) {
-    var cls = 'arena-row' + (row.nature === 'lesson' ? ' arena-row--lesson' : '') +
+    var stripe = row.stripe || (row.nature === 'lesson' ? 'lesson' : 'ice');
+    var cls =
+      'arena-row' +
+      (stripe === 'lesson' ? ' arena-row--lesson' : '') +
+      (row.nowState === 'live' ? ' arena-row--live' : '') +
       (row.empty ? ' arena-row--empty' : '');
     var ctaCls = 'arena-cta arena-cta--' + (row.ctaKind || 'ghost');
     var tag = 'div';
@@ -227,23 +232,22 @@
   }
 
   function renderIceSection() {
-    var closed = M.seasonClosedBanner(state.card);
-    if (closed) {
+    var feed = M.iceFeedView({
+      card: state.card,
+      hasSessions: hasAnySessions(),
+    });
+    if (feed.mode === 'closed') {
       return (
         '<div class="arena-sec">' +
         '<p class="arena-h">Лёд</p>' +
-        '<div class="arena-closed">' + esc(closed) + '</div>' +
+        '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
         '</div>'
       );
     }
-    var mode = M.iceSectionMode({
-      tier: state.card.tier,
-      hasSessions: hasAnySessions(),
-    });
-    if (mode === 'none') {
+    if (feed.mode === 'none') {
       return '';
     }
-    if (mode === 'pending') {
+    if (feed.mode === 'pending') {
       var phone = (state.card.phone || '').trim();
       var site = (state.card.website_url || '').trim();
       var actions = '';
@@ -290,8 +294,17 @@
       renderRibbonRows() +
       '</div>' +
       '<div class="arena-legend">' +
-      '<span><i class="arena-sw arena-sw--ice"></i>открытый лёд — только информация</span>' +
-      '<span><i class="arena-sw arena-sw--lesson"></i>занятие — можно записаться</span>' +
+      M.ribbonLegend()
+        .map(function (item) {
+          return (
+            '<span><i class="arena-sw arena-sw--' +
+            esc(item.stripe) +
+            '"></i>' +
+            esc(item.text) +
+            '</span>'
+          );
+        })
+        .join('') +
       '</div>' +
       '</div>'
     );
