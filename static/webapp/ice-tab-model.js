@@ -54,7 +54,7 @@
   }
 
   function mapHref() {
-    return 'catalog?tab=catalog';
+    return '';
   }
 
   function trainerHref(item) {

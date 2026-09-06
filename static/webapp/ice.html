@@ -26,9 +26,10 @@
   <script src="mini-app-telegram-chrome.js?v=202609022"></script>
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609062" />
-  <script src="mini-app-client-shell.js?v=202609062"></script>
-  <script src="ice-tab-model.js?v=202609062"></script>
+  <link rel="stylesheet" href="ice-tab.css?v=202609063" />
+  <script src="mini-app-client-shell.js?v=202609063"></script>
+  <script src="ice-tab-model.js?v=202609063"></script>
+  <script src="ice-map-model.js?v=202609063"></script>
 </head>
 <body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
   <div class="header client-app-header">
@@ -73,8 +74,14 @@
       <p class="ice-eyebrow" id="iceCaption">Загрузка…</p>
       <div class="ice-list" id="iceList"></div>
     </div>
-    <div class="ice-sec" id="iceMapSec" hidden>
-      <p class="ice-map-note" id="iceMapNote"></p>
+    <div class="ice-map-wrap" id="iceMapSec" hidden>
+      <div class="ice-map-empty" id="iceMapEmpty" hidden></div>
+      <div class="ice-map-stage" id="iceMapStage">
+        <div id="iceMapCanvas" class="ice-map-canvas" role="application" aria-label="Карта катков"></div>
+        <button type="button" class="ice-near" id="iceNearBtn">◎ Рядом со мной</button>
+      </div>
+      <div class="ice-map-sheet" id="iceMapSheet"></div>
+      <p class="ice-map-offmap" id="iceMapOffMap" hidden></p>
     </div>
     <div class="ice-sec" id="iceSearchSec" hidden>
       <p class="ice-eyebrow">Результаты</p>
@@ -92,6 +99,7 @@
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
-  <script src="ice-tab.js?v=202609062"></script>
+  <script src="ice-map.js?v=202609063"></script>
+  <script src="ice-tab.js?v=202609063"></script>
 </body>
 </html>

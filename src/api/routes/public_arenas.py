@@ -18,12 +18,21 @@ from src.application.arena_public_use_cases import (
     list_public_ice_arenas,
     search_public_ice,
 )
+from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
 
 
 def _query_error(exc: IcePublicQueryError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/ice/map-config")
+async def get_ice_map_config(response: Response) -> dict[str, str | None]:
+    """Browser Yandex Maps JS API key. Empty → Ice tab shows a map empty state (no OSM)."""
+    response.headers["Cache-Control"] = "no-store"
+    key = (Settings().yandex_maps_js_api_key or "").strip() or None
+    return {"yandex_maps_js_api_key": key}
 
 
 @router.get("/ice/arenas")
