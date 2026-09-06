@@ -66,6 +66,9 @@ logs/
 
 secrets/
 
+# Isolated git worktrees (agent parallel lanes)
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
