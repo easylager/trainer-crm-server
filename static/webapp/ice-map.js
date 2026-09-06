@@ -146,6 +146,8 @@
     var boundsTimer = null;
     var ignoreBounds = false;
     var started = false;
+    var missingKey = false;
+    var keyResolved = '';
     var userPlacemark = null;
 
     function getIntent() {
@@ -165,9 +167,18 @@
     }
 
     function arenaHref(item) {
+      var target = MM.pinSheetTarget(item);
+      if (target && target.href && target.yandexOrgCard === false) return target.href;
       if (opts.arenaHref) return opts.arenaHref(item);
       if (global.IceTabModel) return global.IceTabModel.arenaHref(item);
       return '';
+    }
+
+    function applyIntentFilter(items) {
+      if (global.IceTabModel && typeof global.IceTabModel.filterSkateLens === 'function') {
+        return global.IceTabModel.filterSkateLens(items || [], getIntent());
+      }
+      return items || [];
     }
 
     function showStage(on) {
@@ -245,14 +256,24 @@
     function fetchViewport() {
       if (!map || !opts.listUrl) return;
       var bbox = MM.boundsToBbox(map.getBounds());
-      var plan = MM.planBboxFetch(bboxState, bbox);
+      var payload = MM.bboxFetchPayload({
+        bbox: bbox,
+        intent: getIntent(),
+        cityId: getCityId(),
+        limit: 50,
+      });
+      if (!payload.fetch) return;
+      var plan = MM.planBboxFetch(bboxState, payload.bbox);
       if (!plan.fetch) return;
       bboxState = plan;
-      var extra = { bbox: bbox, intent: getIntent(), limit: 50 };
-      var cityId = getCityId();
-      if (cityId != null) extra.cityId = cityId;
-      fetchJson(listUrl(extra)).then(function (data) {
-        mapItems = (data && data.items) || [];
+      fetchJson(
+        listUrl({
+          bbox: payload.bbox,
+          intent: payload.intent,
+          limit: payload.limit,
+        })
+      ).then(function (data) {
+        mapItems = applyIntentFilter((data && data.items) || []);
         syncObjects();
         defaultSheet();
       });
@@ -346,20 +367,36 @@
     }
 
     function start() {
-      if (started) {
-        if (map) {
-          map.container.fitToViewport();
-          fetchViewport();
-        }
+      if (missingKey) {
+        showMissing();
         return Promise.resolve();
       }
-      started = true;
+      if (map) {
+        map.container.fitToViewport();
+        fetchViewport();
+        return Promise.resolve();
+      }
       var getKey = opts.getKey || defaultGetKey;
-      return Promise.resolve(getKey())
+      return Promise.resolve(keyResolved || getKey())
         .then(function (key) {
-          var resolved = MM.resolveApiKey({ key: key });
+          var resolved = keyResolved || MM.resolveApiKey({ key: key });
           if (!resolved) {
+            missingKey = true;
             showMissing();
+            return;
+          }
+          keyResolved = resolved;
+          started = true;
+          var decision = MM.mapStartDecision({ key: resolved, listItems: listItems });
+          if (decision.kind === 'missing-key') {
+            missingKey = true;
+            showMissing();
+            return;
+          }
+          if (decision.kind === 'no-arenas') {
+            showStage(false);
+            renderEmpty(emptyEl, decision.empty);
+            if (sheetEl) sheetEl.innerHTML = '';
             return;
           }
           return loadYmaps(resolved).then(function (api) {
@@ -380,7 +417,7 @@
     function onNearClick() {
       if (!nearMePolicyOk()) return;
       if (!navigator.geolocation) {
-        paintGeoNote(MM.geoDeniedState());
+        paintGeoDenied();
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -392,8 +429,8 @@
           var cityId = getCityId();
           if (cityId != null) extra.cityId = cityId;
           fetchJson(listUrl(extra)).then(function (data) {
-            var items = (data && data.items) || [];
-            if (typeof opts.onNearList === 'function') opts.onNearList(data);
+            var items = applyIntentFilter((data && data.items) || []);
+            if (typeof opts.onNearList === 'function') opts.onNearList({ items: items, total: items.length });
             listItems = items.length ? items : listItems;
             var mapped = MM.splitMapAndList(items).onMap;
             if (!mapped.length) {
@@ -425,7 +462,7 @@
           });
         },
         function () {
-          paintGeoNote(MM.geoDeniedState());
+          paintGeoDenied();
         },
         { timeout: 8000, maximumAge: 30000 }
       );
@@ -433,6 +470,22 @@
 
     function nearMePolicyOk() {
       return MM.nearMePolicy.geolocateOnButton && !MM.nearMePolicy.geolocateOnStart;
+    }
+
+    function paintGeoDenied() {
+      var outcome = MM.afterGeoDenied({
+        pinCount: mapItems.length,
+        sheetOpen: !!selected,
+      });
+      if (outcome.keepStage) showStage(true);
+      if (outcome.keepSheet && selected) {
+        if (offMapEl) {
+          offMapEl.hidden = false;
+          offMapEl.textContent = outcome.body;
+        }
+        return;
+      }
+      paintGeoNote(outcome);
     }
 
     function paintGeoNote(state) {
@@ -465,6 +518,9 @@
         if (map && !mapItems.length) {
           mapItems = MM.splitMapAndList(listItems).onMap.slice();
           syncObjects();
+        }
+        if (!map && started && !missingKey && listItems.length) {
+          start();
         }
       },
       refresh: function () {
