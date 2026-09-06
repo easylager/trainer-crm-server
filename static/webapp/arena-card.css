@@ -17,6 +17,7 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-card {
+  display: block;
   max-width: 480px;
   margin: 0 auto;
   overflow-x: hidden;
