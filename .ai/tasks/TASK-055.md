@@ -1,7 +1,7 @@
 ---
 task_id: TASK-055
 title: Связки — тизер «Лёд рядом» на главной и арены на карточке тренера
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-051]
@@ -85,3 +85,4 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 3
 - **IN_PROGRESS** (2026-09-06) — UI lane: hub teaser «Лёд рядом» from `/client/hub/bootstrap` (session city, future MK only) + trainer-card arena chips with primary mark and «ещё M». Map (TASK-054) not touched. PR https://github.com/easylager/trainer-crm-server/pull/34 (not merged).
+- **TASK-055_MERGED** (2026-09-06) — squash `3786958` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/34. Не в master.

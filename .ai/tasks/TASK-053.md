@@ -1,7 +1,7 @@
 ---
 task_id: TASK-053
 title: Таб «Лёд» — список арен, чипы намерения, поиск; каталог как линза
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-051]
@@ -111,3 +111,4 @@ Status: OPEN
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 3
 - **IN_PROGRESS** (2026-09-06) — Ice tab UI on `feat/TASK-053-ice-tab`. PR https://github.com/easylager/trainer-crm-server/pull/32 (base `release/ice-discovery`). AC-002 stale: skate lens filters to future MK slots per epic 2026-09-05. Coordinator owns merge.
 - **UI_PROTOTYPE_PASS** (2026-09-06) — `feat/ice-ui-prototype-pass`: live line formats взр/дет/прокат from structured prices; skate empty copy; amber chips; list/map stays on ice.html. MK rows unchanged (read-only lives on TASK-052 card).
+- **TASK-053_MERGED** (2026-09-06) — squash `31fb488` → `release/ice-discovery` https://github.com/easylager/trainer-crm-server/pull/32. Не в master.
