@@ -66,7 +66,7 @@ def test_dry_run_parses_all_seven_dossiers(cards) -> None:
         assert card.enough_facts
         assert card.status == "published"
 
-    assert cards["minskarena"].publishable_photo_count == 0
+    assert cards["minskarena"].publishable_photo_count == 3
     assert cards["zamok"].publishable_photo_count == 6
     assert cards["chizhovka"].publishable_photo_count == 3
     assert cards["ledby"].publishable_photo_count == 6
@@ -106,7 +106,8 @@ def test_zamok_is_the_fullest_card(cards) -> None:
 
 
 def test_unknown_amenities_stay_unset(cards) -> None:
-    assert cards["minskarena"].amenities == {}
+    assert cards["minskarena"].amenities == {"parking": True, "cafe": True}
+    assert "skate_rental" not in cards["minskarena"].amenities
     assert cards["minsk-ledlife"].amenities == {}
     assert cards["minsk-ledlife"].phone is None
     assert cards["minsk-ledlife"].opening_hours is None
