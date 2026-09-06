@@ -112,4 +112,4 @@ Status: OPEN
 - **UNBLOCKED_ICE_TAB** (2026-09-06) — координатор: статус READY. Сначала прототип `.ai/design/ice-tab-map-yandex.html` на живых тайлах Яндекса, затем код только таба «Лёд» (`ice.html` / `ice-tab.js`). OSM запрещён. Профиль тренера и онбординг — не этот проход.
 - **IN_PROGRESS** (2026-09-06) — Ice-tab + прототип на Yandex JS API. Кластеры, bbox pan, «рядом со мной» только по кнопке, шит нашей карточки арены. Ключ: `YANDEX_MAPS_JS_API_KEY` / `GET /api/public/ice/map-config`. Без ключа — empty state, без OSM.
 - **WAIVED AC-004 / AC-005** (2026-09-06) — coordinator: "profile/onboarding later pass". Профиль тренера и онбординг не в этом PR.
-- **pr_url** — pending push
+- **pr_url** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 — base `release/ice-discovery`. Not merged.
