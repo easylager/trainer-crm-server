@@ -64,6 +64,8 @@
     );
   }
 
+  var mapCtl = null;
+
   function $(id) {
     return document.getElementById(id);
   }
@@ -87,6 +89,53 @@
     var mapSec = $('iceMapSec');
     if (listSec) listSec.hidden = state.view !== 'list';
     if (mapSec) mapSec.hidden = state.view !== 'map';
+    if (state.view === 'map') showMap();
+  }
+
+  function showMap() {
+    if (!global.IceMap) return;
+    if (!mapCtl) {
+      mapCtl = global.IceMap.mount({
+        canvas: $('iceMapCanvas'),
+        emptyEl: $('iceMapEmpty'),
+        sheetEl: $('iceMapSheet'),
+        nearBtn: $('iceNearBtn'),
+        offMapEl: $('iceMapOffMap'),
+        stageEl: $('iceMapStage'),
+        listUrl: function (extra) {
+          extra = extra || {};
+          var opts = {
+            intent: extra.intent || state.intent,
+            limit: extra.limit || 50,
+          };
+          if (extra.near) opts.near = extra.near;
+          if (extra.bbox) opts.bbox = extra.bbox;
+          if (extra.cityId != null && extra.cityId !== '') opts.cityId = extra.cityId;
+          else if (!extra.bbox && state.cityId) opts.cityId = state.cityId;
+          return M.buildListUrl(opts);
+        },
+        fetchJson: fetchJson,
+        getIntent: function () {
+          return state.intent;
+        },
+        getCityId: function () {
+          return state.cityId;
+        },
+        arenaHref: M.arenaHref,
+        onOpenArena: function (item, href) {
+          if (href) shellNav(href);
+        },
+        onNearList: function (data) {
+          state.items = (data && data.items) || [];
+          state.total = data && data.total != null ? data.total : state.items.length;
+          renderList();
+        },
+      });
+    }
+    mapCtl.setListItems(state.items);
+    mapCtl.start().then(function () {
+      mapCtl.resize();
+    });
   }
 
   function renderList() {
@@ -178,6 +227,10 @@
         state.total = data && data.total != null ? data.total : state.items.length;
         state.cursor = data && data.next_cursor;
         renderList();
+        if (mapCtl) {
+          mapCtl.setListItems(state.items);
+          if (state.view === 'map') mapCtl.refresh();
+        }
       })
       .catch(function () {
         state.loading = false;
@@ -275,6 +328,7 @@
       if (searchSec) searchSec.hidden = true;
       if (listSec) listSec.hidden = state.view !== 'list';
       if (mapSec) mapSec.hidden = state.view !== 'map';
+      if (state.view === 'map' && mapCtl) mapCtl.resize();
       return;
     }
     fetchJson(M.buildSearchUrl(query, 8)).then(function (data) {
@@ -359,14 +413,10 @@
 
     document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var view = btn.getAttribute('data-view');
-        if (view === 'map') {
-          persist();
-          shellNav(M.mapHref());
-          return;
-        }
-        state.view = 'list';
+        var view = btn.getAttribute('data-view') || 'list';
+        state.view = view === 'map' ? 'map' : 'list';
         setViewToggle();
+        persist();
       });
     });
 
@@ -473,7 +523,9 @@
     setViewToggle();
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent && saved.intent !== 'coach') state.intent = saved.intent;
+    if (saved && saved.view === 'map') state.view = 'map';
     setChips();
+    setViewToggle();
     resolveCity().then(function () {
       if (saved && saved.scrollY) {
         global.setTimeout(function () {

@@ -561,9 +561,11 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=202609062', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=202609062', as: 'script' },
-      { href: base + 'ice-tab.css?v=202609062', as: 'style' },
+      { href: base + 'ice-tab.js?v=202609063', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202609063', as: 'script' },
+      { href: base + 'ice-map-model.js?v=202609063', as: 'script' },
+      { href: base + 'ice-map.js?v=202609063', as: 'script' },
+      { href: base + 'ice-tab.css?v=202609063', as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;

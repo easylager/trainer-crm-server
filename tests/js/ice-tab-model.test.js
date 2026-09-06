@@ -36,6 +36,18 @@ describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
     const { buildListUrl } = loadModel();
     assert.match(buildListUrl({ cityId: 1 }), /intent=skate/);
   });
+
+  it('map pan sends bbox without dumping the city as a second query shape', () => {
+    const { buildListUrl } = loadModel();
+    const url = buildListUrl({
+      bbox: '53.8,27.4,54.0,27.7',
+      intent: 'skate',
+      limit: 50,
+    });
+    assert.match(url, /bbox=53\.8%2C27\.4%2C54\.0%2C27\.7|bbox=53\.8,27\.4,54\.0,27\.7/);
+    assert.match(url, /intent=skate/);
+    assert.ok(!url.includes('city_id='));
+  });
 });
 
 describe('trainer catalog chip (AC-001 / AC-006)', () => {
@@ -142,9 +154,9 @@ describe('hrefs', () => {
     assert.equal(trainerHref({ id: 77 }), 'catalog?tab=catalog&trainer_id=77');
   });
 
-  it('map toggle points at the existing catalog map until TASK-054', () => {
+  it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {
     const { mapHref } = loadModel();
-    assert.equal(mapHref(), 'catalog?tab=catalog');
+    assert.equal(mapHref(), '');
   });
 });
 

@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     notify_telegram_id: int | None = None
     # Base URL for Telegram Web App (trainer schedule). Must be HTTPS in production. Example: https://api.yoursite.com
     webapp_base_url: str = "http://localhost:8000"
+    # Ice tab map (Yandex Maps JS API 2.1). Browser key — restrict by HTTP referrer in the Yandex cabinet.
+    # Missing key → Ice map empty state. No OSM/Leaflet fallback.
+    yandex_maps_js_api_key: str | None = None
 
     # Plain-text suffix for amounts in bots, Telegram HTML, and Mini App UI (default BYN per ISO 4217).
     byr_display_sign: str = "BYN"

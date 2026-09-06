@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Лёд — карта (Yandex) · прототип TASK-054</title>
+  <script>
+    /* Placeholder — never a third-party key from fixtures.
+       Live tiles: open with ?apikey=YOUR_KEY
+       or set window.YANDEX_MAPS_JS_API_KEY before this script.
+       Env for production Mini App: YANDEX_MAPS_JS_API_KEY */
+    window.YANDEX_MAPS_JS_API_KEY = window.YANDEX_MAPS_JS_API_KEY || 'YOUR_YANDEX_MAPS_JS_API_KEY';
+  </script>
+  <script src="../../static/webapp/ice-map-model.js"></script>
+  <style>
+:root{
+  --page:#EEF3F6; --frame:#C9D6DE;
+  --bg:#FFFFFF; --bg2:#F2F6F9; --sunk:#E8EFF3;
+  --ink:#0F1A22; --soft:#41535F; --mute:#72868F; --line:#DCE5EA; --line2:#EAF0F4;
+  --amber:#C2761A; --amber-ink:#FFFFFF; --amber-bg:#F7EAD8;
+  --ice:#2A6E8F; --ice-bg:#E1EEF4;
+  --ok:#2E7D5B; --note:#8A6A2B; --note-bg:#FBF2E2;
+  --shadow:0 2px 4px rgba(15,26,34,.04), 0 24px 48px -28px rgba(15,26,34,.45);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#070C11; --frame:#1E2C36;
+    --bg:#101A22; --bg2:#0C151C; --sunk:#16232C;
+    --ink:#E9F2F7; --soft:#B2C4CF; --mute:#7A909D; --line:#22333E; --line2:#1A2831;
+    --amber:#E4A051; --amber-ink:#16110A; --amber-bg:#2A2113;
+    --ice:#78BBD9; --ice-bg:#14303D;
+    --shadow:0 2px 4px rgba(0,0,0,.4), 0 28px 56px -30px #000;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  margin:0;padding:28px 20px 64px;background:var(--page);color:var(--ink);
+  font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  line-height:1.5;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0;text-align:left}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.top{max-width:1120px;margin:0 auto 22px;display:flex;flex-direction:column;gap:10px}
+.top h1{margin:0;font-size:25px;letter-spacing:-.02em;font-weight:750}
+.top p{margin:0;color:var(--mute);font-size:15px;max-width:78ch}
+.how{font-size:13.5px;color:var(--soft);max-width:78ch}
+.how code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--sunk);padding:1px 6px;border-radius:4px}
+.stage{max-width:1120px;margin:0 auto;display:grid;gap:34px;align-items:start}
+@media (min-width:900px){.stage{grid-template-columns:394px 1fr}}
+.device{
+  width:394px;max-width:100%;height:760px;border-radius:34px;background:var(--bg);
+  border:9px solid var(--frame);box-shadow:var(--shadow);
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
+}
+.tg{flex:0 0 auto;padding:11px 14px 9px;background:var(--bg2);border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:10px}
+.tg .title{font-size:15px;font-weight:680;flex:1}
+.tg .dots{color:var(--mute);letter-spacing:2px}
+.view{flex:1;overflow-y:auto;overscroll-behavior:contain;background:var(--bg);display:flex;flex-direction:column}
+.tabbar{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);background:var(--bg2);padding:6px 4px 9px}
+.tabbar span{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--mute);font-size:10.5px;font-weight:600;padding:4px 0}
+.tabbar span.on{color:var(--amber)}
+.sec{padding:14px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:10px}
+.sec:first-child{border-top:0}
+.cityrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cityrow b{font-size:15px;font-weight:680}
+.cityrow span{font-size:13px;color:var(--amber);font-weight:600}
+.chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px}
+.chips::-webkit-scrollbar{height:0}
+.chip{flex:0 0 auto;font-size:12.5px;font-weight:600;padding:7px 11px;border-radius:999px;border:1px solid var(--line);color:var(--soft);background:var(--bg)}
+.chip[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.seg{display:flex;background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{flex:1;text-align:center;font-size:13px;font-weight:650;padding:6px 0;border-radius:6px;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.acard{display:grid;grid-template-columns:74px 1fr;gap:11px;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--bg);width:100%}
+.acard .ph{height:74px;border-radius:8px;background:linear-gradient(150deg,var(--ice-bg),var(--sunk));border:1px solid var(--line2)}
+.acard .ph.c{background:var(--sunk)}
+.acard .b{display:flex;flex-direction:column;gap:3px;min-width:0}
+.acard .nm{font-size:14.5px;font-weight:680;letter-spacing:-.01em}
+.acard .mt{font-size:12px;color:var(--mute)}
+.live{font-size:12.5px;font-weight:620;margin-top:2px}
+.live.a{color:var(--ice)}
+.live.b{color:var(--note)}
+.live.c{color:var(--mute);font-weight:500}
+.tierbadge{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px}
+.tierbadge--a{background:var(--amber-bg);color:var(--amber)}
+.tierbadge--b{background:var(--ice-bg);color:var(--ice)}
+.tierbadge--c{background:var(--sunk);color:var(--mute)}
+.eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--mute);margin:0}
+.sub{font-size:13px;color:var(--mute);margin:0}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:14px;background:var(--bg2);display:flex;flex-direction:column;gap:8px;margin:12px}
+.empty b{font-size:14px}
+.empty p{margin:0;font-size:12.5px;color:var(--mute)}
+.map-stage{position:relative;height:330px;background:var(--sunk);flex:0 0 auto}
+#protoMap{position:absolute;inset:0}
+.near{position:absolute;right:11px;top:11px;z-index:2;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:12.5px;font-weight:650;box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.sheet{margin:-26px 12px 0;position:relative;z-index:2}
+.sheet .acard{box-shadow:var(--shadow)}
+.offmap{margin:8px 14px 0;font-size:12px;color:var(--mute)}
+.list{display:flex;flex-direction:column;gap:9px}
+.ice-ypin{display:flex;flex-direction:column;align-items:center;gap:2px;transform:translate(-50%,-100%)}
+.ice-ypin__dot{width:15px;height:15px;border-radius:99px 99px 99px 2px;transform:rotate(45deg);background:var(--ice);border:2px solid var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.25);display:block}
+.ice-ypin--a .ice-ypin__dot{background:var(--amber)}
+.ice-ypin--c .ice-ypin__dot{background:var(--mute);opacity:.55;width:11px;height:11px}
+.ice-ypin__label{font-size:10.5px;font-weight:700;background:var(--bg);border:1px solid var(--line);padding:1px 5px;border-radius:4px;white-space:nowrap;color:var(--ink)}
+.ice-ypin__label:empty{display:none}
+.ice-ycluster{width:38px;height:38px;border-radius:99px;background:var(--ice);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:750;font-size:14px;border:3px solid var(--bg);box-shadow:0 3px 10px rgba(0,0,0,.3);transform:translate(-50%,-50%)}
+.notes{display:flex;flex-direction:column;gap:14px;padding-top:4px}
+.notes h2{margin:0;font-size:20px;font-weight:730}
+.nlist{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;max-width:62ch}
+.nlist li{position:relative;padding-left:18px;font-size:15px;color:var(--soft)}
+.nlist li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:2px;background:var(--amber)}
+.nlist b{color:var(--ink)}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>Лёд — карта на живых тайлах Яндекса</h1>
+    <p>Кликабельный прототип TASK-054: кластеры с числом, A-пины с ближайшим сеансом, бледные C, «◎ Рядом со мной», нижняя карточка нашей арены (не карточка организации Яндекса). OSM нет.</p>
+    <p class="how">Открыть: <code>.ai/design/ice-tab-map-yandex.html?apikey=…</code> — ключ только из кабинета Яндекса / env <code>YANDEX_MAPS_JS_API_KEY</code>. Не подставляйте ключи из HTML-фикстур катков. Без ключа виден пустой экран, тайлы не грузятся.</p>
+  </div>
+
+  <div class="stage">
+    <div class="device">
+      <div class="tg"><span class="title">Лёд</span><span class="dots">⋯</span></div>
+      <div class="view" id="view">
+        <div class="sec" style="padding-bottom:10px">
+          <div class="cityrow"><b>📍 Минск</b><span>Изменить</span></div>
+          <div class="chips" id="intentChips">
+            <button type="button" class="chip" data-intent="skate" aria-pressed="true">⛸️ Покататься</button>
+            <button type="button" class="chip" data-intent="coach" aria-pressed="false">🎯 Тренеры</button>
+            <button type="button" class="chip" data-intent="group" aria-pressed="false">👥 Группы</button>
+          </div>
+          <div class="seg" id="viewSeg">
+            <button type="button" data-view="list" aria-pressed="false">Список</button>
+            <button type="button" data-view="map" aria-pressed="true">Карта</button>
+          </div>
+        </div>
+
+        <div id="listView" hidden>
+          <div class="sec list" id="listCards"></div>
+        </div>
+
+        <div id="mapView">
+          <div class="map-stage" id="mapStage">
+            <div id="protoMap"></div>
+            <button type="button" class="near" id="nearBtn">◎ Рядом со мной</button>
+          </div>
+          <div id="mapEmpty" hidden></div>
+          <div class="sheet" id="sheet"></div>
+          <p class="offmap" id="offMap"></p>
+          <div class="sec" style="border-top:0">
+            <p class="sub">Кластеризация вместо каши из пинов. Тап по пину открывает нашу карточку арены снизу, не организацию Яндекса.</p>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <span>Главная</span><span class="on">Лёд</span><span>Записи</span><span>Ещё</span>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h2>Что должно совпасть с SoT</h2>
+      <ul class="nlist">
+        <li><b>Кластер с числом</b> — юг Минска собран в кружок «6», зум разворачивает.</li>
+        <li><b>A-пины</b> с подписью «Чижовка · 11:00» / «Минск-Арена · 15:30».</li>
+        <li><b>C-пины</b> бледные и меньше, без подписи сеанса.</li>
+        <li><b>◎ Рядом со мной</b> спрашивает геолокацию только по нажатию.</li>
+        <li>Нижний шит — <b>наша</b> карточка арены (фото, тир, live-строка).</li>
+        <li>Чипы намерения и переключатель Список / Карта как на экране «Лёд».</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var MM = window.IceMapModel;
+  if (!MM) {
+    document.getElementById('mapEmpty').hidden = false;
+    document.getElementById('mapEmpty').innerHTML = '<div class="empty"><b>Не загрузилась ice-map-model.js</b><p>Откройте файл из репозитория, не копируйте HTML в отрыв.</p></div>';
+    return;
+  }
+
+  var SAMPLE = [
+    { id: 1, name: 'Ледовый дворец «Чижовка»', district: 'Заводской', latitude: 53.859, longitude: 27.627, on_map: true, tier: 'A', distance_km: 2.4, live: { kind: 'session', starts_at_local: '11:00', text: 'Сегодня 11:00 · взр. 12 BYN' } },
+    { id: 2, name: '«Минск-Арена»', district: 'Фрунзенский', latitude: 53.936, longitude: 27.482, on_map: true, tier: 'A', distance_km: 5.1, live: { kind: 'session', starts_at_local: '15:30', text: 'Сегодня 15:30 · взр. 15 BYN' } },
+    { id: 3, name: 'Каток в ТЦ «Замок»', district: 'Фрунзенский', latitude: 53.908, longitude: 27.522, on_map: true, tier: 'B', distance_km: 6.3, live: { kind: 'unknown', text: 'Расписание уточняется · есть телефон и сайт' } },
+    { id: 4, name: 'Каток «Юность»', district: 'Центральный', latitude: 53.905, longitude: 27.555, on_map: true, tier: 'C', distance_km: 3.8, live: { kind: 'unknown', text: 'Есть в справочнике · данных пока нет' } },
+    { id: 5, name: 'Каток «Ледлайф»', district: 'Московский', latitude: 53.869, longitude: 27.548, on_map: true, tier: 'C', distance_km: 4.1, live: { kind: 'unknown', text: 'Есть в справочнике · данных пока нет' } },
+    { id: 21, name: 'Каток юг-1', district: 'Ленинский', latitude: 53.848, longitude: 27.575, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 22, name: 'Каток юг-2', district: 'Ленинский', latitude: 53.849, longitude: 27.579, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 23, name: 'Каток юг-3', district: 'Ленинский', latitude: 53.847, longitude: 27.572, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 24, name: 'Каток юг-4', district: 'Ленинский', latitude: 53.850, longitude: 27.581, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 25, name: 'Каток юг-5', district: 'Ленинский', latitude: 53.846, longitude: 27.577, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 26, name: 'Каток юг-6', district: 'Ленинский', latitude: 53.8485, longitude: 27.578, on_map: true, tier: 'C', live: { text: 'Есть в справочнике' } },
+    { id: 99, name: 'Каток без координат', district: 'Неизвестный', latitude: null, longitude: null, on_map: false, tier: 'C', live: { text: 'Адрес уточняется' } }
+  ];
+
+  var intent = 'skate';
+  var view = 'map';
+  var selected = SAMPLE[0];
+  var map = null;
+  var clusterer = null;
+
+  function liveLine(item) {
+    if (intent === 'coach') return item.tier === 'A' ? '4 тренера · есть слоты' : 'Тренеров пока нет';
+    if (intent === 'group') return item.tier === 'A' ? '2 группы с набором' : 'Групп нет';
+    return (item.live && item.live.text) || '';
+  }
+
+  function cardHtml(item, meta) {
+    var tone = String(item.tier || 'C').toLowerCase();
+    return '<button type="button" class="acard" data-id="' + item.id + '"><span class="ph' + (tone === 'c' ? ' c' : '') + '"></span><span class="b"><span class="nm">' +
+      item.name + '<span class="tierbadge tierbadge--' + tone + '">' + item.tier + '</span></span><span class="mt">' +
+      (meta || [item.district, item.distance_km ? String(item.distance_km).replace('.', ',') + ' км' : ''].filter(Boolean).join(' · ')) +
+      '</span><span class="live ' + tone + '">' + liveLine(item) + '</span></span></button>';
+  }
+
+  function paintList() {
+    var box = document.getElementById('listCards');
+    var split = MM.splitMapAndList(SAMPLE);
+    box.innerHTML = '<p class="eyebrow">' + split.list.length + ' катков · сначала с актуальным расписанием</p>' +
+      split.list.map(function (it) { return cardHtml(it); }).join('') +
+      '<p class="sub">Каток без координат остаётся в списке и не рисуется на карте.</p>';
+  }
+
+  function paintSheet(item, nearest) {
+    selected = item;
+    var sheet = document.getElementById('sheet');
+    if (!item) { sheet.innerHTML = ''; return; }
+    var meta = MM.formatSheetMeta(item, { nearest: !!nearest }) || item.district;
+    sheet.innerHTML = cardHtml(item, meta);
+  }
+
+  function paintOffMap() {
+    var el = document.getElementById('offMap');
+    el.textContent = MM.formatOffMapNote(MM.splitMapAndList(SAMPLE).offMapCount);
+  }
+
+  function setView(next) {
+    view = next;
+    document.querySelectorAll('#viewSeg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-view') === view ? 'true' : 'false');
+    });
+    document.getElementById('listView').hidden = view !== 'list';
+    document.getElementById('mapView').hidden = view !== 'map';
+    if (view === 'map' && map) map.container.fitToViewport();
+  }
+
+  function showMissing() {
+    var empty = MM.missingKeyState();
+    document.getElementById('mapStage').hidden = true;
+    var box = document.getElementById('mapEmpty');
+    box.hidden = false;
+    box.innerHTML = '<div class="empty"><b>' + empty.title + '</b><p>' + empty.body + '</p></div>';
+    paintSheet(SAMPLE[0], true);
+    paintOffMap();
+  }
+
+  function addObjects(ymaps) {
+    var PinLayout = ymaps.templateLayoutFactory.createClass(
+      '<div class="ice-ypin ice-ypin--$[properties.tone]"><b class="ice-ypin__label">$[properties.label]</b><i class="ice-ypin__dot"></i></div>'
+    );
+    var ClusterLayout = ymaps.templateLayoutFactory.createClass(
+      '<div class="ice-ycluster">{{ properties.geoObjects.length }}</div>'
+    );
+    clusterer = new ymaps.Clusterer({
+      minClusterSize: 2,
+      gridSize: 64,
+      clusterDisableClickZoom: false,
+      clusterOpenBalloonOnClick: false,
+      hasBalloon: false,
+      clusterHasBalloon: false,
+      clusterIconLayout: ClusterLayout,
+      clusterIconOffset: [-19, -19],
+      clusterIconShape: { type: 'Circle', coordinates: [0, 0], radius: 19 }
+    });
+    MM.splitMapAndList(SAMPLE).onMap.forEach(function (item) {
+      var viewPin = MM.pinView(item);
+      var pm = new ymaps.Placemark(
+        [item.latitude, item.longitude],
+        { tone: viewPin.tone, label: viewPin.label, arenaId: item.id },
+        {
+          iconLayout: PinLayout,
+          iconOffset: [-8, -28],
+          iconShape: { type: 'Rectangle', coordinates: [[-70, -36], [70, 6]] },
+          hasBalloon: false,
+          openBalloonOnClick: false
+        }
+      );
+      pm.events.add('click', function (ev) {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        paintSheet(item, false);
+      });
+      clusterer.add(pm);
+    });
+    map.geoObjects.add(clusterer);
+  }
+
+  function bootMap() {
+    var params = new URLSearchParams(location.search);
+    var key = MM.resolveApiKey({
+      query: { apikey: params.get('apikey') },
+      windowKey: window.YANDEX_MAPS_JS_API_KEY,
+      env: {}
+    });
+    if (!key) { showMissing(); return; }
+    var url = MM.scriptUrl(key);
+    var s = document.createElement('script');
+    s.src = url;
+    s.async = true;
+    s.onerror = showMissing;
+    s.onload = function () {
+      if (!window.ymaps) { showMissing(); return; }
+      ymaps.ready(function () {
+        map = new ymaps.Map('protoMap', {
+          center: [53.90, 27.56],
+          zoom: 11,
+          controls: ['zoomControl']
+        }, {
+          yandexMapDisablePoiInteractivity: true,
+          suppressMapOpenBlock: true
+        });
+        addObjects(ymaps);
+        paintSheet(SAMPLE[0], true);
+        paintOffMap();
+      });
+    };
+    document.head.appendChild(s);
+  }
+
+  document.getElementById('intentChips').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-intent]');
+    if (!btn) return;
+    intent = btn.getAttribute('data-intent');
+    document.querySelectorAll('#intentChips .chip').forEach(function (c) {
+      c.setAttribute('aria-pressed', c === btn ? 'true' : 'false');
+    });
+    paintList();
+    paintSheet(selected, selected && selected.id === SAMPLE[0].id);
+  });
+
+  document.getElementById('viewSeg').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-view]');
+    if (!btn) return;
+    setView(btn.getAttribute('data-view'));
+  });
+
+  document.getElementById('listCards').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-id]');
+    if (!btn) return;
+    var id = Number(btn.getAttribute('data-id'));
+    var item = SAMPLE.filter(function (it) { return it.id === id; })[0];
+    if (item && item.on_map !== false) {
+      setView('map');
+      paintSheet(item, false);
+    }
+  });
+
+  document.getElementById('nearBtn').addEventListener('click', function () {
+    if (!navigator.geolocation) {
+      var denied = MM.geoDeniedState();
+      document.getElementById('sheet').innerHTML = '<div class="empty"><b>' + denied.title + '</b><p>' + denied.body + '</p></div>';
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      SAMPLE.forEach(function (it) {
+        if (!MM.hasCoords(it)) { it.distance_km = null; return; }
+        var dlat = Number(it.latitude) - pos.coords.latitude;
+        var dlon = Number(it.longitude) - pos.coords.longitude;
+        it.distance_km = Math.round(Math.sqrt(dlat * dlat + dlon * dlon) * 1110) / 10;
+      });
+      var nearest = MM.pickNearest(SAMPLE);
+      paintSheet(nearest, true);
+      if (map && nearest) map.setCenter([pos.coords.latitude, pos.coords.longitude], 13);
+    }, function () {
+      var denied = MM.geoDeniedState();
+      document.getElementById('sheet').innerHTML = '<div class="empty"><b>' + denied.title + '</b><p>' + denied.body + '</p></div>';
+    }, { timeout: 8000, maximumAge: 30000 });
+  });
+
+  paintList();
+  paintSheet(SAMPLE[0], true);
+  paintOffMap();
+  bootMap();
+})();
+</script>
+</body>
+</html>
