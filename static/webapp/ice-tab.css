@@ -122,16 +122,6 @@ body.ar-pilot--ice .client-app-header {
   color: var(--app-cta-text, #04262a);
 }
 
-.ice-hint {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
-}
-
-.ice-hint[hidden] {
-  display: none;
-}
-
 .ice-seg {
   display: flex;
   background: var(--glide-paper, #f1f3f2);

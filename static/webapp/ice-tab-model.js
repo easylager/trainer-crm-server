@@ -202,10 +202,6 @@
     };
   }
 
-  function trainersMovedHint() {
-    return 'Каталог тренеров теперь здесь — чип «Тренеры», в один тап.';
-  }
-
   function formatDistanceKm(km) {
     if (km == null || km === '' || isNaN(Number(km))) return '';
     var n = Number(km);
@@ -420,7 +416,6 @@
     hasFutureSkateSlot: hasFutureSkateSlot,
     filterSkateLens: filterSkateLens,
     listRowCta: listRowCta,
-    trainersMovedHint: trainersMovedHint,
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,
     liveTone: liveTone,

@@ -93,10 +93,8 @@
     });
     var listSec = $('iceListSec');
     var mapSec = $('iceMapSec');
-    var hint = $('iceTrainersHint');
     if (listSec) listSec.hidden = state.view !== 'list';
     if (mapSec) mapSec.hidden = state.view !== 'map';
-    if (hint) hint.hidden = state.view === 'map';
     if (state.view === 'map') {
       showMap();
       if (mapSec && typeof mapSec.scrollIntoView === 'function') {
@@ -551,9 +549,6 @@
   }
 
   function bind() {
-    var hint = $('iceTrainersHint');
-    if (hint) hint.textContent = M.trainersMovedHint();
-
     document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var intent = btn.getAttribute('data-intent');

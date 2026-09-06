@@ -67,6 +67,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "data_tier" not in page_js
     assert "formatLiveLine" in model.text
     assert "formatEmptyList" in model.text
+    assert "Каталог тренеров теперь здесь" not in page_js
     assert "#c2761a" not in css.text.lower()
     assert ".ice-sec[hidden]" in css.text
 

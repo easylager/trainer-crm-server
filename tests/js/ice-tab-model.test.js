@@ -72,12 +72,6 @@ describe('trainer catalog chip (TASK-076 AC-002)', () => {
     assert.deepEqual(intentChipAction('skate'), { type: 'list', intent: 'skate' });
     assert.deepEqual(intentChipAction('group'), { type: 'list', intent: 'group' });
   });
-
-  it('exposes a hint that the trainers catalog moved to the chip', () => {
-    const { trainersMovedHint } = loadModel();
-    assert.match(trainersMovedHint(), /Тренер/);
-    assert.match(trainersMovedHint(), /чип/);
-  });
 });
 
 describe('formatSortCaption (AC-003 + EDGE-002)', () => {
@@ -179,11 +173,11 @@ describe('formatLiveLine (prototype: three prices, not mashed live.text)', () =>
 });
 
 describe('formatEmptyList', () => {
-  it('skate empty does not dump the trainers-moved hint into the list', () => {
-    const { formatEmptyList, trainersMovedHint } = loadModel();
+  it('skate empty does not dump a catalog-moved banner into the list', () => {
+    const { formatEmptyList } = loadModel();
     const empty = formatEmptyList('skate');
     assert.match(empty.title, /массового катания|катков/i);
-    assert.ok(!empty.body.includes(trainersMovedHint()));
+    assert.ok(!/каталог тренеров теперь здесь/i.test(empty.title + empty.body));
     assert.match(empty.body, /город|Тренер/i);
   });
 
