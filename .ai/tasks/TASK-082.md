@@ -20,7 +20,7 @@ branch: feat/TASK-082-ice-map-loader-groups
 
 ## Scope
 
-- `static/webapp/ice.html`, `ice-tab.js`, `ice-tab.css`, `ice-tab-model.js`, `ice-map.js` + тесты.
+- `static/webapp/ice.html`, `ice-tab.js`, `ice-tab.css`, `ice-tab-model.js`, `ice-map.js`, `ice-map-model.js` + API `GET /api/public/ice/cities`, `POST /api/public/ice/interest`.
 - Пробный `GET /api/public/training-groups?city_id=&limit=1`.
 - Не трогать `arena-card.*`, ingestion, `master`.
 
@@ -31,3 +31,10 @@ branch: feat/TASK-082-ice-map-loader-groups
 
 ### AC-002
 Чип «Группы» `hidden`, пока `total` групп в городе = 0. Если сохранён intent=group — сброс на skate.
+
+### AC-003
+Смена города не оставляет камеру Минска. Нет катков — empty, не чужая карта.
+
+### AC-004
+В дропдауне Льда только города с `map_rink_count > 0` или `trainer_count > 0`. Тренеры без катка: «Скоро добавим катки» + кнопка пишет `ice_city_interest`.
+

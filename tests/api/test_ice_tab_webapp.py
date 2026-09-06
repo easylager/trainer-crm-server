@@ -60,13 +60,15 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert alias.status_code == 200
     page_js = js.text + model.text + body
     assert "/api/public/ice/arenas" in page_js
+    assert "/api/public/ice/cities" in page_js
+    assert "/api/public/ice/interest" in page_js
     assert "/api/public/trainers" in page_js
     assert "intent=skate" in page_js or "intent: 'skate'" in page_js or 'intent: "skate"' in page_js
     assert "arena?ref=" in page_js
     assert "computeTier" not in page_js
     assert "data_tier" not in page_js
     assert "formatLiveLine" in model.text
-    assert "formatEmptyList" in model.text
+    assert "Хочу кататься здесь" in model.text
     assert "Каталог тренеров теперь здесь" not in page_js
     assert "#c2761a" not in css.text.lower()
     assert ".ice-sec[hidden]" in css.text

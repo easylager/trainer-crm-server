@@ -290,6 +290,24 @@ body.ar-pilot--ice .client-app-header {
   color: var(--glide-hint, #5e6b6b);
 }
 
+.ice-empty__cta {
+  margin-top: 12px;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  background: var(--app-cta-fill, #45B9BB);
+  color: var(--app-cta-text, #04262a);
+  cursor: pointer;
+}
+
+.ice-empty__cta:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
 .ice-results {
   display: flex;
   flex-direction: column;

@@ -188,6 +188,15 @@ describe('formatEmptyList', () => {
     assert.ok(!/catalog\.html/i.test(empty.title + empty.body));
     assert.ok(!/воронк/i.test(empty.body));
   });
+
+  it('shows coming-soon when the city has trainers but no map rinks', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('skate', { trainerCount: 3, mapRinkCount: 0 });
+    assert.equal(empty.kind, 'coming-soon');
+    assert.match(empty.title, /скоро/i);
+    assert.match(empty.cta, /кататься/i);
+    assert.equal(formatEmptyList('skate', { trainerCount: 0, mapRinkCount: 0 }).kind, undefined);
+  });
 });
 
 describe('groupSearchResults (AC-004)', () => {

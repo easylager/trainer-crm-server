@@ -78,8 +78,19 @@
   function renderEmpty(el, state) {
     if (!el) return;
     el.hidden = false;
+    var cta = state && state.cta
+      ? '<button type="button" class="ice-empty__cta" data-action="ice-interest">' +
+        esc(state.cta) +
+        '</button>'
+      : '';
     el.innerHTML =
-      '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+      '<div class="ice-empty"><b>' +
+      esc(state.title) +
+      '</b><p>' +
+      esc(state.body) +
+      '</p>' +
+      cta +
+      '</div>';
   }
 
   function hideEmpty(el) {
@@ -315,9 +326,29 @@
       });
     }
 
+    function cityCamera() {
+      var center = opts.getCityCenter ? opts.getCityCenter() : null;
+      return MM.cityCameraFromItems(listItems, { fallbackCenter: center });
+    }
+
+    function showNoArenasEmpty() {
+      setLoading(false);
+      showStage(false);
+      var empty = MM.cityWithoutArenasState();
+      if (global.IceTabModel && typeof global.IceTabModel.formatEmptyList === 'function') {
+        empty = global.IceTabModel.formatEmptyList(getIntent(), {
+          trainerCount: opts.getTrainerCount ? opts.getTrainerCount() : 0,
+          mapRinkCount: opts.getMapRinkCount ? opts.getMapRinkCount() : 0,
+        });
+      }
+      renderEmpty(emptyEl, empty);
+      paintSheet(null);
+    }
+
     function applyCityCamera() {
       if (!map) return;
-      var cam = MM.cityCameraFromItems(listItems);
+      var cam = cityCamera();
+      if (!cam) return;
       ignoreBounds = true;
       map.options.set('restrictMapArea', cam.restrict);
       map.options.set('minZoom', cam.minZoom);
@@ -359,7 +390,8 @@
     function createMap() {
       if (map || !canvas) return;
       buildLayouts();
-      var cam = MM.cityCameraFromItems(listItems);
+      var cam = cityCamera();
+      if (!cam) return;
       map = new ymaps.Map(
         canvas,
         {
@@ -414,6 +446,10 @@
         return Promise.resolve();
       }
       if (map) {
+        if (!listItems.length) {
+          showNoArenasEmpty();
+          return Promise.resolve();
+        }
         setLoading(false);
         hideEmpty(emptyEl);
         showStage(true);
@@ -458,10 +494,7 @@
               showStage(true);
               return;
             }
-            setLoading(false);
-            showStage(false);
-            renderEmpty(emptyEl, decision.empty);
-            if (sheetEl) sheetEl.innerHTML = '';
+            showNoArenasEmpty();
             return;
           }
           return loadYmaps(resolved).then(function (api) {
@@ -586,6 +619,10 @@
       setListItems: function (items) {
         listItems = items || [];
         setOffMapNote();
+        if (!listItems.length && getIntent() !== 'coach') {
+          showNoArenasEmpty();
+          return;
+        }
         if (map) {
           if (!listItems.length) {
             mapItems = [];

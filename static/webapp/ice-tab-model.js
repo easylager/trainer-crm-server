@@ -100,6 +100,14 @@
     return '/api/public/trainers?' + params.join('&');
   }
 
+  function buildIceCitiesUrl() {
+    return '/api/public/ice/cities';
+  }
+
+  function buildIceInterestUrl() {
+    return '/api/public/ice/interest';
+  }
+
   function catalogHref() {
     return 'catalog?tab=catalog';
   }
@@ -296,7 +304,18 @@
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
   }
 
-  function formatEmptyList(intent) {
+  function formatEmptyList(intent, opts) {
+    opts = opts || {};
+    var trainers = Number(opts.trainerCount) || 0;
+    var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
+      return {
+        kind: 'coming-soon',
+        title: 'Скоро добавим катки',
+        body: 'В этом городе уже есть тренеры. Расписание массового катания подключим — нажмите, если хотите кататься здесь.',
+        cta: 'Хочу кататься здесь',
+      };
+    }
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
@@ -404,6 +423,8 @@
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
+    buildIceCitiesUrl: buildIceCitiesUrl,
+    buildIceInterestUrl: buildIceInterestUrl,
     buildGroupsProbeUrl: buildGroupsProbeUrl,
     shouldShowGroupChip: shouldShowGroupChip,
     sanitizeIntent: sanitizeIntent,
