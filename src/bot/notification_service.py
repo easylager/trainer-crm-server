@@ -38,7 +38,12 @@ from src.bot.notification_loops import (
     run_weekly_sunday_digest_loop,
     run_care_pulse_loop,
 )
-from src.ingestion.loop import run_ice_ingest_scheduler_loop, run_ice_scrape_ttl_loop
+from src.ingestion.loop import (
+    run_ice_health_alert_loop,
+    run_ice_health_weekly_digest_loop,
+    run_ice_ingest_scheduler_loop,
+    run_ice_scrape_ttl_loop,
+)
 from src.shared.config import get_settings, Settings
 from src.shared.notification_hours import set_notification_quiet_hours_bypass
 from src.shared.sentry_init import init_sentry
@@ -116,6 +121,8 @@ async def main() -> None:
         asyncio.create_task(run_recurring_materialization_loop(), name="recurring_materialization"),
         asyncio.create_task(run_ice_ingest_scheduler_loop(), name="ice_ingest_scheduler"),
         asyncio.create_task(run_ice_scrape_ttl_loop(), name="ice_scrape_ttl"),
+        asyncio.create_task(run_ice_health_alert_loop(), name="ice_health_alert"),
+        asyncio.create_task(run_ice_health_weekly_digest_loop(), name="ice_health_weekly_digest"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 

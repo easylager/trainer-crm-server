@@ -1875,6 +1875,19 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
 
     hint_funnel, feature_adoption = await _get_hint_funnel_and_feature_adoption(session)
 
+    ice_health: dict = {
+        "cities": [],
+        "silent_sources": [],
+        "manual_admin_sessions_7d": 0,
+        "calibration": None,
+    }
+    try:
+        from src.ingestion.health import ice_health_admin_payload
+
+        ice_health = await ice_health_admin_payload(session)
+    except ProgrammingError:
+        pass
+
     return {
         "today": today.isoformat(),
         "activation_funnel": activation,
@@ -1885,6 +1898,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
         "correlation": correlation,
         "hint_funnel": hint_funnel,
         "feature_adoption": feature_adoption,
+        "ice_health": ice_health,
     }
 
 
