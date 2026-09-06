@@ -8,7 +8,7 @@ depends_on: [TASK-072]
 execution_mode: SUPERVISED
 created_at: 2026-09-04
 updated_at: 2026-09-06
-pr_url:
+pr_url: https://github.com/easylager/trainer-crm-server/pull/36
 ---
 
 # Task
@@ -91,4 +91,4 @@ Status: OPEN
 ## Execution History
 - **TASK_CREATED** (2026-09-04) — EPIC3, волна 4
 - **DEPENDS_REFRAMED** (2026-09-06) — координатор: depends_on TASK-072 (MERGED), не TASK-059 (не V1). Источник истины — `ice_parser_jobs` + `ice_scrape_runs`.
-- **IN_PROGRESS** (2026-09-06) — silent-source alerts (cadence×N / per-job hours), stale-fact share, city A/B/C + WoW, booking density, weekly admin digest via `notification_service`. Calibration numbers left as TASK-066 placeholder. Not MERGED.
+- **IN_PROGRESS** (2026-09-06) — silent-source alerts (cadence×N / per-job hours), stale-fact share, city A/B/C + WoW, booking density, weekly admin digest via `notification_service`. Calibration numbers left as TASK-066 placeholder. PR: https://github.com/easylager/trainer-crm-server/pull/36. Not MERGED.
