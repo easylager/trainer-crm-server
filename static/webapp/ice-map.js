@@ -148,6 +148,17 @@
     var missingKey = false;
     var keyResolved = '';
     var userPlacemark = null;
+    var loading = false;
+
+    function setLoading(on) {
+      loading = !!on;
+      if (opts.loadingEl) {
+        opts.loadingEl.hidden = !loading;
+        if (loading) opts.loadingEl.setAttribute('aria-busy', 'true');
+        else opts.loadingEl.removeAttribute('aria-busy');
+      }
+      if (nearBtn) nearBtn.hidden = loading || (stageEl && stageEl.hidden);
+    }
 
     function getIntent() {
       return opts.getIntent ? opts.getIntent() : 'skate';
@@ -182,7 +193,7 @@
 
     function showStage(on) {
       if (stageEl) stageEl.hidden = !on;
-      if (nearBtn) nearBtn.hidden = !on;
+      if (nearBtn) nearBtn.hidden = !on || loading;
     }
 
     function setOffMapNote() {
@@ -258,6 +269,7 @@
       selected = null;
       nearestMode = false;
       bboxState = null;
+      setLoading(false);
       if (clusterer) syncObjects();
       paintSheet(null);
       showStage(false);
@@ -385,37 +397,45 @@
     }
 
     function showMissing() {
+      setLoading(false);
       showStage(false);
       renderEmpty(emptyEl, MM.missingKeyState());
     }
 
     function start() {
       if (getIntent() === 'coach') {
+        setLoading(false);
         showCoachEmpty();
         return Promise.resolve();
       }
       if (missingKey) {
+        setLoading(false);
         showMissing();
         return Promise.resolve();
       }
       if (map) {
+        setLoading(false);
         hideEmpty(emptyEl);
         showStage(true);
         map.container.fitToViewport();
         fetchViewport();
         return Promise.resolve();
       }
+      started = true;
+      setLoading(true);
+      showStage(true);
+      hideEmpty(emptyEl);
       var getKey = opts.getKey || defaultGetKey;
       return Promise.resolve(keyResolved || getKey())
         .then(function (key) {
           var resolved = keyResolved || MM.resolveApiKey({ key: key });
           if (!resolved) {
             missingKey = true;
+            setLoading(false);
             showMissing();
             return;
           }
           keyResolved = resolved;
-          started = true;
           var decision = MM.mapStartDecision({
             key: resolved,
             listItems: listItems,
@@ -423,17 +443,22 @@
           });
           if (decision.kind === 'missing-key') {
             missingKey = true;
+            setLoading(false);
             showMissing();
             return;
           }
           if (decision.kind === 'coach') {
+            setLoading(false);
             showCoachEmpty();
             return;
           }
           if (decision.kind === 'no-arenas') {
             if (typeof opts.listReady === 'function' && !opts.listReady()) {
+              setLoading(true);
+              showStage(true);
               return;
             }
+            setLoading(false);
             showStage(false);
             renderEmpty(emptyEl, decision.empty);
             if (sheetEl) sheetEl.innerHTML = '';
@@ -450,9 +475,11 @@
             mapItems = MM.splitMapAndList(listItems).onMap.slice();
             syncObjects();
             fitCity();
+            setLoading(false);
           });
         })
         .catch(function () {
+          setLoading(false);
           showMissing();
         });
     }
@@ -571,7 +598,7 @@
           }
           applyCityCamera();
         }
-        if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
+        if (!map && started && !missingKey && getIntent() !== 'coach') {
           start();
         }
       },

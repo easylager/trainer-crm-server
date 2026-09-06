@@ -49,6 +49,8 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "Покататься" in body
     assert "Тренеры" in body
     assert "Группы" in body
+    assert 'data-intent="group"' in body
+    assert "ice-map-loading" in body
     assert "Каток, тренер или город" in body
     assert js.status_code == 200
     assert css.status_code == 200

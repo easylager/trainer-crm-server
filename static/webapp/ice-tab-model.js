@@ -66,6 +66,27 @@
     return '/api/public/search?' + params.join('&');
   }
 
+  function buildGroupsProbeUrl(opts) {
+    opts = opts || {};
+    var params = ['limit=1'];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    return '/api/public/training-groups?' + params.join('&');
+  }
+
+  function shouldShowGroupChip(count) {
+    return Number(count) > 0;
+  }
+
+  function sanitizeIntent(intent, opts) {
+    opts = opts || {};
+    if (intent === INTENTS.group && !opts.hasGroups) return INTENTS.skate;
+    if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.group) return INTENTS.group;
+    return INTENTS.skate;
+  }
+
   function buildTrainersUrl(opts) {
     opts = opts || {};
     var params = ['order_by=rating'];
@@ -387,6 +408,9 @@
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
+    buildGroupsProbeUrl: buildGroupsProbeUrl,
+    shouldShowGroupChip: shouldShowGroupChip,
+    sanitizeIntent: sanitizeIntent,
     catalogHref: catalogHref,
     mapHref: mapHref,
     trainerHref: trainerHref,

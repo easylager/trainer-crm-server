@@ -396,6 +396,21 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
   });
 });
 
+describe('group chip visibility', () => {
+  it('hides Группы until the city has at least one open group', () => {
+    const { shouldShowGroupChip, sanitizeIntent, buildGroupsProbeUrl } = loadModel();
+    assert.equal(shouldShowGroupChip(0), false);
+    assert.equal(shouldShowGroupChip(null), false);
+    assert.equal(shouldShowGroupChip(2), true);
+    assert.equal(sanitizeIntent('group', { hasGroups: false }), 'skate');
+    assert.equal(sanitizeIntent('group', { hasGroups: true }), 'group');
+    assert.equal(sanitizeIntent('coach', { hasGroups: false }), 'coach');
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /\/api\/public\/training-groups/);
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /city_id=2/);
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /limit=1/);
+  });
+});
+
 describe('session restore', () => {
   it('round-trips lens, city and scroll', () => {
     const { saveIceState, loadIceState, ICE_STATE_KEY } = loadModel();

@@ -17,6 +17,7 @@
     total: 0,
     cursor: null,
     loading: false,
+    groupCount: 0,
   };
   var searchTimer = null;
 
@@ -78,7 +79,11 @@
 
   function setChips() {
     document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      btn.setAttribute('aria-pressed', btn.getAttribute('data-intent') === state.intent ? 'true' : 'false');
+      var intent = btn.getAttribute('data-intent');
+      if (intent === 'group') {
+        btn.hidden = !M.shouldShowGroupChip(state.groupCount);
+      }
+      btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
     });
   }
 
@@ -104,7 +109,9 @@
     if (!global.IceMap) {
       var emptyEl = $('iceMapEmpty');
       var stageEl = $('iceMapStage');
+      var loadingEl = $('iceMapLoading');
       if (stageEl) stageEl.hidden = true;
+      if (loadingEl) loadingEl.hidden = true;
       if (emptyEl && global.IceMapModel) {
         emptyEl.hidden = false;
         emptyEl.innerHTML =
@@ -120,6 +127,7 @@
         nearBtn: $('iceNearBtn'),
         offMapEl: $('iceMapOffMap'),
         stageEl: $('iceMapStage'),
+        loadingEl: $('iceMapLoading'),
         listUrl: function (extra) {
           extra = extra || {};
           var opts = {
@@ -372,6 +380,38 @@
       }).catch(function () {});
     }
     loadList();
+    probeGroups();
+  }
+
+  function probeGroups() {
+    if (!state.cityId) {
+      state.groupCount = 0;
+      maybeDropGroupIntent();
+      setChips();
+      return Promise.resolve();
+    }
+    return fetchJson(M.buildGroupsProbeUrl({ cityId: state.cityId }))
+      .then(function (data) {
+        var total = data && data.total != null ? data.total : ((data && data.items) || []).length;
+        state.groupCount = Number(total) || 0;
+        maybeDropGroupIntent();
+        setChips();
+      })
+      .catch(function () {
+        state.groupCount = 0;
+        maybeDropGroupIntent();
+        setChips();
+      });
+  }
+
+  function maybeDropGroupIntent() {
+    var next = M.sanitizeIntent(state.intent, {
+      hasGroups: M.shouldShowGroupChip(state.groupCount),
+    });
+    if (next === state.intent) return;
+    state.intent = next;
+    persist();
+    loadList();
   }
 
   function renderCityPicker(filter) {
@@ -517,6 +557,7 @@
     document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var intent = btn.getAttribute('data-intent');
+        if (intent === 'group' && !M.shouldShowGroupChip(state.groupCount)) return;
         var action = M.intentChipAction(intent);
         if (action.type !== 'list') return;
         state.intent = action.intent;
