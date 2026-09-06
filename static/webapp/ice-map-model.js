@@ -61,6 +61,53 @@
     };
   }
 
+  function chooseMapProvider(sources) {
+    var key = resolveApiKey(sources);
+    if (!key) {
+      var empty = missingKeyState();
+      return {
+        provider: 'none',
+        fallback: empty.fallback,
+        canRenderMap: false,
+        title: empty.title,
+        body: empty.body,
+      };
+    }
+    return { provider: 'yandex', fallback: 'none', canRenderMap: true };
+  }
+
+  function cityWithoutArenasState() {
+    return {
+      title: 'В этом городе пока нет катков',
+      body: 'Смените город или откройте чип «Тренеры» — пустую карту не показываем как «всё в порядке».',
+    };
+  }
+
+  function mapStartDecision(opts) {
+    opts = opts || {};
+    var provider = chooseMapProvider({ key: opts.key, query: opts.query, env: opts.env, windowKey: opts.windowKey });
+    if (provider.provider !== 'yandex') {
+      return {
+        kind: 'missing-key',
+        showMap: false,
+        provider: 'none',
+        fallback: 'none',
+        empty: missingKeyState(),
+      };
+    }
+    var items = opts.listItems || [];
+    if (!items.length) {
+      return {
+        kind: 'no-arenas',
+        showMap: false,
+        provider: 'yandex',
+        fallback: 'none',
+        empty: cityWithoutArenasState(),
+      };
+    }
+    return { kind: 'map', showMap: true, provider: 'yandex', fallback: 'none' };
+  }
+
   function geoDeniedState() {
     return {
       blocksMap: false,
@@ -69,10 +116,49 @@
     };
   }
 
+  function afterGeoDenied(view) {
+    view = view || {};
+    var denied = geoDeniedState();
+    return {
+      blocksMap: false,
+      keepStage: true,
+      keepPins: true,
+      keepSheet: view.sheetOpen !== false,
+      fallback: 'none',
+      title: denied.title,
+      body: denied.body,
+      pinCount: view.pinCount != null ? Number(view.pinCount) : 0,
+    };
+  }
+
   function noArenasNearState() {
     return {
       title: 'Рядом нет катков',
       body: 'В этой точке мы пока не нашли арен. Сдвиньте карту или смените город — пустую карту не показываем как «всё в порядке».',
+    };
+  }
+
+  function bboxFetchPayload(opts) {
+    opts = opts || {};
+    var bbox = trimStr(opts.bbox);
+    if (!bbox) return { fetch: false };
+    var intent = trimStr(opts.intent) || 'skate';
+    var limit = Number(opts.limit);
+    if (!isFinite(limit) || limit <= 0) limit = 50;
+    return {
+      fetch: true,
+      bbox: bbox,
+      intent: intent,
+      limit: limit,
+    };
+  }
+
+  function pinSheetTarget(item) {
+    var ref = (item && (item.slug || item.id)) || '';
+    return {
+      href: 'arena?ref=' + encodeURIComponent(String(ref)),
+      opens: 'arena-card',
+      yandexOrgCard: false,
     };
   }
 
@@ -287,8 +373,14 @@
     resolveApiKey: resolveApiKey,
     scriptUrl: scriptUrl,
     missingKeyState: missingKeyState,
+    chooseMapProvider: chooseMapProvider,
+    cityWithoutArenasState: cityWithoutArenasState,
+    mapStartDecision: mapStartDecision,
     geoDeniedState: geoDeniedState,
+    afterGeoDenied: afterGeoDenied,
     noArenasNearState: noArenasNearState,
+    bboxFetchPayload: bboxFetchPayload,
+    pinSheetTarget: pinSheetTarget,
     hasCoords: hasCoords,
     splitMapAndList: splitMapAndList,
     formatOffMapNote: formatOffMapNote,

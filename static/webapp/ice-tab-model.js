@@ -67,6 +67,35 @@
     return 'arena?ref=' + encodeURIComponent(String(ref));
   }
 
+  var SKATE_SLOT_KINDS = { public_skate: true, open_ice: true };
+
+  function slotKind(raw) {
+    return String(raw || '').trim();
+  }
+
+  function hasFutureSkateSlot(item) {
+    var live = (item && item.live) || {};
+    var kind = slotKind(live.kind);
+    if (kind === 'session' || SKATE_SLOT_KINDS[kind]) return true;
+    if (SKATE_SLOT_KINDS[slotKind(item && item.next_kind)]) return true;
+    var slots = (item && (item.sessions || item.upcoming_sessions)) || [];
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      if (SKATE_SLOT_KINDS[slotKind(slots[i] && slots[i].kind)]) return true;
+    }
+    return false;
+  }
+
+  function filterSkateLens(items, intent) {
+    var list = items || [];
+    if (intent !== INTENTS.skate) return list.slice();
+    return list.filter(hasFutureSkateSlot);
+  }
+
+  function listRowCta() {
+    return null;
+  }
+
   function intentChipAction(intent) {
     if (intent === INTENTS.coach) {
       return { type: 'catalog', href: catalogHref() };
@@ -273,6 +302,9 @@
     trainerHref: trainerHref,
     arenaHref: arenaHref,
     intentChipAction: intentChipAction,
+    hasFutureSkateSlot: hasFutureSkateSlot,
+    filterSkateLens: filterSkateLens,
+    listRowCta: listRowCta,
     trainersMovedHint: trainersMovedHint,
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,

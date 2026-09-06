@@ -1,7 +1,7 @@
 ---
 task_id: TASK-075
 title: Таб «Лёд» и карта — закрыть vs прототип
-status: READY
+status: IN_PROGRESS
 phase: execute
 epic: EPIC3
 depends_on: [TASK-053, TASK-054]
@@ -77,3 +77,4 @@ Verification method: automated/unit
 
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — координатор: 053/054 MERGED как первый проход; close-out vs прототип. Профиль/онбординг не в scope. Train only.
+- **IN_PROGRESS** (2026-09-06) — close-out list+map vs prototype: client skate-lens filter, bbox payload without city_id, pin sheet → arena.html, missing-key/empty-city without OSM, geo-denied keeps map.

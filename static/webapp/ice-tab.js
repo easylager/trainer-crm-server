@@ -128,8 +128,7 @@
           if (href) shellNav(href);
         },
         onNearList: function (data) {
-          state.items = (data && data.items) || [];
-          state.total = data && data.total != null ? data.total : state.items.length;
+          applyArenaPayload(data);
           renderList();
         },
       });
@@ -169,6 +168,8 @@
         var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
         var live = M.formatLiveLine(item);
         var href = M.arenaHref(item);
+        var cta = M.listRowCta(item);
+        if (cta) live += ' · ' + cta;
         return (
           '<button type="button" class="ice-acard" data-href="' +
           esc(href) +
@@ -200,6 +201,14 @@
       .join('');
   }
 
+  function applyArenaPayload(data) {
+    var incoming = (data && data.items) || [];
+    state.items = M.filterSkateLens(incoming, state.intent);
+    state.total = data && data.total != null ? data.total : incoming.length;
+    if (state.items.length < incoming.length) state.total = state.items.length;
+    state.cursor = data && data.next_cursor;
+  }
+
   function fetchJson(url, opts) {
     opts = opts || {};
     return fetch(url, {
@@ -222,9 +231,7 @@
     return fetchJson(url)
       .then(function (data) {
         state.loading = false;
-        state.items = (data && data.items) || [];
-        state.total = data && data.total != null ? data.total : state.items.length;
-        state.cursor = data && data.next_cursor;
+        applyArenaPayload(data);
         renderList();
         if (mapCtl) {
           mapCtl.setListItems(state.items);

@@ -214,4 +214,76 @@ describe('рядом со мной (AC-003 + EDGE-001/002)', () => {
     assert.equal(sheet.id, 1);
     assert.match(String(sheet.sheetMeta || ''), /ближайш/);
   });
+
+  it('geo denied keeps the map usable and never falls back to OSM', () => {
+    const { afterGeoDenied } = loadModel();
+    const next = afterGeoDenied({ pinCount: 4, sheetOpen: true });
+    assert.equal(next.blocksMap, false);
+    assert.equal(next.keepStage, true);
+    assert.equal(next.keepPins, true);
+    assert.equal(next.keepSheet, true);
+    assert.equal(next.fallback, 'none');
+    assert.equal(next.pinCount, 4);
+    assert.match(next.body, /геолокац/i);
+    assert.ok(!/osm|leaflet|openstreet/i.test(next.body));
+  });
+});
+
+describe('bbox payload on pan (TASK-075 AC-002)', () => {
+  it('sends bbox + intent and omits city_id so the pan is not a second city query', () => {
+    const { bboxFetchPayload } = loadModel();
+    const payload = bboxFetchPayload({
+      bbox: '53.8,27.4,54.0,27.7',
+      intent: 'skate',
+      cityId: 3,
+      limit: 50,
+    });
+    assert.equal(payload.fetch, true);
+    assert.equal(payload.bbox, '53.8,27.4,54.0,27.7');
+    assert.equal(payload.intent, 'skate');
+    assert.equal(payload.limit, 50);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, 'cityId'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, 'city_id'), false);
+  });
+});
+
+describe('pin sheet target (TASK-075 AC-002)', () => {
+  it('opens our arena card, never a Yandex org card', () => {
+    const { pinSheetTarget } = loadModel();
+    const target = pinSheetTarget(rink({ slug: 'minsk-chizhovka', id: 12 }));
+    assert.equal(target.href, 'arena?ref=minsk-chizhovka');
+    assert.equal(target.opens, 'arena-card');
+    assert.equal(target.yandexOrgCard, false);
+    assert.equal(pinSheetTarget(rink({ id: 12, slug: null })).href, 'arena?ref=12');
+  });
+});
+
+describe('map start without key or arenas (TASK-075 AC-004 + EDGE)', () => {
+  it('missing key chooses no provider and never OSM/Leaflet', () => {
+    const { chooseMapProvider, mapStartDecision } = loadModel();
+    const missing = chooseMapProvider({});
+    assert.equal(missing.provider, 'none');
+    assert.equal(missing.fallback, 'none');
+    assert.equal(missing.canRenderMap, false);
+    assert.ok(!/osm|leaflet|openstreet/i.test(missing.body || ''));
+    const live = chooseMapProvider({ key: 'live-key' });
+    assert.equal(live.provider, 'yandex');
+    assert.equal(live.fallback, 'none');
+
+    const emptyCity = mapStartDecision({
+      key: 'live-key',
+      listItems: [],
+    });
+    assert.equal(emptyCity.kind, 'no-arenas');
+    assert.equal(emptyCity.showMap, false);
+    assert.match(emptyCity.empty.title, /нет катков/i);
+
+    const ready = mapStartDecision({
+      key: 'live-key',
+      listItems: [rink()],
+    });
+    assert.equal(ready.kind, 'map');
+    assert.equal(ready.showMap, true);
+    assert.equal(ready.provider, 'yandex');
+  });
 });

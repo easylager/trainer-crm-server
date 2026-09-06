@@ -226,6 +226,59 @@ describe('hrefs', () => {
   });
 });
 
+describe('skate lens filter (TASK-075 AC-001)', () => {
+  const withSession = {
+    id: 1,
+    name: 'Чижовка',
+    tier: 'A',
+    live: { kind: 'session', starts_at_local: '11:00' },
+  };
+  const openIce = {
+    id: 2,
+    name: 'Свободный лёд',
+    tier: 'A',
+    live: { kind: 'open_ice', starts_at_local: '18:00' },
+  };
+  const publicSkateSlot = {
+    id: 3,
+    name: 'Слоты в массиве',
+    tier: 'A',
+    live: { kind: 'unknown' },
+    sessions: [{ kind: 'public_skate', starts_at_local: '19:00' }],
+  };
+  const noSlot = {
+    id: 4,
+    name: 'Только профиль',
+    tier: 'B',
+    live: { kind: 'unknown', text: 'Расписание уточняется' },
+  };
+
+  it('Покататься keeps only arenas with a future public_skate|open_ice slot', () => {
+    const { filterSkateLens } = loadModel();
+    const kept = filterSkateLens([withSession, openIce, publicSkateSlot, noSlot], 'skate');
+    assert.deepEqual(
+      kept.map((it) => it.id),
+      [1, 2, 3]
+    );
+  });
+
+  it('Группы keep venues without MK', () => {
+    const { filterSkateLens } = loadModel();
+    const kept = filterSkateLens([withSession, noSlot], 'group');
+    assert.deepEqual(
+      kept.map((it) => it.id),
+      [1, 4]
+    );
+  });
+
+  it('MK list rows are read-only — no Записаться CTA', () => {
+    const { listRowCta } = loadModel();
+    assert.equal(listRowCta({ live: { kind: 'session' } }), null);
+    assert.equal(listRowCta({ live: { kind: 'public_skate' } }), null);
+    assert.equal(listRowCta({ live: { kind: 'open_ice' } }), null);
+  });
+});
+
 describe('session restore', () => {
   it('round-trips lens, city and scroll', () => {
     const { saveIceState, loadIceState, ICE_STATE_KEY } = loadModel();
