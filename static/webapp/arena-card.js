@@ -190,7 +190,6 @@
 
   function renderRibbonRows() {
     var today = todayIso();
-    var tomorrow = addDaysIso(today, 1);
     if (state.day === 'week') {
       var weekFrom = today;
       var weekTo = addDaysIso(today, 6);
@@ -217,7 +216,7 @@
         })
         .join('');
     }
-    var iso = state.day === 'tomorrow' ? tomorrow : today;
+    var iso = M.ribbonIsoForDay(state.day, today) || today;
     var rows = ribbonForIso(iso);
     if (!rows.length) {
       return (
@@ -373,8 +372,21 @@
   function renderPractice() {
     var card = state.card;
     var mode = M.iceSectionMode({ tier: card.tier, hasSessions: hasAnySessions() });
-    if (mode === 'none' && !card.address && !card.phone) return '';
+    var contacts = M.practiceContacts(card);
+    if (
+      mode === 'none' &&
+      !card.address &&
+      !card.phone &&
+      !contacts.website &&
+      !contacts.socials.length &&
+      !contacts.shortDescription
+    ) {
+      return '';
+    }
     var html = '<div class="arena-sec"><p class="arena-h">Как добраться и что есть</p>';
+    if (contacts.shortDescription) {
+      html += '<p class="arena-sub">' + esc(contacts.shortDescription) + '</p>';
+    }
     if (card.address) {
       var mapHref = '';
       if (card.latitude != null && card.longitude != null) {
@@ -413,6 +425,30 @@
         '</b><span>' +
         esc(hours) +
         '</span></div>';
+    }
+    if (contacts.website) {
+      html +=
+        '<a class="arena-fake-row" href="' +
+        esc(contacts.website.href) +
+        '" target="_blank" rel="noopener"><b style="font-weight:600;font-size:13.5px">' +
+        esc(contacts.website.label) +
+        '</b><span>Открыть</span></a>';
+    }
+    if (contacts.socials.length) {
+      html +=
+        '<p class="arena-sub">' +
+        contacts.socials
+          .map(function (s) {
+            return (
+              '<a href="' +
+              esc(s.href) +
+              '" target="_blank" rel="noopener">' +
+              esc(s.label) +
+              '</a>'
+            );
+          })
+          .join(' · ') +
+        '</p>';
     }
     html += '</div>';
     return html;
@@ -604,7 +640,7 @@
       return;
     }
     if (action === 'open-day') {
-      state.day = 'today';
+      state.day = M.dayTabFromIso(t.getAttribute('data-date'), todayIso());
       paint();
       return;
     }

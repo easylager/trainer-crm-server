@@ -461,3 +461,61 @@ describe('amenityChips', () => {
     assert.deepEqual(chips, ['Прокат', 'Заточка', 'Раздевалки', 'Кафе']);
   });
 });
+
+describe('dayTabFromIso', () => {
+  it('maps the clicked week date to today, tomorrow, or that ISO day', () => {
+    const { dayTabFromIso } = loadModel();
+    const today = '2026-09-06';
+    assert.equal(dayTabFromIso('2026-09-06', today), 'today');
+    assert.equal(dayTabFromIso('2026-09-07', today), 'tomorrow');
+    assert.equal(dayTabFromIso('2026-09-10', today), '2026-09-10');
+  });
+});
+
+describe('ribbonIsoForDay', () => {
+  it('resolves today/tomorrow/week and a specific YYYY-MM-DD onto one local date', () => {
+    const { ribbonIsoForDay } = loadModel();
+    const today = '2026-09-06';
+    assert.equal(ribbonIsoForDay('today', today), '2026-09-06');
+    assert.equal(ribbonIsoForDay('tomorrow', today), '2026-09-07');
+    assert.equal(ribbonIsoForDay('week', today), null);
+    assert.equal(ribbonIsoForDay('2026-09-10', today), '2026-09-10');
+  });
+});
+
+describe('practiceContacts', () => {
+  it('exposes website, known socials, and short_description without inventing URLs', () => {
+    const { practiceContacts } = loadModel();
+    const filled = practiceContacts({
+      website_url: 'https://chizhovka-arena.by/',
+      short_description: 'Крытый каток в Чижовке.',
+      social_urls: {
+        instagram: 'https://instagram.com/chizhovka',
+        facebook: 'https://facebook.com/chizhovka',
+        vk: 'https://vk.com/chizhovka',
+        telegram: 'https://t.me/chizhovka',
+        youtube: 'https://youtube.com/should-not-show',
+      },
+    });
+    assert.equal(filled.shortDescription, 'Крытый каток в Чижовке.');
+    assert.deepEqual(filled.website, {
+      href: 'https://chizhovka-arena.by/',
+      label: 'Сайт катка',
+    });
+    assert.deepEqual(
+      filled.socials.map((s) => s.key),
+      ['instagram', 'facebook', 'vk', 'telegram']
+    );
+    assert.equal(filled.socials[0].href, 'https://instagram.com/chizhovka');
+    assert.ok(!filled.socials.some((s) => s.key === 'youtube'));
+
+    const empty = practiceContacts({
+      website_url: '  ',
+      short_description: '',
+      social_urls: { instagram: '', facebook: null },
+    });
+    assert.equal(empty.website, null);
+    assert.equal(empty.shortDescription, null);
+    assert.deepEqual(empty.socials, []);
+  });
+});
