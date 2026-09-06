@@ -519,3 +519,29 @@ async def test_saleframe_and_html_share_ice_session_columns(db_session) -> None:
     assert default_registry().get(PARSER_KEY_MINSK_ARENA) is not None
     assert default_registry().get("zamok_html_v1") is not None
     assert default_registry().get("chizhovka_html_v1") is not None
+
+
+def test_minsk_arena_live_urls_hit_abws_not_saleframe_html() -> None:
+    """Live extract must call ABWS JSON, not the Vue saleframe shell."""
+    from zoneinfo import ZoneInfo
+
+    from src.ingestion.adapters import (
+        minsk_arena_calendar_url,
+        minsk_arena_events_url,
+        minsk_arena_init_url,
+    )
+
+    cfg = MINSK_ARENA_SALEFRAME_CONFIG
+    init = minsk_arena_init_url(cfg)
+    calendar = minsk_arena_calendar_url(cfg)
+    events = minsk_arena_events_url(
+        cfg, local_date=date(2026, 9, 6), tz=ZoneInfo("Europe/Minsk")
+    )
+    assert init.startswith("https://abws.minskarena.by/api/v3/frame/init")
+    assert "seid=55" in init
+    assert calendar == "https://abws.minskarena.by/api/v1/frame/service/55/calendar"
+    assert "expand=prices" in events
+    assert "from=" in events and "to=" in events
+    assert "saleframe.minskarena.by" not in init
+    assert "saleframe.minskarena.by" not in calendar
+    assert "saleframe.minskarena.by" not in events

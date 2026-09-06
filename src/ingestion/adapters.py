@@ -4,13 +4,14 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA
-from src.ingestion.source_io import load_source_json, load_source_text
+from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _TIME_RANGE = re.compile(r"(\d{1,2}[:.]\d{2})\s*[-–—]+\s*(\d{1,2}[:.]\d{2})")
@@ -49,6 +50,64 @@ def _fmt(hour: int, minute: int) -> str:
     return f"{hour:02d}:{minute:02d}"
 
 
+def _join_api_url(host: str, path: str, query: dict[str, Any] | None = None) -> str:
+    url = host.rstrip("/") + "/" + str(path).lstrip("/")
+    if query:
+        url = f"{url}?{urlencode(query)}"
+    return url
+
+
+def minsk_arena_init_url(config: dict[str, Any]) -> str:
+    service_id = int(config.get("service_id") or 55)
+    path = str(config.get("init_path") or "/api/v3/frame/init")
+    query = dict(config.get("init_query") or {"seid": service_id, "target": "saleframe", "lang": "ru"})
+    return _join_api_url(str(config["api_host"]), path, query)
+
+
+def minsk_arena_calendar_url(config: dict[str, Any]) -> str:
+    service_id = int(config.get("service_id") or 55)
+    path = str(config.get("calendar_path") or "/api/v1/frame/service/{service_id}/calendar").format(
+        service_id=service_id
+    )
+    return _join_api_url(str(config["api_host"]), path)
+
+
+def minsk_arena_events_url(config: dict[str, Any], *, local_date: date, tz: ZoneInfo) -> str:
+    service_id = int(config.get("service_id") or 55)
+    path = str(config.get("events_path") or "/api/v1/frame/service/{service_id}/events").format(
+        service_id=service_id
+    )
+    start = datetime(local_date.year, local_date.month, local_date.day, tzinfo=tz)
+    end = start + timedelta(days=1)
+    query = dict(config.get("events_query") or {})
+    query["from"] = int(start.timestamp())
+    query["to"] = int(end.timestamp())
+    return _join_api_url(str(config["api_host"]), path, query)
+
+
+async def _load_minsk_arena_payloads(job: ParserJob) -> tuple[Any, Any, Any]:
+    """Fixture JSON when fixture_dir is set; otherwise ABWS init/calendar/events."""
+    if job.config.get("fixture_dir"):
+        calendar = await load_source_json(job, filename="calendar.json", url_keys=("calendar_url", "url"))
+        events_blob = await load_source_json(job, filename="events.json", url_keys=("events_url", "url"))
+        init = await load_source_json(job, filename="init.json", url_keys=("init_url", "url"))
+        return calendar, events_blob, init
+    tz = ZoneInfo(str(job.config.get("timezone") or "Europe/Minsk"))
+    init = await fetch_http_json(minsk_arena_init_url(job.config))
+    calendar = await fetch_http_json(minsk_arena_calendar_url(job.config))
+    events: list[Any] = []
+    for row in calendar or []:
+        day_raw = row.get("date") if isinstance(row, dict) else None
+        if not day_raw:
+            continue
+        blob = await fetch_http_json(
+            minsk_arena_events_url(job.config, local_date=date.fromisoformat(str(day_raw)), tz=tz)
+        )
+        chunk = blob.get("data") if isinstance(blob, dict) else blob
+        events.extend(chunk or [])
+    return calendar, {"data": events}, init
+
+
 def _norm_hhmm(raw: str) -> str:
     match = _HHMM.search(raw.replace(" ", ""))
     if not match:
@@ -60,9 +119,7 @@ class MinskArenaSaleframeParser(IceParser):
     parser_key = PARSER_KEY_MINSK_ARENA
 
     async def extract(self, job: ParserJob) -> Extraction:
-        calendar = await load_source_json(job, filename="calendar.json", url_keys=("calendar_url", "url"))
-        events_blob = await load_source_json(job, filename="events.json", url_keys=("events_url", "url"))
-        init = await load_source_json(job, filename="init.json", url_keys=("init_url", "url"))
+        calendar, events_blob, init = await _load_minsk_arena_payloads(job)
         tz = ZoneInfo(str(job.config.get("timezone") or "Europe/Minsk"))
         adult_zone = int(job.config.get("adult_zone_id") or 970)
         child_zone = int(job.config.get("child_zone_id") or 971)
@@ -237,7 +294,7 @@ class ChizhovkaHtmlParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         schedule = await load_source_text(job, filename="schedule.html", url_keys=("schedule_url",))
         prices = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
-        year = int(job.config.get("run_year") or 2026)
+        year = int(job.config.get("run_year") or date.today().year)
         duration = int(job.config.get("default_duration_minutes") or 60)
         keep = {label.upper() for label in job.config.get("keep_rink_labels") or ["МА", "БА"]}
         adult = _price_from_named_row(prices, "ВЗРОСЛЫЙ БИЛЕТ")
@@ -420,7 +477,7 @@ class DiamondHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="ledovaya-arena.html", url_keys=("schedule_url", "url"))
-        year = int(job.config.get("run_year") or 2026)
+        year = int(job.config.get("run_year") or date.today().year)
         drop = [label.lower() for label in job.config.get("drop_labels") or []]
         keep = [label.lower() for label in job.config.get("keep_labels") or ["мк"]]
         disco_marker = str(job.config.get("disco_marker") or "ДИСКОТЕКА").lower()
