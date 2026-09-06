@@ -261,4 +261,5 @@ TASK-053, TASK-054, TASK-055.
 - **TASK-061_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/35 → `release/ice-discovery`. Адаптеры Минска.
 - **TASK-062_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/36 squash `1cbfab1` → `release/ice-discovery`. Алерты тишины + доля A + воскресная сводка. Не в master.
 - **TASK-054_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/38 squash `f216f46` → `release/ice-discovery`. Карта таба «Лёд» на Яндексе. Не в master.
-- **TASK-066_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/37 squash `bbbcf88` → `release/ice-discovery`. Калибровка Минска. DiaMond 7 слотов — follow-up адаптера.
+- **TASK-066_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/37 squash `bbbcf88` → `release/ice-discovery`. Калибровка Минска.
+- **TASK-061_FOLLOW_UP_MERGED** (2026-09-06) — https://github.com/easylager/trainer-crm-server/pull/39 squash `d37e6d0` → `release/ice-discovery`. DiaMond 44/44, в том числе два интервала в одной ячейке.

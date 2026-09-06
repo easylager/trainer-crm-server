@@ -1,7 +1,7 @@
 ---
 task_id: TASK-061
 title: Адаптеры МК Минска — стратегия на каток, первый saleframe
-status: IN_PROGRESS
+status: MERGED
 phase: execute
 epic: EPIC3
 depends_on: [TASK-071, TASK-072, TASK-050]
@@ -10,7 +10,7 @@ created_at: 2026-09-04
 updated_at: 2026-09-06
 city: Минск
 design: .ai/DESIGN-INGESTION-PARSERS-V1.md
-pr_url: https://github.com/easylager/trainer-crm-server/pull/39
+pr_url: https://github.com/easylager/trainer-crm-server/pull/35
 ---
 
 # Task
@@ -87,3 +87,4 @@ Verification method: automated/integration (сравнить shape двух ар
 - **SPECS_IN** (2026-09-05) — SPEC: saleframe ABWS, 45 мин, цены уже minor, rental null; Замок; Чижовка
 - **IN_PROGRESS** (2026-09-06) — extract adapters + publisher; stacked on TASK-065. PR: https://github.com/easylager/trainer-crm-server/pull/35
 - **FOLLOW_UP** (2026-09-06) — DiaMond div-wrapped MK cells + dual-interval Thu 10 Sep; gold 44/44, SCORE_FLOORS recall 1.0. PR: https://github.com/easylager/trainer-crm-server/pull/39
+- **FOLLOW_UP_MERGED** (2026-09-06) — squash `d37e6d0` → `release/ice-discovery` (#39). Не в master.
