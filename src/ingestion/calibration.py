@@ -37,9 +37,8 @@ SCORE_FLOORS: dict[str, dict[str, float]] = {
         "price_accuracy": 1.0,
         "kind_accuracy": 1.0,
     },
-    # TASK-061 follow-up: diamond HTML uses <div> cells the span-only extractor skips.
     "minsk-diamond": {
-        "recall": 0.84,
+        "recall": 1.0,
         "precision": 1.0,
         "price_accuracy": 1.0,
         "kind_accuracy": 1.0,

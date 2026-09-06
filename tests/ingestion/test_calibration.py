@@ -194,10 +194,8 @@ async def test_calibration_run_reports_per_source_and_overall() -> None:
     assert digest["overall"]["kind_accuracy"] == report.overall.kind_accuracy
     assert set(digest["by_source"]) == {row.source_id for row in report.sources}
     assert_calibration_floors(report)
+    assert SCORE_FLOORS["minsk-diamond"]["recall"] == 1.0
     for row in report.sources:
-        if row.source_id == "minsk-diamond":
-            assert row.metrics.recall >= SCORE_FLOORS["minsk-diamond"]["recall"]
-            continue
         assert row.metrics.recall == 1.0, row.source_id
         assert row.metrics.precision == 1.0, row.source_id
         assert row.metrics.price_accuracy == 1.0, row.source_id
