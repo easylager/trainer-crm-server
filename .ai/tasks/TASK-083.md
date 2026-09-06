@@ -1,8 +1,8 @@
 ---
 task_id: TASK-083
 title: BY-egress VPS для ledlife/junost — провижининг и подключение к скедулеру
-status: READY
-phase: plan
+status: IN_PROGRESS
+phase: execute
 epic: EPIC3
 depends_on: [TASK-071, TASK-072]
 execution_mode: SUPERVISED
@@ -50,14 +50,19 @@ Verification: запись в `ice_scrape_runs`, скрин/лог прогон�
 
 ### AC-003
 Без настроенного BY-egress (конфиг пуст/недоступен) скедулер по-прежнему блокирует эти job с тем же `error_code="requires_by_egress"` — регресса безопасности нет.
-Status: OPEN
-Verification: unit-тест на fallback-ветку
+Status: VERIFIED
+Verification: `tests/ingestion/test_scheduler.py::test_requires_by_egress_job_still_blocked_without_worker_config` (fallback, unchanged behavior) и `::test_requires_by_egress_job_runs_when_worker_has_by_egress_configured` (позитивный путь) — `pytest tests/ingestion/ -q` → 73 passed.
 
 ## Technical Notes
 - Точка входа блокировки: `src/ingestion/scheduler.py:69-83` (`config_requires_by_egress`).
+- **Реализовано (AC-003):** `IceIngestScheduler(..., by_egress_configured: bool = False)` — конструкторская инъекция, не чтение env напрямую внутри планировщика (совпадает со стилем остальных зависимостей класса). `job.config["requires_by_egress"]` никогда не снимается; блокировка снимается только когда воркер сам подтверждает egress.
+- Источник флага в проде: `Settings.by_egress_proxy_url` (`src/shared/config.py`, env `BY_EGRESS_PROXY_URL`) → `src/ingestion/loop.py` передаёт `by_egress_configured=bool(get_settings().by_egress_proxy_url)` при создании планировщика внутри `notification_service`. Пусто/не задано → прежнее поведение (безопасный дефолт).
+- `.env.example` получил закомментированный плейсхолдер `BY_EGRESS_PROXY_URL` с пояснением — без реального значения.
 - Секреты (VPS-доступ, ключи туннеля) — только в реальном `.env`/секрет-хранилище, никогда в `.env.example` или в git.
-- Реестр парсеров: `.ai/data/minsk-parser-registry.yaml` (уже фиксирует, что оба сайта отдают BY-geo-block, спуфинг X-Forwarded-For не помог).
+- Реестр парсеров: `.ai/data/minsk-parser-registry.yaml` (уже фиксирует, что оба сайта отдают BY-geo-block, спуфинг X-Forwarded-For не помог; `ledlife` = arena_id 5, `junost` = arena_id 8).
+- **Мастер-скрипт для AC-001 (человеческие шаги):** `scripts/provision-by-egress-vps.sh` — интерактивный wizard, проводит владельца через выбор/оплату VPS (hoster.by / A1 Cloud), генерацию WireGuard-туннеля (или SSH `-D` фолбэк), проверку исходящего IP через ipinfo.io (сырой ответ печатается для ручной проверки — скрипт не доверяет себе на слово), запись `BY_EGRESS_PROXY_URL` в локальный `.env` и подсказку по включению `is_enabled` для job ledlife/junost. Не запускался целиком (блокируется на человеческом вводе/платном хостинге) — проверен `bash -n` и статической трассировкой.
 
 ## Execution History
 - **TASK_CREATED** (2026-09-06) — координатор: follow-up из PDEC-004 (`.ai/decisions.md`, PR #53) после подтверждения владельцем «свой VPS в Беларуси». Инфраструктура ещё не поднята — задача READY, не в работе.
 - **RENUMBERED** (2026-09-06) — TASK-082 → TASK-083: номер TASK-082 занят параллельным PR #56 («Ice map loader and hide empty Группы chip»), коллизия обнаружена координатором до мержа.
+- **AC-003_VERIFIED** (2026-09-06) — конфигурационный fallback в `scheduler.py`/`config.py`/`loop.py` + два unit-теста; `scripts/provision-by-egress-vps.sh` создан для AC-001. AC-001/AC-002 остаются OPEN — требуют реального VPS и оплаты владельцем, агент их выполнить не может. `status` → `IN_PROGRESS` (не `MERGED`): инфраструктурная часть не сделана.

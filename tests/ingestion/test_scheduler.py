@@ -35,13 +35,19 @@ def _job(**overrides) -> ParserJob:
 def _scheduler(
     jobs: list[ParserJob],
     parsers: list | None = None,
+    by_egress_configured: bool = False,
 ) -> tuple[IceIngestScheduler, InMemoryParserJobStore, InMemoryScrapeRunRecorder]:
     store = InMemoryParserJobStore(jobs)
     recorder = InMemoryScrapeRunRecorder()
     registry = ParserRegistry()
     for parser in parsers or [RecordingParser()]:
         registry.register(parser)
-    sched = IceIngestScheduler(store=store, recorder=recorder, registry=registry)
+    sched = IceIngestScheduler(
+        store=store,
+        recorder=recorder,
+        registry=registry,
+        by_egress_configured=by_egress_configured,
+    )
     return sched, store, recorder
 
 
@@ -133,6 +139,36 @@ async def test_requires_by_egress_job_is_not_extracted() -> None:
     await sched.run_due(_NOW)
     assert recording.seen_configs == []
     assert recorder.runs[0].status == "blocked"
+    assert recorder.runs[0].error_code == "requires_by_egress"
+
+
+@pytest.mark.asyncio
+async def test_requires_by_egress_job_still_blocked_without_worker_config() -> None:
+    """AC-003 (TASK-083): no BY_EGRESS_PROXY_URL on the worker -> same block, explicitly opting out."""
+    recording = RecordingParser()
+    job = _job(
+        parser_key=recording.parser_key,
+        config={"url": "https://example.test", "requires_by_egress": True},
+    )
+    sched, _, recorder = _scheduler([job], parsers=[recording], by_egress_configured=False)
+    await sched.run_due(_NOW)
+    assert recording.seen_configs == []
+    assert recorder.runs[0].status == "blocked"
+    assert recorder.runs[0].error_code == "requires_by_egress"
+
+
+@pytest.mark.asyncio
+async def test_requires_by_egress_job_runs_when_worker_has_by_egress_configured() -> None:
+    """AC-003 (TASK-083): worker-level BY_EGRESS_PROXY_URL satisfies the flag; job.config keeps requires_by_egress=True."""
+    recording = RecordingParser()
+    job = _job(
+        parser_key=recording.parser_key,
+        config={"url": "https://example.test", "requires_by_egress": True},
+    )
+    sched, _, recorder = _scheduler([job], parsers=[recording], by_egress_configured=True)
+    await sched.run_due(_NOW)
+    assert recording.seen_configs == [job.config]
+    assert recorder.runs[0].status != "blocked"
 
 
 @pytest.mark.asyncio
