@@ -24,7 +24,7 @@ unknown явно писать `unknown`, не выдумывать.
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
 | http://www.pruzhany-dysh2.by/images/gallery/ice/LD_1.jpg | operator | pruzhany-dysh2.by, раздел «Ледовый комплекс → Фото» (/complex/ice/foto) | Проверено визуально — фасад здания со входом и вывеской «ЛЕДОВЫЙ ДВОРЕЦ». Fetchable `image/jpeg`, крупный файл (~14 МБ, оригинал с телефона). |
-| http://www.pruzhany-dysh2.by/images/gallery/ice/LD_2.jpg … LD_10.jpg | operator | там же | Ещё 9 фото в той же галерее (LD_2–LD_10.jpg) — не просматривались по отдельности, но с того же официального пути `/images/gallery/ice/`, можно использовать как запасные/дополнительные. |
+| http://www.pruzhany-dysh2.by/images/gallery/ice/LD_2.jpg | operator | там же | Ещё в той же галерее (LD_2–LD_10.jpg), тот же официальный путь `/images/gallery/ice/`; не просматривались по отдельности — запасной кадр. |
 
 ## Conflicts
 - Адрес: собственный сайт `pruzhany-dysh2.by` чётко разделяет Ледовый дворец (ул. Заводская, 15) и Водный дворец (ул. Заводская, 19) — это разные здания одного учреждения. Районный портал `pruzhany.brest-region.gov.by` в тексте своей страницы указывает адрес «ул. Заводская, 19» для «Ледового дворца» — похоже на опечатку/смешение с Водным дворцом; в карточке используется адрес с собственного сайта (15).
