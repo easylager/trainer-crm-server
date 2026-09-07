@@ -241,6 +241,33 @@ describe('pickFallbackCity (EDGE-001)', () => {
   });
 });
 
+describe('rankServiceChips (2026-09-07 Тренеры service filter)', () => {
+  it('drops services with zero bookable trainers in the current city', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 1, name: 'Обучение катанию «с нуля»', sort_order: 0, trainer_count: 2 },
+      { id: 2, name: 'Совершенствование катания', sort_order: 1, trainer_count: 0 },
+      { id: 3, name: 'Фигурное катание', sort_order: 2, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [1, 3]);
+  });
+
+  it('orders by sort_order then id', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 9, name: 'B', sort_order: 5, trainer_count: 1 },
+      { id: 2, name: 'A', sort_order: 1, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [2, 9]);
+  });
+
+  it('buildTrainersUrl carries service_id only when set', () => {
+    const { buildTrainersUrl } = loadModel();
+    assert.match(buildTrainersUrl({ cityId: 2, serviceId: 3 }), /service_id=3/);
+    assert.doesNotMatch(buildTrainersUrl({ cityId: 2 }), /service_id=/);
+  });
+});
+
 describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
   it('ranks by map rinks + trainers so a long city list surfaces the busy ones first', () => {
     const { rankPopularCities } = loadModel();

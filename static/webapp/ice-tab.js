@@ -19,6 +19,8 @@
     loading: false,
     groupCount: 0,
     skateCount: null,
+    serviceId: null,
+    services: [],
   };
   var searchTimer = null;
 
@@ -89,6 +91,48 @@
       }
       btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
     });
+    renderServiceChips();
+  }
+
+  function renderServiceChips() {
+    var box = $('iceServiceChips');
+    if (!box) return;
+    var chips = M.rankServiceChips(state.services);
+    var show = state.intent === 'coach' && chips.length > 1;
+    box.hidden = !show;
+    if (!show) return;
+    var html = '<button type="button" class="ice-chip" data-service-id="" aria-pressed="' +
+      (state.serviceId == null ? 'true' : 'false') +
+      '">Все услуги</button>';
+    html += chips.map(function (s) {
+      return (
+        '<button type="button" class="ice-chip" data-service-id="' +
+        esc(s.id) +
+        '" aria-pressed="' +
+        (Number(state.serviceId) === Number(s.id) ? 'true' : 'false') +
+        '">' +
+        esc(s.name) +
+        '</button>'
+      );
+    }).join('');
+    box.innerHTML = html;
+  }
+
+  function loadServiceChips() {
+    if (!state.cityId) {
+      state.services = [];
+      renderServiceChips();
+      return Promise.resolve();
+    }
+    return fetchJson(M.buildServicesUrl({ cityId: state.cityId }))
+      .then(function (data) {
+        state.services = (data && data.items) || [];
+        renderServiceChips();
+      })
+      .catch(function () {
+        state.services = [];
+        renderServiceChips();
+      });
   }
 
   function setViewToggle() {
@@ -419,6 +463,7 @@
     renderList();
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
+      serviceId: state.serviceId,
       limit: 50,
     });
     return fetchJson(url)
@@ -452,9 +497,11 @@
       }).catch(function () {});
     }
     state.skateCount = null; // unknown again for the new city — stay optimistic until probed
+    state.serviceId = null; // a service filter from the old city may not exist here
     loadList();
     probeGroups();
     probeSkate();
+    loadServiceChips();
   }
 
   function probeGroups() {
@@ -688,6 +735,18 @@
         loadList();
       });
     });
+
+    var serviceChips = $('iceServiceChips');
+    if (serviceChips) {
+      serviceChips.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.ice-chip');
+        if (!btn) return;
+        var raw = btn.getAttribute('data-service-id');
+        state.serviceId = raw ? Number(raw) : null;
+        renderServiceChips();
+        loadTrainers();
+      });
+    }
 
     document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
       btn.addEventListener('click', function () {

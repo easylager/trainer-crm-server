@@ -122,6 +122,19 @@ body.ar-pilot--ice .client-app-header {
   color: var(--app-cta-text, #04262a);
 }
 
+.ice-chips--service {
+  margin-top: -2px;
+}
+
+.ice-chips--service[hidden] {
+  display: none;
+}
+
+.ice-chips--service .ice-chip {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
 .ice-seg {
   display: flex;
   background: var(--glide-paper, #f1f3f2);

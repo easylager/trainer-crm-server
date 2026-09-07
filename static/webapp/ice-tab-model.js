@@ -99,11 +99,38 @@
     if (opts.cityId != null && opts.cityId !== '') {
       params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
     }
+    if (opts.serviceId != null && opts.serviceId !== '') {
+      params.push('service_id=' + encodeURIComponent(String(opts.serviceId)));
+    }
     params.push('limit=' + encodeURIComponent(String(opts.limit || 50)));
     if (opts.offset != null && opts.offset !== '') {
       params.push('offset=' + encodeURIComponent(String(opts.offset)));
     }
     return '/api/public/trainers?' + params.join('&');
+  }
+
+  function buildServicesUrl(opts) {
+    opts = opts || {};
+    var params = [];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    return '/api/public/services' + (params.length ? '?' + params.join('&') : '');
+  }
+
+  function rankServiceChips(services) {
+    // Only services with someone bookable in this city — a chip that always leads
+    // to "никого нет" is not a filter, it's a dead end.
+    return (services || [])
+      .filter(function (s) {
+        return Number(s.trainer_count) > 0;
+      })
+      .sort(function (a, b) {
+        var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+        var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+        if (sa !== sb) return sa - sb;
+        return Number(a.id) - Number(b.id);
+      });
   }
 
   function buildIceCitiesUrl() {
@@ -446,6 +473,8 @@
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
+    buildServicesUrl: buildServicesUrl,
+    rankServiceChips: rankServiceChips,
     buildIceCitiesUrl: buildIceCitiesUrl,
     buildIceInterestUrl: buildIceInterestUrl,
     buildGroupsProbeUrl: buildGroupsProbeUrl,
