@@ -33,6 +33,31 @@ def default_registry() -> ParserRegistry:
         MinskArenaSaleframeParser,
         ZamokHtmlParser,
     )
+    from src.ingestion.adapters_regional_batch_a import (
+        BaranovichiLdsParser,
+        BrestLdsParser,
+        KobrinLdsParser,
+        PinskVolnaParser,
+    )
+    from src.ingestion.adapters_regional_batch_b import (
+        GrodnoNemanParser,
+        GrodnoTrinitiParser,
+        LidaLdsParser,
+        NovopolotskLdsParser,
+    )
+    from src.ingestion.adapters_regional_batch_c import (
+        GorkiLdsParser,
+        MogilevDsParser,
+        OrshaArenaParser,
+        OstrovetsLdsParser,
+        VitebskDsParser,
+    )
+    from src.ingestion.adapters_regional_batch_d import (
+        BobruiskArenaParser,
+        GomelLdsParser,
+        ShklovArenaParser,
+        SoligorskSzkParser,
+    )
 
     registry = ParserRegistry()
     for parser in (
@@ -41,6 +66,23 @@ def default_registry() -> ParserRegistry:
         ChizhovkaHtmlParser(),
         LedByHtmlParser(),
         DiamondHtmlParser(),
+        BrestLdsParser(),
+        BaranovichiLdsParser(),
+        KobrinLdsParser(),
+        PinskVolnaParser(),
+        GrodnoTrinitiParser(),
+        GrodnoNemanParser(),
+        LidaLdsParser(),
+        NovopolotskLdsParser(),
+        VitebskDsParser(),
+        MogilevDsParser(),
+        OrshaArenaParser(),
+        GorkiLdsParser(),
+        OstrovetsLdsParser(),
+        BobruiskArenaParser(),
+        SoligorskSzkParser(),
+        ShklovArenaParser(),
+        GomelLdsParser(),
     ):
         registry.register(parser)
     return registry
@@ -53,14 +95,56 @@ from src.ingestion.adapters import (  # noqa: E402
     MinskArenaSaleframeParser,
     ZamokHtmlParser,
 )
+from src.ingestion.adapters_regional_batch_a import (  # noqa: E402
+    BaranovichiLdsParser,
+    BrestLdsParser,
+    KobrinLdsParser,
+    PinskVolnaParser,
+)
+from src.ingestion.adapters_regional_batch_b import (  # noqa: E402
+    GrodnoNemanParser,
+    GrodnoTrinitiParser,
+    LidaLdsParser,
+    NovopolotskLdsParser,
+)
+from src.ingestion.adapters_regional_batch_c import (  # noqa: E402
+    GorkiLdsParser,
+    MogilevDsParser,
+    OrshaArenaParser,
+    OstrovetsLdsParser,
+    VitebskDsParser,
+)
+from src.ingestion.adapters_regional_batch_d import (  # noqa: E402
+    BobruiskArenaParser,
+    GomelLdsParser,
+    ShklovArenaParser,
+    SoligorskSzkParser,
+)
 
 __all__ = [
+    "BaranovichiLdsParser",
+    "BobruiskArenaParser",
+    "BrestLdsParser",
     "ChizhovkaHtmlParser",
     "DiamondHtmlParser",
+    "GomelLdsParser",
+    "GorkiLdsParser",
+    "GrodnoNemanParser",
+    "GrodnoTrinitiParser",
     "IceParser",
+    "KobrinLdsParser",
     "LedByHtmlParser",
+    "LidaLdsParser",
     "MinskArenaSaleframeParser",
+    "MogilevDsParser",
+    "NovopolotskLdsParser",
+    "OrshaArenaParser",
+    "OstrovetsLdsParser",
     "ParserRegistry",
+    "PinskVolnaParser",
+    "ShklovArenaParser",
+    "SoligorskSzkParser",
+    "VitebskDsParser",
     "ZamokHtmlParser",
     "default_registry",
 ]

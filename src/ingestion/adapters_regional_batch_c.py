@@ -469,7 +469,7 @@ def _orsha_prices(html: str) -> tuple[int | None, int | None, int | None]:
     for table in parse_tables(html):
         rows_flat.extend(table)
     section = None
-    for idx, row in enumerate(rows_flat):
+    for row in rows_flat:
         if len(row) == 1:
             section = row[0].strip().upper()
             continue
