@@ -21,7 +21,7 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| — | unknown | — | Официальный домен оператора недоступен (timeout), у арены нет собственного (не портального) соцаккаунта в найденных источниках. Фото на `kobrininform.by` (`ledovaya-arena.jpg`) — сторонний новостной портал, не официальный сайт/соцсеть оператора, поэтому не берём (правило: только operator-owned источник). Не искали в Google/сток. |
+| unknown | — | — | Официальный домен `arena.kobrin.edu.by` повторно проверен 2026-09-07 (batch-1 photo research) — по-прежнему timeout на HTTP и HTTPS. Найден официальный Instagram-аккаунт `@icearena.kobrin` (https://www.instagram.com/icearena.kobrin/), похожий по названию на арену, но прямые CDN-ссылки на посты (`cdninstagram.com/...`) при проверке curl отдают `403` вне контекста приложения — не fetchable, по правилу проекта Instagram-CDN не используем. VK-группы не нашли. Фото на `kobrininform.by` (`ledovaya-arena.jpg`) — сторонний новостной портал, не официальный сайт/соцсеть оператора, поэтому не берём (правило: только operator-owned источник). Не искали в Google/сток. |
 
 ## Conflicts
 - `kbr.by` держит **старую** неделю расписания — не источник (см. SPEC-досье), приоритет за `kobrininform.by`, если там свежее.
