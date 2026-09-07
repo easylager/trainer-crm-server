@@ -2,7 +2,7 @@
 - arena_id: 31
 - slug: orsha-arena
 - verified_at: 2026-09-07
-- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка)
+- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка); фото — photo-research-batch-2
 
 Адрес в проде: ул. Владимира Ленина, 79, Орша. Часть спорткомплекса ГСУ «Хоккейный клуб «Локомотив-Орша»» (в комплексе также универсальный зал «Олимпиец» — не лёд). `http://arena-orsha.by/` → 404, реальный сайт клуба `lokomotiv-orsha.by`.
 
@@ -23,7 +23,10 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| unknown | — | — | Найденные `<img>` на `lokomotiv-orsha.by/` — ресторан, бильярд, сауна, тренажёрный зал, спонсорские лого; ни один явно не лёд/арена. `Ld-*.jpg` в фикстуре — это сфотографированный лист расписания (OCR-источник), не витринное фото зала — не годится как карточка «фото арены». |
+| https://lokomotiv.hockey.by/DSC06160.JPG | operator | официальный сайт ХК «Локомотив» (hockey.by-платформа), страница арены https://lokomotiv.hockey.by/clubs/arena/ | HTTP 200, image/jpeg, 926103 bytes, проверено `curl` 2026-09-07. Тот же адрес (ул. Ленина, 79, Орша), что и в проде — это официальный клубный сайт хоккейной команды, домашняя арена которой и есть эта площадка (отдельный от `lokomotiv-orsha.by` домен той же организации). |
+| https://lokomotiv.hockey.by/DSC06928.JPG | operator | официальный сайт ХК «Локомотив», страница арены https://lokomotiv.hockey.by/clubs/arena/ | HTTP 200, image/jpeg, 380427 bytes, проверено `curl` 2026-09-07. Второе фото арены с той же страницы. |
+
+Найденные ранее `<img>` на `lokomotiv-orsha.by/` (ресторан, бильярд, сауна, тренажёрный зал, спонсорские лого) по-прежнему не годятся как карточка «фото арены» — фото найдены на отдельном клубном сайте `lokomotiv.hockey.by`.
 
 ## Conflicts
 - Парсер `OrshaArenaParser` (`orsha_arena_v1`) требует OCR (`pytesseract` + системный `tesseract` с языком `rus`) — эти зависимости пока не в `requirements.txt`; см. финальный отчёт задачи и комментарий в `src/ingestion/seed_config_regional_batch_c.py` (`ORSHA_ARENA_CONFIG`).
