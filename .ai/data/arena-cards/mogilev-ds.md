@@ -2,7 +2,7 @@
 - arena_id: 43
 - slug: mogilev-ds
 - verified_at: 2026-09-07
-- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка)
+- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка); фото — photo-research-batch-2
 
 Адрес в проде: ул. Гагарина, 1, Могилёв (адрес взят из прод-таблицы арен задачи; на сайте клуба явного текстового адреса не найдено — см. Conflicts). Домашняя арена ХК «Могилёв».
 
@@ -23,7 +23,10 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| unknown | — | — | На `/raspisanie/`, `/uslugi/`, `/clubs/arena/` найдены только логотипы клуба и партнёров (og:image — логотип-лев, `/upload/iblock/...` — спонсорские лого); ни одного явного фото арены/льда не найдено за разумное время поиска. Не подставлять логотип как фото. |
+| https://mogilev.hockey.by/upload/JTHT8itAAoI.jpg | operator | официальный сайт ХК «Могилёв», страница арены https://mogilev.hockey.by/clubs/arena/ | HTTP 200, image/jpeg, 920509 bytes, проверено `curl` 2026-09-07. |
+| https://mogilev.hockey.by/upload/5j2DXSalpPA.jpg | operator | официальный сайт ХК «Могилёв», страница арены https://mogilev.hockey.by/clubs/arena/ | HTTP 200, image/jpeg, 1470456 bytes, проверено `curl` 2026-09-07. Второе фото с той же страницы. |
+
+`/raspisanie/`, `/uslugi/` по-прежнему содержат только логотипы. Предыдущий заход отмечал `/clubs/arena/` как тоже безрезультатную, но повторная проверка нашла на этой же странице два прямых `<img>` арены (см. выше) — вероятно, страница была не полностью просмотрена ранее.
 
 ## Conflicts
 - Задача указывает адрес «ул. Гагарина 1»; сайт клуба (`mogilev.hockey.by`) не публикует текстовый адрес арены на проверенных страницах (`/`, `/raspisanie/`, `/clubs/arena/`) — адрес в профиле взят из прод-данных задачи, не переподтверждён третьим источником.
