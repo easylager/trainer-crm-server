@@ -2,7 +2,7 @@
 - arena_id: 32
 - slug: gorki-lds
 - verified_at: 2026-09-07
-- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка)
+- verified_by: TASK ice-regional-parsers-batch-c (web only, без звонка); фото — photo-research-batch-2
 
 Адрес в проде: Вокзальная улица, 23, Горки. Оператор — ГУСУ «Горецкая детско-юношеская спортивная школа» (сайт gorkiled.by).
 
@@ -23,7 +23,9 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| unknown | — | — | Ссылка `ledovaya-arena` в навигации главной страницы ведёт на 404 (мёртвая страница). На главной — только слайдер-мокапы темы сайта и фото социальных акций, к катку не относятся. |
+| https://gorkiled.by/sites/default/files/led01.jpg | operator | официальный сайт, раздел «Фотогалерея» https://gorkiled.by/ru/fotogalereya | HTTP 200, image/jpeg, 203647 bytes, проверено `curl` 2026-09-07. Найдено ~24 фото льда/арены (файлы `led01.jpg`…`led24.jpg`) в разделе `/ru/fotogalereya`, отдельном от главной страницы (её слайдер — мокапы темы, а не фото). |
+
+Ссылка `ledovaya-arena` в навигации главной страницы по-прежнему ведёт на 404 — реальные фото найдены не через неё, а через отдельный пункт меню «Фотогалерея» (`/ru/fotogalereya`).
 
 ## Conflicts
 - Раньше расписание МК ошибочно искали только на `/ru/uslugi` (там только прайс, без времени сеансов) — сетка на **главной** странице (см. `.ai/parsers/gorki-lds.md`).

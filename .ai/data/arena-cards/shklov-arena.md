@@ -2,7 +2,7 @@
 - arena_id: 42
 - slug: shklov-arena
 - verified_at: 2026-09-07
-- verified_by: batch-D ice parser task (web only, без звонка)
+- verified_by: batch-D ice parser task (web only, без звонка); фото — photo-research-batch-2
 
 Имя по заданию: «Шклов Ледовая арена», ул. Почтовая 2, Шклов. Сайт ГУ «СДЮШОР Шкловского района» http://sportshklov.by/ — **только HTTP**: HTTPS падает на несовпадении имени TLS-сертификата, это не означает «сайта нет».
 
@@ -23,7 +23,10 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| unknown | — | — | Единственное найденное фото сайта — сама еженедельная афиша расписания (JPG), это график, а не фото арены/льда. Отдельного фото площадки на сайте за отведённое время не нашли — не блокер, оставляем `unknown`. |
+| http://sportshklov.by/wp-content/uploads/2021/05/ledovaya_arena_shklov_oktyabr-5.jpg | operator | официальный сайт, раздел «Фото» http://sportshklov.by/category/photo/ | HTTP 200, image/jpeg, 910901 bytes (только HTTP, HTTPS падает на сертификате — как и остальной сайт), проверено `curl` 2026-09-07. Имя файла прямо называет объект («ledovaya_arena_shklov»). |
+| http://sportshklov.by/wp-content/uploads/2021/05/Ledovyj-015.jpg | operator | официальный сайт, раздел «Фото» http://sportshklov.by/category/photo/ | HTTP 200, image/jpeg, 5709213 bytes, проверено `curl` 2026-09-07. Дополнительное фото с тем же корнем имени файла («Ledovyj»/«ледовый»). |
+
+Ранее проверялась только категория `/category/raspisania/` (там действительно только афиши); реальные фото нашлись в отдельной категории `/category/photo/`, которую предыдущий заход не проверял.
 
 ## Conflicts
 - Нет — цены (5,10/4,20 взрослый/детский, прокат 4,20 взрослый) берутся с отдельной страницы `/uslugi/`, а не с самой афиши (на афише цен нет).
