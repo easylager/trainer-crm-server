@@ -79,12 +79,18 @@
     return Number(count) > 0;
   }
 
+  function shouldShowSkateChip(count) {
+    // null/undefined = not probed yet — stay visible, don't flicker-hide the default lens.
+    return count == null || Number(count) > 0;
+  }
+
   function sanitizeIntent(intent, opts) {
     opts = opts || {};
-    if (intent === INTENTS.group && !opts.hasGroups) return INTENTS.skate;
+    var hasSkate = opts.hasSkate !== false; // default true: unprobed = assume available
+    if (intent === INTENTS.group && !opts.hasGroups) intent = INTENTS.skate;
     if (intent === INTENTS.coach) return INTENTS.coach;
     if (intent === INTENTS.group) return INTENTS.group;
-    return INTENTS.skate;
+    return hasSkate ? INTENTS.skate : INTENTS.coach;
   }
 
   function buildTrainersUrl(opts) {
@@ -331,7 +337,9 @@
     if (intent === INTENTS.coach) {
       return {
         title: 'В этом городе пока нет тренеров',
-        body: 'Смените город или вернитесь к чипу «Покататься».',
+        body: opts.hasSkate
+          ? 'Смените город или вернитесь к чипу «Покататься».'
+          : 'Смените город — расписания катков здесь пока тоже нет.',
       };
     }
     return {
@@ -370,6 +378,21 @@
         items: g.items || [],
       };
     });
+  }
+
+  function rankPopularCities(cities, limit) {
+    var list = (cities || []).slice();
+    var cap = limit == null ? 8 : Number(limit);
+    list.sort(function (a, b) {
+      var wa = (Number(a.map_rink_count) || 0) + (Number(a.trainer_count) || 0);
+      var wb = (Number(b.map_rink_count) || 0) + (Number(b.trainer_count) || 0);
+      if (wa !== wb) return wb - wa;
+      var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+      var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+      if (sa !== sb) return sa - sb;
+      return Number(a.id) - Number(b.id);
+    });
+    return list.slice(0, cap);
   }
 
   function pickFallbackCity(cities) {
@@ -427,6 +450,7 @@
     buildIceInterestUrl: buildIceInterestUrl,
     buildGroupsProbeUrl: buildGroupsProbeUrl,
     shouldShowGroupChip: shouldShowGroupChip,
+    shouldShowSkateChip: shouldShowSkateChip,
     sanitizeIntent: sanitizeIntent,
     catalogHref: catalogHref,
     mapHref: mapHref,
@@ -446,6 +470,7 @@
     formatSortCaption: formatSortCaption,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,
+    rankPopularCities: rankPopularCities,
     saveIceState: saveIceState,
     loadIceState: loadIceState,
   };

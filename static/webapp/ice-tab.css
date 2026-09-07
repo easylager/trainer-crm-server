@@ -372,6 +372,37 @@ body.ar-pilot--ice .client-app-header {
   margin-top: 10px;
 }
 
+.ice-picker__label {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--glide-hint, #5e6b6b);
+  margin: 14px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ice-picker__popular {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ice-picker__popular:empty {
+  display: none;
+}
+
+.ice-picker__popular-item {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 650;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--glide-line, #e2e6e5);
+  color: inherit;
+  background: var(--glide-paper, #f1f3f2);
+  cursor: pointer;
+}
+
 .ice-picker__item {
   width: 100%;
   text-align: left;

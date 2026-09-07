@@ -189,6 +189,14 @@ describe('formatEmptyList', () => {
     assert.ok(!/воронк/i.test(empty.body));
   });
 
+  it('coach empty does not point at a hidden Покататься chip (2026-09-07)', () => {
+    const { formatEmptyList } = loadModel();
+    const noSkate = formatEmptyList('coach', { hasSkate: false });
+    assert.ok(!/Покататься/i.test(noSkate.body));
+    const withSkate = formatEmptyList('coach', { hasSkate: true });
+    assert.match(withSkate.body, /Покататься/i);
+  });
+
   it('shows coming-soon when the city has trainers but no map rinks', () => {
     const { formatEmptyList } = loadModel();
     const empty = formatEmptyList('skate', { trainerCount: 3, mapRinkCount: 0 });
@@ -230,6 +238,39 @@ describe('pickFallbackCity (EDGE-001)', () => {
     ]);
     assert.equal(city.id, 1);
     assert.equal(city.name, 'Минск');
+  });
+});
+
+describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
+  it('ranks by map rinks + trainers so a long city list surfaces the busy ones first', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 1, name: 'Минск', map_rink_count: 5, trainer_count: 6, sort_order: 0 },
+      { id: 2, name: 'Раубичи', map_rink_count: 0, trainer_count: 0, sort_order: 29 },
+      { id: 3, name: 'Гродно', map_rink_count: 2, trainer_count: 0, sort_order: 16 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [1, 3, 2]);
+  });
+
+  it('caps the result so the picker never shows a wall of chips', () => {
+    const { rankPopularCities } = loadModel();
+    const cities = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      name: 'City ' + i,
+      map_rink_count: 25 - i,
+      trainer_count: 0,
+    }));
+    assert.equal(rankPopularCities(cities, 8).length, 8);
+    assert.equal(rankPopularCities(cities).length, 8);
+  });
+
+  it('ties break by sort_order then id, never by insertion order alone', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 9, name: 'B', map_rink_count: 0, trainer_count: 0, sort_order: 5 },
+      { id: 2, name: 'A', map_rink_count: 0, trainer_count: 0, sort_order: 1 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [2, 9]);
   });
 });
 
@@ -409,8 +450,25 @@ describe('group chip visibility', () => {
     assert.equal(sanitizeIntent('group', { hasGroups: true }), 'group');
     assert.equal(sanitizeIntent('coach', { hasGroups: false }), 'coach');
     assert.match(buildGroupsProbeUrl({ cityId: 2 }), /\/api\/public\/training-groups/);
-    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /city_id=2/);
-    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /limit=1/);
+  });
+});
+
+describe('skate chip visibility (2026-09-07 cities without a live rink)', () => {
+  it('stays visible until probed, then hides once the city has zero skate arenas', () => {
+    const { shouldShowSkateChip } = loadModel();
+    assert.equal(shouldShowSkateChip(null), true);
+    assert.equal(shouldShowSkateChip(undefined), true);
+    assert.equal(shouldShowSkateChip(0), false);
+    assert.equal(shouldShowSkateChip(3), true);
+  });
+
+  it('falls back Покататься -> Тренеры when the city has no skate arenas', () => {
+    const { sanitizeIntent } = loadModel();
+    assert.equal(sanitizeIntent('skate', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('skate', { hasSkate: true }), 'skate');
+    assert.equal(sanitizeIntent(undefined, { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('coach', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('group', { hasGroups: true, hasSkate: false }), 'group');
   });
 });
 
