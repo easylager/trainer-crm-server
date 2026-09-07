@@ -6,8 +6,9 @@
   <title>Конструктор цветовых гамм — CRM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <style>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+<style>
     * { box-sizing: border-box; }
     :root {
       --tool-bg: #0f172a;
@@ -19,7 +20,7 @@
     body {
       margin: 0;
       padding: 20px 16px 48px;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: var(--app-font-sans, system-ui, sans-serif);
       background: var(--tool-bg);
       color: var(--tool-text);
       line-height: 1.45;
@@ -192,7 +193,7 @@
       --border: rgba(255, 255, 255, 0.1);
       --mock-elev: 0 18px 48px rgba(0, 0, 0, 0.42);
       position: relative;
-      font-family: 'DM Sans', system-ui, sans-serif;
+      font-family: var(--app-font-sans, system-ui, sans-serif);
       background: var(--mock-bg, var(--bg));
       color: var(--text);
       padding: 16px;

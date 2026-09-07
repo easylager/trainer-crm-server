@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
        mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
@@ -15,20 +19,6 @@
   <link rel="stylesheet" href="theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609041" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    media="print"
-    onload="this.media='all'"
-  />
-  <noscript>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    />
-  </noscript>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202609012" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
@@ -113,14 +103,14 @@
       will-change: opacity, transform;
     }
     .hub-splash-title {
-      font-family: var(--app-font-sans, 'DM Sans', system-ui, sans-serif);
+      font-family: var(--app-font-sans, system-ui, sans-serif);
       font-size: 12px; font-weight: 700;
       letter-spacing: .16em; text-transform: uppercase;
       color: var(--tg-theme-text-color, #1a1a1a);
       line-height: 1;
     }
     .hub-splash-sub {
-      font-family: var(--app-font-sans, 'DM Sans', system-ui, sans-serif);
+      font-family: var(--app-font-sans, system-ui, sans-serif);
       font-size: 12px; font-weight: 400;
       color: var(--tg-theme-hint-color, #666);
       margin-top: 7px;

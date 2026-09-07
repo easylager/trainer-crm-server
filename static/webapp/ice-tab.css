@@ -44,7 +44,7 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-cityrow__name {
   font-size: 15px;
-  font-weight: 680;
+  font-weight: 600;
 }
 
 .ice-cityrow__change {
@@ -144,7 +144,7 @@ body.ar-pilot--ice .client-app-header {
   flex: 1;
   text-align: center;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   padding: 6px 0;
   border-radius: 6px;
   border: 0;
@@ -159,8 +159,12 @@ body.ar-pilot--ice .client-app-header {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
+/*
+ * Моноширинный убран (TASK-097). Это был декоративный приём, а не выравнивание цифр:
+ * на macOS он подставлял Menlo и давал третью гарнитуру в строке.
+ * Разрядка и капитель уже отличают эту строку — гарнитуру для этого менять не нужно.
+ */
 .ice-eyebrow {
-  font-family: ui-monospace, Menlo, monospace;
   font-size: 10.5px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -214,7 +218,7 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-acard__name {
   font-size: 14.5px;
-  font-weight: 680;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
@@ -228,7 +232,7 @@ body.ar-pilot--ice .client-app-header {
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  font-weight: 620;
+  font-weight: 600;
   margin-top: 2px;
 }
 
@@ -257,8 +261,12 @@ body.ar-pilot--ice .client-app-header {
   flex: 0 0 auto;
 }
 
+/*
+ * Бейдж уровня: та же причина, что у .ice-eyebrow — Menlo в середине русской строки.
+ * Вес не задаём: наследуется 600 от .ice-acard__name, а лишний литерал только
+ * добавляет работы TASK-086.
+ */
 .ice-tier {
-  font-family: ui-monospace, Menlo, monospace;
   font-size: 9.5px;
   padding: 1px 5px;
   border-radius: 3px;
@@ -385,7 +393,7 @@ body.ar-pilot--ice .client-app-header {
   padding: 11px;
   background: transparent;
   font-size: 13.5px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   color: inherit;
 }
@@ -445,7 +453,7 @@ body.ar-pilot--ice .client-app-header {
   border-radius: 9px;
   padding: 8px 11px;
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   cursor: pointer;
   color: inherit;
@@ -534,7 +542,7 @@ body.ar-pilot--ice .client-app-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 750;
+  font-weight: 700;
   font-size: 14px;
   border: 3px solid var(--tg-theme-bg-color, #fff);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);

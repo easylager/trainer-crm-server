@@ -612,7 +612,7 @@
     .trainer-arena-chips__eyebrow {
       margin: 0;
       font-size: 11px;
-      font-weight: 650;
+      font-weight: 600;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
@@ -1002,7 +1002,7 @@
     }
     .trainer-detail-service-important-kicker {
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
@@ -1566,7 +1566,7 @@
     .catalog-hero__title {
       margin: 0 0 8px;
       font-size: 26px;
-      font-weight: 800;
+      font-weight: 700;
       line-height: 1.1;
       letter-spacing: -0.035em;
       color: var(--tg-theme-text-color);
@@ -3155,7 +3155,7 @@
     }
     .catalog-collective-sessions-title {
       font-size: 20px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
       margin: 0 0 6px;
       color: var(--tg-theme-text-color);
@@ -3240,7 +3240,7 @@
     }
     .catalog-collective-passes-title {
       font-size: 20px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
       margin: 0 0 6px;
       color: var(--tg-theme-text-color);
@@ -3294,7 +3294,7 @@
     }
     .catalog-collective-pass-card__price {
       font-size: 18px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
@@ -3344,7 +3344,7 @@
     .center-pass-order-modal__sheet h3 {
       margin: 0 0 12px;
       font-size: 20px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
     }
     .center-pass-order-modal__text {
@@ -3444,7 +3444,7 @@
     .center-booking-modal__header-main { min-width: 0; flex: 1; }
     .center-booking-modal__title {
       font-size: 20px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
       margin: 0;
@@ -3568,7 +3568,7 @@
       flex-shrink: 0;
       align-self: center;
       font-size: 15px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.01em;
       color: var(--tg-theme-text-color);
       white-space: nowrap;
@@ -3629,7 +3629,7 @@
       min-width: 44px;
       text-align: center;
       font-size: 18px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.02em;
     }
     .center-booking-comment {
@@ -3665,7 +3665,7 @@
     }
     .center-booking-price {
       font-size: 22px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: -0.03em;
       color: var(--tg-theme-text-color);
     }

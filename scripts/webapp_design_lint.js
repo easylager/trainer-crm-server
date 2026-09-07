@@ -12,7 +12,7 @@
  *   scale-font-size   литерал font-size вместо токена шкалы
  *   scale-radius      литерал border-radius вместо токена (пилюли 999px/50% разрешены)
  *   scale-weight      литерал font-weight вместо токена
- *   weight-unloaded   вес, которого нет в подключённом наборе (620/650/680/750 → не рендерится)
+ *   weight-unloaded   вес вне шкалы 400/500/600/700 (Golos Text переменный — 650 рисуется как 650)
  *   hardcoded-hex     hex-цвет мимо палитры
  *   aurora-leak       витринный токен --ice-* / --vertical-brand-* на рабочем экране
  *
@@ -65,7 +65,11 @@ const PALETTE_FILES = new Set(['theme.css']);
 /** Пилюли и «без радиуса» — не нарушение шкалы, а отдельные формы. */
 const RADIUS_ALLOWED = new Set(['0', '0px', '50%', '999px', '9999px', '100%']);
 
-/** Веса, под которые реально загружены начертания DM Sans (см. client-home.html). */
+/*
+ * Шкала весов. Golos Text — переменный (400–700), поэтому промежуточные значения
+ * рисуются как есть, а не округляются вверх, как это делал DM Sans со статическими
+ * начертаниями. Разница 600 vs 650 ниже порога различения, но ломает систему.
+ */
 const WEIGHTS_LOADED = new Set(['400', '500', '600', '700']);
 const WEIGHT_KEYWORDS = new Set(['normal', 'bold', 'inherit', 'initial', 'unset', 'lighter', 'bolder']);
 
@@ -133,7 +137,7 @@ function analyzeFile(file, { checkPalette }) {
     const v = value.toLowerCase();
     if (WEIGHT_KEYWORDS.has(v)) return;
     if (/^\d+$/.test(v) && !WEIGHTS_LOADED.has(v)) {
-      // Вес без загруженного начертания: браузер разрешает его вверх, градация не рендерится.
+      // Вес вне шкалы: на переменном шрифте это реальное, но неразличимое начертание.
       add('weight-unloaded', index, value);
       return;
     }
