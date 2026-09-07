@@ -78,8 +78,8 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-hero__txt h1 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
   color: inherit;
@@ -91,7 +91,7 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-hero__meta {
-  font-size: 12.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
@@ -100,11 +100,11 @@ body.ar-pilot--arena .client-app-header {
   right: 11px;
   bottom: 11px;
   z-index: 1;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   background: var(--tg-theme-bg-color, #fff);
   border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   padding: 3px 7px;
   color: var(--tg-theme-text-color);
 }
@@ -122,8 +122,8 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-h {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.015em;
   margin: 0;
 }
@@ -131,10 +131,10 @@ body.ar-pilot--arena .client-app-header {
 .arena-new {
   display: inline-block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9.5px;
+  font-size: var(--app-text-kicker);
   letter-spacing: 0.1em;
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: var(--app-radius-xs);
   background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
   color: var(--app-cta-fill);
   vertical-align: 2px;
@@ -142,7 +142,7 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-sub {
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
   margin: 0;
 }
@@ -154,10 +154,10 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-amen span {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-surface-row-bot, #e8eff3);
   border: 1px solid var(--glide-line, #eaf0f4);
   color: var(--glide-ink, inherit);
@@ -169,8 +169,8 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-day {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 6px 11px;
   border-radius: 999px;
   border: 1px solid var(--glide-line, #dce5ea);
@@ -201,7 +201,7 @@ body.ar-pilot--arena .client-app-header {
   border: 1px solid var(--glide-line, #eaf0f4);
   border-left: 3px solid var(--ice-blue, #2a6e8f);
   background: var(--app-surface-row-bot, #f2f6f9);
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   padding: 9px 10px;
   width: 100%;
   text-align: left;
@@ -226,12 +226,12 @@ a.arena-row {
 
 .arena-row--live .arena-row__m span {
   color: var(--ice-blue, #2a6e8f);
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
 }
 
 .arena-row__t {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--app-text-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -243,20 +243,20 @@ a.arena-row {
 }
 
 .arena-row__m b {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
 .arena-row__m span {
-  font-size: 11.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
   overflow-wrap: anywhere;
 }
 
 .arena-cta {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 6px 10px;
   border-radius: 999px;
   white-space: nowrap;
@@ -280,7 +280,7 @@ a.arena-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 11.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
@@ -293,7 +293,7 @@ a.arena-row {
 .arena-sw {
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: var(--app-radius-xs);
   display: inline-block;
 }
 
@@ -312,7 +312,7 @@ a.arena-row {
   align-items: center;
   width: 100%;
   border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   padding: 9px 10px;
   background: var(--tg-theme-bg-color, #fff);
   text-align: left;
@@ -323,7 +323,7 @@ a.arena-row {
 .arena-coach__ava {
   width: 38px;
   height: 38px;
-  border-radius: 99px;
+  border-radius: var(--app-radius-pill);
   background: linear-gradient(145deg, var(--ice-mist, #e1eef4), var(--app-surface-row-bot, #e8eff3));
   border: 1px solid var(--glide-line, #eaf0f4);
   object-fit: cover;
@@ -336,12 +336,12 @@ a.arena-row {
 }
 
 .arena-coach__b b {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
 }
 
 .arena-coach__b span {
-  font-size: 11.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
@@ -351,9 +351,9 @@ a.arena-row {
   justify-content: space-between;
   gap: 10px;
   border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   padding: 12px;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   width: 100%;
   text-align: left;
   color: inherit;
@@ -363,7 +363,7 @@ a.arena-row {
 
 .arena-fake-row span {
   color: var(--glide-hint, #72868f);
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   white-space: nowrap;
 }
 
@@ -371,7 +371,7 @@ a.arena-row {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 11.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
@@ -379,7 +379,7 @@ a.arena-row {
 .arena-fresh button.linkish {
   color: var(--glide-ink-teal, var(--app-cta-fill));
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   background: none;
   border: 0;
   padding: 0;
@@ -390,7 +390,7 @@ a.arena-row {
 
 .arena-empty {
   border: 1px dashed var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   padding: 14px;
   background: var(--app-surface-row-bot, #f2f6f9);
   display: flex;
@@ -399,12 +399,12 @@ a.arena-row {
 }
 
 .arena-empty b {
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
 .arena-empty p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
@@ -412,10 +412,10 @@ a.arena-row {
   display: block;
   width: 100%;
   text-align: center;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   padding: 12px;
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   border: 1px solid var(--glide-line, #dce5ea);
   background: var(--tg-theme-bg-color, #fff);
   color: inherit;
@@ -432,7 +432,7 @@ a.arena-row {
 
 .arena-owner {
   border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   padding: 12px;
   background: var(--app-surface-row-bot, #f2f6f9);
   display: flex;
@@ -441,22 +441,22 @@ a.arena-row {
 }
 
 .arena-owner b {
-  font-size: 13.5px;
+  font-size: var(--app-text-body);
 }
 
 .arena-owner p {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint, #72868f);
 }
 
 .arena-closed {
   border: 1px solid var(--glide-line, #dce5ea);
   border-left: 3px solid var(--app-cta-fill);
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   padding: 12px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
 }
 
@@ -483,7 +483,7 @@ a.arena-row {
 .arena-modal__sheet {
   width: min(480px, 100%);
   background: var(--tg-theme-bg-color, #fff);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
@@ -492,12 +492,12 @@ a.arena-row {
 
 .arena-modal__sheet h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--app-text-lead);
 }
 
 .arena-modal__sheet label {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -507,7 +507,7 @@ a.arena-row {
 .arena-modal__sheet input {
   font: inherit;
   padding: 10px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   border: 1px solid var(--glide-line, #dce5ea);
   background: var(--tg-theme-bg-color, #fff);
   color: inherit;
@@ -528,7 +528,7 @@ a.arena-row {
   }
   .arena-cta {
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: var(--app-text-caption);
     white-space: normal;
     max-width: 88px;
     text-align: center;

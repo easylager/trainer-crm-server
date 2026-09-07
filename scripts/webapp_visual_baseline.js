@@ -367,7 +367,19 @@ function pad(s, n) {
   return String(s) + ' '.repeat(Math.max(0, n - String(s).length));
 }
 
-main().catch((e) => {
-  console.error('Ошибка:', e.message);
-  process.exit(1);
-});
+/*
+ * Обвязка (CDP, запуск Chrome, подпись initData, мок Telegram, список экранов)
+ * переиспользуется webapp_overflow_check.js. Разносить её по двум файлам нельзя:
+ * два расходящихся мока Telegram — это два разных продукта под проверкой.
+ */
+module.exports = {
+  CDP, launchChrome, buildMockScript, signInitData, readEnv, waitFor,
+  SCREENS, THEMES, VIEWPORT, CLIENT_NAME, ROOT,
+};
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error('Ошибка:', e.message);
+    process.exit(1);
+  });
+}

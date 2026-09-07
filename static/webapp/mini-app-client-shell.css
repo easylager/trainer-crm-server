@@ -41,8 +41,8 @@ body.client-shell-body.client-shell-more-open .client-tab-bar {
 .client-app-header__title {
   flex: 1;
   min-width: 0;
-  font-size: 19px;
-  font-weight: 700;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.03em;
   line-height: 1.15;
   overflow: hidden;
@@ -77,7 +77,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   box-sizing: border-box;
   background: color-mix(in srgb, var(--tg-theme-bg-color) 94%, transparent);
   border: 1px solid color-mix(in srgb, var(--ice-deep) 14%, transparent);
-  border-radius: 22px;
+  border-radius: var(--app-radius-xl);
   backdrop-filter: saturate(140%) blur(20px);
   -webkit-backdrop-filter: saturate(140%) blur(20px);
   box-shadow: var(--shadow-floating);
@@ -102,14 +102,14 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   background: transparent;
   color: color-mix(in srgb, var(--tg-theme-hint-color) 85%, var(--tg-theme-text-color));
   font-family: inherit;
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   line-height: 1.1;
   letter-spacing: 0.005em;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   transition: color 0.18s ease, background 0.18s ease, transform 0.18s ease;
   position: relative;
 }
@@ -141,7 +141,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   justify-content: center;
   width: 40px;
   height: 30px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   color: inherit;
   background-image: none !important;
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
@@ -180,7 +180,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   z-index: 9101;
   max-height: min(78vh, 520px);
   padding: 8px 16px calc(12px + var(--client-tab-bar-height) + env(safe-area-inset-bottom, 0px));
-  border-radius: 20px 20px 0 0;
+  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
   background: var(--tg-theme-bg-color);
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
   transform: translateY(100%);
@@ -197,7 +197,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 .client-more-sheet__handle {
   width: 40px;
   height: 5px;
-  border-radius: 3px;
+  border-radius: var(--app-radius-pill);
   background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
   margin: 4px auto 10px;
   flex-shrink: 0;
@@ -218,8 +218,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-more-sheet__title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   margin: 0 0 4px;
   padding: 0 4px;
@@ -232,9 +232,9 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 .client-more-sheet__subtitle {
   margin: 0 0 12px;
   padding: 0 4px;
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   line-height: 1.4;
-  font-weight: 500;
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
 }
 
@@ -258,7 +258,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   width: 100%;
   padding: 12px 14px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
   background: var(--tg-theme-secondary-bg-color);
   color: var(--tg-theme-text-color);
   font-family: inherit;
@@ -275,7 +275,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   flex-shrink: 0;
   width: 1.6em;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font-size: 1.45rem;
+  font-size: var(--app-icon-lg);
   line-height: 1;
   text-align: center;
 }
@@ -287,8 +287,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-more-sheet__label {
   display: block;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
@@ -307,8 +307,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-more-sheet__hint {
   display: block;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
@@ -331,15 +331,15 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-empty-state__title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   margin: 0 0 8px;
   color: var(--tg-theme-text-color);
 }
 
 .client-empty-state__hint {
-  font-size: 14px;
+  font-size: var(--app-text-body);
   line-height: 1.45;
   color: var(--tg-theme-hint-color);
   margin: 0 0 18px;
@@ -360,7 +360,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-skel-card {
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   padding: 14px 16px;
   min-height: 72px;
@@ -368,7 +368,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-skel-line {
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-pill);
   background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, var(--tg-theme-secondary-bg-color));
   margin-bottom: 8px;
 }

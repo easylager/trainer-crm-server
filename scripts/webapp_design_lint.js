@@ -330,12 +330,27 @@ function main() {
   }
 
   if (cmd === 'write-baseline') {
+    /*
+     * Храповик переписывается на текущий, более низкий уровень — иначе он перестаёт
+     * защищать уже сделанную работу. Но исходные числа «до эпика» при этом сохраняются:
+     * это доказательная база аудита, и потерять её, опустив планку, значит остаться
+     * без ответа на вопрос «стало ли лучше».
+     */
+    const prev = fs.existsSync(BASELINE_PATH)
+      ? JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
+      : null;
     const data = {
       recorded_at: new Date().toISOString().slice(0, 10),
-      task: 'TASK-085',
-      note: 'Состояние «до» EPIC4. Ratchet: числа могут только уменьшаться.',
+      task: process.env.BASELINE_TASK || 'TASK-085',
+      note: 'Ratchet: числа могут только уменьшаться.',
       client_total: Object.values(clientTotals(findings)).reduce((a, b) => a + b, 0),
       per_file: clientTotals(findings),
+      before_epic4: prev ? prev.before_epic4 || {
+        recorded_at: prev.recorded_at,
+        task: prev.task,
+        client_total: prev.client_total,
+        per_file: prev.per_file,
+      } : undefined,
     };
     fs.writeFileSync(BASELINE_PATH, JSON.stringify(data, null, 2) + '\n');
     console.log(`baseline записан: ${path.relative(ROOT, BASELINE_PATH)}`);
