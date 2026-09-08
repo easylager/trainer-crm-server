@@ -30,10 +30,15 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const WEBAPP = path.join(ROOT, 'static/webapp');
-const BASELINE_PATH = path.join(
-  ROOT,
-  '.ai/epics/client-premium/design/scale-baseline.json'
-);
+/*
+ * Baseline лежит РЯДОМ С ТЕСТОМ, а не в .ai.
+ *
+ * Изначально он жил в .ai/epics/…, и это было ошибкой: .ai — состояние работы
+ * агентов, единый экземпляр вне git (см. .gitignore). После выноса каталога из
+ * репозитория гейт G-P1 падал бы на любом чистом клоне — файла там просто нет.
+ * Baseline же по своей роли не документ эпика, а фикстура теста.
+ */
+const BASELINE_PATH = path.join(ROOT, 'tests/js/design-scale-baseline.json');
 
 /**
  * Клиентские рабочие экраны — то, что закрывает гейт G-P1.

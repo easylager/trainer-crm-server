@@ -23,7 +23,8 @@ const { analyze, clientTotals, CLIENT_FILES } = require('../../scripts/webapp_de
 
 const BASELINE = JSON.parse(
   fs.readFileSync(
-    path.resolve(__dirname, '../../.ai/epics/client-premium/design/scale-baseline.json'),
+    // Рядом с тестом, а не в .ai: тот вынесен из git и на чистом клоне отсутствует.
+    path.resolve(__dirname, 'design-scale-baseline.json'),
     'utf8'
   )
 );
