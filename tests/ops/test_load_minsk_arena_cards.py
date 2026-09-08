@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _ROOT / "scripts" / "load_minsk_arena_cards.py"
-_CARDS = _ROOT / ".ai" / "data" / "arena-cards"
+_CARDS = _ROOT / "data" / "arena-cards"
 
 EXPECTED_IDS = {
     "minskarena": 2,

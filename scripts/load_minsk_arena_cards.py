@@ -711,8 +711,8 @@ def resolve_local_photo_path(ref: str, *, root: Path) -> Path | None:
     candidates = [
         Path(ref) if os.path.isabs(ref) else None,
         root / cleaned,
-        root / ".ai" / "data" / "arena-cards" / cleaned,
-        root / ".ai" / "data" / cleaned,
+        root / "data" / "arena-cards" / cleaned,
+        root / "data" / cleaned,
     ]
     for path in candidates:
         if path is not None and path.is_file():
@@ -1162,17 +1162,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cards-dir",
         type=Path,
-        default=ROOT / ".ai" / "data" / "arena-cards",
+        default=ROOT / "data" / "arena-cards",
     )
     parser.add_argument(
         "--fixtures-dir",
         type=Path,
-        default=ROOT / ".ai" / "data" / "fixtures",
+        default=ROOT / "data" / "fixtures",
     )
     parser.add_argument(
         "--report",
         type=Path,
-        default=ROOT / ".ai" / "data" / "arena-cards" / "TASK-063-load-report.md",
+        default=ROOT / "data" / "arena-cards" / "TASK-063-load-report.md",
     )
     parser.add_argument(
         "--no-report",
