@@ -1,0 +1,12 @@
+arena_id,arena_name,source_url,kind,content_kind,is_primary,spike_verdict,times_ok,prices_ok,notes,checked_at
+3,ТЦ Замок,https://tczamok.by/entertainments/ice-rink,site,html,true,parse_ready,yes,yes,Сетка + цены на одной странице,2026-09-05
+6,Чижовка-арена,https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah,site,html,true,times_only,yes,no,HTML-сетка; цены не в гриде,2026-09-05
+5,Ледовый дворец спорта Минской области,http://led.by/category/timetable/,site,html,true,parse_ready,yes,yes,Расписание + http://led.by/mass_skating/ цены,2026-09-05
+8,"Каток хк ""Юность""",https://junost.hockey.by/clubs/skating/,site,html,true,parse_ready,yes,yes,Цены HTML; junost.by → 403,2026-09-05
+4,СДЮШОР по фигурному катанию,https://ledlife.by/massovye_kataniya/,site,html,true,unreachable,no,no,HTTP 403 с datacenter IP,2026-09-05
+7,ТЦ DiaMond city,https://diamondcity.by/ledovaya-arena,site,html,true,times_only,yes,no,Сетка МК; /ceny без BYN в HTML,2026-09-05
+2,Минск Арена,https://minskarena.by/services.html,site,html,true,times_only,yes,no,Официальный виджет устарел; ByCard без сигнала,2026-09-05
+9,Олимпик-арена,https://olympicarena.by/,site,html,true,times_only,yes,no,Корп. сайт; часы в HTML не = МК,2026-09-05
+13,Хоккейный центр JUSTSKATE,https://justskate.by/,site,html,true,skip_training_only,no,no,Школа/аренда слотов — не МК,2026-09-05
+14,Хоккейный центр Финт,https://fint-tm.by/raspisanie-trenirovok/,site,html,true,skip_training_only,no,no,Тренировки — не МК,2026-09-05
+12,Лыжероллерная трасса,,manual,none,true,skip_not_ice,no,no,Не лёд / не цель таба «Лёд»,2026-09-05

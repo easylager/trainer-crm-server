@@ -45,6 +45,7 @@ MINSK_MK_PARSER_KEYS = frozenset(
         "chizhovka_html_v1",
         "ledby_html_v1",
         "diamond_html_v1",
+        "minskarena_speed_oval_v1",
     }
 )
 

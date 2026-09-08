@@ -1,0 +1,102 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 29,
+  "city": "Витебск",
+  "parser_key": "vitebsk_hockey_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:32:00+03:00",
+  "source_files": [
+    "massovoe-katanie.html"
+  ],
+  "snapshot_stale": true,
+  "child_price_on_page": false,
+  "rental_price_on_page": false,
+  "notes": "Re-GET 2026-09-06 ~00:30: HTML weekday blocks still 30 Apr–3 May 2026 (MK block identical to prior snapshot). Thursday CMS typo 201:15 → 20:15 kept. snapshot_stale true. Live product must drop_past — do not publish Apr/May. 24afisha HTML is JS Verification wall (JSON-LD not refreshed this pass). ByCard init calendar=[]. Saleframe object/124 Vue empty. Do not invent times from news or from 5–6 Sep Event dates without HH:MM.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-04-30",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-01",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-01",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-02",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-02",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:30",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-03",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": "детям до 3 лет не допускаются; 3–12 лет только с взрослым 18+ на коньках; на поздние сеансы несовершеннолетним — со законным представителем",
+      "local_date": "2026-05-03",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "price_adult_minor": 700,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    }
+  ]
+}

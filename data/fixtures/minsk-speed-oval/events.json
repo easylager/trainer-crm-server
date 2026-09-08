@@ -1,0 +1,80 @@
+{
+  "data": [
+    {
+      "id": 752195,
+      "created_at": 1788760949,
+      "serviceId": 242,
+      "start": 1789038000,
+      "end": 1789040700,
+      "quota": 1,
+      "isDelete": 0,
+      "max_services": 150,
+      "prices": [
+        {
+          "id": 921894,
+          "created_at": 1788760949,
+          "updated_at": 1788760949,
+          "serviceEventId": 752195,
+          "price": 700,
+          "priceTypeId": 1,
+          "mapZoneId": 1008,
+          "count": 0,
+          "available": true,
+          "quota": 150,
+          "info": []
+        },
+        {
+          "id": 921895,
+          "created_at": 1788760949,
+          "updated_at": 1788760949,
+          "serviceEventId": 752195,
+          "price": 550,
+          "priceTypeId": 1,
+          "mapZoneId": 1009,
+          "count": 0,
+          "available": true,
+          "quota": 150,
+          "info": []
+        }
+      ]
+    },
+    {
+      "id": 752196,
+      "created_at": 1788761025,
+      "serviceId": 242,
+      "start": 1789150500,
+      "end": 1789153200,
+      "quota": 1,
+      "isDelete": 0,
+      "max_services": 150,
+      "prices": [
+        {
+          "id": 921896,
+          "created_at": 1788761025,
+          "updated_at": 1788761025,
+          "serviceEventId": 752196,
+          "price": 900,
+          "priceTypeId": 1,
+          "mapZoneId": 1008,
+          "count": 0,
+          "available": true,
+          "quota": 150,
+          "info": []
+        },
+        {
+          "id": 921897,
+          "created_at": 1788761025,
+          "updated_at": 1788761025,
+          "serviceEventId": 752196,
+          "price": 650,
+          "priceTypeId": 1,
+          "mapZoneId": 1009,
+          "count": 0,
+          "available": true,
+          "quota": 150,
+          "info": []
+        }
+      ]
+    }
+  ]
+}

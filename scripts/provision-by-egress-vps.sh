@@ -340,7 +340,7 @@ warn "This wrote to your local .env only (gitignored). On a real deploy (Railway
 warn "or wherever notification_service runs), set the SAME variable in that"
 warn "environment's own secret/config store — never in .env.example or git."
 say ""
-say "Registry entries to flip is_enabled=true for, per .ai/data/minsk-parser-registry.yaml:"
+say "Registry entries to flip is_enabled=true for, per data/minsk-parser-registry.yaml:"
 step "arena_id 5 — ledlife.by (Ледовый дворец спорта Минской области)"
 step "arena_id 8 — junost.by (junost_weekend_grid_v1)"
 say "Do this via the admin bot's ice_parser_jobs screen if it exists, or a direct"

@@ -16,12 +16,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.jobs import config_requires_by_egress
-from src.ingestion.seed_config import MINSK_ARENA_SALEFRAME_CONFIG, PARSER_KEY_MINSK_ARENA
+from src.ingestion.seed_config import saleframe_defaults_for
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_REGISTRY_PATH = REPO_ROOT / ".ai/data/minsk-parser-registry.yaml"
-DEFAULT_PARSERS_DIR = REPO_ROOT / ".ai/parsers"
-DEFAULT_FIXTURES_DIR = REPO_ROOT / ".ai/data/fixtures"
+DEFAULT_REGISTRY_PATH = REPO_ROOT / "data/minsk-parser-registry.yaml"
+DEFAULT_PARSERS_DIR = REPO_ROOT / "data/parsers"
+DEFAULT_FIXTURES_DIR = REPO_ROOT / "data/fixtures"
 
 SKIP_TARGETS = frozenset({"not_ice", "training_only"})
 SKIP_STATUSES = frozenset({"skipped"})
@@ -269,8 +269,9 @@ def build_minsk_job_seeds(
                 continue
         fixture_ok = _fixture_expected(fixtures, spec.stem)
         config = dict(spec.config)
-        if spec.parser_key == PARSER_KEY_MINSK_ARENA:
-            merged = dict(MINSK_ARENA_SALEFRAME_CONFIG)
+        defaults = saleframe_defaults_for(spec.parser_key)
+        if defaults is not None:
+            merged = dict(defaults)
             merged.update(config)
             config = merged
         enabled = _job_enabled(spec, entry, fixture_ok=fixture_ok)

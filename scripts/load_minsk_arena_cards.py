@@ -5,7 +5,7 @@ Default is dry-run. ``--apply`` writes to a local test DB only — never product
 Usage:
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply
-  PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply --report .ai/data/arena-cards/TASK-063-load-report.md
+  PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply --report data/arena-cards/TASK-063-load-report.md
 
 Photos: official rink site/socials and local dossier files are would-upload / uploaded on
 ``--apply`` for demo (EPIC3 2026-09-06: verbal OK is enough). ``license`` must be
@@ -42,7 +42,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 SOURCE_ETALON = "etalon_073"
-TARGET_ARENA_IDS = (2, 3, 6, 5, 7, 8, 4)
+TARGET_ARENA_IDS = (2, 3, 6, 5, 7, 8, 4, 115)
 DEFAULT_TZ = "Europe/Minsk"
 PHONE_MAX_LEN = 32
 SESSION_HORIZON_DAYS = 7
@@ -101,6 +101,8 @@ SLUG_FIXTURE_DIRS = {
     "minsk-diamond": ("minsk-diamond",),
     "minsk-junost": ("minsk-junost",),
     "minsk-ledlife": ("minsk-ledlife",),
+    "konkobezhnaya-arena": ("minsk-speed-oval",),
+    "minsk-speed-oval": ("minsk-speed-oval",),
 }
 LOCAL_DB_HOSTS = frozenset(
     {"localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"}

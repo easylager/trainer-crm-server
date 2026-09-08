@@ -208,6 +208,13 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     assert arena.config["prices_already_minor"] is True
     assert arena.cadence == "daily"
 
+    oval = by_key["minskarena_speed_oval_v1"]
+    assert oval.is_enabled is True
+    assert oval.arena_id == 115
+    assert oval.config["service_id"] == 139
+    assert oval.config["rental_service_id"] == 138
+    assert oval.config["adult_zone_id"] == 1008
+
     assert by_key["zamok_html_v1"].is_enabled is True
     assert by_key["zamok_html_v1"].config["url"] == "https://tczamok.by/entertainments/ice-rink"
     assert by_key["chizhovka_html_v1"].is_enabled is True
@@ -342,6 +349,6 @@ async def test_existing_minsk_arena_job_is_updated_not_duplicated(db_session) ->
 
 
 def test_repo_paths_point_at_canonical_minsk_arena_spec() -> None:
-    assert (REPO_ROOT / ".ai/parsers/minsk-arena.md").is_file()
-    assert (REPO_ROOT / ".ai/data/minsk-parser-registry.yaml").is_file()
-    assert not (REPO_ROOT / ".ai/parsers/minsk-minskarena.md").exists()
+    assert (REPO_ROOT / "data/parsers/minsk-arena.md").is_file()
+    assert (REPO_ROOT / "data/minsk-parser-registry.yaml").is_file()
+    assert not (REPO_ROOT / "data/parsers/minsk-minskarena.md").exists()

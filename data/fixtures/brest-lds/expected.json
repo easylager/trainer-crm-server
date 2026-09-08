@@ -1,0 +1,104 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 22,
+  "city": "Брест",
+  "parser_key": "brest_ocr_photo_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:05:00+03:00",
+  "photo_week": "2026-08-31/2026-09-06",
+  "source_files": [
+    "prices.html",
+    "schedule.html",
+    "IMG_8523.JPG"
+  ],
+  "extract_note": "Times from OCR of weekly JPG (label «СВ кат»); prices from HTML. No HTML grid selectors.",
+  "child_price_on_page": true,
+  "rental_standalone_on_page": false,
+  "sessions": [
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-08-31",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-01",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-02",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-03",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-04",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-05",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    },
+    {
+      "kind": "open_ice",
+      "currency_code": "BYN",
+      "local_date": "2026-09-06",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "price_adult_minor": 630,
+      "price_child_minor": 530,
+      "price_rental_minor": null,
+      "session_label": "СВ кат",
+      "age_note": "детям до 12 лет"
+    }
+  ]
+}
