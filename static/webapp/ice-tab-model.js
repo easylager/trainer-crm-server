@@ -448,6 +448,11 @@
     opts = opts || {};
     var total = Number(opts.total);
     if (isNaN(total)) total = (opts.items || []).length;
+    // TASK-095: пока данных нет, «Пока нет катков» — не пустое состояние, а ложь
+    // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
+    if (opts.loading && !total) {
+      return opts.intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
+    }
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';

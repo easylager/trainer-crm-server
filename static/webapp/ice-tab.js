@@ -284,6 +284,32 @@
     );
   }
 
+  /**
+   * TASK-095. Скелетоны собираются из тех же классов, что и живые карточки
+   * (.ice-board / .ice-acard плюс модификатор), поэтому геометрия совпадает по
+   * построению: правка карточки автоматически правит и её скелетон.
+   */
+  function boardSkeletons(n) {
+    var one =
+      '<div class="ice-board ice-board--skel" aria-hidden="true">' +
+      '<span class="ice-board__photo ice-skel"></span>' +
+      '<span class="ice-board__facts"><span class="ice-skel ice-skel--line"></span></span>' +
+      '<span class="ice-board__depth"><span class="ice-skel ice-skel--line ice-skel--wide"></span></span>' +
+      '</div>';
+    return new Array(n + 1).join(one);
+  }
+
+  function trainerSkeletons(n) {
+    var one =
+      '<div class="ice-acard ice-acard--skel" aria-hidden="true">' +
+      '<span class="ice-acard__ph ice-skel"></span>' +
+      '<span class="ice-acard__body">' +
+      '<span class="ice-skel ice-skel--line"></span>' +
+      '<span class="ice-skel ice-skel--line ice-skel--short"></span>' +
+      '</span></div>';
+    return new Array(n + 1).join(one);
+  }
+
   function renderList() {
     var list = $('iceList');
     var cap = $('iceCaption');
@@ -293,14 +319,14 @@
         items: state.items,
         intent: state.intent,
         serviceLabel: currentServiceLabel(),
+        loading: state.loading,
       });
     }
     if (!list) return;
     if (state.loading && !state.items.length) {
-      list.innerHTML =
-        '<div class="ice-state">' +
-        (state.intent === 'coach' ? 'Загрузка тренеров…' : 'Загрузка катков…') +
-        '</div>';
+      // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
+      // Текстовая строка обещала одну форму, а приходила совсем другая.
+      list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
       return;
     }
     if (!state.items.length) {

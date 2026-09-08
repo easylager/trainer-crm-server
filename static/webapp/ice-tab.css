@@ -369,6 +369,57 @@ body.ar-pilot--ice .client-app-header {
   opacity: 0.7;
 }
 
+/* ─── Скелетоны списка (TASK-095) ───────────────────────────────────────── */
+/*
+ * Коробку задаёт сам компонент — .ice-board / .ice-acard остаются как есть,
+ * модификатор только гасит интерактивность и подменяет содержимое мерцанием.
+ * Поэтому скелетон не может «разъехаться» с карточкой при следующей правке.
+ */
+.ice-board--skel,
+.ice-acard--skel {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ice-board--skel::after,
+.ice-acard--skel::after {
+  content: none;
+}
+
+.ice-skel {
+  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
+  animation: ice-skel-pulse 1.2s ease-in-out infinite;
+  border-radius: var(--app-radius-sm);
+  display: block;
+}
+
+.ice-skel--line {
+  height: 12px;
+  width: 58%;
+  border-radius: var(--app-radius-pill);
+}
+
+.ice-skel--short { width: 38%; margin-top: 6px; }
+.ice-skel--wide { width: 72%; }
+
+@keyframes ice-skel-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* AC-004: мерцание выключено, подложка остаётся — ожидание видно, глаз спокоен. */
+  .ice-skel {
+    animation: none !important;
+    opacity: 0.88;
+  }
+}
+
 .ice-acard {
   display: grid;
   grid-template-columns: 74px 1fr 12px;

@@ -584,3 +584,22 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(boardCardView(later, now).day, '10.09');
   });
 });
+
+describe('formatSortCaption во время загрузки (TASK-095)', () => {
+  it('пока идёт запрос, подпись не объявляет пустой результат', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(formatSortCaption({ total: 0, items: [], intent: 'skate', loading: true }), 'Ищем катки…');
+    assert.equal(formatSortCaption({ total: 0, items: [], intent: 'coach', loading: true }), 'Ищем тренеров…');
+  });
+
+  it('после ответа пустой результат называется своим именем', () => {
+    const { formatSortCaption } = loadModel();
+    assert.match(formatSortCaption({ total: 0, items: [], intent: 'skate' }), /Пока нет катков/);
+  });
+
+  it('загрузка с уже показанными карточками не стирает счётчик', () => {
+    const { formatSortCaption } = loadModel();
+    const caption = formatSortCaption({ total: 5, items: [{ tier: 'A' }], intent: 'skate', loading: true });
+    assert.match(caption, /^5 катков/);
+  });
+});

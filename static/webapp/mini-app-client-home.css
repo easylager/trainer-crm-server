@@ -32,10 +32,16 @@ body.hub-body {
 }
 
 /* Greeting + profile chip on one row — chip must not overlay the name (EPIC1). */
+/*
+ * TASK-095 (AC-002): высота строки резервируется, потому что переключатель
+ * профиля монтируется асинхронно. 38px — фактическая высота чипа (замер
+ * getBoundingClientRect на стенде), а не подобранное на глаз число.
+ */
 .hub-hero-top {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 38px;
 }
 
 .hub-hero-greeting {
@@ -1775,8 +1781,13 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 /* ─── Skeleton loading ───────────────────────────────────────────────── */
 
+/*
+ * AC-003: скелетон — часть системы поверхностей. Подложка берётся от карточки
+ * (уровень 1 контракта TASK-088), а не от «вторичного фона Telegram»: иначе в
+ * ICE PAPER плашки уходили в грязно-серый, которого нет в палитре.
+ */
 .hub-skel-shimmer {
-  background: var(--tg-theme-secondary-bg-color);
+  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
   animation: client-hub-skel-pulse 1.2s ease-in-out infinite;
   border-radius: var(--app-radius-sm);
 }
@@ -1784,21 +1795,6 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 @keyframes client-hub-skel-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 0.9; }
-}
-
-/* Card-shaped skeleton for next-booking hero */
-.hub-skel-card {
-  margin: 0 16px 20px;
-  border-radius: var(--app-radius-xl);
-  height: 160px;
-  opacity: 0.6;
-}
-
-.hub-skel-trainer-card {
-  margin: 0 16px 20px;
-  border-radius: var(--app-radius-xl);
-  height: 72px;
-  opacity: 0.5;
 }
 
 /* Row-shaped skeleton for bookings list */
@@ -1829,84 +1825,93 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 .hub-skel-line--primary { width: 65%; height: 13px; }
 .hub-skel-line--secondary { width: 40%; height: 10px; margin-top: 7px; }
 
-/* ─── Unified initial-load skeleton (hero text + card + slot strip) ────── */
-/* Visible only while body has .hub-body--loading, hidden when bootstrap    */
-/* completes. Replaces piece-by-piece pop-in with a single coherent state.  */
+/* ─── Скелетон первой загрузки (TASK-095) ──────────────────────────────── */
+/*
+ * Правило: скелетон повторяет коробку реального компонента, а не рисует
+ * «примерно похожие серые плашки». Где возможно, берутся ровно те же
+ * aspect-ratio, радиусы и ширины, что у настоящих карточек — тогда совпадение
+ * геометрии держится само, а не поддерживается вручную при каждой правке.
+ */
 
 .hub-hero-skel {
   display: none;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 2px;
+  justify-content: center;
 }
 
-.hub-skel-line--hero-greeting { width: 96px; height: 11px; opacity: 0.7; }
-.hub-skel-line--hero-title    { width: 78%;  height: 30px; border-radius: var(--app-radius-pill); }
-.hub-skel-line--hero-title-sm { width: 46%;  height: 30px; border-radius: var(--app-radius-pill); }
+.hub-skel-line--hero-greeting { width: 148px; height: 12px; opacity: 0.7; }
 
 .hub-initial-skel {
   display: none;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--app-space-2);
   margin: 0 0 20px;
   padding: 0 16px;
 }
 
-.hub-initial-skel__trainer {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
+.hub-skel-line--kicker { width: 132px; height: 10px; opacity: 0.55; margin: 4px 0; }
+
+/* Коробка карточки льда: та же, что у a.hub-ice-card. */
+.hub-skel-icecard {
+  border: 1px solid var(--app-card-line);
   border-radius: var(--app-radius-lg);
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1px solid rgba(128, 128, 128, 0.1);
-  min-height: 72px;
+  background: var(--app-card-bg);
+  overflow: hidden;
+}
+
+.hub-skel-band {
+  aspect-ratio: 4 / 1;
+  border-radius: 0;
+}
+
+.hub-skel-icerow {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-4);
+  min-height: 70px;
   box-sizing: border-box;
 }
 
-.hub-skel-avatar {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--app-radius-md);
-}
-
-.hub-initial-skel__trainer-lines {
-  flex: 1;
+.hub-skel-icelines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
-.hub-skel-line--trainer-name { width: 58%; height: 14px; }
-.hub-skel-line--trainer-sub  { width: 42%; height: 10px; opacity: 0.65; }
-
-.hub-initial-skel__strip {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hub-skel-line--head { width: 120px; height: 11px; opacity: 0.55; }
-
-.hub-initial-skel__chips {
-  display: flex;
-  gap: 10px;
-}
-
-.hub-skel-chip {
-  flex: 1 1 0;
-  height: 68px;
-  min-width: 84px;
+/* Коробка строки поиска: те же 39px, что у .hub-search. */
+.hub-skel-search {
+  height: 39px;
   border-radius: var(--app-radius-md);
-  opacity: 0.55;
 }
 
-.hub-skel-line--history {
-  width: 55%;
-  height: 10px;
-  opacity: 0.4;
+/* Коробка карточки тренера: ширина и aspect-ratio из TASK-092. */
+.hub-skel-cards {
+  display: flex;
+  gap: var(--app-space-3);
+  overflow: hidden;
+}
+
+.hub-skel-tcard {
+  flex: 0 0 auto;
+  width: 216px;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  box-sizing: border-box;
+}
+
+.hub-skel-tcard__media {
+  aspect-ratio: 4 / 5;
+  border-radius: var(--app-radius-md);
 }
 
 /* Loading-state: skeleton on, real blocks + footnote off until fully ready. */
@@ -1985,7 +1990,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 @media (prefers-reduced-motion: reduce) {
   .hub-skel-shimmer {
     animation: none !important;
-    background: var(--tg-theme-secondary-bg-color) !important;
+    background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid)) !important;
     opacity: 0.88;
   }
   .hub-bookings-mount {

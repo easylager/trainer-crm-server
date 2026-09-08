@@ -16,7 +16,7 @@
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>
   <link rel="preload" href="client-home-main.js?v=202609082" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609081" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202609082" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202609083" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
   <script src="mini-app-client-shell.js?v=202609062"></script>
@@ -31,15 +31,19 @@
       профиля. Блоков `greeting` + `title` + `sub`, говоривших одно и то же,
       больше нет: приветствие показывают, когда показать нечего, а у нас есть
       лёд, запись и тренеры. Место отдано данным ниже.
+
+      TASK-095 (AC-002). Строка идентичности имеет зарезервированную высоту, а
+      скелетон живёт ВНУТРИ неё, а не под ней. Раньше переключатель профиля
+      монтировался асинхронно, строка вырастала с 0 до 38px и уносила вниз весь
+      экран — это давало 0.0138 CLS из измеренных 0.0218.
     -->
     <div class="hub-hero" id="hubHero">
       <div class="hub-hero-top">
         <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
+        <div class="hub-hero-skel" aria-hidden="true">
+          <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
+        </div>
         <div id="clientProfileSwitcherMount" class="hub-hero-profile-switcher"></div>
-      </div>
-      <!-- Skeleton bar — visible only while bootstrap is in flight. -->
-      <div class="hub-hero-skel" aria-hidden="true">
-        <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
       </div>
     </div>
 
@@ -47,28 +51,38 @@
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
     <!--
-      Unified initial-load skeleton. Shown while /client/hub/bootstrap is in
-      flight; hidden the moment data arrives so the real cards swap in one
-      paint instead of popping in piece by piece. Mirrors the typical post-load
-      layout: large primary card → slot chips strip → short history line.
+      TASK-095 (AC-001). Скелетон — это обещание конкретной формы. Прежний
+      обещал аватар, полосу чипов и строку истории: раскладку, которой на
+      первом экране больше нет. Теперь он повторяет то, что реально приходит —
+      карточка льда, строка поиска, лента тренеров, — и в тех же коробках:
+      те же радиусы, те же aspect-ratio, та же ширина карточки карусели.
     -->
-    <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка хаба">
-      <div class="hub-initial-skel__trainer">
-        <div class="hub-skel-avatar hub-skel-shimmer"></div>
-        <div class="hub-initial-skel__trainer-lines">
-          <div class="hub-skel-line hub-skel-line--trainer-name hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--trainer-sub hub-skel-shimmer"></div>
+    <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка главной">
+      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
+      <div class="hub-skel-icecard">
+        <div class="hub-skel-band hub-skel-shimmer"></div>
+        <div class="hub-skel-icerow">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer"></div>
+          <div class="hub-skel-icelines">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+          </div>
         </div>
       </div>
-      <div class="hub-initial-skel__strip">
-        <div class="hub-skel-line hub-skel-line--head hub-skel-shimmer"></div>
-        <div class="hub-initial-skel__chips">
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
+      <div class="hub-skel-search hub-skel-shimmer"></div>
+      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
+      <div class="hub-skel-cards">
+        <div class="hub-skel-tcard">
+          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-skel-tcard">
+          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
         </div>
       </div>
-      <div class="hub-skel-line hub-skel-line--history hub-skel-shimmer"></div>
     </div>
 
     <!-- ── SCENARIO 3: NEXT BOOKING HERO CARD ──────────────────────────── -->
