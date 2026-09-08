@@ -217,11 +217,17 @@
   --app-cta-glow: 0 8px 22px -8px rgba(var(--accent-rgb), 0.55);
   --glide-line-soft: #E8EDEC;
 
-  /* Full-width CTA (мини-приложения): один размер для .btn-* и .bd-btn */
-  --app-btn-radius: 14px;
+  /*
+   * Full-width CTA (мини-приложения): один размер для .btn-* и .bd-btn.
+   * Значения — ступени шкал, а не литералы: самая крупная кнопка на экране не может
+   * быть единственным элементом вне системы. Радиус берётся вниз по правилу ничьих
+   * (было 14px, кнопка — элемент управления), кегль вверх с 16 до 17: 16px это порог,
+   * ниже которого iOS Safari зумит страницу при фокусе на поле, и опускаться нельзя.
+   */
+  --app-btn-radius: var(--app-radius-md);
   --app-btn-padding: 14px 18px;
-  --app-btn-font-size: 16px;
-  --app-btn-font-weight: 600;
+  --app-btn-font-size: var(--app-text-lead);
+  --app-btn-font-weight: var(--app-weight-semibold);
   --app-btn-icon-gap: 10px;
   --app-btn-stack-gap: 10px;
   /* CTA: одна нейтральная «подъёмность», без цветного ореола */

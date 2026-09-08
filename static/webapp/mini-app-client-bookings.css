@@ -118,14 +118,14 @@ body.client-bookings-body {
   flex-shrink: 0;
 }
 
-.booking-card .badge.pending { background: rgba(255, 149, 0, 0.2); color: #ff9500; }
-.booking-card .badge.confirmed { background: rgba(52, 199, 89, 0.2); color: #34c759; }
-.booking-card .badge.completed { background: rgba(10, 132, 255, 0.16); color: #0a84ff; }
+.booking-card .badge.pending { background: var(--app-attention-wash); color: var(--app-attention-ink); }
+.booking-card .badge.confirmed { background: var(--app-ok-wash); color: var(--app-ok-ink); }
+.booking-card .badge.completed { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
 .booking-card .badge.cancelled,
 .booking-card .badge.declined,
-.booking-card .badge.trainer_removed { background: rgba(142, 142, 147, 0.2); color: #8e8e93; }
+.booking-card .badge.trainer_removed { background: var(--glide-line); color: var(--glide-hint); }
 .booking-card .badge.no_show,
-.booking-card .badge.payment_dispute { background: rgba(255, 59, 48, 0.16); color: #ff3b30; }
+.booking-card .badge.payment_dispute { background: var(--app-danger-wash); color: var(--app-danger-ink); }
 
 .cb-mode-tabs {
   display: flex;
@@ -343,8 +343,8 @@ body.bookings-body--revealed .client-empty-state {
 }
 
 .app-toast.app-toast--success {
-  border-color: rgba(52, 199, 89, 0.35);
-  color: #248a3d;
+  border-color: var(--app-ok);
+  color: var(--app-ok-ink);
 }
 
 .cb-booking-policy-hint {

@@ -36,10 +36,10 @@ body.ar-pilot--arena .client-app-header {
   display: flex;
   align-items: flex-end;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--glide-line, var(--line, #dce5ea));
+  border-bottom: 1px solid var(--glide-line);
   background:
-    radial-gradient(120% 120% at 20% 0, var(--ice-mist, #e6f1ff), transparent 62%),
-    linear-gradient(158deg, var(--app-surface-row-bot, #f2f6f9), var(--tg-theme-bg-color, #fff));
+    radial-gradient(120% 120% at 20% 0, var(--glide-line), transparent 62%),
+    linear-gradient(158deg, var(--app-surface-row-bot), var(--tg-theme-bg-color));
   clip-path: var(--app-ribbon-clip-container, none);
   overflow: hidden;
 }
@@ -62,7 +62,7 @@ body.ar-pilot--arena .client-app-header {
   width: 120%;
   height: 40%;
   transform: rotate(-8deg);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tg-theme-text-color, #fff) 18%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tg-theme-text-color) 18%, transparent), transparent);
   pointer-events: none;
 }
 
@@ -87,12 +87,12 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-hero--photo .arena-hero__txt h1,
 .arena-hero--photo .arena-hero__meta {
-  color: #fff;
+  color: var(--glide-on-deep);
 }
 
 .arena-hero__meta {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-hero__gallery {
@@ -102,8 +102,8 @@ body.ar-pilot--arena .client-app-header {
   z-index: 1;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #dce5ea);
+  background: var(--tg-theme-bg-color);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 3px 7px;
   color: var(--tg-theme-text-color);
@@ -111,7 +111,7 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-sec {
   padding: 14px 16px;
-  border-top: 1px solid var(--glide-line, #eaf0f4);
+  border-top: 1px solid var(--glide-line);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -130,20 +130,19 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-new {
   display: inline-block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--app-text-kicker);
   letter-spacing: 0.1em;
   padding: 2px 5px;
   border-radius: var(--app-radius-xs);
-  background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
-  color: var(--app-cta-fill);
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
   vertical-align: 2px;
   margin-left: 6px;
 }
 
 .arena-sub {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
   margin: 0;
 }
 
@@ -158,8 +157,8 @@ body.ar-pilot--arena .client-app-header {
   font-weight: var(--app-weight-semibold);
   padding: 4px 8px;
   border-radius: var(--app-radius-sm);
-  background: var(--app-surface-row-bot, #e8eff3);
-  border: 1px solid var(--glide-line, #eaf0f4);
+  background: var(--app-surface-row-bot);
+  border: 1px solid var(--glide-line);
   color: var(--glide-ink, inherit);
 }
 
@@ -173,16 +172,16 @@ body.ar-pilot--arena .client-app-header {
   font-weight: var(--app-weight-semibold);
   padding: 6px 11px;
   border-radius: 999px;
-  border: 1px solid var(--glide-line, #dce5ea);
-  color: var(--glide-hint, #72868f);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
   background: transparent;
   cursor: pointer;
 }
 
 .arena-day[aria-pressed='true'] {
-  background: var(--tg-theme-text-color, #0f1a22);
-  color: var(--tg-theme-bg-color, #fff);
-  border-color: var(--tg-theme-text-color, #0f1a22);
+  background: var(--tg-theme-text-color);
+  color: var(--tg-theme-bg-color);
+  border-color: var(--tg-theme-text-color);
 }
 
 .arena-rows {
@@ -198,9 +197,9 @@ body.ar-pilot--arena .client-app-header {
   grid-template-columns: 46px minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
-  border: 1px solid var(--glide-line, #eaf0f4);
-  border-left: 3px solid var(--ice-blue, #2a6e8f);
-  background: var(--app-surface-row-bot, #f2f6f9);
+  border: 1px solid var(--glide-line);
+  border-left: 3px solid var(--app-ok);
+  background: var(--app-surface-row-bot);
   border-radius: var(--app-radius-xs);
   padding: 9px 10px;
   width: 100%;
@@ -216,21 +215,20 @@ a.arena-row {
 }
 
 .arena-row--lesson {
-  border-left-color: var(--app-cta-fill, #45B9BB);
+  border-left-color: var(--app-cta-fill);
 }
 
 .arena-row--empty {
-  border-left-color: var(--glide-hint, #72868f);
+  border-left-color: var(--glide-hint);
   opacity: 0.7;
 }
 
 .arena-row--live .arena-row__m span {
-  color: var(--ice-blue, #2a6e8f);
+  color: var(--app-ok-ink);
   font-weight: var(--app-weight-semibold);
 }
 
 .arena-row__t {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: var(--app-text-caption);
   font-variant-numeric: tabular-nums;
 }
@@ -250,7 +248,7 @@ a.arena-row {
 
 .arena-row__m span {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
   overflow-wrap: anywhere;
 }
 
@@ -266,8 +264,8 @@ a.arena-row {
 }
 
 .arena-cta--ghost {
-  border: 1px solid var(--glide-line, #dce5ea);
-  color: var(--glide-hint, #72868f);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
   background: transparent;
 }
 
@@ -281,7 +279,7 @@ a.arena-row {
   flex-wrap: wrap;
   gap: 10px;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-legend span {
@@ -298,7 +296,7 @@ a.arena-row {
 }
 
 .arena-sw--ice {
-  background: var(--ice-blue, #2a6e8f);
+  background: var(--glide-brand);
 }
 
 .arena-sw--lesson {
@@ -311,10 +309,10 @@ a.arena-row {
   gap: 10px;
   align-items: center;
   width: 100%;
-  border: 1px solid var(--glide-line, #dce5ea);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 9px 10px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   text-align: left;
   color: inherit;
   cursor: pointer;
@@ -324,8 +322,8 @@ a.arena-row {
   width: 38px;
   height: 38px;
   border-radius: var(--app-radius-pill);
-  background: linear-gradient(145deg, var(--ice-mist, #e1eef4), var(--app-surface-row-bot, #e8eff3));
-  border: 1px solid var(--glide-line, #eaf0f4);
+  background: linear-gradient(145deg, var(--glide-line), var(--app-surface-row-bot));
+  border: 1px solid var(--glide-line);
   object-fit: cover;
 }
 
@@ -342,7 +340,7 @@ a.arena-row {
 
 .arena-coach__b span {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-fake-row {
@@ -350,19 +348,19 @@ a.arena-row {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid var(--glide-line, #dce5ea);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 12px;
   font-size: var(--app-text-body);
   width: 100%;
   text-align: left;
   color: inherit;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   text-decoration: none;
 }
 
 .arena-fake-row span {
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
   font-size: var(--app-text-caption);
   white-space: nowrap;
 }
@@ -372,7 +370,7 @@ a.arena-row {
   flex-direction: column;
   gap: 5px;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-fresh a,
@@ -389,10 +387,10 @@ a.arena-row {
 }
 
 .arena-empty {
-  border: 1px dashed var(--glide-line, #dce5ea);
+  border: 1px dashed var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 14px;
-  background: var(--app-surface-row-bot, #f2f6f9);
+  background: var(--app-surface-row-bot);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -405,7 +403,7 @@ a.arena-row {
 .arena-empty p {
   margin: 0;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-btn {
@@ -416,8 +414,8 @@ a.arena-row {
   font-weight: var(--app-weight-semibold);
   padding: 12px;
   border-radius: var(--app-radius-sm);
-  border: 1px solid var(--glide-line, #dce5ea);
-  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line);
+  background: var(--tg-theme-bg-color);
   color: inherit;
   cursor: pointer;
   text-decoration: none;
@@ -431,10 +429,10 @@ a.arena-row {
 }
 
 .arena-owner {
-  border: 1px solid var(--glide-line, #dce5ea);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 12px;
-  background: var(--app-surface-row-bot, #f2f6f9);
+  background: var(--app-surface-row-bot);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -447,11 +445,11 @@ a.arena-row {
 .arena-owner p {
   margin: 0;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-closed {
-  border: 1px solid var(--glide-line, #dce5ea);
+  border: 1px solid var(--glide-line);
   border-left: 3px solid var(--app-cta-fill);
   border-radius: var(--app-radius-xs);
   padding: 12px;
@@ -463,7 +461,7 @@ a.arena-row {
 .arena-state {
   padding: 28px 16px;
   text-align: center;
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-modal {
@@ -482,7 +480,7 @@ a.arena-row {
 
 .arena-modal__sheet {
   width: min(480px, 100%);
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -508,8 +506,8 @@ a.arena-row {
   font: inherit;
   padding: 10px;
   border-radius: var(--app-radius-sm);
-  border: 1px solid var(--glide-line, #dce5ea);
-  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line);
+  background: var(--tg-theme-bg-color);
   color: inherit;
 }
 

@@ -1615,7 +1615,7 @@
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__venue,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__about,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__powered {
-      color: #fff;
+      color: var(--glide-on-deep);
     }
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__lead,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__venue,
@@ -1758,8 +1758,8 @@
       justify-content: center;
       font-size: var(--app-icon-md);
       border-radius: var(--app-radius-sm);
-      background: color-mix(in srgb, var(--ice-glow, #6db7ff) 14%, transparent);
-      border: 1px solid color-mix(in srgb, var(--ice-deep, #0e3a76) 12%, transparent);
+      background: var(--glide-brand-wash);
+      border: 1px solid var(--glide-line);
     }
     .catalog-scenario-chip--rich.catalog-scenario-chip--selected .catalog-scenario-chip__emoji {
       background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
@@ -2237,8 +2237,8 @@
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
-      background: var(--app-success);
-      color: #fff;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
       margin-top: 8px;
     }
     .btn-leave-request:active { opacity: 0.9; }
@@ -2856,10 +2856,10 @@
       width: 8px;
       height: 8px;
       border-radius: 999px;
-      border: 1.5px solid #fff;
+      border: 1.5px solid var(--glide-surface);
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
     }
-    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color, #45B9BB); }
+    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color); }
     .arena-map__legend-dot--idle { background: var(--tg-theme-hint-color); opacity: 0.85; }
 
     /* Custom Leaflet pin via divIcon — sized to match brand and visible on busy map. */
@@ -2867,18 +2867,18 @@
       width: 28px;
       height: 28px;
       border-radius: 999px;
-      border: 2px solid #fff;
-      background: var(--tg-theme-hint-color);
+      border: 2px solid var(--glide-surface);
+      background: var(--glide-brand);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
       display: grid;
       place-items: center;
-      color: #fff;
+      color: var(--app-cta-text);
       font-size: var(--app-text-caption);
       font-weight: var(--app-weight-bold);
       transition: transform 0.12s ease, background 0.12s ease;
     }
     .arena-pin--selected {
-      background: var(--tg-theme-button-color, #45B9BB);
+      background: var(--tg-theme-button-color);
       transform: scale(1.08);
       box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.45);
     }
@@ -2958,13 +2958,14 @@
       border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 40%, transparent);
       display: grid;
       place-items: center;
-      color: #fff;
+      color: transparent;
       background: transparent;
       transition: background 0.12s ease, border-color 0.12s ease;
     }
     .arena-card.selected .arena-card__check {
-      background: var(--tg-theme-button-color, #45B9BB);
-      border-color: var(--tg-theme-button-color, #45B9BB);
+      background: var(--tg-theme-button-color);
+      border-color: var(--tg-theme-button-color);
+      color: var(--app-cta-text);
     }
     .arena-card__main { flex: 1; min-width: 0; }
     .arena-card__name {
@@ -3038,22 +3039,22 @@
 
     /* Save chip — rose/red accent */
     .trainer-action-chip--save.is-active {
-      color: #e0245e;
-      border-color: color-mix(in srgb, #e0245e 35%, transparent);
-      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
+      color: var(--glide-brand);
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
     }
 
     /* Notify chip — sky blue accent */
     .trainer-action-chip--notify.is-active {
-      color: #4f9cf9;
-      border-color: color-mix(in srgb, #4f9cf9 35%, transparent);
-      background: color-mix(in srgb, #4f9cf9 10%, var(--tg-theme-secondary-bg-color));
+      color: var(--glide-brand);
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
     }
 
     /* Pulse on the notify chip when trainer currently has no slots — subtle nudge */
     @keyframes chip-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #4f9cf9 0%, transparent); }
-      50%       { box-shadow: 0 0 0 4px color-mix(in srgb, #4f9cf9 20%, transparent); }
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--glide-brand) 0%, transparent); }
+      50%       { box-shadow: 0 0 0 4px color-mix(in srgb, var(--glide-brand) 20%, transparent); }
     }
     .trainer-action-chip--notify.wants-attention {
       animation: chip-pulse 2.4s ease-in-out 0.6s 2;
@@ -3144,9 +3145,9 @@
     }
     .btn-save-trainer:active { transform: scale(0.97); }
     .btn-save-trainer--active {
-      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
-      border-color: color-mix(in srgb, #e0245e 35%, transparent);
-      color: #e0245e;
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      color: var(--glide-brand);
     }
 
     /* studio_central center grid (ADR-003 W2) — premium list cards */
@@ -3401,12 +3402,12 @@
     .center-booking-modal__backdrop {
       position: absolute;
       inset: 0;
-      background: color-mix(in srgb, #000 0%, transparent);
+      background: rgba(0, 0, 0, 0);
       backdrop-filter: blur(0);
       transition: background 0.28s ease, backdrop-filter 0.28s ease;
     }
     .center-booking-modal.is-open .center-booking-modal__backdrop {
-      background: color-mix(in srgb, #000 42%, transparent);
+      background: rgba(0, 0, 0, 0.42);
       backdrop-filter: blur(6px);
     }
     .center-booking-modal__panel {
@@ -3418,7 +3419,7 @@
       flex-direction: column;
       border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
       background: var(--tg-theme-bg-color);
-      box-shadow: 0 -8px 40px color-mix(in srgb, #000 18%, transparent);
+      box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
       transform: translateY(calc(100% + 12px));
       transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
     }

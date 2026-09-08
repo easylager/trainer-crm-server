@@ -32,7 +32,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-sec + .ice-sec {
-  border-top: 1px solid var(--glide-line, #e2e6e5);
+  border-top: 1px solid var(--glide-line);
 }
 
 .ice-cityrow {
@@ -50,7 +50,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-cityrow__change {
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
   background: none;
   border: 0;
   padding: 0;
@@ -61,8 +61,8 @@ body.ar-pilot--ice .client-app-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 9px 11px;
 }
@@ -74,7 +74,7 @@ body.ar-pilot--ice .client-app-header {
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-search input {
@@ -89,7 +89,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-search input::placeholder {
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-chips {
@@ -110,22 +110,22 @@ body.ar-pilot--ice .client-app-header {
   font-weight: var(--app-weight-semibold);
   padding: 7px 11px;
   border-radius: 999px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  color: var(--glide-hint, #5e6b6b);
-  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
+  background: var(--tg-theme-bg-color);
   cursor: pointer;
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: var(--app-cta-fill, #45B9BB);
-  border-color: var(--app-cta-fill, #45B9BB);
-  color: var(--app-cta-text, #04262a);
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
 }
 
 .ice-hint {
   margin: 0;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-hint[hidden] {
@@ -134,8 +134,8 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-seg {
   display: flex;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 3px;
 }
@@ -149,12 +149,12 @@ body.ar-pilot--ice .client-app-header {
   border-radius: var(--app-radius-sm);
   border: 0;
   background: transparent;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   cursor: pointer;
 }
 
 .ice-seg button[aria-pressed='true'] {
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color, var(--glide-ink));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
@@ -168,7 +168,7 @@ body.ar-pilot--ice .client-app-header {
   font-size: var(--app-text-kicker);
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 0;
 }
 
@@ -177,9 +177,9 @@ body.ar-pilot--ice .client-app-header {
   grid-template-columns: 74px 1fr 12px;
   gap: 11px;
   padding: 10px;
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-md);
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   width: 100%;
   text-align: left;
   cursor: pointer;
@@ -193,20 +193,20 @@ body.ar-pilot--ice .client-app-header {
   align-self: center;
   font-size: var(--app-icon-lg);
   line-height: 1;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-acard__ph {
   height: 74px;
   border-radius: var(--app-radius-sm);
-  background: linear-gradient(150deg, var(--ice-mist, #e6f1ff), var(--glide-paper, #f1f3f2));
-  border: 1px solid var(--glide-line, #e2e6e5);
+  background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
+  border: 1px solid var(--glide-line);
   background-size: cover;
   background-position: center;
 }
 
 .ice-acard__ph--empty {
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-acard__body {
@@ -224,7 +224,7 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-acard__meta {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-live {
@@ -237,15 +237,15 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-live--a {
-  color: var(--ice-blue, #2a6e8f);
+  color: var(--app-ok-ink);
 }
 
 .ice-live--b {
-  color: #8a6a2b;
+  color: var(--glide-hint);
 }
 
 .ice-live--c {
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   font-weight: var(--app-weight-medium);
 }
 
@@ -276,24 +276,24 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-tier--a {
   background: rgba(var(--accent-rgb), 0.16);
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
 }
 
 .ice-tier--b {
-  background: var(--ice-mist, #e6f1ff);
-  color: var(--ice-blue, #2a6e8f);
+  background: var(--glide-line);
+  color: var(--glide-hint);
 }
 
 .ice-tier--c {
-  background: var(--glide-paper, #f1f3f2);
-  color: var(--glide-hint, #5e6b6b);
+  background: var(--glide-paper);
+  color: var(--glide-hint);
 }
 
 .ice-empty {
-  border: 1px dashed var(--glide-line, #e2e6e5);
+  border: 1px dashed var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 14px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-empty b {
@@ -305,7 +305,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-empty p {
   margin: 0;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-results {
@@ -319,7 +319,7 @@ body.ar-pilot--ice .client-app-header {
   font-weight: var(--app-weight-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 6px 0 0;
 }
 
@@ -327,10 +327,10 @@ body.ar-pilot--ice .client-app-header {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 11px 12px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   cursor: pointer;
   color: inherit;
 }
@@ -343,7 +343,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-hit span {
   display: block;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin-top: 2px;
 }
 
@@ -351,7 +351,7 @@ body.ar-pilot--ice .client-app-header {
   position: fixed;
   inset: 0;
   z-index: 8000;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   overflow-y: auto;
   padding: 16px 16px 96px;
 }
@@ -375,10 +375,10 @@ body.ar-pilot--ice .client-app-header {
 .ice-picker__item {
   width: 100%;
   text-align: left;
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 12px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
   cursor: pointer;
@@ -388,7 +388,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-geo {
   margin-top: 8px;
   width: 100%;
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 11px;
   background: transparent;
@@ -406,18 +406,18 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-state {
   font-size: var(--app-text-body);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   padding: 8px 0;
 }
 
 .ice-map-note {
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 0;
 }
 
 .ice-map-note a {
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
   font-weight: var(--app-weight-semibold);
 }
 
@@ -435,7 +435,7 @@ body.ar-pilot--ice .client-app-header {
   position: relative;
   height: min(52vh, 420px);
   min-height: 280px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-map-canvas {
@@ -448,8 +448,8 @@ body.ar-pilot--ice .client-app-header {
   right: 11px;
   top: 11px;
   z-index: 2;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  background: var(--tg-theme-bg-color);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 8px 11px;
   font-size: var(--app-text-caption);
@@ -477,7 +477,7 @@ body.ar-pilot--ice .client-app-header {
 .ice-map-offmap {
   margin: 10px 16px 0;
   font-size: var(--app-text-caption);
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-map-empty {
@@ -497,32 +497,32 @@ body.ar-pilot--ice .client-app-header {
   height: 15px;
   border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
   transform: rotate(45deg);
-  background: var(--ice-blue, #2a6e8f);
-  border: 2px solid var(--tg-theme-bg-color, #fff);
+  background: var(--glide-brand);
+  border: 2px solid var(--tg-theme-bg-color);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   display: block;
 }
 
 .ice-ypin--a .ice-ypin__dot {
-  background: var(--app-cta-fill, #45B9BB);
+  background: var(--app-cta-fill);
 }
 
 .ice-ypin--c .ice-ypin__dot {
-  background: var(--glide-hint, #5e6b6b);
+  background: var(--glide-hint);
   opacity: 0.55;
   width: 11px;
   height: 11px;
 }
 
 .ice-ypin--b .ice-ypin__dot {
-  background: var(--ice-blue, #2a6e8f);
+  background: var(--glide-hint);
 }
 
 .ice-ypin__label {
   font-size: var(--app-text-kicker);
   font-weight: var(--app-weight-bold);
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  background: var(--tg-theme-bg-color);
+  border: 1px solid var(--glide-line);
   padding: 1px 5px;
   border-radius: var(--app-radius-xs);
   white-space: nowrap;
@@ -537,14 +537,14 @@ body.ar-pilot--ice .client-app-header {
   width: 38px;
   height: 38px;
   border-radius: var(--app-radius-pill);
-  background: var(--ice-blue, #2a6e8f);
-  color: #fff;
+  background: var(--glide-brand);
+  color: var(--app-cta-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: var(--app-weight-bold);
   font-size: var(--app-text-body);
-  border: 3px solid var(--tg-theme-bg-color, #fff);
+  border: 3px solid var(--tg-theme-bg-color);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
 }

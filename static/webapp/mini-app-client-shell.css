@@ -76,7 +76,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   padding: 8px 8px;
   box-sizing: border-box;
   background: color-mix(in srgb, var(--tg-theme-bg-color) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ice-deep) 14%, transparent);
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-xl);
   backdrop-filter: saturate(140%) blur(20px);
   -webkit-backdrop-filter: saturate(140%) blur(20px);

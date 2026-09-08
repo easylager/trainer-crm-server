@@ -194,7 +194,7 @@ body.hub-body {
   overflow: hidden;
   position: relative;
   color: var(--tg-theme-text-color);
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.06),
     0 2px 8px rgba(0, 0, 0, 0.04),
@@ -207,29 +207,29 @@ body.hub-body {
 }
 
 .hub-next-card--confirmed {
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   border-color: rgba(69, 185, 187, 0.22);
 }
 
 .hub-next-card--pending {
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   border-color: rgba(69, 185, 187, 0.14);
 }
 
 .hub-is-dark .hub-next-card {
   color: rgba(255, 255, 255, 0.96);
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .hub-is-dark .hub-next-card--confirmed {
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(69, 185, 187, 0.28);
 }
 
 .hub-is-dark .hub-next-card--pending {
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -328,12 +328,12 @@ body.hub-body {
 }
 
 .hub-next-card-status-line--confirmed .hub-next-card-status-dot {
-  background: #52c47a;
+  background: var(--app-ok);
   box-shadow: 0 0 0 2px rgba(82, 196, 122, 0.22);
 }
 
 .hub-next-card-status-line--pending .hub-next-card-status-dot {
-  background: #e8a030;
+  background: var(--app-attention);
   box-shadow: 0 0 0 2px rgba(232, 160, 48, 0.22);
   animation: hub-pulse 2.8s ease-in-out infinite;
 }
@@ -423,7 +423,7 @@ body.hub-body {
   height: 13px;
   flex-shrink: 0;
   margin-top: 2px;
-  color: color-mix(in srgb, var(--ice-glow) 70%, var(--tg-theme-hint-color));
+  color: var(--glide-hint);
 }
 
 .hub-next-card-place-line span {
@@ -453,7 +453,7 @@ body.hub-body {
   padding: 8px 10px;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--tg-theme-text-color) 82%, #5c4a30);
+  color: var(--tg-theme-text-color);
   font: inherit;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-medium);
@@ -780,8 +780,8 @@ body.hub-body {
   border-radius: var(--app-radius-xs) 0 0 var(--app-radius-xs);
 }
 
-.hub-booking-row--confirmed::before { background: #34c759; }
-.hub-booking-row--pending::before { background: #ff9500; }
+.hub-booking-row--confirmed::before { background: var(--app-ok); }
+.hub-booking-row--pending::before { background: var(--app-attention); }
 
 .hub-booking-row--confirmed {
   border-color: rgba(52, 199, 89, 0.2);
@@ -824,7 +824,7 @@ body.hub-body {
   line-height: 1.2;
   white-space: nowrap;
   background: none;
-  color: var(--tg-theme-button-color, #45B9BB);
+  color: var(--tg-theme-button-color);
   border: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
@@ -908,12 +908,12 @@ body.hub-body {
 
 .hub-booking-status--confirmed {
   background: rgba(52, 199, 89, 0.15);
-  color: #34c759;
+  color: var(--app-ok-ink);
 }
 
 .hub-booking-status--pending {
   background: rgba(255, 149, 0, 0.15);
-  color: #ff9500;
+  color: var(--app-attention-ink);
 }
 
 .hub-booking-msg-btn {
@@ -1146,11 +1146,11 @@ body.hub-body {
 }
 
 .hub-is-dark .hub-primary-panel__row--slots .hub-primary-panel__row-head {
-  color: color-mix(in srgb, var(--app-cta-fill) 65%, #aeaeb2);
+  color: var(--glide-ink-teal);
 }
 
 .hub-is-dark .hub-primary-panel__slot {
-  background: color-mix(in srgb, var(--app-cta-fill) 14%, #1c1c1e);
+  background: var(--glide-brand-wash);
   border-color: color-mix(in srgb, var(--app-cta-fill) 32%, rgba(255, 255, 255, 0.08));
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
 }
@@ -1161,19 +1161,19 @@ body.hub-body {
 }
 
 .hub-is-dark .hub-primary-panel__slot-time {
-  color: color-mix(in srgb, var(--app-cta-fill) 92%, #fff);
+  color: var(--glide-ink-teal);
 }
 
 .hub-is-dark .hub-primary-panel__slot-day {
-  color: color-mix(in srgb, #fff 42%, #aeaeb2);
+  color: var(--glide-hint);
 }
 
 .hub-is-dark .hub-primary-panel__slot-place {
-  color: #aeaeb2;
+  color: var(--glide-hint);
 }
 
 .hub-is-dark .hub-primary-panel__slot-place svg {
-  color: color-mix(in srgb, var(--app-cta-fill) 80%, #aeaeb2);
+  color: var(--glide-ink-teal);
 }
 
 /* Pass pill — single CTA card. Ice-blue numeric accent. */
@@ -1195,7 +1195,7 @@ body.hub-body {
 }
 
 .hub-primary-panel__pass:hover {
-  border-color: color-mix(in srgb, var(--ice-glow) 65%, transparent);
+  border-color: var(--app-ok);
 }
 
 .hub-primary-panel__pass:active { transform: scale(0.985); }
@@ -1207,7 +1207,7 @@ body.hub-body {
   font-weight: var(--app-weight-semibold);
   letter-spacing: -0.03em;
   line-height: 1;
-  color: var(--ice-glow);
+  color: var(--app-ok-ink);
   text-align: center;
 }
 
@@ -1248,12 +1248,12 @@ body.hub-body {
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-medium);
   line-height: 1.35;
-  color: color-mix(in srgb, var(--ice-glow) 72%, var(--tg-theme-hint-color));
+  color: var(--app-ok-ink);
 }
 
 .hub-primary-panel__pass--auto-debit {
-  border-color: color-mix(in srgb, var(--ice-glow) 28%, rgba(128, 128, 128, 0.12));
-  background: color-mix(in srgb, var(--ice-glow) 6%, var(--tg-theme-secondary-bg-color));
+  border-color: var(--app-ok-wash);
+  background: var(--app-ok-wash);
 }
 
 .hub-primary-panel__pass-chevron {
@@ -1308,7 +1308,7 @@ body.hub-body {
   font: inherit;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
-  color: var(--app-cta-fill);
+  color: var(--glide-ink-teal);
   cursor: pointer;
   padding: 4px 6px;
   margin: -4px -6px;
@@ -1501,15 +1501,15 @@ body.hub-body {
 
 .hub-quick-pill--primary {
   background: var(--app-cta-fill);
-  color: var(--app-cta-text, #fff);
+  color: var(--app-cta-text);
   border-color: transparent;
   box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
 }
 
-.hub-quick-pill--primary svg { color: var(--app-cta-text, #fff); }
+.hub-quick-pill--primary svg { color: var(--app-cta-text); }
 
 .hub-quick-pill--primary:hover {
-  background: color-mix(in srgb, var(--app-cta-fill) 90%, #000);
+  background: var(--glide-brand-pressed);
   border-color: transparent;
 }
 
@@ -1549,7 +1549,7 @@ html:not(.hub-is-dark) .hub-explore-tile {
 
 .hub-is-dark .hub-explore-tile {
   background: var(--tg-theme-secondary-bg-color);
-  color: #1a1a1a;
+  color: var(--glide-text);
   border-color: rgba(var(--accent-rgb), 0.35);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
 }
@@ -1627,7 +1627,7 @@ html:not(.hub-is-dark) .hub-explore-tile {
   z-index: 1;
 }
 
-.hub-is-dark .hub-explore-hint { color: #4a4a4a; opacity: 1; }
+.hub-is-dark .hub-explore-hint { color: var(--glide-hint); opacity: 1; }
 html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); opacity: 1; }
 
 /* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
@@ -1715,7 +1715,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   font-size: var(--app-text-body);
 }
 
-.state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: #ff3b30; }
+.state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: var(--app-danger-ink); }
 .state-panel.loading { color: var(--tg-theme-hint-color); }
 
 /* ─── Footer aside: support (secondary — not booking cards) ───────────── */
@@ -1928,7 +1928,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   line-height: 1.4;
   resize: vertical;
   box-sizing: border-box;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   border: 1px solid rgba(128, 128, 128, 0.2);
   font-family: inherit;
@@ -1968,11 +1968,11 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 }
 
 .hub-support-status.hub-support-status--err {
-  color: #c0392b;
+  color: var(--app-danger-ink);
 }
 
 .hub-is-dark .hub-support-status.hub-support-status--err {
-  color: #ff8a80;
+  color: var(--app-danger-ink);
 }
 
 /* ─── Skeleton loading ───────────────────────────────────────────────── */
@@ -2254,7 +2254,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
   min-width: 68px;
   padding: 10px 12px;
   background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid color-mix(in srgb, #e0245e 25%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--glide-brand) 25%, transparent);
   border-radius: var(--app-radius-md);
   cursor: pointer;
   font-family: inherit;
@@ -2400,7 +2400,7 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
 }
 
 .client-hub-book-fab.hub-book-fab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-cta-fill) 70%, #000);
+  outline: 2px solid var(--glide-brand-pressed);
   outline-offset: 3px;
 }
 
@@ -2471,7 +2471,7 @@ a.hub-ice-teaser {
   color: var(--tg-theme-hint-color);
 }
 .hub-ice-teaser__chev {
-  color: var(--app-cta-fill);
+  color: var(--glide-ink-teal);
   font-size: var(--app-icon-md);
   line-height: 1;
 }
