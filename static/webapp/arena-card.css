@@ -9,7 +9,11 @@ body.ar-pilot--arena {
   font-family: var(--app-font-sans, ui-sans-serif, system-ui, sans-serif);
   min-height: 100vh;
   overflow-x: hidden;
-  padding-bottom: 72px;
+  /*
+   * Отступ считается оболочкой от ФАКТИЧЕСКОЙ высоты панели (TASK-093), а не своим
+   * числом: 72px было ещё одной догадкой, разошедшейся с реальными 87px.
+   */
+  padding-bottom: var(--client-shell-tab-inset);
 }
 
 body.ar-pilot--arena .client-app-header {

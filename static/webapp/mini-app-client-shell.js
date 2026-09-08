@@ -488,6 +488,53 @@
 
     applyTabBarVisibility();
     syncTabBarActive();
+    observeTabBarMetrics();
+  }
+
+  /*
+   * Фактическая высота панели → --client-tab-bar-measured (TASK-093).
+   *
+   * CSS знает только заявленные 62px, а панель рендерится в 69px: высота зависит от
+   * гарнитуры и от того, перенеслась ли подпись. Разница уходила в нижний отступ
+   * полотна, и последние 7px контента оставались под панелью на каждом экране.
+   *
+   * Пишем в ОТДЕЛЬНУЮ переменную, а не в --client-tab-bar-height: та задаёт панели
+   * min-height, и запись измеренного значения обратно в неё замкнула бы наблюдателя
+   * сам на себя.
+   */
+  function syncTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    var h = Math.round(bar.getBoundingClientRect().height);
+    if (!h) return;
+    try {
+      document.documentElement.style.setProperty('--client-tab-bar-measured', h + 'px');
+    } catch (e) { /* */ }
+  }
+
+  function observeTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    syncTabBarMetrics();
+
+    /*
+     * Наблюдатель нужен не «на всякий случай»: первый замер снимается системным
+     * фолбэком, Golos Text доезжает позже и меняет высоту подписи. Без пересчёта
+     * мы зафиксировали бы высоту чужого шрифта.
+     */
+    if (typeof global.ResizeObserver === 'function') {
+      try {
+        new global.ResizeObserver(syncTabBarMetrics).observe(bar);
+      } catch (e) {
+        global.addEventListener('resize', syncTabBarMetrics);
+      }
+    } else {
+      global.addEventListener('resize', syncTabBarMetrics);
+    }
+
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(syncTabBarMetrics).catch(function () { /* */ });
+    }
   }
 
   function writeCatalogWarmCache(payload) {

@@ -4,13 +4,59 @@
  */
 
 :root {
+  /*
+   * ВЫСОТА ПАНЕЛИ: заявленная и измеренная — это два разных числа (TASK-093).
+   *
+   * --client-tab-bar-height здесь работает как ПОЛ (min-height панели), а не как
+   * истина. Фактическая высота зависит от гарнитуры, длины подписи и того,
+   * перенеслась ли она: замер на 390px дал 69px против заявленных 62px. Разница
+   * уходила в нижний отступ полотна, и последние 7px контента навсегда оставались
+   * под панелью.
+   *
+   * Поэтому реальную высоту пишет JS в --client-tab-bar-measured, а отступ считается
+   * от максимума. Подставить «правильную» константу вместо 62 нельзя по той же
+   * причине, по которой не годилось 62: число зависит от условий рендера.
+   * Без JS всё сводится к прежнему поведению.
+   */
   --client-tab-bar-height: 62px;
   --client-tab-bar-margin: 18px;
-  --client-shell-tab-inset: calc(var(--client-tab-bar-height) + var(--client-tab-bar-margin) + env(safe-area-inset-bottom, 0px));
+  --client-shell-tab-inset: calc(
+    max(var(--client-tab-bar-height), var(--client-tab-bar-measured, 0px)) +
+    var(--client-tab-bar-margin) + env(safe-area-inset-bottom, 0px)
+  );
 }
 
 body.client-shell-body {
   padding-bottom: var(--client-shell-tab-inset);
+}
+
+/*
+ * СКРИМ под панелью. Панель — плавающая пилюля с полями по бокам, поэтому контент
+ * проходит и под ней, и мимо неё. Без затухания строка обрывается на полуслове без
+ * всякого признака, что там край, и выглядит забытой, а не продолжающейся.
+ *
+ * Градиент гасит текст ДО того, как он доедет до панели, и делает это фоном холста —
+ * не «стеклом»: theme.css относит стекло к витринному языку, а таб-бар клиент видит
+ * десятки раз в неделю.
+ *
+ * z-index 8999 — строго под панелью (9000) и над контентом.
+ */
+body.client-shell-body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--client-shell-tab-inset) + 20px);
+  z-index: 8999;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--app-canvas-bg) 58%);
+}
+
+/* Панели нет — гасить нечего. */
+body.client-shell-body.client-shell-tabs-hidden::after,
+body.client-shell-body.client-shell-more-open::after {
+  display: none;
 }
 
 body.client-shell-body.client-shell-tabs-hidden {
@@ -179,8 +225,10 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   bottom: 0;
   z-index: 9101;
   max-height: min(78vh, 520px);
-  padding: 8px 16px calc(12px + var(--client-tab-bar-height) + env(safe-area-inset-bottom, 0px));
-  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+  /* Тот же замер, что у полотна: заявленная высота панели здесь так же врала. */
+  padding: 8px 16px calc(12px + var(--client-shell-tab-inset));
+  /* Шторка — уровень «плавающая», её ступень радиуса по контракту xl, а не lg. */
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
   background: var(--app-float-bg);
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
   transform: translateY(100%);
