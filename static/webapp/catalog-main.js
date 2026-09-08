@@ -6677,9 +6677,11 @@
         }
       };
       document.getElementById('tabCatalogFromDetail').onclick = function() {
-        renderSummary();
-        switchTab('catalog');
-        showScreen('screenSummary');
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          window.ClientShell.navigate('ice?intent=coach');
+          return;
+        }
+        window.location.href = 'ice?intent=coach';
       };
       document.getElementById('tabMyTrainerFromDetail').onclick = function() { /* already on my trainer card */ };
 

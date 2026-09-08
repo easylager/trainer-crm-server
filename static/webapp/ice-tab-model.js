@@ -72,6 +72,9 @@
     if (opts.cityId != null && opts.cityId !== '') {
       params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
     }
+    if (opts.serviceId != null && opts.serviceId !== '') {
+      params.push('service_id=' + encodeURIComponent(String(opts.serviceId)));
+    }
     params.push('limit=' + encodeURIComponent(String(opts.limit || 50)));
     if (opts.offset != null && opts.offset !== '') {
       params.push('offset=' + encodeURIComponent(String(opts.offset)));
@@ -79,8 +82,83 @@
     return '/api/public/trainers?' + params.join('&');
   }
 
+  function buildServicesUrl(opts) {
+    opts = opts || {};
+    if (opts.cityId == null || opts.cityId === '') return '/api/public/services';
+    return '/api/public/services?city_id=' + encodeURIComponent(String(opts.cityId));
+  }
+
+  function buildIceCitiesUrl() {
+    return '/api/public/ice/cities';
+  }
+
+  function filterIceCities(cities) {
+    return (cities || []).filter(function (c) {
+      return (Number(c.skate_count) || 0) > 0 || (Number(c.trainer_count) || 0) > 0;
+    });
+  }
+
+  function pickCityIntent(city, currentIntent) {
+    var skate = Number(city && city.skate_count);
+    var trainers = Number(city && city.trainer_count);
+    var known = city && (city.skate_count != null || city.trainer_count != null);
+    if (!known) return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+    if (currentIntent === INTENTS.coach && trainers > 0) return INTENTS.coach;
+    if (skate > 0) return INTENTS.skate;
+    if (trainers > 0) return INTENTS.coach;
+    return currentIntent === INTENTS.coach ? INTENTS.coach : INTENTS.skate;
+  }
+
+  function serviceChipLabel(name) {
+    var raw = String(name || '').trim();
+    if (!raw) return 'Все';
+    var lower = raw.toLowerCase();
+    if (/охм/.test(lower)) return 'ОХМ';
+    if (/с нуля/.test(lower)) return 'С нуля';
+    if (/ролик/.test(lower)) return 'Ролики';
+    if (/фигурн/.test(lower)) return 'Фигурное';
+    if (/совершенств/.test(lower)) return 'Техника';
+    if (/хокке/.test(lower)) return 'Хоккей';
+    if (/офп|офк/.test(lower)) return 'ОФП';
+    var cut = raw.replace(/\s*\([^)]*\)\s*/g, '').replace(/[«»]/g, '').trim();
+    if (cut.length > 16) cut = cut.slice(0, 15) + '…';
+    return cut || raw;
+  }
+
+  function cityCountryLabel(code) {
+    var c = String(code || '').trim().toUpperCase();
+    if (c === 'BY') return 'Беларусь';
+    if (c === 'RU') return 'Россия';
+    return '';
+  }
+
+  function coerceIntent(intent) {
+    if (intent === INTENTS.coach) return INTENTS.coach;
+    return INTENTS.skate;
+  }
+
   function catalogHref() {
     return 'catalog?tab=catalog';
+  }
+
+  function iceCoachHref() {
+    return 'ice?intent=coach';
+  }
+
+  function intentFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    var params;
+    try {
+      params = new URLSearchParams(raw);
+    } catch (e) {
+      return null;
+    }
+    var intent = String(params.get('intent') || '').trim();
+    if (intent === INTENTS.skate || intent === INTENTS.coach || intent === INTENTS.group) {
+      return intent;
+    }
+    return null;
   }
 
   function mapHref() {
@@ -89,7 +167,7 @@
 
   function trainerHref(item) {
     var id = item && item.id;
-    return catalogHref() + '&trainer_id=' + encodeURIComponent(String(id));
+    return 'catalog?trainer_id=' + encodeURIComponent(String(id));
   }
 
   function arenaHref(item) {
@@ -279,7 +357,8 @@
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
   }
 
-  function formatEmptyList(intent) {
+  function formatEmptyList(intent, opts) {
+    opts = opts || {};
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
@@ -293,6 +372,12 @@
       };
     }
     if (intent === INTENTS.coach) {
+      if (opts.serviceName) {
+        return {
+          title: 'Нет тренеров по этой услуге',
+          body: 'Снимите фильтр или смените город.',
+        };
+      }
       return {
         title: 'В этом городе пока нет тренеров',
         body: 'Смените город или вернитесь к чипу «Покататься».',
@@ -310,8 +395,9 @@
     if (isNaN(total)) total = (opts.items || []).length;
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
-      if (total === 0) return 'Пока нет тренеров · смените город или чип';
-      return total + ' ' + coachWord;
+      var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
+      if (total === 0) return 'Пока нет тренеров' + svc;
+      return total + ' ' + coachWord + svc;
     }
     var word = pluralRu(total, 'каток', 'катка', 'катков');
     var items = opts.items || [];
@@ -353,9 +439,10 @@
       storage.setItem(
         ICE_STATE_KEY,
         JSON.stringify({
-          intent: state.intent || INTENTS.skate,
+          intent: coerceIntent(state.intent),
           cityId: state.cityId || null,
           cityName: state.cityName || '',
+          serviceId: state.serviceId || null,
           scrollY: state.scrollY || 0,
           view: state.view || 'list',
         })
@@ -387,7 +474,16 @@
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
+    buildServicesUrl: buildServicesUrl,
+    buildIceCitiesUrl: buildIceCitiesUrl,
+    filterIceCities: filterIceCities,
+    pickCityIntent: pickCityIntent,
+    serviceChipLabel: serviceChipLabel,
+    cityCountryLabel: cityCountryLabel,
+    coerceIntent: coerceIntent,
     catalogHref: catalogHref,
+    iceCoachHref: iceCoachHref,
+    intentFromSearch: intentFromSearch,
     mapHref: mapHref,
     trainerHref: trainerHref,
     arenaHref: arenaHref,

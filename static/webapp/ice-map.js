@@ -306,13 +306,16 @@
     function applyCityCamera() {
       if (!map) return;
       var cam = MM.cityCameraFromItems(listItems);
+      if (!cam) return;
       ignoreBounds = true;
+      bboxState = null;
       map.options.set('restrictMapArea', cam.restrict);
       map.options.set('minZoom', cam.minZoom);
       map.options.set('maxZoom', cam.maxZoom);
       var done = function () {
         global.setTimeout(function () {
           ignoreBounds = false;
+          fetchViewport();
         }, 120);
       };
       map.setBounds(cam.restrict, { checkZoomRange: true, zoomMargin: 72 }).then(function () {
@@ -348,6 +351,7 @@
       if (map || !canvas) return;
       buildLayouts();
       var cam = MM.cityCameraFromItems(listItems);
+      if (!cam) return;
       map = new ymaps.Map(
         canvas,
         {
@@ -399,10 +403,39 @@
         return Promise.resolve();
       }
       if (map) {
+        var existing = MM.mapStartDecision({
+          key: keyResolved || 'live',
+          listItems: listItems,
+          intent: getIntent(),
+        });
+        if (existing.kind === 'coach') {
+          showCoachEmpty();
+          return Promise.resolve();
+        }
+        if (existing.kind === 'no-arenas') {
+          if (typeof opts.listReady === 'function' && !opts.listReady()) {
+            showStage(false);
+            hideEmpty(emptyEl);
+            mapItems = [];
+            selected = null;
+            if (clusterer) syncObjects();
+            paintSheet(null);
+            return Promise.resolve();
+          }
+          showStage(false);
+          renderEmpty(emptyEl, existing.empty);
+          mapItems = [];
+          selected = null;
+          if (clusterer) syncObjects();
+          paintSheet(null);
+          return Promise.resolve();
+        }
         hideEmpty(emptyEl);
         showStage(true);
         map.container.fitToViewport();
-        fetchViewport();
+        mapItems = MM.splitMapAndList(listItems).onMap.slice();
+        syncObjects();
+        applyCityCamera();
         return Promise.resolve();
       }
       var getKey = opts.getKey || defaultGetKey;
@@ -556,19 +589,53 @@
 
     return {
       start: start,
+      leaveCity: function () {
+        bboxState = null;
+        listItems = [];
+        mapItems = [];
+        selected = null;
+        nearestMode = false;
+        if (clusterer) syncObjects();
+        paintSheet(null);
+        showStage(false);
+        hideEmpty(emptyEl);
+      },
       setListItems: function (items) {
         listItems = items || [];
         setOffMapNote();
-        if (map) {
-          if (!listItems.length) {
+        if (getIntent() === 'coach') return;
+        var decision = MM.mapStartDecision({
+          key: keyResolved || 'live',
+          listItems: listItems,
+          intent: getIntent(),
+        });
+        if (decision.kind === 'no-arenas') {
+          if (typeof opts.listReady === 'function' && !opts.listReady()) {
+            showStage(false);
+            hideEmpty(emptyEl);
+            if (map) {
+              mapItems = [];
+              selected = null;
+              syncObjects();
+              paintSheet(null);
+            }
+            return;
+          }
+          showStage(false);
+          renderEmpty(emptyEl, decision.empty);
+          if (map) {
             mapItems = [];
             selected = null;
             syncObjects();
             paintSheet(null);
-          } else if (!mapItems.length) {
-            mapItems = MM.splitMapAndList(listItems).onMap.slice();
-            syncObjects();
           }
+          return;
+        }
+        if (map) {
+          hideEmpty(emptyEl);
+          showStage(true);
+          mapItems = MM.splitMapAndList(listItems).onMap.slice();
+          syncObjects();
           applyCityCamera();
         }
         if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
@@ -577,12 +644,7 @@
       },
       refresh: function () {
         bboxState = null;
-        if (getIntent() === 'coach') {
-          start();
-          return;
-        }
-        if (map) applyCityCamera();
-        else if (started) start();
+        start();
       },
       resize: function () {
         if (map) map.container.fitToViewport();

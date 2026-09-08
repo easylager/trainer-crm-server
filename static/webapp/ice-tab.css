@@ -3,7 +3,7 @@
  */
 body.ar-pilot--ice {
   margin: 0;
-  background: var(--app-canvas-bg);
+  background: var(--tg-theme-bg-color, var(--glide-paper));
   color: var(--tg-theme-text-color, var(--glide-ink));
   font-family: var(--app-font-sans, ui-sans-serif, system-ui, sans-serif);
   min-height: 100vh;
@@ -11,7 +11,7 @@ body.ar-pilot--ice {
 }
 
 body.ar-pilot--ice .client-app-header {
-  margin-bottom: 0;
+  display: none;
 }
 
 .ice-tab {
@@ -32,38 +32,65 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-sec + .ice-sec {
-  border-top: 1px solid var(--glide-line);
+  border-top: 1px solid var(--glide-line, #e2e6e5);
 }
 
-.ice-cityrow {
-  display: flex;
+.ice-sec--hero {
+  padding-top: 18px;
+  gap: 12px;
+}
+
+.ice-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--glide-ink-teal, #0b6e70);
+}
+
+.ice-masthead {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.ice-citypill {
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.ice-cityrow__name {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-}
-
-.ice-cityrow__change {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--glide-ink-teal);
-  background: none;
-  border: 0;
-  padding: 0;
+  gap: 6px;
+  margin: 2px 0 2px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glide-line, #e2e6e5);
+  background: var(--glide-paper, #f1f3f2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
   cursor: pointer;
+}
+
+.ice-citypill::after {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--glide-hint, #5e6b6b);
 }
 
 .ice-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--glide-paper);
-  border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
+  background: var(--glide-paper, #f1f3f2);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 10px;
   padding: 9px 11px;
 }
 
@@ -74,7 +101,7 @@ body.ar-pilot--ice .client-app-header {
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-search input {
@@ -83,13 +110,13 @@ body.ar-pilot--ice .client-app-header {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: var(--app-text-body);
+  font-size: 14px;
   color: inherit;
   outline: none;
 }
 
 .ice-search input::placeholder {
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-chips {
@@ -106,26 +133,39 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chip {
   flex: 0 0 auto;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  padding: 7px 11px;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 13px;
   border-radius: 999px;
-  border: 1px solid var(--glide-line);
-  color: var(--glide-hint);
-  background: var(--app-canvas-bg);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  color: var(--glide-hint, #5e6b6b);
+  background: var(--tg-theme-bg-color, #fff);
   cursor: pointer;
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: var(--app-cta-fill);
-  border-color: var(--app-cta-fill);
-  color: var(--app-cta-text);
+  background: var(--app-cta-fill, #45B9BB);
+  border-color: var(--app-cta-fill, #45B9BB);
+  color: var(--app-cta-text, #04262a);
+}
+
+.ice-chips--svc {
+  padding-top: 2px;
+}
+
+.ice-chips--svc[hidden] {
+  display: none;
+}
+
+.ice-chips--svc .ice-chip {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 .ice-hint {
   margin: 0;
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 12.5px;
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-hint[hidden] {
@@ -134,41 +174,41 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-seg {
   display: flex;
-  background: var(--glide-paper);
-  border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
+  background: var(--glide-paper, #f1f3f2);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 9px;
   padding: 3px;
+}
+
+.ice-seg[hidden] {
+  display: none;
 }
 
 .ice-seg button {
   flex: 1;
   text-align: center;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
+  font-size: 13px;
+  font-weight: 650;
   padding: 6px 0;
-  border-radius: var(--app-radius-sm);
+  border-radius: 6px;
   border: 0;
   background: transparent;
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
   cursor: pointer;
 }
 
 .ice-seg button[aria-pressed='true'] {
-  background: var(--app-card-bg);
+  background: var(--tg-theme-bg-color, #fff);
   color: var(--tg-theme-text-color, var(--glide-ink));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-/*
- * Моноширинный убран (TASK-097). Это был декоративный приём, а не выравнивание цифр:
- * на macOS он подставлял Menlo и давал третью гарнитуру в строке.
- * Разрядка и капитель уже отличают эту строку — гарнитуру для этого менять не нужно.
- */
 .ice-eyebrow {
-  font-size: var(--app-text-kicker);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
   margin: 0;
 }
 
@@ -177,37 +217,36 @@ body.ar-pilot--ice .client-app-header {
   grid-template-columns: 74px 1fr 12px;
   gap: 11px;
   padding: 10px;
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-md);
-  background: var(--app-card-bg);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 11px;
+  background: var(--tg-theme-bg-color, #fff);
   width: 100%;
   text-align: left;
   cursor: pointer;
   color: inherit;
   text-decoration: none;
   box-sizing: border-box;
-  box-shadow: var(--app-card-shadow);
 }
 
 .ice-acard::after {
   content: '›';
   align-self: center;
-  font-size: var(--app-icon-lg);
+  font-size: 22px;
   line-height: 1;
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-acard__ph {
   height: 74px;
-  border-radius: var(--app-radius-sm);
-  background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
-  border: 1px solid var(--glide-line);
+  border-radius: 8px;
+  background: linear-gradient(150deg, var(--ice-mist, #e6f1ff), var(--glide-paper, #f1f3f2));
+  border: 1px solid var(--glide-line, #e2e6e5);
   background-size: cover;
   background-position: center;
 }
 
 .ice-acard__ph--empty {
-  background: var(--glide-paper);
+  background: var(--glide-paper, #f1f3f2);
 }
 
 .ice-acard__body {
@@ -218,36 +257,36 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-acard__name {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
+  font-size: 14.5px;
+  font-weight: 680;
   letter-spacing: -0.01em;
 }
 
 .ice-acard__meta {
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 12px;
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-live {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
+  font-size: 12.5px;
+  font-weight: 620;
   margin-top: 2px;
 }
 
 .ice-live--a {
-  color: var(--app-ok-ink);
+  color: var(--ice-blue, #2a6e8f);
 }
 
 .ice-live--b {
-  color: var(--glide-hint);
+  color: #8a6a2b;
 }
 
 .ice-live--c {
-  color: var(--glide-hint);
-  font-weight: var(--app-weight-medium);
+  color: var(--glide-hint, #5e6b6b);
+  font-weight: 500;
 }
 
 .ice-live:empty {
@@ -257,56 +296,52 @@ body.ar-pilot--ice .client-app-header {
 .ice-live__dot {
   width: 6px;
   height: 6px;
-  border-radius: var(--app-radius-pill);
+  border-radius: 99px;
   background: currentColor;
   flex: 0 0 auto;
 }
 
-/*
- * Бейдж уровня: та же причина, что у .ice-eyebrow — Menlo в середине русской строки.
- * Вес не задаём: наследуется 600 от .ice-acard__name, а лишний литерал только
- * добавляет работы TASK-086.
- */
 .ice-tier {
-  font-size: var(--app-text-kicker);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
   padding: 1px 5px;
-  border-radius: var(--app-radius-xs);
+  border-radius: 3px;
   margin-left: 6px;
   vertical-align: 1px;
 }
 
 .ice-tier--a {
   background: rgba(var(--accent-rgb), 0.16);
-  color: var(--glide-ink-teal);
+  color: var(--glide-ink-teal, #0b6e70);
 }
 
 .ice-tier--b {
-  background: var(--glide-line);
-  color: var(--glide-hint);
+  background: var(--ice-mist, #e6f1ff);
+  color: var(--ice-blue, #2a6e8f);
 }
 
 .ice-tier--c {
-  background: var(--glide-paper);
-  color: var(--glide-hint);
+  background: var(--glide-paper, #f1f3f2);
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-empty {
-  border: 1px dashed var(--glide-line);
-  border-radius: var(--app-radius-sm);
+  border: 1px dashed var(--glide-line, #e2e6e5);
+  border-radius: 10px;
   padding: 14px;
-  background: var(--glide-paper);
+  background: var(--glide-paper, #f1f3f2);
 }
 
 .ice-empty b {
   display: block;
-  font-size: var(--app-text-body);
+  font-size: 14px;
   margin-bottom: 6px;
 }
 
 .ice-empty p {
   margin: 0;
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 12.5px;
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-results {
@@ -316,11 +351,11 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-results__label {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
+  font-size: 11.5px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--glide-hint);
+  color: var(--glide-hint, #5e6b6b);
   margin: 6px 0 0;
 }
 
@@ -328,24 +363,23 @@ body.ar-pilot--ice .client-app-header {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 10px;
   padding: 11px 12px;
-  background: var(--app-card-bg);
+  background: var(--tg-theme-bg-color, #fff);
   cursor: pointer;
   color: inherit;
-  box-shadow: var(--app-card-shadow);
 }
 
 .ice-hit b {
   display: block;
-  font-size: var(--app-text-body);
+  font-size: 14px;
 }
 
 .ice-hit span {
   display: block;
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 12px;
+  color: var(--glide-hint, #5e6b6b);
   margin-top: 2px;
 }
 
@@ -353,50 +387,111 @@ body.ar-pilot--ice .client-app-header {
   position: fixed;
   inset: 0;
   z-index: 8000;
-  background: var(--app-canvas-bg);
-  overflow-y: auto;
-  padding: 16px 16px 96px;
+  display: flex;
+  flex-direction: column;
+  background: var(--tg-theme-bg-color, #fff);
+  overflow: hidden;
+  padding: 0;
 }
 
 .ice-picker[hidden] {
   display: none;
 }
 
+.ice-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 10px;
+}
+
 .ice-picker h2 {
-  margin: 0 0 12px;
-  font-size: var(--app-text-lead);
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ice-picker__close {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--glide-ink-teal, #0b6e70);
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.ice-picker__tools {
+  padding: 0 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .ice-picker__list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
+  padding: 0 0 calc(var(--client-shell-tab-inset, 96px) + 12px);
+}
+
+.ice-picker__label {
+  margin: 12px 16px 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--glide-hint, #5e6b6b);
+}
+
+.ice-picker__label:first-child {
+  margin-top: 4px;
 }
 
 .ice-picker__item {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   text-align: left;
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-sm);
-  padding: 12px;
-  background: var(--app-card-bg);
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
+  border: 0;
+  border-bottom: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 0;
+  padding: 14px 16px;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   cursor: pointer;
   color: inherit;
-  box-shadow: var(--app-card-shadow);
+}
+
+.ice-picker__country {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--glide-hint, #5e6b6b);
+}
+
+.ice-picker__item--current {
+  background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 18%, transparent);
 }
 
 .ice-geo {
-  margin-top: 8px;
   width: 100%;
-  border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
-  padding: 11px;
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 10px;
+  padding: 12px;
   background: transparent;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
+  font-size: 14px;
+  font-weight: 650;
   cursor: pointer;
   color: inherit;
 }
@@ -408,20 +503,20 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-state {
-  font-size: var(--app-text-body);
-  color: var(--glide-hint);
+  font-size: 14px;
+  color: var(--glide-hint, #5e6b6b);
   padding: 8px 0;
 }
 
 .ice-map-note {
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 13px;
+  color: var(--glide-hint, #5e6b6b);
   margin: 0;
 }
 
 .ice-map-note a {
-  color: var(--glide-ink-teal);
-  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal, #0b6e70);
+  font-weight: 600;
 }
 
 .ice-map-wrap {
@@ -438,7 +533,7 @@ body.ar-pilot--ice .client-app-header {
   position: relative;
   height: min(52vh, 420px);
   min-height: 280px;
-  background: var(--glide-paper);
+  background: var(--glide-paper, #f1f3f2);
 }
 
 .ice-map-canvas {
@@ -451,12 +546,12 @@ body.ar-pilot--ice .client-app-header {
   right: 11px;
   top: 11px;
   z-index: 2;
-  background: var(--app-float-bg);
-  border: 1px solid var(--app-float-line);
-  border-radius: var(--app-radius-sm);
+  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: 9px;
   padding: 8px 11px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
+  font-size: 12.5px;
+  font-weight: 650;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   cursor: pointer;
   color: inherit;
@@ -479,8 +574,8 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-map-offmap {
   margin: 10px 16px 0;
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
+  font-size: 12.5px;
+  color: var(--glide-hint, #5e6b6b);
 }
 
 .ice-map-empty {
@@ -498,38 +593,38 @@ body.ar-pilot--ice .client-app-header {
 .ice-ypin__dot {
   width: 15px;
   height: 15px;
-  border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
+  border-radius: 99px 99px 99px 2px;
   transform: rotate(45deg);
-  background: var(--glide-brand);
-  border: 2px solid var(--tg-theme-bg-color);
+  background: var(--ice-blue, #2a6e8f);
+  border: 2px solid var(--tg-theme-bg-color, #fff);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   display: block;
 }
 
 .ice-ypin--a .ice-ypin__dot {
-  background: var(--app-cta-fill);
+  background: var(--app-cta-fill, #45B9BB);
 }
 
 .ice-ypin--c .ice-ypin__dot {
-  background: var(--glide-hint);
+  background: var(--glide-hint, #5e6b6b);
   opacity: 0.55;
   width: 11px;
   height: 11px;
 }
 
 .ice-ypin--b .ice-ypin__dot {
-  background: var(--glide-hint);
+  background: var(--ice-blue, #2a6e8f);
 }
 
 .ice-ypin__label {
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-bold);
-  background: var(--app-float-bg);
-  border: 1px solid var(--app-float-line);
+  font-size: 10.5px;
+  font-weight: 700;
+  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line, #e2e6e5);
   padding: 1px 5px;
-  border-radius: var(--app-radius-xs);
+  border-radius: 4px;
   white-space: nowrap;
-  color: inherit;
+  color: var(--tg-theme-text-color, var(--glide-text, #101617));
 }
 
 .ice-ypin__label:empty {
@@ -539,15 +634,15 @@ body.ar-pilot--ice .client-app-header {
 .ice-ycluster {
   width: 38px;
   height: 38px;
-  border-radius: var(--app-radius-pill);
-  background: var(--glide-brand);
-  color: var(--app-cta-text);
+  border-radius: 99px;
+  background: var(--ice-blue, #2a6e8f);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: var(--app-weight-bold);
-  font-size: var(--app-text-body);
-  border: 3px solid var(--tg-theme-bg-color);
+  font-weight: 750;
+  font-size: 14px;
+  border: 3px solid var(--tg-theme-bg-color, #fff);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
 }

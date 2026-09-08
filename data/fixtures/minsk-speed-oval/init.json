@@ -1,0 +1,206 @@
+{
+  "viewType": null,
+  "calendar": [],
+  "more": false,
+  "user": null,
+  "session": null,
+  "object": {
+    "id": 4,
+    "created_at": 1643208646,
+    "updated_at": 1788760804,
+    "name": "Конькобежный стадион",
+    "address": "проспект Победителей, 111",
+    "description": "Здание Конькобежного стадиона\r\n\r\nПодземный переход связывает Конькобежный стадион со зданием Арены.\r\n\r\nНа Конькобежном стадионе установлено уникальное оборудование, позволяющее регулировать температуру льда на разных участках для разных видов спорта – фигурного катания, керлинга, хоккея, скоростного бега на коньках.\r\n\r\nВ здании Конькобежного стадиона находятся комнаты горного воздуха, которые не имеют аналогов в Республике Беларусь, уникальны по своим терапевтическим свойствам и представляют особую ценность для спортсменов.\r\n\r\nКонькобежная дорожка МКСК «Минск-арена» нередко становится местом тренировочных сборов для конькобежцев из Нидерландов, России, Казахстана, Эстонии, Украины.\r\n\r\nНа Конькобежном стадионе также присутствует возможность оказания физкультурно-оздоровительных услуг людям с инвалидностью.\r\n\r\nНа льду Конькобежного стадиона проводились крупные международные старты: \r\n\r\n\r\n\tмеждународные соревнования по шорт-треку Evo Cup (октябрь 2012 г.)\r\n\tГран-при по фигурному катанию на коньках среди юниоров (сентябрь 2013 г.)\r\n\tэтапы Кубка мира по конькобежному спорту среди юниоров (ноябрь 2012 г., декабрь 2014 г.)\r\n\tЧемпионат Европы по конькобежному спорту (январь 2016 г.)\r\n\tэтапы Кубка мира по конькобежному спорту среди юниоров (ноябрь 2016 г.)\r\n\tэтапы Кубка Мира по шорт-треку (февраль 2017 г.)\r\n\tфинал Кубка мира по конькобежному спорту среди мужчин и женщин (март 2018 г.)\r\n\tIV чемпионат мира среди студентов по конькобежному спорту (март 2018 г.)\r\n\tЧемпионат Европы по фигурному катанию - тренировочная зона (январь 2019)\r\n\tII Европейские игры - тренировочная зона (июнь 2019)\r\n\r\n\r\nВ 2013 г. Конькобежный стадион впервые стал площадкой Международного автосалона \"Моторшоу\", а в 2014, 2017, 2019, 2021 и 2022 годах на спортивном объекте состоялась Международная выставка вооружения и военной техники – MILEX.",
+    "isDelete": 0,
+    "cityId": 3,
+    "lat": "53.935930",
+    "lng": "27.481638",
+    "shortDescription": "Здание Конькобежного стадиона Подземный переход связывает Конькобежный стадион со зданием Арены. Это первая в Беларуси крытая ледовая площадка с 400-метровой беговой дорожкой (ширина – 9,5 м), общая площадь льда 10 000 м2. Здесь же находятся две тренировочные хоккейные коробки европейского и канадского стандартов (60×30 и 60×28 м), две дорожки для керлинга.",
+    "categoryId": 29,
+    "phone1": "",
+    "phone2": ""
+  },
+  "service": {
+    "id": 139,
+    "created_at": 1753278003,
+    "updated_at": 1788762603,
+    "deleted_at": null,
+    "startTime": 1753191560,
+    "endTime": 1789084800,
+    "institutionId": 4,
+    "duration": 45,
+    "companyId": 1,
+    "performanceId": 46,
+    "mapId": 46,
+    "isSellOnline": true,
+    "isBooking": false,
+    "type": "quota",
+    "outerCommissionSum": 200,
+    "isIncludedOuterCommission": 0,
+    "distributorCommissionSum": 0
+  },
+  "organizator": {
+    "id": 1,
+    "created_at": 1643199301,
+    "updated_at": 1764918386,
+    "name": "Государственное учреждение «Многопрофильный культурно-спортивный комплекс «Минск-арена»",
+    "address": "пр-т. Победителей 111, Минск",
+    "phone1": "0",
+    "phone2": "",
+    "description": "<p>Стандартный договор</p>\r\n",
+    "isDelete": 0,
+    "vatNumber": "191007290",
+    "taxValue": 0,
+    "shortName": "МКСК «Минск-арена»",
+    "postAddress": "220020",
+    "fax": "0",
+    "email": "minskarena.com@gmail.com",
+    "requisites": ""
+  },
+  "performance": {
+    "id": 46,
+    "home_sort": 0,
+    "name": "Массовое катание на конькобежной дорожке",
+    "shortDescription": "<p>Массовое катание на конькобежной дорожке</p>",
+    "showFrom": 0,
+    "showTo": 1754438400,
+    "minAge": 0,
+    "duration": 45,
+    "kinopoiskRank": 0,
+    "imdbRank": 0,
+    "is_show_info": 0,
+    "info_image_url": "uploads/events/5z68s9Yxl.jpg",
+    "image": {
+      "240x340": "https://abws.minskarena.by/uploads/events/thumbs/240x340/1tA8DNZZN.jpg",
+      "170x240": "https://abws.minskarena.by/uploads/events/thumbs/170x240/1tA8DNZZN.jpg",
+      "300x430": "https://abws.minskarena.by/uploads/events/thumbs/300x430/1tA8DNZZN.jpg",
+      "original": "https://abws.minskarena.by/uploads/events/1tA8DNZZN.jpg"
+    },
+    "slug": "46-massovoe-katanie-na-konkobezhnoy-dorozhke",
+    "minPrice": "0.00",
+    "maxPrice": "0.00",
+    "video": {
+      "service": "",
+      "key": ""
+    },
+    "images": [],
+    "isSelling": 0
+  },
+  "video": null,
+  "promotion": null,
+  "items": [],
+  "mapData": {
+    "map": {
+      "id": 46,
+      "hallName": "Массовое катание на конькобежной дорожке",
+      "placesCount": 300,
+      "sections": [
+        {
+          "id": 267,
+          "corners": null,
+          "mapId": 46,
+          "mapZoneId": 1008,
+          "name": "Массовое катание взрослый (конькобежная дорожка)",
+          "placesAvailable": 200,
+          "placesFree": 200,
+          "svg": null,
+          "type": "dance",
+          "translation": {
+            "name": {
+              "ru": "Массовое катание взрослый (конькобежная дорожка)"
+            }
+          },
+          "isDelete": 0,
+          "deviceGroupId": 0,
+          "floorId": null,
+          "posX": null,
+          "posY": null,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1
+        },
+        {
+          "id": 268,
+          "corners": null,
+          "mapId": 46,
+          "mapZoneId": 1009,
+          "name": "Массовое катание детский до 16 лет (конькобежная дорожка)",
+          "placesAvailable": 100,
+          "placesFree": 100,
+          "svg": null,
+          "type": "dance",
+          "translation": {
+            "name": {
+              "ru": "Массовое катание детский до 16 лет (конькобежная дорожка)"
+            }
+          },
+          "isDelete": 0,
+          "deviceGroupId": 0,
+          "floorId": null,
+          "posX": null,
+          "posY": null,
+          "rotation": 0,
+          "scaleX": 1,
+          "scaleY": 1
+        }
+      ],
+      "staticZones": [
+        {
+          "id": 1008,
+          "name": "Массовое катание взрослый",
+          "color": "#ca84c6",
+          "placesCount": 0,
+          "mapSectionId": 0,
+          "sessionId": null,
+          "prices": [],
+          "section": null,
+          "translation": {
+            "name": {
+              "ru": "Массовое катание взрослый"
+            }
+          },
+          "companyId": 0,
+          "minPrice": 0,
+          "maxPrice": 0,
+          "defaultPrice": 0
+        },
+        {
+          "id": 1009,
+          "name": "Массовое катание детский до 14 лет",
+          "color": "#91bfd5",
+          "placesCount": 0,
+          "mapSectionId": 0,
+          "sessionId": null,
+          "prices": [],
+          "section": null,
+          "translation": {
+            "name": {
+              "ru": "Массовое катание детский до 14 лет"
+            }
+          },
+          "companyId": 0,
+          "minPrice": 0,
+          "maxPrice": 0,
+          "defaultPrice": 0
+        }
+      ],
+      "svg": "",
+      "type": "dances",
+      "typeWithPlaces": ""
+    },
+    "places": null
+  },
+  "order": null,
+  "settings": {
+    "maxTicketsCount": 20,
+    "supportEmail": "kassa@minskarena.by",
+    "supportPhone": "Конькобежный стадион: +375(44)7808501; Велодром: +375(44)7882106; Арена: +375(29)3124516",
+    "siteUrl": "https://minskarena.by",
+    "siteUrlCabinet": "",
+    "copyright": "© 2010-2026 МКСК «Минск-арена». Все права защищены.",
+    "offerContract": "https://minskarena.by/page.html?slug=contract",
+    "logoUrl": "https://abws.minskarena.by/uploads/settings/layout.afishaLogo.svg",
+    "styles": "",
+    "currency": "руб"
+  }
+}

@@ -1,0 +1,673 @@
+<title>Лёд как продукт</title>
+<style>
+  /* ── Tokens: light is the base set; both dark states redefine only tokens ── */
+  :root {
+    --ground:        #F4F7F9;
+    --surface:       #FFFFFF;
+    --surface-sunk:  #EAF0F4;
+    --ink:           #0F1A22;
+    --ink-soft:      #3B4C58;
+    --ink-mute:      #6C808D;
+    --line:          #D2DEE5;
+    --line-soft:     #E3EBF0;
+    --accent:        #C2761A;   /* amber — действие, наши данные, транзакция */
+    --accent-soft:   #F3E2CB;
+    --ice:           #2A6E8F;   /* холодный синий — внешние данные, read-only */
+    --ice-soft:      #DCEAF1;
+    --good:          #2E7D5B;
+    --warn:          #A8630F;
+    --stop:          #A33A2E;
+    --shadow:        0 1px 0 rgba(15,26,34,.04), 0 8px 24px -18px rgba(15,26,34,.5);
+  }
+  :root:not([data-theme="light"]) { }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:       #0B1218;
+      --surface:      #111C24;
+      --surface-sunk: #0E1922;
+      --ink:          #E8F1F6;
+      --ink-soft:     #B4C6D1;
+      --ink-mute:     #7C93A1;
+      --line:         #22333F;
+      --line-soft:    #1A2833;
+      --accent:       #E4A051;
+      --accent-soft:  #33251266;
+      --ice:          #6FB6D6;
+      --ice-soft:     #14313F;
+      --good:         #6CC49A;
+      --warn:         #D9A45C;
+      --stop:         #E08376;
+      --shadow:       0 1px 0 rgba(0,0,0,.3), 0 10px 30px -20px #000;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:       #0B1218;
+    --surface:      #111C24;
+    --surface-sunk: #0E1922;
+    --ink:          #E8F1F6;
+    --ink-soft:     #B4C6D1;
+    --ink-mute:     #7C93A1;
+    --line:         #22333F;
+    --line-soft:    #1A2833;
+    --accent:       #E4A051;
+    --accent-soft:  #33251266;
+    --ice:          #6FB6D6;
+    --ice-soft:     #14313F;
+    --good:         #6CC49A;
+    --warn:         #D9A45C;
+    --stop:         #E08376;
+    --shadow:       0 1px 0 rgba(0,0,0,.3), 0 10px 30px -20px #000;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 20px 96px;
+  }
+
+  .wrap { max-width: 780px; margin: 0 auto; }
+  .wide { max-width: 1000px; margin: 0 auto; }
+
+  /* ── Type ── */
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.022em; line-height: 1.12; margin: 0; }
+  h1 { font-size: clamp(34px, 6.4vw, 52px); font-weight: 800; }
+  h2 { font-size: clamp(24px, 3.6vw, 31px); font-weight: 750; }
+  h3 { font-size: 19px; font-weight: 700; letter-spacing: -0.012em; }
+  p  { margin: 0; }
+  a  { color: var(--accent); }
+
+  .eyebrow {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    letter-spacing: .17em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+  .lede { font-size: 20px; line-height: 1.5; color: var(--ink-soft); }
+  .note { font-size: 15px; color: var(--ink-mute); line-height: 1.55; }
+  strong { font-weight: 680; color: var(--ink); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .88em;
+    background: var(--surface-sunk);
+    border: 1px solid var(--line-soft);
+    padding: .08em .34em;
+    border-radius: 3px;
+  }
+
+  /* ── Rhythm ── */
+  section { display: flex; flex-direction: column; gap: 20px; padding: 56px 0 0; }
+  section > .stack { display: flex; flex-direction: column; gap: 14px; }
+  .head { display: flex; flex-direction: column; gap: 9px; }
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 56px 0 0; }
+
+  /* ── Hero: single 45° cut, echoing the app's ribbon geometry ── */
+  header.hero {
+    padding: 72px 0 8px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .hero-mark {
+    height: 3px; width: 96px;
+    background: linear-gradient(90deg, var(--accent), var(--ice));
+    clip-path: polygon(0 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
+  }
+  .thesis {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+    padding: 26px 28px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .thesis .eyebrow { color: var(--accent); }
+
+  /* ── Cards & grids ── */
+  .grid { display: grid; gap: 14px; }
+  @media (min-width: 700px) { .grid.two { grid-template-columns: 1fr 1fr; } .grid.three { grid-template-columns: repeat(3, 1fr); } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 18px 20px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card .k { font-size: 15px; }
+  .card h3 + p { color: var(--ink-soft); font-size: 15.5px; line-height: 1.55; }
+
+  /* ── Diagram: convergence ── */
+  .figure {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .figure-scroll { overflow-x: auto; }
+  .figure svg { display: block; min-width: 620px; width: 100%; height: auto; }
+  figcaption { font-size: 14px; color: var(--ink-mute); line-height: 1.5; }
+
+  /* ── Phone mock: arena screen anatomy ── */
+  .phone {
+    max-width: 380px; width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .ph-hero {
+    height: 96px;
+    background:
+      radial-gradient(120% 140% at 15% 10%, var(--ice-soft), transparent 60%),
+      linear-gradient(160deg, var(--surface-sunk), var(--surface));
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: flex-end; padding: 12px 14px;
+  }
+  .ph-hero div { display: flex; flex-direction: column; gap: 2px; }
+  .ph-title { font-weight: 720; font-size: 17px; }
+  .ph-sub { font-size: 12.5px; color: var(--ink-mute); }
+  .ph-tabs { display: flex; gap: 6px; padding: 12px 14px 4px; }
+  .ph-tab {
+    font-size: 12px; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--ink-mute);
+  }
+  .ph-tab.on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .ph-rows { display: flex; flex-direction: column; padding: 8px 14px 14px; gap: 7px; }
+  .row {
+    display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center;
+    border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--ice);
+    background: var(--surface-sunk);
+    padding: 9px 10px; border-radius: 3px;
+  }
+  .row.act { border-left-color: var(--accent); }
+  .row .t { font-family: ui-monospace, Menlo, monospace; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .row .m { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .row .m b { font-size: 13.5px; font-weight: 640; }
+  .row .m span { font-size: 11.5px; color: var(--ink-mute); }
+  .cta {
+    font-size: 11.5px; font-weight: 650; padding: 5px 10px; border-radius: 999px;
+    white-space: nowrap;
+  }
+  .cta.ghost { border: 1px solid var(--line); color: var(--ink-mute); }
+  .cta.solid { background: var(--accent); color: var(--surface); }
+  :root[data-theme="dark"] .cta.solid { color: #17110A; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cta.solid { color: #17110A; } }
+  .ph-block { border-top: 1px solid var(--line-soft); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .ph-block .eyebrow { font-size: 10.5px; }
+  .coach { display: flex; gap: 9px; align-items: center; }
+  .coach i { width: 30px; height: 30px; border-radius: 999px; background: var(--surface-sunk); border: 1px solid var(--line); flex: 0 0 auto; }
+  .coach div { display: flex; flex-direction: column; }
+  .coach b { font-size: 13.5px; font-weight: 640; }
+  .coach span { font-size: 11.5px; color: var(--ink-mute); }
+  .anat { display: flex; flex-direction: column; gap: 10px; }
+  .anat li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 15px; line-height: 1.5; }
+  .anat li b { font-weight: 700; }
+  .anat .n { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink-mute); padding-top: 3px; }
+  .anat ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .split { display: grid; gap: 24px; align-items: start; }
+  @media (min-width: 800px) { .split { grid-template-columns: 380px 1fr; } }
+
+  /* ── Legend chips ── */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--ink-soft); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+
+  /* ── Tables ── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; line-height: 1.45; }
+  thead th {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-mute); font-weight: 500;
+    background: var(--surface-sunk); border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td .tag { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink-mute); }
+
+  .tier { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 3px; font-weight: 750; font-size: 13px; }
+  .tier.a { background: var(--accent); color: var(--surface); }
+  :root[data-theme="dark"] .tier.a { color: #17110A; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tier.a { color: #17110A; } }
+  .tier.b { background: var(--ice-soft); color: var(--ice); }
+  .tier.c { background: var(--surface-sunk); color: var(--ink-mute); border: 1px solid var(--line); }
+
+  /* ── Phases ── */
+  .phase {
+    display: grid; grid-template-columns: 40px 1fr; gap: 16px;
+    padding: 18px 20px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+  }
+  .phase .num {
+    font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 600;
+    color: var(--ink-mute); line-height: 1;
+  }
+  .phase .body { display: flex; flex-direction: column; gap: 7px; }
+  .gate {
+    font-size: 14px; color: var(--ink-soft);
+    border-left: 2px solid var(--accent); padding-left: 11px;
+  }
+  .gate b { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); display: block; }
+
+  ul.plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  ul.plain li { display: grid; grid-template-columns: 14px 1fr; gap: 10px; font-size: 16px; line-height: 1.55; }
+  ul.plain li::before { content: ""; width: 7px; height: 7px; margin-top: 9px; background: var(--ink-mute); border-radius: 1px; }
+  ul.plain.stop li::before { background: var(--stop); }
+
+  footer.end { padding: 64px 0 0; color: var(--ink-mute); font-size: 14.5px; display: flex; flex-direction: column; gap: 8px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-mark"></div>
+    <p class="eyebrow">Клиентское приложение · перестройка вокруг арен</p>
+    <h1>Лёд как продукт</h1>
+    <p class="lede">Как совместить справочник из 150 катков с расписанием и ценами — и платформу тренеров — в одном Mini App, не превращая его в два приложения под одной кнопкой.</p>
+  </header>
+
+  <div class="thesis" style="margin-top:26px;">
+    <p class="eyebrow">Решение</p>
+    <p>Не строить «раздел Арены» рядом с «разделом Тренеры». Ввести один объект — <strong>арену как страницу</strong> — и одну ленту на ней: <strong>что происходит на этом льду</strong>. В ленте строки двух природ: открытый лёд (read-only, внешние данные, билет на месте) и занятие (слот тренера или группа, кнопка «Записаться»).</p>
+    <p>Два продукта — это не два раздела. Это <strong>два типа строк в одном списке</strong>.</p>
+  </div>
+</div>
+
+<div class="wide">
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Почему это работает</p>
+    <h2>Две двери, одна комната</h2>
+    <p class="lede">Клиент, который ищет «где покататься в субботу», и клиент, который ищет тренера, приходят на один и тот же экран. Там они и встречаются — без баннеров и без переключателя режима.</p>
+  </div>
+
+  <figure class="figure figure-scroll">
+    <svg viewBox="0 0 900 300" role="img" aria-label="Схема: два входа сходятся на карточке арены, из которой ведут действия">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-mute)"></path>
+        </marker>
+      </defs>
+
+      <!-- entry 1 -->
+      <rect x="8" y="42" width="216" height="72" rx="4" fill="var(--surface-sunk)" stroke="var(--ice)" stroke-width="1.5"></rect>
+      <text x="26" y="70" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1.6" fill="var(--ice)">НАМЕРЕНИЕ 1</text>
+      <text x="26" y="94" font-family="ui-sans-serif, system-ui" font-size="17" font-weight="650" fill="var(--ink)">Покататься в субботу</text>
+
+      <!-- entry 2 -->
+      <rect x="8" y="186" width="216" height="72" rx="4" fill="var(--surface-sunk)" stroke="var(--accent)" stroke-width="1.5"></rect>
+      <text x="26" y="214" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1.6" fill="var(--accent)">НАМЕРЕНИЕ 2</text>
+      <text x="26" y="238" font-family="ui-sans-serif, system-ui" font-size="17" font-weight="650" fill="var(--ink)">Найти тренера</text>
+
+      <!-- lens -->
+      <rect x="272" y="104" width="150" height="92" rx="4" fill="var(--surface)" stroke="var(--line)"></rect>
+      <text x="347" y="136" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="15" font-weight="650" fill="var(--ink)">Таб «Лёд»</text>
+      <text x="347" y="158" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">карта · список · поиск</text>
+      <text x="347" y="176" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">чипы намерения</text>
+
+      <path d="M224 78 C250 78, 250 132, 270 132" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+      <path d="M224 222 C250 222, 250 168, 270 168" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+
+      <!-- arena -->
+      <rect x="470" y="86" width="176" height="128" rx="4" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"></rect>
+      <text x="558" y="120" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1.6" fill="var(--ink-mute)">ТОЧКА СХОЖДЕНИЯ</text>
+      <text x="558" y="150" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="19" font-weight="720" fill="var(--ink)">Карточка арены</text>
+      <text x="558" y="176" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="13" fill="var(--ink-mute)">фото · лента льда · тренеры</text>
+      <text x="558" y="195" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="13" fill="var(--ink-mute)">группы · практика · свежесть</text>
+      <path d="M424 150 L466 150" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+
+      <!-- outcomes -->
+      <rect x="700" y="34" width="192" height="58" rx="4" fill="var(--ice-soft)" stroke="var(--ice)" stroke-width="1.2"></rect>
+      <text x="718" y="60" font-family="ui-sans-serif, system-ui" font-size="14.5" font-weight="620" fill="var(--ink)">Пошёл на массовое</text>
+      <text x="718" y="79" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">билет на месте · read-only</text>
+
+      <rect x="700" y="121" width="192" height="58" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"></rect>
+      <text x="718" y="147" font-family="ui-sans-serif, system-ui" font-size="14.5" font-weight="620" fill="var(--ink)">Записался к тренеру</text>
+      <text x="718" y="166" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">наша транзакция · CRM</text>
+
+      <rect x="700" y="208" width="192" height="58" rx="4" fill="var(--surface-sunk)" stroke="var(--line)" stroke-width="1.2"></rect>
+      <text x="718" y="234" font-family="ui-sans-serif, system-ui" font-size="14.5" font-weight="620" fill="var(--ink)">Заявка в группу</text>
+      <text x="718" y="253" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">существующий контур</text>
+
+      <path d="M648 138 C672 138, 672 63, 696 63" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+      <path d="M650 150 L696 150" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+      <path d="M648 162 C672 162, 672 237, 696 237" fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar)"></path>
+    </svg>
+    <figcaption>Чипы намерения — это линзы над одним набором арен, а не разные воронки: меняется ранжирование и то, какая строка показывается на карточке в списке. Пользователь никогда не переключает «режим приложения».</figcaption>
+  </figure>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Экран</p>
+    <h2>Карточка арены</h2>
+    <p class="lede">Одна временная ось, две природы строк. Разница между «информацией» и «действием» читается за полсекунды и не требует объяснений.</p>
+  </div>
+
+  <div class="split">
+    <div class="phone">
+      <div class="ph-hero">
+        <div>
+          <span class="ph-title">Ледовый дворец «Чижовка»</span>
+          <span class="ph-sub">Заводской · 2,4 км · открыт до 23:00</span>
+        </div>
+      </div>
+      <div class="ph-tabs">
+        <span class="ph-tab on">Сегодня</span>
+        <span class="ph-tab">Завтра</span>
+        <span class="ph-tab">Неделя</span>
+      </div>
+      <div class="ph-rows">
+        <div class="row">
+          <span class="t">11:00</span>
+          <span class="m"><b>Массовое катание</b><span>взр. 12 · дет. 8 · прокат +6</span></span>
+          <span class="cta ghost">Билет на месте</span>
+        </div>
+        <div class="row act">
+          <span class="t">13:15</span>
+          <span class="m"><b>Индивидуально · Мария К.</b><span>45 мин · 60 ₽</span></span>
+          <span class="cta solid">Записаться</span>
+        </div>
+        <div class="row">
+          <span class="t">15:00</span>
+          <span class="m"><b>Свободный лёд</b><span>20 ₽ · без проката</span></span>
+          <span class="cta ghost">Билет на месте</span>
+        </div>
+        <div class="row act">
+          <span class="t">17:30</span>
+          <span class="m"><b>Группа «Первый лёд» 5–7</b><span>идёт набор · 2 места</span></span>
+          <span class="cta solid">Заявка</span>
+        </div>
+      </div>
+      <div class="ph-block">
+        <p class="eyebrow">Тренеры на этой арене</p>
+        <div class="coach"><i></i><div><b>Мария Ковалёва</b><span>Фигурное катание · от 55 ₽</span></div></div>
+        <div class="coach"><i></i><div><b>Антон Лис</b><span>С нуля, взрослые · от 50 ₽</span></div></div>
+      </div>
+      <div class="ph-block">
+        <p class="note" style="font-size:12.5px;">Расписание обновлено 2 дня назад · по данным сайта катка. <span style="color:var(--accent);">Сообщить об ошибке</span></p>
+      </div>
+    </div>
+
+    <div class="anat">
+      <ol>
+        <li><span class="n">01</span><span><b>Hero-фото, имя, расстояние, статус.</b> Без фото карточка катка не конвертит — это единственный сигнал «нормальное место» до визита.</span></li>
+        <li><span class="n">02</span><span><b>Лента льда.</b> Сегодня / Завтра / Неделя. Сеансы — нейтральные, занятия — акцентные.</span></li>
+        <li><span class="n">03</span><span><b>Тренеры на этой арене.</b> Карточки-ссылки; честное состояние: «Записаться» если можно, иначе «Написать».</span></li>
+        <li><span class="n">04</span><span><b>Группы с набором.</b> Уже есть в модели.</span></li>
+        <li><span class="n">05</span><span><b>Практика.</b> Адрес, карта, телефон, сайт, прокат / заточка / парковка / раздевалки, часы, сезонность.</span></li>
+        <li><span class="n">06</span><span><b>Свежесть и источник</b> + «Сообщить об ошибке» на самом факте, а не в поддержку.</span></li>
+        <li><span class="n">07</span><span><b>«Это ваш каток? Забрать страницу»</b> — продуктовая функция и канал продаж одновременно.</span></li>
+      </ol>
+      <div class="legend" style="margin-top:6px;">
+        <span><i class="swatch" style="background:var(--ice);"></i> открытый лёд — read-only, внешние данные</span>
+        <span><i class="swatch" style="background:var(--accent);"></i> занятие — наши данные, транзакция</span>
+      </div>
+      <p class="note" style="margin-top:6px;">Жёсткая граница: транзакции живут только в тренерском контуре. Арена — read-only. «Купить билет на массовое» тянет за собой платежи, возвраты, договоры с катками и кассовую дисциплину — это другой бизнес, и он утопит V1.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Навигация</p>
+    <h2>Четыре таба остаются четырьмя</h2>
+    <p class="lede">Это не переезд, а поглощение: каталог тренеров не удаляется — он становится одной из линз внутри «Льда».</p>
+  </div>
+  <div class="wrap tablewrap">
+    <table>
+      <thead><tr><th>Сейчас</th><th>Становится</th><th>Что меняется</th></tr></thead>
+      <tbody>
+        <tr><td>Главная</td><td><strong>Главная</strong></td><td>Без изменений — hub удержания. Плюс одна строка-тизер «Лёд рядом: сегодня 13:00 на Чижовке»</td></tr>
+        <tr><td>Тренеры</td><td><strong>Лёд</strong></td><td>Тот же таб, новая работа: карта и список арен, сеансы, тренеры — одним набором</td></tr>
+        <tr><td>Записи</td><td><strong>Записи</strong></td><td>Без изменений</td></tr>
+        <tr><td>Ещё</td><td><strong>Ещё</strong></td><td>Без изменений</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="wrap grid two">
+    <div class="card">
+      <h3>Что делать с воронкой</h3>
+      <p>Экран «город → услуга → арена → тренеры» перестаёт быть входом и остаётся как «Все тренеры» с фильтрами. Мультивыбор арен чекбоксами живёт дальше — но только как фильтр каталога, а не как способ выбрать, куда поехать.</p>
+    </div>
+    <div class="card">
+      <h3>Риск и как он снимается</h3>
+      <p>Существующий клиент шёл в «Тренеров» и не найдёт их. Снимается двумя вещами: чип «Найти тренера» первым экраном таба и единый поиск — «Ковалёва» отдаёт тренера, «Чижовка» отдаёт арену.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Честность как механика</p>
+    <h2>150 арен, из них 12 с расписанием</h2>
+    <p class="lede">Главная продуктовая проблема — не «как распарсить», а «что показывать, пока распарсено мало». Решается явным уровнем арены, который управляет и ранжированием, и текстами, и картой.</p>
+  </div>
+  <div class="wrap tablewrap">
+    <table>
+      <thead><tr><th>Уровень</th><th>Что есть</th><th>Как выглядит</th><th>Место в выдаче</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tier a">A</span></td><td>Расписание и цены, свежесть в норме</td><td>Полная карточка, «Сегодня 13:00 · 12 ₽», бейдж свежести</td><td>Первый</td></tr>
+        <tr><td><span class="tier b">B</span></td><td>Контакты, фото, часы, тренеры — расписания нет</td><td>«Расписание уточняется» + телефон + сайт катка</td><td>После A</td></tr>
+        <tr><td><span class="tier c">C</span></td><td>Только адрес и координаты</td><td>Бледный пин, строка без обещаний</td><td>Последний, не попадает в «Лёд сегодня»</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="wrap grid two">
+    <div class="card">
+      <h3>Метрика, за которой стоит следить</h3>
+      <p>Доля арен уровня A по городу — не количество арен в справочнике. Покрытие — это не рост; рост — это плотность.</p>
+    </div>
+    <div class="card">
+      <h3>Правило отображения</h3>
+      <p>Просроченный факт лучше не показывать, чем показать. Один человек, приехавший к закрытым дверям, стоит дороже сотни просмотров.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Данные</p>
+    <h2>Конвейер наблюдений с человеком в конце</h2>
+    <p class="lede">150 арен с еженедельной сменой расписания — это сотни документов в неделю. Не big data: объём, который один человек проверяет глазами за час, если ему правильно показать.</p>
+  </div>
+
+  <figure class="figure figure-scroll">
+    <svg viewBox="0 0 900 210" role="img" aria-label="Схема конвейера: источник, загрузка, проверка изменения, извлечение, нормализация, наблюдение, разрешение, публикация или очередь">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-mute)"></path>
+        </marker>
+      </defs>
+      <g font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink)">
+        <rect x="6" y="62" width="104" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--line)"></rect>
+        <text x="58" y="82" text-anchor="middle" font-weight="640">Источник</text>
+        <text x="58" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">сайт · ВК · каток</text>
+
+        <rect x="130" y="62" width="104" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--line)"></rect>
+        <text x="182" y="82" text-anchor="middle" font-weight="640">Снимок</text>
+        <text x="182" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">raw + hash</text>
+
+        <rect x="254" y="62" width="112" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--ice)" stroke-width="1.4"></rect>
+        <text x="310" y="82" text-anchor="middle" font-weight="640" fill="var(--ice)">Hash изменился?</text>
+        <text x="310" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">нет → стоп</text>
+
+        <rect x="386" y="62" width="104" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--line)"></rect>
+        <text x="438" y="82" text-anchor="middle" font-weight="640">Извлечение</text>
+        <text x="438" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">LLM → строгая схема</text>
+
+        <rect x="510" y="62" width="112" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--line)"></rect>
+        <text x="566" y="82" text-anchor="middle" font-weight="640">Нормализация</text>
+        <text x="566" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">TZ · валюта · матч</text>
+
+        <rect x="642" y="62" width="104" height="46" rx="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"></rect>
+        <text x="694" y="82" text-anchor="middle" font-weight="700">Observation</text>
+        <text x="694" y="99" text-anchor="middle" font-size="11" fill="var(--ink-mute)">факт + источник</text>
+
+        <rect x="766" y="10" width="128" height="46" rx="3" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"></rect>
+        <text x="830" y="30" text-anchor="middle" font-weight="640">Публикация</text>
+        <text x="830" y="47" text-anchor="middle" font-size="11" fill="var(--ink-mute)">высокое доверие</text>
+
+        <rect x="766" y="118" width="128" height="46" rx="3" fill="var(--surface-sunk)" stroke="var(--line)"></rect>
+        <text x="830" y="138" text-anchor="middle" font-weight="640">Очередь</text>
+        <text x="830" y="155" text-anchor="middle" font-size="11" fill="var(--ink-mute)">принять · исправить</text>
+      </g>
+      <g fill="none" stroke="var(--ink-mute)" stroke-width="1.4" marker-end="url(#ar2)">
+        <path d="M112 85 L128 85"></path>
+        <path d="M236 85 L252 85"></path>
+        <path d="M368 85 L384 85"></path>
+        <path d="M492 85 L508 85"></path>
+        <path d="M624 85 L640 85"></path>
+        <path d="M748 78 C760 78, 754 33, 764 33"></path>
+        <path d="M748 92 C760 92, 754 141, 764 141"></path>
+      </g>
+      <text x="454" y="196" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-size="12.5" fill="var(--ink-mute)">Парсер никогда не пишет в справочник напрямую — только наблюдение. Ручная правка тоже наблюдение, с максимальным доверием.</text>
+    </svg>
+  </figure>
+
+  <div class="wrap grid three">
+    <div class="card">
+      <h3>Почему LLM, а не селекторы</h3>
+      <p>150 источников селекторами не поддерживает никто. Экстракция запускается только при изменении хеша — не 150 прогонов в день, а сотня в неделю. Это единицы долларов.</p>
+    </div>
+    <div class="card">
+      <h3>Сначала руки</h3>
+      <p>Первые 10–15 арен одного города заполняются вручную за пару вечеров. Это проверяет главную гипотезу до постройки конвейера. Фреймворк выкристаллизуется из третьего адаптера.</p>
+    </div>
+    <div class="card">
+      <h3>Что мониторить</h3>
+      <p>Не «упал ли парсер», а когда источник последний раз дал валидный результат. Источник, две недели отдающий ноль сеансов и не падающий, — сломан. Это самая опасная поломка.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Блокеры</p>
+    <h2>Что обязано быть починено до карточки арены</h2>
+    <p class="lede">Каждый из этих дефектов разрушает доверие именно к новому экрану. Это не пожелания, а условия запуска.</p>
+  </div>
+  <div class="wrap tablewrap">
+    <table>
+      <thead><tr><th>Проблема</th><th>Где</th><th>Почему блокер</th></tr></thead>
+      <tbody>
+        <tr><td>Запись уезжает на основную арену тренера</td><td class="tag">booking_use_cases.py:1042</td><td>Записался с карточки арены X → занятие на арене Y. Убивает новый экран в первый же день</td></tr>
+        <tr><td>Карточка тренера есть, слотов ноль</td><td class="tag">webapp.py:1261</td><td>Слоты без арены выбрасываются молча — на карточке арены это тупик без объяснения</td></tr>
+        <tr><td>Место занятия = все арены тренера через запятую</td><td class="tag">booking_use_cases.py:174</td><td>Клиент видит «А, Б, В, Г, Д» вместо места</td></tr>
+        <tr><td>Нет координат у большинства новых арен</td><td class="tag">geocode_arena_addresses.py</td><td>Скрипт готов, не прогнан на проде. Без координат карта пустая, района для фильтра нет</td></tr>
+        <tr><td>Одна связь отвечает и за витрину, и за допуск</td><td class="tag">trainer_arenas</td><td>Выездной тренер «прилипает» к случайному катку</td></tr>
+        <tr><td>Тренер виден только по городу профиля</td><td class="tag">trainer_repository.py:1257</td><td>Тренер «Минск + Москва» пропадает с карточек арен одного из городов</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">План</p>
+    <h2>Шесть фаз, шесть гейтов</h2>
+    <p class="lede">Каждая фаза заканчивается проверяемым вопросом, а не словом «сделано». Порядок неслучаен: самая дешёвая проверка гипотезы стоит раньше самой дорогой стройки.</p>
+  </div>
+  <div class="wrap" style="display:flex;flex-direction:column;gap:12px;">
+    <div class="phase"><span class="num">0</span><div class="body">
+      <h3>Фундамент под ссылки</h3>
+      <p class="note">Геокодер на проде, <code>slug</code>, район, статус арены; чинятся блокеры записи и отображения места. Пользователю ничего не видно.</p>
+      <p class="gate"><b>Гейт</b>≥95% активных арен с координатами; запись с фильтром по арене оформляется именно на эту арену.</p>
+    </div></div>
+    <div class="phase"><span class="num">1</span><div class="body">
+      <h3>Карточка арены без расписания</h3>
+      <p class="note">Страница на существующих данных: адрес, карта, тренеры, группы, практика. Уровни B и C с честными текстами.</p>
+      <p class="gate"><b>Гейт</b>Открывают ли карточку вообще и переходит ли с неё кто-нибудь к тренеру. Если нет — вся затея под вопросом, и это дёшево выяснить здесь, до конвейера данных.</p>
+    </div></div>
+    <div class="phase"><span class="num">2</span><div class="body">
+      <h3>Лёд как контент</h3>
+      <p class="note">Сеансы и медиа-слой, ручной ввод в админке, 10–15 арен одного города заполнены руками, лента льда на карточке, hero-фото.</p>
+      <p class="gate"><b>Гейт</b>Возвращаемость: доля клиентов, открывших приложение ради расписания дважды за две недели.</p>
+    </div></div>
+    <div class="phase"><span class="num">3</span><div class="body">
+      <h3>Таб «Лёд»</h3>
+      <p class="note">Карта с кластеризацией, геолокация, чипы намерения, ранжирование, единый поиск. Каталог становится линзой. Компонент выбора арены переиспользуется в профиле тренера и онбординге.</p>
+      <p class="gate"><b>Гейт</b>Время до первого полезного экрана и доля сессий, доходящих до карточки арены.</p>
+    </div></div>
+    <div class="phase"><span class="num">4</span><div class="body">
+      <h3>Источники</h3>
+      <p class="note">Реестр источников, наблюдения, три адаптера на реальных катках, очередь модерации одним экраном, свежесть в UI, алерты на устаревание.</p>
+      <p class="gate"><b>Гейт</b>Доля арен уровня A растёт без роста ручного труда.</p>
+    </div></div>
+    <div class="phase"><span class="num">5</span><div class="body">
+      <h3>Деньги и трафик</h3>
+      <p class="note">Панель оператора катка («заберите свою страницу») и публичные индексируемые страницы города и арены со статической генерацией.</p>
+      <p class="gate"><b>Гейт</b>Mini App не индексируется — публичные страницы это единственный бесплатный источник трафика. Приходит ли он.</p>
+    </div></div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Бизнес</p>
+    <h2>Почему это стоит делать</h2>
+  </div>
+  <div class="wrap grid two">
+    <div class="card"><h3>Частота</h3><p>Тренера ищут раз-два в год, лёд — каждую неделю. Расписание массового катания — единственный высокочастотный незакрытый спрос в отрасли, и у него есть поисковый объём.</p></div>
+    <div class="card"><h3>Бесплатная воронка к тренерам</h3><p>Каждый визит «где покататься в субботу» проходит мимо блока «тренеры на этой арене» — в контексте, а не как реклама.</p></div>
+    <div class="card"><h3>Аргумент в продажах катку</h3><p>Страница катка с его расписанием, фото и его тренерами — это то, что можно показать и предложить забрать. Каток приводит 10–30 тренеров: единица продажи — арена, а не тренер.</p></div>
+    <div class="card"><h3>Moat</h3><p>Расписание живёт в постах ВК и картинках. Копируется снимок данных — но не процесс поддержания свежести и не отношения с катками.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Границы</p>
+    <h2>Чего не делать</h2>
+  </div>
+  <div class="wrap">
+    <ul class="plain stop">
+      <li>Не продавать билеты на массовое катание — платежи, возвраты и договоры это другой бизнес.</li>
+      <li>Не заводить вкладку «Арены» рядом с вкладкой «Тренеры».</li>
+      <li>Не показывать расписание, свежесть которого не гарантирована.</li>
+      <li>Не строить фреймворк парсинга до третьего рабочего адаптера.</li>
+      <li>Не скрейпить чужие фотографии из поисковых картинок.</li>
+      <li>Не расширяться на не-ледовые вертикали — вся ценность в связях тренер ↔ арена ↔ сеанс ↔ группа ↔ абонемент.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap head">
+    <p class="eyebrow">Нужны решения</p>
+    <h2>Три вопроса к бизнесу</h2>
+  </div>
+  <div class="wrap grid three">
+    <div class="card"><h3>Первый город</h3><p>Где заполняем расписания руками: Минск (плотность, свои люди) или Москва (объём и реальный рынок)?</p></div>
+    <div class="card"><h3>Первый каток-партнёр</h3><p>Есть ли договорённость хоть с одним катком, что он ведёт свою страницу? Первая такая меняет приоритет пятой фазы.</p></div>
+    <div class="card"><h3>Владелец свежести</h3><p>Кто в команде отвечает за актуальность данных еженедельно? Без назначенного человека уровень A не удержится ни на каком конвейере.</p></div>
+  </div>
+</section>
+
+<footer class="end wrap">
+  <p>Полная версия с моделью данных, SQL-полями и ссылками на код — <code>design/arenas-client-app.md</code> в репозитории.</p>
+  <p>Опирается на <code>docs/product-knowledge/architecture.md</code> и <code>docs/research/arenas-scale-2026-09-02.md</code>.</p>
+</footer>
+</div>

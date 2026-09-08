@@ -1,0 +1,20 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 15,
+  "city": "Раубичи",
+  "parser_key": "raubichi_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-05T23:55:00+03:00",
+  "source_files": [
+    "skates.html"
+  ],
+  "status": "empty",
+  "notes": "Page states «Массовые катания не проводятся». Prices on page (7/5/5) are not slots. Do not materialize a grid.",
+  "price_catalog_if_reopened": {
+    "adult_minor": 700,
+    "child_minor": 500,
+    "rental_minor": 500
+  },
+  "sessions": []
+}

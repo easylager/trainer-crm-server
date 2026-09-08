@@ -1,0 +1,16 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 40,
+  "city": "Лунинец",
+  "parser_key": null,
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-05T23:55:00+03:00",
+  "source_files": [],
+  "http_status": null,
+  "fetch_timeout": true,
+  "tried_url": "http://dussch.luninec.edu.by/ru/main.aspx",
+  "status": "empty",
+  "notes": "School site timed out from this egress. No public weekly MK HTML found. Do not invent from directory listings (masterskating.ru). Skip until a reachable schedule page exists.",
+  "sessions": []
+}

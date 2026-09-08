@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609022" />
-  <script src="mini-app-telegram-chrome.js?v=202609022"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609071"></script>
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609068" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609073" />
   <script src="mini-app-client-shell.js?v=202609068"></script>
-  <script src="ice-tab-model.js?v=202609067"></script>
-  <script src="ice-map-model.js?v=2026090618"></script>
+  <script src="ice-tab-model.js?v=202609074"></script>
+  <script src="ice-map-model.js?v=202609074"></script>
 </head>
 <body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
   <div class="header client-app-header">
@@ -32,11 +32,12 @@
   </div>
 
   <div id="iceRoot" class="ice-tab">
-    <div class="ice-sec">
-      <div class="ice-cityrow">
-        <b class="ice-cityrow__name" id="iceCityName">📍 Город</b>
-        <button type="button" class="ice-cityrow__change" id="iceCityChange">Изменить</button>
-      </div>
+    <div class="ice-sec ice-sec--hero">
+      <p class="ice-kicker">Где кататься</p>
+      <h1 class="ice-masthead">Лёд</h1>
+      <button type="button" class="ice-citypill" id="iceCityChange">
+        <span class="ice-citypill__name" id="iceCityName">Город</span>
+      </button>
       <div class="ice-search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input
@@ -51,15 +52,15 @@
         />
       </div>
       <div class="ice-chips" id="iceIntentChips" role="group" aria-label="Намерение">
-        <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">⛸️ Покататься</button>
-        <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">🎯 Тренеры</button>
-        <button type="button" class="ice-chip" data-intent="group" aria-pressed="false">👥 Группы</button>
+        <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">Покататься</button>
+        <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">Тренеры</button>
       </div>
-      <p class="ice-hint" id="iceTrainersHint"></p>
-      <div class="ice-seg" id="iceViewSeg">
-        <button type="button" data-view="list" aria-pressed="true">Список</button>
-        <button type="button" data-view="map" aria-pressed="false">Карта</button>
-      </div>
+      <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
+      <!--
+        Переключатель «Список / Карта» убран в TASK-084 (AC-003, DEC-002).
+        Разметка карты ниже (#iceMapSec) и весь её код оставлены на месте:
+        возврат = вернуть этот блок и поставить MAP_ENABLED = true в ice-tab.js.
+      -->
     </div>
     <div class="ice-sec" id="iceListSec">
       <p class="ice-eyebrow" id="iceCaption">Загрузка…</p>
@@ -81,16 +82,21 @@
   </div>
 
   <div class="ice-picker" id="iceCityPicker" hidden>
-    <h2>Город</h2>
-    <div class="ice-search">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input type="search" id="iceCityFilter" placeholder="Найти город…" autocomplete="off" />
+    <div class="ice-picker__head">
+      <h2>Город</h2>
+      <button type="button" class="ice-picker__close" id="iceCityPickerClose">Закрыть</button>
     </div>
-    <button type="button" class="ice-geo" id="iceGeoBtn">◎ Определить по геолокации</button>
+    <div class="ice-picker__tools">
+      <div class="ice-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input type="search" id="iceCityFilter" placeholder="Найти город…" autocomplete="off" />
+      </div>
+      <button type="button" class="ice-geo" id="iceGeoBtn">Определить по геолокации</button>
+    </div>
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
-  <script src="ice-map.js?v=2026090618"></script>
-  <script src="ice-tab.js?v=202609068"></script>
+  <script src="ice-map.js?v=202609074"></script>
+  <script src="ice-tab.js?v=202609074"></script>
 </body>
 </html>

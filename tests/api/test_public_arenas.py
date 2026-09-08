@@ -554,3 +554,30 @@ async def test_trainers_on_arena_reuse_can_book(app_use_test_db, db_session) -> 
     arena_hits = [h for h in found["groups"] if h["type"] == "arena"][0]["items"]
     assert any(h["id"] == tid for h in trainer_hits)
     assert any(h["id"] == arena_id for h in arena_hits)
+
+
+@pytest.mark.asyncio
+async def test_ice_cities_omit_empty_and_count_skate_vs_trainers(
+    app_use_test_db, db_session
+) -> None:
+    """Ice picker: no content → hidden; trainer-only cities stay with trainer_count."""
+    empty_id = await _insert_city(db_session, name=f"IceEmpty-{uuid.uuid4().hex[:6]}")
+    skate_id = await _insert_city(db_session, name=f"IceSkate-{uuid.uuid4().hex[:6]}")
+    coach_id = await _insert_city(db_session, name=f"IceCoach-{uuid.uuid4().hex[:6]}")
+    skate_arena = await _insert_arena(db_session, skate_id, name="Каток со сеансом")
+    await _add_future_session(db_session, skate_arena)
+    sid = await require_seed_service_id(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        tid = await _create_active_trainer_via_api(
+            client, db_session, city_id=coach_id, service_ids=[sid]
+        )
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        resp = await client.get("/api/public/ice/cities")
+    assert resp.status_code == 200, resp.text
+    by_id = {int(it["id"]): it for it in resp.json()["items"]}
+    assert empty_id not in by_id
+    assert skate_id in by_id
+    assert coach_id in by_id
+    assert by_id[skate_id]["skate_count"] >= 1
+    assert by_id[coach_id]["trainer_count"] >= 1
+    assert by_id[coach_id]["skate_count"] == 0

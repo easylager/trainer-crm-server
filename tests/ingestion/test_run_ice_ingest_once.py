@@ -57,4 +57,5 @@ def test_one_shot_only_bumps_merged_minsk_mk_keys(runner) -> None:
         "chizhovka_html_v1",
         "ledby_html_v1",
         "diamond_html_v1",
+        "minskarena_speed_oval_v1",
     }

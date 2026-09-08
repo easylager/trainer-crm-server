@@ -98,11 +98,6 @@ body.hub-body {
   display: none !important;
 }
 
-.hub-body--booking-led .ice-lane {
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
-
 .hub-body--booking-led .hub-next-card {
   margin-top: 0;
 }
@@ -2290,63 +2285,6 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 64px;
-}
-
-/* ─── Ice Lane: divider с текстом — appear → hold → fade → pause → repeat ── */
-
-.ice-lane {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px 18px 14px;
-  opacity: 0;
-  pointer-events: none;
-  color: var(--app-cta-fill);
-}
-
-.ice-lane__line {
-  flex: 1;
-  height: 1px;
-  background: color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
-  border-radius: var(--app-radius-xs);
-}
-
-.ice-lane__wordmark {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  font-family: var(--app-font-sans);
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  color: color-mix(in srgb, var(--tg-theme-hint-color) 80%, var(--tg-theme-text-color));
-}
-
-/* Cycle starts only after bootstrap — not while skeleton is on screen. */
-body.hub-body--revealed .ice-lane {
-  animation: ice-lane-cycle 9s ease-in-out infinite;
-}
-
-.ice-lane--paused {
-  animation-play-state: paused !important;
-}
-
-/* appear(0→18%) → hold(18→52%) → fade(52→65%) → pause(65→100%) */
-@keyframes ice-lane-cycle {
-  0%   { opacity: 0; }
-  18%  { opacity: 1; }
-  52%  { opacity: 1; }
-  65%  { opacity: 0; }
-  100% { opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.hub-body--revealed .ice-lane {
-    animation: none;
-    opacity: 0.6;
-  }
 }
 
 /* ─── Sticky «Записаться» FAB — primary trainer, above client tab bar ───── */

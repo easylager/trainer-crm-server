@@ -31,12 +31,14 @@ def default_registry() -> ParserRegistry:
         DiamondHtmlParser,
         LedByHtmlParser,
         MinskArenaSaleframeParser,
+        MinskSpeedOvalParser,
         ZamokHtmlParser,
     )
 
     registry = ParserRegistry()
     for parser in (
         MinskArenaSaleframeParser(),
+        MinskSpeedOvalParser(),
         ZamokHtmlParser(),
         ChizhovkaHtmlParser(),
         LedByHtmlParser(),
@@ -51,6 +53,7 @@ from src.ingestion.adapters import (  # noqa: E402
     DiamondHtmlParser,
     LedByHtmlParser,
     MinskArenaSaleframeParser,
+    MinskSpeedOvalParser,
     ZamokHtmlParser,
 )
 
@@ -60,6 +63,7 @@ __all__ = [
     "IceParser",
     "LedByHtmlParser",
     "MinskArenaSaleframeParser",
+    "MinskSpeedOvalParser",
     "ParserRegistry",
     "ZamokHtmlParser",
     "default_registry",

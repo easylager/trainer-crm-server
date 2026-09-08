@@ -177,7 +177,7 @@ async def test_saleframe_parser_extracts_without_inserting() -> None:
 
     parser = MinskArenaSaleframeParser()
     cfg = dict(MINSK_ARENA_SALEFRAME_CONFIG)
-    cfg["fixture_dir"] = str(Path(".ai/data/fixtures/minsk-arena"))
+    cfg["fixture_dir"] = str(Path("data/fixtures/minsk-arena"))
     job = _job(parser_key=PARSER_KEY_MINSK_ARENA, config=cfg)
     extraction = await parser.extract(job)
     assert extraction.parser_key == PARSER_KEY_MINSK_ARENA

@@ -17,6 +17,7 @@ from src.ingestion.parsers import (
     DiamondHtmlParser,
     LedByHtmlParser,
     MinskArenaSaleframeParser,
+    MinskSpeedOvalParser,
     ParserRegistry,
     ZamokHtmlParser,
     default_registry,
@@ -29,14 +30,19 @@ from src.ingestion.scrape_runs import (
     SqlAlchemyScrapeRunRecorder,
     assert_can_replace_ice_sessions,
 )
-from src.ingestion.seed_config import MINSK_ARENA_SALEFRAME_CONFIG, PARSER_KEY_MINSK_ARENA
+from src.ingestion.seed_config import (
+    MINSK_ARENA_SALEFRAME_CONFIG,
+    MINSK_SPEED_OVAL_SALEFRAME_CONFIG,
+    PARSER_KEY_MINSK_ARENA,
+    PARSER_KEY_MINSK_SPEED_OVAL,
+)
 from src.ingestion.types import RUN_STATUS_EMPTY, RUN_STATUS_OK, CanonicalSlotDraft, ParserJob
 from src.ingestion.validate import IceSessionValidator
 from tests.ingestion.fakes import RecordingParser
 
 ROOT = Path(__file__).resolve().parents[2]
 _NOW = datetime(2026, 9, 5, 9, 0, tzinfo=timezone.utc)
-_FIXTURES = ROOT / ".ai/data/fixtures"
+_FIXTURES = ROOT / "data/fixtures"
 
 
 def _job(*, arena_id: int, parser_key: str, config: dict, job_id: int = 1) -> ParserJob:
@@ -56,6 +62,12 @@ def _minsk_arena_job(arena_id: int = 2, job_id: int = 1) -> ParserJob:
     cfg = dict(MINSK_ARENA_SALEFRAME_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "minsk-arena")
     return _job(arena_id=arena_id, parser_key=PARSER_KEY_MINSK_ARENA, config=cfg, job_id=job_id)
+
+
+def _minsk_speed_oval_job(arena_id: int = 115, job_id: int = 6) -> ParserJob:
+    cfg = dict(MINSK_SPEED_OVAL_SALEFRAME_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "minsk-speed-oval")
+    return _job(arena_id=arena_id, parser_key=PARSER_KEY_MINSK_SPEED_OVAL, config=cfg, job_id=job_id)
 
 
 def _zamok_job(arena_id: int = 3, job_id: int = 2) -> ParserJob:
@@ -175,6 +187,33 @@ async def test_saleframe_fixture_yields_two_public_skate_slots() -> None:
         assert slot.price_rental_minor is None
         assert slot.price_adult_minor == gold["price_adult_minor"]
     assert (first.ends_at_utc - first.starts_at_utc) == timedelta(minutes=45)
+
+
+@pytest.mark.asyncio
+async def test_speed_oval_fixture_joins_rental_by_start() -> None:
+    """Oval MK 139 + rental 138 by unix start; not attached to hockey arena 2."""
+    expected = json.loads((_FIXTURES / "minsk-speed-oval/expected.json").read_text(encoding="utf-8"))
+    parser = MinskSpeedOvalParser()
+    job = _minsk_speed_oval_job()
+    now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
+    extraction = await parser.extract(job)
+    drafts = IceSessionNormalizer().normalize(extraction, job, now=now)
+    validated = IceSessionValidator().validate(drafts)
+
+    assert extraction.arena_id == 115
+    assert extraction.parser_key == PARSER_KEY_MINSK_SPEED_OVAL
+    assert len(validated) == 2
+    by_key = {(slot.local_date, slot.starts_at_local.strftime("%H:%M")): slot for slot in validated}
+    for gold in expected["sessions"]:
+        slot = by_key[(date.fromisoformat(gold["local_date"]), gold["starts_at_local"])]
+        assert slot.kind == "public_skate"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_child_minor == gold["price_child_minor"]
+        assert slot.price_rental_minor == gold["price_rental_minor"]
+        assert slot.session_label == gold["session_label"]
+    hockey = await MinskArenaSaleframeParser().extract(_minsk_arena_job())
+    assert all(item.price_rental is None for item in hockey.slots)
 
 
 @pytest.mark.asyncio
@@ -406,7 +445,13 @@ def test_publisher_requires_ok_scrape_run() -> None:
     sched_src = Path("src/ingestion/scheduler.py").read_text(encoding="utf-8")
     assert "publisher" in sched_src
     assert "INSERT INTO ice_sessions" not in sched_src
-    for cls in (MinskArenaSaleframeParser, ZamokHtmlParser, ChizhovkaHtmlParser, LedByHtmlParser):
+    for cls in (
+        MinskArenaSaleframeParser,
+        MinskSpeedOvalParser,
+        ZamokHtmlParser,
+        ChizhovkaHtmlParser,
+        LedByHtmlParser,
+    ):
         source = inspect.getsource(cls)
         assert "INSERT" not in source
         assert "ice_sessions" not in source
@@ -517,6 +562,7 @@ async def test_saleframe_and_html_share_ice_session_columns(db_session) -> None:
         IceSessionValidator().validate([bad])
 
     assert default_registry().get(PARSER_KEY_MINSK_ARENA) is not None
+    assert default_registry().get(PARSER_KEY_MINSK_SPEED_OVAL) is not None
     assert default_registry().get("zamok_html_v1") is not None
     assert default_registry().get("chizhovka_html_v1") is not None
 
@@ -545,3 +591,32 @@ def test_minsk_arena_live_urls_hit_abws_not_saleframe_html() -> None:
     assert "saleframe.minskarena.by" not in init
     assert "saleframe.minskarena.by" not in calendar
     assert "saleframe.minskarena.by" not in events
+
+
+def test_speed_oval_live_urls_use_service_139_not_hockey_55() -> None:
+    from zoneinfo import ZoneInfo
+
+    from src.ingestion.adapters import (
+        minsk_arena_calendar_url,
+        minsk_arena_events_url,
+        minsk_arena_init_url,
+    )
+
+    cfg = MINSK_SPEED_OVAL_SALEFRAME_CONFIG
+    init = minsk_arena_init_url(cfg)
+    calendar = minsk_arena_calendar_url(cfg)
+    events = minsk_arena_events_url(
+        cfg, local_date=date(2026, 9, 10), tz=ZoneInfo("Europe/Minsk")
+    )
+    rental_cfg = dict(cfg)
+    rental_cfg["service_id"] = int(cfg["rental_service_id"])
+    rental_events = minsk_arena_events_url(
+        rental_cfg, local_date=date(2026, 9, 10), tz=ZoneInfo("Europe/Minsk")
+    )
+    assert "seid=139" in init
+    assert calendar.endswith("/service/139/calendar")
+    assert "/service/139/events" in events
+    assert "/service/138/events" in rental_events
+    assert "service/55" not in init
+    assert "service/55" not in calendar
+    assert "service/55" not in events

@@ -398,7 +398,7 @@
               title: 'Пока нет обращений',
               hint: 'Опишите задачу — подходящие тренеры смогут откликнуться и предложить занятие на льду.',
               ctaLabel: 'Найти тренера',
-              ctaPath: 'catalog?tab=catalog',
+              ctaPath: 'ice?intent=coach',
             });
           } else {
             listEl.innerHTML = '';

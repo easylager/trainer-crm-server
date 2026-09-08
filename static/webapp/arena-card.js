@@ -711,11 +711,7 @@
       back.addEventListener('click', function () {
         if (global.history.length > 1) global.history.back();
         else {
-          var iceState = null;
-          try {
-            iceState = global.sessionStorage && global.sessionStorage.getItem('tcb_ice_tab_v1');
-          } catch (e) { /* */ }
-          shellNav(iceState ? 'ice' : 'catalog?tab=catalog');
+          shellNav('ice');
         }
       });
     }

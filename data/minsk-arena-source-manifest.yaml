@@ -1,0 +1,85 @@
+# Probe manifest for spike script scripts/spike/probe_minsk_ice_sources.py
+# arena_id must match prod export data/minsk-arenas-prod.csv
+# expectation: mass_skating | training_only | not_ice | unknown
+
+sources:
+  - arena_id: 3
+    name: "ТЦ Замок"
+    expectation: mass_skating
+    urls:
+      - https://tczamok.by/entertainments/ice-rink
+    notes: "Stable hourly grid + prices on same page"
+
+  - arena_id: 6
+    name: "Чижовка-арена"
+    expectation: mass_skating
+    urls:
+      - https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah
+      - https://chizhovka-arena.by/czeny/katanie-na-konkah
+    notes: "Weekly HTML grid; prices on /czeny/katanie-na-konkah"
+
+  - arena_id: 5
+    name: "Ледовый дворец спорта Минской области"
+    expectation: mass_skating
+    urls:
+      - http://led.by/category/timetable/
+      - http://led.by/mass_skating/
+    notes: "Weekly timetable + pricelist on sibling URL"
+
+  - arena_id: 8
+    name: 'Каток хк "Юность"'
+    expectation: mass_skating
+    urls:
+      - https://junost.hockey.by/clubs/skating/
+      - https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/
+    notes: "Prices on hockey.by; schedule link may 403"
+
+  - arena_id: 4
+    name: "СДЮШОР по фигурному катанию"
+    expectation: mass_skating
+    urls:
+      - https://ledlife.by/massovye_kataniya/
+    notes: "Weekly grid when not blocked; may return 403"
+
+  - arena_id: 7
+    name: "ТЦ DiaMond city"
+    expectation: mass_skating
+    urls:
+      - https://diamondcity.by/ledovaya-arena
+      - https://diamondcity.by/ceny
+    notes: "Weekly MK grid; prices page may be image/widget"
+
+  - arena_id: 2
+    name: "Минск Арена"
+    expectation: mass_skating
+    urls:
+      - https://minskarena.by/services.html
+      - https://bycard.by/afisha/minsk/katki/5821807
+    notes: "Official widget often stale; ByCard is aggregator"
+
+  - arena_id: 9
+    name: "Олимпик-арена"
+    expectation: unknown
+    urls:
+      - https://olympicarena.by/
+    notes: "Corporate site; no public MK schedule found"
+
+  - arena_id: 13
+    name: 'Хоккейный центр "JUSTSKATE"'
+    expectation: training_only
+    urls:
+      - https://justskate.by/
+    notes: "Skating school / rental slots; not municipal MK grid"
+
+  - arena_id: 14
+    name: 'Хоккейный центр «Финт»'
+    expectation: training_only
+    urls:
+      - https://fint-tm.by/raspisanie-trenirovok/
+    notes: "Hockey shooting center; phone booking, not MK"
+
+  - arena_id: 12
+    name: "Лыжероллерная трасса"
+    expectation: not_ice
+    urls: []
+    notes: "Roller/ski track in CRM; skip HTTP probe"

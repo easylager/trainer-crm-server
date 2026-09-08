@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _ROOT / "scripts" / "load_minsk_arena_cards.py"
-_CARDS = _ROOT / ".ai" / "data" / "arena-cards"
+_CARDS = _ROOT / "data" / "arena-cards"
 
 EXPECTED_IDS = {
     "minskarena": 2,
@@ -27,6 +27,7 @@ EXPECTED_IDS = {
     "chizhovka": 6,
     "minsk-diamond": 7,
     "minsk-junost": 8,
+    "konkobezhnaya-arena": 115,
 }
 
 
@@ -52,7 +53,7 @@ def cards(loader):
 
 
 def test_dry_run_parses_all_seven_dossiers(cards) -> None:
-    assert len(cards) == 7
+    assert len(cards) == 8
     by_id = {card.arena_id: card.slug for card in cards.values()}
     assert by_id[2] == "minskarena"
     assert by_id[3] == "zamok"
@@ -61,6 +62,7 @@ def test_dry_run_parses_all_seven_dossiers(cards) -> None:
     assert by_id[7] == "minsk-diamond"
     assert by_id[8] == "minsk-junost"
     assert by_id[4] == "minsk-ledlife"
+    assert by_id[115] == "konkobezhnaya-arena"
     for card in cards.values():
         assert card.arena_id in EXPECTED_IDS.values()
         assert card.enough_facts
@@ -73,6 +75,7 @@ def test_dry_run_parses_all_seven_dossiers(cards) -> None:
     assert cards["minsk-diamond"].publishable_photo_count == 2
     assert cards["minsk-junost"].publishable_photo_count == 0
     assert cards["minsk-ledlife"].publishable_photo_count == 0
+    assert cards["konkobezhnaya-arena"].publishable_photo_count == 2
 
 
 def test_zamok_is_the_fullest_card(cards) -> None:
@@ -118,6 +121,15 @@ def test_unknown_amenities_stay_unset(cards) -> None:
     assert diamond.amenities == {"skate_rental": True, "locker_rooms": True}
     assert "parking" not in diamond.amenities
     assert diamond.social_urls == {}
+    oval = cards["konkobezhnaya-arena"]
+    assert oval.phone == "+375447808501"
+    assert oval.amenities == {
+        "skate_rental": True,
+        "parking": True,
+        "cafe": True,
+        "accessibility": True,
+    }
+    assert oval.website_url == "https://minskarena.by/"
 
 
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:

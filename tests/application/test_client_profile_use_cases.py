@@ -1,7 +1,7 @@
 """
 EPIC1: client_profile_links — one Telegram account acting as several client profiles.
 
-See .ai/DECISION-multi-profile-clients.md / .ai/EPIC1-client-multi-profile.md.
+See docs/adr/004-multi-profile-clients.md / docs/epics/client-multi-profile.md.
 """
 from __future__ import annotations
 

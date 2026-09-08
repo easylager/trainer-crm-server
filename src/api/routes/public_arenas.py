@@ -13,6 +13,7 @@ from src.application.arena_public_use_cases import (
     MAX_LIST_LIMIT,
     IcePublicQueryError,
     get_public_arena_card,
+    list_ice_discovery_cities,
     list_public_arena_sessions,
     list_public_arena_trainers,
     list_public_ice_arenas,
@@ -33,6 +34,17 @@ async def get_ice_map_config(response: Response) -> dict[str, str | None]:
     response.headers["Cache-Control"] = "no-store"
     key = (Settings().yandex_maps_js_api_key or "").strip() or None
     return {"yandex_maps_js_api_key": key}
+
+
+@router.get("/ice/cities")
+async def get_ice_discovery_cities(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Cities for the Ice picker: only those with MK sessions and/or catalog trainers."""
+    response.headers["Cache-Control"] = "no-store"
+    items = await list_ice_discovery_cities(session)
+    return {"items": items}
 
 
 @router.get("/ice/arenas")

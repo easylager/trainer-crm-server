@@ -50,7 +50,7 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
     """Teaser and chips models are served; hub still has trainer / bookings / passes mounts."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         home = await client.get("/webapp/client-home")
-        catalog = await client.get("/webapp/catalog")
+        catalog = await client.get("/webapp/catalog?trainer_id=1")
         teaser_js = await client.get("/webapp/ice-teaser-model.js")
         chips_js = await client.get("/webapp/trainer-arena-chips-model.js")
         home_js = await client.get("/webapp/client-home-main.js")

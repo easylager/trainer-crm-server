@@ -1,0 +1,22 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 20,
+  "city": "Жодино",
+  "parser_key": "zhodino_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-05T23:55:00+03:00",
+  "source_files": [
+    "raspisanie.html",
+    "ceny.html"
+  ],
+  "status": "empty",
+  "notes": "Schedule page: season ended, rink closed for maintenance. No times. Prices on /цены/ are the catalog for when MK returns: adult 6.00 / child to 14 5.00 / rental adult 4.50 (use adult pair). Do not publish a fake grid.",
+  "price_catalog_if_reopened": {
+    "adult_minor": 600,
+    "child_minor": 500,
+    "rental_minor": 450,
+    "age_note": "детский до 14 лет"
+  },
+  "sessions": []
+}

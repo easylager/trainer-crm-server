@@ -1,0 +1,2358 @@
+<!DOCTYPE html>
+<html lang="ru-RU">
+<head>
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+    /* Стили для предзагрузчика */
+    #preloader {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        background-color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* Контейнер для кубиков */
+    #loader {
+        position: relative;
+        width: 120px;
+        height: 120px;
+    }
+
+    /* Общие стили для кубиков */
+    .cube {
+        width: 50px;
+        height: 50px;
+        position: absolute;
+        animation-duration: 1.0s;
+        animation-timing-function: ease-in-out;
+        animation-fill-mode: forwards;
+    }
+
+    /* Начальные стили кубиков */
+    #cube1 {
+        background-color: #3498db;
+        top: 0;
+        left: 0;
+        animation-name: moveCube1;
+        animation-delay: 3s;
+    }
+
+    #cube2 {
+        background-color: #e74c3c;
+        top: 0;
+        left: 70px;
+        animation-name: moveCube2;
+        animation-delay: 1.5s;
+    }
+
+    #cube3 {
+        background-color: #f1c40f;
+        top: 70px;
+        left: 70px;
+        animation-name: moveCube3;
+        animation-delay: 0s;
+    }
+
+    /* Анимации для кубиков */
+    @keyframes moveCube1 {
+        0%   { top: 0; left: 0; }
+        100% { top: 0; left: 70px; }
+    }
+
+    @keyframes moveCube2 {
+        0%   { top: 0; left: 70px; }
+        100% { top: 70px; left: 70px; }
+    }
+
+    @keyframes moveCube3 {
+        0%   { top: 70px; left: 70px; }
+        100% { top: 70px; left: 0; }
+    }
+</style>
+
+<div id="preloader">
+    <div id="loader">
+        <div id="cube1" class="cube"></div>
+        <div id="cube2" class="cube"></div>
+        <div id="cube3" class="cube"></div>
+    </div>
+</div>
+
+<script>
+    jQuery(window).on('load', function () {
+        setTimeout(function() {
+            jQuery('#preloader').fadeOut('slow');
+        }, 0100);
+    });
+</script>    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="profile" href="http://gmpg.org/xfn/11">
+	
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript" >
+   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+   m[i].l=1*new Date();
+   for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+   ym(99930860, "init", {
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+   });
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/99930860" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+
+<!-- Varioqub experiments -->
+<script type="text/javascript">
+(function(e, x, pe, r, i, me, nt){
+e[i]=e[i]||function(){(e[i].a=e[i].a||[]).push(arguments)},
+me=x.createElement(pe),me.async=1,me.src=r,nt=x.getElementsByTagName(pe)[0],me.addEventListener('error',function(){function cb(t){t=t[t.length-1],'function'==typeof t&&t({flags:{}})};Array.isArray(e[i].a)&&e[i].a.forEach(cb);e[i]=function(){cb(arguments)}}),nt.parentNode.insertBefore(me,nt)})
+(window, document, 'script', 'https://abt.s3.yandex.net/expjs/latest/exp.js', 'ymab');
+ymab('metrika.99930860', 'init'/*, {clientFeatures}, {callback}*/);
+</script>
+<!-- /END Varioqub experiments -->
+	
+    <title>Ледовая арена &#8212; СПОРТИВНО-РАЗВЛЕКАТЕЛЬНЫЙ ЦЕНТР «Олимпик-2011»</title>
+<meta name='robots' content='max-image-preview:large' />
+<link rel='dns-prefetch' href='//translate.google.com' />
+<link rel="alternate" type="application/rss+xml" title="СПОРТИВНО-РАЗВЛЕКАТЕЛЬНЫЙ ЦЕНТР «Олимпик-2011» &raquo; Лента" href="https://src.by/WDKL/feed" />
+<link rel="alternate" type="application/rss+xml" title="СПОРТИВНО-РАЗВЛЕКАТЕЛЬНЫЙ ЦЕНТР «Олимпик-2011» &raquo; Лента комментариев" href="https://src.by/WDKL/comments/feed" />
+<link rel="alternate" title="oEmbed (JSON)" type="application/json+oembed" href="https://src.by/WDKL/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fsrc.by%2FWDKL%2F%25d0%25bb%25d0%25b5%25d0%25b4%25d0%25be%25d0%25b2%25d0%25b0%25d1%258f-%25d0%25b0%25d1%2580%25d0%25b5%25d0%25bd%25d0%25b0" />
+<link rel="alternate" title="oEmbed (XML)" type="text/xml+oembed" href="https://src.by/WDKL/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fsrc.by%2FWDKL%2F%25d0%25bb%25d0%25b5%25d0%25b4%25d0%25be%25d0%25b2%25d0%25b0%25d1%258f-%25d0%25b0%25d1%2580%25d0%25b5%25d0%25bd%25d0%25b0&#038;format=xml" />
+<style id="wp-img-auto-sizes-contain-inline-css">
+img:is([sizes=auto i],[sizes^="auto," i]){contain-intrinsic-size:3000px 1500px}
+/*# sourceURL=wp-img-auto-sizes-contain-inline-css */
+</style>
+<link rel='stylesheet' id='newspaperup-theme-fonts-css' href='https://src.by/WDKL/wp-content/fonts/c9ea682f8f73bf9b43f74cc1a7b5c8cb.css?ver=20201110' media='all' />
+<style id="wp-emoji-styles-inline-css">
+
+	img.wp-smiley, img.emoji {
+		display: inline !important;
+		border: none !important;
+		box-shadow: none !important;
+		height: 1em !important;
+		width: 1em !important;
+		margin: 0 0.07em !important;
+		vertical-align: -0.1em !important;
+		background: none !important;
+		padding: 0 !important;
+	}
+/*# sourceURL=wp-emoji-styles-inline-css */
+</style>
+<style id="wp-block-library-inline-css">
+:root{--wp-block-synced-color:#7a00df;--wp-block-synced-color--rgb:122,0,223;--wp-bound-block-color:var(--wp-block-synced-color);--wp-editor-canvas-background:#ddd;--wp-admin-theme-color:#007cba;--wp-admin-theme-color--rgb:0,124,186;--wp-admin-theme-color-darker-10:#006ba1;--wp-admin-theme-color-darker-10--rgb:0,107,160.5;--wp-admin-theme-color-darker-20:#005a87;--wp-admin-theme-color-darker-20--rgb:0,90,135;--wp-admin-border-width-focus:2px}@media (min-resolution:192dpi){:root{--wp-admin-border-width-focus:1.5px}}.wp-element-button{cursor:pointer}:root .has-very-light-gray-background-color{background-color:#eee}:root .has-very-dark-gray-background-color{background-color:#313131}:root .has-very-light-gray-color{color:#eee}:root .has-very-dark-gray-color{color:#313131}:root .has-vivid-green-cyan-to-vivid-cyan-blue-gradient-background{background:linear-gradient(135deg,#00d084,#0693e3)}:root .has-purple-crush-gradient-background{background:linear-gradient(135deg,#34e2e4,#4721fb 50%,#ab1dfe)}:root .has-hazy-dawn-gradient-background{background:linear-gradient(135deg,#faaca8,#dad0ec)}:root .has-subdued-olive-gradient-background{background:linear-gradient(135deg,#fafae1,#67a671)}:root .has-atomic-cream-gradient-background{background:linear-gradient(135deg,#fdd79a,#004a59)}:root .has-nightshade-gradient-background{background:linear-gradient(135deg,#330968,#31cdcf)}:root .has-midnight-gradient-background{background:linear-gradient(135deg,#020381,#2874fc)}:root{--wp--preset--font-size--normal:16px;--wp--preset--font-size--huge:42px}.has-regular-font-size{font-size:1em}.has-larger-font-size{font-size:2.625em}.has-normal-font-size{font-size:var(--wp--preset--font-size--normal)}.has-huge-font-size{font-size:var(--wp--preset--font-size--huge)}:root .has-text-align-center{text-align:center}:root .has-text-align-left{text-align:left}:root .has-text-align-right{text-align:right}.has-fit-text{white-space:nowrap!important}#end-resizable-editor-section{display:none}.aligncenter{clear:both}.items-justified-left{justify-content:flex-start}.items-justified-center{justify-content:center}.items-justified-right{justify-content:flex-end}.items-justified-space-between{justify-content:space-between}.screen-reader-text{word-wrap:normal!important;border:0;clip-path:inset(50%);height:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;width:1px;word-break:normal!important}.screen-reader-text:focus{background-color:#ddd;clip-path:none;color:#444;display:block;font-size:1em;height:auto;left:5px;line-height:normal;padding:15px 23px 14px;text-decoration:none;top:5px;width:auto;z-index:100000}html :where(.has-border-color){border-style:solid}html :where([style^=border-color],[style*=";border-color"],[style*="; border-color"]){border-style:solid}html :where([style^=border-top-color],[style*=";border-top-color"],[style*="; border-top-color"]){border-top-style:solid}html :where([style^=border-right-color],[style*=";border-right-color"],[style*="; border-right-color"]){border-right-style:solid}html :where([style^=border-bottom-color],[style*=";border-bottom-color"],[style*="; border-bottom-color"]){border-bottom-style:solid}html :where([style^=border-left-color],[style*=";border-left-color"],[style*="; border-left-color"]){border-left-style:solid}html :where([style^=border-width],[style*=";border-width"],[style*="; border-width"]){border-style:solid}html :where([style^=border-top-width],[style*=";border-top-width"],[style*="; border-top-width"]){border-top-style:solid}html :where([style^=border-right-width],[style*=";border-right-width"],[style*="; border-right-width"]){border-right-style:solid}html :where([style^=border-bottom-width],[style*=";border-bottom-width"],[style*="; border-bottom-width"]){border-bottom-style:solid}html :where([style^=border-left-width],[style*=";border-left-width"],[style*="; border-left-width"]){border-left-style:solid}html :where(img[class*=wp-image-]){height:auto;max-width:100%}:where(figure){margin:0 0 1em}html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:var(--wp-admin--admin-bar--height,0px)}@media screen and (max-width:600px){html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:0px}}
+
+/*# sourceURL=/wp-includes/css/dist/block-library/common.min.css */
+</style>
+<style id="wp-block-image-inline-css">
+.wp-block-image>a,.wp-block-image>figure>a{display:inline-block}.wp-block-image img{box-sizing:border-box;height:auto;max-width:100%;vertical-align:bottom}@media not (prefers-reduced-motion){.wp-block-image img.hide{visibility:hidden}.wp-block-image img.show{animation:show-content-image .4s}}.wp-block-image[style*=border-radius] img,.wp-block-image[style*=border-radius]>a{border-radius:inherit}.wp-block-image.has-custom-border img{box-sizing:border-box}.wp-block-image.aligncenter{text-align:center}.wp-block-image.alignfull>a,.wp-block-image.alignwide>a{width:100%}.wp-block-image.alignfull img,.wp-block-image.alignwide img{height:auto;width:100%}.wp-block-image .aligncenter,.wp-block-image .alignleft,.wp-block-image .alignright,.wp-block-image.aligncenter,.wp-block-image.alignleft,.wp-block-image.alignright{display:table}.wp-block-image .aligncenter>figcaption,.wp-block-image .alignleft>figcaption,.wp-block-image .alignright>figcaption,.wp-block-image.aligncenter>figcaption,.wp-block-image.alignleft>figcaption,.wp-block-image.alignright>figcaption{caption-side:bottom;display:table-caption}.wp-block-image .alignleft{float:left;margin:.5em 1em .5em 0}.wp-block-image .alignright{float:right;margin:.5em 0 .5em 1em}.wp-block-image .aligncenter{margin-left:auto;margin-right:auto}.wp-block-image :where(figcaption){margin-bottom:1em;margin-top:.5em}.wp-block-image.is-style-circle-mask img{border-radius:9999px}@supports ((-webkit-mask-image:none) or (mask-image:none)) or (-webkit-mask-image:none){.wp-block-image.is-style-circle-mask img{border-radius:0;-webkit-mask-image:url('data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50"/></svg>');mask-image:url('data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50"/></svg>');mask-mode:alpha;-webkit-mask-position:center;mask-position:center;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain}}:root :where(.wp-block-image.is-style-rounded img,.wp-block-image .is-style-rounded img){border-radius:9999px}.wp-block-image figure{margin:0}.wp-lightbox-container{display:flex;flex-direction:column;position:relative}.wp-lightbox-container img{cursor:zoom-in}.wp-lightbox-container img:hover+button{opacity:1}.wp-lightbox-container button{align-items:center;backdrop-filter:blur(16px) saturate(180%);background-color:rgba(90,90,90,.25);border:none;border-radius:4px;cursor:zoom-in;display:flex;height:20px;justify-content:center;opacity:0;padding:0;position:absolute;right:16px;text-align:center;top:16px;width:20px;z-index:100}@media not (prefers-reduced-motion){.wp-lightbox-container button{transition:opacity .2s ease}}.wp-lightbox-container button:focus-visible{outline:3px auto rgba(90,90,90,.25);outline:3px auto -webkit-focus-ring-color;outline-offset:3px}.wp-lightbox-container button:hover{cursor:pointer;opacity:1}.wp-lightbox-container button:focus{opacity:1}.wp-lightbox-container button:focus,.wp-lightbox-container button:hover,.wp-lightbox-container button:not(:hover):not(:active):not(.has-background){background-color:rgba(90,90,90,.25);border:none}.wp-lightbox-overlay{box-sizing:border-box;cursor:zoom-out;height:100vh;left:0;overflow:hidden;position:fixed;top:0;visibility:hidden;width:100%;z-index:100000}.wp-lightbox-overlay .wp-lightbox-close-button{align-items:center;cursor:pointer;display:flex;font-family:inherit;gap:8px;justify-content:center;line-height:1;min-height:40px;min-width:40px;padding:0 4px;position:absolute;right:calc(env(safe-area-inset-right) + 16px);top:calc(env(safe-area-inset-top) + 16px);z-index:5000000}.wp-lightbox-overlay .wp-lightbox-close-button:focus,.wp-lightbox-overlay .wp-lightbox-close-button:hover,.wp-lightbox-overlay .wp-lightbox-close-button:not(:hover):not(:active):not(.has-background){background:none;border:none}.wp-lightbox-overlay .wp-lightbox-close-button:has(.wp-lightbox-close-text:not([hidden])) .wp-lightbox-close-icon svg{height:1em;width:1em}.wp-lightbox-overlay .wp-lightbox-close-icon svg{display:block}.wp-lightbox-overlay .wp-lightbox-navigation-button-next,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{align-items:center;bottom:16px;cursor:pointer;display:flex;font-family:inherit;gap:4px;justify-content:center;line-height:1;min-height:40px;min-width:40px;padding:0 8px;position:absolute;z-index:2000002}.wp-lightbox-overlay .wp-lightbox-navigation-button-next[hidden],.wp-lightbox-overlay .wp-lightbox-navigation-button-prev[hidden]{display:none}@media (min-width:960px){.wp-lightbox-overlay .wp-lightbox-navigation-button-next,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{bottom:50%;transform:translateY(-50%)}}.wp-lightbox-overlay .wp-lightbox-navigation-button-next:focus,.wp-lightbox-overlay .wp-lightbox-navigation-button-next:hover,.wp-lightbox-overlay .wp-lightbox-navigation-button-next:not(:hover):not(:active):not(.has-background),.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:focus,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:hover,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:not(:hover):not(:active):not(.has-background){background:none;border:none;padding:0 8px}.wp-lightbox-overlay .wp-lightbox-navigation-button-next:has(.wp-lightbox-navigation-text:not([hidden])) .wp-lightbox-navigation-icon svg,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:has(.wp-lightbox-navigation-text:not([hidden])) .wp-lightbox-navigation-icon svg{display:block;height:1.5em;width:1.5em}.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{left:calc(env(safe-area-inset-left) + 16px)}.wp-lightbox-overlay .wp-lightbox-navigation-button-next{right:calc(env(safe-area-inset-right) + 16px)}.wp-lightbox-overlay .wp-lightbox-navigation-icon svg{vertical-align:middle}.wp-lightbox-overlay .lightbox-image-container{height:var(--wp--lightbox-container-height);left:50%;overflow:hidden;position:absolute;top:50%;transform:translate(-50%,-50%);transform-origin:top left;width:var(--wp--lightbox-container-width);z-index:2000001}.wp-lightbox-overlay .wp-block-image{align-items:center;box-sizing:border-box;display:flex;height:100%;justify-content:center;margin:0;position:relative;transform-origin:0 0;width:100%;z-index:3000000}.wp-lightbox-overlay .wp-block-image img{height:var(--wp--lightbox-image-height);min-height:var(--wp--lightbox-image-height);min-width:var(--wp--lightbox-image-width);width:var(--wp--lightbox-image-width)}.wp-lightbox-overlay .wp-block-image figcaption{display:none}.wp-lightbox-overlay button{background:none;border:none}.wp-lightbox-overlay .scrim{background-color:#fff;height:100%;opacity:.9;position:absolute;width:100%;z-index:2000000}.wp-lightbox-overlay.active{visibility:visible}@media not (prefers-reduced-motion){.wp-lightbox-overlay.active{animation:turn-on-visibility .25s both}.wp-lightbox-overlay.active img{animation:turn-on-visibility .35s both}.wp-lightbox-overlay.show-closing-animation:not(.active){animation:turn-off-visibility .35s both}.wp-lightbox-overlay.show-closing-animation:not(.active) img{animation:turn-off-visibility .25s both}.wp-lightbox-overlay.zoom.active{animation:none;opacity:1;visibility:visible}.wp-lightbox-overlay.zoom.active .lightbox-image-container{animation:lightbox-zoom-in .4s}.wp-lightbox-overlay.zoom.active .lightbox-image-container img{animation:none}.wp-lightbox-overlay.zoom.active .scrim{animation:turn-on-visibility .4s forwards}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active){animation:none}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .lightbox-image-container{animation:lightbox-zoom-out .4s}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .lightbox-image-container img{animation:none}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .scrim{animation:turn-off-visibility .4s forwards}}@keyframes show-content-image{0%{visibility:hidden}99%{visibility:hidden}to{visibility:visible}}@keyframes turn-on-visibility{0%{opacity:0}to{opacity:1}}@keyframes turn-off-visibility{0%{opacity:1;visibility:visible}99%{opacity:0;visibility:visible}to{opacity:0;visibility:hidden}}@keyframes lightbox-zoom-in{0%{transform:translate(calc((-100vw + var(--wp--lightbox-scrollbar-width))/2 + var(--wp--lightbox-initial-left-position)),calc(-50vh + var(--wp--lightbox-initial-top-position))) scale(var(--wp--lightbox-scale))}to{transform:translate(-50%,-50%) scale(1)}}@keyframes lightbox-zoom-out{0%{transform:translate(-50%,-50%) scale(1);visibility:visible}99%{visibility:visible}to{transform:translate(calc((-100vw + var(--wp--lightbox-scrollbar-width))/2 + var(--wp--lightbox-initial-left-position)),calc(-50vh + var(--wp--lightbox-initial-top-position))) scale(var(--wp--lightbox-scale));visibility:hidden}}
+/*# sourceURL=https://src.by/WDKL/wp-includes/blocks/image/style.min.css */
+</style>
+<style id="wp-block-paragraph-inline-css">
+.is-small-text{font-size:.875em}.is-regular-text{font-size:1em}.is-large-text{font-size:2.25em}.is-larger-text{font-size:3em}.has-drop-cap:not(:focus):first-letter{float:left;font-size:8.4em;font-style:normal;font-weight:100;line-height:.68;margin:.05em .1em 0 0;text-transform:uppercase}body.rtl .has-drop-cap:not(:focus):first-letter{float:none;margin-left:.1em}p.has-drop-cap.has-background{overflow:hidden}:root :where(p.has-background){padding:1.25em 2.375em}:where(p.has-text-color:not(.has-link-color)) a{color:inherit}p.has-text-align-left[style*="writing-mode:vertical-lr"],p.has-text-align-right[style*="writing-mode:vertical-rl"]{rotate:180deg}
+/*# sourceURL=https://src.by/WDKL/wp-includes/blocks/paragraph/style.min.css */
+</style>
+<style id="wp-block-embed-inline-css">
+.wp-block-embed.alignleft,.wp-block-embed.alignright,.wp-block[data-align=left]>[data-type="core/embed"],.wp-block[data-align=right]>[data-type="core/embed"]{max-width:360px;width:100%}.wp-block-embed.alignleft .wp-block-embed__wrapper,.wp-block-embed.alignright .wp-block-embed__wrapper,.wp-block[data-align=left]>[data-type="core/embed"] .wp-block-embed__wrapper,.wp-block[data-align=right]>[data-type="core/embed"] .wp-block-embed__wrapper{min-width:280px}.wp-block-cover .wp-block-embed{min-height:240px;min-width:320px}.wp-block-group.is-layout-flex .wp-block-embed{flex:1 1 0%;min-width:0}.wp-block-embed{overflow-wrap:break-word}.wp-block-embed :where(figcaption){margin-bottom:1em;margin-top:.5em}.wp-block-embed iframe{max-width:100%}.wp-block-embed__wrapper{position:relative}.wp-embed-responsive .wp-has-aspect-ratio .wp-block-embed__wrapper:before{content:"";display:block;padding-top:50%}.wp-embed-responsive .wp-has-aspect-ratio iframe{bottom:0;height:100%;left:0;position:absolute;right:0;top:0;width:100%}.wp-embed-responsive .wp-embed-aspect-21-9 .wp-block-embed__wrapper:before{padding-top:42.85%}.wp-embed-responsive .wp-embed-aspect-18-9 .wp-block-embed__wrapper:before{padding-top:50%}.wp-embed-responsive .wp-embed-aspect-16-9 .wp-block-embed__wrapper:before{padding-top:56.25%}.wp-embed-responsive .wp-embed-aspect-4-3 .wp-block-embed__wrapper:before{padding-top:75%}.wp-embed-responsive .wp-embed-aspect-1-1 .wp-block-embed__wrapper:before{padding-top:100%}.wp-embed-responsive .wp-embed-aspect-9-16 .wp-block-embed__wrapper:before{padding-top:177.77%}.wp-embed-responsive .wp-embed-aspect-1-2 .wp-block-embed__wrapper:before{padding-top:200%}
+/*# sourceURL=https://src.by/WDKL/wp-includes/blocks/embed/style.min.css */
+</style>
+
+<style id="classic-theme-styles-inline-css">
+/*! This file is auto-generated */
+.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}
+/*# sourceURL=/wp-includes/css/classic-themes.min.css */
+</style>
+
+<style id="global-styles-inline-css">
+:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}.wp-block-button{--wp--preset--dimension--25: 25%;--wp--preset--dimension--50: 50%;--wp--preset--dimension--75: 75%;--wp--preset--dimension--100: 100%;}:where(body) { margin: 0; }:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}body{padding-top: 0px;padding-right: 0px;padding-bottom: 0px;padding-left: 0px;}:root :where(.wp-element-button, .wp-block-button__link){background-color: #32373c;border-width: 0;color: #fff;font-family: inherit;font-size: inherit;font-style: inherit;font-weight: inherit;letter-spacing: inherit;line-height: inherit;padding-top: calc(0.667em + 2px);padding-right: calc(1.333em + 2px);padding-bottom: calc(0.667em + 2px);padding-left: calc(1.333em + 2px);text-decoration: none;text-transform: inherit;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}
+/*# sourceURL=global-styles-inline-css */
+</style>
+
+<link rel='stylesheet' id='google-language-translator-css' href='https://src.by/WDKL/wp-content/plugins/google-language-translator/css/style.css?ver=6.0.20' media='' />
+<link rel='stylesheet' id='glt-toolbar-styles-css' href='https://src.by/WDKL/wp-content/plugins/google-language-translator/css/toolbar.css?ver=6.0.20' media='' />
+<link rel='stylesheet' id='all-css-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/all.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='dark-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/colors/dark.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='core-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/core.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='newspaperup-style-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/style.css?ver=7.1' media='all' />
+<style id="newspaperup-style-inline-css">
+.site-branding-text .site-title a { font-size: 30px;} .bs-slide .inner .title { font-size: 0px !important;} .multi-post-widget .bs-blog-post.three.bsm .title { font-size: 0px !important;} 
+/*# sourceURL=newspaperup-style-inline-css */
+</style>
+<link rel='stylesheet' id='wp-core-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/wp-core.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='default-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/colors/default.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='swiper-bundle-css-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/swiper-bundle.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='menu-core-css-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/sm-core-css.css?ver=7.1' media='all' />
+<link rel='stylesheet' id='smartmenus-css' href='https://src.by/WDKL/wp-content/themes/newspaperup/css/sm-clean.css?ver=7.1' media='all' />
+<script id="jquery-core-js" src="https://src.by/WDKL/wp-includes/js/jquery/jquery.min.js?ver=3.7.1"></script>
+<script id="newspaperup-navigation-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/navigation.js?ver=7.1"></script>
+<script id="swiper-bundle-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/swiper-bundle.js?ver=7.1"></script>
+<script id="sticky-js-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/hc-sticky.js?ver=7.1"></script>
+<script id="sticky-header-js-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/jquery.sticky.js?ver=7.1"></script>
+<script id="smartmenus-js-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/jquery.smartmenus.js?ver=7.1"></script>
+<script id="jquery-cookie-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/jquery.cookie.min.js?ver=7.1"></script>
+<link rel="https://api.w.org/" href="https://src.by/WDKL/wp-json/" /><link rel="alternate" title="JSON" type="application/json" href="https://src.by/WDKL/wp-json/wp/v2/pages/184" /><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://src.by/WDKL/xmlrpc.php?rsd" />
+<meta name="generator" content="WordPress 7.1" />
+<link rel="canonical" href="https://src.by/WDKL/%d0%bb%d0%b5%d0%b4%d0%be%d0%b2%d0%b0%d1%8f-%d0%b0%d1%80%d0%b5%d0%bd%d0%b0" />
+<link rel='shortlink' href='https://src.by/WDKL/?p=184' />
+<style>p.hello{font-size:12px;color:darkgray;}#google_language_translator,#flags{text-align:left;}#google_language_translator{clear:both;}#flags{width:165px;}#flags a{display:inline-block;margin-right:2px;}#google_language_translator{width:auto!important;}div.skiptranslate.goog-te-gadget{display:inline!important;}.goog-tooltip{display: none!important;}.goog-tooltip:hover{display: none!important;}.goog-text-highlight{background-color:transparent!important;border:none!important;box-shadow:none!important;}#google_language_translator select.goog-te-combo{color:#32373c;}#google_language_translator{color:transparent;}body{top:0px!important;}#goog-gt-{display:none!important;}font font{background-color:transparent!important;box-shadow:none!important;position:initial!important;}#glt-translate-trigger{left:20px;right:auto;}#glt-translate-trigger > span{color:#ffffff;}#glt-translate-trigger{background:#f89406;}.goog-te-gadget .goog-te-combo{width:100%;}</style>        <style>
+            .bs-blog-post p:nth-of-type(1)::first-letter {
+                display: none;
+            }
+        </style>
+            <style>
+        .ice-arena-buy-button {
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #FFD700 !important;
+            color: #000000 !important;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 18px;
+            border: 2px solid #FFA500;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .ice-arena-buy-button:hover {
+            background-color: #FFA500 !important;
+            color: #000000 !important;
+            box-shadow: 0 6px 8px rgba(0,0,0,0.2);
+            transform: translateY(-2px);
+        }
+        
+        .ice-arena-button-container {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px 0;
+        }
+        </style>
+                <style type="text/css">
+                    </style>
+        <link rel="icon" href="https://src.by/WDKL/wp-content/uploads/2025/01/1.png" sizes="32x32" />
+<link rel="icon" href="https://src.by/WDKL/wp-content/uploads/2025/01/1.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="https://src.by/WDKL/wp-content/uploads/2025/01/1.png" />
+<meta name="msapplication-TileImage" content="https://src.by/WDKL/wp-content/uploads/2025/01/1.png" />
+<style id="core-block-supports-inline-css">
+.wp-elements-1 a:where(:not(.wp-element-button)){color:var(--wp--preset--color--black);}.wp-elements-2 a:where(:not(.wp-element-button)){color:var(--wp--preset--color--black);}.wp-elements-3 a:where(:not(.wp-element-button)){color:var(--wp--preset--color--black);}
+/*# sourceURL=core-block-supports-inline-css */
+</style>
+
+</head>
+
+<body class="wp-singular page-template-default page page-id-184 wp-embed-responsive wp-theme-newspaperup wide  ta-hide-date-author-in-list defaultcolor" >
+    
+
+
+<div id="page" class="site">
+    <a class="skip-link screen-reader-text" href="#content">
+        Перейти к содержанию    </a>
+
+    <!--wrapper-->
+    <div class="wrapper" id="custom-background-css">
+    <!--==================== Header ====================-->
+    
+      <div class="header-image-section" style="background:url('https://src.by/WDKL/wp-content/uploads/2025/01/1-11.jpg') no-repeat center center/cover; width: 100%; height: 400px;">
+        <div class="overlay" style="background-color:; width: 100%; height: 100%;"></div>
+      </div>
+      <script>
+        document.addEventListener("DOMContentLoaded", function() {
+          var headerImageSection = document.querySelector('.header-image-section');
+          if (!headerImageSection) return;
+
+          // Берём список картинок динамически из get_header_images.php,
+          // чтобы карусель показывала ВСЕ файлы из папки header-images.
+          fetch('https://src.by/WDKL/get_header_images.php')
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+              var images = (data.images || []).map(function(src) {
+                return 'url("' + src + '")';
+              });
+              if (images.length < 2) { return; } // крутить нечего
+
+              var currentIndex = 0;
+              setInterval(function() {
+                currentIndex = (currentIndex + 1) % images.length;
+                headerImageSection.style.backgroundImage = images[currentIndex];
+              }, 3000);
+            })
+            .catch(function() { /* при ошибке оставляем стартовую картинку */ });
+        });
+      </script>
+    <!--header-->
+<header class="bs-default">
+  <div class="clearfix"></div>
+  <div class="bs-head-detail d-none d-lg-flex">
+        <!--top-bar-->
+    <div class="container">
+      <div class="row align-items-center">
+         
+
+          <!-- col-md-7 -->
+          <div class="col-md-7 col-xs-12">
+            
+  <!-- bs-latest-news -->
+  <div class="bs-latest-news">
+      <div class="bn_title">
+      <h5 class="title"><i class="fas fa-bolt"></i><span>Спорт, Афиша, Мероприятия</span></h5>
+    </div>
+  <!-- bs-latest-news_slider -->
+    <div class="bs-latest-news-slider swipe bs swiper-container">
+      <div class="swiper-wrapper">
+         
+      </div>
+    </div>
+  <!-- // bs-latest-news_slider -->
+  </div>
+  <!-- bs-latest-news -->
+            <!--/col-md-7-->
+          </div>
+          <!--col-md-5-->
+          <div class="col-md-5 col-xs-12">
+            <div class="tobbar-right d-flex align-center justify-end">
+              
+                <div class="top-date ms-1">
+            <span id="real-time-clock">
+                6 сентября 2026 00:02:47            </span>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                function updateClock() {
+                    let now = new Date();
+                    let formattedDate = now.toLocaleDateString('ru-RU', { 
+                        day: 'numeric', month: 'long', year: 'numeric'
+                    });
+                    let formattedTime = now.toLocaleTimeString('ru-RU', { 
+                        hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                    });
+
+                    let clockElement = document.getElementById('real-time-clock');
+                    if (clockElement) {
+                        clockElement.textContent = formattedDate + ' ' + formattedTime;
+                    }
+                }
+
+                setInterval(updateClock, 1000); // Обновляем каждую секунду
+                updateClock(); // Запускаем сразу после загрузки
+            });
+        </script>
+      <ul class="bs-social">
+            <li>
+          <a  href="https://www.instagram.com/src.olimpik2011/?igsh=MWV4bmxueW1kcnRvdw%3D%3D#">
+            <i class="fab fa-instagram"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="https://webobook.com/tour/Ig4SjbZoaam7LinRgA4xxNZN0UP0MTFA/cIBxCu4GkwsYcsclA0RneyQpYr7AsxSR">
+            <i class="fab fa-youtube"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="http://t.me/LedovijDVOREC">
+            <i class="fab fa-telegram"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="https://xn----7sbgfh2alwzdhpc0c.xn--90ais/">
+            <i class="fas fa-university"></i>
+          </a>
+        </li>
+        </ul>          </div>
+        </div>
+        <!--/col-md-5-->
+      </div>
+    </div>
+    <!--/top-bar-->
+      </div>
+   <!-- Main Menu Area-->
+   <div class="bs-header-main">
+      <div class="inner responsive">
+        <div class="container">
+          <div class="row align-center">
+            <div class="col-md-12 text-center">
+              <!-- logo-->
+<div class="logo">
+  <div class="site-logo">
+      </div>
+  <div class="site-branding-text">
+      <p class="site-title"> <a href="https://src.by/WDKL/" rel="home">СПОРТИВНО-РАЗВЛЕКАТЕЛЬНЫЙ ЦЕНТР «Олимпик-2011»</a></p>
+        <p class="site-description">ГУ МОК СДЮШОР &quot;ОЛИМПИК-2011&quot; 222310 г. Молодечно ул. В.Гостинец, 102 </p>
+  </div>
+</div><!-- /logo-->
+            </div>
+            <div class="col-md-12 center">
+              <!-- advertisement Area-->
+                              <!-- advertisement--> 
+            </div>
+          </div>
+        </div><!-- /container-->
+      </div><!-- /inner-->
+    </div>
+  <!-- /Main Menu Area-->
+    <!-- Header bottom -->
+          <div class="bs-menu-full sticky-header">
+        <div class="container">
+          <div class="main-nav d-flex align-center"> 
+             
+    <div class="navbar-wp">
+		<button class="menu-btn" onclick="window.location.href='/WDKL'">
+		<span>Навигация</span>
+		</button>
+
+      <nav id="main-nav" class="nav-wp justify-start">
+                <!-- Sample menu definition -->
+        <ul id="menu-%d0%be%d1%81%d0%bd%d0%be%d0%b2%d0%bd%d0%be%d0%b5-%d0%bc%d0%b5%d0%bd%d1%8e" class="sm sm-clean"><li id="menu-item-746" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-home menu-item-746"><a class="nav-link" title="На Главную" href="https://src.by/WDKL/">На Главную</a></li>
+</ul>      </nav> 
+    </div>
+  <div class="right-nav">
+
+  </div>
+          </div>
+        </div>
+      </div> 
+  <!-- Header bottom -->
+</header>
+<!--==================== main content section ====================-->
+<main id="content" class="page-class content">
+	<!--container-->
+		<div class="container">
+			<div class="bs-card-box page-entry-title"><h1 class="entry-title title mb-0">Ледовая арена</h1>            <div class="bs-breadcrumb-section">
+                <div class="overlay">
+                    <div class="row">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb">
+                                <div role="navigation" aria-label="Цепочки навигации" class="breadcrumb-trail breadcrumbs" itemprop="breadcrumb"><ul class="breadcrumb trail-items" itemscope itemtype="http://schema.org/BreadcrumbList"><meta name="numberOfItems" content="2" /><meta name="itemListOrder" content="Ascending" /><li itemprop="itemListElement breadcrumb-item" itemscope itemtype="http://schema.org/ListItem" class="trail-item breadcrumb-item  trail-begin"><a href="https://src.by/WDKL" rel="home" itemprop="item"><span itemprop="name">Домашняя</span></a><meta itemprop="position" content="1" /></li><li itemprop="itemListElement breadcrumb-item" itemscope itemtype="http://schema.org/ListItem" class="trail-item breadcrumb-item  trail-end"><span itemprop="name"><span itemprop="name">Ледовая арена</span></span><meta itemprop="position" content="2" /></li></ul></div> 
+                            </ol>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>			<!--row-->
+			<div class="row">
+					        
+    <div class="col-lg-12">
+        <div class="bs-card-box wd-back">
+            
+<div class="olp-banner">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Archivo:wght@500&display=swap');
+    .olp-banner{position:relative;width:100%;max-width:1440px;height:120px;margin:0 auto;overflow:hidden;background:#0b3d91;display:flex;align-items:center;box-sizing:border-box;box-shadow:0 12px 40px rgba(11,61,145,.28);font-family:'Archivo',system-ui,sans-serif}
+    .olp-banner *{box-sizing:border-box}
+    .olp-stripes{position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.06) 0 2px,transparent 2px 28px);background-size:56px 100%;animation:olpSlide 1.6s linear infinite}
+    .olp-bar{position:absolute;left:0;top:0;bottom:0;width:8px;background:#38e1ff;z-index:2;pointer-events:none}
+    .olp-brand{position:relative;display:flex;align-items:center;gap:16px;padding:0 32px 0 40px}
+    .olp-ico{width:52px;height:52px;border-radius:50%;background:#38e1ff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .olp-name{font-family:'Oswald',sans-serif;font-weight:700;font-size:17px;letter-spacing:.04em;color:#fff;text-transform:uppercase;line-height:1.15}
+    .olp-sub{font-family:'Archivo',sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9db6e6;line-height:1.15}
+    .olp-div{position:relative;width:1px;height:56px;background:rgba(255,255,255,.16)}
+    .olp-msg{position:relative;flex:1;padding:0 32px;display:flex;flex-direction:column;gap:6px}
+    .olp-pill{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:rgba(56,225,255,.15);border:1px solid rgba(56,225,255,.5);padding:3px 12px;border-radius:100px}
+    .olp-dot{width:7px;height:7px;border-radius:50%;background:#38e1ff;animation:olpPulse 1.4s ease-in-out infinite}
+    .olp-pill span{font-family:'Oswald',sans-serif;font-weight:600;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#38e1ff}
+    .olp-head{font-family:'Oswald',sans-serif;font-weight:600;font-size:30px;letter-spacing:.01em;color:#fff;line-height:1.05;margin:0}
+    .olp-head b{font-weight:600;color:#38e1ff}
+    .olp-ctawrap{position:relative;padding-right:40px;z-index:3}
+    .olp-cta,.olp-cta:link,.olp-cta:visited{display:inline-flex;align-items:center;justify-content:center;gap:10px;text-decoration:none!important;font-family:'Oswald',sans-serif;font-weight:700;font-size:17px;letter-spacing:.04em;text-transform:uppercase;color:#0b3d91!important;background:#38e1ff;padding:16px 30px;border-radius:10px;box-shadow:0 6px 18px rgba(56,225,255,.4);transition:transform .15s,box-shadow .15s;border:none}
+    .olp-cta:hover,.olp-cta:focus{text-decoration:none!important;color:#0b3d91!important;transform:translateY(-2px);box-shadow:0 10px 26px rgba(56,225,255,.55)}
+    @keyframes olpSlide{from{background-position:0 0}to{background-position:56px 0}}
+    @keyframes olpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.7)}}
+    @media(max-width:640px){
+      .olp-banner{height:auto;flex-direction:column;align-items:stretch;padding:22px 20px 20px;gap:14px}
+      .olp-bar{width:100%;height:6px;bottom:auto}
+      .olp-brand{padding:0;gap:12px}
+      .olp-ico{width:44px;height:44px}
+      .olp-div{display:none}
+      .olp-msg{padding:0;gap:10px}
+      .olp-head{font-size:23px}
+      .olp-ctawrap{padding:0}
+      .olp-cta{width:100%;padding:17px 24px;font-size:18px}
+    }
+  </style>
+
+  <div class="olp-stripes"></div>
+  <div class="olp-bar"></div>
+
+  <div class="olp-brand">
+    <div class="olp-ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="5" width="19" height="14" rx="2.5" stroke="#0b3d91" stroke-width="1.8"/><path d="M2.5 9.5h19" stroke="#0b3d91" stroke-width="1.8"/><path d="M6 14.5h4.5" stroke="#0b3d91" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <div>
+      <div class="olp-name">Олимпик-2011</div>
+      <div class="olp-sub">Спортивно-развлекательный центр</div>
+    </div>
+  </div>
+
+  <div class="olp-div"></div>
+
+  <div class="olp-msg">
+    <div class="olp-pill"><span class="olp-dot"></span><span>Онлайн-оплата доступна</span></div>
+    <p class="olp-head">Оплатите <b>катание на льду</b> онлайн</p>
+  </div>
+
+  <div class="olp-ctawrap">
+    <a class="olp-cta" href="https://src.by/PAY/">
+      Оплатить онлайн
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#0b3d91" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+</div>
+
+
+
+<style>
+/* ============================================================
+   Информация о ледовой арене — фирменный стиль
+   ============================================================ */
+
+:root {
+    --brand-blue: #8ed1fc;
+    --brand-blue-dark: #4a90e2;
+    --brand-blue-light: #f4faff;
+    --brand-border: #d4e3f0;
+    --text-dark: #2c3e50;
+    --text-mid: #34495e;
+    --shadow-color: rgba(142, 209, 252, 0.1);
+    --danger-red: #e74c3c;
+    --warning-orange: #e67e22;
+}
+
+.ice-info-block {
+    width: 100%;
+    max-width: 100%;
+    margin: 2rem 0;
+    padding: 0;
+}
+
+.ice-info-card {
+    width: 100%;
+    background: linear-gradient(135deg, #ffffff 0%, var(--brand-blue-light) 100%);
+    border: 1px solid var(--brand-border);
+    border-radius: 20px;
+    padding: 35px 40px;
+    box-shadow: 0 6px 20px var(--shadow-color);
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.ice-info-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(to right, var(--brand-blue), var(--brand-blue-dark));
+}
+
+.ice-info-title {
+    color: var(--text-dark);
+    font-size: 2em;
+    font-weight: 600;
+    font-family: 'Georgia', serif;
+    margin: 0 0 5px 0;
+    text-align: center;
+}
+
+.ice-info-title span {
+    color: var(--brand-blue-dark);
+}
+
+.ice-info-subtitle {
+    color: var(--text-mid);
+    font-size: 1.1em;
+    font-family: 'Georgia', serif;
+    text-align: center;
+    margin: 0 0 25px 0;
+}
+
+/* --- Блоки с информацией --- */
+.ice-section {
+    margin-bottom: 25px;
+    padding-bottom: 25px;
+    border-bottom: 1px solid var(--brand-border);
+}
+
+.ice-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.ice-section-title {
+    color: var(--text-dark);
+    font-size: 1.3em;
+    font-weight: 600;
+    font-family: 'Georgia', serif;
+    margin: 0 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ice-section-title .icon {
+    font-size: 1.2em;
+}
+
+.ice-text {
+    color: var(--text-mid);
+    font-size: 1em;
+    line-height: 1.6;
+    font-family: 'Georgia', serif;
+    margin: 5px 0;
+}
+
+.ice-text strong {
+    color: var(--text-dark);
+    font-weight: 600;
+}
+
+/* --- ВНИМАНИЕ (жёлтый акцент) --- */
+.ice-attention {
+    background: linear-gradient(120deg, #fff3b0 0%, #ffe68f 100%);
+    border-radius: 12px;
+    padding: 15px 20px;
+    margin: 15px 0;
+    border-left: 4px solid var(--warning-orange);
+}
+
+.ice-attention .ice-text {
+    color: #7a5800;
+    margin: 3px 0;
+}
+
+.ice-attention .ice-text strong {
+    color: #5a3e00;
+}
+
+/* --- Запрещено (красный акцент) --- */
+.ice-danger {
+    background: rgba(231, 76, 60, 0.06);
+    border-radius: 12px;
+    padding: 15px 20px;
+    margin: 15px 0;
+    border-left: 4px solid var(--danger-red);
+}
+
+.ice-danger .ice-section-title {
+    color: var(--danger-red);
+    font-size: 1.1em;
+}
+
+.ice-danger .ice-text {
+    color: #8b2c2c;
+}
+
+/* --- Список запретов --- */
+.ice-list {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 0 0;
+}
+
+.ice-list li {
+    color: var(--text-mid);
+    font-size: 0.95em;
+    line-height: 1.6;
+    font-family: 'Georgia', serif;
+    padding: 4px 0 4px 28px;
+    position: relative;
+}
+
+.ice-list li::before {
+    content: '✗';
+    position: absolute;
+    left: 0;
+    color: var(--danger-red);
+    font-weight: 700;
+}
+
+/* --- Гардероб --- */
+.ice-cloakroom {
+    background: rgba(142, 209, 252, 0.1);
+    border-radius: 12px;
+    padding: 15px 20px;
+    margin: 15px 0;
+    border-left: 4px solid var(--brand-blue);
+}
+
+.ice-cloakroom .ice-text {
+    margin: 3px 0;
+}
+
+.ice-cloakroom .ice-text strong {
+    color: var(--brand-blue-dark);
+}
+
+/* --- Список гардероба --- */
+.ice-cloakroom-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0 0;
+}
+
+.ice-cloakroom-list li {
+    color: var(--text-mid);
+    font-size: 0.95em;
+    line-height: 1.5;
+    font-family: 'Georgia', serif;
+    padding: 3px 0 3px 28px;
+    position: relative;
+}
+
+.ice-cloakroom-list li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: var(--brand-blue-dark);
+    font-weight: 700;
+    font-size: 1.2em;
+}
+
+.ice-cloakroom-list .not-allowed::before {
+    content: '✗';
+    color: var(--danger-red);
+}
+
+/* ============================================================
+   АДАПТИВНОСТЬ
+   ============================================================ */
+
+@media (max-width: 768px) {
+    .ice-info-card {
+        padding: 25px 25px;
+        border-radius: 16px;
+    }
+
+    .ice-info-title {
+        font-size: 1.6em;
+    }
+
+    .ice-section-title {
+        font-size: 1.2em;
+    }
+
+    .ice-text {
+        font-size: 0.95em;
+    }
+
+    .ice-attention,
+    .ice-danger,
+    .ice-cloakroom {
+        padding: 12px 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .ice-info-card {
+        padding: 18px 15px;
+        border-radius: 14px;
+    }
+
+    .ice-info-title {
+        font-size: 1.3em;
+    }
+
+    .ice-info-subtitle {
+        font-size: 0.95em;
+        margin-bottom: 18px;
+    }
+
+    .ice-section {
+        margin-bottom: 18px;
+        padding-bottom: 18px;
+    }
+
+    .ice-section-title {
+        font-size: 1.1em;
+    }
+
+    .ice-text {
+        font-size: 0.9em;
+    }
+
+    .ice-list li,
+    .ice-cloakroom-list li {
+        font-size: 0.88em;
+        padding: 3px 0 3px 22px;
+    }
+
+    .ice-attention,
+    .ice-danger,
+    .ice-cloakroom {
+        padding: 10px 12px;
+        margin: 12px 0;
+    }
+}
+</style>
+
+<div class="ice-info-block">
+    <div class="ice-info-card">
+        <h2 class="ice-info-title"><span>Ледовая арена</span></h2>
+        <p class="ice-info-subtitle">Информация для посетителей</p>
+
+        <!-- Общая информация -->
+        <div class="ice-section">
+            <p class="ice-text"><strong>Брони нет</strong></p>
+            <p class="ice-text"><strong>Наполняемость катка:</strong> 180 человек</p>
+        </div>
+
+        <!-- ВНИМАНИЕ 1 -->
+        <div class="ice-attention">
+            <p class="ice-text"><strong>⚠️ ВНИМАНИЕ</strong></p>
+            <p class="ice-text">Дети от 10 до 14 лет при пропуске на лед иметь при себе документ (в электронном варианте) подтверждающий возраст. Например справка со школы, пропуск с фотографией.</p>
+        </div>
+
+        <!-- ВНИМАНИЕ 2 -->
+        <div class="ice-attention">
+            <p class="ice-text"><strong>⚠️ ВНИМАНИЕ</strong></p>
+            <p class="ice-text">При посещении свободного катания первоначально нужно оплатить сеанс свободного катания (лёд) в центральной кассе или онлайн.</p>
+        </div>
+
+        <!-- Важно -->
+        <div class="ice-section">
+            <p class="ice-text"><strong>Территория ледовой арены является зоной повышенного риска</strong></p>
+            <p class="ice-text" style="color: var(--danger-red); font-weight: 600;">Дети в возрасте до 3-х лет на сеансы свободного катания не допускаются!</p>
+        </div>
+
+        <!-- ЗАПРЕЩАЕТСЯ -->
+        <div class="ice-danger">
+            <div class="ice-section-title">
+                <span class="icon">🚫</span> ЗАПРЕЩАЕТСЯ
+            </div>
+            <ul class="ice-list">
+                <li>выходить на ледовое поле с ребенком на руках;</li>
+                <li>находиться на льду под действием алкогольных или иных токсических средств;</li>
+                <li>бросать на лёд любые предметы, выливать жидкость, долбить или ковырять лёд коньками;</li>
+                <li>выходить на ледовую площадку без коньков;</li>
+                <li>двигаться наперерез или против основного потока катающихся.</li>
+            </ul>
+        </div>
+
+        <!-- Гардероб -->
+        <div class="ice-cloakroom">
+            <div class="ice-section-title">
+                <span class="icon">🧥</span> Гардероб
+            </div>
+            <p class="ice-text">На прокате работает <strong>ГАРДЕРОБ</strong>.</p>
+            <p class="ice-text">Гардероб принимает на хранение верхнюю одежду и обувь в <strong>ЧИСТЫХ пакетах</strong>.</p>
+
+            <p class="ice-text" style="margin-top: 10px;"><strong>Гардероб НЕ принимает на хранение:</strong></p>
+            <ul class="ice-cloakroom-list">
+                <li class="not-allowed">верхнюю одежду с признаками сильного загрязнения;</li>
+                <li class="not-allowed">ценные вещи;</li>
+                <li class="not-allowed">представителей флоры и фауны;</li>
+                <li class="not-allowed">колющие и режущие предметы.</li>
+            </ul>
+        </div>
+
+        <!-- Ответственность -->
+        <div class="ice-section" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <p class="ice-text" style="font-style: italic; color: var(--text-mid);">
+                <strong>Администрация не несёт ответственности</strong> за имущество (деньги, документы, телефоны, ключи и прочее), оставленное в карманах одежды сданной на хранение в гардероб!
+            </p>
+        </div>
+    </div>
+</div>
+
+
+<div class="wp-block-image">
+<figure class="aligncenter size-full is-resized"><img fetchpriority="high" decoding="async" width="799" height="668" src="https://src.by/WDKL/wp-content/uploads/2025/01/2.jpg" alt="" class="wp-image-185" style="width:515px;height:auto"/></figure>
+</div>
+
+
+<style>
+/* ============================================================
+   Баннер — Онлайн-оплата (спортивный стиль)
+   С уникальным классом .banner-pay-block — не конфликтует с темой WP
+   ============================================================ */
+
+.banner-pay-block {
+    display: block;
+    width: 100%;
+    padding: 20px;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    box-sizing: border-box;
+}
+
+.banner-pay-block * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.banner-pay-block .banner {
+    position: relative;
+    width: 1100px;
+    max-width: 100%;
+    height: 520px;
+    border-radius: 48px;
+    background: linear-gradient(145deg, #0d1424 0%, #1a2440 100%);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    padding: 0 50px;
+    margin: 0 auto;
+}
+
+/* Динамичные линии скорости (фон) */
+.banner-pay-block .banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(45deg,
+            transparent,
+            transparent 40px,
+            rgba(0, 255, 255, 0.03) 40px,
+            rgba(0, 255, 255, 0.03) 41px),
+        repeating-linear-gradient(-45deg,
+            transparent,
+            transparent 40px,
+            rgba(0, 200, 255, 0.02) 40px,
+            rgba(0, 200, 255, 0.02) 41px);
+    pointer-events: none;
+}
+
+/* Светящиеся дуги (speed эффект) */
+.banner-pay-block .glow-arc {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 255, 255, 0.08);
+    width: 500px;
+    height: 500px;
+    right: -80px;
+    top: -150px;
+    transform: rotate(20deg);
+    box-shadow: 0 0 80px rgba(0, 255, 255, 0.03);
+}
+
+.banner-pay-block .glow-arc.second {
+    width: 350px;
+    height: 350px;
+    right: 60px;
+    bottom: -100px;
+    top: auto;
+    border-color: rgba(0, 200, 255, 0.06);
+}
+
+/* Левая часть — текст */
+.banner-pay-block .content {
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    color: #ffffff;
+    padding-right: 20px;
+}
+
+.banner-pay-block .badge {
+    display: inline-block;
+    background: rgba(0, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    padding: 8px 20px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #8be9ff;
+    border: 1px solid rgba(0, 255, 255, 0.15);
+    margin-bottom: 20px;
+}
+
+.banner-pay-block .title {
+    font-size: 52px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -1px;
+    background: linear-gradient(to right, #ffffff, #b0f0ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.banner-pay-block .title span {
+    background: linear-gradient(to right, #00f0ff, #0077ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.banner-pay-block .sub {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 12px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+}
+
+/* Кнопка — УВЕЛИЧЕНА! */
+.banner-pay-block .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 32px;
+    padding: 22px 56px;
+    background: linear-gradient(135deg, #00d4ff, #0066ff);
+    border: none;
+    border-radius: 60px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 12px 30px rgba(0, 100, 255, 0.35);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+}
+
+.banner-pay-block .btn:hover {
+    transform: scale(1.04);
+    box-shadow: 0 16px 40px rgba(0, 150, 255, 0.5);
+}
+
+.banner-pay-block .btn svg {
+    width: 30px;
+    height: 30px;
+    fill: currentColor;
+    transition: transform 0.2s;
+}
+
+.banner-pay-block .btn:hover svg {
+    transform: translateX(6px);
+}
+
+/* Телефон с изображением сайта — более пропорциональный */
+.banner-pay-block .phone-wrapper {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    margin-left: 20px;
+}
+
+.banner-pay-block .phone {
+    width: 280px;
+    height: 500px;
+    background: #0f1a2b;
+    border-radius: 42px;
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    padding: 14px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
+}
+
+.banner-pay-block .phone-screen {
+    width: 100%;
+    height: 100%;
+    background: #121c30;
+    border-radius: 32px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.banner-pay-block .phone-screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 31px;
+}
+
+/* ============================================================
+   АДАПТИВНОСТЬ
+   ============================================================ */
+
+@media (max-width: 900px) {
+    .banner-pay-block .banner {
+        flex-direction: column;
+        height: auto;
+        padding: 40px 28px;
+        text-align: center;
+        gap: 30px;
+        border-radius: 32px;
+    }
+
+    .banner-pay-block .title {
+        font-size: 36px;
+    }
+
+    .banner-pay-block .content {
+        padding-right: 0;
+    }
+
+    .banner-pay-block .phone {
+        width: 220px;
+        height: 400px;
+    }
+
+    .banner-pay-block .btn {
+        padding: 18px 40px;
+        font-size: 22px;
+    }
+
+    .banner-pay-block .phone-wrapper {
+        margin-left: 0;
+    }
+
+    .banner-pay-block .glow-arc {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .banner-pay-block .banner {
+        padding: 30px 20px;
+        border-radius: 28px;
+        gap: 24px;
+    }
+
+    .banner-pay-block .title {
+        font-size: 30px;
+    }
+
+    .banner-pay-block .badge {
+        font-size: 12px;
+        padding: 6px 16px;
+    }
+
+    .banner-pay-block .sub {
+        font-size: 16px;
+    }
+
+    .banner-pay-block .phone {
+        width: 190px;
+        height: 340px;
+        padding: 10px;
+        border-radius: 30px;
+    }
+
+    .banner-pay-block .phone-screen {
+        border-radius: 22px;
+    }
+
+    .banner-pay-block .phone-screen img {
+        border-radius: 21px;
+    }
+
+    .banner-pay-block .btn {
+        padding: 16px 34px;
+        font-size: 20px;
+        gap: 10px;
+    }
+
+    .banner-pay-block .btn svg {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .banner-pay-block .banner {
+        padding: 24px 16px;
+        border-radius: 24px;
+        gap: 20px;
+    }
+
+    .banner-pay-block .title {
+        font-size: 26px;
+    }
+
+    .banner-pay-block .badge {
+        font-size: 11px;
+        padding: 4px 14px;
+        margin-bottom: 14px;
+    }
+
+    .banner-pay-block .sub {
+        font-size: 14px;
+        margin-top: 8px;
+    }
+
+    .banner-pay-block .phone {
+        width: 160px;
+        height: 290px;
+        padding: 8px;
+        border-radius: 26px;
+    }
+
+    .banner-pay-block .phone-screen {
+        border-radius: 20px;
+    }
+
+    .banner-pay-block .phone-screen img {
+        border-radius: 19px;
+    }
+
+    .banner-pay-block .btn {
+        padding: 14px 28px;
+        font-size: 18px;
+        gap: 8px;
+        margin-top: 24px;
+    }
+
+    .banner-pay-block .btn svg {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+@media (max-width: 380px) {
+    .banner-pay-block .banner {
+        padding: 18px 12px;
+        border-radius: 20px;
+        gap: 16px;
+    }
+
+    .banner-pay-block .title {
+        font-size: 22px;
+    }
+
+    .banner-pay-block .badge {
+        font-size: 10px;
+        padding: 4px 12px;
+        margin-bottom: 10px;
+    }
+
+    .banner-pay-block .sub {
+        font-size: 13px;
+    }
+
+    .banner-pay-block .phone {
+        width: 130px;
+        height: 240px;
+        padding: 6px;
+        border-radius: 20px;
+    }
+
+    .banner-pay-block .phone-screen {
+        border-radius: 16px;
+    }
+
+    .banner-pay-block .phone-screen img {
+        border-radius: 15px;
+    }
+
+    .banner-pay-block .btn {
+        padding: 12px 20px;
+        font-size: 16px;
+        gap: 6px;
+        margin-top: 18px;
+    }
+
+    .banner-pay-block .btn svg {
+        width: 18px;
+        height: 18px;
+    }
+}
+</style>
+
+<div class="banner-pay-block">
+    <div class="banner">
+        <!-- Эффекты скорости -->
+        <div class="glow-arc"></div>
+        <div class="glow-arc second"></div>
+
+        <!-- Текст + кнопка -->
+        <div class="content">
+            <div class="badge">⚡ Онлайн-оплата</div>
+            <div class="title">
+                Плати <span>быстро</span><br>
+                как спринт
+            </div>
+            <div class="sub">SRC.BY/PAY · 1 клик · без очередей</div>
+
+            <a href="https://src.by/PAY/" class="btn" target="_blank">
+                Оплатить
+                <svg viewBox="0 0 24 24"><path d="M13.025 1l-2.847 2.828 6.176 6.176h-16.354v3.992h16.354l-6.176 6.176 2.847 2.828 10.975-11z"></path></svg>
+            </a>
+        </div>
+
+        <!-- Телефон с изображением сайта -->
+        <div class="phone-wrapper">
+            <div class="phone">
+                <div class="phone-screen">
+                    <img decoding="async" src="https://src.by/WDKL/wp-content/uploads/2026/07/SRCBYNEW.jpg" alt="Оплата на src.by/PAY">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<style>
+.qr-section {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+  max-width: 1200px;
+  margin: 40px auto;
+  padding: 0 20px;
+  font-family: 'Play-Bold', 'Segoe UI', sans-serif;
+}
+
+.qr-card {
+  flex: 1 1 340px;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  padding: 32px 32px 38px;
+  text-align: center;
+  transition: all 0.25s ease;
+  border: 1px solid #f0f4f0;
+  text-decoration: none !important;
+  color: inherit !important;
+  display: block;
+  cursor: pointer;
+}
+
+.qr-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 48px rgba(74, 158, 47, 0.14);
+  border-color: #4CAF50;
+}
+
+.qr-card img {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  aspect-ratio: 1/1;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 18px;
+  border-radius: 16px;
+  background: #fafcfa;
+  padding: 12px;
+  pointer-events: none; /* чтобы клик проходил сквозь картинку */
+}
+
+.qr-card .label {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a2e1a;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.qr-card .sub {
+  font-size: 15px;
+  color: #5a7a5a;
+  font-weight: 500;
+}
+
+.qr-card .badge {
+  display: inline-block;
+  background: #4CAF50;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 6px 18px;
+  border-radius: 30px;
+  margin-top: 12px;
+}
+
+.qr-card .badge-arrow {
+  display: inline-block;
+  margin-left: 6px;
+  transition: transform 0.2s ease;
+}
+
+.qr-card:hover .badge-arrow {
+  transform: translateX(4px);
+}
+
+@media (max-width: 700px) {
+  .qr-section {
+    gap: 24px;
+  }
+  .qr-card {
+    flex: 1 1 100%;
+    max-width: 360px;
+    padding: 24px 20px 28px;
+  }
+  .qr-card img {
+    max-width: 220px;
+    padding: 8px;
+  }
+  .qr-card .label {
+    font-size: 16px;
+  }
+  .qr-card .sub {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .qr-card {
+    padding: 18px 14px 22px;
+  }
+  .qr-card img {
+    max-width: 180px;
+    padding: 6px;
+  }
+  .qr-card .label {
+    font-size: 14px;
+  }
+  .qr-card .sub {
+    font-size: 13px;
+  }
+}
+</style>
+
+<div class="qr-section">
+  
+  <!-- Карточка 1: Instagram (кликабельная) -->
+  <a href="https://www.instagram.com/src.olimpik2011?utm_source=qr&#038;igsh=MWV4bmxueW1kcnRvdw%3D%3D" class="qr-card" target="_blank" rel="noopener noreferrer">
+    <img decoding="async" src="https://src.by/WDKL/wp-content/uploads/2026/07/Instagram.jpg" alt="QR-код Instagram" loading="lazy">
+    <div class="label">📸 Следите за нами</div>
+    <div class="sub">Instagram · @SRC.OLIMPIK2011</div>
+    <span class="badge">
+      подписывайтесь
+      <span class="badge-arrow">→</span>
+    </span>
+  </a>
+  
+  <!-- Карточка 2: Telegram (кликабельная) -->
+  <a href="https://t.me/LedovijDVOREC" class="qr-card" target="_blank" rel="noopener noreferrer">
+    <img decoding="async" src="https://src.by/WDKL/wp-content/uploads/2025/01/image-новое.png" alt="QR-код Telegram" loading="lazy">
+    <div class="label">📱 Наш Telegram</div>
+    <div class="sub">Присоединяйтесь к каналу</div>
+    <span class="badge">
+      подписывайтесь
+      <span class="badge-arrow">→</span>
+    </span>
+  </a>
+  
+</div>
+
+
+
+<p class="wp-block-paragraph"></p>
+
+
+
+<p class="has-black-color has-vivid-green-cyan-background-color has-text-color has-background has-link-color wp-elements-1 wp-block-paragraph" style="font-size:12px"><strong> Остановочный период ледовой арены с 1 мая 2026 г.</strong></p>
+
+
+
+<p class="has-black-color has-luminous-vivid-orange-background-color has-text-color has-background has-link-color wp-elements-2 wp-block-paragraph" style="font-size:16px"><strong>Сеансы массового катания:</strong> </p>
+
+
+
+<p class="has-black-color has-luminous-vivid-orange-background-color has-text-color has-background has-link-color wp-elements-3 wp-block-paragraph" style="font-size:16px"><strong>Телефон для справок: Администратор&nbsp;</strong><br>☎️ Городской: 80176580850<br>📱Мобильный: <a href="tel:80447111713">80447111713</a></p>
+
+
+
+<p class="wp-block-paragraph"><strong>🏁 <strong>Важно</strong>:&nbsp;</strong><br><strong>Дети до 10 лет посещают Ледовую арену только в сопровождении взрослых старше 18-ти лет находящихся в коньках вместе с сопровождающим.</strong> <br><strong>Прокат Коньков оплачивается непосредственно при получении коньков на прокате.</strong><br><strong>Длительность сеанса 45 минут.</strong></p>
+
+
+
+<style>
+    table {
+        width: 100%; /* Для адаптивности */
+        max-width: 800px; /* Максимальная ширина таблицы */
+        border-collapse: collapse;
+        background: #fff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 0 auto; /* Центрируем таблицу */
+    }
+    th, td {
+        padding: 12px;
+        text-align: center;
+        border-bottom: 1px solid #ddd;
+        word-wrap: break-word; /* Перенос длинных строк */
+    }
+    th {
+        background: #4CAF50;
+        color: white;
+    }
+    tr:hover {
+        background: #f1f1f1;
+    }
+    .holiday {
+        font-weight: bold;
+    }
+    .closed {
+        font-style: italic;
+        color: #888;
+    }
+    /* Ограничение максимальной ширины колонок */
+    td:first-child, th:first-child {
+        max-width: 50px; /* Максимальная ширина для колонки "День" */
+    }
+    td:nth-child(2), th:nth-child(2) {
+        max-width: 50px; /* Максимальная ширина для колонки "Время работы" */
+    }
+    td:nth-child(3), th:nth-child(3) {
+        max-width: 35px; /* Максимальная ширина для колонки "Цена (руб/час)" */
+    }
+    @media (max-width: 50px) {
+        table, thead, tbody, th, td, tr {
+            display: block;
+        }
+        th {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+        }
+        tr {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+        td {
+            border: none;
+            border-bottom: 1px solid #eee;
+            position: relative;
+            padding-left: 50%;
+        }
+        td:before {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            width: 45%;
+            padding-right: 10px;
+            white-space: nowrap;
+            content: attr(data-label);
+            font-weight: bold;
+        }
+    }
+</style>
+
+
+
+<style>
+.min {
+    background-color: orange;
+}
+</style>
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Наименование услуги</th>
+            <th>Тариф (рублей)</th>
+            <th>Единица измерения</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="min">
+            <td>Сеанс свободного катания (для детей до 14 лет)</td>
+            <td>7.00</td>
+            <td>45 минут</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для детей до 14 лет)</td>
+            <td>28.00</td>
+            <td>1 абонемент (4 посещения)</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для детей до 14 лет)</td>
+            <td>49.00</td>
+            <td>1 абонемент (8 посещений)</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для детей до 14 лет)</td>
+            <td>75.00</td>
+            <td>1 абонемент (12 посещений)</td>
+        </tr>
+        <tr class="min">
+            <td>Сеанс свободного катания (для взрослых)</td>
+            <td>8.00</td>
+            <td>45 минут</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для взрослых)</td>
+            <td>32.00</td>
+            <td>1 абонемент (4 посещения)</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для взрослых)</td>
+            <td>56.00</td>
+            <td>1 абонемент (8 посещений)</td>
+        </tr>
+        <tr>
+            <td>Сеанс свободного катания (для взрослых)</td>
+            <td>80.00</td>
+            <td>1 абонемент (12 посещений)</td>
+        </tr>
+    </tbody>
+</table>
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Наименование услуги</th>
+            <th>Тариф (рублей)</th>
+            <th>Единица измерения</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+        <td data-label="Наименование услуги">Ледовая арена + 1 раздевалка для любительских команд</td>
+            <td data-label="Тариф (рублей)">231.00</td>
+            <td data-label="Единица измерения">1 час</td>
+        </tr>
+        <tr>
+            <td data-label="Наименование услуги">Ледовая арена</td>
+            <td data-label="Тариф (рублей)">258.00</td>
+            <td data-label="Единица измерения">1 час</td>
+        </tr>
+        <tr>
+            <td data-label="Наименование услуги">Ледовая арена с учетом одной раздевалки</td>
+            <td data-label="Тариф (рублей)">295.00</td>
+            <td data-label="Единица измерения">1 час</td>
+        </tr>
+        <tr>
+            <td data-label="Наименование услуги">Ледовая арена с учетом раздевалок и судейских комнат</td>
+            <td data-label="Тариф (рублей)">399.00</td>
+            <td data-label="Единица измерения">1 час</td>
+        </tr>
+    </tbody>
+</table>
+
+
+
+<table>
+    <thead>
+        <tr>
+            <th>Наименование услуги</th>
+            <th>Тариф (рублей)</th>
+            <th>Единица измерения</th>
+        </tr>
+    </thead>
+    <tbody>
+		<tr>
+            <td data-label="Наименование услуги">Размещение рекламы на стене ледовой площадки</td>
+            <td data-label="Тариф (рублей)">20.00</td>
+            <td data-label="Единица измерения">кв.м/месяц</td>
+        </tr>
+		<tr>
+            <td data-label="Наименование услуги">Размещение аудио-видео роликов</td>
+            <td data-label="Тариф (рублей)">10.00</td>
+            <td data-label="Единица измерения">до 2 минут</td>
+        </tr>
+        <tr>
+            <td data-label="Наименование услуги">Размещение рекламы подо льдом</td>
+            <td data-label="Тариф (рублей)">12.00</td>
+            <td data-label="Единица измерения">кв.м/месяц</td>
+        </tr>
+        <tr>
+            <td data-label="Наименование услуги">Размещение рекламы на бортах</td>
+            <td data-label="Тариф (рублей)">50.00</td>
+            <td data-label="Единица измерения">кв.м/месяц</td>
+        </tr>
+    </tbody>
+</table>
+
+
+
+<script>
+(function (d, w) {
+    window.addEventListener('click', function(ev){
+        var href = '';
+
+        let d = ev.target.parentElement;
+
+        if (ev.target && ev.target.getAttribute('href') ) {
+            href = ev.target.getAttribute('href');
+        }
+        if (ev.target.parentElement && ev.target.parentElement.getAttribute('href') ) {
+            href = ev.target.parentElement.getAttribute('href');
+        }
+        if(href === '' && d.parentElement.getAttribute('href')){
+            href = d.parentElement.getAttribute('href');
+        }
+
+        if (href.indexOf('//saleframe.') + 1) {
+            let link = href;
+            if (href.includes('?')) {
+                link += '&v=2';
+            } else {
+                link += '?v=2';
+            }
+
+            ev.preventDefault();
+            ev.stopPropagation ? ev.stopPropagation() : (ev.cancelBubble=true);
+
+            if ( /Android|AppleWebKit|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && screen.width <= 960 &#038;&#038; location.host != 'saleframe.24ats.com') {
+                redirectToMobile(link);
+            } else {
+                openAtsWidget(link);
+            }
+        }
+    });
+
+    window.addEventListener('message', function(msg) {
+        if (msg.data &#038;&#038; msg.data.action) {
+            if (msg.data.action == 'closeFrame') {
+                closeWidget()
+            }
+        }
+        if (msg.data.url &#038;&#038; (msg.data.url.match('://checkout.bepaid.by') || msg.data.url.match('://gateway.bepaid.by'))) {
+            setTimeout(function() {
+                try {
+                    document.querySelector('iframe.frame-center').src = msg.data.url;
+                } catch (err) {
+                    document.location = msg.data.url;
+                }
+            }, 500);
+        };
+        return false;
+    });
+
+    function closeWidget () {
+        var overlay = document.querySelector('.arcom__overlay'),
+            container = document.querySelector('.arcom__widget-container');
+
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
+        overlay.style.display = 'none';
+    }
+
+    function redirectToMobile (url) {
+        var overlay = document.querySelector('.arcom__overlay'),
+            container = document.querySelector('.arcom__widget-container'),
+            frame = document.createElement('iframe');
+
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
+
+        overlay.style.display = 'flex';
+
+        frame.setAttribute("src", url);
+        frame.style.width = "100%";
+        frame.style.height = "100%";
+        frame.style.border = "none";
+        frame.style.position = "absolute";
+        frame.style.top = "0";
+        frame.style.bottom = "0";
+        frame.style.right = "0";
+        frame.style.left = "0";
+        frame.style.zIndex = "100001";
+
+        container.appendChild(frame);
+    }
+
+    function findGetParameter (str, parameterName) {
+        var result = null,
+            tmp = [];
+        str.split('?')[1].split('&#038;').forEach(function(item) {
+            tmp = item.split('=')
+            if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1])
+        })
+
+        return result
+    }
+
+    function openAtsWidget (url) {
+
+        var overlay = document.querySelector('.arcom__overlay'),
+            container = document.querySelector('.arcom__widget-container'),
+            frame = document.createElement('iframe');
+
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
+
+        overlay.style.display = 'flex';
+
+        frame.setAttribute("src", url);
+        frame.style.width = "1030px";
+        frame.style.height = "100%";
+        frame.style.border = "none";
+        frame.style.backgroundColor = "darkgray";
+
+        container.appendChild(frame);
+    }
+
+    function addOverlay () {
+        console.log('LOAD OVERLEY');
+
+        var css = '@keyframes fadeIn {'+
+                '0% { opacity: 0 }' +
+                '100% { opacity: 1 }}',
+            head = document.head || document.getElementsByTagName('head')[0],
+            style = document.createElement('style'),
+            overlay = document.createElement('div'),
+            body = document.querySelector('body'),
+            container = document.createElement('div');
+
+        style.type = 'text/css';
+
+        container.className = 'arcom__widget-container'; 
+
+        overlay.className = 'arcom__overlay';
+        overlay.style = 'margin: auto!important;' +
+            'background-color: rgba(0,0,0,.85)!important;' +
+            'display: none;' +
+            'position: fixed;' +
+            'top: 0;' +
+            'right: 0;' +
+            'bottom: 0;' +
+            'left: 0;' +
+            'padding: 0;' +
+            'overflow: auto;' +
+            'background-color: rgba(0,0,0,.85);' +
+            'animation-duration: .35s;' +
+            'animation-fill-mode: both;' +
+            'z-index: 10000;' +
+            'animation-name: fadeIn;';
+
+        if (style.styleSheet) {
+            // This is required for IE8 and below.
+            style.styleSheet.cssText = css;
+        } else {
+            style.appendChild(document.createTextNode(css));
+        }
+
+        head.appendChild(style);
+        overlay.appendChild(container);
+        body.appendChild(overlay);
+    }
+
+    addOverlay();
+})(document, window);
+</script>
+	
+        </div>
+    </div> 				</div>
+			<!--/row-->
+		</div>
+	<!--/container-->
+</main>
+<!-- </main> -->
+<!--==================== Missed ====================-->
+<div class="missed">
+  <div class="container">
+    <div class="row">
+      <div class="col-12">
+        <div class="wd-back position-relative">
+          			<!-- bs-sec-title -->
+			<div class="bs-widget-title one">
+				<h4 class="title"><span><i class="fas fa-arrow-right"></i></span>Вы пропустили</h4>
+				<div class="border-line"></div>
+			</div> 
+			<!-- // bs-sec-title -->
+			          <div class="missedslider d-grid column4">
+               
+          </div>        
+        </div><!-- end wd-back -->
+      </div><!-- end col12 -->
+    </div><!-- end row -->
+  </div><!-- end container -->
+</div> 
+<!-- end missed -->
+    <!--==================== FOOTER AREA ====================-->
+        <footer class="footer one "
+     >
+        <div class="overlay" style="background-color: ;">
+            <!--Start bs-footer-widget-area-->
+                            <div class="bs-footer-widget-area">
+                    <div class="container">
+                        <!--row-->
+                            <div class="row">
+                                <div id="block-21" class="col-lg-4 col-sm-6 rotateInDownLeft animated bs-widget widget_block widget_media_image">
+<figure class="wp-block-image size-full is-resized"><a href="https://president.gov.by/ru/documents/ukaz-no-1-ot-1-anvara-2026-g"><img loading="lazy" decoding="async" width="768" height="429" src="https://src.by/WDKL/wp-content/uploads/2026/06/1.jpg" alt="" class="wp-image-2094" style="aspect-ratio:1.78093934957236;width:223px;height:auto" srcset="https://src.by/WDKL/wp-content/uploads/2026/06/1.jpg 768w, https://src.by/WDKL/wp-content/uploads/2026/06/1-300x168.jpg 300w" sizes="auto, (max-width: 768px) 100vw, 768px" /></a></figure>
+</div><div id="block-15" class="col-lg-4 col-sm-6 rotateInDownLeft animated bs-widget widget_block widget_media_image">
+<figure class="wp-block-image size-full is-resized"><img loading="lazy" decoding="async" width="1024" height="966" src="https://src.by/WDKL/wp-content/uploads/2025/01/1-8.jpg" alt="" class="wp-image-173" style="width:131px;height:auto"/></figure>
+</div><div id="block-18" class="col-lg-4 col-sm-6 rotateInDownLeft animated bs-widget widget_block">
+<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio"><div class="wp-block-embed__wrapper">
+<iframe loading="lazy" title="Сильная личность 1:11" width="640" height="360" src="https://www.youtube.com/embed/uLGnk2iSig8?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</div></figure>
+</div>                            </div>
+                            <div class="divide-line"></div>
+                        <!--/row-->
+                    </div>
+                    <!--/container-->
+                </div>
+                            <div class="bs-footer-bottom-area">
+                    <div class="container">
+                        <div class="row align-center">
+                            <div class="col-lg-6 col-md-6">
+                                <div class="footer-logo text-xs">
+                                                                        <div class="site-branding-text">
+                                        <p class="site-title-footer"> <a href="https://src.by/WDKL/" rel="home">СПОРТИВНО-РАЗВЛЕКАТЕЛЬНЫЙ ЦЕНТР «Олимпик-2011»</a></p>
+                                        <p class="site-description-footer">ГУ МОК СДЮШОР &quot;ОЛИМПИК-2011&quot; 222310 г. Молодечно ул. В.Гостинец, 102 </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!--col-lg-3-->
+                            <div class="col-lg-6 col-md-6">
+                                  <ul class="bs-social">
+            <li>
+          <a  href="https://www.instagram.com/src.olimpik2011/?igsh=MWV4bmxueW1kcnRvdw%3D%3D#">
+            <i class="fab fa-instagram"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="https://webobook.com/tour/Ig4SjbZoaam7LinRgA4xxNZN0UP0MTFA/cIBxCu4GkwsYcsclA0RneyQpYr7AsxSR">
+            <i class="fab fa-youtube"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="http://t.me/LedovijDVOREC">
+            <i class="fab fa-telegram"></i>
+          </a>
+        </li>
+                <li>
+          <a  href="https://xn----7sbgfh2alwzdhpc0c.xn--90ais/">
+            <i class="fas fa-university"></i>
+          </a>
+        </li>
+        </ul>                            </div>
+                            <!--/col-lg-3-->
+                        </div>
+                        <!--/row-->
+                    </div>
+                    <!--/container-->
+                </div>
+                <!--End bs-footer-widget-area-->
+                                    <div class="bs-footer-copyright">
+                        <div class="container">
+                            <div class="row">
+                                <!--<div class="col-lg-12 text-center">
+                                                                            <p class="mb-0">
+                                        Авторские права &copy; Все права защищены                                            <span class="sep"> | </span>
+                                            <a href="#" target="_blank">Newspaperup</a> от <a href="https://themeansar.com" target="_blank">Themeansar</a>.                                        </p>
+                                                                           
+                                </div>-->
+                                                            </div>
+                        </div>
+                    </div> 
+                 
+        </div>
+        <!--/overlay-->
+    </footer>
+    <!--/footer-->
+</div>
+<!--/wrapper-->
+<!--Scroll To Top-->
+                <div class="newspaperup_stt">
+                <a href="#" class="bs_upscr">
+                    <i class="fa-solid fa-angles-up"></i>
+                </a>
+            </div>
+      <aside class="bs-offcanvas end" bs-data-targeted="true">
+    <div class="bs-offcanvas-close">
+      <a href="#" class="bs-offcanvas-btn-close" bs-data-removable="true">
+        <span></span>
+        <span></span>
+      </a>
+    </div>
+    <div class="bs-offcanvas-inner">
+            <div class="bs-card-box empty-sidebar">
+      			<!-- bs-sec-title -->
+			<div class="bs-widget-title one">
+				<h4 class="title"><span><i class="fas fa-arrow-right"></i></span>Header Toggle Sidebar</h4>
+				<div class="border-line"></div>
+			</div> 
+			<!-- // bs-sec-title -->
+			        <p class='empty-sidebar-widget-text'>
+          This is an example widget to show how the Header Toggle Sidebar looks by default. You can add custom widgets from the          <a href='https://src.by/WDKL/wp-admin/widgets.php' title='виджеты'>
+            виджеты          </a>
+          in the admin.        </p>
+      </div>
+          </div>
+  </aside>
+          <div class="search-popup" bs-search-targeted="true">
+            <div class="search-popup-content">
+                <div class="search-popup-close">
+                    <button type="button" class="btn-close" bs-dismiss-search="true"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="search-inner">
+                    <form role="search" method="get" class="search-form" action="https://src.by/WDKL/">
+				<label>
+					<span class="screen-reader-text">Найти:</span>
+					<input type="search" class="search-field" placeholder="Поиск&hellip;" value="" name="s" />
+				</label>
+				<input type="submit" class="search-submit" value="Поиск" />
+			</form>                </div>
+            </div>
+        </div>
+    <!--/Scroll To Top-->
+<script type="speculationrules">
+{"prefetch":[{"source":"document","where":{"and":[{"href_matches":"/WDKL/*"},{"not":{"href_matches":["/WDKL/wp-*.php","/WDKL/wp-admin/*","/WDKL/wp-content/uploads/*","/WDKL/wp-content/*","/WDKL/wp-content/plugins/*","/WDKL/wp-content/themes/newspaperup/*","/WDKL/*\\?(.+)"]}},{"not":{"selector_matches":"a[rel~=\"nofollow\"]"}},{"not":{"selector_matches":".no-prefetch, .no-prefetch a"}}]},"eagerness":"conservative"}]}
+</script>
+<div id="glt-translate-trigger"><span class="notranslate">П</span></div><div id="glt-toolbar"></div><div id="flags" style="display:none" class="size18"><ul id="sortable" class="ui-sortable"><li id="Belarusian"><a href="#" title="Belarusian" class="nturl notranslate be flag Belarusian"></a></li><li id="English"><a href="#" title="English" class="nturl notranslate en flag united-states"></a></li><li id="Russian"><a href="#" title="Russian" class="nturl notranslate ru flag Russian"></a></li></ul></div><div id='glt-footer'><div id="google_language_translator" class="default-language-ru"></div></div><script>function GoogleLanguageTranslatorInit() { new google.translate.TranslateElement({pageLanguage: 'ru', includedLanguages:'be,en,ru', autoDisplay: false}, 'google_language_translator');}</script>    <div class="bs-overlay-section" bs-remove-overlay="true"></div>
+<style type="text/css"> 
+	:root {
+		--wrap-color: #ffffff;
+	}
+/* Top Bar Color*/
+.bs-head-detail {
+  background: ;
+}
+.bs-head-detail, .bs-latest-news .bs-latest-news-slider a{
+  color: #ffffff;
+}
+/*==================== Site title and tagline ====================*/
+.site-title a, .site-description{
+  color: 000;
+}
+body.dark .site-title a, body.dark .site-description{
+  color: #fff;
+}
+/*=================== Blog Post Color ===================*/
+.site-branding-text .site-title a:hover{
+  color:  !important;
+}
+body.dark .site-branding-text .site-title a:hover{
+  color:  !important;
+}
+/* Footer Color*/
+footer .bs-footer-copyright {
+  background: ;
+}
+footer .bs-widget p, footer .site-title a, footer .site-title a:hover , footer .site-description, footer .site-description:hover, footer .bs-widget h6, footer .mg_contact_widget .bs-widget h6 {
+  color: ;
+}
+footer .bs-footer-copyright p, footer .bs-footer-copyright a {
+  color: ;
+}
+@media (min-width: 992px) {
+    
+    .archive-class .sidebar-right, .archive-class .sidebar-left , .index-class .sidebar-right, .index-class .sidebar-left{
+      flex: 100;
+      max-width:% !important;
+    }
+    .archive-class .content-right , .index-class .content-right {
+      max-width: calc((100% - %)) !important;
+    }
+  }
+</style>
+        <script>
+        (function (d, w) {
+            window.addEventListener('click', function(ev){
+                var href = '';
+
+                let d = ev.target.parentElement;
+
+                if (ev.target && ev.target.getAttribute('href') ) {
+                    href = ev.target.getAttribute('href');
+                }
+                if (ev.target.parentElement && ev.target.parentElement.getAttribute('href') ) {
+                    href = ev.target.parentElement.getAttribute('href');
+                }
+                if(href === '' && d.parentElement.getAttribute('href')){
+                    href = d.parentElement.getAttribute('href');
+                }
+
+                if (href.indexOf('//saleframe.') + 1) {
+                    let link = href;
+                    if (href.includes('?')) {
+                        link += '&v=2';
+                    } else {
+                        link += '?v=2';
+                    }
+
+                    ev.preventDefault();
+                    ev.stopPropagation ? ev.stopPropagation() : (ev.cancelBubble=true);
+
+                    if ( /Android|AppleWebKit|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && screen.width <= 960 && location.host != 'saleframe.24ats.com') {
+                        redirectToMobile(link);
+                    } else {
+                        openAtsWidget(link);
+                    }
+                }
+            });
+
+            window.addEventListener('message', function(msg) {
+                if (msg.data && msg.data.action) {
+                    if (msg.data.action == 'closeFrame') {
+                        closeWidget()
+                    }
+                }
+                if (msg.data.url && (msg.data.url.match('://checkout.bepaid.by') || msg.data.url.match('://gateway.bepaid.by'))) {
+                    setTimeout(function() {
+                        try {
+                            document.querySelector('iframe.frame-center').src = msg.data.url;
+                        } catch (err) {
+                            document.location = msg.data.url;
+                        }
+                    }, 500);
+                };
+                return false;
+            });
+
+            function closeWidget () {
+                var overlay = document.querySelector('.arcom__overlay'),
+                    container = document.querySelector('.arcom__widget-container');
+
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
+                overlay.style.display = 'none';
+            }
+
+            function redirectToMobile (url) {
+                var overlay = document.querySelector('.arcom__overlay'),
+                    container = document.querySelector('.arcom__widget-container'),
+                    frame = document.createElement('iframe');
+
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
+
+                overlay.style.display = 'flex';
+
+                frame.setAttribute("src", url);
+                frame.style.width = "100%";
+                frame.style.height = "100%";
+                frame.style.border = "none";
+                frame.style.position = "absolute";
+                frame.style.top = "0";
+                frame.style.bottom = "0";
+                frame.style.right = "0";
+                frame.style.left = "0";
+                frame.style.zIndex = "100001";
+
+                container.appendChild(frame);
+            }
+
+            function findGetParameter (str, parameterName) {
+                var result = null,
+                    tmp = [];
+                str.split('?')[1].split('&').forEach(function(item) {
+                    tmp = item.split('=')
+                    if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1])
+                })
+
+                return result
+            }
+
+            function openAtsWidget (url) {
+
+                var overlay = document.querySelector('.arcom__overlay'),
+                    container = document.querySelector('.arcom__widget-container'),
+                    frame = document.createElement('iframe');
+
+                while (container.firstChild) {
+                    container.removeChild(container.firstChild);
+                }
+
+                overlay.style.display = 'flex';
+
+                frame.setAttribute("src", url);
+                frame.style.width = "1030px";
+                frame.style.height = "100%";
+                frame.style.border = "none";
+                frame.style.backgroundColor = "darkgray";
+
+                container.appendChild(frame);
+            }
+
+            function addOverlay () {
+                console.log('LOAD OVERLEY');
+
+                var css = '@keyframes fadeIn {'+
+                        '0% { opacity: 0 }' +
+                        '100% { opacity: 1 }}',
+                    head = document.head || document.getElementsByTagName('head')[0],
+                    style = document.createElement('style'),
+                    overlay = document.createElement('div'),
+                    body = document.querySelector('body'),
+                    container = document.createElement('div');
+
+                style.type = 'text/css';
+
+                container.className = 'arcom__widget-container'; 
+
+                overlay.className = 'arcom__overlay';
+                overlay.style = 'margin: auto!important;' +
+                    'background-color: rgba(0,0,0,.85)!important;' +
+                    'display: none;' +
+                    'position: fixed;' +
+                    'top: 0;' +
+                    'right: 0;' +
+                    'bottom: 0;' +
+                    'left: 0;' +
+                    'padding: 0;' +
+                    'overflow: auto;' +
+                    'background-color: rgba(0,0,0,.85);' +
+                    'animation-duration: .35s;' +
+                    'animation-fill-mode: both;' +
+                    'z-index: 10000;' +
+                    'animation-name: fadeIn;';
+
+                if (style.styleSheet) {
+                    // This is required for IE8 and below.
+                    style.styleSheet.cssText = css;
+                } else {
+                    style.appendChild(document.createTextNode(css));
+                }
+
+                head.appendChild(style);
+                overlay.appendChild(container);
+                body.appendChild(overlay);
+            }
+
+            addOverlay();
+        })(document, window);
+        </script>
+        		<script>
+		/(trident|msie)/i.test(navigator.userAgent)&&document.getElementById&&window.addEventListener&&window.addEventListener("hashchange",function(){var t,e=location.hash.substring(1);/^[A-z0-9_-]+$/.test(e)&&(t=document.getElementById(e))&&(/^(?:a|select|input|button|textarea)$/i.test(t.tagName)||(t.tabIndex=-1),t.focus())},!1);
+		</script>
+		<script id="scripts-js" src="https://src.by/WDKL/wp-content/plugins/google-language-translator/js/scripts.js?ver=6.0.20"></script>
+<script id="scripts-google-js" src="//translate.google.com/translate_a/element.js?cb=GoogleLanguageTranslatorInit"></script>
+<script id="newspaperup_custom-js-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/custom.js?ver=7.1"></script>
+<script id="newspaperup-dark-js" src="https://src.by/WDKL/wp-content/themes/newspaperup/js/dark.js?ver=7.1"></script>
+<script id="wp-emoji-settings" type="application/json">
+{"baseUrl":"https://s.w.org/images/core/emoji/17.0.2/72x72/","ext":".png","svgUrl":"https://s.w.org/images/core/emoji/17.0.2/svg/","svgExt":".svg","source":{"concatemoji":"https://src.by/WDKL/wp-includes/js/wp-emoji-release.min.js?ver=7.1"}}
+</script>
+<script type="module">
+/*! This file is auto-generated */
+var e="script#wp-emoji-settings",t=document.querySelector(e);if(!(t instanceof HTMLScriptElement))throw new Error("Element missing: "+e);const r=JSON.parse(t.text),s=(window._wpemojiSettings=r,"wpEmojiSettingsSupports"),o=["flag","emoji"];function i(e){try{var t={supportTests:e,timestamp:(new Date).valueOf()};sessionStorage.setItem(s,JSON.stringify(t))}catch(e){}}function c(e,t,n){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);t=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(n,0,0);const r=new Uint32Array(e.getImageData(0,0,e.canvas.width,e.canvas.height).data);return t.every((e,t)=>e===r[t])}function p(e,t){e.clearRect(0,0,e.canvas.width,e.canvas.height),e.fillText(t,0,0);var n=e.getImageData(16,16,1,1);for(let e=0;e<n.data.length;e++)if(0!==n.data[e])return!1;return!0}function u(e,t,n,r){switch(t){case"flag":return n(e,"\ud83c\udff3\ufe0f\u200d\u26a7\ufe0f","\ud83c\udff3\ufe0f\u200b\u26a7\ufe0f")?!1:!n(e,"\ud83c\udde8\ud83c\uddf6","\ud83c\udde8\u200b\ud83c\uddf6")&&!n(e,"\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f","\ud83c\udff4\u200b\udb40\udc67\u200b\udb40\udc62\u200b\udb40\udc65\u200b\udb40\udc6e\u200b\udb40\udc67\u200b\udb40\udc7f");case"emoji":return!r(e,"\ud83e\u1fac8")}return!1}function f(e,t,n,r){let a;const s=(a="undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?new OffscreenCanvas(300,150):document.createElement("canvas")).getContext("2d",{willReadFrequently:!0}),o=(s.textBaseline="top",s.font="600 32px Arial",{});return e.forEach(e=>{o[e]=t(s,e,n,r)}),o}function a(e){var t=document.createElement("script");t.src=e,t.defer=!0,document.head.appendChild(t)}r.supports={everything:!0,everythingExceptFlag:!0},new Promise(t=>{let n=function(){try{var e=JSON.parse(sessionStorage.getItem(s));if("object"==typeof e&&"number"==typeof e.timestamp&&(new Date).valueOf()<e.timestamp+604800&&"object"==typeof e.supportTests)return e.supportTests}catch(e){}return null}();if(!n){if("undefined"!=typeof Worker&&"undefined"!=typeof OffscreenCanvas&&"undefined"!=typeof URL&&URL.createObjectURL&&"undefined"!=typeof Blob)try{var e="postMessage("+f.toString()+"("+[JSON.stringify(o),u.toString(),c.toString(),p.toString()].join(",")+"));",r=new Blob([e],{type:"text/javascript"});const a=new Worker(URL.createObjectURL(r),{name:"wpTestEmojiSupports"});return void(a.onmessage=e=>{i(n=e.data),a.terminate(),t(n)})}catch(e){}i(n=f(o,u,c,p))}t(n)}).then(e=>{for(const n in e)r.supports[n]=e[n],r.supports.everything=r.supports.everything&&r.supports[n],"flag"!==n&&(r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&r.supports[n]);var t;r.supports.everythingExceptFlag=r.supports.everythingExceptFlag&&!r.supports.flag,r.supports.everything||((t=r.source||{}).concatemoji?a(t.concatemoji):t.wpemoji&&t.twemoji&&(a(t.twemoji),a(t.wpemoji)))});
+//# sourceURL=https://src.by/WDKL/wp-includes/js/wp-emoji-loader.min.js
+</script>
+
+<!-- Началь кнопка для слабовидящих -->
+
+<!--<link rel="stylesheet" href="/WDKL/wp-content/plugins/button-visually-impaired/assets/css/bvi.min.css">-->
+<!--<script src="/WDKL/wp-content/plugins/button-visually-impaired/assets/js/bvi.min.js"></script>-->
+
+<a href="#" class="bvi-open">А</a>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof isvek !== "undefined" && typeof isvek.Bvi !== "undefined") {
+            var bviInstance = new isvek.Bvi({
+                theme: "white",
+                font: "arial",
+                fontSize: 16,
+                images: true,
+                reload: false,
+                speech: true,
+                panelFixed: true,
+                panelHide: false,
+                lang: "ru-RU"
+            });
+
+            var bviButton = document.querySelector(".bvi-open");
+
+            if (bviButton) {
+                bviButton.addEventListener("click", function (e) {
+                    e.preventDefault();
+
+                    var panel = document.querySelector('.bvi-panel');
+
+                    if (panel) {
+                        panel.style.display = (panel.style.display === "none" || panel.style.display === "") ? "block" : "none";
+                    }
+                });
+            }
+        }
+    });
+</script>
+
+<style>
+    .bvi-open {
+        position: fixed;
+        bottom: 0px; /* Спускаем в самый низ */
+        left: 75px; /* Перемещаем влево */
+        background-color: #e60d0d; /* Оранжевый фон */
+        color: #fff;
+        width: 41.5px; /* Фиксированная ширина */
+        height: 31.4px; /* Фиксированная высота */
+        font-size: 16px;
+        z-index: 9999;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 1px;
+    }
+
+    .bvi-open:hover {
+        background-color: #d68205; /* Более тёмный оранжевый при наведении */
+    }
+</style>
+
+<!-- Конец кнопка для слабовидящих -->
+
+<!-- COOKIE BANNER START -->
+<div id="cookie-banner" style="display:none;">
+  <div style="
+    width: 320px;
+    min-height: 110px;
+    background: #222;
+    color: #fff;
+    padding: 18px 16px 14px 16px;
+    border-radius: 18px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+    font-size: 1.08em;
+    position: relative;
+    text-align: left;
+  ">
+    <div style="margin-bottom: 12px;">
+      Мы используем cookie.<br>
+      <a href="https://src.by/WDKL/cookie-policy" style="color:#ffd700;text-decoration:underline;font-size:1em;" target="_blank" rel="noopener">Подробнее</a>
+    </div>
+    <div style="display: flex; gap: 14px; align-items: center; justify-content: center;">
+      <button id="cookie-accept-btn" style="background:#2a7ae2;color:#fff;border:none;border-radius:6px;padding:10px 22px;min-width:120px;cursor:pointer;font-size:1.08em;display:flex;align-items:center;justify-content:center;">Согласиться</button>
+      <button id="cookie-decline-btn" style="background:#888;color:#fff;border:none;border-radius:6px;padding:10px 22px;min-width:120px;cursor:pointer;font-size:1.08em;display:flex;align-items:center;justify-content:center;">Отказаться</button>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!localStorage.getItem('cookieConsent')) {
+      var banner = document.getElementById('cookie-banner');
+      banner.style.display = 'block';
+      banner.style.position = 'fixed';
+      banner.style.left = '24px';
+      banner.style.bottom = '24px';
+      banner.style.zIndex = '10000';
+      banner.style.textAlign = 'left';
+      banner.style.background = 'none';
+      banner.style.boxShadow = 'none';
+    }
+    var acceptBtn = document.getElementById('cookie-accept-btn');
+    var declineBtn = document.getElementById('cookie-decline-btn');
+    if(acceptBtn) {
+      acceptBtn.onclick = function() {
+        document.getElementById('cookie-banner').style.display = 'none';
+        localStorage.setItem('cookieConsent', 'accepted');
+        // Здесь можно запускать аналитику и другие cookie-скрипты
+      };
+    }
+    if(declineBtn) {
+      declineBtn.onclick = function() {
+        document.getElementById('cookie-banner').style.display = 'none';
+        localStorage.setItem('cookieConsent', 'declined');
+        // Здесь можно отключить/не запускать аналитику и сторонние cookie
+      };
+    }
+  });
+</script>
+<!-- COOKIE BANNER END -->
+
+</body>
+</html>

@@ -1,8 +1,10 @@
 """Minsk IceParser strategies. Extract only — persistence is IceSessionPublisher."""
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -10,7 +12,7 @@ from zoneinfo import ZoneInfo
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA
+from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA, PARSER_KEY_MINSK_SPEED_OVAL
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -108,6 +110,54 @@ async def _load_minsk_arena_payloads(job: ParserJob) -> tuple[Any, Any, Any]:
     return calendar, {"data": events}, init
 
 
+async def _load_rental_prices_by_start(
+    job: ParserJob, *, calendar_days: set[str], tz: ZoneInfo
+) -> dict[int, Any]:
+    """Map event.start unix → rental price (already minor). Empty if job has no rental_service_id."""
+    rental_id = job.config.get("rental_service_id")
+    if not rental_id:
+        return {}
+    events: list[Any] = []
+    fixture_dir = job.config.get("fixture_dir")
+    if fixture_dir:
+        path = Path(str(fixture_dir)) / "rental_events.json"
+        if not path.is_file():
+            return {}
+        blob = json.loads(path.read_text(encoding="utf-8"))
+        chunk = blob.get("data") if isinstance(blob, dict) else blob
+        events = list(chunk or [])
+    else:
+        rental_cfg = dict(job.config)
+        rental_cfg["service_id"] = int(rental_id)
+        days = set(calendar_days)
+        if not days:
+            calendar = await fetch_http_json(minsk_arena_calendar_url(rental_cfg))
+            days = {str(row.get("date")) for row in (calendar or []) if row.get("date")}
+        for day_raw in sorted(days):
+            blob = await fetch_http_json(
+                minsk_arena_events_url(
+                    rental_cfg, local_date=date.fromisoformat(str(day_raw)), tz=tz
+                )
+            )
+            chunk = blob.get("data") if isinstance(blob, dict) else blob
+            events.extend(chunk or [])
+    zone = int(job.config.get("rental_zone_id") or 0)
+    out: dict[int, Any] = {}
+    for event in events:
+        start_ts = event.get("start")
+        if not start_ts:
+            continue
+        for price in event.get("prices") or []:
+            zone_id = int(price.get("mapZoneId") or 0)
+            if zone and zone_id != zone:
+                continue
+            amount = price.get("price")
+            if amount is not None:
+                out[int(start_ts)] = amount
+                break
+    return out
+
+
 def _norm_hhmm(raw: str) -> str:
     match = _HHMM.search(raw.replace(" ", ""))
     if not match:
@@ -126,6 +176,7 @@ class MinskArenaSaleframeParser(IceParser):
         allow = [s.lower() for s in job.config.get("kind_allow_substrings") or ["массовое катание"]]
         drop_items = [s.lower() for s in job.config.get("drop_item_name_substrings") or ["заточка"]]
         calendar_days = {str(row.get("date")) for row in (calendar or []) if row.get("date")}
+        rental_by_start = await _load_rental_prices_by_start(job, calendar_days=calendar_days, tz=tz)
         events = events_blob.get("data") if isinstance(events_blob, dict) else events_blob
         zone_names = {}
         for zone in (((init.get("mapData") or {}).get("map") or {}).get("staticZones") or []):
@@ -174,7 +225,7 @@ class MinskArenaSaleframeParser(IceParser):
                     kind_raw=performance,
                     price_adult=adult,
                     price_child=child,
-                    price_rental=None,
+                    price_rental=rental_by_start.get(int(start_ts)),
                     source_id=str(event.get("id") or ""),
                     session_label=performance,
                     age_note=age_note,
@@ -187,6 +238,12 @@ class MinskArenaSaleframeParser(IceParser):
             snapshot=snapshot,
             slots=slots,
         )
+
+
+class MinskSpeedOvalParser(MinskArenaSaleframeParser):
+    """ABWS saleframe/139 on object id=4. Same extract as hockey/55; rental joins service/138 by start."""
+
+    parser_key = PARSER_KEY_MINSK_SPEED_OVAL
 
 
 class ZamokHtmlParser(IceParser):

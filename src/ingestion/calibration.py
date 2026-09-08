@@ -15,13 +15,13 @@ from typing import Any, Iterable
 
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.parsers import default_registry
-from src.ingestion.seed_config import MINSK_ARENA_SALEFRAME_CONFIG, PARSER_KEY_MINSK_ARENA
+from src.ingestion.seed_config import saleframe_defaults_for
 from src.ingestion.types import CanonicalSlotDraft, ParserJob
 from src.ingestion.validate import IceSessionValidator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FIXTURES_DIR = REPO_ROOT / ".ai/data/fixtures"
-MANIFEST_PATH = REPO_ROOT / ".ai/data/calibration/manifest.json"
+FIXTURES_DIR = REPO_ROOT / "data/fixtures"
+MANIFEST_PATH = REPO_ROOT / "data/calibration/manifest.json"
 _NOW_FALLBACK = datetime(2026, 8, 30, 6, 0, tzinfo=timezone.utc)
 
 SCORE_FLOORS: dict[str, dict[str, float]] = {
@@ -286,8 +286,9 @@ def _job_for(item: GoldItem) -> ParserJob:
         "fixture_dir": str(item.fixture_dir),
         "requires_by_egress": item.scoring == "blocked_empty",
     }
-    if item.parser_key == PARSER_KEY_MINSK_ARENA:
-        config = dict(MINSK_ARENA_SALEFRAME_CONFIG)
+    defaults = saleframe_defaults_for(item.parser_key)
+    if defaults is not None:
+        config = dict(defaults)
         config["fixture_dir"] = str(item.fixture_dir)
     config.update(item.extra_config)
     gold = json.loads(item.gold_path.read_text(encoding="utf-8"))

@@ -2,8 +2,8 @@
 Client profile links: one Telegram/VK account acting as several client profiles (self + children).
 
 Decouples "who is logged in" (``account_telegram_id``) from "who the service is for"
-(``profile_client_id``, a ``clients`` row). See .ai/DECISION-multi-profile-clients.md and
-.ai/EPIC1-client-multi-profile.md for the full domain writeup.
+(``profile_client_id``, a ``clients`` row). See docs/adr/004-multi-profile-clients.md and
+docs/epics/client-multi-profile.md for the full domain writeup.
 
 Orthogonal to ``client_family_access_members`` (several accounts sharing one profile) —
 that mechanism is untouched; ``list_accessible_profiles`` surfaces its result alongside

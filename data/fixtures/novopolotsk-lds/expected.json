@@ -1,0 +1,75 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 30,
+  "city": "Новополоцк",
+  "parser_key": "novopolotsk_himik_html_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:05:00+03:00",
+  "source_files": [
+    "mass-skating.html"
+  ],
+  "child_price_on_page": false,
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": null,
+      "local_date": "2026-09-04",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 900,
+      "price_child_minor": null,
+      "price_rental_minor": 600
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": null,
+      "local_date": "2026-09-05",
+      "starts_at_local": "15:00",
+      "ends_at_local": "15:45",
+      "price_adult_minor": 1000,
+      "price_child_minor": null,
+      "price_rental_minor": 600
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": null,
+      "local_date": "2026-09-05",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 1000,
+      "price_child_minor": null,
+      "price_rental_minor": 600
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": null,
+      "local_date": "2026-09-06",
+      "starts_at_local": "15:00",
+      "ends_at_local": "15:45",
+      "price_adult_minor": 1000,
+      "price_child_minor": null,
+      "price_rental_minor": 600
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": null,
+      "age_note": null,
+      "local_date": "2026-09-06",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 1000,
+      "price_child_minor": null,
+      "price_rental_minor": 600
+    }
+  ]
+}

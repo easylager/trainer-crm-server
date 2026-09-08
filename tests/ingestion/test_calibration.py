@@ -142,6 +142,7 @@ def test_gold_manifest_covers_minsk_mk_pilot() -> None:
     ids = {item.source_id for item in manifest.items}
     assert ids == {
         "minsk-arena",
+        "minsk-speed-oval",
         "minsk-zamok",
         "minsk-chizhovka",
         "minsk-ledby",

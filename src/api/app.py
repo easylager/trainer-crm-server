@@ -34,6 +34,7 @@ from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.maintenance import MaintenanceModeMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
+from src.shared.catalog_entry import catalog_browse_redirect
 from src.shared.outage import (
     SERVICE_UNAVAILABLE_CODE,
     service_unavailable_payload,
@@ -176,8 +177,11 @@ def webapp_book_page():
 
 
 @app.get("/webapp/catalog")
-def webapp_catalog_page():
-    """Serve the client catalog Mini App (city → service → arena → trainers → select)."""
+def webapp_catalog_page(request: Request):
+    """Trainer card Mini App. Browse without trainer_id goes to Ice (TASK-084)."""
+    target = catalog_browse_redirect(request.query_params)
+    if target:
+        return RedirectResponse(url=target, status_code=307)
     path = _WEBAPP_DIR / "catalog.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
