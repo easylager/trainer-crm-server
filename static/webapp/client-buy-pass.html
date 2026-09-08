@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <style>
@@ -286,7 +287,9 @@
       <div class="bd-section-label">Сертификаты</div>
       <div id="certListContent"></div>
     </div>
-    <div id="emptyAll" class="empty" style="display:none;">У этого тренера пока нет абонементов и сертификатов.</div>
+    <!-- TASK-096 AC-002: контейнер под состояние с выходом. Текст и кнопка ставятся из JS,
+         разметка молчит, чтобы «пока нет» не мелькнуло до загрузки. -->
+    <div id="emptyAll" style="display:none;"></div>
   </div>
   <script>
     (function() {
@@ -378,7 +381,28 @@
           document.getElementById('passSection').style.display = hasPasses ? 'block' : 'none';
           document.getElementById('certSection').style.display = hasCerts ? 'block' : 'none';
           var emptyAll = !hasPasses && !hasCerts;
-          document.getElementById('emptyAll').style.display = emptyAll ? 'block' : 'none';
+          var emptyAllEl = document.getElementById('emptyAll');
+          emptyAllEl.style.display = emptyAll ? 'block' : 'none';
+          if (emptyAll) {
+            // TASK-096 AC-002: у этого тренера витрины нет — но записаться к нему можно,
+            // и это ближайший осмысленный следующий шаг, а не тупик.
+            var E = window.MiniAppEmptyState;
+            if (E) {
+              E.renderOrFallback(emptyAllEl, {
+                icon: E.ICONS.ticket,
+                title: 'У этого тренера пока нет абонементов',
+                hint: 'Ни абонементов, ни сертификатов он пока не выставил. Записаться на занятие можно как обычно.',
+                ctaLabel: 'Записаться на занятие',
+                onCta: function() { history.back(); },
+                fallbackText: 'У этого тренера пока нет абонементов и сертификатов.',
+              });
+            } else {
+              emptyAllEl.innerHTML =
+                '<div class="empty">У этого тренера пока нет абонементов и сертификатов.</div>';
+            }
+          } else {
+            emptyAllEl.innerHTML = '';
+          }
           var nudgeLine = document.getElementById('bpNudge');
           if (nudgeLine) nudgeLine.style.display = emptyAll ? 'none' : '';
           var bestIdx = -1;

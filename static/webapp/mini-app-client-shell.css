@@ -362,42 +362,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 /* ─── Shared empty state ─────────────────────────────────────────────────── */
-
-.client-empty-state {
-  text-align: center;
-  padding: 36px 20px 28px;
-  max-width: 320px;
-  margin: 0 auto;
-}
-
-.client-empty-state__icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 14px;
-  color: var(--app-cta-fill);
-  opacity: 0.85;
-}
-
-.client-empty-state__title {
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-  color: var(--tg-theme-text-color);
-}
-
-.client-empty-state__hint {
-  font-size: var(--app-text-body);
-  line-height: 1.45;
-  color: var(--tg-theme-hint-color);
-  margin: 0 0 18px;
-}
-
-.client-empty-state .btn-primary,
-.client-empty-state .btn-neutral {
-  max-width: 280px;
-  margin: 0 auto;
-}
+/* TASK-096: `.client-empty-state` moved to mini-app-components.css. Screens without a tab bar
+   (абонементы, сертификаты, покупка) never load this file, and they need empty states too. */
 
 /* ─── Shared skeleton (aligned with hub) ─────────────────────────────────── */
 

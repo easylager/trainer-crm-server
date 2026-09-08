@@ -3912,6 +3912,31 @@
         }
       }
 
+      /**
+       * TASK-096 AC-002: один вызов общего компонента пустого состояния на весь каталог.
+       * `iconName` — ключ в MiniAppEmptyState.ICONS; `fallbackText` рисуется, только если
+       * mini-app-empty-state.js не загрузился, чтобы контейнер никогда не оставался пустым.
+       */
+      function renderCatalogEmpty(container, opts) {
+        if (!container) return;
+        var E = window.MiniAppEmptyState;
+        if (!E) {
+          container.innerHTML = '<div class="empty">' + escapeHtml(opts.fallbackText || '') + '</div>';
+          return;
+        }
+        E.renderOrFallback(container, {
+          icon: E.ICONS[opts.iconName] || E.ICONS.search,
+          title: opts.title,
+          hint: opts.hint,
+          ctaLabel: opts.ctaLabel,
+          ctaPath: opts.ctaPath,
+          onCta: opts.onCta,
+          secondaryLabel: opts.secondaryLabel,
+          onSecondary: opts.onSecondary,
+          fallbackText: opts.fallbackText,
+        });
+      }
+
       function resetPickerSearch(kind) {
         var input = document.getElementById(kind + 'SearchInput');
         if (!input || !input.value) return;
@@ -4510,7 +4535,16 @@
         getJson('/cities').then(function(data) {
           catalogCityItems = data.items || [];
           if (!catalogCityItems.length) {
-            document.getElementById('cityList').innerHTML = '<div class="empty">Нет городов</div>';
+            // TASK-096 AC-002: пустой список городов — не состояние продукта, а сбой загрузки.
+            // «Нет городов» без кнопки оставляло экран, из которого нельзя выйти.
+            renderCatalogEmpty(document.getElementById('cityList'), {
+              iconName: 'city',
+              title: 'Список городов не загрузился',
+              hint: 'Похоже, пропала связь. Попробуйте открыть список ещё раз.',
+              ctaLabel: 'Повторить',
+              onCta: function() { loadCities(); },
+              fallbackText: 'Нет городов',
+            });
             syncPickerSearchChrome('city', 0, 0, '');
             syncCatalogHeaderBack();
             return;
@@ -4623,8 +4657,17 @@
         loadReq.then(function(data) {
           var items = data.items || [];
           if (!items.length) {
-            var emptyMsg = 'Нет услуг в каталоге';
-            document.getElementById('serviceList').innerHTML = '<div class="empty">' + emptyMsg + '</div>';
+            // TASK-096 AC-002: пустой каталог услуг — сбой, а не состояние. Даём повтор.
+            renderCatalogEmpty(document.getElementById('serviceList'), {
+              iconName: 'retry',
+              title: 'Список услуг не загрузился',
+              hint: 'Похоже, пропала связь. Попробуйте ещё раз или вернитесь к выбору города.',
+              ctaLabel: 'Повторить',
+              onCta: function() { loadServices(); },
+              secondaryLabel: 'Выбрать город',
+              onSecondary: function() { showScreen('screenCity'); },
+              fallbackText: 'Нет услуг в каталоге',
+            });
             var backCityEmpty = document.getElementById('backToCity');
             if (backCityEmpty) backCityEmpty.style.display = state.returnToSummary ? 'none' : 'block';
             syncCatalogHeaderBack();
@@ -4966,7 +5009,15 @@
         var input = document.getElementById('arenaSearchInput');
         var query = input ? input.value : '';
         if (!items.length) {
-          listEl.innerHTML = '<div class="empty">В этом городе арены пока не добавлены</div>';
+          // TASK-096 AC-002: арен в городе нет — выход в другой город, а не сообщение в пустоту.
+          renderCatalogEmpty(listEl, {
+            iconName: 'city',
+            title: 'В этом городе арен пока нет',
+            hint: 'Мы добавляем площадки по городам постепенно. В другом городе они, скорее всего, уже есть.',
+            ctaLabel: 'Выбрать другой город',
+            onCta: function() { showScreen('screenCity'); },
+            fallbackText: 'В этом городе арены пока не добавлены',
+          });
           syncPickerSearchChrome('arena', 0, 0, query);
           return;
         }
@@ -4975,10 +5026,16 @@
         });
         syncPickerSearchChrome('arena', items.length, filtered.length, query);
         if (!filtered.length) {
-          listEl.innerHTML =
-            '<div class="empty">' +
-            'Площадка не найдена<div class="catalog-picker-search__empty-hint">Попробуйте часть названия или адреса</div>' +
-            '</div>';
+          // TASK-096 AC-002: фильтр ничего не нашёл — сбросить его можно кнопкой, а не только
+          // догадавшись очистить поле поиска.
+          renderCatalogEmpty(listEl, {
+            iconName: 'search',
+            title: 'Площадка не найдена',
+            hint: 'Попробуйте часть названия или адреса — или посмотрите все площадки города.',
+            ctaLabel: 'Показать все площадки',
+            onCta: function() { resetPickerSearch('arena'); },
+            fallbackText: 'Площадка не найдена',
+          });
           return;
         }
         var selectedSet = {};

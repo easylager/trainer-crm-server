@@ -333,12 +333,7 @@
       var empty = M.formatEmptyList(state.intent, {
         serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
       });
-      list.innerHTML =
-        '<div class="ice-empty"><b>' +
-        esc(empty.title) +
-        '</b><p>' +
-        esc(empty.body) +
-        '</p></div>';
+      renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
       return;
     }
     list.innerHTML = state.items
@@ -346,6 +341,78 @@
         return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
+  }
+
+  /**
+   * TASK-096 AC-002. Turns a model-side `{title, body, action, secondary}` shape into a real
+   * empty state with tappable exits. `kind` strings are resolved here because only the view
+   * knows how to switch a chip or open the city sheet.
+   */
+  function emptyAction(kind) {
+    if (kind === 'city') {
+      return function () {
+        openCityPicker(true);
+      };
+    }
+    if (kind === 'clear-service') {
+      return function () {
+        state.serviceId = null;
+        renderServiceChips();
+        persist();
+        loadTrainers();
+      };
+    }
+    if (kind === 'clear-search') {
+      return function () {
+        var input = $('iceSearchInput');
+        if (input) input.value = '';
+        showSearch('');
+      };
+    }
+    if (kind === 'retry') {
+      return function () {
+        loadList();
+      };
+    }
+    if (kind && kind.indexOf('intent:') === 0) {
+      var next = kind.slice('intent:'.length);
+      return function () {
+        state.intent = M.coerceIntent(next);
+        setChips();
+        setViewToggle();
+        persist();
+        loadList();
+      };
+    }
+    return null;
+  }
+
+  function renderEmpty(container, shape, iconName) {
+    if (!container) return;
+    var comp = global.MiniAppEmptyState;
+    var action = shape && shape.action;
+    var onCta = action ? emptyAction(action.kind) : null;
+    if (!comp || !onCta) {
+      // Degradation, not a designed state: the panel keeps the copy so the screen is never blank.
+      container.innerHTML =
+        '<div class="ice-empty"><b>' +
+        esc(shape.title) +
+        '</b><p>' +
+        esc(shape.body || '') +
+        '</p></div>';
+      return;
+    }
+    var secondary = shape.secondary;
+    var onSecondary = secondary ? emptyAction(secondary.kind) : null;
+    comp.render(container, {
+      icon: comp.ICONS[iconName || 'ice'],
+      title: shape.title,
+      hint: shape.body,
+      ctaLabel: action.label,
+      onCta: onCta,
+      secondaryLabel: onSecondary ? secondary.label : null,
+      onSecondary: onSecondary,
+    });
   }
 
   function applyArenaPayload(data) {
@@ -386,11 +453,16 @@
   }
 
   function loadFailed() {
-    var list = $('iceList');
-    if (list) {
-      list.innerHTML =
-        '<div class="ice-empty"><b>Не удалось загрузить список</b><p>Попробуйте ещё раз.</p></div>';
-    }
+    // TASK-096: «Попробуйте ещё раз» without a button is an instruction the screen doesn't honour.
+    renderEmpty(
+      $('iceList'),
+      {
+        title: 'Не удалось загрузить список',
+        body: 'Похоже, пропала связь. Список загрузится заново по кнопке.',
+        action: { label: 'Повторить', kind: 'retry' },
+      },
+      'retry'
+    );
   }
 
   function loadArenas() {
@@ -712,7 +784,12 @@
             '</span></button>';
         });
       });
-      box.innerHTML = html || '<div class="ice-state">Ничего не найдено</div>';
+      if (html) {
+        box.innerHTML = html;
+        return;
+      }
+      // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
+      renderEmpty(box, M.formatEmptySearch(query), 'search');
     });
   }
 

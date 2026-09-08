@@ -412,35 +412,61 @@
     };
   }
 
+  /**
+   * TASK-096 AC-002: an empty state must offer the way out, not merely name it in prose.
+   * Each shape now carries `action` (and sometimes `secondary`) — an intent the view turns into a
+   * real button: `intent:<id>` switches the chip, `city` opens the city picker, `clear-service`
+   * drops the service filter, `retry` reloads.
+   */
   function formatEmptyList(intent, opts) {
     opts = opts || {};
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
-        body: 'В этом городе нет будущих сеансов. Смените город или откройте чип «Тренеры».',
+        body: 'В этом городе нет будущих сеансов — но тренеры здесь есть.',
+        action: { label: 'Показать тренеров', kind: 'intent:coach' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     if (intent === INTENTS.group) {
       return {
         title: 'Групп с набором нет',
-        body: 'Площадки появятся, когда откроется набор. Чип «Тренеры» — список тренеров города.',
+        body: 'Площадки появятся, когда откроется набор. Пока можно записаться к тренеру.',
+        action: { label: 'Показать тренеров', kind: 'intent:coach' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     if (intent === INTENTS.coach) {
       if (opts.serviceName) {
         return {
           title: 'Нет тренеров по этой услуге',
-          body: 'Снимите фильтр или смените город.',
+          body: 'В городе есть другие тренеры — снимите фильтр по услуге.',
+          action: { label: 'Показать всех тренеров', kind: 'clear-service' },
+          secondary: { label: 'Сменить город', kind: 'city' },
         };
       }
       return {
         title: 'В этом городе пока нет тренеров',
-        body: 'Смените город или вернитесь к чипу «Покататься».',
+        body: 'Посмотрите массовые катания или выберите другой город.',
+        action: { label: 'Показать массовые катания', kind: 'intent:skate' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     return {
       title: 'В этом городе пока нет катков',
-      body: 'Смените город или откройте чип «Тренеры».',
+      body: 'Посмотрите тренеров города или выберите другой город.',
+      action: { label: 'Показать тренеров', kind: 'intent:coach' },
+      secondary: { label: 'Сменить город', kind: 'city' },
+    };
+  }
+
+  /** Search dropdown with no hits. Was «Ничего не найдено» — a literal dead end. */
+  function formatEmptySearch(query) {
+    var q = String(query || '').trim();
+    return {
+      title: q ? 'По запросу «' + q + '» ничего нет' : 'Ничего не найдено',
+      body: 'Поиск ищет по каткам, тренерам и городам. Можно открыть весь лёд города списком.',
+      action: { label: 'Показать весь лёд города', kind: 'clear-search' },
     };
   }
 
@@ -561,6 +587,7 @@
     sessionDayLabel: sessionDayLabel,
     boardCardView: boardCardView,
     formatEmptyList: formatEmptyList,
+    formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <style>
@@ -1124,7 +1125,21 @@
             }
 
             if (passState.items.length === 0 && !showShop) {
-              listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              // TASK-096 AC-002. Витрины у этого тренера нет (showShop=false), значит выход —
+              // не «купить здесь», а к другим тренерам.
+              var E = window.MiniAppEmptyState;
+              if (E) {
+                E.renderOrFallback(listEl, {
+                  icon: E.ICONS.ticket,
+                  title: 'Пока нет абонементов',
+                  hint: 'Абонемент оформляет тренер — спросите про него при записи или выберите другого тренера.',
+                  ctaLabel: 'Найти тренера',
+                  ctaPath: 'ice?intent=coach',
+                  fallbackText: 'Пока нет абонементов.',
+                });
+              } else {
+                listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              }
               return;
             }
 
@@ -1510,8 +1525,23 @@
             });
             if (rest.length === 0) {
               if (primaries.length === 0) {
-                listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+                // TASK-096 AC-002: ни одного сертификата — состояние с выходом.
+                var E = window.MiniAppEmptyState;
+                if (E) {
+                  E.renderOrFallback(listEl, {
+                    icon: E.ICONS.gift,
+                    title: 'Пока нет сертификатов',
+                    hint: 'Сертификат на занятия оформляет тренер — его можно попросить как подарок.',
+                    ctaLabel: 'Найти тренера',
+                    ctaPath: 'ice?intent=coach',
+                    fallbackText: 'Пока нет сертификатов.',
+                  });
+                } else {
+                  listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+                }
               } else {
+                // Не пустое состояние: сертификаты есть и показаны выше. Это подпись хвоста
+                // списка, и превращать её в экран с кнопкой было бы неправдой.
                 listEl.innerHTML = '<div class="empty cert-list-rest-empty">Других сертификатов нет.</div>';
               }
               return;

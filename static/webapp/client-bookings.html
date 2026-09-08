@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609031" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609031" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609031" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
   <script>
     (function () {
@@ -1041,9 +1042,39 @@
           html += '</div>';
         }
         if (!anyCard) {
-          html = filterId != null
-            ? '<div class="empty">Нет записей с выбранным тренером.</div>'
-            : '<div class="empty">У вас пока нет записей.<br>Выберите тренера в каталоге и нажмите «Записаться».</div>';
+          // TASK-096 AC-002: этот путь рендера тоже упирался в текст без выхода. Фильтр по
+          // тренеру снимается кнопкой, а полностью пустой список ведёт к выбору тренера.
+          var listBox = document.getElementById('listContent');
+          var E = window.MiniAppEmptyState;
+          if (E && filterId != null) {
+            E.renderOrFallback(listBox, {
+              icon: E.ICONS.calendar,
+              title: 'С этим тренером записей нет',
+              hint: 'У других тренеров записи могут быть — снимите фильтр, чтобы увидеть весь список.',
+              ctaLabel: 'Показать все записи',
+              onCta: function() {
+                state.trainerFilter = null;
+                renderTrainerChips();
+                renderAllBookings();
+              },
+              fallbackText: 'Нет записей с выбранным тренером.',
+            });
+          } else if (E) {
+            E.renderOrFallback(listBox, {
+              icon: E.ICONS.calendar,
+              title: 'Пока нет записей',
+              hint: 'Выберите тренера на вкладке «Лёд» — свободные слоты видны сразу.',
+              ctaLabel: 'Найти тренера',
+              ctaPath: 'ice?intent=coach',
+              fallbackText: 'У вас пока нет записей.',
+            });
+          } else {
+            listBox.innerHTML = filterId != null
+              ? '<div class="empty">Нет записей с выбранным тренером.</div>'
+              : '<div class="empty">У вас пока нет записей.</div>';
+          }
+          // Карточек нет — вешать на них обработчики не нужно, выходим до этого блока.
+          return;
         }
         document.getElementById('listContent').innerHTML = html;
         document.querySelectorAll('.booking-card .btn-cancel').forEach(function(btn) {

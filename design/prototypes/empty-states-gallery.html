@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TASK-096 — пустые состояния клиентского приложения</title>
+<!--
+  Стенд, не экран продукта. Задача одна: увидеть все пустые состояния сразу и в обеих темах,
+  не подделывая под каждое живые данные (нет абонементов, нет арен в городе, оборвалась сеть).
+
+  Грузит НАСТОЯЩИЕ файлы: theme.css, mini-app-components.css и mini-app-empty-state.js. Если
+  состояние здесь выглядит правильно — оно так же выглядит в приложении, потому что это тот же
+  компонент и те же токены. Если поправить компонент и забыть про стенд, стенд сломается сам.
+
+  Открывать файлом: design/prototypes/empty-states-gallery.html
+-->
+<link rel="stylesheet" href="../../static/webapp/theme.css" />
+<link rel="stylesheet" href="../../static/webapp/mini-app-client-theme.css" />
+<link rel="stylesheet" href="../../static/webapp/mini-app-components.css" />
+<style>
+  body {
+    margin: 0;
+    font-family: var(--app-font-sans, system-ui);
+  }
+  /* Хром стенда носит собственный контрастный фон. theme.css красит body под тему приложения,
+     поэтому текст стенда без своей подложки проваливал бы AA в светлой теме — и проверка
+     контраста ругалась бы на стенд вместо продукта. */
+  .g-head {
+    padding: 20px 16px 10px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .g-head h1,
+  .g-head p,
+  .g-cell > figcaption {
+    background: #111827;
+    color: #fff;
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+  .g-head h1 { font-size: 19px; margin: 0 0 8px; }
+  .g-head p { margin: 0; max-width: 62ch; }
+  .g-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    padding: 16px;
+    align-items: flex-start;
+  }
+  .g-cell { width: 330px; }
+  .g-cell > figcaption {
+    font-size: 12px;
+    margin: 0 0 6px;
+  }
+  /* Ячейка = холст приложения. Тема живёт классом на <html> (theme.css: html.client-mini-dark),
+     поэтому переключается для всей страницы, а не по ячейкам. */
+  .g-canvas {
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--tg-theme-bg-color);
+    color: var(--tg-theme-text-color);
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+  }
+  .g-canvas > div { width: 100%; }
+  .g-toggle {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 9;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: #111827;
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<button type="button" class="g-toggle" id="themeToggle">Тёмная тема</button>
+<div class="g-head">
+  <h1>TASK-096 · пустые состояния</h1>
+  <p>Каждое состояние обязано иметь выход; компонент отказывается рисовать состояние без кнопки. Тема переключается кнопкой справа — снимать надо оба прогона.</p>
+</div>
+<div class="g-grid" id="grid"></div>
+
+<script src="../../static/webapp/mini-app-empty-state.js"></script>
+<script>
+(function () {
+  var E = window.MiniAppEmptyState;
+  var noop = function () {};
+
+  // Те же аргументы, что передают экраны. Расхождение здесь — расхождение в продукте.
+  var CASES = [
+    ['Лёд · нет массового катания', {
+      icon: E.ICONS.city,
+      title: 'Сейчас нет массового катания',
+      hint: 'В этом городе нет будущих сеансов — но тренеры здесь есть.',
+      ctaLabel: 'Показать тренеров', onCta: noop,
+      secondaryLabel: 'Сменить город', onSecondary: noop,
+    }],
+    ['Лёд · нет тренеров по услуге', {
+      icon: E.ICONS.ice,
+      title: 'Нет тренеров по этой услуге',
+      hint: 'В городе есть другие тренеры — снимите фильтр по услуге.',
+      ctaLabel: 'Показать всех тренеров', onCta: noop,
+      secondaryLabel: 'Сменить город', onSecondary: noop,
+    }],
+    ['Лёд · поиск без результата', {
+      icon: E.ICONS.search,
+      title: 'По запросу «Юность-2» ничего нет',
+      hint: 'Поиск ищет по каткам, тренерам и городам. Можно открыть весь лёд города списком.',
+      ctaLabel: 'Показать весь лёд города', onCta: noop,
+    }],
+    ['Лёд · список не загрузился', {
+      icon: E.ICONS.retry,
+      title: 'Не удалось загрузить список',
+      hint: 'Похоже, пропала связь. Список загрузится заново по кнопке.',
+      ctaLabel: 'Повторить', onCta: noop,
+    }],
+    ['Записи · пусто', {
+      icon: E.ICONS.calendar,
+      title: 'Пока нет записей',
+      hint: 'Выберите тренера на вкладке «Лёд» — свободные слоты видны сразу.',
+      ctaLabel: 'Найти тренера', onCta: noop,
+    }],
+    ['Записи · фильтр по тренеру', {
+      icon: E.ICONS.calendar,
+      title: 'С этим тренером записей нет',
+      hint: 'У других тренеров записи могут быть — снимите фильтр, чтобы увидеть весь список.',
+      ctaLabel: 'Показать все записи', onCta: noop,
+    }],
+    ['Абонементы · пусто', {
+      icon: E.ICONS.ticket,
+      title: 'Пока нет абонементов',
+      hint: 'Абонемент оформляет тренер — выберите тренера и спросите про абонемент при записи.',
+      ctaLabel: 'Найти тренера', onCta: noop,
+    }],
+    ['Сертификаты · пусто', {
+      icon: E.ICONS.gift,
+      title: 'Пока нет сертификатов',
+      hint: 'Сертификат на занятия оформляет тренер — его можно попросить как подарок для близкого.',
+      ctaLabel: 'Найти тренера', onCta: noop,
+    }],
+    ['Витрина тренера · пусто', {
+      icon: E.ICONS.ticket,
+      title: 'У этого тренера пока нет абонементов',
+      hint: 'Ни абонементов, ни сертификатов он пока не выставил. Записаться на занятие можно как обычно.',
+      ctaLabel: 'Записаться на занятие', onCta: noop,
+    }],
+    ['Каталог · города не загрузились', {
+      icon: E.ICONS.city,
+      title: 'Список городов не загрузился',
+      hint: 'Похоже, пропала связь. Попробуйте открыть список ещё раз.',
+      ctaLabel: 'Повторить', onCta: noop,
+    }],
+    ['Каталог · нет арен в городе', {
+      icon: E.ICONS.city,
+      title: 'В этом городе арен пока нет',
+      hint: 'Мы добавляем площадки по городам постепенно. В другом городе они, скорее всего, уже есть.',
+      ctaLabel: 'Выбрать другой город', onCta: noop,
+    }],
+    ['Каталог · площадка не найдена', {
+      icon: E.ICONS.search,
+      title: 'Площадка не найдена',
+      hint: 'Попробуйте часть названия или адреса — или посмотрите все площадки города.',
+      ctaLabel: 'Показать все площадки', onCta: noop,
+    }],
+  ];
+
+  var grid = document.getElementById('grid');
+  CASES.forEach(function (pair) {
+    var fig = document.createElement('figure');
+    fig.className = 'g-cell';
+    fig.style.margin = '0';
+    var cap = document.createElement('figcaption');
+    cap.textContent = pair[0];
+    var canvas = document.createElement('div');
+    canvas.className = 'g-canvas';
+    var host = document.createElement('div');
+    canvas.appendChild(host);
+    fig.appendChild(cap);
+    fig.appendChild(canvas);
+    grid.appendChild(fig);
+    if (!E.render(host, pair[1])) {
+      // Стенд обязан ловить это первым: состояние без выхода — брак, а не вариант оформления.
+      host.innerHTML = '<p style="color:#f87171;padding:24px;text-align:center">Состояние без выхода — компонент отказал</p>';
+    }
+  });
+
+  // theme.css выбирает тёмную по классу на <html> (html.client-mini-dark), а не по
+  // prefers-color-scheme: тема Telegram и тема ОС — разные вещи.
+  var DARK_CLASS = 'client-mini-dark';
+  var btn = document.getElementById('themeToggle');
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle(DARK_CLASS, dark);
+    btn.textContent = dark ? 'Светлая тема' : 'Тёмная тема';
+  }
+  applyTheme(/[?&]theme=dark/.test(location.search));
+  btn.addEventListener('click', function () {
+    applyTheme(!document.documentElement.classList.contains(DARK_CLASS));
+  });
+})();
+</script>
+</body>
+</html>

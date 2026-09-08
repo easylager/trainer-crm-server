@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <style>
@@ -381,7 +382,22 @@
           .then(function(data) {
             state.items = data.items || [];
             if (state.items.length === 0) {
-              document.getElementById('listContent').innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              // TASK-096 AC-002: абонемент нельзя купить «вообще» — его выдаёт конкретный
+              // тренер, поэтому единственный честный выход отсюда — к тренерам.
+              var listEl = document.getElementById('listContent');
+              var E = window.MiniAppEmptyState;
+              if (E) {
+                E.renderOrFallback(listEl, {
+                  icon: E.ICONS.ticket,
+                  title: 'Пока нет абонементов',
+                  hint: 'Абонемент оформляет тренер — выберите тренера и спросите про абонемент при записи.',
+                  ctaLabel: 'Найти тренера',
+                  ctaPath: 'ice?intent=coach',
+                  fallbackText: 'Пока нет абонементов.',
+                });
+              } else {
+                listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              }
               return;
             }
             function formatPriceChip(cents) {

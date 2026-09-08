@@ -805,43 +805,34 @@
       .replace(/"/g, '&quot;');
   }
 
+  /**
+   * TASK-096: one renderer, not two. The implementation lives in mini-app-empty-state.js so that
+   * shell-free screens can use it; this stays as the call site the shell's own screens already use.
+   * The old version tolerated an empty state with no CTA — that is exactly what AC-002 forbids,
+   * so the shared renderer now refuses it instead of quietly drawing a dead end.
+   */
   function renderEmptyState(container, options) {
     if (!container) return;
+    var comp = global.MiniAppEmptyState;
+    if (!comp || typeof comp.render !== 'function') {
+      if (global.console && global.console.error) {
+        global.console.error('ClientShell.renderEmptyState: mini-app-empty-state.js is not loaded');
+      }
+      return;
+    }
     options = options || {};
-    var icon = options.icon || TAB_ICONS.catalog;
-    var title = escHtml(options.title || 'Пока пусто');
-    var hint = options.hint ? escHtml(options.hint) : '';
-    var ctaLabel = options.ctaLabel;
-    var ctaPath = options.ctaPath;
-
-    var html =
-      '<div class="client-empty-state" role="status">' +
-      '<div class="client-empty-state__icon">' +
-      icon +
-      '</div>' +
-      '<p class="client-empty-state__title">' +
-      title +
-      '</p>';
-    if (hint) {
-      html += '<p class="client-empty-state__hint">' + hint + '</p>';
-    }
-    if (ctaLabel && ctaPath) {
-      html +=
-        '<button type="button" class="btn-primary btn-block client-empty-state__cta" data-nav-path="' +
-        ctaPath +
-        '">' +
-        ctaLabel +
-        '</button>';
-    }
-    html += '</div>';
-    container.innerHTML = html;
-    var cta = container.querySelector('.client-empty-state__cta');
-    if (cta) {
-      cta.addEventListener('click', function () {
-        hapticSelection();
-        navigate(cta.getAttribute('data-nav-path'));
-      });
-    }
+    comp.render(container, {
+      icon: options.icon || TAB_ICONS.catalog,
+      title: options.title || 'Пока пусто',
+      hint: options.hint,
+      ctaLabel: options.ctaLabel,
+      ctaPath: options.ctaPath,
+      ctaHref: options.ctaHref,
+      onCta: options.onCta,
+      secondaryLabel: options.secondaryLabel,
+      secondaryPath: options.secondaryPath,
+      onSecondary: options.onSecondary,
+    });
   }
 
   function renderSkeletonList(container, count) {
