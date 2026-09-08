@@ -343,7 +343,11 @@ from src.application.demand_signals_use_cases import (
     get_signals_since,
 )
 from src.infrastructure.db import async_session_factory
-from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
+from src.infrastructure.db.models import (
+    CLIENT_SHARE_KIND_TRAINER,
+    SUBSCRIPTION_TIERS,
+    TRAINER_STATUS_ACTIVE,
+)
 from src.shared.webapp_http_messages import (
     TRAINER_WEBAPP_FORBIDDEN_DETAIL,
     WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
@@ -381,6 +385,7 @@ from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
 )
+from src.application.client_delight_metrics import record_client_share
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
@@ -2952,6 +2957,19 @@ async def get_client_share_trainer(
     service_line = services[0] if services else None
 
     share_body = share_body_for_native_share_dialog(share_text, deep_link)
+
+    # TASK-096 (G-P5): until now share_context was accepted and thrown away, so the share rate
+    # was unknowable rather than low. This endpoint is only called from a «Поделиться» click
+    # handler, so one row here == one intent to share. It is *not* "a message was sent" —
+    # Telegram never tells us that, and the column must not be read as if it did.
+    await record_client_share(
+        session,
+        kind=CLIENT_SHARE_KIND_TRAINER,
+        share_context=raw_ctx or "catalog",
+        trainer_id=trainer_id,
+        telegram_id=client_catalog_telegram_key(principal),
+        payload={"city": city_name} if city_name else None,
+    )
 
     return {
         "share_url": deep_link,
