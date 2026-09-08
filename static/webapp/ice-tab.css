@@ -49,6 +49,14 @@ body.ar-pilot--ice .client-app-header {
   color: var(--glide-ink-teal);
 }
 
+/* TASK-090: имя экрана и город — одна строка, минус ~45px до первой карточки. */
+.ice-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
 .ice-masthead {
   margin: 0;
   font-size: var(--app-text-display);
@@ -58,7 +66,8 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-citypill {
-  align-self: flex-start;
+  flex: 0 0 auto;
+  max-width: 60%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -72,6 +81,13 @@ body.ar-pilot--ice .client-app-header {
   font-weight: var(--app-weight-semibold);
   color: inherit;
   cursor: pointer;
+}
+
+.ice-citypill__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ice-citypill::after {
@@ -211,6 +227,148 @@ body.ar-pilot--ice .client-app-header {
   margin: 0;
 }
 
+/*
+ * TASK-090. КАРТОЧКА-ТАБЛО.
+ *
+ * Жанр экрана — расписание, а не витрина товаров: у строки один якорь (время),
+ * и он крупнее всего остального на ступень шкалы. Порядок чтения задан сверху
+ * вниз прямо на кадре: КОГДА (день + время) → ГДЕ (каток + район). Условия и
+ * глубина предложения живут ниже, на поверхности карточки, где контраст
+ * измерим чекером, а не «примерно белый по фотографии».
+ *
+ * Три уровня иерархии, каждый на ступень друг от друга:
+ *   display (29) время → title (20) имя катка → caption (12) район и цены.
+ */
+.ice-board {
+  display: block;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  overflow: hidden;
+}
+
+.ice-board__photo {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  /* 2:1 — кадр катка узнаётся, но не превращает список в ленту афиш. */
+  aspect-ratio: 2 / 1;
+  background-color: var(--app-media-bed);
+  background-size: cover;
+  background-position: center;
+}
+
+/*
+ * AC-006 и Q-001: каток без кадра. Плоский прямоугольник читался как ошибка
+ * загрузки; здесь это осознанная плашка — фактура льда под углом и монограмма.
+ */
+.ice-board__photo--empty {
+  background-image: repeating-linear-gradient(
+      115deg,
+      transparent 0 22px,
+      rgba(127, 127, 127, 0.06) 22px 24px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+}
+
+.ice-board__initial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.55;
+  letter-spacing: -0.02em;
+}
+
+.ice-board__scrim {
+  position: relative;
+  width: 100%;
+  padding: var(--app-space-6) var(--app-space-4) var(--app-space-3);
+  background: var(--app-media-scrim);
+}
+
+.ice-board__day {
+  display: block;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--app-on-media-dim);
+  margin-bottom: 2px;
+}
+
+.ice-board__time {
+  display: block;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  /* Табло: цифры не должны плясать по ширине от строки к строке. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--app-on-media);
+}
+
+.ice-board__name {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--app-on-media);
+}
+
+.ice-board__where {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  color: var(--app-on-media-dim);
+}
+
+.ice-board__facts {
+  display: block;
+  padding: 10px var(--app-space-4);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  line-height: 1.45;
+}
+
+.ice-board__status {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-medium);
+}
+
+/* AC-004: глубина предложения — собственная строка, а не хвост прайса. */
+.ice-board__depth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  padding: 10px var(--app-space-4) var(--app-space-3);
+  border-top: 1px solid var(--app-card-line);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-ink-teal);
+}
+
+.ice-board__go {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
 .ice-acard {
   display: grid;
   grid-template-columns: 74px 1fr 12px;
@@ -245,8 +403,28 @@ body.ar-pilot--ice .client-app-header {
   background-position: center;
 }
 
+/*
+ * AC-006 / F-5: раньше это была плоская заливка — на скрине списка тренеров
+ * получался ряд мёртвых прямоугольников. Теперь плашка говорит, чья она.
+ */
 .ice-acard__ph--empty {
-  background: var(--glide-paper);
+  background: repeating-linear-gradient(
+      115deg,
+      transparent 0 14px,
+      rgba(127, 127, 127, 0.06) 14px 16px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ice-acard__mono {
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.6;
+  letter-spacing: -0.02em;
 }
 
 .ice-acard__body {
@@ -499,7 +677,8 @@ body.ar-pilot--ice .client-app-header {
 .ice-list {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  /* Карточка-табло выше строки списка — 9px между ними читались как слипание. */
+  gap: var(--app-space-3);
 }
 
 .ice-state {

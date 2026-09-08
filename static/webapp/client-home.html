@@ -10,13 +10,13 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202608315"></script>
-<link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
+<link rel="stylesheet" href="theme.css?v=202609081" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609081" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>
-  <link rel="preload" href="client-home-main.js?v=202609081" as="script" />
+  <link rel="preload" href="client-home-main.js?v=202609082" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609081" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202609081" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202609082" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
   <script src="mini-app-client-shell.js?v=202609062"></script>
@@ -26,25 +26,22 @@
 <body class="hub-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
   <div class="hub-shell" id="hubShell">
 
-    <!-- Hero — короткий заголовок по сценарию; без маркетинговых блоков -->
+    <!--
+      TASK-091 (AC-001). Приветствие — ОДНА строка, разделённая с переключателем
+      профиля. Блоков `greeting` + `title` + `sub`, говоривших одно и то же,
+      больше нет: приветствие показывают, когда показать нечего, а у нас есть
+      лёд, запись и тренеры. Место отдано данным ниже.
+    -->
     <div class="hub-hero" id="hubHero">
-      <!-- EPIC1: greeting + profile chip share one row (no absolute overlap). -->
       <div class="hub-hero-top">
         <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
         <div id="clientProfileSwitcherMount" class="hub-hero-profile-switcher"></div>
       </div>
-      <h1 class="hub-hero-title" id="hubHeroTitle">Добро пожаловать!</h1>
-      <p class="hub-hero-sub" id="hubHeroSub" style="display:none;"></p>
-      <div id="hubHeroActions" class="hub-hero-actions" hidden></div>
-      <!-- Skeleton bars — visible only while bootstrap is in flight. -->
+      <!-- Skeleton bar — visible only while bootstrap is in flight. -->
       <div class="hub-hero-skel" aria-hidden="true">
         <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
-        <div class="hub-skel-line hub-skel-line--hero-title hub-skel-shimmer"></div>
-        <div class="hub-skel-line hub-skel-line--hero-title-sm hub-skel-shimmer"></div>
       </div>
     </div>
-
-    <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
 
     <!-- Error / loading panel -->
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
@@ -77,20 +74,42 @@
     <!-- ── SCENARIO 3: NEXT BOOKING HERO CARD ──────────────────────────── -->
     <div id="nextBookingBlock"></div>
 
+    <!--
+      TASK-091 (AC-002, AC-005). Лёд города — завершённая единица данных, и он
+      стоит НАД сгибом, а не строкой-тизером в хвосте. Для клиента с основным
+      тренером зона уезжает ниже панели тренера (placeIceZone в client-home-main.js):
+      порядок Intent Engine не меняется, меняется только то, что показано первым.
+    -->
+    <div id="hubIceZone" class="hub-ice-zone" hidden>
+      <div class="hub-sec-head">
+        <p class="hub-kicker" id="hubIceKicker">Сегодня на льду</p>
+        <a class="hub-sec-link" id="hubIceAll" href="ice">Весь лёд</a>
+      </div>
+      <div id="hubIceTeaser" class="hub-ice-teaser-wrap"></div>
+      <!--
+        AC-003: поиск остаётся доступным, но перестаёт быть главным объектом
+        первого экрана — строка вместо кнопки на 15% высоты.
+      -->
+      <button type="button" class="hub-search" id="hubSearchRow">
+        <span class="hub-search__ic" aria-hidden="true"></span>
+        <span class="hub-search__text">Найти тренера или каток</span>
+      </button>
+    </div>
+
     <!-- ── SCENARIO 1: MY TRAINER CARD ────────────────────────────────── -->
     <div id="myTrainerBlock" style="display:none;"></div>
 
     <!-- Living panel under primary trainer: nearest slots + pass remainder + history line -->
     <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
 
-    <!-- TASK-055: one ice teaser row — hidden unless bootstrap has a future MK slot -->
-    <div id="hubIceTeaser" class="hub-ice-teaser-wrap" hidden></div>
-
     <!-- Discovery for new clients without primary trainer: real trainers carousel -->
     <section id="hubDiscovery" class="hub-discovery" hidden></section>
 
     <!-- ── CONTEXTUAL QUICK PILLS (rebook only — no tab duplicates) ─── -->
     <div class="hub-quick-strip" id="quickStrip" hidden></div>
+
+    <!-- Удержание, а не товар: серия недель уехала под контент (решение владельца 2026-09-08) -->
+    <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
 
     <!-- ── UPCOMING BOOKINGS LIST (secondary, below hero) ─────────────── -->
     <div id="upcomingSection" style="display:none;">
@@ -174,7 +193,7 @@
     <span class="hub-book-fab__label">Записаться</span>
   </button>
 
-  <script src="ice-teaser-model.js?v=202609061"></script>
-  <script defer src="client-home-main.js?v=202609081"></script>
+  <script src="ice-teaser-model.js?v=202609082"></script>
+  <script defer src="client-home-main.js?v=202609082"></script>
 </body>
 </html>

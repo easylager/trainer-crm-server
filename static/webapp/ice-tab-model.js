@@ -233,6 +233,14 @@
     return name || 'Тренер';
   }
 
+  /** Первая буква имени для плашки без фото. Эмодзи в имени пропускаем. */
+  function initialOf(name) {
+    var clean = String(name || '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+    return clean ? clean.charAt(0).toUpperCase() : '?';
+  }
+
   function trainerCardView(item) {
     item = item || {};
     var p = item.profile || {};
@@ -248,11 +256,15 @@
     if (slots > 0) {
       live += ' · ' + slots + ' ' + pluralRu(slots, 'слот', 'слота', 'слотов');
     }
+    var displayName = trainerDisplayName(item);
     return {
       kind: 'trainer',
-      name: trainerDisplayName(item),
+      name: displayName,
       href: trainerHref(item),
       thumb: trainerPhotoUrl(item),
+      // TASK-090 / AC-006: без фото была мёртвая заливка. Монограмма — тот же
+      // приём, что у катка без кадра: пустое место должно что-то говорить.
+      initial: initialOf(displayName),
       meta: parts.join(' · '),
       live: live,
       tone: 'a',
@@ -320,16 +332,20 @@
     return parts.join(' · ');
   }
 
+  function sessionDayLabel(live, now) {
+    live = live || {};
+    var localDate = String(live.local_date || '').slice(0, 10);
+    if (!localDate) return '';
+    var today = isoDayUtc(now instanceof Date ? now : new Date());
+    if (localDate === today) return 'Сегодня';
+    if (localDate === addDaysIso(today, 1)) return 'Завтра';
+    return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+  }
+
   function sessionWhenLabel(live, now) {
     live = live || {};
     var time = String(live.starts_at_local || '').slice(0, 5);
-    var localDate = String(live.local_date || '').slice(0, 10);
-    var today = isoDayUtc(now instanceof Date ? now : new Date());
-    var day = '';
-    if (localDate && localDate === today) day = 'Сегодня';
-    else if (localDate && localDate === addDaysIso(today, 1)) day = 'Завтра';
-    else if (localDate) day = localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
-    return [day, time].filter(Boolean).join(' ');
+    return [sessionDayLabel(live, now), time].filter(Boolean).join(' ');
   }
 
   function formatLiveLine(item, now) {
@@ -355,6 +371,45 @@
     if (tier === 'C') return 'Есть в справочнике · данных пока нет';
     if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
+  }
+
+  /**
+   * TASK-090. Карточка «Льда» — табло, а не строка списка: кадр во всю ширину,
+   * время как якорь, глубина предложения отдельной строкой. Функция чистая:
+   * решает, ЧТО написано в каждом слоте, разметку собирает ice-tab.js.
+   */
+  function boardCardView(item, now) {
+    item = item || {};
+    var live = item.live || {};
+    var isSession = String(live.kind || '') === 'session';
+    var name = String(item.name || '');
+    var currency = live.currency_code || item.currency_code || '';
+    var prices = isSession ? formatThreePrices(live) : '';
+    if (prices && currency) prices += ' ' + currency;
+    var more = Number(live.more_count);
+    var depth;
+    if (isSession && more > 0) {
+      // more_count — все будущие сеансы, а не «за неделю»: обещать окно нельзя.
+      depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
+    } else if (isSession) {
+      depth = 'Расписание и цены';
+    } else {
+      depth = 'Открыть карточку катка';
+    }
+    return {
+      href: arenaHref(item),
+      photo: item.card || item.thumb || '',
+      initial: initialOf(name),
+      isSession: isSession,
+      day: isSession ? sessionDayLabel(live, now) : '',
+      time: isSession ? String(live.starts_at_local || '').slice(0, 5) : '',
+      name: name,
+      where: formatMeta(item),
+      prices: prices,
+      status: isSession ? '' : formatLiveLine(item, now),
+      depth: depth,
+      tone: liveTone(item),
+    };
   }
 
   function formatEmptyList(intent, opts) {
@@ -498,6 +553,8 @@
     liveTone: liveTone,
     formatThreePrices: formatThreePrices,
     formatLiveLine: formatLiveLine,
+    sessionDayLabel: sessionDayLabel,
+    boardCardView: boardCardView,
     formatEmptyList: formatEmptyList,
     formatSortCaption: formatSortCaption,
     groupSearchResults: groupSearchResults,

@@ -200,42 +200,54 @@
     return ' style="background-image:url(\'' + esc(src).replace(/'/g, '%27') + '\')"';
   }
 
+  /**
+   * TASK-090: карточка катка — табло, а не строка CRM.
+   * Кадр во всю ширину несёт карточку; время и имя лежат на кадре под скримом
+   * и читаются сверху вниз «когда → где»; условия и глубина предложения —
+   * отдельными строками на поверхности карточки, где контраст измерим.
+   */
   function renderArenaCard(item) {
-    var tone = M.liveTone(item);
-    var tier = String(item.tier || 'C').toUpperCase();
-    var thumb = item.thumb;
-    var live = M.formatLiveLine(item);
-    var href = M.arenaHref(item);
-    var cta = M.listRowCta(item);
-    if (cta) live += ' · ' + cta;
+    var v = M.boardCardView(item);
+    var photo = v.photo
+      ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
+      : '<span class="ice-board__photo ice-board__photo--empty">' +
+        '<span class="ice-board__initial" aria-hidden="true">' +
+        esc(v.initial) +
+        '</span>';
+    var scrim =
+      '<span class="ice-board__scrim">' +
+      (v.isSession
+        ? '<span class="ice-board__day">' +
+          esc(v.day) +
+          '</span><span class="ice-board__time">' +
+          esc(v.time) +
+          '</span>'
+        : '') +
+      '<span class="ice-board__name">' +
+      esc(v.name) +
+      '</span>' +
+      (v.where ? '<span class="ice-board__where">' + esc(v.where) + '</span>' : '') +
+      '</span>';
+    var facts = v.isSession
+      ? v.prices
+        ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
+        : ''
+      : '<span class="ice-board__status">' + esc(v.status) + '</span>';
     return (
-      '<a class="ice-acard" href="' +
-      esc(href) +
+      '<a class="ice-board" href="' +
+      esc(v.href) +
       '" data-href="' +
-      esc(href) +
+      esc(v.href) +
       '">' +
-      '<span class="ice-acard__ph' +
-      (thumb ? '' : ' ice-acard__ph--empty') +
-      '"' +
-      acardThumbStyle(thumb) +
-      '></span>' +
-      '<span class="ice-acard__body">' +
-      '<span class="ice-acard__name">' +
-      esc(item.name) +
-      '<span class="ice-tier ice-tier--' +
-      tone +
-      '">' +
-      esc(tier) +
-      '</span></span>' +
-      '<span class="ice-acard__meta">' +
-      esc(M.formatMeta(item)) +
+      photo +
+      scrim +
       '</span>' +
-      '<span class="ice-live ice-live--' +
-      tone +
-      '">' +
-      esc(live) +
+      (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
+      '<span class="ice-board__depth">' +
+      esc(v.depth) +
+      '<span class="ice-board__go" aria-hidden="true">→</span>' +
       '</span>' +
-      '</span></a>'
+      '</a>'
     );
   }
 
@@ -251,7 +263,11 @@
       (view.thumb ? '' : ' ice-acard__ph--empty') +
       '"' +
       acardThumbStyle(view.thumb) +
-      '></span>' +
+      '>' +
+      (view.thumb
+        ? ''
+        : '<span class="ice-acard__mono" aria-hidden="true">' + esc(view.initial || '?') + '</span>') +
+      '</span>' +
       '<span class="ice-acard__body">' +
       '<span class="ice-acard__name">' +
       esc(view.name) +
@@ -844,6 +860,13 @@
       if (params.get('view') === 'map') state.view = 'map';
       var urlIntent = M.intentFromSearch(global.location.search || '');
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
+      // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
+      if (params.get('focus') === 'search') {
+        global.setTimeout(function () {
+          var input = $('iceSearchInput');
+          if (input && typeof input.focus === 'function') input.focus();
+        }, 0);
+      }
     } catch (e) { /* */ }
     setChips();
     setViewToggle();

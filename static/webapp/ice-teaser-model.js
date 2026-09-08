@@ -159,9 +159,106 @@
     );
   }
 
+  /* ────────────────────────────────────────────────────────────────────
+   * TASK-091. Тизер-строка становится карточкой: тот же объект, что на «Льду»
+   * (кадр, время-якорь, каток, условия). Строка внизу первого экрана лёд не
+   * продавала — её читали как примечание. Старые formatIceTeaser /
+   * renderIceTeaserHtml оставлены: на них есть тесты и они ничего не ломают.
+   * ──────────────────────────────────────────────────────────────────── */
+
+  function hiddenCard() {
+    return { hidden: true };
+  }
+
+  function dayLabel(payload, now) {
+    var startMs = Date.parse(payload.starts_at_utc || '');
+    if (!isNaN(startMs)) {
+      var mins = Math.round((startMs - now.getTime()) / 60000);
+      if (mins >= 0 && mins < 60) {
+        return mins <= 0 ? 'Сейчас' : 'Через ' + mins + ' ' + pluralMinutes(mins);
+      }
+    }
+    var localDate = String(payload.local_date || '').slice(0, 10);
+    if (!localDate) return '';
+    var today = minskDateIso(now);
+    if (localDate === today) return 'Сегодня';
+    if (localDate === addDaysIso(today, 1)) return 'Завтра';
+    return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+  }
+
+  function initialOf(name) {
+    var clean = String(name || '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+    return clean ? clean.charAt(0).toUpperCase() : '?';
+  }
+
+  function formatIceCard(payload, now) {
+    if (!payload || typeof payload !== 'object') return hiddenCard();
+    var href = arenaHref(payload);
+    var time = hhmm(payload.starts_at_local);
+    if (!href || !time) return hiddenCard();
+    now = now instanceof Date ? now : new Date();
+    var facts = [kindLabel(payload.kind)];
+    var price = formatPrice(payload.price_adult_minor, payload.currency_code);
+    if (price) facts.push(price);
+    var name = String(payload.arena_name || '').trim();
+    return {
+      hidden: false,
+      href: href,
+      photo: payload.card || payload.thumb || '',
+      initial: initialOf(name),
+      day: dayLabel(payload, now),
+      time: time,
+      name: name,
+      where: String(payload.arena_district || '').trim(),
+      facts: facts.join(' · '),
+      city: String(payload.city_name || '').trim(),
+    };
+  }
+
+  function renderIceCardHtml(view) {
+    if (!view || view.hidden) return '';
+    var photo = view.photo
+      ? '<span class="hub-ice-card__photo" style="background-image:url(\'' +
+        escapeHtml(view.photo).replace(/'/g, '%27') +
+        '\')"></span>'
+      : '<span class="hub-ice-card__photo hub-ice-card__photo--empty">' +
+        '<span class="hub-ice-card__initial" aria-hidden="true">' +
+        escapeHtml(view.initial) +
+        '</span></span>';
+    return (
+      '<a class="hub-ice-card" href="' +
+      escapeHtml(view.href) +
+      '">' +
+      photo +
+      '<span class="hub-ice-card__row">' +
+      '<span class="hub-ice-card__when">' +
+      '<span class="hub-ice-card__time">' +
+      escapeHtml(view.time) +
+      '</span>' +
+      '<span class="hub-ice-card__day">' +
+      escapeHtml(view.day) +
+      '</span>' +
+      '</span>' +
+      '<span class="hub-ice-card__what">' +
+      '<span class="hub-ice-card__name">' +
+      escapeHtml(view.name) +
+      '</span>' +
+      '<span class="hub-ice-card__facts">' +
+      escapeHtml(view.facts) +
+      '</span>' +
+      '</span>' +
+      '<span class="hub-ice-card__chev" aria-hidden="true">→</span>' +
+      '</span></a>'
+    );
+  }
+
   return {
     formatIceTeaser: formatIceTeaser,
     renderIceTeaserHtml: renderIceTeaserHtml,
+    formatIceCard: formatIceCard,
+    renderIceCardHtml: renderIceCardHtml,
     arenaHref: arenaHref,
   };
 });

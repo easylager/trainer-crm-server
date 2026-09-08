@@ -492,3 +492,95 @@ describe('session restore', () => {
     assert.equal(loaded.scrollY, 420);
   });
 });
+
+describe('boardCardView (TASK-090: карточка-табло)', () => {
+  const sessionItem = {
+    id: 3,
+    slug: 'tts-zamok',
+    name: 'ТЦ Замок',
+    district: 'Центральный район',
+    tier: 'A',
+    thumb: '/photos/3_thumb.jpg',
+    card: '/photos/3_card.jpg',
+    live: {
+      kind: 'session',
+      local_date: '2026-09-06',
+      starts_at_local: '18:15',
+      price_adult_minor: 1000,
+      price_child_minor: 800,
+      price_rental_minor: 900,
+      currency_code: 'BYN',
+      more_count: 69,
+    },
+  };
+  const now = new Date('2026-09-06T08:00:00Z');
+
+  it('AC-002: время и день — отдельные слоты, а не склеенная строка', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.time, '18:15');
+    assert.equal(v.day, 'Сегодня');
+    assert.equal(v.isSession, true);
+  });
+
+  it('AC-001: полноширинный кадр берёт card (800px), а не thumb (320px)', () => {
+    const { boardCardView } = loadModel();
+    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_card.jpg');
+    const noCard = Object.assign({}, sessionItem, { card: null });
+    assert.equal(boardCardView(noCard, now).photo, '/photos/3_thumb.jpg');
+  });
+
+  it('AC-004: глубина предложения — свой слот, без обещания недельного окна', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.depth, 'Ещё 69 сеансов в расписании');
+    assert.ok(!v.depth.includes('недел'));
+    assert.ok(!v.prices.includes('69'));
+    assert.match(v.prices, /взр\. 10 · дет\. 8 · прокат \+9 BYN/);
+  });
+
+  it('единственный сеанс не превращается в «ещё 0»', () => {
+    const { boardCardView } = loadModel();
+    const one = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { more_count: 0 }),
+    });
+    assert.equal(boardCardView(one, now).depth, 'Расписание и цены');
+  });
+
+  it('AC-006: каток без расписания отдаёт текст статуса, а не пустые слоты', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(
+      { id: 9, name: 'Юность', district: 'Центральный район', tier: 'B', live: { kind: 'unknown' } },
+      now
+    );
+    assert.equal(v.isSession, false);
+    assert.equal(v.time, '');
+    assert.ok(v.status.length > 0);
+    assert.equal(v.depth, 'Открыть карточку катка');
+  });
+
+  it('AC-006: каток без кадра получает монограмму, а не пустой прямоугольник', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView({ id: 9, name: 'Юность', live: { kind: 'unknown' } }, now);
+    assert.equal(v.photo, '');
+    assert.equal(v.initial, 'Ю');
+  });
+
+  it('монограмма тренера пропускает эмодзи в имени', () => {
+    const { trainerCardView } = loadModel();
+    const v = trainerCardView({ id: 1, name: '🌱 Максим Василенко' });
+    assert.equal(v.initial, 'М');
+  });
+
+  it('завтрашний сеанс подписан «Завтра», послезавтрашний — датой', () => {
+    const { boardCardView } = loadModel();
+    const tomorrow = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { local_date: '2026-09-07' }),
+    });
+    assert.equal(boardCardView(tomorrow, now).day, 'Завтра');
+    const later = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { local_date: '2026-09-10' }),
+    });
+    assert.equal(boardCardView(later, now).day, '10.09');
+  });
+});

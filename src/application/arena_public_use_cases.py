@@ -270,10 +270,14 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
 def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     hero = item.get("hero")
     thumb = None
+    card = None
     if isinstance(hero, Mapping):
         variants = hero.get("variants") or {}
         if isinstance(variants, Mapping):
             thumb = variants.get("thumb") or variants.get("card")
+            # TASK-090: карточка «Льда» показывает кадр во всю ширину. thumb — 320px,
+            # на 390pt при DPR2 это мыло, поэтому список отдаёт ещё и card (800px).
+            card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
     return {
         "id": item["id"],
@@ -288,6 +292,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "distance_km": item.get("distance_km"),
         "tier": item["tier"],
         "thumb": thumb,
+        "card": card,
         "currency_code": item.get("currency_code"),
         "live": live,
         "live_line": live.get("text"),
@@ -553,21 +558,33 @@ async def get_hub_ice_teaser(
 
     Same MK filter as Ice tab intent=skate (tier A). No geolocation — distance
     stays unset. Hub bootstrap uses this so home load stays one round-trip.
+
+    TASK-091. Два изменения против TASK-055:
+      * без города клиента больше не отдаём None. Первый экран Главной обязан
+        показать товар и новичку (AC-005), а город у него появляется только
+        после первого выбора. Без city_id берём ближайший сеанс по стране —
+        ровно то же, что делает вкладка «Лёд» своим pickFallbackCity;
+      * отдаём кадр арены и название города: карточка на Главной — тот же
+        объект, что карточка на «Льду», а не строка-тизер.
     """
-    if city_id is None:
-        return None
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
         "now": now,
         "st": STATUS_ACTIVE,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
-        "city_id": int(city_id),
     }
+    city_filter = ""
+    if city_id is not None:
+        params["city_id"] = int(city_id)
+        city_filter = "  AND a.city_id = :city_id\n"
     sql = f"""
 SELECT
     a.id AS arena_id,
     p.slug AS arena_slug,
     a.name AS arena_name,
+    p.district AS arena_district,
+    a.city_id AS city_id,
+    c.name AS city_name,
     nxt.kind,
     nxt.starts_at_utc,
     nxt.local_date,
@@ -576,6 +593,7 @@ SELECT
     nxt.currency_code
 FROM arenas a
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
 JOIN LATERAL (
     SELECT s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
            s.price_adult_minor, s.currency_code
@@ -585,8 +603,7 @@ JOIN LATERAL (
     LIMIT 1
 ) nxt ON true
 WHERE a.is_active AND a.is_confirmed
-  AND a.city_id = :city_id
-  AND (p.status IS NULL OR p.status = :published)
+{city_filter}  AND (p.status IS NULL OR p.status = :published)
 ORDER BY nxt.starts_at_utc, a.id
 LIMIT 1
 """
@@ -595,16 +612,31 @@ LIMIT 1
         return None
     local_date = row["local_date"]
     starts_utc = row["starts_at_utc"]
+    media_holder: dict[str, Any] = {"id": int(row["arena_id"])}
+    await attach_arena_media_payloads(session, [media_holder])
+    hero = media_holder.get("hero")
+    thumb = None
+    card = None
+    if isinstance(hero, Mapping):
+        variants = hero.get("variants") or {}
+        if isinstance(variants, Mapping):
+            thumb = variants.get("thumb") or variants.get("card")
+            card = variants.get("card") or variants.get("hero") or thumb
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
         "arena_name": row["arena_name"],
+        "arena_district": row["arena_district"],
+        "city_id": int(row["city_id"]) if row["city_id"] is not None else None,
+        "city_name": row["city_name"],
         "kind": row["kind"],
         "starts_at_utc": starts_utc.isoformat() if hasattr(starts_utc, "isoformat") else str(starts_utc),
         "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
         "starts_at_local": _hhmm(row["starts_at_local"]),
         "price_adult_minor": row["price_adult_minor"],
         "currency_code": row["currency_code"],
+        "thumb": thumb,
+        "card": card,
         "distance_km": None,
     }
 

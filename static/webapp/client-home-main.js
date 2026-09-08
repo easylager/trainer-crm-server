@@ -98,21 +98,36 @@
         return 'недель';
       }
 
-      /** Duolingo-style streak line on hub; tap opens full «Ваша активность». */
+      /**
+       * TASK-091 (AC-002, AC-005). Лёд города карточкой, а не строкой-примечанием.
+       * Зона показывается всегда, когда в городе есть будущий сеанс: это и есть
+       * товар, который видит новый клиент вместо приглашения к поиску.
+       * Поиск живёт в той же зоне и остаётся даже без льда — иначе клиент без
+       * данных упрётся в пустой экран.
+       */
       function renderIceTeaser(payload) {
+        var zone = document.getElementById('hubIceZone');
         var mount = document.getElementById('hubIceTeaser');
-        if (!mount) return;
+        if (!mount || !zone) return;
         var model = window.IceTeaserModel;
-        if (!model || typeof model.formatIceTeaser !== 'function') {
-          mount.hidden = true;
-          mount.innerHTML = '';
-          return;
+        var html = '';
+        var view = null;
+        if (model && typeof model.formatIceCard === 'function') {
+          view = model.formatIceCard(payload, new Date());
+          html = model.renderIceCardHtml(view);
         }
-        var view = model.formatIceTeaser(payload, new Date());
-        var html = model.renderIceTeaserHtml(view);
         mount.innerHTML = html;
         mount.hidden = !html;
-        var link = mount.querySelector('a.hub-ice-teaser');
+        zone.hidden = false;
+        var kicker = document.getElementById('hubIceKicker');
+        if (kicker) {
+          if (!html) kicker.textContent = 'Лёд города';
+          else kicker.textContent = view && view.city ? 'На льду · ' + view.city : 'На льду';
+        }
+        var head = zone.querySelector('.hub-sec-head');
+        if (head) head.hidden = !html;
+        wireHubIceZoneLinks();
+        var link = mount.querySelector('a.hub-ice-card');
         if (link) {
           link.addEventListener('click', function (ev) {
             var href = link.getAttribute('href');
@@ -121,6 +136,23 @@
             navigateTo(href);
           });
         }
+      }
+
+      /**
+       * Порядок первого экрана. Intent Engine не переписан: он по-прежнему
+       * решает, что главное. Меняется только место зоны льда — у клиента с
+       * основным тренером его панель важнее городского катания, поэтому лёд
+       * уезжает под неё, а над сгибом остаётся карточка тренера.
+       */
+      function placeIceZone(mode) {
+        var zone = document.getElementById('hubIceZone');
+        var shell = document.getElementById('hubShell');
+        if (!zone || !shell) return;
+        var anchor =
+          mode === 'below-trainer'
+            ? document.getElementById('hubDiscovery')
+            : document.getElementById('myTrainerBlock');
+        if (anchor && anchor.parentNode === shell) shell.insertBefore(zone, anchor);
       }
 
       function renderStreakRibbon(activity) {
@@ -287,33 +319,17 @@
       function resetHubHeroLayout() {
         setHeroLayout('full');
         setHubGreeting(defaultHubGreeting());
-        var t = document.getElementById('hubHeroTitle');
-        if (t) t.hidden = false;
       }
 
-      /** Upcoming booking: greeting is the headline; the amber card holds the facts. */
+      /**
+       * TASK-091 (AC-001): у hero больше нет ни заголовка, ни подзаголовка —
+       * приветствие живёт одной строкой рядом с переключателем профиля во всех
+       * сценариях. Сценарий называет не приветствие, а кикер над данными
+       * («Ближайшая тренировка», «Сегодня на льду», «Мой тренер»).
+       */
       function configureHeroForUpcomingBooking() {
         setHubGreeting(defaultHubGreeting());
-        setHeroText(null, null);
         setHeroLayout('booking-led');
-      }
-
-      function setHeroText(title, sub) {
-        var t = document.getElementById('hubHeroTitle');
-        var s = document.getElementById('hubHeroSub');
-        if (t) {
-          if (title == null || title === '') {
-            t.textContent = '';
-            t.hidden = true;
-          } else {
-            t.textContent = title;
-            t.hidden = false;
-          }
-        }
-        if (s) {
-          if (sub != null) { s.textContent = sub; s.style.display = ''; }
-          else { s.style.display = 'none'; }
-        }
       }
 
       /* ── Next booking hero card ─────────────────────────────────────── */
@@ -763,24 +779,30 @@
 
       /* ── Hero primary actions + contextual pills (no tab duplicates) ─── */
 
-      function clearHubHeroActions() {
-        var el = document.getElementById('hubHeroActions');
-        if (!el) return;
-        el.innerHTML = '';
-        el.setAttribute('hidden', 'hidden');
-      }
-
-      function renderNewClientHeroActions() {
-        var el = document.getElementById('hubHeroActions');
-        if (!el) return;
-        var searchIcon = (ICONS.search || '').replace('<svg ', '<svg class="hub-hero-actions__icon" ');
-        el.innerHTML =
-          '<button type="button" class="btn-block btn-primary hub-hero-actions__primary" id="hubBtnFindTrainer">' +
-            searchIcon + 'Найти тренера' +
-          '</button>';
-        el.removeAttribute('hidden');
-        var findBtn = document.getElementById('hubBtnFindTrainer');
-        if (findBtn) findBtn.addEventListener('click', function() { navigateTo('ice?intent=coach'); });
+      /**
+       * TASK-091 (AC-003). Крупный CTA «Найти тренера» съедал ~15% первого
+       * экрана в состоянии нового клиента. Теперь поиск — постоянная строка в
+       * зоне льда: доступен всегда и во всех сценариях, но ничего не заслоняет.
+       */
+      function wireHubIceZoneLinks() {
+        var search = document.getElementById('hubSearchRow');
+        if (search && !search.dataset.wired) {
+          search.dataset.wired = '1';
+          search.innerHTML =
+            (ICONS.search || '').replace('<svg ', '<svg class="hub-search__ic" ') +
+            '<span class="hub-search__text">Найти тренера или каток</span>';
+          search.addEventListener('click', function () {
+            navigateTo('ice?focus=search');
+          });
+        }
+        var all = document.getElementById('hubIceAll');
+        if (all && !all.dataset.wired) {
+          all.dataset.wired = '1';
+          all.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            navigateTo('ice');
+          });
+        }
       }
 
       function hideQuickStrip() {
@@ -849,7 +871,6 @@
 
       function resetHubChromeForState(opts) {
         opts = opts || {};
-        clearHubHeroActions();
         hideQuickStrip();
         hidePrimaryPanel();
         hideDiscovery();
@@ -1428,11 +1449,6 @@
         wireUpcomingBookingsBlock();
       }
 
-      /* ── New client: hero CTA only — no marketing block in nextBookingBlock ── */
-      function renderAcquisitionHero() {
-        clearNextBookingBlock();
-        renderNewClientHeroActions();
-      }
 
       /* ── Saved trainers strip ───────────────────────────────────────── */
 
@@ -1556,6 +1572,7 @@
         if (nextItem) {
           resetHubChromeForState({ keepHeroLayout: true });
           configureHeroForUpcomingBooking();
+          placeIceZone('top');
           renderNextBookingCard(nextItem);
           hideMyTrainerBlock();
           renderQuickStrip('has-booking', nextItem);
@@ -1571,11 +1588,12 @@
         clearNextBookingBlock();
         hideUpcomingSection();
         resetHubChromeForState();
+        placeIceZone('top');
 
         /* ── Priority 2: Has primary trainer ── */
         if (primaryTrainerId != null) {
           resetHubHeroLayout();
-          setHeroText('Время для тренировки', 'Выберите удобный слот у вашего тренера');
+          placeIceZone('below-trainer');
           var pname = (cs.primary_trainer_name || '').trim();
           var pphoto = cs.primary_trainer_list_photo_key || null;
           var ptgUn = cs.primary_trainer_telegram_username || null;
@@ -1590,7 +1608,6 @@
         /* ── Priority 3: Has saved trainers (no primary yet) ── */
         if (hasSavedBookmarks && primaryTrainerId == null) {
           resetHubHeroLayout();
-          setHeroText('Ваши любимые тренеры 💛', 'Выберите, с кем хотите позаниматься');
           renderSavedTrainersStrip(cs);
           return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
         }
@@ -1598,7 +1615,6 @@
         /* ── Priority 4: Has past sessions (churned / dormant) ── */
         if (hasPastSessions) {
           resetHubHeroLayout();
-          setHeroText('Возвращаемся на лёд! ⛸️', 'Ваши тренеры очень ждут вас');
           hideMyTrainerBlock();
           renderQuickStrip('has-past', null);
           return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
@@ -1606,8 +1622,7 @@
 
         /* ── Priority 5: Clean state — find trainer and book ── */
         resetHubHeroLayout();
-        setHeroText('Добро пожаловать!', 'Выберите, чем хотите заняться, а мы найдём лучшего тренера');
-        renderAcquisitionHero();
+        clearNextBookingBlock();
         hideMyTrainerBlock();
         return finishHubApply(loadAndRenderDiscovery());
       }
@@ -1636,7 +1651,9 @@
         if (!initData) {
           setStateMessage('', '');
           hideNextBookingSkeleton();
-          renderAcquisitionHero();
+          clearNextBookingBlock();
+          // Без initData данных нет, но поиск обязан остаться доступным.
+          renderIceTeaser(null);
           renderStreakRibbon(null);
           return loadAndRenderDiscovery().then(finishHubInitialLoading, finishHubInitialLoading);
         }

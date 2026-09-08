@@ -63,7 +63,8 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
     assert 'id="upcomingSection"' in home.text
     assert teaser_js.status_code == 200
     assert chips_js.status_code == 200
-    assert "formatIceTeaser" in home_js.text
+    # TASK-091: Главная рисует карточку льда, а не строку-тизер.
+    assert "formatIceCard" in home_js.text
     assert "TrainerArenaChips" in catalog_js.text
     assert "trainer-arena-chips-model.js" in catalog.text
     assert "Работает на аренах" in catalog_js.text or "Работает на аренах" in chips_js.text
@@ -150,14 +151,22 @@ async def test_hub_bootstrap_ice_teaser_hidden_without_future_mk(
     assert resp.status_code == 200, resp.text
     payload = resp.json()
     assert "ice_teaser" in payload
+    # Город выбран, но льда в нём нет — фолбэк по стране НЕ включается:
+    # он для клиента без города, а не подмена пустого города чужим.
     assert payload["ice_teaser"] is None
 
 
 @pytest.mark.asyncio
-async def test_hub_bootstrap_ice_teaser_hidden_without_session_city(
+async def test_hub_bootstrap_ice_teaser_falls_back_without_session_city(
     app_use_test_db, db_session
 ) -> None:
-    """No geolocation: without city_id on the session the teaser stays hidden."""
+    """TASK-091 AC-005: без города клиента лёд всё равно показываем.
+
+    До TASK-091 тизер прятался — и новый клиент видел первый экран без единой
+    единицы данных, ровно то, что чинит эта задача (аудит F-4). Теперь без
+    city_id берётся ближайший сеанс по стране: показать чужой город честнее,
+    чем не показать ничего, и это тот же фолбэк, что делает вкладка «Лёд».
+    """
     city_id = await _insert_city(db_session, name="Минск-без-сессии")
     arena_id = await _insert_arena(db_session, city_id, name="Чижовка")
     await _add_future_session(db_session, arena_id, days_ahead=1)
@@ -180,4 +189,8 @@ async def test_hub_bootstrap_ice_teaser_hidden_without_session_city(
     assert resp.status_code == 200, resp.text
     payload = resp.json()
     assert "ice_teaser" in payload
-    assert payload["ice_teaser"] is None
+    teaser = payload["ice_teaser"]
+    assert teaser is not None
+    assert teaser["arena_id"] == arena_id
+    assert teaser["city_id"] == city_id
+    assert teaser["city_name"] == "Минск-без-сессии"

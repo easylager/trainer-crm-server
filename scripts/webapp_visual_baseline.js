@@ -48,7 +48,13 @@ const CLIENT_NAME = { first_name: 'Максим', last_name: 'Василенко
 
 const SCREENS = [
   { id: 'client-home', url: '/webapp/client-home', ready: "document.body.classList.contains('hub-body--revealed')" },
-  { id: 'ice-skate', url: '/webapp/ice', ready: "document.querySelectorAll('.ice-acard').length > 0" },
+  // TASK-090: список катков рисуется карточкой-табло (.ice-board); линза
+  // «Тренеры» осталась на строке .ice-acard — готовность ждём по обеим.
+  {
+    id: 'ice-skate',
+    url: '/webapp/ice',
+    ready: "document.querySelectorAll('.ice-board, .ice-acard').length > 0",
+  },
   { id: 'ice-coach', url: '/webapp/ice?intent=coach', ready: "document.querySelectorAll('.ice-acard').length > 0" },
   { id: 'arena-card', url: '/webapp/arena?arena_id=3', ready: "document.querySelector('#arenaRoot') !== null" },
   { id: 'client-bookings', url: '/webapp/client-bookings', ready: null },

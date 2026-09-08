@@ -2861,8 +2861,11 @@ async def get_client_hub_bootstrap(
     try:
         sess_row = await read_client_bot_session(telegram_id, session)
         city_id = (sess_row or {}).get("city_id")
-        if city_id is not None:
-            ice_teaser = await get_hub_ice_teaser(session, city_id=int(city_id))
+        # TASK-091 AC-005: у нового клиента города ещё нет, но первый экран всё
+        # равно обязан показать лёд. Без city_id берём ближайший сеанс по стране.
+        ice_teaser = await get_hub_ice_teaser(
+            session, city_id=int(city_id) if city_id is not None else None
+        )
     except Exception:
         logger.exception("client hub ice teaser failed")
     return {
