@@ -242,6 +242,14 @@ describe('city camera (selected city, not the world)', () => {
     assert.ok(maxLon - minLon >= 0.15);
     assert.ok(cam.center[0] > 55 && cam.center[0] < 55.4);
   });
+
+  it('does not invent a Minsk camera when the new city has no mapped rinks', () => {
+    const { cityCameraFromItems, mapStartDecision } = loadModel();
+    assert.equal(cityCameraFromItems([]), null);
+    const empty = mapStartDecision({ key: 'live-key', listItems: [], intent: 'skate' });
+    assert.equal(empty.kind, 'no-arenas');
+    assert.equal(empty.showMap, false);
+  });
 });
 
 describe('рядом со мной (AC-003 + EDGE-001/002)', () => {

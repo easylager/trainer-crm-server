@@ -64,13 +64,23 @@ describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
 
 describe('trainer catalog chip (TASK-076 AC-002)', () => {
   it('Тренеры chip stays on ice.html as a list lens, not catalog navigate', () => {
-    const { catalogHref, intentChipAction } = loadModel();
+    const { catalogHref, iceCoachHref, intentChipAction } = loadModel();
     assert.equal(catalogHref(), 'catalog?tab=catalog');
+    assert.equal(iceCoachHref(), 'ice?intent=coach');
     assert.deepEqual(intentChipAction('coach'), { type: 'list', intent: 'coach' });
     assert.notEqual(intentChipAction('coach').type, 'catalog');
     assert.equal(intentChipAction('coach').href, undefined);
     assert.deepEqual(intentChipAction('skate'), { type: 'list', intent: 'skate' });
     assert.deepEqual(intentChipAction('group'), { type: 'list', intent: 'group' });
+  });
+
+  it('URL intent=coach opens the coaches lens even if session had skate', () => {
+    const { intentFromSearch } = loadModel();
+    assert.equal(intentFromSearch('?intent=coach'), 'coach');
+    assert.equal(intentFromSearch('?intent=group'), 'group');
+    assert.equal(intentFromSearch('?intent=skate'), 'skate');
+    assert.equal(intentFromSearch(''), null);
+    assert.equal(intentFromSearch('?intent=nope'), null);
   });
 
   it('exposes a hint that the trainers catalog moved to the chip', () => {
@@ -194,6 +204,13 @@ describe('formatEmptyList', () => {
     assert.ok(!/catalog\.html/i.test(empty.title + empty.body));
     assert.ok(!/воронк/i.test(empty.body));
   });
+
+  it('coach empty with a service filter tells the user to drop the chip', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('coach', { serviceName: 'Фигурное катание' });
+    assert.match(empty.title, /услуг/i);
+    assert.match(empty.body, /фильтр|город/i);
+  });
 });
 
 describe('groupSearchResults (AC-004)', () => {
@@ -237,9 +254,9 @@ describe('hrefs', () => {
     assert.equal(arenaHref({ id: 12 }), 'arena?ref=12');
   });
 
-  it('trainer search hits reuse the old catalog deep link', () => {
+  it('trainer search hits open the catalog trainer card, not the browse funnel', () => {
     const { trainerHref } = loadModel();
-    assert.equal(trainerHref({ id: 77 }), 'catalog?tab=catalog&trainer_id=77');
+    assert.equal(trainerHref({ id: 77 }), 'catalog?trainer_id=77');
   });
 
   it('coach list reuses GET /api/public/trainers for the city, not a booking API', () => {
@@ -250,6 +267,61 @@ describe('hrefs', () => {
     assert.match(url, /limit=50/);
     assert.ok(!url.includes('/book'));
     assert.ok(!url.includes('/api/webapp'));
+  });
+
+  it('coach list can filter trainers by catalog service_id', () => {
+    const { buildTrainersUrl, buildServicesUrl } = loadModel();
+    const url = buildTrainersUrl({ cityId: 2, serviceId: 3, limit: 50 });
+    assert.match(url, /service_id=3/);
+    assert.match(url, /city_id=2/);
+    assert.equal(buildServicesUrl({ cityId: 2 }), '/api/public/services?city_id=2');
+  });
+
+  it('Ice city picker asks /api/public/ice/cities, not the full catalog city dump', () => {
+    const { buildIceCitiesUrl } = loadModel();
+    assert.equal(buildIceCitiesUrl(), '/api/public/ice/cities');
+  });
+
+  it('hides cities with neither skating nor trainers; trainer-only opens Тренеры', () => {
+    const { filterIceCities, pickCityIntent } = loadModel();
+    const cities = [
+      { id: 1, name: 'Пустой', skate_count: 0, trainer_count: 0 },
+      { id: 2, name: 'Минск', skate_count: 4, trainer_count: 9 },
+      { id: 3, name: 'Гомель', skate_count: 0, trainer_count: 2 },
+    ];
+    assert.deepEqual(
+      filterIceCities(cities).map((c) => c.name),
+      ['Минск', 'Гомель']
+    );
+    assert.equal(pickCityIntent({ skate_count: 4, trainer_count: 9 }, 'skate'), 'skate');
+    assert.equal(pickCityIntent({ skate_count: 0, trainer_count: 2 }, 'skate'), 'coach');
+    assert.equal(pickCityIntent({ skate_count: 0, trainer_count: 2 }, 'coach'), 'coach');
+    assert.equal(pickCityIntent({ skate_count: 3, trainer_count: 0 }, 'coach'), 'skate');
+  });
+
+  it('service chips use short labels; empty service is «Все»', () => {
+    const { serviceChipLabel } = loadModel();
+    assert.equal(serviceChipLabel(''), 'Все');
+    assert.equal(serviceChipLabel('Фигурное катание'), 'Фигурное');
+    assert.equal(serviceChipLabel('Хоккейное катание'), 'Хоккей');
+    assert.equal(serviceChipLabel('Катание на роликах'), 'Ролики');
+    assert.equal(serviceChipLabel('Обучение катанию «с нуля»'), 'С нуля');
+    assert.equal(serviceChipLabel('Совершенствование катания'), 'Техника');
+    assert.equal(serviceChipLabel('ОХМ(отработка хоккейного мастерства)'), 'ОХМ');
+  });
+
+  it('city picker shows country as a second line', () => {
+    const { cityCountryLabel } = loadModel();
+    assert.equal(cityCountryLabel('BY'), 'Беларусь');
+    assert.equal(cityCountryLabel('RU'), 'Россия');
+    assert.equal(cityCountryLabel(null), '');
+  });
+
+  it('group intent is not a first-class Ice lens anymore', () => {
+    const { coerceIntent } = loadModel();
+    assert.equal(coerceIntent('group'), 'skate');
+    assert.equal(coerceIntent('coach'), 'coach');
+    assert.equal(coerceIntent('skate'), 'skate');
   });
 
   it('map toggle stays on the Ice tab (TASK-054 in-place Yandex map)', () => {
@@ -371,7 +443,7 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
     const { trainerCardView } = loadModel();
     const view = trainerCardView(trainer);
     assert.equal(view.name, 'Мария Иванова');
-    assert.equal(view.href, 'catalog?tab=catalog&trainer_id=77');
+    assert.equal(view.href, 'catalog?trainer_id=77');
     assert.equal(view.thumb, '/api/public/photos/t.jpg');
     assert.match(view.meta, /Чижовка/);
     assert.ok(!view.href.includes('ice.html'));
@@ -407,14 +479,16 @@ describe('session restore', () => {
       },
     };
     saveIceState(
-      { intent: 'group', cityId: 5, cityName: 'Гродно', scrollY: 420, view: 'list' },
+      { intent: 'coach', cityId: 5, cityName: 'Гродно', serviceId: 3, scrollY: 420, view: 'map' },
       storage
     );
     assert.ok(mem[ICE_STATE_KEY]);
     const loaded = loadIceState(storage);
-    assert.equal(loaded.intent, 'group');
+    assert.equal(loaded.intent, 'coach');
     assert.equal(loaded.cityId, 5);
     assert.equal(loaded.cityName, 'Гродно');
+    assert.equal(loaded.serviceId, 3);
+    assert.equal(loaded.view, 'map');
     assert.equal(loaded.scrollY, 420);
   });
 });

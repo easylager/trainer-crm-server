@@ -112,7 +112,8 @@
       };
     }
     var items = opts.listItems || [];
-    if (!items.length) {
+    var onMap = splitMapAndList(items).onMap;
+    if (!onMap.length) {
       return {
         kind: 'no-arenas',
         showMap: false,
@@ -194,32 +195,22 @@
     // Floor ≈ Minsk (~24×27 km). Rink hull of 3–5 pins is smaller and zooms the city away.
     var minLatSpan = 0.22;
     var minLonSpan = 0.42;
-    var fallback = opts.fallbackCenter;
-    if (!fallback || !isFinite(Number(fallback[0])) || !isFinite(Number(fallback[1]))) {
-      fallback = [53.902496, 27.561481];
-    }
     var onMap = splitMapAndList(items).onMap;
+    if (!onMap.length) return null;
     var minLat;
     var maxLat;
     var minLon;
     var maxLon;
-    if (onMap.length) {
-      var lats = onMap.map(function (it) {
-        return Number(it.latitude);
-      });
-      var lons = onMap.map(function (it) {
-        return Number(it.longitude);
-      });
-      minLat = Math.min.apply(null, lats) - pad;
-      maxLat = Math.max.apply(null, lats) + pad;
-      minLon = Math.min.apply(null, lons) - pad;
-      maxLon = Math.max.apply(null, lons) + pad;
-    } else {
-      minLat = Number(fallback[0]) - minLatSpan / 2;
-      maxLat = Number(fallback[0]) + minLatSpan / 2;
-      minLon = Number(fallback[1]) - minLonSpan / 2;
-      maxLon = Number(fallback[1]) + minLonSpan / 2;
-    }
+    var lats = onMap.map(function (it) {
+      return Number(it.latitude);
+    });
+    var lons = onMap.map(function (it) {
+      return Number(it.longitude);
+    });
+    minLat = Math.min.apply(null, lats) - pad;
+    maxLat = Math.max.apply(null, lats) + pad;
+    minLon = Math.min.apply(null, lons) - pad;
+    maxLon = Math.max.apply(null, lons) + pad;
     if (maxLat - minLat < minLatSpan) {
       var midLat = (minLat + maxLat) / 2;
       minLat = midLat - minLatSpan / 2;

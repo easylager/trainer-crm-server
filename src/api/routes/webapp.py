@@ -2620,7 +2620,7 @@ async def get_client_profiles(
     """
     Profiles this account can act as (self + any children added via «Добавить ребёнка»),
     plus the family-shared profile from /client/family-access if the account was invited
-    that way. See .ai/EPIC1-client-multi-profile.md.
+    that way. See docs/epics/client-multi-profile.md.
     """
     telegram_id = client_catalog_telegram_key(principal)
     items = await list_accessible_profiles(session, telegram_id)
@@ -2875,7 +2875,6 @@ async def get_client_hub_bootstrap(
         "platform": {
             "vertical_key": "ice",
             "ui": {
-                "hero_wordmark": "Чудесного дня на льду 🐧",
                 "streak_template": "{count} тренировок подряд",
                 "venue_label": "Арена",
             },
