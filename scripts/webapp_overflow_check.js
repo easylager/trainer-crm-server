@@ -25,8 +25,9 @@
 
 const fs = require('node:fs');
 const {
-  CDP, launchChrome, buildMockScript, signInitData, readEnv, waitFor,
-  SCREENS, THEMES, VIEWPORT, CLIENT_NAME,
+  CDP, launchChrome, readEnv, waitFor,
+  buildCredentials, usableScreens, mockForScreen,
+  SCREENS, THEMES, VIEWPORT,
 } = require('./webapp_visual_baseline.js');
 
 /**
@@ -89,7 +90,7 @@ const PROBE = `(() => {
   return JSON.stringify(out);
 })()`;
 
-async function inspect(cdp, screen, theme, initData, baseUrl) {
+async function inspect(cdp, screen, theme, creds, baseUrl) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
 
@@ -99,7 +100,7 @@ async function inspect(cdp, screen, theme, initData, baseUrl) {
   // Тот же блок, что в стенде снимков: настоящий SDK затирает мок и ломает тему.
   await cdp.send('Network.setBlockedURLs', { urls: ['*telegram.org/js/telegram-web-app.js*'] }, sessionId);
   await cdp.send('Emulation.setDeviceMetricsOverride', VIEWPORT, sessionId);
-  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: buildMockScript(initData, theme) }, sessionId);
+  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: mockForScreen(screen, theme, creds) }, sessionId);
   await cdp.send('Page.navigate', { url: baseUrl + screen.url }, sessionId);
 
   const settled = await waitFor(cdp, sessionId, screen.ready, 12000);
@@ -120,11 +121,8 @@ async function main() {
   const jsonOut = opt('--json', null);
 
   const env = readEnv();
-  const token = process.env.TELEGRAM_BOT_TOKEN_CLIENT || env.TELEGRAM_BOT_TOKEN_CLIENT;
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN_CLIENT не найден — без него API отдаст 401.');
-
-  const initData = signInitData(token, CLIENT_NAME);
-  const screens = only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS;
+  const creds = buildCredentials(env);
+  const screens = usableScreens(only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS, creds);
 
   const { proc, userDataDir, wsUrl } = await launchChrome();
   const cdp = await CDP.connect(wsUrl);
@@ -133,7 +131,7 @@ async function main() {
   try {
     for (const screen of screens) {
       for (const theme of THEMES) {
-        const r = await inspect(cdp, screen, theme, initData, baseUrl);
+        const r = await inspect(cdp, screen, theme, creds, baseUrl);
         const n = r.items.length + (r.page ? 1 : 0);
         const tag = `${screen.id} / ${theme}`;
         console.log(`  ${tag}${' '.repeat(Math.max(0, 32 - tag.length))} ${n === 0 ? 'чисто' : n + ' находок'}${r.settled ? '' : '  (ПО ТАЙМАУТУ)'}`);

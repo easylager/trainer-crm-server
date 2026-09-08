@@ -58,7 +58,26 @@ const SCREENS = [
   { id: 'ice-coach', url: '/webapp/ice?intent=coach', ready: "document.querySelectorAll('.ice-acard').length > 0" },
   { id: 'arena-card', url: '/webapp/arena?arena_id=3', ready: "document.querySelector('#arenaRoot') !== null" },
   { id: 'client-bookings', url: '/webapp/client-bookings', ready: null },
+  /*
+   * TASK-098. Тренерские экраны в стенде — не расширение эпика, а его условие:
+   * mini-app-components.css общий, и правка клиентских кнопок молча меняет
+   * двенадцать тренерских страниц. TASK-097 уже показала, как правка общего
+   * theme.css утащила их в системный шрифт — тогда заметили только потому, что
+   * искали. Здесь искать будет нечему, если не снимать.
+   */
+  { id: 'trainer-home', url: '/webapp/trainer-home', audience: 'trainer', ready: null },
+  { id: 'trainer-clients', url: '/webapp/trainer-clients', audience: 'trainer', ready: null },
+  { id: 'trainer-profile', url: '/webapp/trainer-profile', audience: 'trainer', ready: null },
+  { id: 'trainer-stats', url: '/webapp/trainer-stats', audience: 'trainer', ready: null },
+  { id: 'trainer-subscription', url: '/webapp/trainer-subscription', audience: 'trainer', ready: null },
 ];
+
+/*
+ * Локальный тренер: тот же telegram_id, что у клиента в dev-БД, но initData
+ * подписывается ДРУГИМ ботом — тренерские маршруты проверяют свой токен.
+ */
+const TRAINER_TELEGRAM_ID = Number(process.env.BASELINE_TRAINER_ID || 1304982166);
+const TRAINER_NAME = { first_name: 'Максим', last_name: 'Василенко', username: 'maks' };
 
 const THEMES = ['dark', 'light'];
 
@@ -81,10 +100,10 @@ function readEnv() {
  * Подпись ровно как в src/shared/telegram_webapp.py:
  * secret = HMAC_SHA256(key="WebAppData", msg=bot_token); hash = HMAC_SHA256(secret, dcs).
  */
-function signInitData(botToken, user) {
+function signInitData(botToken, user, telegramId = CLIENT_TELEGRAM_ID) {
   const fields = {
     query_id: 'AAF' + crypto.randomBytes(8).toString('hex'),
-    user: JSON.stringify({ id: CLIENT_TELEGRAM_ID, is_bot: false, language_code: 'ru', ...user }),
+    user: JSON.stringify({ id: telegramId, is_bot: false, language_code: 'ru', ...user }),
     auth_date: String(Math.floor(Date.now() / 1000)),
   };
   const dcs = Object.keys(fields)
@@ -106,6 +125,8 @@ function signInitData(botToken, user) {
 function buildMockScript(initData, theme, opts = {}) {
   // Плёнку перехода (TASK-094) снимают с ЖИВЫМИ анимациями — иначе снимать нечего.
   const freezeAnimations = opts.freezeAnimations !== false;
+  const telegramId = opts.telegramId || CLIENT_TELEGRAM_ID;
+  const person = opts.person || CLIENT_NAME;
   const dark = theme === 'dark';
   const themeParams = dark
     ? { bg_color: '#0B0C0E', text_color: '#E6E9EA', hint_color: '#868D93', link_color: '#57D0D2',
@@ -119,7 +140,7 @@ function buildMockScript(initData, theme, opts = {}) {
                        enable: noop, disable: noop, showProgress: noop, hideProgress: noop, isVisible: false });
   window.Telegram = { WebApp: {
     initData: ${JSON.stringify(initData)},
-    initDataUnsafe: { user: ${JSON.stringify({ id: CLIENT_TELEGRAM_ID, ...CLIENT_NAME })} },
+    initDataUnsafe: { user: ${JSON.stringify({ id: telegramId, ...person })} },
     version: '7.10', platform: 'ios',
     colorScheme: ${JSON.stringify(theme)},
     themeParams: ${JSON.stringify(themeParams)},
@@ -251,6 +272,50 @@ async function launchChrome() {
   throw new Error('Chrome не поднял отладочный порт за 15 с');
 }
 
+/**
+ * TASK-098. Учётки стенда. Тренерские экраны отличаются от клиентских ровно
+ * одним: initData подписан другим ботом. Помощники живут здесь, чтобы все
+ * четыре проверки (снимки, обрезания, контраст, CLS) ходили одним способом —
+ * иначе тренерский экран молча снимется как «401» и пройдёт проверку.
+ */
+function buildCredentials(env) {
+  const clientToken = process.env.TELEGRAM_BOT_TOKEN_CLIENT || env.TELEGRAM_BOT_TOKEN_CLIENT;
+  if (!clientToken) throw new Error('TELEGRAM_BOT_TOKEN_CLIENT не найден — без него API отдаст 401.');
+  const trainerToken = process.env.TELEGRAM_BOT_TOKEN_TRAINER || env.TELEGRAM_BOT_TOKEN_TRAINER;
+  return {
+    client: {
+      initData: signInitData(clientToken, CLIENT_NAME, CLIENT_TELEGRAM_ID),
+      telegramId: CLIENT_TELEGRAM_ID,
+      person: CLIENT_NAME,
+      available: true,
+    },
+    trainer: {
+      initData: trainerToken ? signInitData(trainerToken, TRAINER_NAME, TRAINER_TELEGRAM_ID) : '',
+      telegramId: TRAINER_TELEGRAM_ID,
+      person: TRAINER_NAME,
+      available: !!trainerToken,
+    },
+  };
+}
+
+/** Экраны, которые нечем открыть, из прогона выпадают — с явным предупреждением. */
+function usableScreens(screens, creds) {
+  if (creds.trainer.available) return screens;
+  const skipped = screens.filter((s) => s.audience === 'trainer').length;
+  if (skipped) console.log(`TELEGRAM_BOT_TOKEN_TRAINER не найден — ${skipped} тренерских экранов пропущено\n`);
+  return screens.filter((s) => s.audience !== 'trainer');
+}
+
+/** Мок Telegram под аудиторию конкретного экрана. */
+function mockForScreen(screen, theme, creds, opts = {}) {
+  const who = creds[screen.audience === 'trainer' ? 'trainer' : 'client'];
+  return buildMockScript(who.initData, theme, {
+    ...opts,
+    telegramId: who.telegramId,
+    person: who.person,
+  });
+}
+
 // ── Съёмка ───────────────────────────────────────────────────────────────────
 
 async function waitFor(cdp, sessionId, expression, timeoutMs) {
@@ -268,7 +333,7 @@ async function waitFor(cdp, sessionId, expression, timeoutMs) {
   return false;
 }
 
-async function capture(cdp, screen, theme, initData, baseUrl, outDir) {
+async function capture(cdp, screen, theme, creds, baseUrl, outDir) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
 
@@ -289,7 +354,7 @@ async function capture(cdp, screen, theme, initData, baseUrl, outDir) {
   await cdp.send('Emulation.setDeviceMetricsOverride', VIEWPORT, sessionId);
   await cdp.send(
     'Page.addScriptToEvaluateOnNewDocument',
-    { source: buildMockScript(initData, theme) },
+    { source: mockForScreen(screen, theme, creds) },
     sessionId
   );
 
@@ -331,8 +396,7 @@ async function main() {
   const outDir = path.join(SHOTS_DIR, outName);
 
   const env = readEnv();
-  const token = process.env.TELEGRAM_BOT_TOKEN_CLIENT || env.TELEGRAM_BOT_TOKEN_CLIENT;
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN_CLIENT не найден — без него API отдаст 401.');
+  const creds = buildCredentials(env);
 
   try {
     const probe = await fetch(`${baseUrl}/webapp/client-home`, { signal: AbortSignal.timeout(4000) });
@@ -342,8 +406,7 @@ async function main() {
   }
 
   fs.mkdirSync(outDir, { recursive: true });
-  const initData = signInitData(token, CLIENT_NAME);
-  const screens = only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS;
+  const screens = usableScreens(only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS, creds);
 
   const { proc, userDataDir, wsUrl } = await launchChrome();
   const cdp = await CDP.connect(wsUrl);
@@ -352,7 +415,7 @@ async function main() {
   try {
     for (const screen of screens) {
       for (const theme of THEMES) {
-        const { settled } = await capture(cdp, screen, theme, initData, baseUrl, outDir);
+        const { settled } = await capture(cdp, screen, theme, creds, baseUrl, outDir);
         const mark = settled || !screen.ready ? 'ok' : 'ПО ТАЙМАУТУ';
         console.log(`  ${pad(screen.id + ' / ' + theme, 32)} ${mark}`);
         report.push({ screen: screen.id, theme, settled: settled || !screen.ready });
@@ -393,6 +456,7 @@ function pad(s, n) {
  */
 module.exports = {
   CDP, launchChrome, buildMockScript, signInitData, readEnv, waitFor,
+  buildCredentials, usableScreens, mockForScreen,
   SCREENS, THEMES, VIEWPORT, CLIENT_NAME, ROOT,
 };
 

@@ -20,7 +20,7 @@
 const path = require('node:path');
 
 const H = require(path.join(__dirname, 'webapp_visual_baseline.js'));
-const { CDP, launchChrome, buildMockScript, signInitData, readEnv, waitFor, SCREENS, THEMES, VIEWPORT, CLIENT_NAME } = H;
+const { CDP, launchChrome, readEnv, waitFor, buildCredentials, usableScreens, mockForScreen, SCREENS, THEMES, VIEWPORT } = H;
 
 const THRESHOLD = 0.005;
 
@@ -56,7 +56,7 @@ const OBSERVER = `(() => {
   }
 })();`;
 
-async function measure(cdp, screen, theme, initData, baseUrl) {
+async function measure(cdp, screen, theme, creds, baseUrl) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   await cdp.send('Page.enable', {}, sessionId);
@@ -65,7 +65,7 @@ async function measure(cdp, screen, theme, initData, baseUrl) {
   await cdp.send('Network.setBlockedURLs', { urls: ['*telegram.org/js/telegram-web-app.js*'] }, sessionId);
   await cdp.send('Emulation.setDeviceMetricsOverride', VIEWPORT, sessionId);
   await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: OBSERVER }, sessionId);
-  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: buildMockScript(initData, theme) }, sessionId);
+  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: mockForScreen(screen, theme, creds) }, sessionId);
 
   await cdp.send('Page.navigate', { url: baseUrl + screen.url }, sessionId);
   await waitFor(cdp, sessionId, screen.ready, 12000);
@@ -97,11 +97,8 @@ async function main() {
   const verbose = args.includes('--sources');
 
   const env = readEnv();
-  const token = process.env.TELEGRAM_BOT_TOKEN_CLIENT || env.TELEGRAM_BOT_TOKEN_CLIENT;
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN_CLIENT не найден — без него API отдаст 401.');
-
-  const initData = signInitData(token, CLIENT_NAME);
-  const screens = only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS;
+  const creds = buildCredentials(env);
+  const screens = usableScreens(only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS, creds);
 
   const { proc, userDataDir, wsUrl } = await launchChrome();
   const cdp = await CDP.connect(wsUrl);
@@ -111,7 +108,7 @@ async function main() {
     console.log('CLS на вьюпорте 390×844, порог ' + THRESHOLD + '\n');
     for (const screen of screens) {
       for (const theme of THEMES) {
-        const cls = await measure(cdp, screen, theme, initData, baseUrl);
+        const cls = await measure(cdp, screen, theme, creds, baseUrl);
         const v = Math.round(cls.value * 10000) / 10000;
         worst = Math.max(worst, v);
         const ok = v <= THRESHOLD;

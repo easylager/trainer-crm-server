@@ -22,8 +22,9 @@
 
 const fs = require('node:fs');
 const {
-  CDP, launchChrome, buildMockScript, signInitData, readEnv, waitFor,
-  SCREENS, THEMES, VIEWPORT, CLIENT_NAME,
+  CDP, launchChrome, readEnv, waitFor,
+  buildCredentials, usableScreens, mockForScreen,
+  SCREENS, THEMES, VIEWPORT,
 } = require('./webapp_visual_baseline.js');
 
 const PROBE = `(() => {
@@ -122,7 +123,7 @@ const PROBE = `(() => {
   return JSON.stringify(out);
 })()`;
 
-async function inspect(cdp, screen, theme, initData, baseUrl) {
+async function inspect(cdp, screen, theme, creds, baseUrl) {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
   await cdp.send('Page.enable', {}, sessionId);
@@ -130,7 +131,7 @@ async function inspect(cdp, screen, theme, initData, baseUrl) {
   await cdp.send('Network.enable', {}, sessionId);
   await cdp.send('Network.setBlockedURLs', { urls: ['*telegram.org/js/telegram-web-app.js*'] }, sessionId);
   await cdp.send('Emulation.setDeviceMetricsOverride', VIEWPORT, sessionId);
-  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: buildMockScript(initData, theme) }, sessionId);
+  await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: mockForScreen(screen, theme, creds) }, sessionId);
   await cdp.send('Page.navigate', { url: baseUrl + screen.url }, sessionId);
   const settled = await waitFor(cdp, sessionId, screen.ready, 12000);
   await cdp.send('Runtime.evaluate', { expression: 'document.fonts.ready', awaitPromise: true }, sessionId);
@@ -148,11 +149,8 @@ async function main() {
   const oneTheme = opt('--theme', null);
 
   const env = readEnv();
-  const token = process.env.TELEGRAM_BOT_TOKEN_CLIENT || env.TELEGRAM_BOT_TOKEN_CLIENT;
-  if (!token) throw new Error('TELEGRAM_BOT_TOKEN_CLIENT не найден — без него API отдаст 401.');
-
-  const initData = signInitData(token, CLIENT_NAME);
-  const screens = only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS;
+  const creds = buildCredentials(env);
+  const screens = usableScreens(only ? SCREENS.filter((s) => s.id.includes(only)) : SCREENS, creds);
   const themes = oneTheme ? [oneTheme] : THEMES;
 
   const { proc, userDataDir, wsUrl } = await launchChrome();
@@ -162,7 +160,7 @@ async function main() {
   try {
     for (const screen of screens) {
       for (const theme of themes) {
-        const r = await inspect(cdp, screen, theme, initData, baseUrl);
+        const r = await inspect(cdp, screen, theme, creds, baseUrl);
         checked += r.checked; skipped += r.skipped.length; fails += r.fail.length;
         const tag = `${screen.id} / ${theme}`;
         console.log(`  ${tag}${' '.repeat(Math.max(0, 30 - tag.length))} проверено ${String(r.checked).padStart(3)} · не прошло ${r.fail.length} · не посчитано ${r.skipped.length}`);

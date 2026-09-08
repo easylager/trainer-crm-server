@@ -60,10 +60,15 @@ const CLIENT_FILES = [
 ];
 
 /**
- * Общий с тренером. Считается отдельно: включать его в scope TASK-086 —
- * открытый вопрос Q-002 той задачи, и молча тянуть тренерские экраны нельзя.
+ * Общий с тренерским Mini App. До TASK-098 считался отдельно и в гейт не входил:
+ * молча тянуть тренерские экраны было нельзя (Q-002 в TASK-086). Владелец дал
+ * гейт 2026-09-09, файл переведён на токены и тренерские экраны сняты стендом —
+ * теперь он в гейте наравне с клиентскими, иначе дыра вернётся при первой правке.
  */
 const SHARED_FILES = ['mini-app-components.css'];
+
+/** Всё, что закрывает G-P1. */
+const GATED_FILES = [...CLIENT_FILES, ...SHARED_FILES];
 
 /** Источник правды палитры: hex здесь легитимен по определению. */
 const PALETTE_FILES = new Set(['theme.css']);
@@ -247,14 +252,10 @@ function report(findings) {
   };
 
   CLIENT_FILES.forEach(printRow);
+  console.log('  общий с тренерским Mini App:');
+  SHARED_FILES.forEach(printRow);
   console.log('-'.repeat(widths.reduce((a, b) => a + b, 0)));
-  console.log(pad('ИТОГО клиент', widths[0]) + pad('', 40) + grand);
-
-  console.log('\nОбщий с тренером (вне гейта, Q-002 в TASK-086)\n');
-  SHARED_FILES.forEach((file) => {
-    const c = byFile[file];
-    console.log(pad(file, widths[0]) + total(c));
-  });
+  console.log(pad('ИТОГО под гейтом', widths[0]) + pad('', 40) + grand);
 
   const distinct = distinctValues(findings);
   console.log('\nРазброс значений (то, что чинит шкала в TASK-086)\n');
@@ -270,7 +271,7 @@ function report(findings) {
 function distinctValues(findings) {
   const out = Object.fromEntries(RULES.map((r) => [r, new Set()]));
   for (const f of findings) {
-    if (CLIENT_FILES.includes(f.file)) out[f.rule].add(f.value);
+    if (GATED_FILES.includes(f.file)) out[f.rule].add(f.value);
   }
   return out;
 }
@@ -286,7 +287,7 @@ function list(findings, ruleFilter) {
 function clientTotals(findings) {
   const byFile = tally(findings);
   const out = {};
-  for (const file of CLIENT_FILES) out[file] = total(byFile[file]);
+  for (const file of GATED_FILES) out[file] = total(byFile[file]);
   return out;
 }
 
@@ -396,4 +397,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { analyze, clientTotals, CLIENT_FILES, RULES };
+module.exports = { analyze, clientTotals, CLIENT_FILES, SHARED_FILES, GATED_FILES, RULES };

@@ -1,6 +1,6 @@
 {
   "recorded_at": "2026-09-08",
-  "task": "TASK-087",
+  "task": "TASK-085",
   "note": "Ratchet: числа могут только уменьшаться.",
   "client_total": 0,
   "per_file": {
@@ -13,9 +13,10 @@
     "mini-app-client-bookings.css": 0,
     "mini-app-client-requests.css": 0,
     "mini-app-client-theme.css": 0,
+    "mini-app-trainer-card.css": 0,
     "mini-app-arena-ribbon.css": 0,
     "booking-client.css": 0,
-    "mini-app-trainer-card.css": 0
+    "mini-app-components.css": 0
   },
   "before_epic4": {
     "recorded_at": "2026-09-07",
