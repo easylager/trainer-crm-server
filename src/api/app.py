@@ -1258,6 +1258,19 @@ def webapp_client_requests_main_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-trainer-card.css")
+def webapp_trainer_card_css(request: Request):
+    """Единый компонент карточки тренера (TASK-092). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-card.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-home.css")
 def webapp_client_home_page_css(request: Request):
     """Client hub page styles (split from client-home.html). Use ``?v=…`` for long cache."""
