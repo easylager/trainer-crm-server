@@ -32,7 +32,7 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-sec + .ice-sec {
-  border-top: 1px solid var(--glide-line, #e2e6e5);
+  border-top: 1px solid var(--glide-line);
 }
 
 .ice-sec--hero {
@@ -42,17 +42,17 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-kicker {
   margin: 0;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
 }
 
 .ice-masthead {
   margin: 0;
-  font-size: 34px;
-  font-weight: 700;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.045em;
   line-height: 1.05;
 }
@@ -64,12 +64,12 @@ body.ar-pilot--ice .client-app-header {
   gap: 6px;
   margin: 2px 0 2px;
   padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  background: var(--glide-paper, #f1f3f2);
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-paper);
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: inherit;
   cursor: pointer;
 }
@@ -81,16 +81,16 @@ body.ar-pilot--ice .client-app-header {
   margin-left: 2px;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid var(--glide-hint, #5e6b6b);
+  border-top: 5px solid var(--glide-hint);
 }
 
 .ice-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 9px 11px;
 }
 
@@ -101,7 +101,7 @@ body.ar-pilot--ice .client-app-header {
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-search input {
@@ -110,13 +110,13 @@ body.ar-pilot--ice .client-app-header {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   color: inherit;
   outline: none;
 }
 
 .ice-search input::placeholder {
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-chips {
@@ -133,20 +133,20 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chip {
   flex: 0 0 auto;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   padding: 8px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  color: var(--glide-hint, #5e6b6b);
-  background: var(--tg-theme-bg-color, #fff);
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
+  background: var(--app-canvas-bg);
   cursor: pointer;
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: var(--app-cta-fill, #45B9BB);
-  border-color: var(--app-cta-fill, #45B9BB);
-  color: var(--app-cta-text, #04262a);
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
 }
 
 .ice-chips--svc {
@@ -158,14 +158,14 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-chips--svc .ice-chip {
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   padding: 6px 10px;
 }
 
 .ice-hint {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-hint[hidden] {
@@ -174,9 +174,9 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-seg {
   display: flex;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 9px;
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 3px;
 }
 
@@ -187,28 +187,27 @@ body.ar-pilot--ice .client-app-header {
 .ice-seg button {
   flex: 1;
   text-align: center;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   padding: 6px 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   border: 0;
   background: transparent;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   cursor: pointer;
 }
 
 .ice-seg button[aria-pressed='true'] {
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-card-bg);
   color: var(--tg-theme-text-color, var(--glide-ink));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .ice-eyebrow {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 10.5px;
+  font-size: var(--app-text-kicker);
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 0;
 }
 
@@ -217,36 +216,37 @@ body.ar-pilot--ice .client-app-header {
   grid-template-columns: 74px 1fr 12px;
   gap: 11px;
   padding: 10px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 11px;
-  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
   width: 100%;
   text-align: left;
   cursor: pointer;
   color: inherit;
   text-decoration: none;
   box-sizing: border-box;
+  box-shadow: var(--app-card-shadow);
 }
 
 .ice-acard::after {
   content: '›';
   align-self: center;
-  font-size: 22px;
+  font-size: var(--app-icon-lg);
   line-height: 1;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-acard__ph {
   height: 74px;
-  border-radius: 8px;
-  background: linear-gradient(150deg, var(--ice-mist, #e6f1ff), var(--glide-paper, #f1f3f2));
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: var(--app-radius-sm);
+  background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
+  border: 1px solid var(--glide-line);
   background-size: cover;
   background-position: center;
 }
 
 .ice-acard__ph--empty {
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-acard__body {
@@ -257,36 +257,36 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-acard__name {
-  font-size: 14.5px;
-  font-weight: 680;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
 .ice-acard__meta {
-  font-size: 12px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-live {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
-  font-weight: 620;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   margin-top: 2px;
 }
 
 .ice-live--a {
-  color: var(--ice-blue, #2a6e8f);
+  color: var(--app-ok-ink);
 }
 
 .ice-live--b {
-  color: #8a6a2b;
+  color: var(--glide-hint);
 }
 
 .ice-live--c {
-  color: var(--glide-hint, #5e6b6b);
-  font-weight: 500;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-medium);
 }
 
 .ice-live:empty {
@@ -296,52 +296,51 @@ body.ar-pilot--ice .client-app-header {
 .ice-live__dot {
   width: 6px;
   height: 6px;
-  border-radius: 99px;
+  border-radius: var(--app-radius-pill);
   background: currentColor;
   flex: 0 0 auto;
 }
 
 .ice-tier {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 9.5px;
+  font-size: var(--app-text-kicker);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--app-radius-xs);
   margin-left: 6px;
   vertical-align: 1px;
 }
 
 .ice-tier--a {
   background: rgba(var(--accent-rgb), 0.16);
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
 }
 
 .ice-tier--b {
-  background: var(--ice-mist, #e6f1ff);
-  color: var(--ice-blue, #2a6e8f);
+  background: var(--glide-line);
+  color: var(--glide-hint);
 }
 
 .ice-tier--c {
-  background: var(--glide-paper, #f1f3f2);
-  color: var(--glide-hint, #5e6b6b);
+  background: var(--glide-paper);
+  color: var(--glide-hint);
 }
 
 .ice-empty {
-  border: 1px dashed var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 14px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-empty b {
   display: block;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   margin-bottom: 6px;
 }
 
 .ice-empty p {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-results {
@@ -351,11 +350,11 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-results__label {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 6px 0 0;
 }
 
@@ -363,23 +362,24 @@ body.ar-pilot--ice .client-app-header {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 11px 12px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-card-bg);
   cursor: pointer;
   color: inherit;
+  box-shadow: var(--app-card-shadow);
 }
 
 .ice-hit b {
   display: block;
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
 .ice-hit span {
   display: block;
-  font-size: 12px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   margin-top: 2px;
 }
 
@@ -389,7 +389,7 @@ body.ar-pilot--ice .client-app-header {
   z-index: 8000;
   display: flex;
   flex-direction: column;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-canvas-bg);
   overflow: hidden;
   padding: 0;
 }
@@ -408,16 +408,16 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-picker h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--app-text-headline);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.03em;
 }
 
 .ice-picker__close {
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--glide-ink-teal, #0b6e70);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
   background: none;
   border: 0;
   padding: 8px 0;
@@ -442,11 +442,11 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-picker__label {
   margin: 12px 16px 4px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-picker__label:first-child {
@@ -461,37 +461,37 @@ body.ar-pilot--ice .client-app-header {
   gap: 2px;
   text-align: left;
   border: 0;
-  border-bottom: 1px solid var(--glide-line, #e2e6e5);
+  border-bottom: 1px solid var(--glide-line);
   border-radius: 0;
   padding: 14px 16px;
   background: transparent;
   font: inherit;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.02em;
   cursor: pointer;
   color: inherit;
 }
 
 .ice-picker__country {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   letter-spacing: 0;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-picker__item--current {
-  background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 18%, transparent);
+  background: color-mix(in srgb, var(--app-cta-fill) 18%, transparent);
 }
 
 .ice-geo {
   width: 100%;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 12px;
   background: transparent;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
   color: inherit;
 }
@@ -503,20 +503,20 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-state {
-  font-size: 14px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-body);
+  color: var(--glide-hint);
   padding: 8px 0;
 }
 
 .ice-map-note {
-  font-size: 13px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   margin: 0;
 }
 
 .ice-map-note a {
-  color: var(--glide-ink-teal, #0b6e70);
-  font-weight: 600;
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
 }
 
 .ice-map-wrap {
@@ -533,7 +533,7 @@ body.ar-pilot--ice .client-app-header {
   position: relative;
   height: min(52vh, 420px);
   min-height: 280px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-map-canvas {
@@ -546,12 +546,12 @@ body.ar-pilot--ice .client-app-header {
   right: 11px;
   top: 11px;
   z-index: 2;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 9px;
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 8px 11px;
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   cursor: pointer;
   color: inherit;
@@ -574,8 +574,8 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-map-offmap {
   margin: 10px 16px 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-map-empty {
@@ -593,38 +593,38 @@ body.ar-pilot--ice .client-app-header {
 .ice-ypin__dot {
   width: 15px;
   height: 15px;
-  border-radius: 99px 99px 99px 2px;
+  border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
   transform: rotate(45deg);
-  background: var(--ice-blue, #2a6e8f);
-  border: 2px solid var(--tg-theme-bg-color, #fff);
+  background: var(--glide-brand);
+  border: 2px solid var(--tg-theme-bg-color);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   display: block;
 }
 
 .ice-ypin--a .ice-ypin__dot {
-  background: var(--app-cta-fill, #45B9BB);
+  background: var(--app-cta-fill);
 }
 
 .ice-ypin--c .ice-ypin__dot {
-  background: var(--glide-hint, #5e6b6b);
+  background: var(--glide-hint);
   opacity: 0.55;
   width: 11px;
   height: 11px;
 }
 
 .ice-ypin--b .ice-ypin__dot {
-  background: var(--ice-blue, #2a6e8f);
+  background: var(--glide-hint);
 }
 
 .ice-ypin__label {
-  font-size: 10.5px;
-  font-weight: 700;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   white-space: nowrap;
-  color: var(--tg-theme-text-color, var(--glide-text, #101617));
+  color: var(--tg-theme-text-color, var(--glide-text));
 }
 
 .ice-ypin__label:empty {
@@ -634,15 +634,15 @@ body.ar-pilot--ice .client-app-header {
 .ice-ycluster {
   width: 38px;
   height: 38px;
-  border-radius: 99px;
-  background: var(--ice-blue, #2a6e8f);
-  color: #fff;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-brand);
+  color: var(--app-cta-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 750;
-  font-size: 14px;
-  border: 3px solid var(--tg-theme-bg-color, #fff);
+  font-weight: var(--app-weight-bold);
+  font-size: var(--app-text-body);
+  border: 3px solid var(--tg-theme-bg-color);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
 }
