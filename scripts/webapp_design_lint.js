@@ -49,6 +49,7 @@ const CLIENT_FILES = [
   'mini-app-client-bookings.css',
   'mini-app-client-requests.css',
   'mini-app-client-theme.css',
+  'mini-app-trainer-card.css',
   'mini-app-arena-ribbon.css',
   'booking-client.css',
 ];

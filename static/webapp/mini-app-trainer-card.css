@@ -1,0 +1,215 @@
+/**
+ * Карточка тренера — единый компонент (TASK-092, EPIC4 client-premium).
+ *
+ * ЗАЧЕМ ОТДЕЛЬНЫЙ ФАЙЛ. До этой задачи карточка существовала двумя независимыми
+ * кусками CSS: карусель на Главной в mini-app-client-home.css и список «Лёд» в
+ * ice-tab.css. Они разошлись — в одном месте плейсхолдер показывал инициалы,
+ * в другом это была просто заливка без единого символа. Расхождение и есть
+ * причина F-5, а не его следствие (DEC-001), поэтому лечится оно одним
+ * источником правды, а не двумя одинаковыми правками.
+ *
+ * ПРАВИЛО КОМПОНЕНТА: лучше меньше фактов, но целых, чем много обрезанных.
+ * Три обрезания подряд читаются как поломка, а не как компактность. Поэтому
+ * здесь нет ни одного `text-overflow: ellipsis` — если факт не помещается,
+ * он переносится, а не обрубается.
+ *
+ * Подключать ПОСЛЕ theme.css.
+ */
+
+.tcard {
+  /*
+   * 216px вместо прежних 180px. Ширина продиктована данными, а не вкусом:
+   * самое длинное имя в базе — 19 символов, названия услуг доходят до 36
+   * («ОХМ(отработка хоккейного мастерства)»). В 180px такой набор физически
+   * не помещается целиком, и любая вёрстка там сводится к выбору, что именно
+   * обрезать. AC-001 прямо разрешает расширить карточку вместо обрезания.
+   *
+   * На вьюпорте 390px видно полторы карточки — то есть край следующей остаётся
+   * подсказкой, что ряд листается.
+   */
+  flex: 0 0 auto;
+  width: 216px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--app-space-2);
+  padding: var(--app-space-3);
+  border-radius: var(--app-radius-lg);
+  /* Уровень 1 контракта поверхностей (TASK-088): карточка в потоке. */
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-line);
+  box-shadow: var(--app-card-shadow);
+  font: inherit;
+  color: var(--tg-theme-text-color);
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tcard:hover {
+  border-color: color-mix(in srgb, var(--app-cta-fill) 45%, transparent);
+}
+
+.tcard:active {
+  transform: scale(0.985);
+}
+
+/* ── Кадр ─────────────────────────────────────────────────────────────────── */
+
+.tcard__media {
+  /*
+   * 4/5 вместо квадрата. Квадрат с object-fit: cover срезал портрет по грудь и
+   * ставил голову вплотную к верхней кромке — человек на фото выглядел
+   * случайно попавшим в кадр. Вертикальное соотношение терпимо к портретной
+   * съёмке, которой снято большинство фото тренеров.
+   */
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--app-radius-md);
+  overflow: hidden;
+  background: var(--glide-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tcard__media img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  /*
+   * Фокус кадра выше геометрического центра. На портрете лицо почти всегда в
+   * верхней трети, и центрирование по умолчанию срезает макушку.
+   */
+  object-position: 50% 22%;
+}
+
+/*
+ * ПЛЕЙСХОЛДЕР — не исключение, а основное состояние.
+ *
+ * Замер по локальной БД: 8 из 9 видимых в каталоге тренеров без фото, то есть
+ * 89%. Проектировать его как редкий случай значит проектировать не тот экран.
+ * Отсюда решение: инициалы крупно, в брендовом тоне, со срезанным углом —
+ * объект, который выглядит намеренным, а не пустым местом.
+ *
+ * Срез именно здесь, а не на кадре с фотографией: theme.css § ГЕОМЕТРИЯ БРЕНДА
+ * относит аватар-плейсхолдер к служебной геометрии, а контейнер фотографии —
+ * к контенту, который срез не трогает. Побочный эффект полезен: форма сама
+ * различает «человек есть» и «фото ещё нет».
+ */
+.tcard__media--empty {
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+  font-size: var(--app-icon-xl);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.02em;
+  clip-path: var(--app-ribbon-clip-avatar);
+  border-radius: 0;
+}
+
+/* ── Факты ────────────────────────────────────────────────────────────────── */
+
+.tcard__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-width: 0;
+}
+
+.tcard__name {
+  /*
+   * Имя переносится, а не обрезается (AC-001). Раньше здесь стояло
+   * white-space: nowrap + ellipsis, и «Виктория Дуброўская» превращалась
+   * в «Виктория Дуброў…» — карточка обещала человека и не отдавала даже имени.
+   *
+   * min-height в две строки держит карточки ряда выровненными по нижнему блоку;
+   * имя длиннее двух строк просто увеличит карточку, и это честнее обрезания.
+   * text-wrap: balance распределяет строки ровно — Baseline с мая 2024.
+   */
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  min-height: 2.4em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.tcard__rating {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--tg-theme-text-color);
+  line-height: 1.2;
+}
+
+.tcard__rating-count {
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-hint-color);
+}
+
+.tcard__where {
+  /*
+   * Место тоже переносится. Прежний ellipsis резал «Ледовый дворец спорта
+   * Минской области» на середине — единственная находка проверки переполнений,
+   * которая держалась дольше всех.
+   */
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-hint-color);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tcard__where svg {
+  width: var(--app-icon-xs);
+  height: var(--app-icon-xs);
+  flex-shrink: 0;
+  /* Иконка выравнивается по первой строке, а не по центру двухстрочного адреса. */
+  margin-top: 1px;
+}
+
+/* ── Услуги ───────────────────────────────────────────────────────────────── */
+
+.tcard__svcs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1);
+  margin-top: var(--app-space-1);
+}
+
+/*
+ * Услуга — завершённая единица (AC-002). Прежде это была одна строка текста,
+ * склеенная через « · » и обрезанная line-clamp: 2, из-за чего вторая услуга
+ * систематически превращалась в «…».
+ *
+ * Чип переносится внутри себя, а не обрезается: у названий вроде «Обучение
+ * катанию «с нуля»» нет короткой формы, и урезать их значит вернуть ту же
+ * болезнь в другом обличье.
+ *
+ * Цвет текста — --glide-ink-teal, а не заливочный --app-cta-fill: последний
+ * на светлой бумаге даёт 2.11:1 и для текста непригоден (см. шапку theme.css).
+ */
+.tcard__svc {
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.3;
+  padding: var(--app-space-1) var(--app-space-2);
+  border-radius: var(--app-radius-sm);
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* Счётчик остатка: тоже завершённая единица — «ещё 2», а не многоточие. */
+.tcard__svc--more {
+  background: var(--glide-line);
+  color: var(--tg-theme-hint-color);
+}

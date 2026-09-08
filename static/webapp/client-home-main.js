@@ -1181,15 +1181,17 @@
 
       function wireDiscoveryCardPhotos(root) {
         if (!root) return;
-        root.querySelectorAll('.hub-discovery__avatar--photo img').forEach(function(img) {
+        root.querySelectorAll('.tcard__media img').forEach(function(img) {
           function showInitialsFallback() {
-            var card = img.closest('.hub-discovery__card');
-            var avatar = img.closest('.hub-discovery__avatar');
-            if (!avatar) return;
-            var nameEl = card && card.querySelector('.hub-discovery__name');
+            var card = img.closest('.tcard');
+            var media = img.closest('.tcard__media');
+            if (!media) return;
+            var nameEl = card && card.querySelector('.tcard__name');
             var name = nameEl ? nameEl.textContent : '?';
-            avatar.classList.remove('hub-discovery__avatar--photo');
-            avatar.innerHTML = initials(name);
+            // Сбой загрузки фото приводит к тому же плейсхолдеру, что и его отсутствие:
+            // два разных вида «фото нет» выглядели бы как поломка.
+            media.classList.add('tcard__media--empty');
+            media.innerHTML = initials(name);
           }
           img.onerror = function() {
             var fb = img.getAttribute('data-fallback') || '';
@@ -1203,11 +1205,30 @@
         });
       }
 
-      function hubDiscoveryServicesLine(services) {
-        var labels = (services || []).slice(0, 2).map(function(s) {
+      /*
+       * Услуги — завершённые единицы, а не склеенная строка (TASK-092 AC-002).
+       *
+       * Раньше это был `labels.join(' · ')` под `-webkit-line-clamp: 2`, из-за
+       * чего вторая услуга почти всегда обрывалась многоточием. Теперь каждая
+       * услуга — свой чип, а остаток честно считается: «ещё 2» вместо «…».
+       *
+       * Показываем два чипа: по данным у тренеров сейчас одна-две услуги, а
+       * длина названий доходит до 36 символов, и третий чип вытеснил бы имя.
+       */
+      function hubDiscoveryServiceChips(services) {
+        var labels = (services || []).map(function(s) {
           return String((s && (s.service_name || s.name)) || '').trim();
         }).filter(Boolean);
-        return labels.join(' · ');
+        if (!labels.length) return '';
+        var shown = labels.slice(0, 2);
+        var rest = labels.length - shown.length;
+        var chips = shown.map(function(l) {
+          return '<span class="tcard__svc">' + esc(l) + '</span>';
+        });
+        if (rest > 0) {
+          chips.push('<span class="tcard__svc tcard__svc--more">ещё ' + esc(String(rest)) + '</span>');
+        }
+        return '<div class="tcard__svcs">' + chips.join('') + '</div>';
       }
 
       function buildDiscoveryCardHtml(t) {
@@ -1216,38 +1237,35 @@
         var photo = t && t.photos && t.photos[0];
         var src = hubDiscoveryPhotoListSrc(photo);
         var cdnFallback = hubDiscoveryPhotoCdnFallback(photo);
-        var avatarHtml = src
-          ? '<div class="hub-discovery__avatar hub-discovery__avatar--photo">' +
+        var mediaHtml = src
+          ? '<div class="tcard__media">' +
               '<img src="' + esc(src) + '" alt="" loading="eager" decoding="async"' +
               (cdnFallback && cdnFallback !== src
                 ? ' data-fallback="' + esc(cdnFallback) + '"'
                 : '') +
               '/></div>'
-          : '<div class="hub-discovery__avatar">' + esc(initials(name)) + '</div>';
+          : '<div class="tcard__media tcard__media--empty">' + esc(initials(name)) + '</div>';
         var arena = ((t && t.primary_arena_name) || '').toString().trim();
-        var arenaHtml = arena ? '<div class="hub-discovery__city">' + ICONS.pin + esc(arena) + '</div>' : '';
+        var arenaHtml = arena ? '<div class="tcard__where">' + ICONS.pin + '<span>' + esc(arena) + '</span></div>' : '';
         var ratingHtml = '';
         if (p && p.rating_avg != null && (p.rating_count || 0) > 0) {
           ratingHtml =
-            '<div class="hub-discovery__rating">⭐ ' +
+            '<div class="tcard__rating">⭐ ' +
             esc(Number(p.rating_avg).toFixed(1)) +
-            ' <span class="hub-discovery__rating-count">(' + esc(String(p.rating_count)) + ')</span></div>';
+            ' <span class="tcard__rating-count">(' + esc(String(p.rating_count)) + ')</span></div>';
         }
         var services = (t && Array.isArray(t.services)) ? t.services : [];
-        var svcLine = hubDiscoveryServicesLine(services);
-        var svcHtml = svcLine
-          ? '<div class="hub-discovery__services">' + esc(svcLine) + '</div>'
-          : '';
+        var svcHtml = hubDiscoveryServiceChips(services);
         var tidStr = esc(String((t && t.id) || ''));
         return (
-          '<button type="button" class="hub-discovery__card" data-tid="' + tidStr + '">' +
-            avatarHtml +
-            '<div class="hub-discovery__body">' +
-              '<div class="hub-discovery__name">' + esc(name) + '</div>' +
+          '<button type="button" class="tcard" data-tid="' + tidStr + '">' +
+            mediaHtml +
+            '<div class="tcard__body">' +
+              '<div class="tcard__name">' + esc(name) + '</div>' +
               ratingHtml +
               arenaHtml +
-              svcHtml +
             '</div>' +
+            svcHtml +
           '</button>'
         );
       }
@@ -1277,7 +1295,7 @@
             wireDiscoveryCardPhotos(el);
             var allBtn = document.getElementById('hubDiscoveryAll');
             if (allBtn) allBtn.addEventListener('click', function() { navigateTo('ice?intent=coach'); });
-            el.querySelectorAll('.hub-discovery__card').forEach(function(btn) {
+            el.querySelectorAll('.tcard').forEach(function(btn) {
               btn.addEventListener('click', function() {
                 var tid = btn.getAttribute('data-tid');
                 if (tid) navigateTo('catalog?trainer_id=' + encodeURIComponent(tid));
