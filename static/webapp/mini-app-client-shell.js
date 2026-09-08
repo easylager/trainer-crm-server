@@ -410,12 +410,82 @@
     return true;
   }
 
+  /* ── TASK-094: направление перехода ───────────────────────────────────────
+   *
+   * Направление знает только уходящая страница — новая видит лишь то, что её
+   * открыли. Поэтому оно кладётся в sessionStorage перед уходом и читается на
+   * pagereveal. Навигационный API, когда он есть, точнее (ловит и системную
+   * кнопку «назад»), поэтому он в приоритете, а флаг — фолбэк.
+   */
+  var NAV_DIR_KEY = 'tcb_nav_dir_v1';
+  var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
+
+  function rememberNavDirection(path) {
+    var from = TAB_ORDER[resolveActiveTab()];
+    var toTab = null;
+    var key = normalizeRoutePath(path).split('?')[0];
+    if (key === 'client-home') toTab = 'home';
+    else if (key === 'ice' || key === 'catalog' || key === 'arena') toTab = 'catalog';
+    else if (key === 'client-bookings') toTab = 'bookings';
+    var to = TAB_ORDER[toTab];
+    // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда
+    // вернёт системная кнопка, и её направление посчитает Navigation API.
+    var dir = from != null && to != null && to < from ? 'back' : 'forward';
+    try {
+      global.sessionStorage.setItem(NAV_DIR_KEY, dir);
+    } catch (e) {
+      /* приватный режим — переход просто будет кросс-фейдом */
+    }
+  }
+
+  function takeNavDirection() {
+    try {
+      var dir = global.sessionStorage.getItem(NAV_DIR_KEY);
+      global.sessionStorage.removeItem(NAV_DIR_KEY);
+      return dir === 'back' || dir === 'forward' ? dir : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function bindViewTransitions() {
+    // Нет поддержки — ничего не подписываем, навигация остаётся как была.
+    if (!('onpagereveal' in global)) return;
+    global.addEventListener('pagereveal', function (ev) {
+      if (!ev.viewTransition) return;
+      // Флаг снимаем всегда, иначе он протечёт в следующий переход.
+      var stored = takeNavDirection();
+      /*
+       * Навигационный API отвечает на другой вопрос: он знает про движение по
+       * стеку истории, а не про смысл перехода. Уход «Лёд → Главная» — это
+       * push вперёд по стеку, но назад по вкладкам. Поэтому API имеет право
+       * утверждать только «это возврат по истории»; смысл остальных переходов
+       * знает уходившая страница, и он лежит во флаге.
+       */
+      var traversalBack = false;
+      var nav = global.navigation;
+      if (nav && nav.activation && nav.activation.from && nav.activation.entry) {
+        var fromIndex = nav.activation.from.index;
+        var toIndex = nav.activation.entry.index;
+        traversalBack =
+          typeof fromIndex === 'number' && typeof toIndex === 'number' && toIndex >= 0 && toIndex < fromIndex;
+      }
+      var dir = traversalBack ? 'back' : stored || 'forward';
+      try {
+        ev.viewTransition.types.add(dir);
+      } catch (e) {
+        /* types не поддержаны — останется кросс-фейд по умолчанию */
+      }
+    });
+  }
+
   function navigate(path) {
     if (isSameTabRoute(path)) {
       closeMoreSheet();
       syncTabBarActive();
       return;
     }
+    rememberNavDirection(path);
     var url = withInit(webappBasePath() + path);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
     global.location.href = url;
@@ -859,6 +929,13 @@
       navigate('client-home');
     };
   }
+
+  /*
+   * Подписка на pagereveal — на уровне модуля, а не в boot(): событие
+   * срабатывает до первой отрисовки, то есть раньше DOMContentLoaded.
+   * Подписаться позже значит не получить первый же переход.
+   */
+  bindViewTransitions();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

@@ -11,14 +11,16 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202609061"></script>
   <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609084" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609022" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="arena-card.css?v=202609067" />
-  <script src="mini-app-client-shell.js?v=202609062"></script>
+  <link rel="stylesheet" href="arena-card.css?v=202609084" />
+  <script src="mini-app-client-shell.js?v=202609085"></script>
   <script src="arena-card-model.js?v=202609066"></script>
+  <!-- Переход не должен снимать пустую страницу: ждём разметку экрана. -->
+  <link rel="expect" href="#arenaRoot" blocking="render" />
 </head>
 <body class="ar-pilot ar-pilot--arena" data-client-shell="tabs">
   <div class="header client-app-header">
@@ -29,8 +31,15 @@
     </div>
   </div>
 
+  <!--
+    TASK-094 AC-003. Шапка арены рисуется только после трёх запросов, то есть
+    её нет в DOM в момент, когда браузер снимает новый документ для перехода.
+    Поэтому здесь стоит пустая шапка того же размера: она существует к первому
+    кадру, несёт имя перехода и заодно работает скелетоном вместо строки
+    «Загрузка карточки…». paint() заменит её настоящей.
+  -->
   <div id="arenaRoot" class="arena-card">
-    <div class="arena-state" id="arenaBoot">Загрузка карточки…</div>
+    <div class="arena-hero arena-hero--pending" id="arenaBoot" aria-label="Загрузка карточки катка"></div>
   </div>
 
   <div class="arena-modal" id="arenaModal" hidden>

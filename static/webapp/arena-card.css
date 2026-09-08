@@ -48,6 +48,15 @@ body.ar-pilot--arena .client-app-header {
   overflow: hidden;
 }
 
+/*
+ * TASK-094. Пустая шапка до прихода данных: та же коробка, что у настоящей,
+ * чтобы переход со списка «Льда» морфил кадр в неё, а не в пустоту, и чтобы
+ * появление фото не двигало макет.
+ */
+.arena-hero--pending {
+  border-bottom-color: transparent;
+}
+
 .arena-hero--photo {
   background-size: cover;
   background-position: center;

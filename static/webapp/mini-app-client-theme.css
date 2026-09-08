@@ -77,3 +77,107 @@ button.btn-app-home,
 .st-widget--time .st-progress-fill {
   background: var(--app-cta-fill) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * TASK-094. НЕПРЕРЫВНОСТЬ ПЕРЕХОДОВ (гейт G-P4, находка F-7).
+ *
+ * Вкладки клиента — отдельные документы, и до этой правки каждое переключение
+ * давало вспышку фона и пересборку экрана. Cross-document view transitions
+ * убирают шов, не трогая архитектуру: SPA не заводим (DEC-001).
+ *
+ * Объявление лежит здесь, потому что этот файл грузят все пятнадцать
+ * клиентских страниц и ни одна тренерская — граница эпика соблюдена.
+ *
+ * ПОДДЕРЖКА: Chrome/Edge 126+, Safari 18.2+; в Firefox нет. Где не
+ * поддержано — обычная навигация, ровно как раньше. Это прогрессивное
+ * улучшение, а не функциональность: на нём ничего не построено.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+@view-transition {
+  navigation: auto;
+}
+
+/*
+ * AC-006. Полное выключение при запросе на уменьшение движения — не «покороче»,
+ * а navigation: none: анимация перехода тут и есть предмет запроса.
+ */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
+/*
+ * Длительность. 200мс — не «быстро, насколько можно», а граница, за которой
+ * переход начинает восприниматься как задержка. Экран открывают ежедневно;
+ * красивый долгий переход раздражает на десятом открытии (AC-007).
+ */
+::view-transition-group(root) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * AC-004. Направление читается: вперёд — новый экран приходит справа, назад —
+ * слева. Сдвиг намеренно короткий (7%): полноэкранный слайд на 100% выглядит
+ * как перелистывание слайдов и на коротком переходе не успевает прочитаться.
+ */
+@keyframes client-vt-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-7%);
+  }
+}
+
+@keyframes client-vt-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(7%);
+  }
+}
+
+@keyframes client-vt-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(7%);
+  }
+}
+
+@keyframes client-vt-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-7%);
+  }
+}
+
+html:active-view-transition-type(forward)::view-transition-old(root) {
+  animation-name: client-vt-out-left;
+}
+
+html:active-view-transition-type(forward)::view-transition-new(root) {
+  animation-name: client-vt-in-right;
+}
+
+html:active-view-transition-type(back)::view-transition-old(root) {
+  animation-name: client-vt-out-right;
+}
+
+html:active-view-transition-type(back)::view-transition-new(root) {
+  animation-name: client-vt-in-left;
+}
+
+/*
+ * AC-003. Кадр катка не мигает, а разворачивается в шапку арены: один и тот же
+ * снимок с двух сторон перехода. Имя ставится на КОНКРЕТНУЮ карточку в момент
+ * тапа (ice-tab.js) — в списке таких элементов пять, а имя обязано быть
+ * уникальным в документе.
+ */
+.arena-hero,
+.ice-board__photo[data-vt-hero] {
+  view-transition-name: client-arena-hero;
+}
+
+::view-transition-group(client-arena-hero) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}

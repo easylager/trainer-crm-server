@@ -11,7 +11,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202608315"></script>
 <link rel="stylesheet" href="theme.css?v=202609081" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609081" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609084" />
   <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>
   <link rel="preload" href="client-home-main.js?v=202609082" as="script" />
@@ -19,9 +19,11 @@
   <link rel="stylesheet" href="mini-app-client-home.css?v=202609083" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <script src="mini-app-client-shell.js?v=202609062"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <script defer src="mini-app-client-home.js?v=202608315"></script>
+  <!-- TASK-094: не снимать переход по пустой странице. -->
+  <link rel="expect" href="#hubShell" blocking="render" />
 </head>
 <body class="hub-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
   <div class="hub-shell" id="hubShell">

@@ -12,7 +12,7 @@
   <script src="client-mini-app-theme.js?v=202609031"></script>
   <script src="mini-app-phone-field.js?v=202609031"></script>
   <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609084" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609031" />
   <script src="mini-app-telegram-chrome.js?v=202609031"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609031" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609031" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609031" />
-  <script src="mini-app-client-shell.js?v=202609062"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
   <script>
     (function () {
       try {
@@ -34,6 +34,8 @@
     html.bookings-open-detail #screenList.active { display: none !important; }
     html.bookings-open-detail #screenDetail { display: block !important; }
   </style>
+  <!-- TASK-094: не снимать переход по пустой странице. -->
+  <link rel="expect" href="#screenList" blocking="render" />
 </head>
 <body class="client-bookings-body ar-pilot ar-pilot--client-bookings" data-client-shell="tabs">
   <div class="header client-app-header">

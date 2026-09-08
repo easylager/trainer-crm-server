@@ -731,7 +731,26 @@
       showSearch('');
       return;
     }
-    if (href) shellNav(href);
+    if (href) {
+      markHeroForTransition(card);
+      shellNav(href);
+    }
+  }
+
+  /*
+   * TASK-094 AC-003. Кадр тапнутой карточки получает имя перехода — и только он:
+   * в списке таких элементов пять, а view-transition-name обязано быть
+   * уникальным в документе, иначе браузер отменит переход целиком.
+   * Снимок уходящей страницы делается в pageswap, то есть уже после этой
+   * пометки, — успеваем.
+   */
+  function markHeroForTransition(card) {
+    var prev = document.querySelectorAll('[data-vt-hero]');
+    var i;
+    for (i = 0; i < prev.length; i++) prev[i].removeAttribute('data-vt-hero');
+    if (!card || typeof card.querySelector !== 'function') return;
+    var photo = card.querySelector('.ice-board__photo');
+    if (photo) photo.setAttribute('data-vt-hero', '1');
   }
 
   function bind() {
@@ -896,6 +915,13 @@
     } catch (e) { /* */ }
     setChips();
     setViewToggle();
+    /*
+     * TASK-095: скелетон рисуется первым же кадром, не дожидаясь резолва города.
+     * Иначе между появлением экрана и первым запросом список — пустое место, и
+     * на переходе с Главной (TASK-094) въезжает наполовину собранная страница.
+     */
+    state.loading = true;
+    renderList();
     resolveCity().then(function () {
       if (saved && saved.scrollY) {
         global.setTimeout(function () {

@@ -103,7 +103,9 @@ function signInitData(botToken, user) {
  * client-home-main.js, ice-tab.js, mini-app-client-shell.js, mini-app-telegram-chrome.js).
  * Отсутствующий метод = исключение на старте = пустой снимок, поэтому лучше шире.
  */
-function buildMockScript(initData, theme) {
+function buildMockScript(initData, theme, opts = {}) {
+  // Плёнку перехода (TASK-094) снимают с ЖИВЫМИ анимациями — иначе снимать нечего.
+  const freezeAnimations = opts.freezeAnimations !== false;
   const dark = theme === 'dark';
   const themeParams = dark
     ? { bg_color: '#0B0C0E', text_color: '#E6E9EA', hint_color: '#868D93', link_color: '#57D0D2',
@@ -144,9 +146,20 @@ function buildMockScript(initData, theme) {
     switchInlineQuery: noop, shareToStory: noop,
   }};
   // Стенд снимает статичный кадр: анимации только смазывают снимок и делают дифф шумным.
-  const style = document.createElement('style');
-  style.textContent = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}';
-  document.documentElement.appendChild(style);
+  //
+  // ВАЖНО (найдено в TASK-094): скрипт выполняется на document-start, когда
+  // documentElement ещё null — прежняя версия падала здесь с TypeError, и
+  // анимации на самом деле НЕ глушились ни на одном снимке эпика. Ждём корень.
+  const freeze = () => {
+    if (!${freezeAnimations}) return;
+    const root = document.documentElement;
+    if (!root) return;
+    const style = document.createElement('style');
+    style.textContent = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;}';
+    root.appendChild(style);
+  };
+  if (document.documentElement) freeze();
+  else document.addEventListener('readystatechange', freeze, { once: true });
 })();`;
 }
 
