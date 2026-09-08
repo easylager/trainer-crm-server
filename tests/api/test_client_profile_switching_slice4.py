@@ -1,6 +1,6 @@
 """
 EPIC1 Slice 4: existing client endpoints resolve the acting client via ``X-Profile-Id``
-instead of always the account's own row. See .ai/EPIC1-client-multi-profile.md.
+instead of always the account's own row. See docs/epics/client-multi-profile.md.
 """
 from __future__ import annotations
 

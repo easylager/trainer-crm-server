@@ -5,6 +5,137 @@
 (function (global) {
   'use strict';
 
+  // ngrok-free.dev serves an interstitial HTML to browser-like UAs (Telegram WebView).
+  // fetch/XHR parse as JSON, <img> and CSS background-image fail to decode — empty thumbs.
+  (function patchNgrokSkipWarning() {
+    var blobCache = Object.create(null);
+    var blobPending = Object.create(null);
+
+    function absoluteUrl(url) {
+      try {
+        return new URL(url, global.location && global.location.href);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function shouldSkip(url) {
+      var parsed = absoluteUrl(url);
+      if (!parsed) return false;
+      var host = parsed.hostname;
+      return host === 'localhost' || host === '127.0.0.1' || host.indexOf('ngrok') !== -1;
+    }
+
+    function isPublicPhotoUrl(url) {
+      var parsed = absoluteUrl(url);
+      return !!(parsed && parsed.pathname.indexOf('/api/public/photos/') === 0);
+    }
+
+    function withSkipHeader(headers) {
+      var next = new Headers(headers || undefined);
+      next.set('ngrok-skip-browser-warning', '1');
+      return next;
+    }
+
+    if (typeof global.fetch === 'function') {
+      var origFetch = global.fetch.bind(global);
+      global.fetch = function (input, init) {
+        var url = typeof input === 'string' ? input : input && input.url;
+        if (!shouldSkip(url)) return origFetch(input, init);
+        init = init ? Object.assign({}, init) : {};
+        init.headers = withSkipHeader(init.headers);
+        return origFetch(input, init);
+      };
+    }
+
+    function resolvePhotoBlob(url) {
+      if (!url || blobCache[url]) return Promise.resolve(blobCache[url] || url);
+      if (blobPending[url]) return blobPending[url];
+      blobPending[url] = global
+        .fetch(url, { cache: 'force-cache' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('photo ' + res.status);
+          return res.blob();
+        })
+        .then(function (blob) {
+          if (!blob || String(blob.type || '').indexOf('image/') !== 0) {
+            throw new Error('not image');
+          }
+          var objectUrl = URL.createObjectURL(blob);
+          blobCache[url] = objectUrl;
+          return objectUrl;
+        })
+        .catch(function () {
+          return url;
+        });
+      return blobPending[url];
+    }
+
+    function backgroundUrl(style) {
+      var match = String(style || '').match(/url\(\s*(['"]?)([^'")]+)\1\s*\)/);
+      return match ? match[2] : '';
+    }
+
+    function rewritePhotoNode(node) {
+      if (!node || node.nodeType !== 1) return;
+      if (node.tagName === 'IMG') {
+        var src = node.getAttribute('src') || '';
+        if (src && isPublicPhotoUrl(src) && !node.getAttribute('data-ngrok-blob')) {
+          node.setAttribute('data-ngrok-blob', '1');
+          resolvePhotoBlob(src).then(function (next) {
+            if (next && node.getAttribute('src') !== next) node.setAttribute('src', next);
+          });
+        }
+      }
+      var inline = node.getAttribute && node.getAttribute('style');
+      if (inline && inline.indexOf('url(') !== -1 && !node.getAttribute('data-ngrok-bg')) {
+        var bg = backgroundUrl(inline);
+        if (bg && isPublicPhotoUrl(bg)) {
+          node.setAttribute('data-ngrok-bg', '1');
+          resolvePhotoBlob(bg).then(function (next) {
+            if (next) node.style.backgroundImage = 'url("' + String(next).replace(/"/g, '') + '")';
+          });
+        }
+      }
+    }
+
+    function walkPhotoNodes(root) {
+      if (!root) return;
+      rewritePhotoNode(root);
+      if (!root.querySelectorAll) return;
+      var nodes = root.querySelectorAll('img, [style*="background-image"]');
+      for (var i = 0; i < nodes.length; i += 1) rewritePhotoNode(nodes[i]);
+    }
+
+    function startPhotoObserver() {
+      var doc = global.document;
+      if (!doc || !global.MutationObserver) return;
+      walkPhotoNodes(doc);
+      var observer = new MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i += 1) {
+          var rec = records[i];
+          if (rec.type === 'attributes') rewritePhotoNode(rec.target);
+          var added = rec.addedNodes || [];
+          for (var j = 0; j < added.length; j += 1) walkPhotoNodes(added[j]);
+        }
+      });
+      observer.observe(doc.documentElement || doc.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src', 'style'],
+      });
+    }
+
+    if (global.document) {
+      if (global.document.readyState === 'loading') {
+        global.document.addEventListener('DOMContentLoaded', startPhotoObserver);
+      } else {
+        startPhotoObserver();
+      }
+    }
+  })();
+
   function detectPlatformId() {
     if (global.Telegram && global.Telegram.WebApp) return 'telegram';
     return 'unknown';

@@ -12,7 +12,7 @@ the same discount schedule as the existing BY seed (migration 0069): 3mo = month
 proposed and accepted in TASK-044's task file directly (not further derived).
 
 These are starting figures pending real-world confirmation once RU trainers exist — not
-claimed as final/perfect. See ``.ai/tasks/TASK-044-ru-subscription-pricing.md``.
+claimed as final/perfect. See ``.ai/tasks/TASK-044.md``.
 
 Revision ID: 0189_ru_subscription_pricing
 Revises: 0188_currency_by_city_foundation

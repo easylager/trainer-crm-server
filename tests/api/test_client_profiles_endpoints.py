@@ -1,7 +1,7 @@
 """
 EPIC1 Slice 3: GET/POST /api/webapp/client/profiles + PATCH .../default.
 
-See .ai/EPIC1-client-multi-profile.md.
+See docs/epics/client-multi-profile.md.
 """
 from __future__ import annotations
 

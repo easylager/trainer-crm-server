@@ -288,7 +288,7 @@ async def list_linked_trainer_telegram_ids_for_hub_menu(session: AsyncSession) -
             SELECT telegram_id
             FROM trainers
             WHERE telegram_id IS NOT NULL
-              AND lower(trim(status)) != :deactivated
+              AND status != CAST(:deactivated AS trainer_status_enum)
             ORDER BY id
             """
         ),

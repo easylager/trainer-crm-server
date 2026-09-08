@@ -1,7 +1,7 @@
 """
 EPIC1 Slice 5: client_trainer_edges is keyed by client_id, so a guardian/child profile gets
 its own "мой тренер"/saved/notify-slots state instead of sharing the account's row.
-See .ai/EPIC1-client-multi-profile.md.
+See docs/epics/client-multi-profile.md.
 """
 from __future__ import annotations
 

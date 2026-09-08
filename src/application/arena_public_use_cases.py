@@ -431,6 +431,70 @@ async def _load_ice_arena_rows(
     return [_row_to_arena_dict(row) for row in result.mappings()]
 
 
+async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any]]:
+    """Active cities that have public skate sessions and/or catalog trainers.
+
+    Empty cities stay out of the Ice picker so a switch never lands on a fake map.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT c.id, c.name, c.sort_order, c.country,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND EXISTS (
+                                 SELECT 1 FROM ice_sessions s
+                                 WHERE s.arena_id = a.id
+                                   AND s.status = :st
+                                   AND s.kind IN ('public_skate', 'open_ice')
+                                   AND s.ends_at_utc >= :now
+                                   AND (s.valid_until IS NULL OR s.valid_until >= :now)
+                             )
+                       ) AS skate_count,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM trainers t
+                           WHERE t.status = 'active'
+                             AND t.is_catalog_visible = true
+                             AND EXISTS (
+                                 SELECT 1 FROM trainer_cities tc
+                                 WHERE tc.trainer_id = t.id AND tc.city_id = c.id
+                             )
+                       ) AS trainer_count
+                FROM cities c
+                WHERE c.is_active
+                ORDER BY c.sort_order, c.id
+                """
+            ),
+            {"published": ARENA_PROFILE_STATUS_PUBLISHED, "st": STATUS_ACTIVE, "now": now},
+        )
+    ).mappings()
+    items = []
+    for row in rows:
+        skate_count = int(row["skate_count"] or 0)
+        trainer_count = int(row["trainer_count"] or 0)
+        if skate_count <= 0 and trainer_count <= 0:
+            continue
+        items.append(
+            {
+                "id": int(row["id"]),
+                "name": row["name"],
+                "sort_order": row["sort_order"],
+                "country": row["country"],
+                "skate_count": skate_count,
+                "trainer_count": trainer_count,
+            }
+        )
+    return items
+
+
 async def list_public_ice_arenas(
     session: AsyncSession,
     *,

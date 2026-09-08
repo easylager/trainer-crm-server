@@ -324,7 +324,7 @@
     if (ctx.trainerId) {
       return { type: 'catalog-trainer', path: 'catalog?trainer_id=' + encodeURIComponent(String(ctx.trainerId)) };
     }
-    return { type: 'catalog', path: 'catalog?tab=catalog' };
+    return { type: 'catalog', path: 'ice?intent=coach' };
   }
 
   function navigateBookingReturn(from, ctx) {

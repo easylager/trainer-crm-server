@@ -151,6 +151,7 @@ from src.bot.handlers.trainer_handlers import (
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
 from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
+from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.config import (
     TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC,
     TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX,
@@ -1895,7 +1896,7 @@ async def run_inactive_client_loop(client_bot: Bot) -> None:
                                 [
                                     InlineKeyboardButton(
                                         text=inactive_label,
-                                        web_app=WebAppInfo(url=f"{base_ia}/webapp/catalog"),
+                                        web_app=WebAppInfo(url=client_discovery_webapp_url(base_ia)),
                                     ),
                                 ],
                             ]
@@ -3020,7 +3021,7 @@ def _care_pulse_client_keyboard(kind: str) -> InlineKeyboardMarkup | None:
     if not base.lower().startswith("https://"):
         return None
     if kind == CARE_PULSE_KIND_INVITE_BACK:
-        url = f"{base}/webapp/catalog"
+        url = client_discovery_webapp_url(base)
         label = msg.CARE_PULSE_CLIENT_BTN_CATALOG
     else:
         url = f"{base}/webapp/client-bookings"

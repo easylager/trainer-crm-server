@@ -705,7 +705,7 @@ class ClientFamilyAccessMember(Base):
 # Orthogonal to ClientFamilyAccessMember above: that table is "several Telegram accounts
 # share ONE clients row" (e.g. both parents see the same kid's bookings). This table is the
 # mirror case — "one Telegram account acts as SEVERAL clients rows" (one parent, several kids,
-# each with independent booking history). See .ai/DECISION-multi-profile-clients.md.
+# each with independent booking history). See docs/adr/004-multi-profile-clients.md.
 CLIENT_PROFILE_ROLE_SELF = "self"
 CLIENT_PROFILE_ROLE_GUARDIAN = "guardian"
 

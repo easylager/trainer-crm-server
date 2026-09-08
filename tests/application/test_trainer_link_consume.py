@@ -4,9 +4,10 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from src.application.trainer_link import consume_link_token
+from src.application.trainer_link import consume_link_token, list_linked_trainer_telegram_ids_for_hub_menu
 from src.application.trainer_link_token_use_cases import issue_landing_trainer_link_token
 from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
+from tests.conftest import unique_test_telegram_id
 
 
 @pytest.mark.asyncio
@@ -48,3 +49,21 @@ async def test_consume_landing_token_idempotent_for_linked_telegram(db_session) 
     second = await consume_link_token(db_session, str(issued2["token"]), telegram_id)
     assert second.error is None
     assert second.trainer_id == first.trainer_id
+
+
+@pytest.mark.asyncio
+async def test_hub_menu_telegram_ids_exclude_deactivated_and_unlinked(db_session) -> None:
+    active_tg = unique_test_telegram_id()
+    deactivated_tg = unique_test_telegram_id()
+    await db_session.execute(
+        text(
+            "INSERT INTO trainers (status, telegram_id) VALUES "
+            "('active', :active_tg), ('deactivated', :deactivated_tg), ('active', NULL)"
+        ),
+        {"active_tg": active_tg, "deactivated_tg": deactivated_tg},
+    )
+    await db_session.commit()
+
+    ids = await list_linked_trainer_telegram_ids_for_hub_menu(db_session)
+    assert active_tg in ids
+    assert deactivated_tg not in ids

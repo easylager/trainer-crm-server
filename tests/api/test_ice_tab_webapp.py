@@ -51,10 +51,18 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert 'data-intent="group"' not in body
     assert "ice-masthead" in body
     assert "iceServiceChips" in body
-    assert "iceViewSeg" in body
-    assert "Карта" in body
+    # TASK-084 AC-003: переключателя «Список / Карта» на экране нет.
+    assert "iceViewSeg" not in body
+    # …при этом код карты намеренно оставлен и продолжает отдаваться (DEC-007):
+    # выключение сделано флагом, возврат стоит две правки. Проверяем и то, и другое,
+    # иначе «убрали карту» и «удалили карту» станут неразличимы.
+    assert "iceMapSec" in body
     assert "Каток, тренер или город" in body
     assert js.status_code == 200
+    # Флаг выключения карты — часть контракта AC-003, а не деталь реализации:
+    # без него вид «карта» мог бы вернуться из sessionStorage или ?view=map.
+    assert "MAP_ENABLED = false" in js.text
+
     assert css.status_code == 200
     assert model.status_code == 200
     assert map_js.status_code == 200

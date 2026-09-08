@@ -11,7 +11,7 @@
  *    fetch call sites. Before profiles load (or with no profiles yet), no header is sent.
  * 2. On pages that opt in with a `#clientProfileSwitcherMount` element, render the current
  *    profile chip + a bottom sheet to switch profiles or add a child
- *    (GET/POST /client/profiles, PATCH .../default — see .ai/EPIC1-client-multi-profile.md).
+ *    (GET/POST /client/profiles, PATCH .../default — see docs/epics/client-multi-profile.md).
  *
  * Selection is client-only (localStorage) — the server has no notion of "current screen",
  * only of which profiles an account may act as (client_profile_links).

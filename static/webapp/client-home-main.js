@@ -553,7 +553,7 @@
           navigateToBookAgain(lt, lastBookingServiceId);
           return;
         }
-        navigateTo('catalog?tab=catalog');
+        navigateTo('ice?intent=coach');
       }
 
       /** First word of display name for compact pill label. */
@@ -780,7 +780,7 @@
           '</button>';
         el.removeAttribute('hidden');
         var findBtn = document.getElementById('hubBtnFindTrainer');
-        if (findBtn) findBtn.addEventListener('click', function() { navigateTo('catalog?tab=catalog'); });
+        if (findBtn) findBtn.addEventListener('click', function() { navigateTo('ice?intent=coach'); });
       }
 
       function hideQuickStrip() {
@@ -1276,7 +1276,7 @@
             el.removeAttribute('hidden');
             wireDiscoveryCardPhotos(el);
             var allBtn = document.getElementById('hubDiscoveryAll');
-            if (allBtn) allBtn.addEventListener('click', function() { navigateTo('catalog?tab=catalog'); });
+            if (allBtn) allBtn.addEventListener('click', function() { navigateTo('ice?intent=coach'); });
             el.querySelectorAll('.hub-discovery__card').forEach(function(btn) {
               btn.addEventListener('click', function() {
                 var tid = btn.getAttribute('data-tid');
@@ -1489,11 +1489,6 @@
       function applyHubState(bookingDays, requestItems, hubMeta) {
         if (window.ClientShell && typeof window.ClientShell.writeBookingsWarmCache === 'function') {
           window.ClientShell.writeBookingsWarmCache({ days: bookingDays || [] });
-        }
-        var platformUi = (hubMeta && hubMeta.platform && hubMeta.platform.ui) || {};
-        var wordmarkEl = document.getElementById('hubIceWordmark');
-        if (wordmarkEl && platformUi.hero_wordmark) {
-          wordmarkEl.textContent = platformUi.hero_wordmark;
         }
         var cs = (hubMeta && hubMeta.client_session) || {};
         renderIceTeaser(hubMeta && hubMeta.ice_teaser);
@@ -1768,16 +1763,6 @@
         });
       })();
 
-      (function wireIceLaneVisibilityPause() {
-        var lane = document.getElementById('hubIceLane');
-        if (!lane) return;
-        function sync() {
-          var paused = document.hidden;
-          lane.classList.toggle('ice-lane--paused', paused);
-        }
-        document.addEventListener('visibilitychange', sync);
-        sync();
-      })();
 
       loadAll();
     })();
