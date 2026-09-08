@@ -3,7 +3,7 @@
  */
 body.client-bookings-body {
   font-family: var(--app-font-sans);
-  background: var(--tg-theme-bg-color);
+  background: var(--app-canvas-bg);
   color: var(--tg-theme-text-color);
 }
 
@@ -150,7 +150,7 @@ body.client-bookings-body {
 }
 
 .cb-mode-tab.active {
-  background: var(--tg-theme-bg-color);
+  background: var(--app-card-bg);
   color: var(--tg-theme-text-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }

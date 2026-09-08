@@ -75,8 +75,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   min-height: var(--client-tab-bar-height);
   padding: 8px 8px;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--tg-theme-bg-color) 94%, transparent);
-  border: 1px solid var(--glide-line);
+  background: color-mix(in srgb, var(--app-float-bg) 94%, transparent);
+  border: 1px solid var(--app-float-line);
   border-radius: var(--app-radius-xl);
   backdrop-filter: saturate(140%) blur(20px);
   -webkit-backdrop-filter: saturate(140%) blur(20px);
@@ -181,7 +181,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   max-height: min(78vh, 520px);
   padding: 8px 16px calc(12px + var(--client-tab-bar-height) + env(safe-area-inset-bottom, 0px));
   border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
-  background: var(--tg-theme-bg-color);
+  background: var(--app-float-bg);
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
   transform: translateY(100%);
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);

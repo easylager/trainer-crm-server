@@ -4,7 +4,7 @@
  */
 body.ar-pilot--arena {
   margin: 0;
-  background: var(--tg-theme-bg-color, var(--glide-paper));
+  background: var(--app-canvas-bg);
   color: var(--tg-theme-text-color, var(--glide-ink));
   font-family: var(--app-font-sans, ui-sans-serif, system-ui, sans-serif);
   min-height: 100vh;
@@ -102,7 +102,7 @@ body.ar-pilot--arena .client-app-header {
   z-index: 1;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
-  background: var(--tg-theme-bg-color);
+  background: var(--glide-line);
   border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-sm);
   padding: 3px 7px;
@@ -309,13 +309,14 @@ a.arena-row {
   gap: 10px;
   align-items: center;
   width: 100%;
-  border: 1px solid var(--glide-line);
+  border: 1px solid var(--app-card-line);
   border-radius: var(--app-radius-sm);
   padding: 9px 10px;
-  background: var(--tg-theme-bg-color);
+  background: var(--app-card-bg);
   text-align: left;
   color: inherit;
   cursor: pointer;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-coach__ava {
@@ -348,15 +349,16 @@ a.arena-row {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid var(--glide-line);
+  border: 1px solid var(--app-card-line);
   border-radius: var(--app-radius-sm);
   padding: 12px;
   font-size: var(--app-text-body);
   width: 100%;
   text-align: left;
   color: inherit;
-  background: var(--tg-theme-bg-color);
+  background: var(--app-card-bg);
   text-decoration: none;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-fake-row span {
@@ -414,11 +416,12 @@ a.arena-row {
   font-weight: var(--app-weight-semibold);
   padding: 12px;
   border-radius: var(--app-radius-sm);
-  border: 1px solid var(--glide-line);
-  background: var(--tg-theme-bg-color);
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg);
   color: inherit;
   cursor: pointer;
   text-decoration: none;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-btn--pri {
@@ -480,12 +483,13 @@ a.arena-row {
 
 .arena-modal__sheet {
   width: min(480px, 100%);
-  background: var(--tg-theme-bg-color);
+  background: var(--app-float-bg);
   border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: var(--app-float-shadow);
 }
 
 .arena-modal__sheet h2 {
@@ -507,7 +511,7 @@ a.arena-row {
   padding: 10px;
   border-radius: var(--app-radius-sm);
   border: 1px solid var(--glide-line);
-  background: var(--tg-theme-bg-color);
+  background: var(--app-canvas-bg);
   color: inherit;
 }
 

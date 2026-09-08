@@ -11,7 +11,7 @@ body.hub-body {
   padding: 0 0 calc(36px + env(safe-area-inset-bottom)) 0;
   overflow-x: hidden;
   /* Soft morning light — flat paper canvas */
-  background: var(--tg-theme-bg-color) !important;
+  background: var(--app-canvas-bg) !important;
 }
 
 .hub-shell {
@@ -1928,7 +1928,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   line-height: 1.4;
   resize: vertical;
   box-sizing: border-box;
-  background: var(--tg-theme-bg-color);
+  background: var(--app-canvas-bg);
   color: var(--tg-theme-text-color);
   border: 1px solid rgba(128, 128, 128, 0.2);
   font-family: inherit;
@@ -2441,7 +2441,7 @@ a.hub-ice-teaser {
   padding: 11px;
   border-radius: var(--app-radius-md);
   border: 1px solid color-mix(in srgb, var(--app-cta-fill) 55%, transparent);
-  background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-bg-color));
+  background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--app-card-bg-solid));
   text-decoration: none;
   color: inherit;
   box-sizing: border-box;

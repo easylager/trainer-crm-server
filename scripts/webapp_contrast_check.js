@@ -47,6 +47,21 @@ const PROBE = `(() => {
     return s;
   };
 
+  /*
+   * Градиент — не повод не считать. Контракт поверхностей (TASK-088) кладёт под
+   * карточку linear-gradient из двух сплошных тонов, и пропускать такой фон значило бы
+   * снять проверку ровно с тех элементов, которые только что переделали.
+   * Берём все опорные цвета и считаем по ХУДШЕМУ: если текст читается на самой
+   * невыгодной точке градиента, он читается на всём.
+   */
+  const gradientStops = (bgImage) => {
+    if (!/^(linear|radial)-gradient\\(/.test(bgImage)) return null;
+    const stops = bgImage.match(/rgba?\\([^)]+\\)/g);
+    if (!stops || !stops.length) return null;
+    const parsed = stops.map(parse).filter((c) => c && c.a > 0);
+    return parsed.length ? parsed : null;
+  };
+
   const out = { fail: [], skipped: [], checked: 0 };
 
   for (const el of document.querySelectorAll('body *')) {
@@ -64,10 +79,15 @@ const PROBE = `(() => {
 
     // Эффективный фон: вверх до первого непрозрачного. Картинка или градиент
     // означают, что посчитать нельзя — честно уходим в «не посчитано».
-    let bg = null, painted = null, node = el;
+    let bg = null, painted = null, node = el, candidates = null;
     while (node && node !== document.documentElement.parentNode) {
       const ncs = getComputedStyle(node);
-      if (ncs.backgroundImage && ncs.backgroundImage !== 'none') { painted = name(node); break; }
+      if (ncs.backgroundImage && ncs.backgroundImage !== 'none') {
+        const stops = gradientStops(ncs.backgroundImage);
+        if (!stops) { painted = name(node); break; }
+        candidates = stops;
+        break;
+      }
       const c = parse(ncs.backgroundColor);
       if (c && c.a > 0) {
         bg = bg ? over(bg, c) : c;
@@ -76,18 +96,27 @@ const PROBE = `(() => {
       node = node.parentElement;
     }
     if (painted) { out.skipped.push({ sel: name(el), reason: 'фон-изображение у ' + painted, text: own.slice(0, 40) }); continue; }
-    if (!bg || bg.a < 0.999) { out.skipped.push({ sel: name(el), reason: 'фон не определён', text: own.slice(0, 40) }); continue; }
+    if (!candidates && (!bg || bg.a < 0.999)) { out.skipped.push({ sel: name(el), reason: 'фон не определён', text: own.slice(0, 40) }); continue; }
 
     const size = parseFloat(cs.fontSize);
     const weight = parseInt(cs.fontWeight, 10) || 400;
     const large = size >= 24 || (size >= 18.66 && weight >= 700);
     const need = large ? 3 : 4.5;
-    const eff = fg.a < 1 ? over(fg, bg) : fg;
-    const r = ratio(eff, bg);
+    // Под градиентом проверяем каждую опорную точку и оставляем худшую.
+    const grounds = candidates || [bg];
+    let worst = null;
+    for (const g of grounds) {
+      const base = g.a >= 0.999 ? g : over(g, bg || { r: 255, g: 255, b: 255, a: 1 });
+      const eff = fg.a < 1 ? over(fg, base) : fg;
+      const r = ratio(eff, base);
+      if (!worst || r < worst.r) worst = { r, base };
+    }
     out.checked += 1;
-    if (r < need) {
-      out.fail.push({ sel: name(el), text: own.slice(0, 40), ratio: Math.round(r * 100) / 100, need,
-                      size: size + 'px', weight, fg: cs.color, bg: 'rgb(' + Math.round(bg.r) + ',' + Math.round(bg.g) + ',' + Math.round(bg.b) + ')' });
+    if (worst.r < need) {
+      const b = worst.base;
+      out.fail.push({ sel: name(el), text: own.slice(0, 40), ratio: Math.round(worst.r * 100) / 100, need,
+                      size: size + 'px', weight, fg: cs.color,
+                      bg: 'rgb(' + Math.round(b.r) + ',' + Math.round(b.g) + ',' + Math.round(b.b) + ')' + (candidates ? ' (худшая точка градиента)' : '') });
     }
   }
   return JSON.stringify(out);

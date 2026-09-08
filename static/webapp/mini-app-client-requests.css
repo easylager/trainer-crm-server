@@ -136,7 +136,7 @@
       height: 44px;
       border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.14);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-card-bg);
       color: var(--tg-theme-button-color);
       cursor: pointer;
       display: flex;
@@ -159,7 +159,7 @@
     .cr-detail-toolbar button.danger {
       color: var(--app-danger);
       border-color: rgba(255, 59, 48, 0.35);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-card-bg);
     }
     .cr-detail-title {
       font-size: clamp(var(--app-text-title), 5.5vw, var(--app-text-headline));
@@ -750,8 +750,9 @@
       border-radius: var(--app-radius-sm);
       overflow: hidden;
       border: 1px solid rgba(128, 128, 128, 0.16);
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-card-full .tcf-education-doc img {
       width: 100%;
       height: 100%;
@@ -769,8 +770,9 @@
       color: var(--tg-theme-hint-color);
       font-size: var(--app-text-caption);
       padding: 0 8px;
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-card-full .tcf-education-more {
       margin-top: 12px;
       padding-top: 12px;
@@ -919,7 +921,7 @@
       display: flex;
     }
     .reviews-modal-content {
-      background: var(--tg-theme-bg-color);
+      background: var(--app-float-bg);
       border-radius: var(--app-radius-lg);
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
