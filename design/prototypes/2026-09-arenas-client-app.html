@@ -1,0 +1,733 @@
+<meta charset="utf-8">
+<title>Лёд — прототип экранов</title>
+<style>
+:root{
+  --page:#EEF3F6; --frame:#C9D6DE;
+  --bg:#FFFFFF; --bg2:#F2F6F9; --sunk:#E8EFF3;
+  --ink:#0F1A22; --soft:#41535F; --mute:#72868F; --line:#DCE5EA; --line2:#EAF0F4;
+  --amber:#C2761A; --amber-ink:#FFFFFF; --amber-bg:#F7EAD8;
+  --ice:#2A6E8F; --ice-bg:#E1EEF4;
+  --ok:#2E7D5B; --note:#8A6A2B; --note-bg:#FBF2E2;
+  --shadow:0 2px 4px rgba(15,26,34,.04), 0 24px 48px -28px rgba(15,26,34,.45);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#070C11; --frame:#1E2C36;
+    --bg:#101A22; --bg2:#0C151C; --sunk:#16232C;
+    --ink:#E9F2F7; --soft:#B2C4CF; --mute:#7A909D; --line:#22333E; --line2:#1A2831;
+    --amber:#E4A051; --amber-ink:#16110A; --amber-bg:#2A2113;
+    --ice:#78BBD9; --ice-bg:#14303D;
+    --ok:#6CC49A; --note:#D9A45C; --note-bg:#241C10;
+    --shadow:0 2px 4px rgba(0,0,0,.4), 0 28px 56px -30px #000;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#070C11; --frame:#1E2C36;
+  --bg:#101A22; --bg2:#0C151C; --sunk:#16232C;
+  --ink:#E9F2F7; --soft:#B2C4CF; --mute:#7A909D; --line:#22333E; --line2:#1A2831;
+  --amber:#E4A051; --amber-ink:#16110A; --amber-bg:#2A2113;
+  --ice:#78BBD9; --ice-bg:#14303D;
+  --ok:#6CC49A; --note:#D9A45C; --note-bg:#241C10;
+  --shadow:0 2px 4px rgba(0,0,0,.4), 0 28px 56px -30px #000;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  margin:0;padding:28px 20px 64px;background:var(--page);color:var(--ink);
+  font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  line-height:1.5;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0;text-align:left}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* ── page chrome ── */
+.top{max-width:1120px;margin:0 auto 26px;display:flex;flex-direction:column;gap:14px}
+.top h1{margin:0;font-size:25px;letter-spacing:-.02em;font-weight:750}
+.top p{margin:0;color:var(--mute);font-size:15px;max-width:70ch}
+.picker{display:flex;flex-wrap:wrap;gap:7px}
+.picker button{
+  font-size:13.5px;font-weight:600;padding:8px 13px;border:1px solid var(--line);
+  border-radius:999px;background:var(--bg);color:var(--soft);
+}
+.picker button[aria-pressed="true"]{background:var(--ink);color:var(--page);border-color:var(--ink)}
+.picker .sep{width:1px;background:var(--line);margin:4px 6px}
+
+.stage{max-width:1120px;margin:0 auto;display:grid;gap:34px;align-items:start}
+@media (min-width:900px){.stage{grid-template-columns:394px 1fr}}
+
+/* ── device ── */
+.device{
+  width:394px;max-width:100%;height:760px;border-radius:34px;background:var(--bg);
+  border:9px solid var(--frame);box-shadow:var(--shadow);
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
+}
+.tg{
+  flex:0 0 auto;padding:11px 14px 9px;background:var(--bg2);border-bottom:1px solid var(--line2);
+  display:flex;align-items:center;gap:10px;
+}
+.tg .title{font-size:15px;font-weight:680;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg .back{font-size:13.5px;color:var(--mute);font-weight:600}
+.tg .dots{color:var(--mute);letter-spacing:2px;font-size:15px}
+.view{flex:1;overflow-y:auto;overscroll-behavior:contain;background:var(--bg)}
+.view::-webkit-scrollbar{width:0}
+.tabbar{
+  flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);
+  border-top:1px solid var(--line);background:var(--bg2);padding:6px 4px 9px;
+}
+.tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--mute);font-size:10.5px;font-weight:600;padding:4px 0}
+.tabbar button[aria-current="true"]{color:var(--amber)}
+.tabbar svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── generic screen bits ── */
+.screen{display:none;flex-direction:column}
+.screen.on{display:flex}
+.pad{padding:14px}
+.sec{padding:14px;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:10px}
+.sec:first-child{border-top:0}
+.eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--mute);margin:0}
+.h{font-size:17px;font-weight:700;letter-spacing:-.015em;margin:0}
+.sub{font-size:13px;color:var(--mute);margin:0}
+.new{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:9.5px;letter-spacing:.1em;
+  padding:2px 5px;border-radius:3px;background:var(--amber-bg);color:var(--amber);vertical-align:2px;margin-left:6px}
+
+/* search + chips */
+.search{display:flex;align-items:center;gap:8px;background:var(--sunk);border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--mute);font-size:14px}
+.search svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;flex:0 0 auto}
+.cityrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cityrow b{font-size:15px;font-weight:680}
+.cityrow span{font-size:13px;color:var(--amber);font-weight:600}
+.chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px}
+.chips::-webkit-scrollbar{height:0}
+.chip{flex:0 0 auto;font-size:12.5px;font-weight:600;padding:7px 11px;border-radius:999px;border:1px solid var(--line);color:var(--soft);background:var(--bg)}
+.chip[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.seg{display:flex;background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{flex:1;text-align:center;font-size:13px;font-weight:650;padding:6px 0;border-radius:6px;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* arena list card */
+.acard{display:grid;grid-template-columns:74px 1fr;gap:11px;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--bg);width:100%}
+.acard .ph{height:74px;border-radius:8px;background:linear-gradient(150deg,var(--ice-bg),var(--sunk));border:1px solid var(--line2);position:relative;overflow:hidden}
+.acard .ph::after{content:"";position:absolute;inset:auto -20% -30% -20%;height:60%;background:radial-gradient(60% 100% at 50% 0,rgba(255,255,255,.35),transparent)}
+.acard .ph.c{background:var(--sunk)}
+.acard .b{display:flex;flex-direction:column;gap:3px;min-width:0}
+.acard .nm{font-size:14.5px;font-weight:680;letter-spacing:-.01em}
+.acard .mt{font-size:12px;color:var(--mute)}
+.live{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:620;margin-top:2px}
+.live.a{color:var(--ice)}
+.live.b{color:var(--note)}
+.live.c{color:var(--mute);font-weight:500}
+.dot{width:6px;height:6px;border-radius:99px;background:currentColor;flex:0 0 auto}
+.tierbadge{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px}
+.tierbadge--a{background:var(--amber-bg);color:var(--amber)}
+.tierbadge--b{background:var(--ice-bg);color:var(--ice)}
+.tierbadge--c{background:var(--sunk);color:var(--mute)}
+
+/* map */
+.map{position:relative;height:330px;background:
+  radial-gradient(90% 70% at 30% 25%,var(--ice-bg),transparent 70%),
+  linear-gradient(160deg,var(--sunk),var(--bg2));border-bottom:1px solid var(--line)}
+.map .grid{position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line2) 1px,transparent 1px);
+  background-size:46px 46px}
+.map .riv{position:absolute;inset:0}
+.pin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:2px}
+.pin i{width:15px;height:15px;border-radius:99px 99px 99px 2px;transform:rotate(45deg);background:var(--ice);border:2px solid var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.pin.a i{background:var(--amber)}
+.pin.c i{background:var(--mute);opacity:.55;width:11px;height:11px}
+.pin b{font-size:10.5px;font-weight:700;background:var(--bg);border:1px solid var(--line);padding:1px 5px;border-radius:4px;white-space:nowrap}
+.cluster{position:absolute;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:99px;background:var(--ice);color:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-weight:750;font-size:14px;border:3px solid var(--bg);box-shadow:0 3px 10px rgba(0,0,0,.3)}
+.near{position:absolute;right:11px;top:11px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:12.5px;font-weight:650;box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.sheet{margin:-26px 12px 0;position:relative;z-index:2}
+
+/* arena hero */
+.hero{height:168px;position:relative;background:
+  radial-gradient(120% 120% at 20% 0,var(--ice-bg),transparent 62%),
+  linear-gradient(158deg,var(--sunk),var(--bg2));border-bottom:1px solid var(--line2);
+  display:flex;align-items:flex-end;padding:13px}
+.hero .glare{position:absolute;left:-10%;top:12%;width:120%;height:40%;transform:rotate(-8deg);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent)}
+.hero .txt{position:relative;display:flex;flex-direction:column;gap:3px}
+.hero h2{margin:0;font-size:20px;font-weight:750;letter-spacing:-.02em}
+.hero .mt{font-size:12.5px;color:var(--soft)}
+.gallery{position:absolute;right:11px;bottom:11px;font-size:11px;font-weight:650;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 7px}
+.amen{display:flex;flex-wrap:wrap;gap:6px}
+.amen span{font-size:11.5px;font-weight:600;padding:4px 8px;border-radius:6px;background:var(--sunk);border:1px solid var(--line2);color:var(--soft)}
+
+/* ice timeline */
+.days{display:flex;gap:6px}
+.day{font-size:12.5px;font-weight:650;padding:6px 11px;border-radius:999px;border:1px solid var(--line);color:var(--mute)}
+.day[aria-pressed="true"]{background:var(--ink);color:var(--page);border-color:var(--ink)}
+.rows{display:flex;flex-direction:column;gap:7px}
+.row{display:grid;grid-template-columns:46px 1fr auto;gap:9px;align-items:center;
+  border:1px solid var(--line2);border-left:3px solid var(--ice);background:var(--bg2);border-radius:4px;padding:9px 10px}
+.row.act{border-left-color:var(--amber)}
+.row .t{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;font-variant-numeric:tabular-nums}
+.row .m{display:flex;flex-direction:column;gap:1px;min-width:0}
+.row .m b{font-size:13.5px;font-weight:640;letter-spacing:-.01em}
+.row .m span{font-size:11.5px;color:var(--mute)}
+.cta{font-size:11.5px;font-weight:660;padding:6px 10px;border-radius:999px;white-space:nowrap;flex:0 0 auto}
+.cta.ghost{border:1px solid var(--line);color:var(--mute)}
+.cta.solid{background:var(--amber);color:var(--amber-ink)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--mute)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:9px;height:9px;border-radius:2px}
+
+/* coaches */
+.coach{display:grid;grid-template-columns:38px 1fr auto;gap:10px;align-items:center;width:100%;
+  border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--bg)}
+.coach i{width:38px;height:38px;border-radius:99px;background:linear-gradient(145deg,var(--ice-bg),var(--sunk));border:1px solid var(--line2)}
+.coach .b{display:flex;flex-direction:column;min-width:0}
+.coach .b b{font-size:13.5px;font-weight:660}
+.coach .b span{font-size:11.5px;color:var(--mute)}
+
+/* misc */
+.fresh{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--mute)}
+.fresh a{color:var(--amber);text-decoration:none;font-weight:600}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:14px;background:var(--bg2);display:flex;flex-direction:column;gap:8px}
+.empty b{font-size:14px}
+.empty p{margin:0;font-size:12.5px;color:var(--mute)}
+.btn{display:block;width:100%;text-align:center;font-size:14px;font-weight:680;padding:12px;border-radius:10px}
+.btn.pri{background:var(--amber);color:var(--amber-ink)}
+.btn.sec{border:1px solid var(--line);color:var(--soft);background:var(--bg)}
+.owner{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg2);display:flex;flex-direction:column;gap:8px}
+.owner b{font-size:13.5px}
+.owner p{margin:0;font-size:12px;color:var(--mute)}
+.teaser{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border:1px solid var(--amber);
+  background:var(--amber-bg);border-radius:11px;padding:11px;width:100%}
+.teaser .ic{width:30px;height:30px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:15px}
+.teaser b{font-size:13.5px;display:block}
+.teaser span{font-size:11.5px;color:var(--soft)}
+.hubcard{border:1px solid var(--line);border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.old-note{background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:10px;font-size:12px;color:var(--mute)}
+.fake-row{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:9px;padding:12px;font-size:14px}
+.fake-row span{color:var(--mute);font-size:13px}
+
+/* ── notes column ── */
+.notes{display:flex;flex-direction:column;gap:16px;padding-top:4px}
+.notes h2{margin:0;font-size:20px;font-weight:730;letter-spacing:-.02em}
+.notes .lead{margin:0;color:var(--soft);font-size:15.5px;max-width:62ch}
+.nlist{display:flex;flex-direction:column;gap:11px;margin:0;padding:0;list-style:none;max-width:62ch}
+.nlist li{position:relative;padding-left:18px;font-size:15px;line-height:1.55;color:var(--soft)}
+.nlist li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:2px;background:var(--amber)}
+.nlist li b{color:var(--ink);font-weight:670}
+.nbox{border:1px solid var(--line);border-left:3px solid var(--ice);border-radius:4px;background:var(--bg);padding:13px 15px;max-width:62ch}
+.nbox p{margin:0;font-size:14.5px;color:var(--soft)}
+.nbox p+p{margin-top:8px}
+.nbox b{color:var(--ink)}
+</style>
+
+<div class="top">
+  <h1>Что конкретно меняется в клиентском приложении</h1>
+  <p>Кликабельный прототип: нажимайте арены, чипы намерения, вкладки дней, карточки тренеров. Табы внизу переключают разделы. Блокеры считаем починенными — показано целевое состояние.</p>
+  <div class="picker" id="picker">
+    <button data-go="hub" aria-pressed="false">Главная</button>
+    <button data-go="ice" aria-pressed="true">Лёд — список</button>
+    <button data-go="map" aria-pressed="false">Лёд — карта</button>
+    <button data-go="arena" aria-pressed="false">Арена (есть расписание)</button>
+    <button data-go="arenaB" aria-pressed="false">Арена (расписания нет)</button>
+    <button data-go="coach" aria-pressed="false">Тренер</button>
+    <span class="sep"></span>
+    <button data-go="old" aria-pressed="false">Было: вход в каталог</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="device">
+    <div class="tg">
+      <button class="back" id="tgBack" hidden>‹ Назад</button>
+      <span class="title" id="tgTitle">Лёд</span>
+      <span class="dots">⋯</span>
+    </div>
+
+    <div class="view" id="view">
+
+      <!-- ══ ГЛАВНАЯ ══ -->
+      <div class="screen" data-screen="hub">
+        <div class="sec">
+          <p class="eyebrow">Ваш тренер</p>
+          <div class="hubcard">
+            <div style="display:flex;gap:10px;align-items:center">
+              <span style="width:42px;height:42px;border-radius:99px;background:linear-gradient(145deg,var(--ice-bg),var(--sunk));border:1px solid var(--line2)"></span>
+              <div><b style="font-size:15px">Мария Ковалёва</b><div class="sub">Фигурное катание · Чижовка</div></div>
+            </div>
+            <div class="chips">
+              <span class="chip">Сб 13:15</span><span class="chip">Сб 18:00</span><span class="chip">Вс 11:30</span>
+            </div>
+            <button class="btn pri">Записаться</button>
+          </div>
+        </div>
+        <div class="sec">
+          <p class="eyebrow">Новое на главной</p>
+          <button class="teaser" data-go="arena">
+            <span class="ic">⛸️</span>
+            <span><b>Лёд рядом — сегодня в 11:00</b><span>Чижовка · 2,4 км · массовое, взр. 12 BYN</span></span>
+            <span style="color:var(--amber);font-size:18px">›</span>
+          </button>
+          <p class="sub">Единственное изменение на главной: одна строка-тизер. Hub удержания не трогаем.</p>
+        </div>
+        <div class="sec">
+          <p class="eyebrow">Ближайшие записи</p>
+          <div class="fake-row"><b style="font-weight:640;font-size:14px">Сб, 6 сент · 13:15</b><span>Чижовка</span></div>
+          <div class="fake-row"><b style="font-weight:640;font-size:14px">Вт, 9 сент · 18:00</b><span>Минск-Арена</span></div>
+        </div>
+      </div>
+
+      <!-- ══ ЛЁД: СПИСОК ══ -->
+      <div class="screen on" data-screen="ice">
+        <div class="sec">
+          <div class="cityrow"><b>📍 Минск</b><span>Изменить</span></div>
+          <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Каток, тренер или город</div>
+          <div class="chips" id="intentChips">
+            <button class="chip" data-intent="skate" aria-pressed="true">⛸️ Покататься</button>
+            <button class="chip" data-intent="coach" aria-pressed="false">🎯 Тренеры</button>
+            <button class="chip" data-intent="group" aria-pressed="false">👥 Группы</button>
+          </div>
+          <div class="seg" id="viewSeg">
+            <button aria-pressed="true">Список</button>
+            <button aria-pressed="false" data-go="map">Карта</button>
+          </div>
+        </div>
+        <div class="sec" style="gap:9px">
+          <p class="eyebrow">14 катков · сначала с актуальным расписанием</p>
+
+          <button class="acard" data-go="arena">
+            <span class="ph"></span>
+            <span class="b">
+              <span class="nm">Ледовый дворец «Чижовка»<span class="tierbadge tierbadge--a">A</span></span>
+              <span class="mt">Заводской · 2,4 км · до 23:00</span>
+              <span class="live a" data-skate="Сегодня 11:00 · взр. 12 BYN · ещё 3 сеанса"
+                    data-coach="4 тренера · 12 свободных слотов на неделе"
+                    data-group="2 группы с набором · 5–7 и 8–12 лет">Сегодня 11:00 · взр. 12 BYN · ещё 3 сеанса</span>
+            </span>
+          </button>
+
+          <button class="acard" data-go="arena">
+            <span class="ph"></span>
+            <span class="b">
+              <span class="nm">«Минск-Арена»<span class="tierbadge tierbadge--a">A</span></span>
+              <span class="mt">Фрунзенский · 5,1 км · до 22:00</span>
+              <span class="live a" data-skate="Сегодня 15:30 · взр. 15 BYN · ещё 2 сеанса"
+                    data-coach="7 тренеров · 26 свободных слотов"
+                    data-group="1 группа с набором · 4–6 лет">Сегодня 15:30 · взр. 15 BYN · ещё 2 сеанса</span>
+            </span>
+          </button>
+
+          <button class="acard" data-go="arenaB">
+            <span class="ph"></span>
+            <span class="b">
+              <span class="nm">Каток в ТЦ «Замок»<span class="tierbadge tierbadge--b">B</span></span>
+              <span class="mt">Фрунзенский · 6,3 км</span>
+              <span class="live b" data-skate="Расписание уточняется · есть телефон и сайт"
+                    data-coach="2 тренера · 4 свободных слота"
+                    data-group="Групп с набором нет">Расписание уточняется · есть телефон и сайт</span>
+            </span>
+          </button>
+
+          <button class="acard" data-go="arenaB">
+            <span class="ph c"></span>
+            <span class="b">
+              <span class="nm">Каток «Юность»<span class="tierbadge tierbadge--c">C</span></span>
+              <span class="mt">Центральный · 3,8 км</span>
+              <span class="live c" data-skate="Есть в справочнике · данных пока нет"
+                    data-coach="Тренеров пока нет"
+                    data-group="Групп нет">Есть в справочнике · данных пока нет</span>
+            </span>
+          </button>
+
+          <p class="sub" style="margin-top:2px">Уровень A → B → C задаёт порядок и текст. Ничего не обещаем там, где не знаем.</p>
+        </div>
+      </div>
+
+      <!-- ══ ЛЁД: КАРТА ══ -->
+      <div class="screen" data-screen="map">
+        <div class="sec" style="padding-bottom:10px">
+          <div class="cityrow"><b>📍 Минск</b><span>Изменить</span></div>
+          <div class="chips">
+            <button class="chip" aria-pressed="true">⛸️ Покататься</button>
+            <button class="chip">🎯 Тренеры</button>
+            <button class="chip">👥 Группы</button>
+          </div>
+          <div class="seg">
+            <button data-go="ice">Список</button>
+            <button aria-pressed="true">Карта</button>
+          </div>
+        </div>
+        <div class="map">
+          <div class="grid"></div>
+          <svg class="riv" viewBox="0 0 360 330" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M-10 210 C 70 190, 110 250, 190 230 S 320 180, 370 200" fill="none" stroke="var(--ice)" stroke-opacity=".28" stroke-width="16"/>
+            <path d="M40 -10 L120 340" stroke="var(--line)" stroke-width="7" fill="none"/>
+            <path d="M-10 120 L370 96" stroke="var(--line)" stroke-width="7" fill="none"/>
+          </svg>
+          <div class="pin a" style="left:38%;top:56%"><b>Чижовка · 11:00</b><i></i></div>
+          <div class="pin a" style="left:70%;top:35%"><b>Минск-Арена · 15:30</b><i></i></div>
+          <div class="pin" style="left:20%;top:30%"><i></i></div>
+          <div class="pin c" style="left:57%;top:76%"><i></i></div>
+          <div class="pin c" style="left:83%;top:64%"><i></i></div>
+          <div class="cluster" style="left:30%;top:83%">6</div>
+          <button class="near">◎ Рядом со мной</button>
+        </div>
+        <div class="sheet">
+          <button class="acard" data-go="arena" style="box-shadow:var(--shadow)">
+            <span class="ph"></span>
+            <span class="b">
+              <span class="nm">Ледовый дворец «Чижовка»<span class="tierbadge tierbadge--a">A</span></span>
+              <span class="mt">Заводской · 2,4 км · ближайший каток</span>
+              <span class="live a"><i class="dot"></i>Сегодня 11:00 · взр. 12 BYN</span>
+            </span>
+          </button>
+        </div>
+        <div class="sec" style="border-top:0">
+          <p class="sub">Кластеризация вместо каши из пинов, отдача точек по видимой области, «рядом со мной» с сортировкой по расстоянию. Пины уровня C — бледные.</p>
+        </div>
+      </div>
+
+      <!-- ══ КАРТОЧКА АРЕНЫ (A) ══ -->
+      <div class="screen" data-screen="arena">
+        <div class="hero">
+          <span class="glare"></span>
+          <span class="txt">
+            <h2>Ледовый дворец «Чижовка»</h2>
+            <span class="mt">Заводской · 2,4 км · открыт до 23:00</span>
+          </span>
+          <span class="gallery">1 / 6 фото</span>
+        </div>
+
+        <div class="sec">
+          <div class="amen">
+            <span>Прокат</span><span>Заточка</span><span>Парковка</span><span>Раздевалки</span><span>Кафе</span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <p class="h">Лента льда<span class="new">НОВОЕ</span></p>
+          <div class="days" id="dayTabs">
+            <button class="day" data-day="today" aria-pressed="true">Сегодня</button>
+            <button class="day" data-day="tomorrow" aria-pressed="false">Завтра</button>
+            <button class="day" data-day="week" aria-pressed="false">Неделя</button>
+          </div>
+
+          <div class="rows" data-rows="today">
+            <div class="row"><span class="t">07:00</span><span class="m"><b>Свободный лёд</b><span>20 BYN · без проката</span></span><span class="cta ghost">Билет на месте</span></div>
+            <div class="row"><span class="t">11:00</span><span class="m"><b>Массовое катание</b><span>взр. 12 · дет. 8 · прокат +6</span></span><span class="cta ghost">Билет на месте</span></div>
+            <button class="row act" data-go="coach"><span class="t">13:15</span><span class="m"><b>Индивидуально · Мария К.</b><span>45 мин · 60 BYN · есть место</span></span><span class="cta solid">Записаться</span></button>
+            <div class="row"><span class="t">15:00</span><span class="m"><b>Массовое катание</b><span>взр. 12 · дет. 8</span></span><span class="cta ghost">Билет на месте</span></div>
+            <div class="row act"><span class="t">17:30</span><span class="m"><b>Группа «Первый лёд» 5–7</b><span>идёт набор · 2 места</span></span><span class="cta solid">Заявка</span></div>
+            <button class="row act" data-go="coach"><span class="t">19:00</span><span class="m"><b>Индивидуально · Антон Лис</b><span>45 мин · 50 BYN</span></span><span class="cta solid">Записаться</span></button>
+          </div>
+
+          <div class="rows" data-rows="tomorrow" hidden>
+            <div class="row"><span class="t">09:30</span><span class="m"><b>Массовое катание</b><span>взр. 12 · дет. 8 · прокат +6</span></span><span class="cta ghost">Билет на месте</span></div>
+            <button class="row act" data-go="coach"><span class="t">11:00</span><span class="m"><b>Индивидуально · Мария К.</b><span>45 мин · 60 BYN</span></span><span class="cta solid">Записаться</span></button>
+            <div class="row"><span class="t">13:00</span><span class="m"><b>Массовое катание</b><span>взр. 12 · дет. 8</span></span><span class="cta ghost">Билет на месте</span></div>
+            <div class="row"><span class="t">16:00</span><span class="m"><b>Хоккейная аренда</b><span>лёд занят</span></span><span class="cta ghost">Закрыто</span></div>
+          </div>
+
+          <div class="rows" data-rows="week" hidden>
+            <div class="row"><span class="t">Пт</span><span class="m"><b>4 сеанса · 2 занятия</b><span>с 07:00 до 21:00</span></span><span class="cta ghost">Открыть</span></div>
+            <div class="row"><span class="t">Сб</span><span class="m"><b>6 сеансов · 5 занятий</b><span>с 09:00 до 22:00</span></span><span class="cta ghost">Открыть</span></div>
+            <div class="row"><span class="t">Вс</span><span class="m"><b>6 сеансов · 3 занятия</b><span>с 09:00 до 22:00</span></span><span class="cta ghost">Открыть</span></div>
+            <div class="row" style="border-left-color:var(--mute);opacity:.7"><span class="t">Пн</span><span class="m"><b>Данных нет</b><span>расписание на неделю уточняется</span></span><span class="cta ghost">—</span></div>
+          </div>
+
+          <div class="legend">
+            <span><i class="sw" style="background:var(--ice)"></i>открытый лёд — только информация</span>
+            <span><i class="sw" style="background:var(--amber)"></i>занятие — можно записаться</span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <p class="h">Тренеры на этой арене<span class="new">НОВОЕ</span></p>
+          <button class="coach" data-go="coach">
+            <i></i><span class="b"><b>Мария Ковалёва</b><span>Фигурное катание · от 55 BYN</span></span><span class="cta solid">Записаться</span>
+          </button>
+          <button class="coach" data-go="coach">
+            <i></i><span class="b"><b>Антон Лис</b><span>С нуля, взрослые · от 50 BYN</span></span><span class="cta solid">Записаться</span>
+          </button>
+          <button class="coach" data-go="coach">
+            <i></i><span class="b"><b>Ольга Радько</b><span>Хореография на льду</span></span><span class="cta ghost">Написать</span>
+          </button>
+          <p class="sub">Тренер без онлайн-записи показывается честно — «Написать», а не мёртвая кнопка.</p>
+        </div>
+
+        <div class="sec">
+          <p class="h">Группы с набором</p>
+          <div class="fake-row"><b style="font-weight:640;font-size:14px">«Первый лёд» · 5–7 лет</b><span>2 места</span></div>
+          <div class="fake-row"><b style="font-weight:640;font-size:14px">«Уверенный старт» · 8–12</b><span>набор открыт</span></div>
+        </div>
+
+        <div class="sec">
+          <p class="h">Как добраться и что есть</p>
+          <div class="fake-row"><b style="font-weight:600;font-size:13.5px">ул. Ташкентская, 19</b><span>Открыть карту</span></div>
+          <div class="fake-row"><b style="font-weight:600;font-size:13.5px">+375 17 000-00-00</b><span>Позвонить</span></div>
+          <div class="fake-row"><b style="font-weight:600;font-size:13.5px">Сезон: круглый год</b><span>Пн–Вс 07:00–23:00</span></div>
+        </div>
+
+        <div class="sec">
+          <div class="fresh">
+            <span>Расписание обновлено 2 дня назад · по данным сайта катка</span>
+            <span><a href="#" onclick="return false">Сообщить об ошибке</a> — конкретное поле, а не письмо в поддержку</span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="owner">
+            <b>Это ваш каток?</b>
+            <p>Заберите страницу: ведите расписание сами, добавьте фото и своих тренеров.</p>
+            <button class="btn sec">Забрать страницу</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ КАРТОЧКА АРЕНЫ (B) ══ -->
+      <div class="screen" data-screen="arenaB">
+        <div class="hero">
+          <span class="glare"></span>
+          <span class="txt">
+            <h2>Каток в ТЦ «Замок»</h2>
+            <span class="mt">Фрунзенский · 6,3 км</span>
+          </span>
+        </div>
+        <div class="sec">
+          <div class="amen"><span>Прокат</span><span>Парковка</span><span>Кафе</span></div>
+        </div>
+        <div class="sec">
+          <p class="h">Лёд</p>
+          <div class="empty">
+            <b>Расписание уточняется</b>
+            <p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем.</p>
+            <button class="btn sec">Позвонить +375 17 000-00-00</button>
+            <button class="btn sec">Сайт катка</button>
+          </div>
+          <p class="sub">Уровень B: карточка полезна и без расписания — контакты, фото, тренеры, дорога.</p>
+        </div>
+        <div class="sec">
+          <p class="h">Тренеры на этой арене</p>
+          <button class="coach" data-go="coach"><i></i><span class="b"><b>Дмитрий Ш.</b><span>С нуля, дети · от 45 BYN</span></span><span class="cta solid">Записаться</span></button>
+          <button class="coach" data-go="coach"><i></i><span class="b"><b>Елена Т.</b><span>Фигурное катание</span></span><span class="cta ghost">Написать</span></button>
+        </div>
+        <div class="sec">
+          <div class="owner">
+            <b>Знаете расписание этого катка?</b>
+            <p>Подскажите время и цены — проверим и опубликуем со ссылкой на источник.</p>
+            <button class="btn sec">Дополнить карточку</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ ТРЕНЕР ══ -->
+      <div class="screen" data-screen="coach">
+        <div class="sec">
+          <div style="display:flex;gap:12px;align-items:center">
+            <span style="width:64px;height:64px;border-radius:99px;background:linear-gradient(145deg,var(--ice-bg),var(--sunk));border:1px solid var(--line2)"></span>
+            <div><b style="font-size:18px;font-weight:730">Мария Ковалёва</b><div class="sub">Фигурное катание · 8 лет опыта · ★ 4,9</div></div>
+          </div>
+          <p class="sub" style="color:var(--soft)">Ставлю технику скольжения детям и взрослым. Первое занятие — диагностика.</p>
+        </div>
+        <div class="sec">
+          <p class="eyebrow">Работает на аренах<span class="new">НОВОЕ</span></p>
+          <div class="chips">
+            <button class="chip" data-go="arena" aria-pressed="true">Чижовка</button>
+            <button class="chip" data-go="arenaB">ТЦ «Замок»</button>
+          </div>
+          <p class="sub">Связь стала двусторонней: с арены — к тренеру, с тренера — обратно на арену.</p>
+        </div>
+        <div class="sec">
+          <p class="h">Ближайшие слоты · Чижовка</p>
+          <div class="rows">
+            <div class="row act"><span class="t">Сб</span><span class="m"><b>13:15 · 45 мин</b><span>Чижовка · 60 BYN</span></span><span class="cta solid">Записаться</span></div>
+            <div class="row act"><span class="t">Сб</span><span class="m"><b>18:00 · 45 мин</b><span>Чижовка · 60 BYN</span></span><span class="cta solid">Записаться</span></div>
+            <div class="row act"><span class="t">Вс</span><span class="m"><b>11:30 · 45 мин</b><span>ТЦ «Замок» · 60 BYN</span></span><span class="cta solid">Записаться</span></div>
+          </div>
+          <p class="sub">Место занятия — арена слота, а не «основная площадка тренера». Запись оформляется туда, куда клиент смотрит.</p>
+        </div>
+      </div>
+
+      <!-- ══ БЫЛО ══ -->
+      <div class="screen" data-screen="old">
+        <div class="sec">
+          <div class="seg"><button aria-pressed="true">Каталог</button><button>Мой тренер</button></div>
+          <div style="text-align:center;padding:18px 0 6px">
+            <b style="font-size:21px;font-weight:740;letter-spacing:-.02em">Найдите тренера</b>
+            <p class="sub" style="margin-top:6px">Город и занятие — покажем свободные слоты на аренах.</p>
+          </div>
+        </div>
+        <div class="sec">
+          <p class="eyebrow">Популярное</p>
+          <div class="chips"><span class="chip">⛸️ Улучшить катание</span><span class="chip">🌱 С нуля</span></div>
+        </div>
+        <div class="sec">
+          <p class="eyebrow">Параметры поиска</p>
+          <div class="fake-row"><b style="font-weight:600;font-size:14px">📍 Город</b><span>Не выбран ›</span></div>
+          <div class="fake-row"><b style="font-weight:600;font-size:14px">🎯 Занятие</b><span>Любое ›</span></div>
+          <div class="fake-row"><b style="font-weight:600;font-size:14px">🏟️ Площадка</b><span>Любая ›</span></div>
+          <button class="btn pri" style="margin-top:4px">Найти тренера</button>
+          <p class="sub" style="text-align:center">Начните с города или нажмите вариант в «Популярное»</p>
+        </div>
+        <div class="sec">
+          <div class="old-note">
+            Четыре обязательных шага до первого полезного экрана, и ни одного ответа на вопрос «где сегодня лёд». Арена здесь — строка фильтра, а не место.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <nav class="tabbar" id="tabbar">
+      <button data-go="hub" data-tab="hub"><svg viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Главная</button>
+      <button data-go="ice" data-tab="ice" aria-current="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 7l14 10M19 7L5 17"/></svg>Лёд</button>
+      <button data-tab="bookings"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>Записи</button>
+      <button data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Ещё</button>
+    </nav>
+  </div>
+
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+(function () {
+  var TITLES = {
+    hub:'Главная', ice:'Лёд', map:'Лёд', arena:'Чижовка', arenaB:'ТЦ «Замок»',
+    coach:'Мария Ковалёва', old:'Каталог (как сейчас)'
+  };
+  var TAB_OF = { hub:'hub', ice:'ice', map:'ice', arena:'ice', arenaB:'ice', coach:'ice', old:'ice' };
+  var BACKABLE = { arena:1, arenaB:1, coach:1, map:1 };
+
+  var NOTES = {
+    ice: {
+      h: 'Таб «Тренеры» становится табом «Лёд»',
+      lead: 'Тот же второй таб, новая работа. Каталог тренеров не удаляется — он становится линзой внутри «Льда».',
+      items: [
+        '<b>Чипы намерения — это линзы, а не воронки.</b> Нажмите «Найти тренера» или «Группы»: список арен тот же, меняется только строка под названием и порядок.',
+        '<b>Город — строка в шапке, а не обязательный экран.</b> Определяется сам, меняется одним тапом.',
+        '<b>Один поиск на три типа результатов</b> — арена, тренер, город.',
+        '<b>Уровень A / B / C</b> задаёт и порядок, и текст. Каток без данных не притворяется полным.'
+      ],
+      box: '<p><b>Что видит существующий клиент.</b> Он шёл в «Тренеров» — теперь первым чипом стоит «Найти тренера», и поиск по фамилии работает. Один тап вместо привычного пути.</p>'
+    },
+    map: {
+      h: 'Карта становится способом выбрать, а не украшением',
+      lead: 'Сейчас карта есть только внутри шага фильтра, без поиска и кластеризации — на 60 аренах она схлопывается в кашу.',
+      items: [
+        '<b>Кластеры вместо кучи пинов</b>, точки грузятся по видимой области, а не всем городом.',
+        '<b>«Рядом со мной»</b> с сортировкой по расстоянию — в Москве это главный способ выбора.',
+        '<b>Пин показывает ближайший сеанс</b> прямо на карте: «Чижовка · 11:00».',
+        '<b>Арены уровня C бледные</b> — видно, что место существует, но данных о нём нет.'
+      ],
+      box: '<p>Тот же компонент карты и выбора арены переиспользуется в профиле тренера и онбординге — там сейчас плоский список из 60 строк без адресов.</p>'
+    },
+    arena: {
+      h: 'Карточка арены — новый центральный экран',
+      lead: 'Здесь два продукта становятся одним: массовое катание и занятия с тренером живут на одной временной оси.',
+      items: [
+        '<b>Синяя полоса — открытый лёд.</b> Только информация: время, цена, «билет на месте». Мы ничего не продаём.',
+        '<b>Янтарная полоса — занятие.</b> Слот тренера или группа, кнопка «Записаться» ведёт в существующий контур записи.',
+        '<b>Тренеры на этой арене</b> — прямая связь через уже существующую привязку тренер ↔ арена.',
+        '<b>Свежесть и источник</b> подписаны у самого расписания, «Сообщить об ошибке» — на конкретном факте.',
+        '<b>«Это ваш каток?»</b> — продуктовая функция и канал продаж катку одновременно.'
+      ],
+      box: '<p><b>Проверьте вкладку «Неделя».</b> День без данных честно говорит «данных нет» вместо пустоты — это то же правило, что и уровни арен.</p>'
+    },
+    arenaB: {
+      h: 'Каток без расписания — тоже полезная страница',
+      lead: 'Из 150 арен расписание сначала будет у единиц. Это спроектированное состояние, а не дыра.',
+      items: [
+        '<b>Никаких пустых блоков «скоро».</b> Прямо сказано, чего мы не знаем.',
+        '<b>Полезное действие есть всегда</b> — позвонить катку, открыть его сайт, посмотреть тренеров.',
+        '<b>Просьба дополнить</b> превращает посетителя в источник данных.'
+      ],
+      box: '<p>Метрика продукта — доля арен уровня A по городу, а не количество арен в справочнике. Покрытие — не рост.</p>'
+    },
+    coach: {
+      h: 'Карточка тренера почти не меняется',
+      lead: 'Тренерский контур — запись, абонементы, заявки — остаётся как есть. Добавляются два штриха.',
+      items: [
+        '<b>Чипы арен</b> ведут обратно на карточки катков: граф становится двусторонним.',
+        '<b>Место занятия — арена слота</b>, а не «основная площадка тренера». Клиент записывается туда, куда смотрел.'
+      ],
+      box: '<p>Именно это и был главный блокер: без него запись с карточки арены могла бы уехать на другой конец города.</p>'
+    },
+    hub: {
+      h: 'Главная остаётся хабом удержания',
+      lead: 'Экран «мой тренер / ближайшая запись / абонемент» работает хорошо, и его не трогаем.',
+      items: [
+        '<b>Одна новая строка</b> — тизер ближайшего льда рядом. Вход в новый раздел для тех, кто пришёл по привычке.',
+        '<b>Всё остальное без изменений:</b> записи, абонементы, сертификаты, заявки, семейный доступ.'
+      ],
+      box: '<p>Табов по-прежнему четыре. Меняется смысл второго, а не структура навигации.</p>'
+    },
+    old: {
+      h: 'Как это выглядит сейчас',
+      lead: 'Текущий вход во второй таб — анкета из четырёх шагов, где арена это строка фильтра.',
+      items: [
+        '<b>Город → услуга → площадка → результат.</b> Четыре обязательных шага до первого полезного экрана.',
+        '<b>Ни одного ответа</b> на самый частый вопрос: где и когда сегодня лёд.',
+        '<b>Арена — фильтр, а не место:</b> у неё нет фото, расписания, цен и своей страницы.'
+      ],
+      box: '<p>Переключитесь на «Лёд — список», чтобы увидеть тот же таб после перестройки.</p>'
+    }
+  };
+
+  var view = document.getElementById('view');
+  var screens = {};
+  [].forEach.call(document.querySelectorAll('[data-screen]'), function (el) { screens[el.dataset.screen] = el; });
+  var current = 'ice', prev = null;
+
+  function renderNotes(id) {
+    var n = NOTES[id]; if (!n) return;
+    document.getElementById('notes').innerHTML =
+      '<h2>' + n.h + '</h2>' +
+      '<p class="lead">' + n.lead + '</p>' +
+      '<ul class="nlist">' + n.items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul>' +
+      '<div class="nbox">' + n.box + '</div>';
+  }
+
+  function go(id, isBack) {
+    if (!screens[id] || id === current) return;
+    if (!isBack) prev = current;
+    Object.keys(screens).forEach(function (k) { screens[k].classList.toggle('on', k === id); });
+    current = id;
+    document.getElementById('tgTitle').textContent = TITLES[id] || '';
+    document.getElementById('tgBack').hidden = !BACKABLE[id];
+    [].forEach.call(document.querySelectorAll('#tabbar button'), function (b) {
+      b.setAttribute('aria-current', b.dataset.tab === TAB_OF[id] ? 'true' : 'false');
+    });
+    [].forEach.call(document.querySelectorAll('#picker button'), function (b) {
+      b.setAttribute('aria-pressed', b.dataset.go === id ? 'true' : 'false');
+    });
+    view.scrollTop = 0;
+    renderNotes(id);
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-go]');
+    if (t) { go(t.dataset.go); return; }
+    var d = e.target.closest('#dayTabs button');
+    if (d) {
+      [].forEach.call(document.querySelectorAll('#dayTabs button'), function (b) {
+        b.setAttribute('aria-pressed', b === d ? 'true' : 'false');
+      });
+      [].forEach.call(document.querySelectorAll('[data-rows]'), function (r) {
+        r.hidden = r.dataset.rows !== d.dataset.day;
+      });
+      return;
+    }
+    var c = e.target.closest('#intentChips button');
+    if (c) {
+      [].forEach.call(document.querySelectorAll('#intentChips button'), function (b) {
+        b.setAttribute('aria-pressed', b === c ? 'true' : 'false');
+      });
+      [].forEach.call(document.querySelectorAll('.live'), function (l) {
+        var v = l.dataset[c.dataset.intent];
+        if (v) l.textContent = v;
+      });
+      return;
+    }
+  });
+
+  document.getElementById('tgBack').addEventListener('click', function () { go(prev || 'ice', true); });
+
+  renderNotes('ice');
+})();
+</script>

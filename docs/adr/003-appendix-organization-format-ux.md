@@ -74,5 +74,5 @@ After claim: owner opens trainer mini-app → format-specific first screen (stud
 ## Related
 
 - [ADR 001 — Collective overlay](./001-collective-overlay.md)
-- [Organizations completion backlog](../../ORGANIZATIONS_COMPLETION_BACKLOG.md) — execution checklist
+- [Organizations completion backlog](../../plans/organizations-completion-backlog.md) — execution checklist
 - Implementation: `src/application/organization_capabilities.py`, `static/webapp/catalog-main.js`
