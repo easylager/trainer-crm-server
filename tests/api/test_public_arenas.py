@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -133,6 +134,45 @@ async def _add_future_session(
         )
     await db_session.flush()
     return session_id
+
+
+async def _add_minsk_session(
+    db_session,
+    arena_id: int,
+    *,
+    when: datetime,
+    duration_minutes: int = 45,
+    price_adult_minor: int = 850,
+) -> int:
+    """Insert a public_skate slot at a Europe/Minsk wall-clock instant."""
+    local = when.astimezone(ZoneInfo("Europe/Minsk"))
+    created = await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=local.date(),
+        starts_at_local=local.strftime("%H:%M"),
+        duration_minutes=duration_minutes,
+        kind="public_skate",
+        price_adult_minor=price_adult_minor,
+    )
+    await db_session.flush()
+    return int(created["id"])
+
+
+def _session_ids_from_feed(payload: dict) -> set[int]:
+    ids: set[int] = set()
+    for day in payload.get("days") or []:
+        for slot in day.get("sessions") or []:
+            ids.add(int(slot["id"]))
+    return ids
+
+
+def _session_hhmm_from_feed(payload: dict) -> list[str]:
+    times: list[str] = []
+    for day in payload.get("days") or []:
+        for slot in day.get("sessions") or []:
+            times.append(str(slot.get("starts_at_local") or "")[:5])
+    return times
 
 
 @pytest.mark.asyncio
@@ -327,6 +367,56 @@ async def test_expired_sessions_are_not_current_in_list_or_feed(
     assert slot["price_rental_minor"] == 1200
     assert slot["currency_code"]
     assert slot["local_date"]
+
+
+@pytest.mark.asyncio
+async def test_started_session_is_not_current_on_ice_list_or_feed(
+    app_use_test_db, db_session
+) -> None:
+    """PDEC-005: an in-progress MK slot is past for the vitrine (starts_at > now, UTC+3).
+
+    Repro: 13:10 Europe/Minsk still showing 12:15 on Ice tab / hub because the
+    filter used ends_at >= now. A 90-minute session that started 55 minutes ago
+    has not ended yet — and must still disappear, while the next start stays.
+    """
+    now_minsk = datetime.now(ZoneInfo("Europe/Minsk"))
+    started = now_minsk - timedelta(minutes=55)
+    upcoming = now_minsk + timedelta(hours=2)
+    cid = await _insert_city(db_session, name=f"IceNow-{uuid.uuid4().hex[:6]}")
+    mixed = await _insert_arena(db_session, cid, name="ТЦ Diamond city")
+    only_live = await _insert_arena(db_session, cid, name="Только идущий сеанс")
+    await _add_minsk_session(db_session, mixed, when=started, duration_minutes=90)
+    upcoming_id = await _add_minsk_session(
+        db_session, mixed, when=upcoming, duration_minutes=45, price_adult_minor=1100
+    )
+    await _add_minsk_session(db_session, only_live, when=started, duration_minutes=90)
+
+    from src.application.arena_public_use_cases import get_hub_ice_teaser
+
+    teaser = await get_hub_ice_teaser(db_session, city_id=cid)
+    assert teaser is not None
+    assert teaser["arena_id"] == mixed
+    assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        listed = await client.get(
+            "/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"}
+        )
+        feed_mixed = await client.get(f"/api/public/arenas/{mixed}/sessions")
+        feed_live = await client.get(f"/api/public/arenas/{only_live}/sessions")
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["items"]
+    assert {it["id"] for it in items} == {mixed}
+    live = items[0]["live"]
+    assert live["kind"] == "session"
+    assert str(live["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+    assert started.strftime("%H:%M") not in str(live.get("text") or "")
+
+    mixed_times = _session_hhmm_from_feed(feed_mixed.json())
+    assert upcoming.strftime("%H:%M") in mixed_times
+    assert started.strftime("%H:%M") not in mixed_times
+    assert upcoming_id in _session_ids_from_feed(feed_mixed.json())
+    assert _session_ids_from_feed(feed_live.json()) == set()
 
 
 @pytest.mark.asyncio

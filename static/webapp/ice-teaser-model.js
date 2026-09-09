@@ -72,6 +72,7 @@
 
   function formatWhen(payload, now) {
     var startMs = Date.parse(payload.starts_at_utc || '');
+    if (!isNaN(startMs) && startMs <= now.getTime()) return '';
     if (!isNaN(startMs)) {
       var mins = Math.round((startMs - now.getTime()) / 60000);
       if (mins >= 0 && mins < 60) {
@@ -114,12 +115,19 @@
     return 'arena?ref=' + encodeURIComponent(String(ref));
   }
 
+  function slotHasStarted(payload, now) {
+    var startMs = Date.parse((payload && payload.starts_at_utc) || '');
+    if (isNaN(startMs)) return false;
+    return startMs <= now.getTime();
+  }
+
   function formatIceTeaser(payload, now) {
     if (!payload || typeof payload !== 'object') return hiddenView();
     var href = arenaHref(payload);
     var time = hhmm(payload.starts_at_local);
     if (!href || !time) return hiddenView();
     now = now instanceof Date ? now : new Date();
+    if (slotHasStarted(payload, now)) return hiddenView();
     var when = formatWhen(payload, now);
     var parts = [];
     var name = String(payload.arena_name || '').trim();
@@ -199,6 +207,7 @@
     var time = hhmm(payload.starts_at_local);
     if (!href || !time) return hiddenCard();
     now = now instanceof Date ? now : new Date();
+    if (slotHasStarted(payload, now)) return hiddenCard();
     var facts = [kindLabel(payload.kind)];
     var price = formatPrice(payload.price_adult_minor, payload.currency_code);
     if (price) facts.push(price);

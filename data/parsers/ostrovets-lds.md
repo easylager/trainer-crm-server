@@ -24,7 +24,8 @@
   "kind": "public_skate",
   "default_duration_minutes": 45,
   "empty_cell": "нет катаний",
-  "requires_by_egress": false
+  "requires_by_egress": false,
+  "prices_already_minor": true
 }
 ```
 
@@ -38,6 +39,7 @@
    - 1.1 взрослые `6,00` → 600
    - 1.2 дети до 14 лет `4,00` → 400
    - 1.8 предоставление коньков `5,00` / 60 мин → `price_rental_minor=500` (на странице МК коньки выдаются на один сеанс)
+   - Адаптер отдаёт уже копейки; job.config **обязан** иметь `prices_already_minor: true`, иначе нормализатор умножит ещё раз (600 → 60000 → «600 BYN» на карточке).
    - Drop: абонементы 4/8/безлимит, 1.3 ОХМ, 1.4 инструктор, 1.5–1.7 группы, заточка, билеты, опоры/защита/шлем
    - `/ceny-na-uslugi/` = бокс 10.00 — не брать
 6. Merge: один слот на `(local_date, starts_at_local)`.

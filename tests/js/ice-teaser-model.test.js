@@ -136,3 +136,51 @@ describe('renderIceTeaserHtml', () => {
     assert.ok(!/скоро/i.test(html));
   });
 });
+
+describe('formatIceCard hides started slots (PDEC-005, UTC+3)', () => {
+  it('hides a 12:45 slot when now is 13:10 Europe/Minsk', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T09:45:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '12:45',
+        arena_name: 'ТЦ Diamond city',
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.hidden, true);
+  });
+
+  it('keeps a slot that has not started yet', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        arena_district: 'Центр',
+        city_name: 'Минск',
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.hidden, false);
+    assert.equal(view.time, '15:00');
+    assert.equal(view.day, 'Сегодня');
+  });
+});
+
+describe('formatIceTeaser hides started slots (PDEC-005)', () => {
+  it('hides when starts_at_utc is already in the past', () => {
+    const { formatIceTeaser } = loadModel();
+    const view = formatIceTeaser(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T09:15:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '12:15',
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.hidden, true);
+  });
+});

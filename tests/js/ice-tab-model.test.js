@@ -583,6 +583,22 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     });
     assert.equal(boardCardView(later, now).day, '10.09');
   });
+
+  it('«Сегодня» считается по Europe/Minsk, не по UTC-календарю', () => {
+    const { boardCardView, sessionDayLabel } = loadModel();
+    const afterUtcMidnight = new Date('2026-09-06T22:10:00Z');
+    const minskToday = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, {
+        local_date: '2026-09-07',
+        starts_at_local: '12:15',
+      }),
+    });
+    assert.equal(boardCardView(minskToday, afterUtcMidnight).day, 'Сегодня');
+    assert.equal(
+      sessionDayLabel({ local_date: '2026-09-06' }, afterUtcMidnight),
+      '06.09'
+    );
+  });
 });
 
 describe('formatSortCaption во время загрузки (TASK-095)', () => {

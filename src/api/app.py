@@ -1389,6 +1389,19 @@ def webapp_mini_app_client_shell_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-empty-state.js")
+def webapp_mini_app_empty_state_js(request: Request):
+    """Shared client empty-state renderer (TASK-096). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-empty-state.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-trainer-shell.css")
 def webapp_mini_app_trainer_shell_css(request: Request):
     """Trainer shell — bottom tab bar + more sheet. Use ``?v=…`` for long cache."""

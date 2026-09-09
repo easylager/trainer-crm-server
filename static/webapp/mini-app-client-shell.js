@@ -813,14 +813,18 @@
    */
   function renderEmptyState(container, options) {
     if (!container) return;
+    options = options || {};
     var comp = global.MiniAppEmptyState;
     if (!comp || typeof comp.render !== 'function') {
       if (global.console && global.console.error) {
         global.console.error('ClientShell.renderEmptyState: mini-app-empty-state.js is not loaded');
       }
+      // TASK-103: without this, «Мои записи» keeps the skeleton forever when the
+      // shared file 404s — the list fetch already succeeded, only the empty paint failed.
+      container.innerHTML =
+        '<div class="empty">' + escHtml(options.title || 'Пока пусто') + '</div>';
       return;
     }
-    options = options || {};
     comp.render(container, {
       icon: options.icon || TAB_ICONS.catalog,
       title: options.title || 'Пока пусто',

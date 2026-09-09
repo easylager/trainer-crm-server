@@ -205,4 +205,11 @@ describe('подключение и отсутствие рецидивов (TAS
     // Разметку теперь собирает компонент; в оболочке её быть не должно.
     assert.ok(!shell.includes('client-empty-state__title'));
   });
+
+  it('оболочка снимает скелетон, если mini-app-empty-state.js не загрузился', () => {
+    const shell = read('mini-app-client-shell.js');
+    const idx = shell.indexOf('mini-app-empty-state.js is not loaded');
+    assert.ok(idx >= 0, 'ожидали лог про незагруженный компонент');
+    assert.match(shell.slice(idx, idx + 500), /container\.innerHTML/);
+  });
 });

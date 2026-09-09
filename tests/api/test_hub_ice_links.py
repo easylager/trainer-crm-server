@@ -194,3 +194,50 @@ async def test_hub_bootstrap_ice_teaser_falls_back_without_session_city(
     assert teaser["arena_id"] == arena_id
     assert teaser["city_id"] == city_id
     assert teaser["city_name"] == "Минск-без-сессии"
+
+
+@pytest.mark.asyncio
+async def test_hub_ice_teaser_skips_in_progress_slot(
+    app_use_test_db, db_session
+) -> None:
+    """PDEC-005: hub card must not keep a 12:15 slot at 13:10 Europe/Minsk."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from tests.api.test_public_arenas import _add_minsk_session
+
+    now_minsk = datetime.now(ZoneInfo("Europe/Minsk"))
+    city_id = await _insert_city(db_session, name="Минск-идущий")
+    arena_id = await _insert_arena(db_session, city_id, name="ТЦ Diamond city")
+    await _add_minsk_session(
+        db_session, arena_id, when=now_minsk - timedelta(minutes=55), duration_minutes=90
+    )
+    upcoming = now_minsk + timedelta(hours=2)
+    await _add_minsk_session(
+        db_session,
+        arena_id,
+        when=upcoming,
+        duration_minutes=45,
+        price_adult_minor=1100,
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_sessions (telegram_id, state, city_id)
+            VALUES (:t, 'idle', :cid)
+            ON CONFLICT (telegram_id) DO UPDATE SET city_id = EXCLUDED.city_id
+            """
+        ),
+        {"t": ctg, "cid": city_id},
+    )
+    await db_session.flush()
+
+    resp = await _bootstrap(ctg)
+    assert resp.status_code == 200, resp.text
+    teaser = resp.json()["ice_teaser"]
+    assert teaser is not None
+    assert teaser["arena_id"] == arena_id
+    assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")

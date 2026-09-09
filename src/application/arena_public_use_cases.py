@@ -10,6 +10,7 @@ import json
 import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,12 +46,20 @@ DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 100
 SEARCH_LIMIT = 8
 
+# PDEC-005: vitrine shows only slots that have not started. An in-progress
+# session is past — live line / pin / hub card all show start time, so
+# "12:45 сегодня" at 13:10 is a lie even if the ice is still open.
 _CURRENT_SESSION_SQL = """
     s.status = :st
     AND s.kind IN ('public_skate', 'open_ice')
-    AND s.ends_at_utc >= :now
+    AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
 """
+
+
+def _today_minsk() -> date:
+    """Calendar day for Ice copy and default feed window (UTC+3, no DST)."""
+    return datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
 
 
 class IcePublicQueryError(ValueError):
@@ -445,7 +454,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
     rows = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT c.id, c.name, c.sort_order, c.country,
                        (
                            SELECT COUNT(*)::int
@@ -457,10 +466,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND EXISTS (
                                  SELECT 1 FROM ice_sessions s
                                  WHERE s.arena_id = a.id
-                                   AND s.status = :st
-                                   AND s.kind IN ('public_skate', 'open_ice')
-                                   AND s.ends_at_utc >= :now
-                                   AND (s.valid_until IS NULL OR s.valid_until >= :now)
+                                   AND {_CURRENT_SESSION_SQL}
                              )
                        ) AS skate_count,
                        (
@@ -540,7 +546,7 @@ async def list_public_ice_arenas(
     rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
-    today = date.today()
+    today = _today_minsk()
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
     return {
@@ -715,7 +721,7 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "opening_hours": _as_mapping(row.get("opening_hours")),
         "season_start_month": season_start,
         "season_end_month": season_end,
-        "in_season": is_in_season(season_start, season_end, date.today().month),
+        "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
         "contacts": {
             "phone": row.get("phone"),
@@ -744,24 +750,21 @@ async def list_public_arena_sessions(
     row = await _load_arena_by_ref(session, arena_ref)
     if row is None:
         return None
-    start = date_from or date.today()
+    start = date_from or _today_minsk()
     end = date_to or (start + timedelta(days=14))
     if end < start:
         start, end = end, start
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
                    source_id, observed_at, valid_until, confidence
             FROM ice_sessions s
             WHERE s.arena_id = :aid
-              AND s.status = :st
-              AND s.kind IN ('public_skate', 'open_ice')
-              AND s.ends_at_utc >= :now
-              AND (s.valid_until IS NULL OR s.valid_until >= :now)
+              AND {_CURRENT_SESSION_SQL}
               AND s.local_date >= :dfrom AND s.local_date <= :dto
             ORDER BY s.local_date, s.starts_at_local, s.id
             """
