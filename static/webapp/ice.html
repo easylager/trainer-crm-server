@@ -63,9 +63,11 @@
       </div>
       <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
       <!--
-        Переключатель «Список / Карта» убран в TASK-084 (AC-003, DEC-002).
-        Разметка карты ниже (#iceMapSec) и весь её код оставлены на месте:
-        возврат = вернуть этот блок и поставить MAP_ENABLED = true в ice-tab.js.
+        TASK-103: карта вернулась, но переключатель сюда — нет.
+        Сегмент «Список / Карта» стоял здесь и стоил ~46px над сгибом; это и было
+        названной причиной его удаления в TASK-084 (гейт G-P3 «товар над сгибом»).
+        Теперь переключатель — плавающая пилюля #iceViewSwitch в конце документа:
+        ноль высоты полотна, один тап в обе стороны.
       -->
     </div>
     <div class="ice-sec" id="iceListSec">
@@ -76,6 +78,15 @@
       <div class="ice-map-empty" id="iceMapEmpty" hidden></div>
       <div class="ice-map-stage" id="iceMapStage">
         <div id="iceMapCanvas" class="ice-map-canvas" role="application" aria-label="Карта катков"></div>
+        <!--
+          TASK-103: пока Яндекс не отдал тайлы, сцена показывает лоадер, а не пустую
+          серую заливку. Серый прямоугольник неотличим от поломки, и без этого возврат
+          карты выглядел бы хуже её отсутствия.
+        -->
+        <div class="ice-map-loader" id="iceMapLoader" role="status" aria-live="polite">
+          <span class="ice-map-loader__spinner" aria-hidden="true"></span>
+          <span class="ice-map-loader__text">Загружаем карту…</span>
+        </div>
         <button type="button" class="ice-near" id="iceNearBtn">◎ Рядом со мной</button>
       </div>
       <div class="ice-map-sheet" id="iceMapSheet"></div>
@@ -102,7 +113,20 @@
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
-  <script src="ice-map.js?v=202609074"></script>
-  <script src="ice-tab.js?v=202609085"></script>
+  <!--
+    TASK-103: переключатель «Список ↔ Карта».
+    Плавающая пилюля, а не сегмент в шапке: сегмент занимал верх первого экрана и
+    нарушал G-P3 («товар над сгибом»), из-за чего карту и выключили в TASK-084.
+    Здесь он стоит ноль высоты полотна и одинаково доступен в обоих состояниях.
+    Скрыт по умолчанию: показывается только для чипов «Покататься» и «Группы» —
+    тренеров на карте нет.
+  -->
+  <button type="button" class="ice-viewswitch" id="iceViewSwitch" hidden aria-pressed="false">
+    <span class="ice-viewswitch__icon" id="iceViewSwitchIcon" aria-hidden="true"></span>
+    <span class="ice-viewswitch__label" id="iceViewSwitchLabel">Карта</span>
+  </button>
+
+  <script src="ice-map.js?v=202609091"></script>
+  <script src="ice-tab.js?v=202609091"></script>
 </body>
 </html>

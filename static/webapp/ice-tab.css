@@ -188,35 +188,115 @@ body.ar-pilot--ice .client-app-header {
   display: none;
 }
 
-.ice-seg {
-  display: flex;
-  background: var(--glide-paper);
-  border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
-  padding: 3px;
+/*
+ * ПЕРЕКЛЮЧАТЕЛЬ «СПИСОК ↔ КАРТА» (TASK-103).
+ *
+ * Почему пилюля, а не сегмент. Сегмент `.ice-seg` стоял в шапке и стоил ~46px
+ * высоты над сгибом — это и была единственная названная причина, по которой карту
+ * выключили в TASK-084 (гейт G-P3, «товар над сгибом»). Вернуть карту прежним
+ * способом значило вернуть и нарушение. Плавающая кнопка стоит ноль высоты
+ * полотна, всегда в зоне большого пальца и одинаково доступна в обоих состояниях.
+ *
+ * Геометрия дна взята из --client-shell-tab-inset, а не из константы: TASK-093
+ * показала, что заявленная высота таб-бара (62px) и измеренная (69px на 390px)
+ * расходятся, и разница уходит под панель.
+ */
+.ice-viewswitch {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 12px);
+  z-index: 8400;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: 11px 18px 11px 15px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.01em;
+  /* Тень плотнее карточной: кнопка висит над контентом, а не лежит в потоке. */
+  box-shadow: 0 4px 14px -2px rgba(15, 26, 34, 0.34), 0 2px 4px rgba(15, 26, 34, 0.16);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.ice-seg[hidden] {
+.ice-viewswitch[hidden] {
   display: none;
 }
 
-.ice-seg button {
-  flex: 1;
-  text-align: center;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  padding: 6px 0;
-  border-radius: var(--app-radius-sm);
-  border: 0;
-  background: transparent;
-  color: var(--glide-hint);
-  cursor: pointer;
+.ice-viewswitch:active {
+  transform: translateX(-50%) scale(0.96);
 }
 
-.ice-seg button[aria-pressed='true'] {
-  background: var(--app-card-bg);
-  color: var(--tg-theme-text-color, var(--glide-ink));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+.ice-viewswitch__icon {
+  display: flex;
+  width: var(--app-icon-sm);
+  height: var(--app-icon-sm);
+}
+
+.ice-viewswitch__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-viewswitch {
+    transition: none;
+  }
+  .ice-viewswitch:active {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+ * ЛОАДЕР КАРТЫ (TASK-103).
+ * До тайлов сцена была ровной серой заливкой, неотличимой от поломки. Требование
+ * лежало в TASK-082, которой никто не занимается; без него возврат карты выглядел
+ * бы хуже, чем её отсутствие.
+ */
+.ice-map-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  background: var(--glide-paper);
+  color: var(--tg-theme-hint-color);
+  font-size: var(--app-text-caption);
+}
+
+.ice-map-loader[hidden] {
+  display: none;
+}
+
+.ice-map-loader__spinner {
+  width: var(--app-icon-lg);
+  height: var(--app-icon-lg);
+  border-radius: var(--app-radius-pill);
+  border: 2px solid var(--glide-line);
+  border-top-color: var(--app-cta-fill);
+  animation: ice-map-spin 0.8s linear infinite;
+}
+
+@keyframes ice-map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-map-loader__spinner {
+    animation-duration: 2.4s;
+  }
 }
 
 .ice-eyebrow {

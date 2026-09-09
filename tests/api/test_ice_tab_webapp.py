@@ -1,6 +1,7 @@
 """TASK-053: Ice tab Mini App — tab label, list module, catalog lens, deep links."""
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from httpx import ASGITransport, AsyncClient
 from src.api.app import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _code_only(text: str) -> str:
+    """Убирает комментарии: проверять надо объявления, а не рассказ о том, что убрано."""
+    text = re.sub(r"/\*[\s\S]*?\*/", " ", text)
+    return re.sub(r"^\s*//.*$", " ", text, flags=re.MULTILINE)
 
 
 def test_ice_tab_model_node_unit() -> None:
@@ -51,17 +58,17 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert 'data-intent="group"' not in body
     assert "ice-masthead" in body
     assert "iceServiceChips" in body
-    # TASK-084 AC-003: переключателя «Список / Карта» на экране нет.
+    # TASK-103: карта вернулась, но сегмент «Список / Карта» в шапку — нет.
+    # Он стоил ~46px над сгибом и был причиной выключения карты в TASK-084 (G-P3).
+    # Проверяем именно отсутствие сегмента, а не отсутствие переключателя вообще.
     assert "iceViewSeg" not in body
-    # …при этом код карты намеренно оставлен и продолжает отдаваться (DEC-007):
-    # выключение сделано флагом, возврат стоит две правки. Проверяем и то, и другое,
-    # иначе «убрали карту» и «удалили карту» станут неразличимы.
+    assert "iceViewSwitch" in body
     assert "iceMapSec" in body
     assert "Каток, тренер или город" in body
     assert js.status_code == 200
-    # Флаг выключения карты — часть контракта AC-003, а не деталь реализации:
-    # без него вид «карта» мог бы вернуться из sessionStorage или ?view=map.
-    assert "MAP_ENABLED = false" in js.text
+    # Флаг MAP_ENABLED снят намеренно: он гасил случай «экран открылся картой без
+    # выхода», а TASK-103 делает этот случай невозможным — список всегда стартовый вид.
+    assert "MAP_ENABLED" not in _code_only(js.text)
 
     assert css.status_code == 200
     assert model.status_code == 200
@@ -97,7 +104,11 @@ def test_shell_second_tab_is_ice() -> None:
     ice_tab = (REPO_ROOT / "static/webapp/ice-tab.js").read_text(encoding="utf-8")
     ice_model = (REPO_ROOT / "static/webapp/ice-tab-model.js").read_text(encoding="utf-8")
     assert "class=\"ice-acard\" href=\"" in ice_tab
-    assert "params.get('view') === 'map'" in ice_tab
+    # Здесь раньше проверялся deep-link ?view=map. TASK-103 его убрала осознанно:
+    # AC-001 требует, чтобы список был стартовым видом всегда, а «открыть экран сразу
+    # картой» — это ровно тот случай, ради которого в TASK-084 стоял флаг MAP_ENABLED.
+    # Вход в карту остался, но только осознанным тапом по #iceViewSwitch.
+    assert "iceViewSwitch" in ice_tab
     assert "buildServicesUrl" in ice_model
     assert "serviceId" in ice_tab
     assert "action.type === 'catalog'" not in ice_tab
@@ -157,3 +168,76 @@ async def test_catalog_browse_redirects_to_ice_coaches(app_use_test_db) -> None:
     assert "catalog-main.js" in card.text
     assert collective.status_code == 200
     assert "catalog-main.js" in collective.text
+
+
+# ─── TASK-103: карта вернулась — список первым, карта в один тап ─────────────
+
+
+@pytest.mark.asyncio
+async def test_map_switch_costs_no_height_above_the_fold() -> None:
+    """AC-003: переключатель не отнимает высоту у первого экрана.
+
+    Именно это, а не карта сама по себе, было причиной выключения в TASK-084:
+    сегмент стоял в шапке между чипами и списком. Тест держит носитель — плавающую
+    пилюлю (position: fixed), — потому что вернуть сегмент проще всего «заодно».
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/webapp/ice")).text
+        css = _code_only((await client.get("/webapp/ice-tab.css")).text)
+
+    assert "iceViewSwitch" in body
+    assert "iceViewSeg" not in body, "сегмент в шапке вернул нарушение G-P3"
+    switch_rule = css.split(".ice-viewswitch {")[1].split("}")[0]
+    assert "position: fixed" in switch_rule
+    # Дно считается от измеренной высоты панели (TASK-093), а не от константы 62px.
+    assert "--client-shell-tab-inset" in switch_rule
+
+
+@pytest.mark.asyncio
+async def test_list_is_always_the_entry_state() -> None:
+    """AC-001: ни sessionStorage, ни ?view=map не могут открыть экран картой.
+
+    Раньше этот класс багов гасился флагом MAP_ENABLED в двух местах. Теперь
+    состояние просто не достижимо при входе — и тест сторожит именно это, а не
+    наличие предохранителя.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        js = _code_only((await client.get("/webapp/ice-tab.js")).text)
+
+    boot = js.split("function boot()")[1]
+    assert "state.view = 'list';" in boot
+    # Обе прежние двери в вид «карта» при входе должны быть закрыты.
+    assert "saved.view === 'map'" not in boot
+    assert "params.get('view')" not in boot
+
+
+@pytest.mark.asyncio
+async def test_switch_is_one_tap_both_ways_and_hidden_for_coaches() -> None:
+    """AC-002 + AC-005: одна кнопка обслуживает оба направления; у «Тренеров» её нет."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        js = _code_only((await client.get("/webapp/ice-tab.js")).text)
+
+    assert "setView(mapViewActive() ? 'list' : 'map')" in js
+    # Подпись зовёт в другое состояние, а не называет текущее.
+    assert "'Список' : 'Карта'" in js
+    assert "state.intent !== 'coach'" in js.split("function mapAllowed()")[1].split("}")[0]
+
+
+@pytest.mark.asyncio
+async def test_map_stage_shows_a_loader_before_tiles() -> None:
+    """AC-004: до тайлов — лоадер, а не пустая серая заливка.
+
+    Требование лежало в TASK-082, которой никто не занимается. Без него возврат
+    карты выглядел бы хуже её отсутствия: серый прямоугольник неотличим от поломки.
+    """
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        body = (await client.get("/webapp/ice")).text
+        css = _code_only((await client.get("/webapp/ice-tab.css")).text)
+        map_js = _code_only((await client.get("/webapp/ice-map.js")).text)
+
+    assert "iceMapLoader" in body
+    assert ".ice-map-loader" in css
+    # Гасится в showStage — общей точке обоих исходов запуска (карта или пустое
+    # состояние), а не вручную в каждой ветке start(), где легко забыть ветку.
+    assert "setLoading(false)" in map_js.split("function showStage(on)")[1].split("\n    }")[0]
+    assert "setLoading(true)" in map_js

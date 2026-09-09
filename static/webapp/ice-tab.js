@@ -96,36 +96,54 @@
   }
 
   /*
-   * TASK-084 AC-003 / DEC-002: карта на «Льду» выключена в этом проходе.
+   * КАРТА (TASK-103, вернулась после TASK-084).
    *
-   * Код карты — ice-map.js, ice-map-model.js, разметка #iceMapSec и её тесты —
-   * намеренно НЕ удалён. Решение владельца 2026-09-08 звучало условием: убрать можно,
-   * если мы сможем её вернуть. Возврат = поставить здесь true и вернуть переключатель
-   * «Список / Карта» в ice.html; больше ничего.
+   * Карту выключали не потому, что она плохая, а потому что сегмент «Список / Карта»
+   * занимал верх первого экрана — против гейта G-P3 «товар над сгибом». Поэтому
+   * вернулась она с другим носителем переключателя: плавающая пилюля #iceViewSwitch,
+   * ноль высоты полотна (см. ice-tab.css).
    *
-   * Флаг проверяется в ДВУХ местах не для надёжности, а по необходимости: скрыть
-   * переключатель мало — вид «карта» мог остаться в sessionStorage с прошлой сессии
-   * или прийти из ?view=map, и тогда экран открылся бы картой без способа вернуться
-   * в список.
+   * Флага MAP_ENABLED больше нет, и это осознанно. Он существовал, чтобы гасить один
+   * класс багов: вид «карта» мог остаться в sessionStorage или прийти из ?view=map, и
+   * экран открывался картой без способа вернуться в список. Правильное лекарство —
+   * не второй предохранитель, а невозможность самого состояния: список ВСЕГДА
+   * стартовое состояние экрана (см. boot(), где сохранённый и урловый view=map
+   * сознательно игнорируются). Тогда «застрять на карте при входе» просто нечему.
+   *
+   * Тренеров на карте нет, поэтому для чипа «Тренеры» карта и переключатель скрыты.
    */
-  var MAP_ENABLED = false;
+  var VIEWSWITCH_ICONS = {
+    // Пин — «переключиться на карту»; список — «вернуться к списку».
+    map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>',
+  };
+
+  function mapAllowed() {
+    return state.intent !== 'coach';
+  }
 
   function mapViewActive() {
-    return MAP_ENABLED && state.intent !== 'coach' && state.view === 'map';
+    return mapAllowed() && state.view === 'map';
   }
 
   function setViewToggle() {
-    var allowed = MAP_ENABLED && state.intent !== 'coach';
-    var seg = $('iceViewSeg');
-    if (seg) seg.hidden = !allowed;
-    document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
-      var view = btn.getAttribute('data-view') === 'map' ? 'map' : 'list';
-      var effective = allowed && state.view === 'map' ? 'map' : 'list';
-      btn.setAttribute('aria-pressed', view === effective ? 'true' : 'false');
-    });
+    var allowed = mapAllowed();
+    var showMapView = mapViewActive();
+
+    var sw = $('iceViewSwitch');
+    if (sw) {
+      sw.hidden = !allowed;
+      // aria-pressed отвечает на «карта включена?», а подпись зовёт в другое
+      // состояние — иначе кнопка называлась бы тем, что уже видно на экране.
+      sw.setAttribute('aria-pressed', showMapView ? 'true' : 'false');
+      var icon = $('iceViewSwitchIcon');
+      var label = $('iceViewSwitchLabel');
+      if (icon) icon.innerHTML = showMapView ? VIEWSWITCH_ICONS.list : VIEWSWITCH_ICONS.map;
+      if (label) label.textContent = showMapView ? 'Список' : 'Карта';
+    }
+
     var listSec = $('iceListSec');
     var mapSec = $('iceMapSec');
-    var showMapView = mapViewActive();
     if (listSec) listSec.hidden = showMapView;
     if (mapSec) mapSec.hidden = !showMapView;
     if (showMapView) {
@@ -136,11 +154,25 @@
     }
   }
 
+  function setView(next) {
+    var wanted = next === 'map' && mapAllowed() ? 'map' : 'list';
+    if (state.view === wanted) return;
+    state.view = wanted;
+    setViewToggle();
+    persist();
+    if (wanted === 'list') {
+      // Возврат в список — наверх: иначе после карты полотно открывается с середины.
+      global.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }
+
   function showMap() {
     if (!global.IceMap) {
       var emptyEl = $('iceMapEmpty');
       var stageEl = $('iceMapStage');
+      var loaderEl = $('iceMapLoader');
       if (stageEl) stageEl.hidden = true;
+      if (loaderEl) loaderEl.hidden = true;
       if (emptyEl && global.IceMapModel) {
         emptyEl.hidden = false;
         emptyEl.innerHTML =
@@ -156,6 +188,7 @@
         nearBtn: $('iceNearBtn'),
         offMapEl: $('iceMapOffMap'),
         stageEl: $('iceMapStage'),
+        loaderEl: $('iceMapLoader'),
         listUrl: function (extra) {
           extra = extra || {};
           var opts = {
@@ -858,14 +891,12 @@
       });
     }
 
-    document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var view = btn.getAttribute('data-view') || 'list';
-        state.view = view === 'map' ? 'map' : 'list';
-        setViewToggle();
-        persist();
+    var viewSwitch = $('iceViewSwitch');
+    if (viewSwitch) {
+      viewSwitch.addEventListener('click', function () {
+        setView(mapViewActive() ? 'list' : 'map');
       });
-    });
+    }
 
     var search = $('iceSearchInput');
     if (search) {
@@ -976,10 +1007,20 @@
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
     if (saved && saved.serviceId) state.serviceId = Number(saved.serviceId) || null;
-    if (saved && saved.view === 'map') state.view = 'map';
+    /*
+     * TASK-103 AC-001: список — всегда стартовое состояние.
+     *
+     * Здесь сознательно НЕ восстанавливается ни saved.view, ни ?view=map. Это и есть
+     * замена флагу MAP_ENABLED: раньше два предохранителя гасили случай «экран
+     * открылся картой без способа вернуться», теперь этого случая не существует.
+     * Требование владельца 2026-09-09 звучит так же: клиент сначала попадает на список.
+     *
+     * state.view всё ещё пишется в sessionStorage — им пользуется восстановление
+     * скролла на pageshow; читать его как стартовый вид просто некому.
+     */
+    state.view = 'list';
     try {
       var params = new URLSearchParams(global.location.search || '');
-      if (params.get('view') === 'map') state.view = 'map';
       var urlIntent = M.intentFromSearch(global.location.search || '');
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
