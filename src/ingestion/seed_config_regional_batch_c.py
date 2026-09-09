@@ -28,6 +28,7 @@ VITEBSK_DS_CONFIG: dict = {
     ),
     "requires_by_egress": False,
     "requires_auth": False,
+    "prices_already_minor": True,
 }
 
 MOGILEV_DS_CONFIG: dict = {
@@ -49,6 +50,7 @@ MOGILEV_DS_CONFIG: dict = {
     "age_note": "детский до 6 лет",
     "requires_by_egress": False,
     "requires_auth": False,
+    "prices_already_minor": True,
 }
 
 ORSHA_ARENA_CONFIG: dict = {
@@ -63,6 +65,7 @@ ORSHA_ARENA_CONFIG: dict = {
     "age_note": "детский младше 14 лет",
     "requires_by_egress": False,
     "requires_auth": False,
+    "prices_already_minor": True,
     # NOTE: this parser OCRs a JPG (no HTML slot grid exists). It needs
     # `pytesseract` (not in requirements.txt yet) plus the system `tesseract`
     # binary with the `rus` language pack on the worker host. See adapter
@@ -81,6 +84,7 @@ GORKI_LDS_CONFIG: dict = {
     "age_note": "детский до 16 лет",
     "requires_by_egress": False,
     "requires_auth": False,
+    "prices_already_minor": True,
 }
 
 OSTROVETS_LDS_CONFIG: dict = {
@@ -94,4 +98,5 @@ OSTROVETS_LDS_CONFIG: dict = {
     "age_note": "дети до 14 лет",
     "requires_by_egress": False,
     "requires_auth": False,
+    "prices_already_minor": True,
 }

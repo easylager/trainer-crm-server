@@ -210,3 +210,17 @@ async def test_ostrovets_lds_skips_no_session_cells() -> None:
     assert sample.price_adult == 600
     assert sample.price_child == 400
     assert sample.price_rental == 500
+
+    assert OSTROVETS_LDS_CONFIG.get("prices_already_minor") is True
+    from datetime import datetime, timezone
+
+    from src.ingestion.normalize import IceSessionNormalizer
+
+    drafts = IceSessionNormalizer().normalize(
+        extraction, job, now=datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+    )
+    assert drafts
+    assert drafts[0].price_adult_minor == 600
+    assert drafts[0].price_child_minor == 400
+    assert drafts[0].price_rental_minor == 500
+    assert all(d.price_adult_minor == 600 for d in drafts)

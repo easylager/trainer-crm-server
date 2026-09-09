@@ -24,7 +24,8 @@
   "kind": "public_skate",
   "default_duration_minutes": 45,
   "empty_cell": "нет катаний",
-  "requires_by_egress": false
+  "requires_by_egress": false,
+  "prices_already_minor": true
 }
 ```
 
