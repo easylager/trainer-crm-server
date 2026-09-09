@@ -33,6 +33,7 @@ from src.ingestion.seed_config_regional_batch_c import (
     VITEBSK_DS_CONFIG,
 )
 from src.ingestion.types import ParserJob
+from tests.ingestion.tesseract_util import skip_unless_tesseract_rus
 
 ROOT = Path(__file__).resolve().parents[2]
 _FIXTURES = ROOT / "data/fixtures"
@@ -123,7 +124,7 @@ async def test_mogilev_ds_filters_school_and_hockey_rows() -> None:
 @pytest.mark.asyncio
 async def test_orsha_arena_ocr_matches_expected_fixture() -> None:
     """AC: OCR of Ld-07-13.jpg yields exactly the 3 gold MK slots; OL/Ol dropped."""
-    pytest.importorskip("pytesseract")
+    skip_unless_tesseract_rus()
     expected = _expected("orsha-arena")
     job = _job(
         arena_id=31,

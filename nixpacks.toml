@@ -1,0 +1,4 @@
+# System packages for Nixpacks / Railway (same image as API, bots, notification_service).
+# Orsha and Shklov ice parsers OCR weekly JPGs with tesseract + rus.
+[phases.setup]
+aptPkgs = ["tesseract-ocr", "tesseract-ocr-rus"]

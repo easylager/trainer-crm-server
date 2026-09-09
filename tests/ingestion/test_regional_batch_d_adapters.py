@@ -26,6 +26,7 @@ from src.ingestion.seed_config_regional_batch_d import (
 )
 from src.ingestion.types import ParserJob
 from src.ingestion.validate import IceSessionValidator
+from tests.ingestion.tesseract_util import skip_unless_tesseract_rus
 
 ROOT = Path(__file__).resolve().parents[2]
 _FIXTURES = ROOT / "data/fixtures"
@@ -129,6 +130,7 @@ async def test_soligorsk_szk_matches_expected_fixture_and_handles_midnight_cross
 
 @pytest.mark.asyncio
 async def test_shklov_arena_ocr_matches_expected_fixture() -> None:
+    skip_unless_tesseract_rus()
     expected = json.loads((_FIXTURES / "shklov-arena/expected.json").read_text(encoding="utf-8"))
     job = _shklov_job()
     extraction = await ShklovArenaParser().extract(job)
