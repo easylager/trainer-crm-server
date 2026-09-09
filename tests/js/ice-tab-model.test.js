@@ -517,6 +517,22 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
     free_slots_14d: 5,
   };
 
+  it('prefers same-origin proxy over a CDN list_url that 404s in Mini App', () => {
+    const { trainerCardView } = loadModel();
+    const view = trainerCardView({
+      ...trainer,
+      photos: [
+        {
+          file_key: 'trainers/9/full.jpg',
+          file_key_list: 'trainers/9/list.jpg',
+          list_url: 'https://cdn.example/broken.jpg',
+          url: 'https://cdn.example/broken-full.jpg',
+        },
+      ],
+    });
+    assert.equal(view.thumb, '/api/public/photos/trainers%2F9%2Flist.jpg');
+  });
+
   it('maps public trainer payload into ice-acard fields and the existing profile deep-link', () => {
     const { trainerCardView } = loadModel();
     const view = trainerCardView(trainer);
@@ -711,11 +727,53 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
   });
 });
 
+describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
+  it('shows trainer skeletons while skate rows are still in memory', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'coach',
+        loadedIntent: 'skate',
+        items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
+      }),
+      'skeleton'
+    );
+  });
+
+  it('keeps live cards on a same-lens refresh', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'skate',
+        loadedIntent: 'skate',
+        items: [{ id: 3, tier: 'A' }],
+      }),
+      'items'
+    );
+  });
+});
+
 describe('formatSortCaption во время загрузки (TASK-095)', () => {
   it('пока идёт запрос, подпись не объявляет пустой результат', () => {
     const { formatSortCaption } = loadModel();
     assert.equal(formatSortCaption({ total: 0, items: [], intent: 'skate', loading: true }), 'Ищем катки…');
     assert.equal(formatSortCaption({ total: 0, items: [], intent: 'coach', loading: true }), 'Ищем тренеров…');
+  });
+
+  it('смена линзы не оставляет подпись «N катков» над скелетоном тренеров', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(
+      formatSortCaption({
+        total: 4,
+        items: [{ tier: 'A' }],
+        intent: 'coach',
+        loadedIntent: 'skate',
+        loading: true,
+      }),
+      'Ищем тренеров…'
+    );
   });
 
   it('после ответа пустой результат называется своим именем', () => {

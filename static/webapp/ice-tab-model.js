@@ -286,10 +286,12 @@
   function trainerPhotoUrl(item) {
     var photos = (item && item.photos) || [];
     var ph = photos[0] || {};
-    if (ph.list_url) return ph.list_url;
-    if (ph.url) return ph.url;
+    // Same-origin proxy first: public R2 CDN 404s while /api/public/photos works
+    // (trainer profile already prefers file_key for this reason).
     var fk = ph.file_key_list || ph.file_key;
     if (fk) return '/api/public/photos/' + encodeURIComponent(fk);
+    if (ph.list_url) return ph.list_url;
+    if (ph.url) return ph.url;
     if (item && item.thumb) return item.thumb;
     return '';
   }
@@ -656,14 +658,34 @@
     };
   }
 
+  /**
+   * How the Ice list should paint. Items from the previous lens must not be
+   * re-skinned as the other card (wide skate board → compact trainer row).
+   */
+  function listPaintMode(opts) {
+    opts = opts || {};
+    var intent = coerceIntent(opts.intent);
+    var items = opts.items || [];
+    var loading = !!opts.loading;
+    var loaded = opts.loadedIntent ? coerceIntent(opts.loadedIntent) : null;
+    var wrongLens = !!(loaded && loaded !== intent);
+    if (wrongLens) return 'skeleton';
+    if (loading && !items.length) return 'skeleton';
+    if (!items.length) return 'empty';
+    return 'items';
+  }
+
   function formatSortCaption(opts) {
     opts = opts || {};
     var total = Number(opts.total);
     if (isNaN(total)) total = (opts.items || []).length;
+    var intent = coerceIntent(opts.intent);
+    var loaded = opts.loadedIntent ? coerceIntent(opts.loadedIntent) : null;
+    var wrongLens = !!(loaded && loaded !== intent);
     // TASK-095: пока данных нет, «Пока нет катков» — не пустое состояние, а ложь
     // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
-    if (opts.loading && !total) {
-      return opts.intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
+    if ((opts.loading && !total) || wrongLens) {
+      return intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
     }
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
@@ -782,6 +804,7 @@
     formatEmptyList: formatEmptyList,
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
+    listPaintMode: listPaintMode,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,

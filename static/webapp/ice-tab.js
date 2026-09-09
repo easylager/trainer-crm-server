@@ -21,8 +21,10 @@
     total: 0,
     cursor: null,
     loading: false,
+    loadedIntent: null,
   };
   var searchTimer = null;
+  var fetchGen = 0;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -364,19 +366,26 @@
         total: state.total,
         items: state.items,
         intent: state.intent,
+        loadedIntent: state.loadedIntent,
         serviceLabel: currentServiceLabel(),
         loading: state.loading,
       });
     }
     setShareButton();
     if (!list) return;
-    if (state.loading && !state.items.length) {
+    var paint = M.listPaintMode({
+      intent: state.intent,
+      loadedIntent: state.loadedIntent,
+      items: state.items,
+      loading: state.loading,
+    });
+    if (paint === 'skeleton') {
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
       // Текстовая строка обещала одну форму, а приходила совсем другая.
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
       return;
     }
-    if (!state.items.length) {
+    if (paint === 'empty') {
       var city = cityFromState(state.cityId) || {};
       var empty = M.formatEmptyList(state.intent, {
         serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
@@ -617,10 +626,28 @@
     );
   }
 
+  function beginListFetch(lens) {
+    fetchGen += 1;
+    var gen = fetchGen;
+    state.loading = true;
+    if (state.loadedIntent !== lens) {
+      state.items = [];
+      state.total = 0;
+      state.loadedIntent = null;
+    }
+    renderList();
+    return gen;
+  }
+
+  function isCurrentFetch(gen, lens) {
+    if (gen !== fetchGen) return false;
+    if (lens === 'coach') return state.intent === 'coach';
+    return state.intent !== 'coach';
+  }
+
   function loadArenas() {
     if (!state.cityId) return Promise.resolve();
-    state.loading = true;
-    renderList();
+    var gen = beginListFetch('skate');
     var url = M.buildListUrl({
       cityId: state.cityId,
       intent: state.intent,
@@ -628,14 +655,17 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!isCurrentFetch(gen, 'skate')) return;
         state.loading = false;
         applyArenaPayload(data);
+        state.loadedIntent = 'skate';
         if (state.intent === 'skate' && !state.items.length) {
           return maybeOpenTrainersWhenNoSkate();
         }
         onListLoaded();
       })
       .catch(function () {
+        if (!isCurrentFetch(gen, 'skate')) return;
         state.loading = false;
         loadFailed();
       });
@@ -643,8 +673,7 @@
 
   function loadTrainers() {
     if (!state.cityId) return Promise.resolve();
-    state.loading = true;
-    renderList();
+    var gen = beginListFetch('coach');
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
       serviceId: state.serviceId,
@@ -652,11 +681,14 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         applyTrainerPayload(data);
+        state.loadedIntent = 'coach';
         onListLoaded();
       })
       .catch(function () {
+        if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         loadFailed();
       });
