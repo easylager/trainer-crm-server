@@ -27,6 +27,7 @@ from src.api.routes import (
     webhooks_router,
 )
 from src.api.routes.public_arenas import router as public_arenas_router
+from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
 from src.application.landing_manifest import inject_landing_html
@@ -1607,6 +1608,7 @@ async def health():
 
 app.include_router(public_router)
 app.include_router(public_arenas_router)
+app.include_router(public_ice_page_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)

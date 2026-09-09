@@ -956,3 +956,23 @@ body.ar-pilot--ice .client-app-header {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
 }
+
+/*
+ * TASK-096 (G-P5): «Поделиться расписанием» — единственный шеринг-артефакт вкладки.
+ *
+ * Класс только про геометрию: краски, радиус и состояния берутся у .btn-neutral из
+ * mini-app-components.css. Собственная кнопка здесь означала бы третий вид вторичной
+ * кнопки в клиентском приложении при двух уже существующих.
+ */
+.ice-share {
+  margin-top: var(--app-space-4);
+}
+
+.ice-share[hidden] {
+  display: none;
+}
+
+.ice-share__icon {
+  font-size: var(--app-text-body);
+  line-height: 1;
+}

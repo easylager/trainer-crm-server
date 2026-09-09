@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609082" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609092" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
   <script src="ice-tab-model.js?v=202609082"></script>
@@ -73,6 +73,15 @@
     <div class="ice-sec" id="iceListSec">
       <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
       <div class="ice-list" id="iceList"></div>
+      <!--
+        TASK-096 (G-P5): шеринг-артефакт №1. Кнопка стоит ПОД списком, а не в шапке —
+        поделиться расписанием хочется после того, как его просмотрел, и первый экран
+        по-прежнему принадлежит товару (G-P3).
+      -->
+      <button type="button" class="btn-neutral btn-block ice-share" id="iceShareBtn" hidden>
+        <span class="ice-share__icon" aria-hidden="true">↗</span>
+        <span class="ice-share__label" id="iceShareLabel">Поделиться расписанием</span>
+      </button>
     </div>
     <div class="ice-map-wrap" id="iceMapSec" hidden>
       <div class="ice-map-empty" id="iceMapEmpty" hidden></div>
@@ -127,6 +136,6 @@
   </button>
 
   <script src="ice-map.js?v=202609091"></script>
-  <script src="ice-tab.js?v=202609091"></script>
+  <script src="ice-tab.js?v=202609092"></script>
 </body>
 </html>

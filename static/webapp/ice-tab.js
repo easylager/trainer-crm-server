@@ -355,6 +355,7 @@
         loading: state.loading,
       });
     }
+    setShareButton();
     if (!list) return;
     if (state.loading && !state.items.length) {
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
@@ -374,6 +375,73 @@
         return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
+  }
+
+  /**
+   * TASK-096 (G-P5). Кнопка видна только там, где есть что переслать: город выбран,
+   * намерение «покататься», список не пуст и не грузится. Артефакт — расписание
+   * массовых катаний города; для «тренеров» его не существует, а шеринг тренера уже
+   * живёт в четырёх других точках.
+   */
+  function shareAvailable() {
+    return !!(
+      state.cityId &&
+      state.intent === 'skate' &&
+      !state.loading &&
+      state.items.length
+    );
+  }
+
+  function setShareButton() {
+    var btn = $('iceShareBtn');
+    if (!btn) return;
+    var show = shareAvailable();
+    btn.hidden = !show;
+    if (!show) return;
+    var label = $('iceShareLabel');
+    if (label) {
+      label.textContent = state.cityName
+        ? 'Поделиться расписанием — ' + state.cityName
+        : 'Поделиться расписанием';
+    }
+    btn.setAttribute(
+      'aria-label',
+      state.cityName
+        ? 'Поделиться расписанием катков: ' + state.cityName
+        : 'Поделиться расписанием катков'
+    );
+  }
+
+  function openIceShareDialog() {
+    if (!state.cityId) return;
+    var btn = $('iceShareBtn');
+    if (btn) btn.disabled = true;
+    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
+      .then(function (data) {
+        if (!data) return;
+        var shareUrl = String(data.share_url || '').trim();
+        var shareBody = String(data.share_body || '').trim();
+        var shareText = String(data.share_text || '').trim();
+        if (!shareUrl && !shareText) return;
+        if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
+          global.openTelegramShareUrlFromMiniApp({
+            shareUrl: shareUrl,
+            shareBody: shareBody,
+            fullMessage: shareText,
+          });
+          return;
+        }
+        var href = shareUrl
+          ? 'https://t.me/share/url?url=' +
+            encodeURIComponent(shareUrl) +
+            (shareBody ? '&text=' + encodeURIComponent(shareBody) : '')
+          : 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
+        global.location.href = href;
+      })
+      .catch(function () {})
+      .then(function () {
+        if (btn) btn.disabled = false;
+      });
   }
 
   /**
@@ -896,6 +964,11 @@
       viewSwitch.addEventListener('click', function () {
         setView(mapViewActive() ? 'list' : 'map');
       });
+    }
+
+    var shareBtn = $('iceShareBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', openIceShareDialog);
     }
 
     var search = $('iceSearchInput');
