@@ -94,3 +94,52 @@ def test_placeholder_is_a_designed_object() -> None:
     # Сбой загрузки фото ведёт к тому же плейсхолдеру, что и его отсутствие.
     assert "tcard__media--empty" in js
     assert "initials(name)" in js
+
+
+# ─── TASK-104: компактный вариант для карусели хаба ──────────────────────────
+
+
+def test_compact_is_a_modifier_not_a_second_component() -> None:
+    """TASK-104 AC-003: вариант живёт в файле компонента, второй копии не появилось.
+
+    Ровно та ошибка, которую чинила TASK-092: удобнее всего «просто дописать
+    карточку поменьше» рядом, в mini-app-client-home.css. Через месяц копии
+    разойдутся так же бесшумно, как разошлись прошлые.
+    """
+    card_css = (_WEBAPP / "mini-app-trainer-card.css").read_text(encoding="utf-8")
+    home_css = _code_only((_WEBAPP / "mini-app-client-home.css").read_text(encoding="utf-8"))
+    assert ".tcard--compact" in card_css
+    assert ".tcard--compact" not in home_css, "вариант карточки уехал из компонента"
+
+
+def test_compact_only_narrows_geometry() -> None:
+    """TASK-104 AC-004: компактность достигнута пропорциями, а не обрезанием.
+
+    Запрет на ellipsis/line-clamp проверяется выше по всему файлу и потому
+    покрывает и вариант. Здесь фиксируется вторая половина правила компонента:
+    факт, который не помещается, убирается целиком — арена скрыта, а не урезана.
+    """
+    card_css = _code_only((_WEBAPP / "mini-app-trainer-card.css").read_text(encoding="utf-8"))
+    compact = card_css.split(".tcard--compact")[1].split("}")[0]
+    assert "width: 168px" in compact
+    where_rule = card_css.split(".tcard--compact .tcard__where")[1].split("}")[0]
+    assert "display: none" in where_rule
+
+
+def test_hub_carousel_uses_the_compact_variant() -> None:
+    """TASK-104 AC-001: карусель хаба просит именно компактный вид."""
+    js = _code_only((_WEBAPP / "client-home-main.js").read_text(encoding="utf-8"))
+    assert 'class="tcard tcard--compact"' in js
+
+
+def test_ice_list_is_untouched_by_the_variant() -> None:
+    """TASK-104 AC-002: список «Льда» рисует свой компонент и вариантом не задет.
+
+    Список использует .ice-acard, а не .tcard — поэтому «не изменился» здесь не
+    вопрос аккуратности правки, а свойство структуры. Тест держит это свойство:
+    если однажды список переведут на .tcard, эта проверка потребует осознанного
+    решения, а не тихо разрешит компактный вид там, где он не задуман.
+    """
+    ice_js = _code_only((_WEBAPP / "ice-tab.js").read_text(encoding="utf-8"))
+    assert "tcard--compact" not in ice_js
+    assert "ice-acard" in ice_js

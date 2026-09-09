@@ -1278,8 +1278,12 @@
         var services = (t && Array.isArray(t.services)) ? t.services : [];
         var svcHtml = hubDiscoveryServiceChips(services);
         var tidStr = esc(String((t && t.id) || ''));
+        // TASK-104: карусель хаба берёт компактный вариант компонента. Витринные
+        // пропорции родные для списка «Льда», где карточка — главный объект экрана;
+        // здесь тренеры — один блок из нескольких, и 380px съедали больше половины
+        // полезной высоты у клиента, который ещё никого не выбрал.
         return (
-          '<button type="button" class="tcard" data-tid="' + tidStr + '">' +
+          '<button type="button" class="tcard tcard--compact" data-tid="' + tidStr + '">' +
             mediaHtml +
             '<div class="tcard__body">' +
               '<div class="tcard__name">' + esc(name) + '</div>' +
