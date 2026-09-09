@@ -1,26 +1,27 @@
 """Regional (non-Minsk) BY ice arenas: cities + arenas + arena_profiles skeleton.
 
 Source of facts: `.ai/data/by-arenas-prod.csv` (read-only prod census dump — names,
-addresses, coordinates only; no client/business data). This script never touches
-prod: it only writes to a local dev/test Postgres, and only after `--apply`.
+addresses, coordinates only; no client/business data). This script writes to local
+dev/test Postgres after `--apply`. Cloud/Railway needs `--apply --i-know-this-is-prod`.
 
 Arena ids are chosen to match the prod census (and therefore the existing
 `.ai/data/fixtures/*/expected.json` + `.ai/parsers/*.md` specs) so fixtures, tests
 and seed data all reference the same arena_id. Safe: none of these ids collide
 with the current local dev DB (checked before insert).
 
-Default is dry-run. ``--apply`` writes to a local test/dev DB only — never production.
+Default is dry-run. ``--apply`` writes to a local test/dev DB.
+Cloud/Railway requires ``--apply --i-know-this-is-prod``.
 
 Usage:
   PYTHONPATH=. python scripts/seed_regional_arenas.py
   PYTHONPATH=. python scripts/seed_regional_arenas.py --apply
+  PYTHONPATH=. python scripts/seed_regional_arenas.py --apply --i-know-this-is-prod
 """
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -30,33 +31,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from src.shared.config import Settings
-
-LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"})
-CLOUD_DB_MARKERS = (
-    "railway", "supabase", "neon.tech", "amazonaws.com", "azure", "render.com",
-    "onrender.com", "planetscale", "digitalocean", "prod.", "production",
+from src.shared.ops_db_guard import (
+    add_i_know_this_is_prod_argument,
+    assert_database_url,
+    warn_prod_ack,
 )
-ALLOWED_APPLY_DB_NAMES = frozenset({"trainer_crm_test", "trainer_crm"})
 
 
-class ProdDatabaseError(RuntimeError):
-    pass
-
-
-def _assert_local_database(url: str, *, apply: bool) -> None:
-    parsed = urlparse(url.replace("postgresql+asyncpg://", "postgresql://", 1))
-    host = (parsed.hostname or "").lower()
-    haystack = f"{host} {url.lower()}"
-    if any(marker in haystack for marker in CLOUD_DB_MARKERS):
-        raise ProdDatabaseError(f"refusing cloud/prod database host {host!r}")
-    local_ok = host in LOCAL_DB_HOSTS or (host.startswith("127.") and host.count(".") == 3)
-    if not local_ok:
-        raise ProdDatabaseError(f"refusing non-local database host {host!r}")
-    if not apply:
-        return
-    dbname = (parsed.path or "").lstrip("/").split("?")[0]
-    if dbname not in ALLOWED_APPLY_DB_NAMES:
-        raise ProdDatabaseError(f"apply is limited to {sorted(ALLOWED_APPLY_DB_NAMES)}, got {dbname!r}")
+def _assert_local_database(url: str, *, apply: bool, allow_prod: bool = False) -> None:
+    assert_database_url(url, apply=apply, allow_prod=allow_prod)
 
 
 # (city_name, sort_order) — new cities beyond the 4 already seeded locally (Минск, Гомель, Москва/МО, СПб).
@@ -115,12 +98,14 @@ def _print_plan() -> None:
         print(f"  arena_id={arena_id:>3} [{flag:12}] {city} — {name} (slug={slug})")
 
 
-def run(*, apply: bool) -> None:
+def run(*, apply: bool, allow_prod: bool = False) -> None:
     url = _database_url()
-    _assert_local_database(url, apply=apply)
+    _assert_local_database(url, apply=apply, allow_prod=allow_prod)
+    if allow_prod:
+        warn_prod_ack()
     if not apply:
         _print_plan()
-        print("\nDry-run only. Re-run with --apply to write to the local DB.")
+        print("\nDry-run only. Re-run with --apply to write.")
         return
 
     engine = create_engine(url)
@@ -188,8 +173,9 @@ def run(*, apply: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
+    add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
-    run(apply=args.apply)
+    run(apply=args.apply, allow_prod=args.i_know_this_is_prod)
 
 
 if __name__ == "__main__":

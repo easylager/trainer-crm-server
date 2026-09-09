@@ -18,18 +18,6 @@ _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _ROOT / "scripts" / "load_minsk_arena_cards.py"
 _CARDS = _ROOT / "data" / "arena-cards"
 
-EXPECTED_IDS = {
-    "minskarena": 2,
-    "zamok": 3,
-    "ledlife": 4,
-    "minsk-ledlife": 4,
-    "ledby": 5,
-    "chizhovka": 6,
-    "minsk-diamond": 7,
-    "minsk-junost": 8,
-    "konkobezhnaya-arena": 115,
-}
-
 
 def _load_mod():
     spec = importlib.util.spec_from_file_location("load_minsk_arena_cards", _SCRIPT)
@@ -52,8 +40,8 @@ def cards(loader):
     return {card.slug: card for card in parsed}
 
 
-def test_dry_run_parses_all_seven_dossiers(cards) -> None:
-    assert len(cards) == 8
+def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
+    assert len(cards) == len(loader.TARGET_ARENA_IDS)
     by_id = {card.arena_id: card.slug for card in cards.values()}
     assert by_id[2] == "minskarena"
     assert by_id[3] == "zamok"
@@ -63,8 +51,10 @@ def test_dry_run_parses_all_seven_dossiers(cards) -> None:
     assert by_id[8] == "minsk-junost"
     assert by_id[4] == "minsk-ledlife"
     assert by_id[115] == "konkobezhnaya-arena"
+    assert by_id[38] == "bobruisk-arena"
+    assert by_id[41] == "ostrovets-lds"
     for card in cards.values():
-        assert card.arena_id in EXPECTED_IDS.values()
+        assert card.arena_id in loader.TARGET_ARENA_IDS
         assert card.enough_facts
         assert card.status == "published"
 
@@ -293,6 +283,11 @@ def test_refuses_production_database_url(loader) -> None:
         "postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm",
         apply=True,
         allow_local_dev=True,
+    )
+    loader.assert_local_database_url(
+        "postgresql://u:p@postgres.railway.internal:5432/railway",
+        apply=True,
+        allow_prod=True,
     )
 
 

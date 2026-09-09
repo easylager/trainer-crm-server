@@ -46,15 +46,37 @@ def test_refuses_cloud_and_non_local_database(runner) -> None:
         runner._assert_local_database(
             "postgresql://trainer_crm:x@localhost:5432/postgres", apply=True
         )
+    runner._assert_local_database(
+        "postgresql://u:p@postgres.railway.internal:5432/railway",
+        apply=True,
+        allow_prod=True,
+    )
 
 
-def test_one_shot_only_bumps_merged_minsk_mk_keys(runner) -> None:
+def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
     assert "junost_origin_html_v1" not in runner.MINSK_MK_PARSER_KEYS
     assert "ledlife_origin_html_v1" not in runner.MINSK_MK_PARSER_KEYS
     assert runner.MINSK_MK_PARSER_KEYS == {
         "minskarena_saleframe_v1",
         "zamok_html_v1",
         "chizhovka_html_v1",
+        "brest_lds_v1",
+        "baranovichi_lds_v1",
+        "kobrin_lds_v1",
+        "pinsk_volna_v1",
+        "grodno_triniti_v1",
+        "grodno_neman_v1",
+        "lida_lds_v1",
+        "novopolotsk_lds_v1",
+        "vitebsk_ds_v1",
+        "mogilev_ds_v1",
+        "orsha_arena_v1",
+        "gorki_lds_v1",
+        "ostrovets_lds_v1",
+        "bobruisk_arena_v1",
+        "soligorsk_szk_v1",
+        "shklov_arena_v1",
+        "gomel_lds_v1",
         "ledby_html_v1",
         "diamond_html_v1",
         "minskarena_speed_oval_v1",

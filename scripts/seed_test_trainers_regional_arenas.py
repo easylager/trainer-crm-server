@@ -21,7 +21,6 @@ import argparse
 import sys
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -31,33 +30,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from src.shared.config import Settings
-
-LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"})
-CLOUD_DB_MARKERS = (
-    "railway", "supabase", "neon.tech", "amazonaws.com", "azure", "render.com",
-    "onrender.com", "planetscale", "digitalocean", "prod.", "production",
-)
-ALLOWED_APPLY_DB_NAMES = frozenset({"trainer_crm_test", "trainer_crm"})
-
-
-class ProdDatabaseError(RuntimeError):
-    pass
+from src.shared.ops_db_guard import assert_database_url
 
 
 def _assert_local_database(url: str, *, apply: bool) -> None:
-    parsed = urlparse(url.replace("postgresql+asyncpg://", "postgresql://", 1))
-    host = (parsed.hostname or "").lower()
-    haystack = f"{host} {url.lower()}"
-    if any(marker in haystack for marker in CLOUD_DB_MARKERS):
-        raise ProdDatabaseError(f"refusing cloud/prod database host {host!r}")
-    local_ok = host in LOCAL_DB_HOSTS or (host.startswith("127.") and host.count(".") == 3)
-    if not local_ok:
-        raise ProdDatabaseError(f"refusing non-local database host {host!r}")
-    if not apply:
-        return
-    dbname = (parsed.path or "").lstrip("/").split("?")[0]
-    if dbname not in ALLOWED_APPLY_DB_NAMES:
-        raise ProdDatabaseError(f"apply is limited to {sorted(ALLOWED_APPLY_DB_NAMES)}, got {dbname!r}")
+    assert_database_url(url, apply=apply)
 
 
 TOMORROW = date(2026, 9, 8)  # matches the live ice_sessions already ingested for 2026-09-07/08

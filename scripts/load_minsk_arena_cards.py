@@ -1,11 +1,13 @@
 """TASK-063: load verified Minsk MK dossiers into arena_profiles (ops, not research).
 
-Default is dry-run. ``--apply`` writes to a local test DB only — never production.
+Default is dry-run. ``--apply`` writes to a local test DB.
+Cloud/Railway requires ``--apply --i-know-this-is-prod`` (and configured S3).
 
 Usage:
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply
   PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply --report data/arena-cards/TASK-063-load-report.md
+  PYTHONPATH=. python scripts/load_minsk_arena_cards.py --apply --i-know-this-is-prod --no-seed-sessions
 
 Photos: official rink site/socials and local dossier files are would-upload / uploaded on
 ``--apply`` for demo (EPIC3 2026-09-06: verbal OK is enough). ``license`` must be
@@ -40,6 +42,13 @@ except ImportError:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from src.shared.ops_db_guard import (
+    ProdDatabaseError,
+    add_i_know_this_is_prod_argument,
+    assert_database_url,
+    warn_prod_ack,
+)
 
 SOURCE_ETALON = "etalon_073"
 TARGET_ARENA_IDS = (
@@ -109,26 +118,6 @@ SLUG_FIXTURE_DIRS = {
     "konkobezhnaya-arena": ("minsk-speed-oval",),
     "minsk-speed-oval": ("minsk-speed-oval",),
 }
-LOCAL_DB_HOSTS = frozenset(
-    {"localhost", "127.0.0.1", "::1", "postgres", "db", "host.docker.internal"}
-)
-CLOUD_DB_MARKERS = (
-    "railway",
-    "supabase",
-    "neon.tech",
-    "amazonaws.com",
-    "azure",
-    "render.com",
-    "onrender.com",
-    "planetscale",
-    "digitalocean",
-    "prod.",
-    "production",
-)
-
-
-class ProdDatabaseError(RuntimeError):
-    """Refuses writes (and apply) against a non-local / production-looking URL."""
 
 
 @dataclass
@@ -651,35 +640,21 @@ def _parse_hhmm(value: str) -> dt_time:
     return parse_hhmm(value)
 
 
-def _normalize_db_url(url: str) -> str:
-    raw = url.strip()
-    for prefix in ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://"):
-        if raw.startswith(prefix):
-            return "postgresql://" + raw[len(prefix) :]
-    return raw
-
-
-def assert_local_database_url(url: str, *, apply: bool, allow_local_dev: bool = False) -> None:
-    parsed = urlparse(_normalize_db_url(url))
-    host = (parsed.hostname or "").lower()
-    dbname = (parsed.path or "").lstrip("/").split("?")[0]
-    haystack = f"{host} {url.lower()}"
-    if any(marker in haystack for marker in CLOUD_DB_MARKERS):
-        raise ProdDatabaseError(
-            f"refusing DATABASE_URL host that looks like production/cloud ({host!r})"
-        )
-    local_ok = host in LOCAL_DB_HOSTS or (host.startswith("127.") and host.count(".") == 3)
-    if not local_ok:
-        raise ProdDatabaseError(f"refusing non-local DATABASE_URL host {host!r}")
-    if not apply:
-        return
-    if dbname == "trainer_crm_test":
-        return
-    if dbname == "trainer_crm" and allow_local_dev:
-        return
-    raise ProdDatabaseError(
-        f"apply requires database trainer_crm_test (got {dbname!r}). "
-        "Pass --allow-local-dev-db only for a clearly local trainer_crm, never prod."
+def assert_local_database_url(
+    url: str,
+    *,
+    apply: bool,
+    allow_local_dev: bool = False,
+    allow_prod: bool = False,
+) -> None:
+    names = {"trainer_crm_test"}
+    if allow_local_dev:
+        names.add("trainer_crm")
+    assert_database_url(
+        url,
+        apply=apply,
+        allow_prod=allow_prod,
+        allowed_apply_db_names=frozenset(names),
     )
 
 
@@ -1196,6 +1171,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow --apply against local database name trainer_crm (still refuses cloud/prod hosts).",
     )
+    add_i_know_this_is_prod_argument(parser)
     parser.add_argument(
         "--only-arena-ids",
         default=None,
@@ -1208,7 +1184,14 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.apply:
         db_url = resolve_database_url()
-        assert_local_database_url(db_url, apply=True, allow_local_dev=args.allow_local_dev_db)
+        assert_local_database_url(
+            db_url,
+            apply=True,
+            allow_local_dev=args.allow_local_dev_db,
+            allow_prod=args.i_know_this_is_prod,
+        )
+        if args.i_know_this_is_prod:
+            warn_prod_ack()
     report_path = None if args.no_report else args.report
     asyncio.run(
         run_load(
