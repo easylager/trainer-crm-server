@@ -420,7 +420,7 @@
   }
 
   document.getElementById('btnBook').onclick = function () {
-    navigateTo('catalog?tab=catalog');
+    navigateTo('ice?intent=coach');
   };
   document.getElementById('btnBookings').onclick = function () {
     navigateTo('client-bookings');

@@ -1,0 +1,674 @@
+/**
+ * TASK-054 Ice tab — in-place Yandex Maps (clusters, bbox, near-me, our sheet).
+ * Never opens a Yandex org card. OSM/Leaflet are not a fallback.
+ */
+(function (global) {
+  'use strict';
+
+  var MM = global.IceMapModel;
+  var ymapsLoad = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function loadYmaps(apiKey) {
+    if (ymapsLoad) return ymapsLoad;
+    var url = MM.scriptUrl(apiKey);
+    if (!url) {
+      return Promise.reject(new Error('no-key'));
+    }
+    ymapsLoad = new Promise(function (resolve, reject) {
+      if (global.ymaps && typeof global.ymaps.ready === 'function') {
+        global.ymaps.ready(function () {
+          resolve(global.ymaps);
+        });
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.onload = function () {
+        if (!global.ymaps || typeof global.ymaps.ready !== 'function') {
+          ymapsLoad = null;
+          reject(new Error('ymaps'));
+          return;
+        }
+        global.ymaps.ready(function () {
+          resolve(global.ymaps);
+        });
+      };
+      s.onerror = function () {
+        ymapsLoad = null;
+        reject(new Error('ymaps-load'));
+      };
+      document.head.appendChild(s);
+    });
+    return ymapsLoad;
+  }
+
+  function defaultGetKey() {
+    var fromWindow = MM.resolveApiKey({ windowKey: global.YANDEX_MAPS_JS_API_KEY });
+    if (fromWindow) return Promise.resolve(fromWindow);
+    return fetch('/api/public/ice/map-config', { cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : {};
+      })
+      .then(function (data) {
+        return MM.resolveApiKey({
+          env: { YANDEX_MAPS_JS_API_KEY: data && data.yandex_maps_js_api_key },
+        });
+      })
+      .catch(function () {
+        return '';
+      });
+  }
+
+  function liveText(item) {
+    if (global.IceTabModel && typeof global.IceTabModel.formatLiveLine === 'function') {
+      return global.IceTabModel.formatLiveLine(item);
+    }
+    return (item && item.live && item.live.text) || (item && item.live_line) || '';
+  }
+
+  function renderEmpty(el, state) {
+    if (!el) return;
+    el.hidden = false;
+    el.innerHTML =
+      '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+  }
+
+  function hideEmpty(el) {
+    if (!el) return;
+    el.hidden = true;
+    el.innerHTML = '';
+  }
+
+  function sheetHtml(item, meta, href) {
+    var tone = (global.IceTabModel && global.IceTabModel.liveTone(item)) || MM.pinView(item).tone;
+    var tier = String(item.tier || 'C').toUpperCase();
+    var thumb = item.thumb
+      ? ' style="background-image:url(\'' + esc(item.thumb).replace(/'/g, '%27') + '\')"'
+      : '';
+    var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
+    var live = liveText(item);
+    var liveHtml = live
+      ? '<span class="ice-live ice-live--' +
+        tone +
+        '"><i class="ice-live__dot"></i>' +
+        esc(live) +
+        '</span>'
+      : '';
+    return (
+      '<button type="button" class="ice-acard ice-acard--sheet" data-href="' +
+      esc(href || '') +
+      '"><span class="' +
+      phClass +
+      '"' +
+      thumb +
+      '></span><span class="ice-acard__body"><span class="ice-acard__name">' +
+      esc(item.name) +
+      '<span class="ice-tier ice-tier--' +
+      tone +
+      '">' +
+      esc(tier) +
+      '</span></span><span class="ice-acard__meta">' +
+      esc(meta) +
+      '</span>' +
+      liveHtml +
+      '</span></button>'
+    );
+  }
+
+  function mount(opts) {
+    opts = opts || {};
+    var canvas = opts.canvas;
+    var emptyEl = opts.emptyEl;
+    var sheetEl = opts.sheetEl;
+    var nearBtn = opts.nearBtn;
+    var offMapEl = opts.offMapEl;
+    var stageEl = opts.stageEl;
+    var loaderEl = opts.loaderEl;
+    var listItems = [];
+    var mapItems = [];
+    var selected = null;
+    var nearestMode = false;
+    var map = null;
+    var clusterer = null;
+    var PinLayout = null;
+    var ClusterLayout = null;
+    var ymaps = null;
+    var bboxState = null;
+    var boundsTimer = null;
+    var ignoreBounds = false;
+    var started = false;
+    var missingKey = false;
+    var keyResolved = '';
+    var userPlacemark = null;
+
+    function getIntent() {
+      return opts.getIntent ? opts.getIntent() : 'skate';
+    }
+
+    function getCityId() {
+      return opts.getCityId ? opts.getCityId() : null;
+    }
+
+    function listUrl(extra) {
+      return opts.listUrl(extra);
+    }
+
+    function fetchJson(url) {
+      return opts.fetchJson(url);
+    }
+
+    function arenaHref(item) {
+      var target = MM.pinSheetTarget(item);
+      if (target && target.href && target.yandexOrgCard === false) return target.href;
+      if (opts.arenaHref) return opts.arenaHref(item);
+      if (global.IceTabModel) return global.IceTabModel.arenaHref(item);
+      return '';
+    }
+
+    function applyIntentFilter(items) {
+      if (global.IceTabModel && typeof global.IceTabModel.filterSkateLens === 'function') {
+        return global.IceTabModel.filterSkateLens(items || [], getIntent());
+      }
+      return items || [];
+    }
+
+    /*
+     * TASK-103: лоадер живёт ровно между «начали грузить» и «на сцене что-то есть».
+     * Гасится здесь и в renderEmpty, потому что это два единственных исхода запуска:
+     * либо сцена показана, либо вместо неё пустое состояние. Держать флаг отдельно и
+     * снимать его вручную в каждой ветке start() значило бы однажды забыть ветку и
+     * оставить спиннер поверх готовой карты.
+     */
+    function setLoading(on) {
+      if (loaderEl) loaderEl.hidden = !on;
+    }
+
+    function showStage(on) {
+      if (stageEl) stageEl.hidden = !on;
+      if (nearBtn) nearBtn.hidden = !on;
+      // И «карта готова», и «вместо карты пустое состояние» одинаково означают,
+      // что ждать больше нечего. Оба исхода проходят здесь.
+      setLoading(false);
+    }
+
+    function setOffMapNote() {
+      if (!offMapEl) return;
+      var split = MM.splitMapAndList(listItems);
+      var note = MM.formatOffMapNote(split.offMapCount);
+      offMapEl.textContent = note;
+      offMapEl.hidden = !note;
+    }
+
+    function paintSheet(item, asNearest) {
+      selected = item || null;
+      nearestMode = !!asNearest;
+      if (!sheetEl) return;
+      if (!item) {
+        sheetEl.innerHTML = '';
+        return;
+      }
+      var meta = MM.formatSheetMeta(item, { nearest: asNearest });
+      if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
+      sheetEl.innerHTML = sheetHtml(item, meta, arenaHref(item));
+    }
+
+    function defaultSheet() {
+      if (selected && mapItems.some(function (it) { return it.id === selected.id; })) {
+        paintSheet(selected, nearestMode);
+        return;
+      }
+      var nearest = MM.pickNearest(mapItems.length ? mapItems : MM.splitMapAndList(listItems).onMap);
+      paintSheet(nearest, !!(nearest && nearest.distance_km != null));
+    }
+
+    function syncObjects() {
+      if (!clusterer || !ymaps) return;
+      clusterer.removeAll();
+      var marks = MM.splitMapAndList(mapItems).onMap.map(function (item) {
+        var view = MM.pinView(item);
+        var pm = new ymaps.Placemark(
+          [Number(item.latitude), Number(item.longitude)],
+          {
+            tone: view.tone,
+            label: view.label,
+            muted: view.muted,
+            arenaId: item.id,
+          },
+          {
+            iconLayout: PinLayout,
+            iconOffset: [-8, -28],
+            iconShape: {
+              type: 'Rectangle',
+              coordinates: [
+                [-70, -36],
+                [70, 6],
+              ],
+            },
+            hasBalloon: false,
+            openBalloonOnClick: false,
+            hasHint: false,
+          }
+        );
+        pm.events.add('click', function (ev) {
+          if (ev && ev.preventDefault) ev.preventDefault();
+          paintSheet(item, false);
+        });
+        return pm;
+      });
+      clusterer.add(marks);
+    }
+
+    function showCoachEmpty() {
+      listItems = [];
+      mapItems = [];
+      selected = null;
+      nearestMode = false;
+      bboxState = null;
+      if (clusterer) syncObjects();
+      paintSheet(null);
+      showStage(false);
+      if (offMapEl) {
+        offMapEl.hidden = true;
+        offMapEl.textContent = '';
+      }
+      renderEmpty(emptyEl, MM.coachMapEmptyState());
+    }
+
+    function fetchViewport() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return;
+      }
+      if (!map || !opts.listUrl) return;
+      var bbox = MM.boundsToBbox(map.getBounds());
+      if (MM.bboxExceedsCity(bbox)) {
+        applyCityCamera();
+        return;
+      }
+      var payload = MM.bboxFetchPayload({
+        bbox: bbox,
+        intent: getIntent(),
+        cityId: getCityId(),
+        limit: 50,
+      });
+      if (!payload.fetch) return;
+      var plan = MM.planBboxFetch(bboxState, payload.bbox);
+      if (!plan.fetch) return;
+      var url = listUrl({
+        bbox: payload.bbox,
+        intent: payload.intent,
+        limit: payload.limit,
+        cityId: payload.cityId != null ? payload.cityId : getCityId(),
+      });
+      if (!url) return;
+      bboxState = plan;
+      fetchJson(url).then(function (data) {
+        mapItems = applyIntentFilter((data && data.items) || []);
+        syncObjects();
+        defaultSheet();
+      });
+    }
+
+    function applyCityCamera() {
+      if (!map) return;
+      var cam = MM.cityCameraFromItems(listItems);
+      if (!cam) return;
+      ignoreBounds = true;
+      bboxState = null;
+      map.options.set('restrictMapArea', cam.restrict);
+      map.options.set('minZoom', cam.minZoom);
+      map.options.set('maxZoom', cam.maxZoom);
+      var done = function () {
+        global.setTimeout(function () {
+          ignoreBounds = false;
+          fetchViewport();
+        }, 120);
+      };
+      map.setBounds(cam.restrict, { checkZoomRange: true, zoomMargin: 72 }).then(function () {
+        var z = map.getZoom();
+        if (z < cam.minZoom) map.setZoom(cam.minZoom);
+        if (z > cam.maxZoom) map.setZoom(cam.maxZoom);
+        done();
+      }, done);
+    }
+
+    function onBoundsChange() {
+      if (ignoreBounds) return;
+      global.clearTimeout(boundsTimer);
+      boundsTimer = global.setTimeout(fetchViewport, 320);
+    }
+
+    function fitCity() {
+      applyCityCamera();
+    }
+
+    function buildLayouts() {
+      PinLayout = ymaps.templateLayoutFactory.createClass(
+        '<div class="ice-ypin ice-ypin--$[properties.tone]">' +
+          '<b class="ice-ypin__label">$[properties.label]</b>' +
+          '<i class="ice-ypin__dot"></i></div>'
+      );
+      ClusterLayout = ymaps.templateLayoutFactory.createClass(
+        '<div class="ice-ycluster">{{ properties.geoObjects.length }}</div>'
+      );
+    }
+
+    function createMap() {
+      if (map || !canvas) return;
+      buildLayouts();
+      var cam = MM.cityCameraFromItems(listItems);
+      if (!cam) return;
+      map = new ymaps.Map(
+        canvas,
+        {
+          center: cam.center,
+          zoom: cam.zoom,
+          controls: ['zoomControl'],
+        },
+        {
+          yandexMapDisablePoiInteractivity: true,
+          suppressMapOpenBlock: true,
+          suppressObsoleteBrowserNotifier: true,
+          restrictMapArea: cam.restrict,
+          minZoom: cam.minZoom,
+          maxZoom: cam.maxZoom,
+        }
+      );
+      if (map.controls && map.controls.get('zoomControl')) {
+        map.controls.get('zoomControl').options.set({ size: 'small', position: { right: 10, top: 54 } });
+      }
+      clusterer = new ymaps.Clusterer({
+        minClusterSize: 2,
+        gridSize: 64,
+        clusterDisableClickZoom: false,
+        clusterOpenBalloonOnClick: false,
+        hasBalloon: false,
+        clusterHasBalloon: false,
+        groupByCoordinates: false,
+        clusterIconLayout: ClusterLayout,
+        clusterIconOffset: [-19, -19],
+        clusterIconShape: { type: 'Circle', coordinates: [0, 0], radius: 19 },
+      });
+      clusterer.options.set({ hasBalloon: false, clusterOpenBalloonOnClick: false });
+      map.geoObjects.add(clusterer);
+      map.events.add('boundschange', onBoundsChange);
+    }
+
+    function showMissing() {
+      showStage(false);
+      renderEmpty(emptyEl, MM.missingKeyState());
+    }
+
+    function start() {
+      if (getIntent() === 'coach') {
+        showCoachEmpty();
+        return Promise.resolve();
+      }
+      if (missingKey) {
+        showMissing();
+        return Promise.resolve();
+      }
+      if (map) {
+        var existing = MM.mapStartDecision({
+          key: keyResolved || 'live',
+          listItems: listItems,
+          intent: getIntent(),
+        });
+        if (existing.kind === 'coach') {
+          showCoachEmpty();
+          return Promise.resolve();
+        }
+        if (existing.kind === 'no-arenas') {
+          if (typeof opts.listReady === 'function' && !opts.listReady()) {
+            showStage(false);
+            hideEmpty(emptyEl);
+            mapItems = [];
+            selected = null;
+            if (clusterer) syncObjects();
+            paintSheet(null);
+            return Promise.resolve();
+          }
+          showStage(false);
+          renderEmpty(emptyEl, existing.empty);
+          mapItems = [];
+          selected = null;
+          if (clusterer) syncObjects();
+          paintSheet(null);
+          return Promise.resolve();
+        }
+        hideEmpty(emptyEl);
+        showStage(true);
+        map.container.fitToViewport();
+        mapItems = MM.splitMapAndList(listItems).onMap.slice();
+        syncObjects();
+        applyCityCamera();
+        return Promise.resolve();
+      }
+      var getKey = opts.getKey || defaultGetKey;
+      return Promise.resolve(keyResolved || getKey())
+        .then(function (key) {
+          var resolved = keyResolved || MM.resolveApiKey({ key: key });
+          if (!resolved) {
+            missingKey = true;
+            showMissing();
+            return;
+          }
+          keyResolved = resolved;
+          started = true;
+          var decision = MM.mapStartDecision({
+            key: resolved,
+            listItems: listItems,
+            intent: getIntent(),
+          });
+          if (decision.kind === 'missing-key') {
+            missingKey = true;
+            showMissing();
+            return;
+          }
+          if (decision.kind === 'coach') {
+            showCoachEmpty();
+            return;
+          }
+          if (decision.kind === 'no-arenas') {
+            if (typeof opts.listReady === 'function' && !opts.listReady()) {
+              return;
+            }
+            showStage(false);
+            renderEmpty(emptyEl, decision.empty);
+            if (sheetEl) sheetEl.innerHTML = '';
+            return;
+          }
+          // Единственная по-настоящему долгая ветка: тянем SDK Яндекса по сети.
+          // Всё выше решается синхронно и лоадера не заслуживает.
+          setLoading(true);
+          return loadYmaps(resolved).then(function (api) {
+            ymaps = api;
+            hideEmpty(emptyEl);
+            showStage(true);
+            createMap();
+            if (map && map.container && typeof map.container.fitToViewport === 'function') {
+              map.container.fitToViewport();
+            }
+            mapItems = MM.splitMapAndList(listItems).onMap.slice();
+            syncObjects();
+            fitCity();
+          });
+        })
+        .catch(function () {
+          showMissing();
+        });
+    }
+
+    function onNearClick() {
+      if (getIntent() === 'coach') return;
+      if (!nearMePolicyOk()) return;
+      if (!navigator.geolocation) {
+        paintGeoDenied();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          var lat = pos.coords.latitude;
+          var lon = pos.coords.longitude;
+          var near = lat + ',' + lon;
+          var extra = { near: near, intent: getIntent(), limit: 50 };
+          var cityId = getCityId();
+          if (cityId != null) extra.cityId = cityId;
+          fetchJson(listUrl(extra)).then(function (data) {
+            var items = applyIntentFilter((data && data.items) || []);
+            if (typeof opts.onNearList === 'function') opts.onNearList({ items: items, total: items.length });
+            listItems = items.length ? items : listItems;
+            var mapped = MM.splitMapAndList(items).onMap;
+            if (!mapped.length) {
+              paintGeoNote(MM.noArenasNearState());
+              return;
+            }
+            hideEmpty(emptyEl);
+            mapItems = mapped;
+            var nearest = MM.pickNearest(mapped);
+            syncObjects();
+            paintSheet(nearest, true);
+            setOffMapNote();
+            if (map) {
+              ignoreBounds = true;
+              map.setCenter([lat, lon], 13);
+              if (ymaps) {
+                if (userPlacemark) map.geoObjects.remove(userPlacemark);
+                userPlacemark = new ymaps.Placemark(
+                  [lat, lon],
+                  {},
+                  { preset: 'islands#geolocationIcon', hasBalloon: false }
+                );
+                map.geoObjects.add(userPlacemark);
+              }
+              global.setTimeout(function () {
+                ignoreBounds = false;
+              }, 200);
+            }
+          });
+        },
+        function () {
+          paintGeoDenied();
+        },
+        { timeout: 8000, maximumAge: 30000 }
+      );
+    }
+
+    function nearMePolicyOk() {
+      return MM.nearMePolicy.geolocateOnButton && !MM.nearMePolicy.geolocateOnStart;
+    }
+
+    function paintGeoDenied() {
+      var outcome = MM.afterGeoDenied({
+        pinCount: mapItems.length,
+        sheetOpen: !!selected,
+      });
+      if (outcome.keepStage) showStage(true);
+      if (outcome.keepSheet && selected) {
+        if (offMapEl) {
+          offMapEl.hidden = false;
+          offMapEl.textContent = outcome.body;
+        }
+        return;
+      }
+      paintGeoNote(outcome);
+    }
+
+    function paintGeoNote(state) {
+      if (!sheetEl) return;
+      sheetEl.innerHTML =
+        '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+    }
+
+    if (nearBtn && nearMePolicyOk()) {
+      nearBtn.addEventListener('click', onNearClick);
+    }
+
+    if (sheetEl) {
+      sheetEl.addEventListener('click', function (ev) {
+        var card = ev.target.closest('[data-href]');
+        if (!card) return;
+        var href = card.getAttribute('data-href') || '';
+        if (!href) return;
+        if (typeof opts.onOpenArena === 'function') {
+          opts.onOpenArena(selected, href);
+        }
+      });
+    }
+
+    return {
+      start: start,
+      leaveCity: function () {
+        bboxState = null;
+        listItems = [];
+        mapItems = [];
+        selected = null;
+        nearestMode = false;
+        if (clusterer) syncObjects();
+        paintSheet(null);
+        showStage(false);
+        hideEmpty(emptyEl);
+      },
+      setListItems: function (items) {
+        listItems = items || [];
+        setOffMapNote();
+        if (getIntent() === 'coach') return;
+        var decision = MM.mapStartDecision({
+          key: keyResolved || 'live',
+          listItems: listItems,
+          intent: getIntent(),
+        });
+        if (decision.kind === 'no-arenas') {
+          if (typeof opts.listReady === 'function' && !opts.listReady()) {
+            showStage(false);
+            hideEmpty(emptyEl);
+            if (map) {
+              mapItems = [];
+              selected = null;
+              syncObjects();
+              paintSheet(null);
+            }
+            return;
+          }
+          showStage(false);
+          renderEmpty(emptyEl, decision.empty);
+          if (map) {
+            mapItems = [];
+            selected = null;
+            syncObjects();
+            paintSheet(null);
+          }
+          return;
+        }
+        if (map) {
+          hideEmpty(emptyEl);
+          showStage(true);
+          mapItems = MM.splitMapAndList(listItems).onMap.slice();
+          syncObjects();
+          applyCityCamera();
+        }
+        if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {
+          start();
+        }
+      },
+      refresh: function () {
+        bboxState = null;
+        start();
+      },
+      resize: function () {
+        if (map) map.container.fitToViewport();
+      },
+    };
+  }
+
+  global.IceMap = { mount: mount, loadYmaps: loadYmaps };
+})(typeof window !== 'undefined' ? window : this);

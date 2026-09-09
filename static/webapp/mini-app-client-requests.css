@@ -21,8 +21,8 @@
       flex: 1;
       min-width: 0;
       margin: 0;
-      font-size: clamp(22px, 6vw, 28px);
-      font-weight: 700;
+      font-size: clamp(var(--app-text-title), 6vw, var(--app-text-display));
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.03em;
       line-height: 1.15;
       color: var(--tg-theme-text-color);
@@ -36,7 +36,7 @@
       gap: 12px;
       padding: 14px 16px;
       margin-bottom: 10px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -62,20 +62,20 @@
       min-width: 0; 
     }
     .request-card .title { 
-      font-weight: 600; 
-      font-size: 16px; 
+      font-weight: var(--app-weight-semibold); 
+      font-size: var(--app-text-lead); 
       margin-bottom: 4px; 
       line-height: 1.3;
       color: var(--tg-theme-text-color);
     }
     .request-card .meta { 
-      font-size: 13px; 
+      font-size: var(--app-text-caption); 
       color: var(--tg-theme-hint-color);
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
     }
     .request-card .arrow {
       color: var(--tg-theme-button-color);
-      font-size: 14px;
+      font-size: var(--app-icon-sm);
       opacity: 0.85;
       transition: opacity 0.2s ease;
       flex-shrink: 0;
@@ -84,21 +84,21 @@
       opacity: 1;
     }
     .screen-title {
-      font-size: clamp(20px, 5vw, 24px);
-      font-weight: 700;
+      font-size: clamp(var(--app-text-title), 5vw, var(--app-text-headline));
+      font-weight: var(--app-weight-bold);
       margin-bottom: 8px;
       font-family: var(--app-font-sans);
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
     .screen-hint { 
-      font-size: 14px; 
+      font-size: var(--app-text-body); 
       color: var(--tg-theme-hint-color); 
       margin-bottom: 16px;
       line-height: 1.5;
     }
     .detail-block { margin-bottom: 16px; }
-    .detail-value { font-size: 15px; }
+    .detail-value { font-size: var(--app-text-body); }
     #screenDetail {
       font-family: var(--app-font-sans);
     }
@@ -107,7 +107,7 @@
     }
     /* Деталь заявки: одна поверхность с карточками списка (.request-card / .bd-client), без «hero» градиента как у слота времени */
     .cr-detail-summary {
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       padding: 16px 18px;
       margin-bottom: 12px;
       background: var(--tg-theme-secondary-bg-color);
@@ -134,9 +134,9 @@
     .cr-detail-toolbar button {
       width: 44px;
       height: 44px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.14);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-card-bg);
       color: var(--tg-theme-button-color);
       cursor: pointer;
       display: flex;
@@ -159,11 +159,11 @@
     .cr-detail-toolbar button.danger {
       color: var(--app-danger);
       border-color: rgba(255, 59, 48, 0.35);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-card-bg);
     }
     .cr-detail-title {
-      font-size: clamp(20px, 5.5vw, 24px);
-      font-weight: 700;
+      font-size: clamp(var(--app-text-title), 5.5vw, var(--app-text-headline));
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.03em;
       line-height: 1.2;
       color: var(--tg-theme-text-color);
@@ -171,34 +171,34 @@
     }
     .cr-detail-date {
       margin-top: 8px;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
     }
     .cr-list-intro {
       margin: 0 0 14px;
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.14);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-hint-color);
     }
     .cr-list-intro p { margin: 0; }
     .cr-detail-section-hint {
       margin: 0 0 12px;
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-hint-color);
     }
     .trainer-card-full .tcf-next-hint {
       margin: 0 0 14px;
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.22);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
@@ -207,10 +207,10 @@
     }
     .cr-responses-empty {
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.12);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-hint-color);
     }
@@ -220,7 +220,7 @@
       gap: 12px;
       padding: 14px 16px;
       margin-bottom: 10px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -313,7 +313,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
+      font-size: var(--app-icon-md);
       color: var(--tg-theme-hint-color);
     }
     @keyframes photo-shimmer {
@@ -322,14 +322,14 @@
     }
     .responder-row .row-main { flex: 1; min-width: 0; position: relative; z-index: 1; }
     .responder-row .row-name { 
-      font-weight: 600; 
-      font-size: 16px; 
+      font-weight: var(--app-weight-semibold); 
+      font-size: var(--app-text-lead); 
       margin: 0 0 4px; 
       line-height: 1.3;
       color: var(--tg-theme-text-color);
     }
     .responder-row .row-comment { 
-      font-size: 13px; 
+      font-size: var(--app-text-caption); 
       color: var(--tg-theme-hint-color); 
       margin: 0; 
       white-space: nowrap; 
@@ -353,8 +353,8 @@
       align-items: center;
       gap: 6px;
       padding: 10px 0;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       cursor: pointer;
       border: none;
@@ -384,7 +384,7 @@
       aspect-ratio: 4/3;
       min-height: 240px;
       max-height: 320px;
-      border-radius: 0 0 20px 20px;
+      border-radius: 0 0 var(--app-radius-lg) var(--app-radius-lg);
       overflow: hidden;
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -393,7 +393,7 @@
       position: absolute;
       inset: 0;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 0 0 20px 20px;
+      border-radius: 0 0 var(--app-radius-lg) var(--app-radius-lg);
     }
     .trainer-card-full .tcf-photo-placeholder.tcf-photo-loading::after {
       content: '';
@@ -402,7 +402,7 @@
       background: none;
       background-size: 200% 100%;
       animation: photo-shimmer 1.5s ease-in-out infinite;
-      border-radius: 0 0 20px 20px;
+      border-radius: 0 0 var(--app-radius-lg) var(--app-radius-lg);
     }
     .trainer-card-full .tcf-photo {
       position: absolute;
@@ -411,7 +411,7 @@
       height: 100%;
       object-fit: cover;
       object-position: center center;
-      border-radius: 0 0 24px 24px;
+      border-radius: 0 0 var(--app-radius-xl) var(--app-radius-xl);
       background: rgba(128,128,128,0.2);
       opacity: 0;
       transition: all 0.3s ease;
@@ -432,8 +432,8 @@
       margin-bottom: 20px;
     }
     .trainer-card-full .tcf-name { 
-      font-size: 28px; 
-      font-weight: 700; 
+      font-size: var(--app-text-display); 
+      font-weight: var(--app-weight-bold); 
       margin: 0 0 12px; 
       text-align: left; 
       line-height: 1.2;
@@ -443,13 +443,13 @@
       word-break: break-word;
     }
     .trainer-card-full .tcf-comment {
-      font-size: 15px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-text-color);
       line-height: 1.5;
       margin-bottom: 20px;
       padding: 16px 50px 16px 16px;
       background: none;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border-left: 4px solid var(--tg-theme-button-color);
       text-align: left;
       position: relative;
@@ -463,7 +463,7 @@
       position: absolute;
       top: 12px;
       right: 16px;
-      font-size: 18px;
+      font-size: var(--app-text-lead);
       opacity: 0.6;
     }
     /* Stats + arenas + services: same layout as catalog.html trainer detail */
@@ -476,7 +476,7 @@
     .trainer-card-full .trainer-detail-stat {
       padding: 12px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 2px solid transparent;
       transition: border-color 0.2s ease;
       box-sizing: border-box;
@@ -485,16 +485,16 @@
       border-color: rgba(var(--accent-rgb), 0.3);
     }
     .trainer-card-full .trainer-detail-stat-label {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
       margin-bottom: 4px;
     }
     .trainer-card-full .trainer-detail-stat-value {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-text-color);
     }
     .trainer-card-full .trainer-detail-stat--arenas {
@@ -512,21 +512,21 @@
       gap: 8px;
     }
     .trainer-card-full .trainer-detail-arena-primary-name {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.35;
       color: var(--tg-theme-text-color);
     }
     .trainer-card-full .trainer-detail-arena-pill {
       flex-shrink: 0;
-      font-size: 9px;
-      font-weight: 700;
+      font-size: var(--app-text-kicker);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
       background: none;
       padding: 3px 7px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-sm);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
     }
     .trainer-card-full .trainer-detail-arena-others {
@@ -538,13 +538,13 @@
       border-left: 2px solid rgba(128, 128, 128, 0.22);
     }
     .trainer-card-full .trainer-detail-arena-secondary {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
     .trainer-card-full .trainer-detail-arena-hint {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
       margin: 10px 0 0;
@@ -557,9 +557,9 @@
       gap: 8px;
       padding: 8px 12px;
       background: none;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
+      border-radius: var(--app-radius-md);
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       margin-bottom: 16px;
     }
@@ -567,8 +567,8 @@
       margin-bottom: 20px;
     }
     .trainer-card-full .trainer-detail-services-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
@@ -578,8 +578,8 @@
       padding: 10px 14px;
       margin-bottom: 6px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 10px;
-      font-size: 14px;
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-body);
       border: 2px solid transparent;
       box-sizing: border-box;
       min-width: 0;
@@ -595,7 +595,7 @@
       gap: 10px;
     }
     .trainer-card-full .trainer-detail-service-name {
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-text-color);
       flex: 1;
       min-width: 0;
@@ -603,7 +603,7 @@
       word-break: break-word;
     }
     .trainer-card-full .trainer-detail-service-price {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       flex-shrink: 0;
       text-align: right;
@@ -611,7 +611,7 @@
     .trainer-card-full .trainer-detail-service-callout {
       margin: 0 0 18px 0;
       padding: 14px 16px 16px 18px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
       box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
@@ -625,12 +625,12 @@
       top: 10px;
       bottom: 10px;
       width: 4px;
-      border-radius: 0 4px 4px 0;
+      border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
       background: var(--tg-theme-button-color);
     }
     .trainer-card-full .trainer-detail-service-callout-kicker {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
@@ -638,8 +638,8 @@
       line-height: 1.35;
     }
     .trainer-card-full .trainer-detail-service-callout-body {
-      font-size: 15px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
@@ -647,8 +647,8 @@
       margin-bottom: 20px;
     }
     .trainer-card-full .tcf-education-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
@@ -656,13 +656,13 @@
     }
     .trainer-card-full .tcf-education-hint {
       margin: 0 0 10px;
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
     }
     .trainer-card-full .tcf-education-item {
       margin-bottom: 8px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       overflow: hidden;
@@ -686,14 +686,14 @@
       gap: 4px;
     }
     .trainer-card-full .tcf-education-summary-title {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.35;
       color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
       word-break: break-word;
     }
     .trainer-card-full .tcf-education-summary-meta {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
@@ -705,8 +705,8 @@
       margin-top: 2px;
     }
     .trainer-card-full .tcf-education-badge {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
@@ -715,7 +715,7 @@
       white-space: nowrap;
     }
     .trainer-card-full .tcf-education-chevron {
-      font-size: 12px;
+      font-size: var(--app-icon-xs);
       color: var(--tg-theme-hint-color);
       transition: transform 0.2s ease;
     }
@@ -728,14 +728,14 @@
     }
     .trainer-card-full .tcf-education-body-line {
       margin-top: 8px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
       word-break: break-word;
     }
     .trainer-card-full .tcf-education-body-line b {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
     }
     .trainer-card-full .tcf-education-docs {
       margin-top: 10px;
@@ -747,11 +747,12 @@
       display: inline-flex;
       width: 56px;
       height: 56px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
       overflow: hidden;
       border: 1px solid rgba(128, 128, 128, 0.16);
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-card-full .tcf-education-doc img {
       width: 100%;
       height: 100%;
@@ -764,28 +765,29 @@
       justify-content: center;
       min-width: 56px;
       height: 56px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
       border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 50%, transparent);
       color: var(--tg-theme-hint-color);
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       padding: 0 8px;
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-card-full .tcf-education-more {
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid rgba(128, 128, 128, 0.16);
     }
     .trainer-card-full .tcf-education-more-label {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
       margin-bottom: 6px;
     }
     .trainer-card-full .tcf-education-more-body {
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
       opacity: 0.92;
@@ -797,12 +799,12 @@
     }
     /* Left accent only — same surface as stats/services (no orange fill) */
     .trainer-card-full .tcf-desc { 
-      font-size: 15px; 
+      font-size: var(--app-text-body); 
       line-height: 1.5; 
       margin: 20px 0; 
       padding: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border-left: 4px solid var(--tg-theme-button-color);
       text-align: left;
       position: relative;
@@ -830,7 +832,7 @@
     }
     .card-wrap {
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(128, 128, 128, 0.12);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -843,7 +845,7 @@
       background: transparent;
       color: var(--tg-theme-text-color);
       font: inherit;
-      font-size: 15px;
+      font-size: var(--app-text-body);
       resize: vertical;
     }
     .card-wrap textarea::placeholder { color: var(--tg-theme-hint-color); }
@@ -851,7 +853,7 @@
       text-align: center; 
       padding: 40px 20px; 
       color: var(--tg-theme-hint-color); 
-      font-size: 15px;
+      font-size: var(--app-text-body);
       line-height: 1.6;
     }
     .error { color: var(--app-danger); }
@@ -864,12 +866,12 @@
     }
     .pagination button {
       padding: 10px 16px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 14px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
@@ -880,7 +882,7 @@
       transform: scale(0.96);
       opacity: 0.8;
     }
-    .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
+    .pagination span { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); align-self: center; }
     .action-buttons {
       display: flex;
       flex-direction: column;
@@ -919,8 +921,8 @@
       display: flex;
     }
     .reviews-modal-content {
-      background: var(--tg-theme-bg-color);
-      border-radius: 20px;
+      background: var(--app-float-bg);
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
       max-width: 500px;
@@ -936,8 +938,8 @@
       align-items: center;
     }
     .reviews-modal-title {
-      font-size: 20px;
-      font-weight: 700;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       color: var(--tg-theme-text-color);
     }
     .reviews-modal-close {
@@ -951,7 +953,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
+      font-size: var(--app-icon-md);
     }
     .reviews-modal-body {
       padding: 20px;
@@ -960,7 +962,7 @@
       padding: 16px;
       margin-bottom: 12px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border-left: 4px solid var(--tg-theme-button-color);
     }
     .review-rating {
@@ -968,17 +970,17 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 8px;
-      font-size: 14px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
     }
     .review-text {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
     .review-date {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
       margin-top: 8px;
     }

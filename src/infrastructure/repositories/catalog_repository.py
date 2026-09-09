@@ -58,7 +58,11 @@ class CatalogRepository:
                 )
             )
         else:
-            count_in_city = f"({self._SERVICE_TRAINER_COUNT_SQL} AND p.city_id = :city_id)"
+            count_in_city = (
+                f"({self._SERVICE_TRAINER_COUNT_SQL}"
+                " AND EXISTS (SELECT 1 FROM trainer_cities tc"
+                " WHERE tc.trainer_id = t.id AND tc.city_id = :city_id))"
+            )
             r = await self._session.execute(
                 text(
                     f"""
@@ -93,23 +97,36 @@ class CatalogRepository:
         Active arenas in a city with address and coords for map link.
 
         When ``service_id`` is set, each row includes ``trainer_count``: distinct active
-        catalog-visible trainers in ``city_id`` who offer that service and list the arena
-        in ``trainer_arenas`` (matches catalog arena filter semantics).
+        catalog-visible trainers who offer that service, list the arena in
+        ``trainer_arenas`` with ``is_public = true``, and have that city in
+        ``trainer_cities`` (profile city or a public arena city — not only
+        ``trainer_profiles.city_id``).
 
         ``include_unconfirmed``: trainer-created arenas start ``is_confirmed=false``
         (TASK-046) — visible to trainers of the same city (pass ``True``, e.g. the
         authenticated trainer profile screen), hidden from the public client catalog
         (default ``False``, e.g. ``GET /api/public/arenas``) until an admin confirms.
+
+        Public callers also hide ``arena_profiles.status != 'published'`` (TASK-048).
+        Missing profile is treated as published so legacy rows stay listed. ``district``
+        may be NULL — the row is still returned.
         """
-        confirmed_filter = "" if include_unconfirmed else "AND is_confirmed"
+        confirmed_filter = "" if include_unconfirmed else "AND a.is_confirmed"
+        published_filter = (
+            ""
+            if include_unconfirmed
+            else "AND (p.status IS NULL OR p.status = 'published')"
+        )
         if service_id is None:
             r = await self._session.execute(
                 text(
                     f"""
-                    SELECT id, city_id, name, sort_order, address, latitude, longitude, is_confirmed
-                    FROM arenas
-                    WHERE city_id = :cid AND is_active {confirmed_filter}
-                    ORDER BY sort_order, id
+                    SELECT a.id, a.city_id, a.name, a.sort_order, a.address,
+                           a.latitude, a.longitude, a.is_confirmed, p.district, p.slug, p.status
+                    FROM arenas a
+                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                    WHERE a.city_id = :cid AND a.is_active {confirmed_filter} {published_filter}
+                    ORDER BY a.sort_order, a.id
                     """
                 ),
                 {"cid": city_id},
@@ -124,12 +141,14 @@ class CatalogRepository:
                     "latitude": row[5],
                     "longitude": row[6],
                     "is_confirmed": bool(row[7]),
+                    "district": row[8],
+                    "slug": row[9],
+                    "status": row[10],
                 }
                 for row in r.fetchall()
             ]
 
         tw = _CATALOG_TRAINER_WHERE
-        confirmed_filter_a = "" if include_unconfirmed else "AND a.is_confirmed"
         r = await self._session.execute(
             text(
                 f"""
@@ -142,21 +161,30 @@ class CatalogRepository:
                     a.latitude,
                     a.longitude,
                     a.is_confirmed,
-                    COALESCE(cnt.trainer_count, 0) AS trainer_count
+                    COALESCE(cnt.trainer_count, 0) AS trainer_count,
+                    p.district,
+                    p.slug,
+                    p.status
                 FROM arenas a
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 LEFT JOIN (
                     SELECT ta.arena_id, COUNT(DISTINCT t.id)::int AS trainer_count
                     FROM trainer_arenas ta
                     INNER JOIN trainers t ON t.id = ta.trainer_id AND {tw}
-                    INNER JOIN trainer_profiles p
-                        ON p.trainer_id = t.id AND p.city_id = :city_id
+                    INNER JOIN trainer_profiles tp
+                        ON tp.trainer_id = t.id
                     INNER JOIN trainer_services ts
                         ON ts.trainer_id = t.id AND ts.service_id = :service_id
                     INNER JOIN arenas ar
                         ON ar.id = ta.arena_id AND ar.city_id = :city_id AND ar.is_active
+                    WHERE ta.is_public = true
+                      AND EXISTS (
+                          SELECT 1 FROM trainer_cities tc
+                          WHERE tc.trainer_id = t.id AND tc.city_id = :city_id
+                      )
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
-                WHERE a.city_id = :city_id AND a.is_active {confirmed_filter_a}
+                WHERE a.city_id = :city_id AND a.is_active {confirmed_filter} {published_filter}
                 ORDER BY COALESCE(cnt.trainer_count, 0) DESC, a.sort_order, a.id
                 """
             ),
@@ -173,6 +201,9 @@ class CatalogRepository:
                 "longitude": row[6],
                 "is_confirmed": bool(row[7]),
                 "trainer_count": int(row[8]),
+                "district": row[9],
+                "slug": row[10],
+                "status": row[11],
             }
             for row in r.fetchall()
         ]
@@ -186,7 +217,12 @@ class CatalogRepository:
                 SELECT
                     (SELECT COUNT(*) FROM trainers t WHERE {_CATALOG_TRAINER_WHERE})::int AS trainers_total,
                     (SELECT COUNT(*) FROM cities WHERE is_active)::int AS cities_count,
-                    (SELECT COUNT(*) FROM arenas WHERE is_active)::int AS arenas_count
+                    (
+                        SELECT COUNT(*) FROM arenas a
+                        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                        WHERE a.is_active AND a.is_confirmed
+                          AND (p.status IS NULL OR p.status = 'published')
+                    )::int AS arenas_count
                 """
             )
         )

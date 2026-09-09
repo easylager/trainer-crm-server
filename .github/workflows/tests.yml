@@ -3,9 +3,9 @@ name: Tests
 
 on:
   push:
-    branches: [master, main, develop, staging]
+    branches: [master, main, develop, staging, release/**]
   pull_request:
-    branches: [master, main, develop, staging]
+    branches: [master, main, develop, staging, release/**]
 
 env:
   DATABASE_URL: postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test
@@ -165,6 +165,11 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements.txt
+
+      - name: Install tesseract (Orsha / Shklov OCR parsers)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-rus
 
       - name: Install dependencies
         run: |

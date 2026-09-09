@@ -5,7 +5,7 @@ Decouples "who is logged in" (``account_telegram_id`` — the same key produced 
 a ``clients`` row). A parent managing two children's separate booking histories needs two
 ``clients`` rows and two links from their one account; today the system has only one
 ``clients`` row per Telegram account, so a second child's booking silently lands on the
-first child's history (see .ai/DECISION-multi-profile-clients.md).
+first child's history (see docs/adr/004-multi-profile-clients.md).
 
 Backfill is exact and lossless: today every ``clients.telegram_id`` maps 1:1 to its own
 row, so a ``role='self', is_default=true`` link reproduces today's resolution exactly.

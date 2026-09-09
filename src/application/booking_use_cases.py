@@ -177,15 +177,12 @@ async def _resolve_trainer_group_slot_booking_price(
     return (None, booking_price_cents, None)
 
 
-SQL_BOOKING_ARENA_DISPLAY = """COALESCE(
+BOOKING_ARENA_UNSPECIFIED_LABEL = "место уточняет тренер"
+
+SQL_BOOKING_ARENA_DISPLAY = f"""COALESCE(
     (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
     (SELECT a.name FROM arenas a WHERE a.id = s.arena_id),
-    (
-        SELECT string_agg(a.name, ', ' ORDER BY a.name)
-        FROM trainer_arenas ta
-        JOIN arenas a ON a.id = ta.arena_id
-        WHERE ta.trainer_id = b.trainer_id
-    )
+    '{BOOKING_ARENA_UNSPECIFIED_LABEL}'
 )"""
 
 # Single arena id for venue/map: booking override, then slot (fixed-venue / group), then trainer defaults.
@@ -539,6 +536,84 @@ async def resolve_service_id_for_generic_welcome_link(
     return requested_service_id, None
 
 
+async def ensure_trainer_schedule_arena_link(
+    session: AsyncSession, trainer_id: int, arena_id: int
+) -> str | None:
+    """
+    Guarantee a trainer_arenas row so EXISTS eligibility checks succeed.
+
+    Missing links are created with is_public=false (schedule-only, not vitrine).
+    Allowed only for an active arena in trainer_cities (profile city plus cities of
+    public arenas). Existing rows are left unchanged.
+
+    Returns None on success, or a Russian error string. Does not commit.
+    """
+    aid = int(arena_id)
+    r_existing = await session.execute(
+        text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+        {"tid": trainer_id, "aid": aid},
+    )
+    if r_existing.fetchone():
+        return None
+    r = await session.execute(
+        text(
+            """
+            SELECT a.is_active, a.city_id
+            FROM arenas a
+            WHERE a.id = :aid
+            """
+        ),
+        {"aid": aid},
+    )
+    row = r.fetchone()
+    if row is None:
+        return "Площадка не найдена"
+    is_active, arena_city_id = row[0], row[1]
+    if not bool(is_active):
+        return "Площадка неактивна"
+    r_city = await session.execute(
+        text(
+            """
+            SELECT 1 FROM trainer_cities
+            WHERE trainer_id = :tid AND city_id = :cid
+            """
+        ),
+        {"tid": trainer_id, "cid": int(arena_city_id)},
+    )
+    if r_city.fetchone() is None:
+        return "Площадка в другом городе"
+    await session.execute(
+        text(
+            """
+            INSERT INTO trainer_arenas (trainer_id, arena_id, is_public)
+            VALUES (:tid, :aid, false)
+            ON CONFLICT (trainer_id, arena_id) DO NOTHING
+            """
+        ),
+        {"tid": trainer_id, "aid": aid},
+    )
+    return None
+
+
+async def _trainer_may_use_booking_arena(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_id: int,
+    *,
+    created_by_trainer: bool,
+) -> bool:
+    rchk = await session.execute(
+        text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+        {"tid": trainer_id, "aid": int(arena_id)},
+    )
+    if rchk.fetchone():
+        return True
+    if not created_by_trainer:
+        return False
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    return err is None
+
+
 async def create_booking(
     session: AsyncSession,
     slot_id: int,
@@ -647,11 +722,9 @@ async def create_booking(
                 )
                 resolved_arena = rmin.scalar()
         else:
-            rchk = await session.execute(
-                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                {"tid": trainer_id, "aid": resolved_arena},
-            )
-            if not rchk.fetchone():
+            if not await _trainer_may_use_booking_arena(
+                session, trainer_id, resolved_arena, created_by_trainer=created_by_trainer
+            ):
                 return (None, (False, False))
     else:
         resolved_arena: int | None = arena_id
@@ -669,11 +742,9 @@ async def create_booking(
                 )
                 resolved_arena = rmin.scalar()
         else:
-            rchk = await session.execute(
-                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                {"tid": trainer_id, "aid": resolved_arena},
-            )
-            if not rchk.fetchone():
+            if not await _trainer_may_use_booking_arena(
+                session, trainer_id, resolved_arena, created_by_trainer=created_by_trainer
+            ):
                 return (None, (False, False))
     if (
         created_by_trainer
@@ -784,6 +855,10 @@ async def create_trainer_quick_booking(
     """
     from src.application.trainer_schedule_use_cases import ensure_individual_slot_for_quick_book
 
+    if arena_id is not None:
+        err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+        if err:
+            raise ValueError(err)
     slot_id = await ensure_individual_slot_for_quick_book(
         session,
         trainer_id,
@@ -1048,31 +1123,35 @@ async def get_trainer_primary_arena_resolved(session: AsyncSession, trainer_id: 
 async def resolve_arena_for_client_self_booking(
     session: AsyncSession,
     trainer_id: int,
-    session_arena_id: int | None,
+    slot_arena_id: int | None,
+    origin_arena_id: int | None = None,
 ) -> tuple[int | None, str | None, bool]:
     """
-    Self-booking from catalog: online slot always resolves to the trainer's primary venue.
-    - «Любая арена» or null session → primary.
-    - Filter by primary → primary.
-    - Filter by another trainer's arena (secondary): still book on primary; third flag True so UI
-      can explain that non-primary venues require a client request, not self-booking.
+    Self-booking venue is the slot's arena, not a silent primary override.
 
-    Returns (arena_id, error_code, used_primary_despite_non_primary_filter).
+    - Slot with arena_id → that arena (must be linked to the trainer).
+    - Slot without arena → trainer schedule default (primary, else MIN(trainer_arenas)).
+    - origin_arena_id is the catalog/card arena the client came from. It never replaces the
+      slot place; when it differs, the third flag is True so UI can warn before confirm.
+
+    Returns (arena_id, error_code, place_mismatch).
     error_code: no_venue | invalid_arena | None.
     """
-    primary = await get_trainer_primary_arena_resolved(session, trainer_id)
-    if primary is None:
-        return None, "no_venue", False
-    if session_arena_id is not None:
+    if slot_arena_id is not None:
         r = await session.execute(
             text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": session_arena_id},
+            {"tid": trainer_id, "aid": int(slot_arena_id)},
         )
         if not r.fetchone():
             return None, "invalid_arena", False
-        if session_arena_id != primary:
-            return primary, None, True
-    return primary, None, False
+        resolved = int(slot_arena_id)
+    else:
+        resolved = await get_trainer_primary_arena_resolved(session, trainer_id)
+        if resolved is None:
+            return None, "no_venue", False
+        resolved = int(resolved)
+    mismatch = origin_arena_id is not None and int(origin_arena_id) != resolved
+    return resolved, None, mismatch
 
 
 def compute_booking_reminder_schedule(
@@ -2210,16 +2289,8 @@ async def update_trainer_booking_arena(
     if not policy.get("allowed"):
         code = "group_service_locked" if policy.get("service_locked") else "not_editable"
         return (None, code)
-    r = await session.execute(
-        text(
-            """
-            SELECT 1 FROM trainer_arenas
-            WHERE trainer_id = :tid AND arena_id = :aid
-            """
-        ),
-        {"tid": trainer_id, "aid": int(arena_id)},
-    )
-    if not r.fetchone():
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    if err:
         return (None, "invalid_arena")
     await session.execute(
         text(

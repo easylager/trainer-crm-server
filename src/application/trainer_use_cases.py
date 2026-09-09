@@ -270,6 +270,46 @@ async def _apply_trainer_services_update(
         await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
 
 
+async def _profile_city_id_for_arena_scope(
+    session: AsyncSession, trainer_id: int, profile_updates: dict[str, Any]
+) -> int | None:
+    if profile_updates.get("city_id") is not None:
+        return int(profile_updates["city_id"])
+    r = await session.execute(
+        text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return int(row[0])
+
+
+async def _apply_trainer_arenas_update(
+    repo: TrainerRepository,
+    session: AsyncSession,
+    trainer_id: int,
+    arena_ids: list[int],
+    *,
+    profile_updates: dict[str, Any],
+) -> None:
+    """Replace arenas in the form's city (and cities of the payload); keep other-city links (TASK-058 AC-002)."""
+    scope: set[int] = set()
+    profile_city = await _profile_city_id_for_arena_scope(session, trainer_id, profile_updates)
+    if profile_city is not None:
+        scope.add(profile_city)
+    if arena_ids:
+        r = await session.execute(
+            text("SELECT DISTINCT city_id FROM arenas WHERE id = ANY(:ids)"),
+            {"ids": [int(x) for x in arena_ids]},
+        )
+        scope.update(int(row[0]) for row in r.fetchall() if row[0] is not None)
+    await repo.set_trainer_arenas(trainer_id, arena_ids, replace_city_ids=list(scope))
+    await repo.reconcile_primary_arena(trainer_id)
+    if arena_ids:
+        await repo.clear_trainer_arena_setup_alternative(trainer_id)
+
+
 async def create_trainer(
     session: AsyncSession,
     *,
@@ -460,10 +500,9 @@ async def update_trainer_profile(
         elif service_ids is not None:
             await _apply_trainer_services_update(repo, session, trainer_id, None, service_ids)
         if arena_ids is not None:
-            await repo.set_trainer_arenas(trainer_id, arena_ids)
-            await repo.reconcile_primary_arena(trainer_id)
-            if arena_ids:
-                await repo.clear_trainer_arena_setup_alternative(trainer_id)
+            await _apply_trainer_arenas_update(
+                repo, session, trainer_id, arena_ids, profile_updates=updates
+            )
         if primary_arena_id_set:
             if primary_arena_id is None:
                 await repo.reconcile_primary_arena(trainer_id)
@@ -503,10 +542,9 @@ async def update_trainer_profile(
     elif service_ids is not None:
         await _apply_trainer_services_update(repo, session, trainer_id, None, service_ids)
     if arena_ids is not None:
-        await repo.set_trainer_arenas(trainer_id, arena_ids)
-        await repo.reconcile_primary_arena(trainer_id)
-        if arena_ids:
-            await repo.clear_trainer_arena_setup_alternative(trainer_id)
+        await _apply_trainer_arenas_update(
+            repo, session, trainer_id, arena_ids, profile_updates=updates
+        )
     if primary_arena_id_set:
         if primary_arena_id is None:
             await repo.reconcile_primary_arena(trainer_id)

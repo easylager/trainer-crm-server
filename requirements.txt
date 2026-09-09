@@ -20,6 +20,7 @@ Pillow>=10.0.0
 qrcode>=7.4.0
 reportlab>=4.0.0
 pymupdf>=1.24.0
+pytesseract>=0.3.10  # OCR for photo-only regional ice schedules (Orsha, Shklov); needs system `tesseract` + `rus` language pack
 
 # Observability
 sentry-sdk[fastapi]>=2.19.0

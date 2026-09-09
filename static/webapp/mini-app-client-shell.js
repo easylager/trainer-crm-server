@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606281';
+  var SHELL_VERSION = '202609062';
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
@@ -13,7 +13,7 @@
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
-    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
+    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7l14 10M19 7L5 17"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
@@ -136,6 +136,7 @@
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
     if (key === 'client-home') return 'home';
+    if (key === 'arena' || key === 'ice') return 'catalog';
     if (key === 'catalog') {
       var q = global.location.search || '';
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
@@ -169,7 +170,7 @@
 
     var tabs = [
       { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
-      { id: 'catalog', label: 'Тренеры', path: 'catalog?tab=catalog', icon: TAB_ICONS.catalog },
+      { id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.catalog },
       { id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings },
       { id: 'more', label: 'Ещё', path: null, icon: TAB_ICONS.more },
     ];
@@ -191,6 +192,7 @@
           'pointerdown',
           function () {
             if (tab.id === 'catalog') {
+              prefetchIceAssets();
               prefetchCatalogAssets();
               prefetchCatalogWarmCache();
             } else {
@@ -408,12 +410,82 @@
     return true;
   }
 
+  /* ── TASK-094: направление перехода ───────────────────────────────────────
+   *
+   * Направление знает только уходящая страница — новая видит лишь то, что её
+   * открыли. Поэтому оно кладётся в sessionStorage перед уходом и читается на
+   * pagereveal. Навигационный API, когда он есть, точнее (ловит и системную
+   * кнопку «назад»), поэтому он в приоритете, а флаг — фолбэк.
+   */
+  var NAV_DIR_KEY = 'tcb_nav_dir_v1';
+  var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
+
+  function rememberNavDirection(path) {
+    var from = TAB_ORDER[resolveActiveTab()];
+    var toTab = null;
+    var key = normalizeRoutePath(path).split('?')[0];
+    if (key === 'client-home') toTab = 'home';
+    else if (key === 'ice' || key === 'catalog' || key === 'arena') toTab = 'catalog';
+    else if (key === 'client-bookings') toTab = 'bookings';
+    var to = TAB_ORDER[toTab];
+    // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда
+    // вернёт системная кнопка, и её направление посчитает Navigation API.
+    var dir = from != null && to != null && to < from ? 'back' : 'forward';
+    try {
+      global.sessionStorage.setItem(NAV_DIR_KEY, dir);
+    } catch (e) {
+      /* приватный режим — переход просто будет кросс-фейдом */
+    }
+  }
+
+  function takeNavDirection() {
+    try {
+      var dir = global.sessionStorage.getItem(NAV_DIR_KEY);
+      global.sessionStorage.removeItem(NAV_DIR_KEY);
+      return dir === 'back' || dir === 'forward' ? dir : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function bindViewTransitions() {
+    // Нет поддержки — ничего не подписываем, навигация остаётся как была.
+    if (!('onpagereveal' in global)) return;
+    global.addEventListener('pagereveal', function (ev) {
+      if (!ev.viewTransition) return;
+      // Флаг снимаем всегда, иначе он протечёт в следующий переход.
+      var stored = takeNavDirection();
+      /*
+       * Навигационный API отвечает на другой вопрос: он знает про движение по
+       * стеку истории, а не про смысл перехода. Уход «Лёд → Главная» — это
+       * push вперёд по стеку, но назад по вкладкам. Поэтому API имеет право
+       * утверждать только «это возврат по истории»; смысл остальных переходов
+       * знает уходившая страница, и он лежит во флаге.
+       */
+      var traversalBack = false;
+      var nav = global.navigation;
+      if (nav && nav.activation && nav.activation.from && nav.activation.entry) {
+        var fromIndex = nav.activation.from.index;
+        var toIndex = nav.activation.entry.index;
+        traversalBack =
+          typeof fromIndex === 'number' && typeof toIndex === 'number' && toIndex >= 0 && toIndex < fromIndex;
+      }
+      var dir = traversalBack ? 'back' : stored || 'forward';
+      try {
+        ev.viewTransition.types.add(dir);
+      } catch (e) {
+        /* types не поддержаны — останется кросс-фейд по умолчанию */
+      }
+    });
+  }
+
   function navigate(path) {
     if (isSameTabRoute(path)) {
       closeMoreSheet();
       syncTabBarActive();
       return;
     }
+    rememberNavDirection(path);
     var url = withInit(webappBasePath() + path);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
     global.location.href = url;
@@ -486,6 +558,53 @@
 
     applyTabBarVisibility();
     syncTabBarActive();
+    observeTabBarMetrics();
+  }
+
+  /*
+   * Фактическая высота панели → --client-tab-bar-measured (TASK-093).
+   *
+   * CSS знает только заявленные 62px, а панель рендерится в 69px: высота зависит от
+   * гарнитуры и от того, перенеслась ли подпись. Разница уходила в нижний отступ
+   * полотна, и последние 7px контента оставались под панелью на каждом экране.
+   *
+   * Пишем в ОТДЕЛЬНУЮ переменную, а не в --client-tab-bar-height: та задаёт панели
+   * min-height, и запись измеренного значения обратно в неё замкнула бы наблюдателя
+   * сам на себя.
+   */
+  function syncTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    var h = Math.round(bar.getBoundingClientRect().height);
+    if (!h) return;
+    try {
+      document.documentElement.style.setProperty('--client-tab-bar-measured', h + 'px');
+    } catch (e) { /* */ }
+  }
+
+  function observeTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    syncTabBarMetrics();
+
+    /*
+     * Наблюдатель нужен не «на всякий случай»: первый замер снимается системным
+     * фолбэком, Golos Text доезжает позже и меняет высоту подписи. Без пересчёта
+     * мы зафиксировали бы высоту чужого шрифта.
+     */
+    if (typeof global.ResizeObserver === 'function') {
+      try {
+        new global.ResizeObserver(syncTabBarMetrics).observe(bar);
+      } catch (e) {
+        global.addEventListener('resize', syncTabBarMetrics);
+      }
+    } else {
+      global.addEventListener('resize', syncTabBarMetrics);
+    }
+
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(syncTabBarMetrics).catch(function () { /* */ });
+    }
   }
 
   function writeCatalogWarmCache(payload) {
@@ -556,6 +675,25 @@
   }
 
   /** Prefetch catalog bundles while user reads the hub — cuts cold-start on tab switch. */
+  function prefetchIceAssets() {
+    var base = webappBasePath();
+    var assets = [
+      { href: base + 'ice-tab.js?v=202609068', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202609063', as: 'script' },
+      { href: base + 'ice-map-model.js?v=2026090618', as: 'script' },
+      { href: base + 'ice-map.js?v=2026090618', as: 'script' },
+      { href: base + 'ice-tab.css?v=202609068', as: 'style' },
+    ];
+    assets.forEach(function (spec) {
+      if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = spec.href;
+      if (spec.as) link.as = spec.as;
+      document.head.appendChild(link);
+    });
+  }
+
   function prefetchCatalogAssets() {
     var base = webappBasePath();
     var assets = [
@@ -644,6 +782,7 @@
 
   function scheduleCatalogNavigationPrefetch() {
     var run = function () {
+      prefetchIceAssets();
       prefetchCatalogAssets();
       prefetchCatalogWarmCache();
       prefetchBookingsAssets();
@@ -666,43 +805,38 @@
       .replace(/"/g, '&quot;');
   }
 
+  /**
+   * TASK-096: one renderer, not two. The implementation lives in mini-app-empty-state.js so that
+   * shell-free screens can use it; this stays as the call site the shell's own screens already use.
+   * The old version tolerated an empty state with no CTA — that is exactly what AC-002 forbids,
+   * so the shared renderer now refuses it instead of quietly drawing a dead end.
+   */
   function renderEmptyState(container, options) {
     if (!container) return;
     options = options || {};
-    var icon = options.icon || TAB_ICONS.catalog;
-    var title = escHtml(options.title || 'Пока пусто');
-    var hint = options.hint ? escHtml(options.hint) : '';
-    var ctaLabel = options.ctaLabel;
-    var ctaPath = options.ctaPath;
-
-    var html =
-      '<div class="client-empty-state" role="status">' +
-      '<div class="client-empty-state__icon">' +
-      icon +
-      '</div>' +
-      '<p class="client-empty-state__title">' +
-      title +
-      '</p>';
-    if (hint) {
-      html += '<p class="client-empty-state__hint">' + hint + '</p>';
+    var comp = global.MiniAppEmptyState;
+    if (!comp || typeof comp.render !== 'function') {
+      if (global.console && global.console.error) {
+        global.console.error('ClientShell.renderEmptyState: mini-app-empty-state.js is not loaded');
+      }
+      // TASK-103: without this, «Мои записи» keeps the skeleton forever when the
+      // shared file 404s — the list fetch already succeeded, only the empty paint failed.
+      container.innerHTML =
+        '<div class="empty">' + escHtml(options.title || 'Пока пусто') + '</div>';
+      return;
     }
-    if (ctaLabel && ctaPath) {
-      html +=
-        '<button type="button" class="btn-primary btn-block client-empty-state__cta" data-nav-path="' +
-        ctaPath +
-        '">' +
-        ctaLabel +
-        '</button>';
-    }
-    html += '</div>';
-    container.innerHTML = html;
-    var cta = container.querySelector('.client-empty-state__cta');
-    if (cta) {
-      cta.addEventListener('click', function () {
-        hapticSelection();
-        navigate(cta.getAttribute('data-nav-path'));
-      });
-    }
+    comp.render(container, {
+      icon: options.icon || TAB_ICONS.catalog,
+      title: options.title || 'Пока пусто',
+      hint: options.hint,
+      ctaLabel: options.ctaLabel,
+      ctaPath: options.ctaPath,
+      ctaHref: options.ctaHref,
+      onCta: options.onCta,
+      secondaryLabel: options.secondaryLabel,
+      secondaryPath: options.secondaryPath,
+      onSecondary: options.onSecondary,
+    });
   }
 
   function renderSkeletonList(container, count) {
@@ -739,6 +873,7 @@
     hapticSuccess: hapticSuccess,
     prefetchCatalogWarmCache: prefetchCatalogWarmCache,
     prefetchCatalogAssets: prefetchCatalogAssets,
+    prefetchIceAssets: prefetchIceAssets,
     scheduleCatalogNavigationPrefetch: scheduleCatalogNavigationPrefetch,
     readCatalogWarmCache: readCatalogWarmCache,
     writeCatalogWarmCache: writeCatalogWarmCache,
@@ -747,11 +882,40 @@
     prefetchBookAssets: prefetchBookAssets,
     readBookingsWarmCache: readBookingsWarmCache,
     writeBookingsWarmCache: writeBookingsWarmCache,
+    maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
     TAB_ICONS: TAB_ICONS,
   };
 
+  function readStartParam() {
+    var tg = getTg();
+    var fromTg = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+    if (fromTg) return String(fromTg);
+    try {
+      var hash = global.location.hash || '';
+      var m = /(?:^|[&#])tgWebAppStartParam=([^&]+)/.exec(hash);
+      if (m) return decodeURIComponent(m[1]);
+    } catch (e) { /* ignore */ }
+    try {
+      var qp = new URLSearchParams(global.location.search || '');
+      return qp.get('tgWebAppStartParam') || qp.get('startapp') || '';
+    } catch (e2) {
+      return '';
+    }
+  }
+
+  function maybeOpenArenaDeepLink() {
+    var key = pathnameKey();
+    if (key === 'arena') return false;
+    var sp = String(readStartParam() || '').trim();
+    var m = /^arena[_-](.+)$/i.exec(sp);
+    if (!m) return false;
+    navigate('arena?ref=' + encodeURIComponent(m[1]));
+    return true;
+  }
+
   function boot() {
     init();
+    if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
       scheduleCatalogNavigationPrefetch();
     }
@@ -760,6 +924,13 @@
       navigate('client-home');
     };
   }
+
+  /*
+   * Подписка на pagereveal — на уровне модуля, а не в boot(): событие
+   * срабатывает до первой отрисовки, то есть раньше DOMContentLoaded.
+   * Подписаться позже значит не получить первый же переход.
+   */
+  bindViewTransitions();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

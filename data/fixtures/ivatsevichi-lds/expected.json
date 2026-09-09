@@ -1,0 +1,12 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 28,
+  "city": "Ивацевичи",
+  "parser_key": null,
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:05:00+03:00",
+  "status": "skip",
+  "skip_reason": "skip: СДЮШОР/school; schedule on Instagram only",
+  "sessions": []
+}

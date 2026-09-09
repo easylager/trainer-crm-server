@@ -124,7 +124,7 @@
     btnBack.onclick = function () { window.history.back(); };
   }
   var btnCatalog = document.getElementById('btnCatalog');
-  if (btnCatalog) btnCatalog.onclick = function () { goTo('catalog?tab=catalog'); };
+  if (btnCatalog) btnCatalog.onclick = function () { goTo('ice?intent=coach'); };
 
   /* ── toast ───────────────────────────────────────────────────── */
 
@@ -498,7 +498,7 @@
         '<button type="button" class="st-empty-cta" id="btnEmptyCatalog">Найти тренера</button>' +
       '</div>';
     var b = document.getElementById('btnEmptyCatalog');
-    if (b) b.onclick = function () { goTo('catalog?tab=catalog'); };
+    if (b) b.onclick = function () { goTo('ice?intent=coach'); };
   }
 
   function renderEmptyFilter(mount) {

@@ -1,0 +1,60 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 31,
+  "city": "Орша",
+  "parser_key": "orsha_ocr_photo_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:30:00+03:00",
+  "photo_week": "2026-09-07/2026-09-13",
+  "source_files": [
+    "schedule.html",
+    "prices.html",
+    "Ld-31-06.jpg",
+    "OL-31-06.jpg",
+    "Ld-07-13.jpg",
+    "Ol-07-13.jpg"
+  ],
+  "extract_note": "Times from OCR of Ld-07-13.jpg (label «Массовое катание»); prices from прейскурант HTML (с 1 января 2026). OL/Ol JPGs are Олимпиец hall — drop. No HTML grid selectors. default_duration_minutes=45 if OCR misses end.",
+  "default_duration_minutes": 45,
+  "child_price_on_page": true,
+  "rental_standalone_on_page": true,
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-12",
+      "starts_at_local": "21:00",
+      "ends_at_local": "21:45",
+      "price_adult_minor": 700,
+      "price_child_minor": 400,
+      "price_rental_minor": 400,
+      "session_label": "Массовое катание",
+      "age_note": "детский младше 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-13",
+      "starts_at_local": "14:45",
+      "ends_at_local": "15:30",
+      "price_adult_minor": 700,
+      "price_child_minor": 400,
+      "price_rental_minor": 400,
+      "session_label": "Массовое катание",
+      "age_note": "детский младше 14 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2026-09-13",
+      "starts_at_local": "20:00",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 700,
+      "price_child_minor": 400,
+      "price_rental_minor": 400,
+      "session_label": "Массовое катание",
+      "age_note": "детский младше 14 лет"
+    }
+  ]
+}

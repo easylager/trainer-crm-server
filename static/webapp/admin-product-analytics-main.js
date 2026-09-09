@@ -349,6 +349,61 @@
     return insightHtml + tableHtml;
   }
 
+  function renderIceHealth(h) {
+    if (!h) return '<div class="adm-empty">Нет данных</div>';
+    var html = '';
+    var silent = h.silent_sources || [];
+    html += '<div class="pa-corr-title">Молчащие источники</div>';
+    if (!silent.length) {
+      html += '<div class="adm-empty" style="margin-bottom:12px">Все включённые job недавно давали ok</div>';
+    } else {
+      html += '<table class="pa-corr-table" style="margin-bottom:14px"><thead><tr>';
+      html += '<th>Арена</th><th>Каденс</th><th>last ok</th><th>успех 7д</th><th>успех 30д</th>';
+      html += '</tr></thead><tbody>';
+      silent.forEach(function (row) {
+        html += '<tr>';
+        html += '<td>' + A.escapeHtml(row.arena_name || ('#' + row.arena_id)) + '</td>';
+        html += '<td>' + A.escapeHtml(row.cadence || '') + '</td>';
+        html += '<td>' + A.escapeHtml(row.last_ok_at || 'никогда') + '</td>';
+        html += '<td>' + pctStr(row.success_rate_7d != null ? row.success_rate_7d * 100 : null) + '</td>';
+        html += '<td>' + pctStr(row.success_rate_30d != null ? row.success_rate_30d * 100 : null) + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+
+    html += '<div class="pa-corr-title">Доля арен A / B / C по городам</div>';
+    html += '<div style="font-size:11px;color:var(--tg-theme-hint-color);margin-bottom:8px">Счётчик A рядом с долей. WoW — к прошлой неделе. Плотность = арены с ≥1 записью за 30 дней. Цены разных валют не суммируются.</div>';
+    var cities = h.cities || [];
+    if (!cities.length) {
+      html += '<div class="adm-empty">Нет арен</div>';
+    } else {
+      html += '<table class="pa-corr-table"><thead><tr>';
+      html += '<th>Город</th><th>A</th><th>B</th><th>C</th><th>A нед. назад</th><th>Записи 30д</th><th>Просрочка</th>';
+      html += '</tr></thead><tbody>';
+      cities.forEach(function (row) {
+        var aLabel = (row.tier_a_count || 0) + '/' + (row.arenas_total || 0) + ' · ' + pctStr(row.tier_a_share != null ? row.tier_a_share * 100 : null);
+        var delta = row.tier_a_count_delta;
+        var deltaCls = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+        var deltaStr = (delta > 0 ? '+' : '') + (delta == null ? '—' : delta);
+        html += '<tr>';
+        html += '<td>' + A.escapeHtml(row.city_name || '') + '</td>';
+        html += '<td>' + A.escapeHtml(aLabel) + ' <span class="adm-delta ' + deltaCls + '">' + deltaStr + '</span></td>';
+        html += '<td>' + (row.tier_b_count || 0) + ' · ' + pctStr(row.tier_b_share != null ? row.tier_b_share * 100 : null) + '</td>';
+        html += '<td>' + (row.tier_c_count || 0) + ' · ' + pctStr(row.tier_c_share != null ? row.tier_c_share * 100 : null) + '</td>';
+        html += '<td>' + (row.tier_a_count_prev || 0) + ' · ' + pctStr(row.tier_a_share_prev != null ? row.tier_a_share_prev * 100 : null) + '</td>';
+        html += '<td>' + (row.arenas_with_bookings_30d || 0) + '/' + (row.arenas_total || 0) + '</td>';
+        html += '<td>' + pctStr(row.stale_session_share != null ? row.stale_session_share * 100 : null) + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+    html += '<div style="font-size:11px;color:var(--tg-theme-hint-color);margin-top:10px">Ручные правки сеансов за 7д: ' +
+      A.formatNum(h.manual_admin_sessions_7d || 0) +
+      ' · Калибровка точности: в воскресной сводке</div>';
+    return html;
+  }
+
   /* ── main render ─────────────────────────────────────────────────── */
 
   function render(d) {
@@ -428,6 +483,13 @@
     html += '<div class="adm-card" style="margin-top:12px">';
     html += '<div class="pa-corr-title">Сколько функций тронул тренер</div>';
     html += renderFeatureAdoption(d.feature_adoption);
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="pa-section" id="s-ice">';
+    html += '<div class="adm-section-title">8 · Лёд — свежесть и доля уровня A</div>';
+    html += '<div class="adm-card">';
+    html += renderIceHealth(d.ice_health);
     html += '</div>';
     html += '</div>';
 

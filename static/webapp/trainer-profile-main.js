@@ -1088,9 +1088,30 @@
         return ids;
       }
 
+      function arenaIdsOutsideLoadedList() {
+        var loaded = {};
+        (state.arenasList || []).forEach(function(a) { loaded[Number(a.id)] = true; });
+        return canonicalArenaIds().filter(function(id) { return !loaded[id]; });
+      }
+
       function setCanonicalArenaIds(ids) {
         if (!state.trainer) state.trainer = {};
         state.trainer.arena_ids = (ids || []).slice();
+      }
+
+      function arenaIsPublic(id) {
+        var map = (state.trainer && state.trainer.arena_is_public) || {};
+        if (Object.prototype.hasOwnProperty.call(map, String(id))) return map[String(id)] !== false;
+        if (Object.prototype.hasOwnProperty.call(map, id)) return map[id] !== false;
+        return true;
+      }
+
+      function setArenaIsPublicLocal(id, isPublic) {
+        if (!state.trainer) state.trainer = {};
+        if (!state.trainer.arena_is_public || typeof state.trainer.arena_is_public !== 'object') {
+          state.trainer.arena_is_public = {};
+        }
+        state.trainer.arena_is_public[String(id)] = !!isPublic;
       }
 
       function syncArenaIdsFromCheckboxes() {
@@ -1098,6 +1119,9 @@
         (state.arenasList || []).forEach(function(a) {
           var cb = document.getElementById('arena_' + a.id);
           if (cb && cb.checked) ids.push(a.id);
+        });
+        arenaIdsOutsideLoadedList().forEach(function(id) {
+          if (ids.indexOf(id) < 0) ids.push(id);
         });
         setCanonicalArenaIds(ids);
       }
@@ -4907,6 +4931,11 @@
               + ' aria-pressed="' + (isPrimary ? 'true' : 'false') + '"'
               + ' aria-label="' + (isPrimary ? 'Основная площадка' : 'Сделать основной') + '">★</button>';
           }
+          var shown = arenaIsPublic(id);
+          html += '<button type="button" class="arena-chip__public" data-arena-public="' + id + '"'
+            + ' aria-pressed="' + (shown ? 'true' : 'false') + '"'
+            + ' title="' + (shown ? 'Показывать в карточке каталога' : 'Только для расписания, скрыта из каталога') + '">'
+            + (shown ? 'в карточке' : 'только слоты') + '</button>';
           html += '<button type="button" class="arena-chip__remove" data-arena-remove="' + id + '" aria-label="Убрать">×</button>';
           html += '</div>';
         });
@@ -4914,6 +4943,37 @@
         chips.querySelectorAll('[data-arena-star]').forEach(function(btn) {
           btn.addEventListener('click', function() {
             setPrimaryArena(btn.getAttribute('data-arena-star'));
+          });
+        });
+        chips.querySelectorAll('[data-arena-public]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var aid = Number(btn.getAttribute('data-arena-public'));
+            if (!aid) return;
+            var next = !arenaIsPublic(aid);
+            setArenaIsPublicLocal(aid, next);
+            updateArenaChips();
+            fetch(apiUrl('/trainer/arenas/' + aid + '/public'), {
+              method: 'PATCH',
+              headers: headersJson(),
+              body: JSON.stringify({ is_public: next }),
+            }).then(function(r) {
+              return r.json().then(function(data) {
+                return { ok: r.ok, data: data };
+              });
+            }).then(function(o) {
+              if (o.ok && o.data && o.data.trainer) {
+                state.trainer = o.data.trainer;
+                updateArenaChips();
+                return;
+              }
+              if (!o.ok) {
+                setArenaIsPublicLocal(aid, !next);
+                updateArenaChips();
+              }
+            }).catch(function() {
+              setArenaIsPublicLocal(aid, !next);
+              updateArenaChips();
+            });
           });
         });
         chips.querySelectorAll('[data-arena-remove]').forEach(function(btn) {
@@ -5597,24 +5657,12 @@
         citySel.onchange = function() {
           var cid = citySel.value ? Number(citySel.value) : null;
           var prev = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
-          var hadArenas = canonicalArenaIds().length > 0;
-          if (hadArenas && cid !== prev) {
-            if (
-              !window.confirm(
-                'Сменить город? Выбранные площадки другого города будут сняты.'
-              )
-            ) {
-              citySel.value = prev ? String(prev) : '';
-              return;
-            }
-          }
           if (state.trainer.profile) state.trainer.profile.city_id = cid;
           if (cid !== prev) {
             state.arenaCreateOpen = false;
             resetArenaSearch();
           }
           loadArenasForCity(cid).then(function() {
-            if (cid !== prev) setCanonicalArenaIds([]);
             renderArenas();
             setDirty();
           });

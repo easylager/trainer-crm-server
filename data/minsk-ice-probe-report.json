@@ -1,0 +1,457 @@
+{
+  "generated_at": "2026-09-05T16:29:14+0300",
+  "prod_csv": "data/minsk-arenas-prod.csv",
+  "manifest": "data/minsk-arena-source-manifest.yaml",
+  "summary": {
+    "parse_ready": 3,
+    "times_only": 4,
+    "prices_only": 0,
+    "reachable_no_signal": 0,
+    "unreachable": 1,
+    "skip_training_only": 2,
+    "skip_not_ice": 1,
+    "unknown": 0,
+    "skipped": 3
+  },
+  "arenas": [
+    {
+      "arena_id": 3,
+      "name": "ТЦ Замок",
+      "expectation": "mass_skating",
+      "notes": "Stable hourly grid + prices on same page",
+      "best_times": true,
+      "best_prices": true,
+      "spike_verdict": "parse_ready",
+      "urls": [
+        {
+          "url": "https://tczamok.by/entertainments/ice-rink",
+          "http_status": 200,
+          "error": null,
+          "bytes": 111958,
+          "time_samples": [
+            "02:00",
+            "09:00",
+            "10:00",
+            "10:15",
+            "10:30",
+            "11:00",
+            "11:15",
+            "12:00",
+            "12:15",
+            "13:00",
+            "13:15",
+            "13:54",
+            "14:00",
+            "14:15",
+            "15:00",
+            "15:15",
+            "16:00",
+            "16:15",
+            "16:17",
+            "17:00"
+          ],
+          "price_samples": [
+            "1.00",
+            "10",
+            "102",
+            "108.80",
+            "11",
+            "136",
+            "15",
+            "30",
+            "54.40",
+            "68"
+          ],
+          "has_mk_keywords": true,
+          "has_weekday_grid": true,
+          "verdict": "times_and_prices"
+        }
+      ]
+    },
+    {
+      "arena_id": 6,
+      "name": "Чижовка-арена",
+      "expectation": "mass_skating",
+      "notes": "Weekly HTML grid; prices on separate page",
+      "best_times": true,
+      "best_prices": false,
+      "spike_verdict": "times_only",
+      "urls": [
+        {
+          "url": "https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah",
+          "http_status": 200,
+          "error": null,
+          "bytes": 80553,
+          "time_samples": [
+            "00:00",
+            "05:09",
+            "0:01",
+            "0:25",
+            "10:30",
+            "11:30",
+            "12:00",
+            "14:15",
+            "15:48",
+            "16:30",
+            "17:30",
+            "19:00",
+            "19:15",
+            "21:00",
+            "23:00",
+            "7:00",
+            "9:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": true,
+          "verdict": "times_only"
+        }
+      ]
+    },
+    {
+      "arena_id": 5,
+      "name": "Ледовый дворец спорта Минской области",
+      "expectation": "mass_skating",
+      "notes": "Weekly timetable + pricelist on sibling URL",
+      "best_times": true,
+      "best_prices": true,
+      "spike_verdict": "parse_ready",
+      "urls": [
+        {
+          "url": "http://led.by/category/timetable/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 32222,
+          "time_samples": [
+            "01:09",
+            "02:09",
+            "03:09",
+            "04:09",
+            "05:09",
+            "06:09",
+            "07:09",
+            "08:09",
+            "09:09",
+            "10:09",
+            "11:09",
+            "12:00",
+            "12:09",
+            "12:45",
+            "13:00",
+            "13:09",
+            "17:45",
+            "19:00",
+            "19:15",
+            "19:30"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": false,
+          "verdict": "times_only"
+        },
+        {
+          "url": "http://led.by/mass_skating/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 108520,
+          "time_samples": [
+            "01:01",
+            "10:00",
+            "11:07",
+            "1:12",
+            "22:00",
+            "8:25"
+          ],
+          "price_samples": [
+            "0,60",
+            "1,50",
+            "10,0",
+            "11,00",
+            "2,00",
+            "4,5",
+            "5,0",
+            "5,5",
+            "6,0",
+            "7,0"
+          ],
+          "has_mk_keywords": true,
+          "has_weekday_grid": true,
+          "verdict": "times_and_prices"
+        }
+      ]
+    },
+    {
+      "arena_id": 8,
+      "name": "'Каток хк \"Юность\"'",
+      "expectation": "mass_skating",
+      "notes": "Prices on hockey.by; schedule link may 403",
+      "best_times": true,
+      "best_prices": true,
+      "spike_verdict": "parse_ready",
+      "urls": [
+        {
+          "url": "https://junost.hockey.by/clubs/skating/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 63552,
+          "time_samples": [
+            "14:25",
+            "20:08",
+            "5:20",
+            "8:25"
+          ],
+          "price_samples": [
+            "12",
+            "5",
+            "6",
+            "7,00"
+          ],
+          "has_mk_keywords": true,
+          "has_weekday_grid": false,
+          "verdict": "times_and_prices"
+        },
+        {
+          "url": "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/",
+          "http_status": 403,
+          "error": "HTTP Error 403: Forbidden",
+          "bytes": 0,
+          "time_samples": [],
+          "price_samples": [],
+          "has_mk_keywords": false,
+          "has_weekday_grid": false,
+          "verdict": "http_error"
+        }
+      ]
+    },
+    {
+      "arena_id": 4,
+      "name": "СДЮШОР по фигурному катанию",
+      "expectation": "mass_skating",
+      "notes": "Weekly grid when not blocked; may return 403",
+      "best_times": false,
+      "best_prices": false,
+      "spike_verdict": "unreachable",
+      "urls": [
+        {
+          "url": "https://ledlife.by/massovye_kataniya/",
+          "http_status": 403,
+          "error": "HTTP Error 403: Forbidden",
+          "bytes": 0,
+          "time_samples": [],
+          "price_samples": [],
+          "has_mk_keywords": false,
+          "has_weekday_grid": false,
+          "verdict": "http_error"
+        }
+      ]
+    },
+    {
+      "arena_id": 7,
+      "name": "ТЦ DiaMond city",
+      "expectation": "mass_skating",
+      "notes": "Weekly MK grid; prices page may be image/widget",
+      "best_times": true,
+      "best_prices": false,
+      "spike_verdict": "times_only",
+      "urls": [
+        {
+          "url": "https://diamondcity.by/ledovaya-arena",
+          "http_status": 200,
+          "error": null,
+          "bytes": 286639,
+          "time_samples": [
+            "00:00",
+            "10:00",
+            "10:14",
+            "10:45",
+            "11:00",
+            "11:15",
+            "11:45",
+            "12:00",
+            "12:15",
+            "12:30",
+            "12:45",
+            "13:00",
+            "13:15",
+            "13:30",
+            "13:45",
+            "14:00",
+            "14:15",
+            "14:30",
+            "14:45",
+            "15:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": true,
+          "verdict": "times_only"
+        },
+        {
+          "url": "https://diamondcity.by/ceny",
+          "http_status": 200,
+          "error": null,
+          "bytes": 122153,
+          "time_samples": [
+            "10:00",
+            "10:14",
+            "12:45",
+            "15:43",
+            "17:17",
+            "1:10",
+            "21:32",
+            "22:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": false,
+          "verdict": "times_only"
+        }
+      ]
+    },
+    {
+      "arena_id": 2,
+      "name": "Минск Арена",
+      "expectation": "mass_skating",
+      "notes": "Official widget often stale; ByCard is aggregator",
+      "best_times": true,
+      "best_prices": false,
+      "spike_verdict": "times_only",
+      "urls": [
+        {
+          "url": "https://minskarena.by/services.html",
+          "http_status": 200,
+          "error": null,
+          "bytes": 18863,
+          "time_samples": [
+            "10:12",
+            "13:30",
+            "16:45",
+            "18:00",
+            "21:30",
+            "9:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": true,
+          "verdict": "times_only"
+        },
+        {
+          "url": "https://bycard.by/afisha/minsk/katki/5821807",
+          "http_status": 200,
+          "error": null,
+          "bytes": 1261,
+          "time_samples": [],
+          "price_samples": [],
+          "has_mk_keywords": false,
+          "has_weekday_grid": false,
+          "verdict": "no_signal"
+        }
+      ]
+    },
+    {
+      "arena_id": 9,
+      "name": "Олимпик-арена",
+      "expectation": "unknown",
+      "notes": "Corporate site; no public MK schedule found",
+      "best_times": true,
+      "best_prices": false,
+      "spike_verdict": "times_only",
+      "urls": [
+        {
+          "url": "https://olympicarena.by/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 68705,
+          "time_samples": [
+            "0:40",
+            "0:50",
+            "10:00",
+            "11:00",
+            "19:00",
+            "21:00",
+            "22:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": true,
+          "has_weekday_grid": false,
+          "verdict": "times_only"
+        }
+      ]
+    },
+    {
+      "arena_id": 13,
+      "name": "'Хоккейный центр \"JUSTSKATE\"'",
+      "expectation": "training_only",
+      "notes": "Skating school / rental slots; not municipal MK grid",
+      "best_times": false,
+      "best_prices": false,
+      "spike_verdict": "skip_training_only",
+      "urls": [
+        {
+          "url": "https://justskate.by/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 208672,
+          "time_samples": [
+            "0:25",
+            "11:32",
+            "1:25",
+            "9:25"
+          ],
+          "price_samples": [
+            "15",
+            "150",
+            "180",
+            "20",
+            "200",
+            "300",
+            "340",
+            "375",
+            "38",
+            "42"
+          ],
+          "has_mk_keywords": true,
+          "has_weekday_grid": false,
+          "verdict": "times_and_prices"
+        }
+      ]
+    },
+    {
+      "arena_id": 14,
+      "name": "'Хоккейный центр «Финт»'",
+      "expectation": "training_only",
+      "notes": "Hockey shooting center; phone booking, not MK",
+      "best_times": false,
+      "best_prices": false,
+      "spike_verdict": "skip_training_only",
+      "urls": [
+        {
+          "url": "https://fint-tm.by/raspisanie-trenirovok/",
+          "http_status": 200,
+          "error": null,
+          "bytes": 33794,
+          "time_samples": [
+            "11:00",
+            "1:11",
+            "22:00",
+            "7:00"
+          ],
+          "price_samples": [],
+          "has_mk_keywords": false,
+          "has_weekday_grid": true,
+          "verdict": "times_only"
+        }
+      ]
+    },
+    {
+      "arena_id": 12,
+      "name": "Лыжероллерная трасса",
+      "expectation": "not_ice",
+      "notes": "Roller/ski track in CRM; skip HTTP probe",
+      "best_times": false,
+      "best_prices": false,
+      "spike_verdict": "skip_not_ice",
+      "urls": []
+    }
+  ]
+}

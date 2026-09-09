@@ -8,6 +8,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BotCommandScopeChat, BotCommandScopeDefault, MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
 from src.application.trainer_link import (
@@ -22,6 +23,19 @@ from src.shared.mini_app_https import mini_app_https_base
 logger = logging.getLogger(__name__)
 
 _RESTORE_DELAY_SEC = 0.05
+_STALE_CHAT_MARKERS = (
+    "chat not found",
+    "bot was blocked by the user",
+    "user is deactivated",
+    "forbidden: bot was blocked",
+)
+
+
+def _is_stale_telegram_chat(exc: BaseException) -> bool:
+    if not isinstance(exc, TelegramBadRequest):
+        return False
+    text = str(exc).lower()
+    return any(marker in text for marker in _STALE_CHAT_MARKERS)
 
 
 async def set_default_trainer_commands_without_stats(bot: Bot) -> None:
@@ -92,20 +106,26 @@ async def restore_all_linked_trainer_hub_menu_buttons(bot: Bot) -> None:
 
     logger.info("trainer_hub_menu_restore: restoring «Обзор» for %s linked trainers", len(chat_ids))
     ok = 0
+    skipped = 0
     failed = 0
     for i, chat_id in enumerate(chat_ids):
         try:
             await sync_trainer_linked_chat_menu(bot, chat_id)
             ok += 1
-        except Exception:
-            failed += 1
-            logger.warning("trainer_hub_menu_restore: failed chat_id=%s", chat_id, exc_info=True)
+        except Exception as e:
+            if _is_stale_telegram_chat(e):
+                skipped += 1
+                logger.info("trainer_hub_menu_restore: skipped stale chat_id=%s", chat_id)
+            else:
+                failed += 1
+                logger.warning("trainer_hub_menu_restore: failed chat_id=%s", chat_id, exc_info=True)
         if i + 1 < len(chat_ids):
             await asyncio.sleep(_RESTORE_DELAY_SEC)
 
     logger.info(
-        "trainer_hub_menu_restore: done ok=%s failed=%s total=%s",
+        "trainer_hub_menu_restore: done ok=%s skipped=%s failed=%s total=%s",
         ok,
+        skipped,
         failed,
         len(chat_ids),
     )

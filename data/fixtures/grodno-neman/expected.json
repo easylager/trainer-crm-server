@@ -1,0 +1,45 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 11,
+  "city": "Гродно",
+  "parser_key": "neman_hockey_news_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-09-06T00:32:00+03:00",
+  "source_files": [
+    "news446875.html",
+    "scheduleMK.html"
+  ],
+  "encoding_widget": "utf-16-le-bom",
+  "stale_widget": true,
+  "max_date_on_widget": "2026-04-05",
+  "widget_updated_at": "2026-05-26T14:40:28",
+  "default_duration_minutes": 60,
+  "notes": "Live MK from neman.hockey.by news446875 (опубл. 2026-09-03): 6 сентября ур. Пышки, 13; Время 17:00 и 18:30; 10/7/5 BYN. Do not parse «13» as 13:00 (FOK address). Widget scheduleMK.html still Sunday 05 апреля 2026 17:00–18:00 — drop past, do not publish April. icepalace.by/schedule/scheduleMK.html 404. VK SPA / Telegram: no MK grid. Duration 60 from last widget interval, not on the news page.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": "лёд Пышки",
+      "age_note": null,
+      "local_date": "2026-09-06",
+      "starts_at_local": "17:00",
+      "ends_at_local": "18:00",
+      "price_adult_minor": 1000,
+      "price_child_minor": 700,
+      "price_rental_minor": 500
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "session_label": "лёд Пышки",
+      "age_note": null,
+      "local_date": "2026-09-06",
+      "starts_at_local": "18:30",
+      "ends_at_local": "19:30",
+      "price_adult_minor": 1000,
+      "price_child_minor": 700,
+      "price_rental_minor": 500
+    }
+  ]
+}

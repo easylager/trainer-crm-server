@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -114,6 +114,7 @@ from src.application.booking_use_cases import (
     normalize_trainer_client_list_tier_filter,
     patch_trainer_client_identity_for_card,
     resolve_arena_for_client_self_booking,
+    ensure_trainer_schedule_arena_link,
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
     trainer_client_roster_link_exists,
@@ -211,6 +212,22 @@ from src.application.client_trainer_edge_use_cases import (
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
+from src.application.arena_profile import (
+    InvalidAmenitiesError,
+    InvalidArenaProfileStatusError,
+    apply_admin_arena_profile_patch,
+    ensure_arena_profile,
+)
+from src.application.arena_public_use_cases import get_hub_ice_teaser
+from src.application.arena_media import (
+    ArenaMediaLimitError,
+    InvalidArenaMediaOrderError,
+    InvalidMediaLicenseError,
+    attach_arena_media_payloads,
+    delete_arena_media,
+    reorder_arena_media,
+    upload_arena_media_from_bytes,
+)
 from src.application.trainer_schedule_use_cases import this_week_monday, trainer_default_slot_arena_id
 from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
@@ -326,7 +343,11 @@ from src.application.demand_signals_use_cases import (
     get_signals_since,
 )
 from src.infrastructure.db import async_session_factory
-from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
+from src.infrastructure.db.models import (
+    CLIENT_SHARE_KIND_TRAINER,
+    SUBSCRIPTION_TIERS,
+    TRAINER_STATUS_ACTIVE,
+)
 from src.shared.webapp_http_messages import (
     TRAINER_WEBAPP_FORBIDDEN_DETAIL,
     WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
@@ -364,6 +385,8 @@ from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
 )
+from src.application.client_delight_metrics import record_client_share
+from src.application.client_first_success import build_first_booking_success
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
@@ -1036,12 +1059,7 @@ async def put_schedule_templates_day(
                 status_code=400,
                 detail="Выберите площадку для групповых слотов в шаблоне.",
             )
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": int(body.group_arena_id)},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, trainer_id, int(body.group_arena_id))
 
     minute_to_cap: dict[int, int] = {}
     minute_to_service: dict[int, int | None] = {}
@@ -1072,12 +1090,7 @@ async def put_schedule_templates_day(
             minute_to_service[sm] = None
             if s.arena_id is not None:
                 aid_cell = int(s.arena_id)
-                r_own = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": aid_cell},
-                )
-                if not r_own.fetchone():
-                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                await _require_schedule_arena_link(session, trainer_id, aid_cell)
                 minute_to_row_arena[sm] = aid_cell
     try:
         await replace_templates_for_day(
@@ -1177,6 +1190,44 @@ def _schedule_slot_intervals(body: ScheduleSlotsDayBody) -> list[tuple[time, tim
 _SLOT_RELATED_SNOOZE_HINT_IDS = ("slots_next_week", "open_loop_free_next")
 
 
+async def _require_schedule_arena_link(session: AsyncSession, trainer_id: int, arena_id: int) -> None:
+    """Auto-create a non-public trainer_arenas row, or 400 if the arena is ineligible."""
+    err = await ensure_trainer_schedule_arena_link(session, trainer_id, int(arena_id))
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+
+class TrainerArenaPublicBody(BaseModel):
+    is_public: bool
+
+
+@router.patch("/trainer/arenas/{arena_id:int}/public")
+async def patch_trainer_arena_public(
+    arena_id: int,
+    body: TrainerArenaPublicBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Toggle whether a linked arena appears on the trainer's catalog card (TASK-057)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    from src.infrastructure.repositories.trainer_repository import TrainerRepository
+
+    repo = TrainerRepository(session)
+    ok = await repo.set_trainer_arena_is_public(trainer_id, int(arena_id), bool(body.is_public))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Площадка не привязана к вашему профилю")
+    await session.commit()
+    trainer = await get_trainer(session, trainer_id)
+    return {
+        "ok": True,
+        "arena_id": int(arena_id),
+        "is_public": bool(body.is_public),
+        "trainer": trainer,
+    }
+
+
 async def _clear_slot_related_hint_snoozes(session: AsyncSession, trainer_id: int) -> None:
     """
     TASK-029 S3: saving slots is the server-side mirror of what the client used to do to its
@@ -1217,12 +1268,7 @@ async def post_schedule_slots(
         if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
             raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
     if body.arena_id is not None:
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": int(body.arena_id)},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, trainer_id, int(body.arena_id))
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
@@ -1260,12 +1306,7 @@ async def post_schedule_slots(
                         detail="Площадку на уровне одного слота можно задать только для индивидуальных слотов.",
                     )
                 aid_ent = int(entry.arena_id)
-                rchk_ent = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": aid_ent},
-                )
-                if not rchk_ent.fetchone():
-                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                await _require_schedule_arena_link(session, trainer_id, aid_ent)
                 per_slot_arena[start_m] = aid_ent
         try:
             await replace_slots_for_day(
@@ -1385,6 +1426,55 @@ def _client_slots_arena_ids_query_param(raw: str | None) -> frozenset[int] | Non
         if v > 0:
             out.append(v)
     return frozenset(out) if out else None
+
+
+def _client_slots_origin_arena_id(sess_row: dict | None) -> int | None:
+    if not sess_row:
+        return None
+    raw = sess_row.get("selected_arena_id")
+    if raw is None:
+        return None
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _annotate_client_slots_place_mismatch(
+    rows: list[dict], origin_arena_id: int | None
+) -> list[dict]:
+    """Copy slot rows and flag when the slot place differs from the catalog origin arena."""
+    out: list[dict] = []
+    for row in rows:
+        copied = dict(row)
+        aid = copied.get("arena_id")
+        if origin_arena_id is None:
+            copied["place_mismatch"] = False
+        else:
+            try:
+                copied["place_mismatch"] = aid is None or int(aid) != int(origin_arena_id)
+            except (TypeError, ValueError):
+                copied["place_mismatch"] = True
+        out.append(copied)
+    return out
+
+
+CLIENT_SLOTS_EMPTY_ON_FILTER_HINT = (
+    "На этой площадке нет свободных слотов. Оставьте заявку — тренер предложит время, "
+    "или посмотрите слоты на других аренах."
+)
+
+
+def _client_slots_filter_empty_extras(
+    arena_filter: frozenset[int] | None, unfiltered_count: int, filtered_count: int
+) -> dict:
+    if not arena_filter or filtered_count > 0 or unfiltered_count <= 0:
+        return {}
+    return {
+        "empty_on_filter": True,
+        "empty_on_filter_hint": CLIENT_SLOTS_EMPTY_ON_FILTER_HINT,
+    }
 
 
 def _filter_client_slots_payload_by_arenas(rows: list[dict], arena_ids: frozenset[int] | None) -> list[dict]:
@@ -1509,8 +1599,8 @@ async def get_client_slots(
             trainer_name_val = (first + " " + last).strip() or trainer_name_val
 
     filter_service_id = int(service_id) if service_id is not None else None
+    sess_row = await read_client_bot_session(client_telegram_id, session)
     if filter_service_id is None:
-        sess_row = await read_client_bot_session(client_telegram_id, session)
         sess_tid = sess_row.get("selected_trainer_id") if sess_row else None
         sess_sid = sess_row.get("selected_service_id") if sess_row else None
         if (
@@ -1520,17 +1610,23 @@ async def get_client_slots(
         ):
             filter_service_id = int(sess_sid)
 
+    origin_arena_id = _client_slots_origin_arena_id(sess_row)
+
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
+        unfiltered_n = len(cached_slots)
         arena_slots = _filter_client_slots_payload_by_arenas(cached_slots, arena_filter)
         filtered_slots, daypart = await _client_slots_after_self_book_window(
             session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
         )
+        annotated = _annotate_client_slots_place_mismatch(filtered_slots, origin_arena_id)
+        extras = _client_slots_response_extras(daypart)
+        extras.update(_client_slots_filter_empty_extras(arena_filter, unfiltered_n, len(annotated)))
         return {
             "trainer_name": trainer_name_val,
-            "slots": filtered_slots,
+            "slots": annotated,
             "online_booking_available": True,
-            **_client_slots_response_extras(daypart),
+            **extras,
         }
 
     this_m = _this_week_monday()
@@ -1593,15 +1689,19 @@ async def get_client_slots(
             }
         )
     set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
+    unfiltered_n = len(serialized_full)
     arena_slots = _filter_client_slots_payload_by_arenas(serialized_full, arena_filter)
     filtered_slots, daypart = await _client_slots_after_self_book_window(
         session, trainer_id, client_telegram_id, arena_slots, requested_profile_id
     )
+    annotated = _annotate_client_slots_place_mismatch(filtered_slots, origin_arena_id)
+    extras = _client_slots_response_extras(daypart)
+    extras.update(_client_slots_filter_empty_extras(arena_filter, unfiltered_n, len(annotated)))
     return {
         "trainer_name": trainer_name_val,
-        "slots": filtered_slots,
+        "slots": annotated,
         "online_booking_available": True,
-        **_client_slots_response_extras(daypart),
+        **extras,
     }
 
 
@@ -1776,47 +1876,29 @@ async def post_client_booking(
 
     slot_cap = max(1, int(slot.get("capacity") or 1))
     arena_for_booking: int | None = None
-    used_primary_despite_filter = False
+    place_mismatch = False
     if client_request_id is None:
         if slot_cap > 1:
             # Group: venue is stored on the slot; catalog/session arena filter does not apply.
             arena_for_booking = None
-            used_primary_despite_filter = False
+            place_mismatch = False
         else:
-            slot_arena_sa = slot.get("arena_id")
-            if slot_arena_sa is not None:
-                r_sa = await session.execute(
-                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-                    {"tid": trainer_id, "aid": int(slot_arena_sa)},
-                )
-                if not r_sa.fetchone():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Слот привязан к площадке, недоступной для этого тренера.",
-                    )
-                arena_for_booking = int(slot_arena_sa)
-                sess_row = await get_client_session(telegram_id, session)
-                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-                primary_sa = await get_trainer_primary_arena_resolved(session, trainer_id)
-                used_primary_despite_filter = bool(
-                    sess_arena is not None
-                    and primary_sa is not None
-                    and int(sess_arena) != int(primary_sa)
-                    and int(slot_arena_sa) == int(primary_sa)
-                )
+            sess_row = await get_client_session(telegram_id, session)
+            sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+            origin = int(sess_arena) if sess_arena is not None else None
+            slot_arena_raw = slot.get("arena_id")
+            slot_arena_int = int(slot_arena_raw) if slot_arena_raw is not None else None
+            resolved, err, place_mismatch = await resolve_arena_for_client_self_booking(
+                session, trainer_id, slot_arena_int, origin
+            )
+            if err == "no_venue":
+                # Onboarding v2: slots without a venue are valid — personal-link booking must not
+                # require a primary arena. Catalog browse still filters by city/arena upstream.
+                arena_for_booking = None
+                place_mismatch = False
+            elif err == "invalid_arena":
+                raise HTTPException(status_code=400, detail="Слот привязан к площадке, недоступной для этого тренера.")
             else:
-                sess_row = await get_client_session(telegram_id, session)
-                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-                resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
-                    session, trainer_id, sess_arena
-                )
-                if err == "no_venue":
-                    # Onboarding v2: slots without a venue are valid — personal-link booking must not
-                    # require a primary arena. Catalog browse still filters by city/arena upstream.
-                    arena_for_booking = None
-                    used_primary_despite_filter = False
-                elif err == "invalid_arena":
-                    raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
                 arena_for_booking = resolved
 
     try:
@@ -1841,8 +1923,18 @@ async def post_client_booking(
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
-    if client_request_id is None and used_primary_despite_filter:
-        out["used_primary_venue_for_online_booking"] = True
+    if client_request_id is None and place_mismatch:
+        out["place_mismatch"] = True
+    # TASK-096 AC-004: момент первого успеха. Считается ДО кэширования идемпотентности —
+    # повтор того же запроса обязан вернуть тот же экран, а не «уже не первая».
+    out.update(
+        await build_first_booking_success(
+            session,
+            client_id=client_id,
+            slot_date=slot.get("slot_date"),
+            start_time=slot.get("start_time"),
+        )
+    )
     if idem_cache_key:
         await set_idempotency_response(session, idem_cache_key, dict(out))
     background_tasks.add_task(
@@ -2544,7 +2636,7 @@ async def get_client_profiles(
     """
     Profiles this account can act as (self + any children added via «Добавить ребёнка»),
     plus the family-shared profile from /client/family-access if the account was invited
-    that way. See .ai/EPIC1-client-multi-profile.md.
+    that way. See docs/epics/client-multi-profile.md.
     """
     telegram_id = client_catalog_telegram_key(principal)
     items = await list_accessible_profiles(session, telegram_id)
@@ -2611,10 +2703,12 @@ async def get_client_activity_stats(
 async def get_client_hub_bootstrap(
     x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Single round-trip for client home: bookings by day + requests + session edges + activity snippet.
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
+    ``ice_teaser`` is the soonest future public_skate/open_ice slot in the session city, or null.
 
     ``bookings`` / ``requests`` / ``activity`` / ``passes`` resolve through the selected profile
     (``X-Profile-Id``). ``_hub_session`` edges/saved trainers and rebook/primary hints use the
@@ -2779,16 +2873,27 @@ async def get_client_hub_bootstrap(
     bookings, requests, client_session, activity, passes = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes()
     )
+    ice_teaser = None
+    try:
+        sess_row = await read_client_bot_session(telegram_id, session)
+        city_id = (sess_row or {}).get("city_id")
+        # TASK-091 AC-005: у нового клиента города ещё нет, но первый экран всё
+        # равно обязан показать лёд. Без city_id берём ближайший сеанс по стране.
+        ice_teaser = await get_hub_ice_teaser(
+            session, city_id=int(city_id) if city_id is not None else None
+        )
+    except Exception:
+        logger.exception("client hub ice teaser failed")
     return {
         "bookings": bookings,
         "requests": requests,
         "client_session": client_session,
         "activity": activity,
         "passes": passes,
+        "ice_teaser": ice_teaser,
         "platform": {
             "vertical_key": "ice",
             "ui": {
-                "hero_wordmark": "Чудесного дня на льду 🐧",
                 "streak_template": "{count} тренировок подряд",
                 "venue_label": "Арена",
             },
@@ -2863,6 +2968,19 @@ async def get_client_share_trainer(
     service_line = services[0] if services else None
 
     share_body = share_body_for_native_share_dialog(share_text, deep_link)
+
+    # TASK-096 (G-P5): until now share_context was accepted and thrown away, so the share rate
+    # was unknowable rather than low. This endpoint is only called from a «Поделиться» click
+    # handler, so one row here == one intent to share. It is *not* "a message was sent" —
+    # Telegram never tells us that, and the column must not be read as if it did.
+    await record_client_share(
+        session,
+        kind=CLIENT_SHARE_KIND_TRAINER,
+        share_context=raw_ctx or "catalog",
+        trainer_id=trainer_id,
+        telegram_id=client_catalog_telegram_key(principal),
+        payload={"city": city_name} if city_name else None,
+    )
 
     return {
         "share_url": deep_link,
@@ -4659,6 +4777,17 @@ class AdminArenaPatchBody(BaseModel):
     longitude: float | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    phone: str | None = None
+    website_url: str | None = None
+    short_description: str | None = None
+    district: str | None = None
+    timezone: str | None = None
+    social_urls: dict[str, Any] | None = None
+    opening_hours: dict[str, Any] | None = None
+    season_start_month: int | None = None
+    season_end_month: int | None = None
+    amenities: dict[str, bool] | None = None
+    status: str | None = None
 
 
 @router.get("/admin/arenas")
@@ -4669,17 +4798,21 @@ async def get_admin_arenas(
     principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """List arenas for a city: id, name, address, lat/lon, sort_order, is_active."""
+    """List arenas for a city: dictionary fields plus catalog profile (TASK-048)."""
     from sqlalchemy import text
 
     q_like = f"%{(q or '').strip()}%" if (q or "").strip() else "%"
     sql = """
-        SELECT id, name, address, latitude, longitude, sort_order, is_active
-        FROM arenas
-        WHERE city_id = :cid
-        AND (is_active = :active_ok OR :include_inactive)
-        AND (name ILIKE :q_like OR (address IS NOT NULL AND address ILIKE :q_like))
-        ORDER BY sort_order, id
+        SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
+               p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
+               p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.amenities, p.status
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        WHERE a.city_id = :cid
+        AND (a.is_active = :active_ok OR :include_inactive)
+        AND (a.name ILIKE :q_like OR (a.address IS NOT NULL AND a.address ILIKE :q_like))
+        ORDER BY a.sort_order, a.id
     """
     params: dict[str, Any] = {
         "cid": city_id,
@@ -4689,20 +4822,32 @@ async def get_admin_arenas(
     }
     r = await session.execute(text(sql), params)
     rows = r.fetchall()
-    return {
-        "items": [
-            {
-                "id": row[0],
-                "name": row[1],
-                "address": row[2],
-                "latitude": row[3],
-                "longitude": row[4],
-                "sort_order": row[5],
-                "is_active": row[6],
-            }
-            for row in rows
-        ]
-    }
+    items = [
+        {
+            "id": row[0],
+            "name": row[1],
+            "address": row[2],
+            "latitude": row[3],
+            "longitude": row[4],
+            "sort_order": row[5],
+            "is_active": row[6],
+            "slug": row[7],
+            "district": row[8],
+            "timezone": row[9],
+            "short_description": row[10],
+            "phone": row[11],
+            "website_url": row[12],
+            "social_urls": row[13] or {},
+            "opening_hours": row[14],
+            "season_start_month": row[15],
+            "season_end_month": row[16],
+            "amenities": row[17] or {},
+            "status": row[18] or "published",
+        }
+        for row in rows
+    ]
+    await attach_arena_media_payloads(session, items)
+    return {"items": items}
 
 
 @router.post("/admin/arenas")
@@ -4740,6 +4885,7 @@ async def post_admin_arena(
         },
     )
     row = r.fetchone()
+    await ensure_arena_profile(session, int(row[0]), city_id=body.city_id, name=name)
     await session.commit()
     return {
         "id": row[0],
@@ -4793,12 +4939,111 @@ async def patch_admin_arena(
     if body.is_active is not None:
         updates.append("is_active = :is_active")
         params["is_active"] = body.is_active
-    if not updates:
+    profile_fields = body.model_dump(
+        exclude_unset=True,
+        exclude={"city_id", "name", "address", "latitude", "longitude", "sort_order", "is_active"},
+    )
+    if body.city_id is not None:
+        profile_fields["city_id"] = body.city_id
+    if not updates and not profile_fields:
         return {"ok": True}
-    q = "UPDATE arenas SET " + ", ".join(updates) + " WHERE id = :id"
-    r = await session.execute(text(q), params)
-    if r.rowcount == 0:
+    if updates:
+        q = "UPDATE arenas SET " + ", ".join(updates) + " WHERE id = :id"
+        r = await session.execute(text(q), params)
+        if r.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Arena not found")
+    else:
+        exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
+        if not exists.fetchone():
+            raise HTTPException(status_code=404, detail="Arena not found")
+    if profile_fields:
+        try:
+            await apply_admin_arena_profile_patch(session, arena_id, profile_fields)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Arena not found") from None
+        except (InvalidAmenitiesError, InvalidArenaProfileStatusError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return {"ok": True}
+
+
+class AdminArenaMediaReorderBody(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
+@router.post("/admin/arenas/{arena_id:int}/photos")
+async def post_admin_arena_photo(
+    arena_id: int,
+    file: UploadFile = File(...),
+    license: str | None = Form(None),
+    source_url: str | None = Form(None),
+    attribution: str | None = Form(None),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload one arena photo (max 6). License required; do not scrape search images."""
+    body_bytes = await file.read()
+    try:
+        item = await upload_arena_media_from_bytes(
+            session,
+            arena_id,
+            body_bytes,
+            file.content_type or "image/jpeg",
+            license_key=license,
+            source_url=source_url,
+            attribution=attribution,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Arena not found") from None
+    except InvalidMediaLicenseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ArenaMediaLimitError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code == "too_large":
+            raise HTTPException(status_code=413, detail="File too large") from exc
+        if code == "not_image":
+            raise HTTPException(status_code=400, detail="Not a valid image") from exc
+        raise HTTPException(status_code=400, detail=code) from exc
+    except Exception:
+        logger.exception("arena photo upload failed arena_id=%s", arena_id)
+        raise HTTPException(status_code=503, detail="Storage temporarily unavailable") from None
+    await session.commit()
+    return item
+
+
+@router.patch("/admin/arenas/{arena_id:int}/photos")
+async def patch_admin_arena_photos(
+    arena_id: int,
+    body: AdminArenaMediaReorderBody,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set gallery order. First published photo is the hero."""
+    exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
+    if not exists.fetchone():
         raise HTTPException(status_code=404, detail="Arena not found")
+    try:
+        await reorder_arena_media(session, arena_id, body.ids)
+    except InvalidArenaMediaOrderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/arenas/{arena_id:int}/photos/{media_id:int}")
+async def delete_admin_arena_photo(
+    arena_id: int,
+    media_id: int,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove a gallery row. Object storage is left in place."""
+    try:
+        await delete_arena_media(session, arena_id, media_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Photo not found") from None
     await session.commit()
     return {"ok": True}
 
@@ -7680,12 +7925,7 @@ async def post_trainer_booking(
             raise HTTPException(status_code=400, detail="Slot not found or not available")
     arena_id: int | None = body.arena_id
     if arena_id is not None:
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": booking_trainer_id, "aid": arena_id},
-        )
-        if not rchk.fetchone():
-            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+        await _require_schedule_arena_link(session, booking_trainer_id, arena_id)
     booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
         session,
         slot_id=body.slot_id,
@@ -10087,6 +10327,8 @@ async def get_trainer_referred_list(
 
 from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
+from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 
 router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_training_groups_router)
+router.include_router(_admin_ice_sessions_router)

@@ -27,7 +27,7 @@
   border-radius: 0 !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: var(--app-ribbon-clip-sm);
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
@@ -43,14 +43,14 @@
   margin-bottom: 10px;
   background: var(--app-surface-container);
   border: 1px solid var(--glide-line);
-  border-radius: 13px;
+  border-radius: var(--app-radius-md);
   box-shadow: var(--app-hairline);
 }
 
 .ar-pilot .week-nav button {
   width: 28px !important;
   height: 28px !important;
-  border-radius: 8px !important;
+  border-radius: var(--app-radius-sm) !important;
   border: 1px solid var(--glide-line) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
@@ -103,15 +103,15 @@ body.ar-pilot .ar-day-head {
 body.ar-pilot .ar-day-head .day-title {
   margin-bottom: 0;
   opacity: 1;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.02em;
   text-transform: none;
 }
 
 body.ar-pilot .ar-day-count {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--glide-hint);
 }
 
@@ -179,7 +179,7 @@ body.ar-pilot .tab.active {
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   color: var(--glide-ink-teal) !important;
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
 }
 
 body.ar-pilot .tab:not(.active) {
@@ -189,7 +189,7 @@ body.ar-pilot .tab:not(.active) {
 
 /* ── Schedule pilot ── */
 body.ar-pilot--schedule .ar-empty-state {
-  font-size: 15px;
+  font-size: var(--app-text-body);
   line-height: 1.5;
   color: var(--glide-hint);
 }
@@ -200,7 +200,7 @@ body.ar-pilot--schedule .slot-card {
   gap: 12px !important;
   margin: 8px !important;
   padding: 12px 14px 12px 12px !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   border: 1px solid var(--glide-line) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
@@ -220,7 +220,7 @@ body.ar-pilot--schedule .slot-card::before {
   top: 9px;
   bottom: 9px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
   background: var(--glide-line-strong, var(--glide-line));
 }
 
@@ -245,12 +245,12 @@ body.ar-pilot--schedule .slot-time {
 }
 
 body.ar-pilot--schedule .slot-status {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
 }
 
 body.ar-pilot--schedule .slot-status.available {
@@ -273,7 +273,7 @@ body.ar-pilot--schedule-editor .slot-row {
   align-items: center !important;
   margin: 8px !important;
   padding: 12px 14px 12px 12px !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   border: 1px solid var(--glide-line) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
@@ -288,7 +288,7 @@ body.ar-pilot--schedule-editor .slot-row::before {
   top: 9px;
   bottom: 9px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
   background: var(--glide-line-strong, var(--glide-line));
 }
 
@@ -317,8 +317,8 @@ body.ar-pilot--schedule-editor .slot-row.slot-past {
 }
 
 body.ar-pilot--schedule-editor .slot-row .slot-status {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -383,7 +383,7 @@ body.ar-pilot--catalog .trainer-list-card {
   gap: 13px !important;
   padding: 13px 14px !important;
   margin-bottom: 10px !important;
-  border-radius: 14px !important;
+  border-radius: var(--app-radius-lg) !important;
   border: 1px solid var(--glide-line) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
@@ -459,7 +459,7 @@ body.ar-pilot--trainer-home .hub-action-inbox__card {
 /* Строки внутри инбокса — блик и градиент, без тени и без среза. */
 body.ar-pilot--trainer-home .hub-action-inbox__item {
   margin: 8px;
-  border-radius: 11px;
+  border-radius: var(--app-radius-md);
   border: 1px solid var(--glide-line);
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
   box-shadow: var(--app-hairline);
@@ -496,7 +496,7 @@ body.ar-pilot--trainer-home .hub-week-pulse__day--today {
    а граница становится нейтральной. */
 body.ar-pilot--trainer-clients .client-card {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;
@@ -564,7 +564,7 @@ body.ar-pilot--trainer-clients .dossier-empty::after {
 /* Карточка группы — строка списка: блик и градиент, тени нет (DEC-007). */
 body.ar-pilot--trainer-groups .group-card-tg {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;
@@ -576,7 +576,7 @@ body.ar-pilot--trainer-groups .group-card-tg::before {
   width: 3px;
   top: 9px;
   bottom: 9px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
   background: var(--glide-line-strong, var(--glide-line));
 }
 
@@ -625,7 +625,7 @@ body.ar-pilot--trainer-pass-products .cert-product-card {
 
 body.ar-pilot--trainer-pass-products .cert-product-card {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
 }
 
 /* Первичное действие — срез и свечение. */
@@ -720,7 +720,7 @@ body.ar-pilot--trainer-profile .service-row,
 body.ar-pilot--trainer-profile .arena-row,
 body.ar-pilot--trainer-profile .quick-action-btn {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;
@@ -756,7 +756,7 @@ body.ar-pilot--client-home .hub-acq-hero::after {
 body.ar-pilot--client-home .hub-booking-row {
   position: relative;
   border: 1px solid var(--glide-line);
-  border-radius: 11px;
+  border-radius: var(--app-radius-md);
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
   box-shadow: var(--app-hairline);
   clip-path: none;
@@ -769,7 +769,7 @@ body.ar-pilot--client-home .hub-booking-row::before {
   top: 9px;
   bottom: 9px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
   background: var(--glide-line-strong, var(--glide-line));
 }
 
@@ -816,7 +816,7 @@ body.ar-pilot--client-requests .trainer-card-full,
 body.ar-pilot--client-requests .responder-row,
 body.ar-pilot--client-requests .review-item {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;
@@ -836,7 +836,7 @@ body.ar-pilot--client-requests .reviews-empty {
 /* ── Client bookings pilot ── */
 body.ar-pilot--client-bookings .booking-card {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;
@@ -845,7 +845,7 @@ body.ar-pilot--client-bookings .booking-card {
 /* ── Book pilot ── */
 body.ar-pilot--book .slot-card {
   border: 1px solid var(--glide-line) !important;
-  border-radius: 11px !important;
+  border-radius: var(--app-radius-md) !important;
   background: linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot)) !important;
   box-shadow: var(--app-hairline) !important;
   clip-path: none !important;

@@ -1,0 +1,422 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-09-05T21:03:41Z",
+  "timezone": "Europe/Minsk",
+  "artifacts": {
+    "extract_json": "data/minsk-ice-sessions.json",
+    "registry_yaml": "data/minsk-parser-registry.yaml"
+  },
+  "summary": {
+    "ready": 4,
+    "partial": 2,
+    "blocked": 1,
+    "skipped": 3,
+    "failed": 1
+  },
+  "arenas": [
+    {
+      "arena_id": 2,
+      "name": "Минск Арена",
+      "target": "mass_skating",
+      "schedule_status": "ok",
+      "prices_status": "ok",
+      "parser_status": "partial",
+      "extractor": "minskarena_bycard_v1",
+      "sessions_extracted": 0,
+      "price_catalog_items": 2,
+      "blockers": [],
+      "next_actions": [
+        "Poll ByCard calendar until isSelling=1 (season tickets)"
+      ],
+      "sources": [
+        {
+          "url": "https://minskarena.by/services.html",
+          "role": "schedule",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://bycard.by/afisha/minsk/katki/5821807",
+          "role": "aggregator",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": true,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://abws.bycard.by/api/v3/pages/events/konkobezhnyy-stadion-minsk-arena",
+          "role": "schedule+prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 3,
+      "name": "ТЦ Замок",
+      "target": "mass_skating",
+      "schedule_status": "ok",
+      "prices_status": "ok",
+      "parser_status": "ready",
+      "extractor": "zamok_html_v1",
+      "sessions_extracted": 91,
+      "price_catalog_items": 5,
+      "blockers": [],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://tczamok.by/entertainments/ice-rink",
+          "role": "schedule+prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": true,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 4,
+      "name": "СДЮШОР по фигурному катанию",
+      "target": "mass_skating",
+      "schedule_status": "blocked",
+      "prices_status": "blocked",
+      "parser_status": "blocked",
+      "extractor": "none",
+      "sessions_extracted": 0,
+      "price_catalog_items": 0,
+      "blockers": [
+        "https://ledlife.by/massovye_kataniya/: geo_ip_nginx (X-Forwarded-For BY IPs did not help; needs BY egress IP or browser snapshot)"
+      ],
+      "next_actions": [
+        "Fetch from BY egress IP (Railway BY region / local VPS) or Playwright snapshot"
+      ],
+      "sources": [
+        {
+          "url": "https://ledlife.by/massovye_kataniya/",
+          "role": "schedule+prices",
+          "http_status": 403,
+          "fetch_ok": false,
+          "block_reason": "geo_ip_nginx (X-Forwarded-For BY IPs did not help; needs BY egress IP or browser snapshot)",
+          "geo_bypass_attempted": true,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 5,
+      "name": "Ледовый дворец спорта Минской области",
+      "target": "mass_skating",
+      "schedule_status": "ok",
+      "prices_status": "ok",
+      "parser_status": "ready",
+      "extractor": "ledby_html_v1",
+      "sessions_extracted": 21,
+      "price_catalog_items": 6,
+      "blockers": [],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "http://led.by/category/timetable/",
+          "role": "schedule",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "http://led.by/mass_skating/",
+          "role": "prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": true,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 6,
+      "name": "Чижовка-арена",
+      "target": "mass_skating",
+      "schedule_status": "ok",
+      "prices_status": "ok",
+      "parser_status": "ready",
+      "extractor": "chizhovka_html_v1",
+      "sessions_extracted": 89,
+      "price_catalog_items": 3,
+      "blockers": [],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://chizhovka-arena.by/fizkultura-i-sport/katanie-na-konkah",
+          "role": "schedule",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://chizhovka-arena.by/czeny/katanie-na-konkah",
+          "role": "prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://katki.chizhovka-arena.by/",
+          "role": "tickets",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 7,
+      "name": "ТЦ DiaMond city",
+      "target": "mass_skating",
+      "schedule_status": "ok",
+      "prices_status": "ok",
+      "parser_status": "ready",
+      "extractor": "diamond_html_v1",
+      "sessions_extracted": 34,
+      "price_catalog_items": 5,
+      "blockers": [],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://diamondcity.by/ledovaya-arena",
+          "role": "schedule",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://diamondcity.by/ceny",
+          "role": "prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [
+            "https://diamondcity.by/d/cena_led_2606.png",
+            "https://diamondcity.by/d/cena_s_10925_kopiya.png"
+          ],
+          "notes": "prices likely in image(s) on page"
+        }
+      ]
+    },
+    {
+      "arena_id": 8,
+      "name": "Каток хк \"Юность\"",
+      "target": "mass_skating",
+      "schedule_status": "partial",
+      "prices_status": "ok",
+      "parser_status": "partial",
+      "extractor": "junost_weekend_grid_v1",
+      "sessions_extracted": 8,
+      "price_catalog_items": 3,
+      "blockers": [
+        "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/: geo_ip_nginx (X-Forwarded-For BY IPs did not help; needs BY egress IP or browser snapshot)"
+      ],
+      "next_actions": [
+        "Confirm weekend grid from BY IP against junost.by origin"
+      ],
+      "sources": [
+        {
+          "url": "https://junost.hockey.by/clubs/skating/",
+          "role": "prices",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": true,
+          "has_price_images": [],
+          "notes": ""
+        },
+        {
+          "url": "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/",
+          "role": "schedule",
+          "http_status": 403,
+          "fetch_ok": false,
+          "block_reason": "geo_ip_nginx (X-Forwarded-For BY IPs did not help; needs BY egress IP or browser snapshot)",
+          "geo_bypass_attempted": true,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 9,
+      "name": "Олимпик-арена",
+      "target": "unknown",
+      "schedule_status": "ok",
+      "prices_status": "missing_on_page",
+      "parser_status": "unknown",
+      "extractor": "none",
+      "sessions_extracted": 0,
+      "price_catalog_items": 0,
+      "blockers": [],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://olympicarena.by/",
+          "role": "site",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 12,
+      "name": "Лыжероллерная трасса",
+      "target": "not_ice",
+      "schedule_status": "n/a",
+      "prices_status": "n/a",
+      "parser_status": "skipped",
+      "extractor": null,
+      "sessions_extracted": 0,
+      "price_catalog_items": 0,
+      "blockers": [
+        "not a mass-skating target (not_ice)"
+      ],
+      "next_actions": [],
+      "sources": []
+    },
+    {
+      "arena_id": 13,
+      "name": "Хоккейный центр \"JUSTSKATE\"",
+      "target": "training_only",
+      "schedule_status": "n/a",
+      "prices_status": "n/a",
+      "parser_status": "skipped",
+      "extractor": null,
+      "sessions_extracted": 0,
+      "price_catalog_items": 0,
+      "blockers": [
+        "not a mass-skating target (training_only)"
+      ],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://justskate.by/",
+          "role": "site",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": false,
+          "has_prices_signal": true,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "arena_id": 14,
+      "name": "Хоккейный центр «Финт»",
+      "target": "training_only",
+      "schedule_status": "n/a",
+      "prices_status": "n/a",
+      "parser_status": "skipped",
+      "extractor": null,
+      "sessions_extracted": 0,
+      "price_catalog_items": 0,
+      "blockers": [
+        "not a mass-skating target (training_only)"
+      ],
+      "next_actions": [],
+      "sources": [
+        {
+          "url": "https://fint-tm.by/raspisanie-trenirovok/",
+          "role": "site",
+          "http_status": 200,
+          "fetch_ok": true,
+          "block_reason": null,
+          "geo_bypass_attempted": false,
+          "geo_bypass_worked": false,
+          "has_times_signal": true,
+          "has_prices_signal": false,
+          "has_price_images": [],
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}

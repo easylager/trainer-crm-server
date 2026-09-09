@@ -2,7 +2,7 @@
     body {
       margin: 0;
       font-family: var(--app-font-sans);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-canvas-bg);
       color: var(--tg-theme-text-color);
       min-height: 100vh;
       padding: 12px;
@@ -20,8 +20,8 @@
       flex: 1;
       min-width: 0;
       margin: 0;
-      font-size: 24px;
-      font-weight: 600;
+      font-size: var(--app-text-headline);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.25;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
@@ -31,8 +31,8 @@
       overflow-wrap: anywhere;
     }
     .step-title {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
       margin: 4px 0 12px 4px;
       text-transform: uppercase;
@@ -62,7 +62,7 @@
       gap: 8px;
       padding: 0 14px 0 12px;
       min-height: 48px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
@@ -90,7 +90,7 @@
       background: transparent;
       color: var(--tg-theme-text-color);
       font: inherit;
-      font-size: 16px;
+      font-size: var(--app-text-lead);
       line-height: 1.3;
       padding: 12px 0;
       -webkit-appearance: none;
@@ -132,14 +132,14 @@
     }
     .catalog-picker-search__meta {
       margin: 6px 4px 0;
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
     }
     .catalog-picker-search__empty-hint {
       margin-top: 4px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
     }
     .choice-card {
@@ -148,7 +148,7 @@
       justify-content: space-between;
       padding: 16px 18px;
       margin-bottom: 8px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
       border: 1px solid rgba(var(--accent-rgb), 0.28);
@@ -198,20 +198,20 @@
       z-index: 1; 
     }
     .choice-card .label { 
-      font-size: 13px; 
+      font-size: var(--app-text-body); 
       color: var(--tg-theme-hint-color); 
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       margin-bottom: 2px;
     }
     .choice-card .value { 
-      font-size: 17px; 
-      font-weight: 600; 
+      font-size: var(--app-text-lead); 
+      font-weight: var(--app-weight-semibold); 
       line-height: 1.25;
       letter-spacing: -0.01em;
     }
     .choice-card__meta {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       margin-top: 4px;
       line-height: 1.2;
@@ -225,7 +225,7 @@
     }
     .choice-card .arrow { 
       color: var(--tg-theme-button-color); 
-      font-size: 16px; 
+      font-size: var(--app-icon-sm); 
       position: relative; 
       z-index: 1;
       opacity: 0.8;
@@ -237,7 +237,7 @@
       display: flex;
       align-items: stretch;
       margin-bottom: 8px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -279,7 +279,7 @@
     .service-summary-modal-body {
       white-space: pre-wrap;
       line-height: 1.55;
-      font-size: 15px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-text-color);
     }
     .trainer-list-card {
@@ -288,7 +288,7 @@
       gap: 18px;
       padding: 18px 20px;
       margin-bottom: 14px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
       border: 1px solid rgba(var(--accent-rgb), 0.28);
@@ -390,14 +390,14 @@
       transform: scale(1.1);
     }
     .trainer-list-card .name {
-      font-weight: 600;
-      font-size: 18px;
+      font-weight: var(--app-weight-semibold);
+      font-size: var(--app-text-lead);
       margin-bottom: 6px;
       line-height: 1.25;
       letter-spacing: -0.01em;
     }
     .trainer-list-card .meta {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-hint-color);
       margin-top: 4px;
       white-space: normal;
@@ -408,7 +408,7 @@
       flex-shrink: 0;
       align-self: center;
       color: var(--tg-theme-button-color);
-      font-size: 16px;
+      font-size: var(--app-icon-sm);
       position: relative;
       z-index: 1;
       opacity: 0.8;
@@ -425,7 +425,7 @@
       aspect-ratio: 4/3;
       min-height: 240px;
       max-height: 320px;
-      border-radius: 24px;
+      border-radius: var(--app-radius-xl);
       overflow: hidden;
       margin-bottom: 20px;
       background: var(--tg-theme-secondary-bg-color);
@@ -435,7 +435,7 @@
       position: absolute;
       inset: 0;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 24px;
+      border-radius: var(--app-radius-xl);
     }
     
     /* Элегантная градиентная маска снизу для возможного текста поверх */
@@ -447,7 +447,7 @@
       right: 0;
       height: 30%;
       background: rgba(0, 0, 0, 0.35);
-      border-radius: 0 0 24px 24px;
+      border-radius: 0 0 var(--app-radius-xl) var(--app-radius-xl);
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.3s ease;
@@ -468,7 +468,7 @@
       background: none;
       background-size: 200% 100%;
       animation: photo-shimmer 1.5s ease-in-out infinite;
-      border-radius: 24px;
+      border-radius: var(--app-radius-xl);
     }
     @keyframes photo-shimmer {
       0% { background-position: 200% 0; }
@@ -484,7 +484,7 @@
       height: 100%;
       object-fit: cover;
       object-position: center center;
-      border-radius: 24px;
+      border-radius: var(--app-radius-xl);
       opacity: 0;
       transition: all 0.3s ease;
     }
@@ -498,8 +498,8 @@
       margin-bottom: 24px;
     }
     .trainer-detail-name { 
-      font-size: 28px; 
-      font-weight: 700; 
+      font-size: var(--app-text-display); 
+      font-weight: var(--app-weight-bold); 
       margin-bottom: 12px; 
       line-height: 1.2;
       letter-spacing: -0.02em;
@@ -511,9 +511,9 @@
       gap: 8px;
       padding: 8px 12px;
       background: none;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
+      border-radius: var(--app-radius-md);
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       margin-bottom: 16px;
     }
@@ -526,7 +526,7 @@
     .trainer-detail-stat {
       padding: 12px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 2px solid transparent;
       transition: all 0.2s ease;
     }
@@ -534,16 +534,16 @@
       border-color: rgba(var(--accent-rgb), 0.3);
     }
     .trainer-detail-stat-label {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
       margin-bottom: 4px;
     }
     .trainer-detail-stat-value {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-text-color);
     }
     /* Arenas: primary vs secondary + short client hint */
@@ -562,21 +562,21 @@
       gap: 8px;
     }
     .trainer-detail-arena-primary-name {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.35;
       color: var(--tg-theme-text-color);
     }
     .trainer-detail-arena-pill {
       flex-shrink: 0;
-      font-size: 9px;
-      font-weight: 700;
+      font-size: var(--app-text-kicker);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
       background: none;
       padding: 3px 7px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-sm);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
     }
     .trainer-detail-arena-others {
@@ -588,26 +588,79 @@
       border-left: 2px solid rgba(128, 128, 128, 0.22);
     }
     .trainer-detail-arena-secondary {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
     .trainer-detail-arena-hint {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
       margin: 10px 0 0;
       padding-top: 10px;
       border-top: 1px solid rgba(128, 128, 128, 0.18);
     }
+    .trainer-detail-stat--chips {
+      display: block;
+    }
+    .trainer-arena-chips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .trainer-arena-chips__eyebrow {
+      margin: 0;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-arena-chips__row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    a.trainer-arena-chip {
+      flex: 0 0 auto;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--app-chip-line, rgba(128, 128, 128, 0.28));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+      background: var(--app-chip-bg, var(--tg-theme-bg-color));
+      text-decoration: none;
+    }
+    a.trainer-arena-chip[aria-pressed="true"] {
+      background: var(--app-cta-fill, var(--tg-theme-button-color));
+      border-color: var(--app-cta-fill, var(--tg-theme-button-color));
+      color: var(--app-cta-on-fill, var(--tg-theme-button-text-color));
+    }
+    .trainer-arena-chip--more {
+      flex: 0 0 auto;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px dashed rgba(128, 128, 128, 0.35);
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-row-place {
+      display: block;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
     .trainer-detail-arena-slot-filter {
       padding: 0 2px 4px;
       margin-bottom: 8px;
     }
     .trainer-detail-arena-filter-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       letter-spacing: -0.01em;
       color: var(--tg-theme-hint-color);
       margin-bottom: 8px;
@@ -621,8 +674,8 @@
       -webkit-appearance: none;
       appearance: none;
       font: inherit;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       padding: 8px 12px;
       border-radius: 999px;
       border: 2px solid rgba(128, 128, 128, 0.22);
@@ -641,7 +694,7 @@
     .trainer-detail-service-callout {
       margin: 0 0 18px 0;
       padding: 14px 16px 16px 18px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
       box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
@@ -655,12 +708,12 @@
       top: 10px;
       bottom: 10px;
       width: 4px;
-      border-radius: 0 4px 4px 0;
+      border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
       background: var(--tg-theme-button-color);
     }
     .trainer-detail-service-callout-kicker {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
@@ -668,8 +721,8 @@
       line-height: 1.35;
     }
     .trainer-detail-service-callout-body {
-      font-size: 15px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
@@ -682,7 +735,7 @@
     .trainer-detail-about {
       margin: 0 0 18px;
       padding: 14px 16px 12px 18px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
@@ -696,13 +749,13 @@
       top: 12px;
       bottom: 12px;
       width: 3px;
-      border-radius: 0 3px 3px 0;
+      border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
       background: var(--tg-theme-button-color);
       opacity: 0.85;
     }
     .trainer-detail-about-kicker {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
@@ -711,7 +764,7 @@
     }
     .trainer-detail-about-bio {
       margin: 0 0 12px;
-      font-size: 15px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
@@ -737,8 +790,8 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       padding: 2px 0 4px;
     }
@@ -771,7 +824,7 @@
     .trainer-detail-about-edu-line {
       position: relative;
       padding-left: 22px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
       overflow-wrap: anywhere;
@@ -782,22 +835,22 @@
       position: absolute;
       left: 0;
       top: 0;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       opacity: 0.9;
     }
     .trainer-detail-about-edu-more {
       padding-left: 22px;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       opacity: 0.9;
     }
     .trainer-detail-about-edu-chip {
       display: inline-flex;
       align-self: flex-start;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       background: color-mix(in srgb, var(--tg-theme-button-color) 12%, var(--tg-theme-secondary-bg-color));
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
@@ -818,8 +871,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
       padding: 2px 0 8px;
     }
@@ -848,8 +901,8 @@
       margin-bottom: 0;
     }
     .trainer-detail-services-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
@@ -859,8 +912,8 @@
       padding: 10px 14px;
       margin-bottom: 6px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 10px;
-      font-size: 14px;
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-body);
       border: 2px solid transparent;
       box-sizing: border-box;
     }
@@ -897,74 +950,74 @@
       background: color-mix(in srgb, var(--tg-theme-button-color) 9%, var(--tg-theme-secondary-bg-color));
     }
     .trainer-detail-service-name {
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-text-color);
     }
     .trainer-detail-service-price {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
     }
     .trainer-detail-service-notice {
       margin-top: 8px;
       padding-top: 8px;
       border-top: 1px solid rgba(128, 128, 128, 0.12);
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
     }
     .trainer-detail-service-notice--stacked {
       padding: 10px 12px;
       margin-top: 10px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 6%, var(--tg-theme-secondary-bg-color));
     }
     .trainer-detail-service-notice-kicker {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
       margin-bottom: 6px;
     }
     .trainer-detail-service-notice-lead {
-      font-size: 13px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       color: var(--tg-theme-text-color);
       margin-bottom: 4px;
       line-height: 1.35;
     }
     .trainer-detail-service-notice-items {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
     }
     .trainer-detail-service-important-callout {
       margin-bottom: 16px;
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
     }
     .trainer-detail-service-important-kicker {
-      font-size: 12px;
-      font-weight: 800;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--tg-theme-button-color);
       margin-bottom: 10px;
     }
     .trainer-detail-service-important-lead {
-      font-size: 16px;
-      font-weight: 700;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       line-height: 1.35;
       color: var(--tg-theme-text-color);
       margin-bottom: 8px;
     }
     .trainer-detail-service-important-items {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
@@ -972,8 +1025,8 @@
       margin-bottom: 20px;
     }
     .trainer-detail-education-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
@@ -981,13 +1034,13 @@
     }
     .trainer-detail-education-hint {
       margin: 0 0 10px;
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
     }
     .trainer-detail-education-item {
       margin-bottom: 8px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       overflow: hidden;
@@ -1011,14 +1064,14 @@
       gap: 4px;
     }
     .trainer-detail-education-summary-title {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.35;
       color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
       word-break: break-word;
     }
     .trainer-detail-education-summary-meta {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
@@ -1030,8 +1083,8 @@
       margin-top: 2px;
     }
     .trainer-detail-education-badge {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
       background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
@@ -1040,7 +1093,7 @@
       white-space: nowrap;
     }
     .trainer-detail-education-chevron {
-      font-size: 12px;
+      font-size: var(--app-icon-xs);
       color: var(--tg-theme-hint-color);
       transition: transform 0.2s ease;
     }
@@ -1053,14 +1106,14 @@
     }
     .trainer-detail-education-body-line {
       margin-top: 8px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
       word-break: break-word;
     }
     .trainer-detail-education-body-line b {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
     }
     .trainer-detail-education-docs {
       margin-top: 10px;
@@ -1072,11 +1125,12 @@
       display: inline-flex;
       width: 56px;
       height: 56px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
       overflow: hidden;
       border: 1px solid rgba(128, 128, 128, 0.16);
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-detail-education-doc img {
       width: 100%;
       height: 100%;
@@ -1089,28 +1143,29 @@
       justify-content: center;
       min-width: 56px;
       height: 56px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
       border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 50%, transparent);
       color: var(--tg-theme-hint-color);
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       padding: 0 8px;
-      background: var(--tg-theme-bg-color);
-    }
+      background: var(--app-card-bg);
+      box-shadow: var(--app-card-shadow);
+}
     .trainer-detail-education-extra {
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid rgba(128, 128, 128, 0.16);
     }
     .trainer-detail-education-extra-label {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
       margin-bottom: 6px;
     }
     .trainer-detail-education-extra-body {
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
       opacity: 0.92;
@@ -1121,12 +1176,12 @@
       word-break: break-word;
     }
     .trainer-detail-desc { 
-      font-size: 15px; 
+      font-size: var(--app-text-body); 
       line-height: 1.5; 
       margin: 20px 0; 
       padding: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border-left: 4px solid var(--tg-theme-button-color);
       min-width: 0;
       max-width: 100%;
@@ -1155,8 +1210,8 @@
       gap: 6px;
       margin-top: 12px;
       padding: 10px 0;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       cursor: pointer;
       border: none;
@@ -1210,7 +1265,7 @@
       gap: 8px;
       margin: 0 0 16px;
       padding: 4px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.22);
     }
@@ -1219,10 +1274,10 @@
       min-height: 44px;
       padding: 10px 12px;
       border: none;
-      border-radius: 11px;
+      border-radius: var(--app-radius-md);
       font: inherit;
-      font-size: 14px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       color: var(--tg-theme-text-color);
       background: transparent;
@@ -1238,8 +1293,8 @@
       margin-top: 0;
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       background: rgba(var(--accent-rgb), 0.18);
       color: var(--tg-theme-text-color);
       border: 1px solid rgba(var(--accent-rgb), 0.35);
@@ -1250,7 +1305,7 @@
       gap: 14px;
       padding: 16px 18px;
       margin-bottom: 12px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       text-align: left;
@@ -1266,7 +1321,7 @@
       border-radius: 50%;
       flex-shrink: 0;
       overflow: hidden;
-      background: var(--tg-theme-bg-color);
+      background: var(--glide-line);
       position: relative;
     }
     .catalog-group-list-card .cg-photo-wrap .cg-photo {
@@ -1285,8 +1340,8 @@
       background: var(--tg-theme-secondary-bg-color);
     }
     .catalog-group-list-card .cg-body { flex: 1; min-width: 0; }
-    .catalog-group-list-card .cg-name { font-size: 17px; font-weight: 600; margin: 0 0 4px; line-height: 1.25; }
-    .catalog-group-list-card .cg-meta { font-size: 13px; color: var(--tg-theme-hint-color); margin: 0 0 6px; line-height: 1.35; }
+    .catalog-group-list-card .cg-name { font-size: var(--app-text-lead); font-weight: var(--app-weight-semibold); margin: 0 0 4px; line-height: 1.25; }
+    .catalog-group-list-card .cg-meta { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); margin: 0 0 6px; line-height: 1.35; }
     .catalog-group-list-card .cg-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .catalog-group-list-card .cg-actions .btn-secondary { margin: 0; }
 
@@ -1302,7 +1357,7 @@
       gap: 18px;
       padding: 18px 20px;
       margin-bottom: 14px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       width: 100%;
@@ -1328,23 +1383,23 @@
     }
     .catalog-trainer-skel-card .catalog-skel-line--title {
       height: 18px;
-      border-radius: 9px;
+      border-radius: var(--app-radius-pill);
       width: 76%;
     }
     .catalog-trainer-skel-card .catalog-skel-line--meta {
       height: 13px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-pill);
       width: 90%;
     }
     .catalog-trainer-skel-card .catalog-skel-line--meta2 {
       height: 13px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-pill);
       width: 58%;
     }
     .catalog-trainer-skel-card__arrow {
       width: 14px;
       height: 14px;
-      border-radius: 4px;
+      border-radius: var(--app-radius-xs);
       flex-shrink: 0;
       align-self: center;
       opacity: 0.75;
@@ -1368,7 +1423,7 @@
       gap: 14px;
       padding: 16px 18px;
       margin-bottom: 12px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       width: 100%;
@@ -1381,7 +1436,7 @@
       height: 56px;
       border-radius: 50%;
       flex-shrink: 0;
-      background: var(--tg-theme-bg-color);
+      background: var(--glide-line);
     }
     .catalog-group-skel-card__body {
       flex: 1;
@@ -1392,17 +1447,17 @@
     }
     .catalog-group-skel-card .catalog-skel-line--group-title {
       height: 17px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-pill);
       width: 78%;
     }
     .catalog-group-skel-card .catalog-skel-line--group-meta {
       height: 13px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-pill);
       width: 92%;
     }
     .catalog-group-skel-card .catalog-skel-line--group-meta2 {
       height: 13px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-pill);
       width: 66%;
     }
     .catalog-group-skel-card__actions {
@@ -1413,7 +1468,7 @@
     }
     .catalog-skel-line--btn {
       height: 42px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       width: 100%;
     }
     .catalog-skel-line--btn--secondary {
@@ -1480,24 +1535,24 @@
     }
     .pagination button {
       padding: 8px 16px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-sm);
       border: none;
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       cursor: pointer;
     }
-    .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
+    .pagination span { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); align-self: center; }
     .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
     .error { color: var(--app-danger); }
-    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: var(--app-text-body); }
     .success-msg {
       text-align: center;
       padding: 24px 16px;
-      font-size: 16px;
+      font-size: var(--app-text-lead);
       line-height: 1.5;
     }
-    .success-msg .name { font-weight: 600; }
+    .success-msg .name { font-weight: var(--app-weight-semibold); }
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
     .catalog-home {
@@ -1512,32 +1567,32 @@
     }
     .catalog-hero__title {
       margin: 0 0 8px;
-      font-size: 26px;
-      font-weight: 800;
+      font-size: var(--app-text-headline);
+      font-weight: var(--app-weight-bold);
       line-height: 1.1;
       letter-spacing: -0.035em;
       color: var(--tg-theme-text-color);
     }
     .catalog-hero__lead {
       margin: 0;
-      font-size: 14.5px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
       max-width: 36ch;
     }
     .catalog-hero__venue {
       margin: 0 0 4px;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
     }
     .catalog-hero__powered {
       margin: 10px 0 0;
-      font-size: 11px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
@@ -1545,7 +1600,7 @@
     }
     body.catalog-collective-mode .catalog-hero {
       border: 1px solid var(--catalog-collective-accent-border, rgba(var(--accent-rgb), 0.22));
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       padding: 16px 16px 14px;
       background-color: var(--catalog-collective-accent-soft, rgba(var(--accent-rgb), 0.1));
       background-color: var(--catalog-collective-accent-soft, rgba(var(--accent-rgb), 0.08));
@@ -1562,7 +1617,7 @@
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__venue,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__about,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__powered {
-      color: #fff;
+      color: var(--glide-on-deep);
     }
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__lead,
     body.catalog-collective-mode .catalog-hero--cover .catalog-hero__venue,
@@ -1570,12 +1625,12 @@
       opacity: 0.88;
     }
     .catalog-hero__logo {
-      width: 52px; height: 52px; border-radius: 14px; object-fit: cover; margin-bottom: 8px;
+      width: 52px; height: 52px; border-radius: var(--app-radius-md); object-fit: cover; margin-bottom: 8px;
       border: 2px solid rgba(255,255,255,0.65);
     }
     .catalog-hero__about {
       margin: 10px 0 0;
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
       opacity: 0.92;
@@ -1591,7 +1646,7 @@
     .catalog-hero__gallery img {
       width: 88px;
       height: 88px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       object-fit: cover;
       flex-shrink: 0;
     }
@@ -1603,8 +1658,8 @@
     }
     .catalog-block__eyebrow {
       margin: 0 0 10px;
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
@@ -1652,7 +1707,7 @@
       margin-bottom: 28px;
     }
     .catalog-home--onboarding .catalog-scenario-chip {
-      font-size: 14px;
+      font-size: var(--app-text-body);
     }
     .catalog-scenario-chip {
       display: inline-flex;
@@ -1663,8 +1718,8 @@
       border: 1px solid rgba(128, 128, 128, 0.2);
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.2;
       cursor: pointer;
       font-family: inherit;
@@ -1691,7 +1746,7 @@
       min-width: 220px;
       max-width: 280px;
       padding: 12px 14px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       white-space: normal;
       text-align: left;
       box-shadow: var(--shadow-soft, 0 1px 2px rgba(0,0,0,0.06));
@@ -1703,10 +1758,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      border-radius: 10px;
-      background: color-mix(in srgb, var(--ice-glow, #6db7ff) 14%, transparent);
-      border: 1px solid color-mix(in srgb, var(--ice-deep, #0e3a76) 12%, transparent);
+      font-size: var(--app-icon-md);
+      border-radius: var(--app-radius-sm);
+      background: var(--glide-brand-wash);
+      border: 1px solid var(--glide-line);
     }
     .catalog-scenario-chip--rich.catalog-scenario-chip--selected .catalog-scenario-chip__emoji {
       background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
@@ -1719,14 +1774,14 @@
       min-width: 0;
     }
     .catalog-scenario-chip--rich .catalog-scenario-chip__title {
-      font-size: 14px;
-      font-weight: 700;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.01em;
       line-height: 1.2;
     }
     .catalog-scenario-chip--rich .catalog-scenario-chip__hint {
-      font-size: 12px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       line-height: 1.3;
       color: var(--tg-theme-hint-color);
     }
@@ -1747,7 +1802,7 @@
       gap: 12px;
       width: 100%;
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       pointer-events: none;
@@ -1756,7 +1811,7 @@
       flex-shrink: 0;
       width: 36px;
       height: 36px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
     }
     .catalog-filter-skel__body {
       flex: 1;
@@ -1771,12 +1826,12 @@
     .catalog-skel-line--filter-label {
       width: 42px;
       height: 10px;
-      border-radius: 4px;
+      border-radius: var(--app-radius-pill);
     }
     .catalog-skel-line--filter-value {
       width: 58%;
       height: 14px;
-      border-radius: 5px;
+      border-radius: var(--app-radius-pill);
     }
     .catalog-filter-skel:nth-child(2) .catalog-skel-line--filter-value { width: 72%; }
     .catalog-filter-skel:nth-child(3) .catalog-skel-line--filter-value { width: 48%; }
@@ -1784,7 +1839,7 @@
       flex-shrink: 0;
       width: 12px;
       height: 12px;
-      border-radius: 3px;
+      border-radius: var(--app-radius-xs);
       opacity: 0.5;
     }
     .catalog-home--booting .catalog-cta--dock {
@@ -1855,8 +1910,8 @@
     }
     .catalog-trainer-deeplink-loading {
       padding: 28px 18px 12px;
-      font-size: 15px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       text-align: center;
     }
@@ -1870,7 +1925,7 @@
       aspect-ratio: 4 / 3;
       min-height: 240px;
       max-height: 320px;
-      border-radius: 24px;
+      border-radius: var(--app-radius-xl);
       margin-bottom: 20px;
     }
     .catalog-trainer-detail-skel__header {
@@ -1882,12 +1937,12 @@
     .catalog-trainer-detail-skel__name {
       width: 68%;
       height: 28px;
-      border-radius: 10px;
+      border-radius: var(--app-radius-sm);
     }
     .catalog-trainer-detail-skel__rating {
       width: 38%;
       height: 16px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-sm);
     }
     .catalog-trainer-detail-skel__stats {
       display: grid;
@@ -1897,17 +1952,17 @@
     }
     .catalog-trainer-detail-skel__stat {
       height: 56px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
     }
     .catalog-trainer-detail-skel__section {
       width: 42%;
       height: 12px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-sm);
       margin-bottom: 12px;
     }
     .catalog-trainer-detail-skel__service {
       height: 52px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       margin-bottom: 10px;
     }
     .catalog-trainer-detail-skel__service--short {
@@ -1921,12 +1976,12 @@
     .catalog-trainer-detail-skel__slots-title {
       width: 36%;
       height: 12px;
-      border-radius: 6px;
+      border-radius: var(--app-radius-sm);
       margin-bottom: 14px;
     }
     .catalog-trainer-detail-skel__slot-row {
       height: 48px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       margin-bottom: 8px;
     }
     .catalog-trainer-detail-skel__slot-row:last-child {
@@ -1938,7 +1993,7 @@
       gap: 12px;
       width: 100%;
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
@@ -1959,10 +2014,10 @@
     }
     .catalog-filter-tile--empty .catalog-filter-tile__value {
       color: var(--tg-theme-hint-color);
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
     }
     .catalog-filter-tile--scenario .catalog-filter-tile__value {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
     }
     .catalog-filter-tile__icon {
       flex-shrink: 0;
@@ -1971,8 +2026,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      border-radius: 10px;
+      font-size: var(--app-icon-md);
+      border-radius: var(--app-radius-sm);
       background: color-mix(in srgb, var(--tg-theme-bg-color) 55%, transparent);
     }
     .catalog-filter-tile__body {
@@ -1983,13 +2038,13 @@
       gap: 2px;
     }
     .catalog-filter-tile__label {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
     }
     .catalog-filter-tile__value {
-      font-size: 16px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.25;
       letter-spacing: -0.01em;
       color: var(--tg-theme-text-color);
@@ -1999,16 +2054,16 @@
     }
     .catalog-filter-tile__meta {
       display: block;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       margin-top: 2px;
       line-height: 1.2;
     }
     .catalog-filter-tile__chev {
       flex-shrink: 0;
-      font-size: 20px;
-      font-weight: 400;
+      font-size: var(--app-icon-md);
+      font-weight: var(--app-weight-regular);
       line-height: 1;
       color: var(--tg-theme-button-color);
       opacity: 0.85;
@@ -2021,8 +2076,8 @@
       align-items: center;
       justify-content: center;
       border-radius: 50%;
-      font-size: 14px;
-      font-weight: 700;
+      font-size: var(--app-icon-sm);
+      font-weight: var(--app-weight-bold);
       color: var(--tg-theme-button-color);
       background: color-mix(in srgb, var(--app-cta-fill, var(--tg-theme-button-color)) 16%, transparent);
     }
@@ -2042,14 +2097,15 @@
       z-index: 4;
       margin-top: 16px;
       padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
-      background: var(--tg-theme-bg-color);
+      background: var(--app-float-bg);
       border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
-    }
+      box-shadow: var(--app-float-shadow);
+}
     .catalog-find-btn {
-      font-size: 17px;
-      font-weight: 700;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       padding: 15px 20px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       box-shadow: var(--app-btn-shadow-cta);
     }
     .catalog-find-btn--ready {
@@ -2057,7 +2113,7 @@
     }
     .catalog-cta__hint {
       margin: 0;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       text-align: center;
       color: var(--tg-theme-hint-color);
@@ -2066,18 +2122,18 @@
       margin-bottom: 16px;
     }
     .summary-row .value.catalog-summary-scenario {
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-text-color);
     }
     .summary-card {
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       padding: 18px 20px;
       margin-bottom: 20px;
     }
     .summary-card .summary-title {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -2090,17 +2146,17 @@
       gap: 12px;
       padding: 10px 0;
       border-bottom: 1px solid rgba(128,128,128,0.12);
-      font-size: 15px;
+      font-size: var(--app-text-body);
     }
     .summary-row:last-child { border-bottom: none; }
     .summary-row .label { color: var(--tg-theme-hint-color); flex-shrink: 0; }
     .summary-row .value {
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       min-width: 0;
       word-break: break-word;
       text-align: right;
     }
-    .summary-row .value.muted { font-weight: 400; color: var(--tg-theme-hint-color); }
+    .summary-row .value.muted { font-weight: var(--app-weight-regular); color: var(--tg-theme-hint-color); }
     .summary-row-clickable {
       cursor: pointer;
       transition: background 0.15s ease;
@@ -2115,11 +2171,11 @@
     }
     .summary-row-clickable:hover { background: rgba(128,128,128,0.08); }
     .summary-row-clickable:active { opacity: 0.9; }
-    .summary-row .row-arrow { color: var(--tg-theme-hint-color); font-size: 14px; margin-left: 8px; }
+    .summary-row .row-arrow { color: var(--tg-theme-hint-color); font-size: var(--app-text-body); margin-left: 8px; }
     .summary-actions { margin-top: 20px; display: flex; flex-direction: column; gap: var(--app-btn-stack-gap); }
     .summary-actions .btn-block { margin: 0; }
     .summary-actions .summary-hint {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-hint-color);
       line-height: 1.4;
       margin: 4px 0 0;
@@ -2130,22 +2186,22 @@
       margin-bottom: 16px;
       padding: 4px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
     }
     .catalog-tabs .tab-btn {
       flex: 1;
       padding: 10px 14px;
       border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       background: transparent;
       color: var(--tg-theme-hint-color);
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
     }
     .catalog-tabs .tab-btn.active {
-      background: var(--tg-theme-bg-color);
+      background: var(--app-card-bg);
       color: var(--tg-theme-text-color);
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
@@ -2155,17 +2211,17 @@
       text-align: center;
       padding: 32px 20px;
       color: var(--tg-theme-hint-color);
-      font-size: 15px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
     }
     .my-trainer-empty .btn-trainer-list { margin-top: 16px; }
     .btn-pass-block {
       width: 100%;
       padding: 14px 18px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: none;
-      font-size: 16px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
@@ -2177,15 +2233,15 @@
     .btn-leave-request {
       width: 100%;
       padding: 14px 18px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: none;
-      font-size: 16px;
-      font-weight: 600;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
-      background: var(--app-success);
-      color: #fff;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
       margin-top: 8px;
     }
     .btn-leave-request:active { opacity: 0.9; }
@@ -2196,17 +2252,17 @@
       gap: 8px;
       width: 100%;
       padding: 14px 18px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: none;
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       background: var(--tg-theme-button-color) !important;
       color: var(--tg-theme-button-text-color) !important;
       cursor: pointer;
     }
     .btn-trainer-list:active { opacity: 0.9; }
     .request-form-hint {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-hint-color);
       line-height: 1.4;
       margin: 0 0 12px;
@@ -2215,12 +2271,12 @@
       width: 100%;
       box-sizing: border-box;
       padding: 12px 14px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: none;
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
       font: inherit;
-      font-size: 16px;
+      font-size: var(--app-text-lead);
       margin-bottom: 16px;
       resize: vertical;
       min-height: 80px;
@@ -2230,7 +2286,7 @@
     .summary-leave-secondary {
       margin-top: 10px;
       text-align: center;
-      font-size: 14px;
+      font-size: var(--app-text-body);
     }
     .summary-leave-secondary .link {
       color: var(--tg-theme-button-color);
@@ -2240,9 +2296,9 @@
     .summary-leave-secondary .link:active { opacity: 0.8; }
     .request-form-context {
       padding: 12px 14px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-text-color);
       margin-bottom: 16px;
     }
@@ -2253,22 +2309,22 @@
       color: var(--tg-theme-button-color);
       cursor: pointer;
       text-decoration: none;
-      font-size: 14px;
+      font-size: var(--app-text-body);
     }
     .request-form-context .context-links .link:active { opacity: 0.8; }
     .request-form-context .context-links .sep { color: var(--tg-theme-hint-color); margin: 0 6px; }
     .trainer-detail-slots {
       margin-top: 16px;
       padding: 14px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
     }
-    .trainer-detail-slots .slots-title { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 10px; text-transform: uppercase; }
+    .trainer-detail-slots .slots-title { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--tg-theme-hint-color); margin-bottom: 10px; text-transform: uppercase; }
     .trainer-detail-slots .slot-row {
       display: flex; align-items: center; justify-content: space-between;
       gap: 10px;
       padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,0.1);
-      font-size: 15px; cursor: pointer; border: none; width: 100%; text-align: left; background: transparent; color: inherit; font: inherit;
+      font-size: var(--app-text-body); cursor: pointer; border: none; width: 100%; text-align: left; background: transparent; color: inherit; font: inherit;
     }
     .trainer-detail-slots .slot-row-main {
       display: flex;
@@ -2279,8 +2335,8 @@
       min-width: 0;
     }
     .trainer-detail-slots .slot-spots-pill {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       padding: 4px 10px;
       border-radius: 999px;
       background: var(--tg-theme-secondary-bg-color);
@@ -2294,7 +2350,7 @@
     }
     .trainer-detail-slots .slot-row:last-child { border-bottom: none; }
     .trainer-detail-slots .slot-row:active { opacity: 0.85; }
-    .trainer-detail-slots .slots-empty { font-size: 14px; color: var(--tg-theme-hint-color); padding: 8px 0; }
+    .trainer-detail-slots .slots-empty { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); padding: 8px 0; }
     .trainer-detail-slots .slots-empty-hint { padding-top: 0; margin-top: -4px; }
     .trainer-detail-groups {
       margin-top: 8px;
@@ -2313,8 +2369,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
       margin-bottom: 0;
       padding: 4px 0 10px;
@@ -2359,8 +2415,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
       margin-bottom: 0;
       padding: 4px 0 10px;
@@ -2396,17 +2452,22 @@
       margin-top: 0;
     }
     .trainer-detail-group-card {
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       padding: 14px 16px;
       margin-bottom: 10px;
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.22);
     }
-    .trainer-detail-group-name { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
-    .trainer-detail-group-meta { font-size: 13px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
-    .trainer-detail-group-sched { font-size: 14px; margin: 6px 0; }
-    .trainer-detail-group-pitch { font-size: 14px; line-height: 1.4; margin: 6px 0; color: var(--tg-theme-text-color); }
-    .trainer-detail-group-spots { font-size: 13px; font-weight: 600; margin: 10px 0 8px; color: var(--tg-theme-hint-color); }
+    /* Группа, ради которой пришли с арены: её надо найти глазами сразу. */
+    .trainer-detail-group-card--focus {
+      border-color: rgba(var(--accent-rgb), 0.85);
+      box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.18);
+    }
+    .trainer-detail-group-name { font-size: var(--app-text-lead); font-weight: var(--app-weight-semibold); margin-bottom: 4px; }
+    .trainer-detail-group-meta { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .trainer-detail-group-sched { font-size: var(--app-text-body); margin: 6px 0; }
+    .trainer-detail-group-pitch { font-size: var(--app-text-body); line-height: 1.4; margin: 6px 0; color: var(--tg-theme-text-color); }
+    .trainer-detail-group-spots { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); margin: 10px 0 8px; color: var(--tg-theme-hint-color); }
     .trainer-detail-actions { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
     .trainer-detail-secondary {
       margin-top: 24px;
@@ -2418,11 +2479,39 @@
       gap: 12px;
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
+    /* Чьи слоты и где — строка под заголовком «Выберите время». */
+    .slot-pick-context {
+      margin: -4px 0 14px;
+      font-size: var(--app-text-body);
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-pick-context[hidden] { display: none; }
+    /* Площадка на строке слота: вторична по отношению ко времени, но читаема. */
+    .slot-pick-list .slot-card-place {
+      font-size: var(--app-text-caption);
+      color: var(--tg-theme-hint-color);
+    }
+    /*
+     * Пустой «Выберите время». Раньше `.slots-empty` был описан только внутри
+     * .trainer-detail-slots, поэтому на этом экране текст падал голым абзацем
+     * без отступов — и без единой кнопки под ним.
+     */
+    .slot-pick-list .slots-empty {
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      padding: 4px 0 16px;
+    }
+    .slot-pick-empty-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
     .slot-pick-list .day-block { margin-bottom: 20px; }
     /* Day headers — readable on phones (was 11px vs 16px slot time). */
     .slot-pick-list .day-title {
-      font-size: 14px;
-      font-weight: 700;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-bold);
       color: var(--tg-theme-text-color);
       opacity: 0.82;
       margin: 8px 0 12px 2px;
@@ -2438,8 +2527,8 @@
       min-width: 0;
     }
     .slot-pick-list .slot-spots-pill {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       padding: 4px 10px;
       border-radius: 999px;
       background: var(--tg-theme-secondary-bg-color);
@@ -2454,7 +2543,7 @@
     .slot-pick-list .slot-card {
       display: flex; align-items: center; justify-content: space-between;
       gap: 12px;
-      padding: 14px 16px; margin-bottom: 8px; border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 8px; border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color); 
       border: 2px solid transparent; 
       width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
@@ -2469,8 +2558,8 @@
       transform: scale(0.98);
     }
     .slot-pick-list .slot-time { 
-      font-weight: 600; 
-      font-size: 16px; 
+      font-weight: var(--app-weight-semibold); 
+      font-size: var(--app-text-lead); 
       color: var(--tg-theme-text-color);
     }
     .slot-pick-list .slot-card span:last-child {
@@ -2548,14 +2637,15 @@
       display: flex;
     }
     .reviews-modal-content {
-      background: var(--tg-theme-bg-color);
-      border-radius: 20px;
+      background: var(--app-float-bg);
+      border-radius: var(--app-radius-lg);
       max-width: 500px;
       width: 100%;
       max-height: 80vh;
       overflow-y: auto;
       position: relative;
-    }
+      box-shadow: var(--app-float-shadow);
+}
     .reviews-modal-header {
       padding: 20px 20px 0;
       display: flex;
@@ -2563,8 +2653,8 @@
       align-items: center;
     }
     .reviews-modal-title {
-      font-size: 20px;
-      font-weight: 700;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       color: var(--tg-theme-text-color);
     }
     .reviews-modal-close {
@@ -2578,7 +2668,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
+      font-size: var(--app-icon-md);
     }
     .reviews-modal-body {
       padding: 20px;
@@ -2587,7 +2677,7 @@
       padding: 16px;
       margin-bottom: 12px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border-left: 4px solid var(--tg-theme-button-color);
     }
     .review-rating {
@@ -2595,17 +2685,17 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 8px;
-      font-size: 14px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-button-color);
     }
     .review-text {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.5;
       color: var(--tg-theme-text-color);
     }
     .review-date {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
       margin-top: 8px;
     }
@@ -2620,22 +2710,47 @@
       color: var(--tg-theme-hint-color);
     }
     .form-block { margin-bottom: 16px; }
-    .form-block label { display: block; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
+    .form-block label { display: block; font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--tg-theme-hint-color); margin-bottom: 6px; }
     .form-block input:not([type="radio"]):not([type="checkbox"]):not(.crm-phone-national-input),
     .form-block textarea {
-      width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: none;
-      background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px;
+      width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: var(--app-radius-md); border: none;
+      background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: var(--app-text-lead);
     }
     /* Phone field matches form-block chrome (components.css); catalog uses 12px radius. */
     #screenBookingForm .crm-phone-field-row {
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
     }
     .form-block textarea { min-height: 60px; resize: vertical; }
 
-    .booking-slot-label { font-size: 15px; margin-bottom: 12px; color: var(--tg-theme-hint-color); }
+    /*
+     * Неопределённый исход записи. Не красный «провал»: запись могла и создаться,
+     * и пугать человека там, где мы сами не знаем результата, нечестно. Нейтральный
+     * акцент + текст, который остаётся на экране.
+     */
+    .booking-form-notice {
+      margin: 12px 0 0;
+      padding: 12px 14px;
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+    }
+    .booking-form-notice[hidden] { display: none; }
+    /* К кому запись — набрано сильнее времени: это главный факт этого экрана. */
+    .booking-trainer-line {
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
+      color: var(--tg-theme-text-color);
+      margin: 0 0 4px;
+      line-height: 1.35;
+    }
+    .booking-trainer-line[hidden] { display: none; }
+    .booking-slot-label { font-size: var(--app-text-body); margin-bottom: 12px; color: var(--tg-theme-hint-color); }
     .booking-service-line {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-text-color);
       margin: 4px 0 0;
       line-height: 1.4;
@@ -2645,10 +2760,10 @@
     #screenBookingForm .book-service-select {
       width: 100%;
       padding: 13px 40px 13px 14px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       border: none;
       margin: 0;
-      font-size: 16px;
+      font-size: var(--app-text-lead);
       font-family: inherit;
       box-sizing: border-box;
       background: var(--tg-theme-secondary-bg-color);
@@ -2669,10 +2784,10 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
-      font-size: 15px;
+      font-size: var(--app-text-body);
       cursor: pointer;
       text-transform: none;
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-text-color);
     }
     .catalog-price-tier-radios input[type="radio"] {
@@ -2692,19 +2807,19 @@
       line-height: 1.35;
     }
     .booking-venue-hint {
-      font-size: 14px; margin-bottom: 14px; line-height: 1.35;
+      font-size: var(--app-text-body); margin-bottom: 14px; line-height: 1.35;
       color: var(--tg-theme-text-color);
       padding: 10px 12px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
     }
     .booking-venue-slot-title {
       margin-bottom: 6px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       letter-spacing: 0.02em;
     }
     .booking-venue-slot-lines {
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.4;
     }
     .booking-venue-slot-map {
@@ -2712,7 +2827,7 @@
     }
     .booking-venue-slot-map a {
       color: var(--tg-theme-button-color);
-      font-weight: 600;
+      font-weight: var(--app-weight-semibold);
       text-decoration: none;
     }
     .booking-venue-slot-map a:active {
@@ -2722,7 +2837,7 @@
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid rgba(128, 128, 128, 0.2);
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
     }
     .booking-venue-hint--alert {
@@ -2735,7 +2850,7 @@
       padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid rgba(128,128,128,0.15);
       text-align: center;
-      font-size: 14px;
+      font-size: var(--app-text-body);
       color: var(--tg-theme-hint-color);
     }
     .trainer-list-footer .link { color: var(--tg-theme-button-color); cursor: pointer; }
@@ -2743,11 +2858,11 @@
     .empty-state-request {
       margin-top: 20px;
       padding: 20px;
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       background: var(--tg-theme-secondary-bg-color);
       text-align: center;
     }
-    .empty-state-request .empty-state-text { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 14px; }
+    .empty-state-request .empty-state-text { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); margin-bottom: 14px; }
 
     /* ======================================================================
      * Arena multi-select screen — map + checkbox cards + sticky "Готово".
@@ -2756,14 +2871,14 @@
      * ====================================================================== */
     .arena-help {
       margin: 0 0 12px 4px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
     .arena-map-wrap {
       position: relative;
       margin: 4px 0 14px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       overflow: hidden;
       border: 1px solid rgba(var(--accent-rgb), 0.22);
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
@@ -2789,24 +2904,24 @@
       gap: 6px;
       padding: 6px 10px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--app-text-caption);
       line-height: 1;
       color: var(--tg-theme-text-color);
-      background: color-mix(in srgb, var(--tg-theme-bg-color) 85%, transparent);
+      background: color-mix(in srgb, var(--app-float-bg) 85%, transparent);
       backdrop-filter: blur(6px);
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
       pointer-events: none;
     }
-    .arena-map__legend-text { font-weight: 500; }
+    .arena-map__legend-text { font-weight: var(--app-weight-medium); }
     .arena-map__legend-text + .arena-map__legend-dot { margin-left: 6px; }
     .arena-map__legend-dot {
       width: 8px;
       height: 8px;
       border-radius: 999px;
-      border: 1.5px solid #fff;
+      border: 1.5px solid var(--glide-surface);
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
     }
-    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color, #45B9BB); }
+    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color); }
     .arena-map__legend-dot--idle { background: var(--tg-theme-hint-color); opacity: 0.85; }
 
     /* Custom Leaflet pin via divIcon — sized to match brand and visible on busy map. */
@@ -2814,18 +2929,18 @@
       width: 28px;
       height: 28px;
       border-radius: 999px;
-      border: 2px solid #fff;
-      background: var(--tg-theme-hint-color);
+      border: 2px solid var(--glide-surface);
+      background: var(--glide-brand);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
       display: grid;
       place-items: center;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
+      color: var(--app-cta-text);
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       transition: transform 0.12s ease, background 0.12s ease;
     }
     .arena-pin--selected {
-      background: var(--tg-theme-button-color, #45B9BB);
+      background: var(--tg-theme-button-color);
       transform: scale(1.08);
       box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.45);
     }
@@ -2848,8 +2963,8 @@
       padding: 8px 14px;
       border-radius: 999px;
       font: inherit;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       cursor: pointer;
       transition: background 0.12s ease, border-color 0.12s ease;
     }
@@ -2859,9 +2974,9 @@
       color: var(--tg-theme-text-color);
     }
     .arena-list-counter {
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
-      font-weight: 500;
+      font-weight: var(--app-weight-medium);
       letter-spacing: 0.02em;
     }
 
@@ -2871,7 +2986,7 @@
       align-items: center;
       gap: 12px;
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
       cursor: pointer;
@@ -2901,37 +3016,38 @@
       flex: 0 0 auto;
       width: 22px;
       height: 22px;
-      border-radius: 7px;
+      border-radius: var(--app-radius-sm);
       border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 40%, transparent);
       display: grid;
       place-items: center;
-      color: #fff;
+      color: transparent;
       background: transparent;
       transition: background 0.12s ease, border-color 0.12s ease;
     }
     .arena-card.selected .arena-card__check {
-      background: var(--tg-theme-button-color, #45B9BB);
-      border-color: var(--tg-theme-button-color, #45B9BB);
+      background: var(--tg-theme-button-color);
+      border-color: var(--tg-theme-button-color);
+      color: var(--app-cta-text);
     }
     .arena-card__main { flex: 1; min-width: 0; }
     .arena-card__name {
       display: block;
-      font-size: 15px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       line-height: 1.25;
       letter-spacing: -0.01em;
       color: var(--tg-theme-text-color);
     }
     .arena-card__addr {
       margin-top: 2px;
-      font-size: 12px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
       line-height: 1.35;
     }
     .arena-card__meta {
       margin-top: 4px;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       line-height: 1.2;
     }
@@ -2947,9 +3063,10 @@
       bottom: 0;
       margin: 14px -12px 0;
       padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
-      background: var(--tg-theme-bg-color);
+      background: var(--app-float-bg);
       border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
-    }
+      box-shadow: var(--app-float-shadow);
+}
     .arena-apply-bar[hidden] { display: none !important; }
 
     /* ── Dual action chips: Save + Notify ─────────────────────────────────── */
@@ -2969,12 +3086,12 @@
       justify-content: center;
       gap: 5px;
       padding: 11px 10px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       border: 1.5px solid rgba(128, 128, 128, 0.18);
       background: var(--tg-theme-secondary-bg-color);
       font: inherit;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       color: var(--tg-theme-hint-color);
       transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
@@ -2985,22 +3102,22 @@
 
     /* Save chip — rose/red accent */
     .trainer-action-chip--save.is-active {
-      color: #e0245e;
-      border-color: color-mix(in srgb, #e0245e 35%, transparent);
-      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
+      color: var(--glide-brand);
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
     }
 
     /* Notify chip — sky blue accent */
     .trainer-action-chip--notify.is-active {
-      color: #4f9cf9;
-      border-color: color-mix(in srgb, #4f9cf9 35%, transparent);
-      background: color-mix(in srgb, #4f9cf9 10%, var(--tg-theme-secondary-bg-color));
+      color: var(--glide-brand);
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
     }
 
     /* Pulse on the notify chip when trainer currently has no slots — subtle nudge */
     @keyframes chip-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #4f9cf9 0%, transparent); }
-      50%       { box-shadow: 0 0 0 4px color-mix(in srgb, #4f9cf9 20%, transparent); }
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--glide-brand) 0%, transparent); }
+      50%       { box-shadow: 0 0 0 4px color-mix(in srgb, var(--glide-brand) 20%, transparent); }
     }
     .trainer-action-chip--notify.wants-attention {
       animation: chip-pulse 2.4s ease-in-out 0.6s 2;
@@ -3022,8 +3139,8 @@
       border: none;
       background: transparent;
       font: inherit;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       cursor: pointer;
       opacity: 0.72;
@@ -3033,7 +3150,7 @@
     }
     .trainer-share-wide-btn:active { opacity: 0.45; }
     .trainer-share-wide-icon {
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1;
       opacity: 0.8;
     }
@@ -3042,7 +3159,7 @@
     /* One muted line below the chips that explains the notify action. */
     .chips-hint {
       margin: 6px 2px 0;
-      font-size: 11px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
       opacity: 0.75;
@@ -3058,10 +3175,10 @@
       transform: translateX(-50%) translateY(8px);
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 13px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       padding: 10px 18px;
-      border-radius: 20px;
+      border-radius: var(--app-radius-lg);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
       white-space: nowrap;
       z-index: 9999;
@@ -3078,12 +3195,12 @@
     .btn-save-trainer {
       width: 100%;
       padding: 12px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1.5px solid rgba(128, 128, 128, 0.22);
       background: transparent;
       color: var(--tg-theme-hint-color);
-      font-size: 15px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       font-family: inherit;
       cursor: pointer;
       transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
@@ -3091,9 +3208,9 @@
     }
     .btn-save-trainer:active { transform: scale(0.97); }
     .btn-save-trainer--active {
-      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
-      border-color: color-mix(in srgb, #e0245e 35%, transparent);
-      color: #e0245e;
+      background: color-mix(in srgb, var(--glide-brand) 10%, var(--tg-theme-secondary-bg-color));
+      border-color: color-mix(in srgb, var(--glide-brand) 35%, transparent);
+      color: var(--glide-brand);
     }
 
     /* studio_central center grid (ADR-003 W2) — premium list cards */
@@ -3101,22 +3218,22 @@
       margin: 4px 0 20px;
     }
     .catalog-collective-sessions-title {
-      font-size: 20px;
-      font-weight: 800;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
       margin: 0 0 6px;
       color: var(--tg-theme-text-color);
     }
     .catalog-collective-sessions-hint {
       margin: 0 0 16px;
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
     .catalog-collective-session-card {
       padding: 18px 20px;
       margin-bottom: 14px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 22%, transparent);
       box-shadow: var(--shadow-soft, 0 2px 12px rgba(0, 0, 0, 0.06));
@@ -3135,8 +3252,8 @@
       margin-bottom: 8px;
     }
     .catalog-collective-session-card__when {
-      font-size: 16px;
-      font-weight: 700;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.01em;
       line-height: 1.3;
       color: var(--tg-theme-text-color);
@@ -3145,15 +3262,15 @@
       flex-shrink: 0;
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-text-color);
       background: color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 14%, var(--tg-theme-secondary-bg-color));
       border: 1px solid color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 24%, transparent);
     }
     .catalog-collective-sessions-coaches {
       display: block;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
       margin: 0 0 14px;
@@ -3167,17 +3284,17 @@
     .catalog-collective-sessions-empty {
       padding: 28px 20px;
       text-align: center;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
       color: var(--tg-theme-hint-color);
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.45;
     }
     .catalog-collective-sessions-empty--compact {
       padding: 18px 16px;
       margin-bottom: 20px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
     }
     .catalog-collective-sessions-block {
       margin-bottom: 28px;
@@ -3186,15 +3303,15 @@
       margin-top: 8px;
     }
     .catalog-collective-passes-title {
-      font-size: 20px;
-      font-weight: 800;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
       margin: 0 0 6px;
       color: var(--tg-theme-text-color);
     }
     .catalog-collective-passes-hint {
       margin: 0 0 18px;
-      font-size: 14px;
+      font-size: var(--app-text-body);
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
@@ -3202,8 +3319,8 @@
       margin-bottom: 22px;
     }
     .catalog-collective-passes-group__label {
-      font-size: 13px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: var(--tg-theme-hint-color);
@@ -3216,7 +3333,7 @@
     }
     .catalog-collective-pass-card {
       padding: 18px 20px;
-      border-radius: 18px;
+      border-radius: var(--app-radius-lg);
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 18%, transparent);
       box-shadow: var(--shadow-soft, 0 2px 12px rgba(0, 0, 0, 0.06));
@@ -3231,8 +3348,8 @@
     .catalog-collective-pass-card__kind {
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-bold);
       letter-spacing: 0.03em;
       text-transform: uppercase;
       color: var(--tg-theme-text-color);
@@ -3240,21 +3357,21 @@
       border: 1px solid color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 22%, transparent);
     }
     .catalog-collective-pass-card__price {
-      font-size: 18px;
-      font-weight: 800;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
     .catalog-collective-pass-card__name {
-      font-size: 16px;
-      font-weight: 700;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       line-height: 1.3;
       margin-bottom: 6px;
       color: var(--tg-theme-text-color);
     }
     .catalog-collective-pass-card__meta {
       margin: 0 0 14px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
     }
@@ -3284,25 +3401,25 @@
       position: relative;
       width: min(100%, 480px);
       padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px));
-      border-radius: 20px 20px 0 0;
-      background: var(--tg-theme-bg-color);
+      border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+      background: var(--app-float-bg);
       box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
     }
     .center-pass-order-modal__sheet h3 {
       margin: 0 0 12px;
-      font-size: 20px;
-      font-weight: 800;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
     }
     .center-pass-order-modal__text {
       margin: 0 0 10px;
-      font-size: 15px;
+      font-size: var(--app-text-body);
       line-height: 1.45;
       color: var(--tg-theme-text-color);
     }
     .center-pass-order-modal__hint {
       margin: 0 0 18px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
     }
@@ -3315,8 +3432,8 @@
       min-height: 48px;
       border-radius: var(--app-btn-radius, 14px);
       border: 0;
-      font-weight: 600;
-      font-size: 15px;
+      font-weight: var(--app-weight-semibold);
+      font-size: var(--app-text-body);
       cursor: pointer;
     }
     .center-pass-order-modal__btn.secondary {
@@ -3348,12 +3465,12 @@
     .center-booking-modal__backdrop {
       position: absolute;
       inset: 0;
-      background: color-mix(in srgb, #000 0%, transparent);
+      background: rgba(0, 0, 0, 0);
       backdrop-filter: blur(0);
       transition: background 0.28s ease, backdrop-filter 0.28s ease;
     }
     .center-booking-modal.is-open .center-booking-modal__backdrop {
-      background: color-mix(in srgb, #000 42%, transparent);
+      background: rgba(0, 0, 0, 0.42);
       backdrop-filter: blur(6px);
     }
     .center-booking-modal__panel {
@@ -3363,9 +3480,9 @@
       max-height: min(92vh, 780px);
       display: flex;
       flex-direction: column;
-      border-radius: 20px 20px 0 0;
-      background: var(--tg-theme-bg-color);
-      box-shadow: 0 -8px 40px color-mix(in srgb, #000 18%, transparent);
+      border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+      background: var(--app-float-bg);
+      box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
       transform: translateY(calc(100% + 12px));
       transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
     }
@@ -3390,16 +3507,16 @@
     }
     .center-booking-modal__header-main { min-width: 0; flex: 1; }
     .center-booking-modal__title {
-      font-size: 20px;
-      font-weight: 800;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
       margin: 0;
     }
     .center-booking-modal__meta {
       margin-top: 6px;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-hint-color);
       line-height: 1.35;
     }
@@ -3410,7 +3527,7 @@
       border-radius: 50%;
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 22px;
+      font-size: var(--app-icon-lg);
       line-height: 1;
       cursor: pointer;
       flex-shrink: 0;
@@ -3428,21 +3545,21 @@
       flex-shrink: 0;
       padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
-      background: var(--tg-theme-bg-color);
+      background: var(--app-float-bg);
     }
     .center-booking-section { margin-bottom: 18px; }
     .center-booking-section--comment { margin-bottom: 8px; }
     .center-booking-section__label {
       display: block;
-      font-size: 14px;
-      font-weight: 700;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.01em;
       color: var(--tg-theme-text-color);
       margin-bottom: 10px;
     }
     .center-booking-section__hint {
       margin: 10px 0 0;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       color: var(--tg-theme-hint-color);
       line-height: 1.4;
     }
@@ -3459,7 +3576,7 @@
       min-width: 0;
       max-width: none;
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: var(--shadow-soft, 0 1px 2px rgba(0, 0, 0, 0.06));
@@ -3482,8 +3599,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      border-radius: 12px;
+      font-size: var(--app-icon-md);
+      border-radius: var(--app-radius-md);
       background: color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 10%, transparent);
       border: 1px solid color-mix(in srgb, var(--catalog-collective-accent, var(--app-cta-fill)) 18%, transparent);
     }
@@ -3499,23 +3616,23 @@
       gap: 3px;
     }
     .center-booking-mode__title {
-      font-size: 15px;
-      font-weight: 700;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.01em;
       line-height: 1.25;
       color: var(--tg-theme-text-color);
     }
     .center-booking-mode__subtitle {
-      font-size: 12px;
-      font-weight: 500;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
       line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
     .center-booking-mode__price {
       flex-shrink: 0;
       align-self: center;
-      font-size: 15px;
-      font-weight: 800;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.01em;
       color: var(--tg-theme-text-color);
       white-space: nowrap;
@@ -3530,8 +3647,8 @@
       border-radius: 999px;
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
       background: var(--tg-theme-secondary-bg-color);
-      font-size: 14px;
-      font-weight: 600;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
       cursor: pointer;
       font-family: inherit;
       color: var(--tg-theme-text-color);
@@ -3547,7 +3664,7 @@
     .center-booking-stepper {
       display: inline-flex;
       align-items: center;
-      border-radius: 16px;
+      border-radius: var(--app-radius-lg);
       overflow: hidden;
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
       background: var(--tg-theme-secondary-bg-color);
@@ -3558,8 +3675,8 @@
       height: 48px;
       border: none;
       background: transparent;
-      font-size: 22px;
-      font-weight: 500;
+      font-size: var(--app-icon-lg);
+      font-weight: var(--app-weight-medium);
       color: var(--tg-theme-text-color);
       cursor: pointer;
       font-family: inherit;
@@ -3575,19 +3692,19 @@
     .center-booking-stepper__value {
       min-width: 44px;
       text-align: center;
-      font-size: 18px;
-      font-weight: 800;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.02em;
     }
     .center-booking-comment {
       width: 100%;
       box-sizing: border-box;
       padding: 12px 14px;
-      border-radius: 14px;
+      border-radius: var(--app-radius-md);
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 15px;
+      font-size: var(--app-text-body);
       font-family: inherit;
       resize: vertical;
       min-height: 64px;
@@ -3606,26 +3723,26 @@
       margin-bottom: 4px;
     }
     .center-booking-price-label {
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
       color: var(--tg-theme-hint-color);
     }
     .center-booking-price {
-      font-size: 22px;
-      font-weight: 800;
+      font-size: var(--app-text-headline);
+      font-weight: var(--app-weight-bold);
       letter-spacing: -0.03em;
       color: var(--tg-theme-text-color);
     }
     .center-booking-price-breakdown {
       margin: 0 0 8px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
       min-height: 18px;
     }
     .center-booking-pay-hint {
       margin: 0 0 12px;
-      font-size: 13px;
+      font-size: var(--app-text-caption);
       line-height: 1.4;
       color: var(--tg-theme-hint-color);
     }

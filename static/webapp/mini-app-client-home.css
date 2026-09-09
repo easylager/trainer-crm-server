@@ -11,7 +11,7 @@ body.hub-body {
   padding: 0 0 calc(36px + env(safe-area-inset-bottom)) 0;
   overflow-x: hidden;
   /* Soft morning light — flat paper canvas */
-  background: var(--tg-theme-bg-color) !important;
+  background: var(--app-canvas-bg) !important;
 }
 
 .hub-shell {
@@ -22,26 +22,36 @@ body.hub-body {
 
 /* ─── Hero zone ──────────────────────────────────────────────────────────── */
 
+/*
+ * TASK-091 (AC-001, F-4). Приветственная зона занимала верхнюю треть экрана.
+ * Осталась одна строка: имя + переключатель профиля.
+ */
 .hub-hero {
-  padding: 22px 18px 14px;
+  padding: 14px 16px 10px;
   position: relative;
 }
 
 /* Greeting + profile chip on one row — chip must not overlay the name (EPIC1). */
+/*
+ * TASK-095 (AC-002): высота строки резервируется, потому что переключатель
+ * профиля монтируется асинхронно. 38px — фактическая высота чипа (замер
+ * getBoundingClientRect на стенде), а не подобранное на глаз число.
+ */
 .hub-hero-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 6px;
+  min-height: 38px;
 }
 
 .hub-hero-greeting {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-  letter-spacing: 0.01em;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--tg-theme-text-color);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   margin: 0;
 }
 
@@ -54,102 +64,13 @@ body.hub-body {
   display: none;
 }
 
-.hub-hero-title {
-  font-size: clamp(24px, 6.5vw, 30px);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.12;
-  margin: 0 0 8px;
-  color: var(--tg-theme-text-color);
-}
-
-.hub-hero-sub {
-  font-size: 14.5px;
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-  line-height: 1.45;
-  margin: 0 0 12px;
-  max-width: 38ch;
-}
-
-/* Has upcoming booking: greeting is the only headline — card carries the rest */
-.hub-hero--booking-led {
-  padding-bottom: 8px;
-}
-
-.hub-hero--booking-led .hub-hero-top {
-  align-items: center;
-  margin-bottom: 0;
-}
-
-.hub-hero--booking-led .hub-hero-greeting {
-  font-size: clamp(22px, 5.8vw, 28px);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.15;
-  color: var(--tg-theme-text-color);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-
-.hub-hero--booking-led .hub-hero-title {
-  display: none !important;
-}
-
-.hub-body--booking-led .ice-lane {
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
-
+/*
+ * Сценарий booking-led. Приветствие больше не раздувается в заголовок: строка
+ * одинаковая во всех сценариях, а сценарий называет кикер над карточкой.
+ * Класс сохранён — на него завязан отступ карточки записи.
+ */
 .hub-body--booking-led .hub-next-card {
   margin-top: 0;
-}
-
-/* New-client primary CTA — lives in hero, not a separate nav row */
-.hub-hero-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.hub-hero-actions[hidden] {
-  display: none !important;
-}
-
-.hub-hero-actions__primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--app-btn-icon-gap, 10px);
-}
-
-.hub-hero-actions__icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.hub-hero-actions__secondary {
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--tg-theme-hint-color);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-align: center;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  border-radius: 12px;
-}
-
-.hub-hero-actions__secondary:active {
-  opacity: 0.75;
 }
 
 /* Week streak ribbon (Duolingo-style retention nudge → client-stats) */
@@ -160,12 +81,12 @@ body.hub-body {
   max-width: 504px;
   margin: 0 auto 14px;
   padding: 12px 16px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
   background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   line-height: 1.35;
   letter-spacing: -0.02em;
   color: var(--tg-theme-text-color);
@@ -181,8 +102,8 @@ body.hub-body {
 .hub-streak-ribbon__cta {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-button-color);
 }
 
@@ -190,11 +111,11 @@ body.hub-body {
 
 .hub-next-card {
   margin: 0 16px 20px;
-  border-radius: 28px;
+  border-radius: var(--app-radius-xl);
   overflow: hidden;
   position: relative;
   color: var(--tg-theme-text-color);
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.06),
     0 2px 8px rgba(0, 0, 0, 0.04),
@@ -207,29 +128,29 @@ body.hub-body {
 }
 
 .hub-next-card--confirmed {
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   border-color: rgba(69, 185, 187, 0.22);
 }
 
 .hub-next-card--pending {
-  background: var(--glide-surface, #ffffff);
+  background: var(--glide-surface);
   border-color: rgba(69, 185, 187, 0.14);
 }
 
 .hub-is-dark .hub-next-card {
   color: rgba(255, 255, 255, 0.96);
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .hub-is-dark .hub-next-card--confirmed {
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(69, 185, 187, 0.28);
 }
 
 .hub-is-dark .hub-next-card--pending {
-  background: #2c2c2e;
+  background: var(--glide-card);
   border-color: rgba(255, 255, 255, 0.12);
 }
 
@@ -313,8 +234,8 @@ body.hub-body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
 }
 
@@ -328,12 +249,12 @@ body.hub-body {
 }
 
 .hub-next-card-status-line--confirmed .hub-next-card-status-dot {
-  background: #52c47a;
+  background: var(--app-ok);
   box-shadow: 0 0 0 2px rgba(82, 196, 122, 0.22);
 }
 
 .hub-next-card-status-line--pending .hub-next-card-status-dot {
-  background: #e8a030;
+  background: var(--app-attention);
   box-shadow: 0 0 0 2px rgba(232, 160, 48, 0.22);
   animation: hub-pulse 2.8s ease-in-out infinite;
 }
@@ -358,16 +279,16 @@ body.hub-body {
 }
 
 .hub-next-card-time {
-  font-size: clamp(26px, 7vw, 32px);
-  font-weight: 600;
+  font-size: clamp(var(--app-text-headline), 7vw, var(--app-text-display));
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.04em;
   line-height: 1;
   margin-bottom: 6px;
 }
 
 .hub-next-card-date {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
   margin-bottom: 14px;
   color: var(--tg-theme-hint-color);
 }
@@ -387,8 +308,8 @@ body.hub-body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--app-icon-xs);
+  font-weight: var(--app-weight-bold);
   flex-shrink: 0;
   text-shadow: none;
   box-shadow: 0 2px 8px rgba(200, 160, 80, 0.08);
@@ -401,16 +322,16 @@ body.hub-body {
 }
 
 .hub-next-card-trainer-name {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin-bottom: 3px;
 }
 
 .hub-next-card-place-line {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   display: flex;
   align-items: flex-start;
@@ -423,7 +344,7 @@ body.hub-body {
   height: 13px;
   flex-shrink: 0;
   margin-top: 2px;
-  color: color-mix(in srgb, var(--ice-glow) 70%, var(--tg-theme-hint-color));
+  color: var(--glide-hint);
 }
 
 .hub-next-card-place-line span {
@@ -434,7 +355,7 @@ body.hub-body {
 .hub-next-card-toolbar {
   display: flex;
   margin-top: 16px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
   background: rgba(255, 255, 255, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.85);
   overflow: hidden;
@@ -453,10 +374,10 @@ body.hub-body {
   padding: 8px 10px;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--tg-theme-text-color) 82%, #5c4a30);
+  color: var(--tg-theme-text-color);
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   letter-spacing: 0.01em;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -488,7 +409,7 @@ body.hub-body {
 
 .hub-trainer-card {
   margin: 0 16px 20px;
-  border-radius: 20px;
+  border-radius: var(--app-radius-xl);
   background: var(--tg-theme-secondary-bg-color);
   border: 1.5px solid rgba(var(--accent-rgb), 0.25);
   padding: 16px 18px;
@@ -515,13 +436,13 @@ body.hub-body {
   gap: 8px;
   width: 100%;
   padding: 11px 14px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
   border: 1.5px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-rgb), 0.12);
   color: var(--app-cta-fill);
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
   -webkit-tap-highlight-color: transparent;
@@ -571,8 +492,8 @@ body.hub-body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--app-icon-md);
+  font-weight: var(--app-weight-bold);
   color: var(--app-cta-fill);
   flex-shrink: 0;
   overflow: hidden;
@@ -591,15 +512,15 @@ body.hub-body {
 }
 
 .hub-trainer-label {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   margin-bottom: 3px;
 }
 
 .hub-trainer-name {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -607,7 +528,7 @@ body.hub-body {
 }
 
 .hub-trainer-sub {
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
@@ -626,7 +547,7 @@ body.hub-body {
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   border: 1.5px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--app-cta-fill);
@@ -663,7 +584,7 @@ body.hub-body {
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   border: 1.5px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--app-cta-fill);
@@ -708,8 +629,8 @@ body.hub-body {
 }
 
 .hub-section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
   color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
   display: flex;
@@ -727,8 +648,8 @@ body.hub-body {
 }
 
 .hub-section-link {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   color: var(--app-cta-fill);
   cursor: pointer;
   text-decoration: none;
@@ -759,7 +680,7 @@ body.hub-body {
   align-items: flex-start;
   gap: 12px;
   padding: 13px 15px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1.5px solid transparent;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -777,11 +698,11 @@ body.hub-body {
   top: 0;
   bottom: 0;
   width: 3px;
-  border-radius: 2px 0 0 2px;
+  border-radius: var(--app-radius-xs) 0 0 var(--app-radius-xs);
 }
 
-.hub-booking-row--confirmed::before { background: #34c759; }
-.hub-booking-row--pending::before { background: #ff9500; }
+.hub-booking-row--confirmed::before { background: var(--app-ok); }
+.hub-booking-row--pending::before { background: var(--app-attention); }
 
 .hub-booking-row--confirmed {
   border-color: rgba(52, 199, 89, 0.2);
@@ -817,14 +738,14 @@ body.hub-body {
 .hub-booking-time-block .hub-session-now-pill {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 700;
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.02em;
   line-height: 1.2;
   white-space: nowrap;
   background: none;
-  color: var(--tg-theme-button-color, #45B9BB);
+  color: var(--tg-theme-button-color);
   border: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
@@ -834,14 +755,14 @@ body.hub-body {
 }
 
 .hub-booking-time {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   color: var(--tg-theme-text-color);
 }
 
 .hub-booking-dur {
-  font-size: 10px;
+  font-size: var(--app-text-kicker);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
@@ -864,8 +785,8 @@ body.hub-body {
 }
 
 .hub-booking-trainer {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   line-height: 1.35;
   color: var(--tg-theme-text-color);
   overflow: hidden;
@@ -875,7 +796,7 @@ body.hub-body {
 }
 
 .hub-booking-place {
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--tg-theme-hint-color);
   line-height: 1.35;
   overflow: hidden;
@@ -892,28 +813,28 @@ body.hub-body {
 }
 
 .hub-booking-status {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 3px 8px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   white-space: nowrap;
 }
 
 .hub-booking-status--inline {
   align-self: flex-start;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: var(--app-text-kicker);
   padding: 2px 7px;
 }
 
 .hub-booking-status--confirmed {
   background: rgba(52, 199, 89, 0.15);
-  color: #34c759;
+  color: var(--app-ok-ink);
 }
 
 .hub-booking-status--pending {
   background: rgba(255, 149, 0, 0.15);
-  color: #ff9500;
+  color: var(--app-attention-ink);
 }
 
 .hub-booking-msg-btn {
@@ -922,7 +843,7 @@ body.hub-body {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   border: 1px solid rgba(var(--accent-rgb), 0.3);
   background: rgba(var(--accent-rgb), 0.08);
   color: var(--app-cta-fill);
@@ -948,8 +869,8 @@ body.hub-body {
 }
 
 .hub-day-chip {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.05em;
   color: var(--tg-theme-hint-color);
   text-transform: uppercase;
@@ -971,7 +892,7 @@ body.hub-body {
 
 .hub-bookings-cap {
   text-align: center;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--tg-theme-hint-color);
   margin-top: 10px;
 }
@@ -1012,8 +933,8 @@ body.hub-body {
 }
 
 .hub-primary-panel__row-head {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
@@ -1075,7 +996,7 @@ body.hub-body {
   gap: 4px;
   padding: 12px 14px 12px 16px;
   min-width: 132px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   background: color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color));
   border: 1.5px solid color-mix(in srgb, var(--app-cta-fill) 24%, rgba(128, 128, 128, 0.14));
   box-shadow: var(--app-btn-shadow-surface);
@@ -1096,7 +1017,7 @@ body.hub-body {
   top: 10px;
   bottom: 10px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
   background: var(--app-cta-fill);
   opacity: 0.92;
 }
@@ -1112,15 +1033,15 @@ body.hub-body {
 }
 
 .hub-primary-panel__slot-day {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   color: color-mix(in srgb, var(--tg-theme-text-color) 48%, var(--tg-theme-hint-color));
   letter-spacing: 0.02em;
 }
 
 .hub-primary-panel__slot-time {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   color: color-mix(in srgb, var(--app-cta-fill) 88%, var(--tg-theme-text-color));
 }
@@ -1129,8 +1050,8 @@ body.hub-body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: color-mix(in srgb, var(--tg-theme-text-color) 38%, var(--tg-theme-hint-color));
   max-width: 160px;
   overflow: hidden;
@@ -1146,11 +1067,11 @@ body.hub-body {
 }
 
 .hub-is-dark .hub-primary-panel__row--slots .hub-primary-panel__row-head {
-  color: color-mix(in srgb, var(--app-cta-fill) 65%, #aeaeb2);
+  color: var(--glide-ink-teal);
 }
 
 .hub-is-dark .hub-primary-panel__slot {
-  background: color-mix(in srgb, var(--app-cta-fill) 14%, #1c1c1e);
+  background: var(--glide-brand-wash);
   border-color: color-mix(in srgb, var(--app-cta-fill) 32%, rgba(255, 255, 255, 0.08));
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
 }
@@ -1161,19 +1082,19 @@ body.hub-body {
 }
 
 .hub-is-dark .hub-primary-panel__slot-time {
-  color: color-mix(in srgb, var(--app-cta-fill) 92%, #fff);
+  color: var(--glide-ink-teal);
 }
 
 .hub-is-dark .hub-primary-panel__slot-day {
-  color: color-mix(in srgb, #fff 42%, #aeaeb2);
+  color: var(--glide-hint);
 }
 
 .hub-is-dark .hub-primary-panel__slot-place {
-  color: #aeaeb2;
+  color: var(--glide-hint);
 }
 
 .hub-is-dark .hub-primary-panel__slot-place svg {
-  color: color-mix(in srgb, var(--app-cta-fill) 80%, #aeaeb2);
+  color: var(--glide-ink-teal);
 }
 
 /* Pass pill — single CTA card. Ice-blue numeric accent. */
@@ -1183,7 +1104,7 @@ body.hub-body {
   gap: 14px;
   width: 100%;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1.5px solid rgba(128, 128, 128, 0.12);
   font: inherit;
@@ -1195,7 +1116,7 @@ body.hub-body {
 }
 
 .hub-primary-panel__pass:hover {
-  border-color: color-mix(in srgb, var(--ice-glow) 65%, transparent);
+  border-color: var(--app-ok);
 }
 
 .hub-primary-panel__pass:active { transform: scale(0.985); }
@@ -1203,11 +1124,11 @@ body.hub-body {
 .hub-primary-panel__pass-num {
   flex: 0 0 auto;
   min-width: 38px;
-  font-size: 26px;
-  font-weight: 600;
+  font-size: var(--app-text-headline);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.03em;
   line-height: 1;
-  color: var(--ice-glow);
+  color: var(--app-ok-ink);
   text-align: center;
 }
 
@@ -1220,22 +1141,22 @@ body.hub-body {
 }
 
 .hub-primary-panel__pass-kicker {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
 }
 
 .hub-primary-panel__pass-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
 }
 
 .hub-primary-panel__pass-sub {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   white-space: nowrap;
   overflow: hidden;
@@ -1245,28 +1166,28 @@ body.hub-body {
 .hub-primary-panel__pass-note {
   display: block;
   margin-top: 5px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   line-height: 1.35;
-  color: color-mix(in srgb, var(--ice-glow) 72%, var(--tg-theme-hint-color));
+  color: var(--app-ok-ink);
 }
 
 .hub-primary-panel__pass--auto-debit {
-  border-color: color-mix(in srgb, var(--ice-glow) 28%, rgba(128, 128, 128, 0.12));
-  background: color-mix(in srgb, var(--ice-glow) 6%, var(--tg-theme-secondary-bg-color));
+  border-color: var(--app-ok-wash);
+  background: var(--app-ok-wash);
 }
 
 .hub-primary-panel__pass-chevron {
   flex: 0 0 auto;
   color: var(--tg-theme-hint-color);
-  font-size: 22px;
+  font-size: var(--app-icon-lg);
   line-height: 1;
 }
 
 /* History line — identity signal, not a CTA. Muted, no card. */
 .hub-primary-panel__history {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   padding: 2px 4px;
   line-height: 1.4;
@@ -1295,8 +1216,8 @@ body.hub-body {
 }
 
 .hub-discovery__title {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
@@ -1306,9 +1227,9 @@ body.hub-body {
   background: none;
   border: none;
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-cta-fill);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
   cursor: pointer;
   padding: 4px 6px;
   margin: -4px -6px;
@@ -1322,141 +1243,24 @@ body.hub-body {
   scrollbar-width: none;
   scroll-snap-type: x mandatory;
   padding: 4px 18px;
+  /*
+   * Без scroll-padding привязка прижимает первую карточку к краю окна и съедает
+   * padding ряда — карточка оказывается левее заголовка секции. Отступ должен
+   * совпадать с горизонтальным padding выше.
+   */
+  scroll-padding-inline: 18px;
 }
 
 .hub-discovery__row::-webkit-scrollbar { display: none; }
 
-.hub-discovery__card {
-  flex: 0 0 auto;
-  width: 180px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(128, 128, 128, 0.12);
-  font: inherit;
-  color: var(--tg-theme-text-color);
-  text-align: left;
-  cursor: pointer;
-  scroll-snap-align: start;
-  transition: border-color 0.2s ease, transform 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-discovery__card:hover {
-  border-color: color-mix(in srgb, var(--app-cta-fill) 45%, transparent);
-}
-
-.hub-discovery__card:active { transform: scale(0.985); }
-
-.hub-discovery__avatar {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--tg-theme-text-color) 8%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--tg-theme-hint-color);
-  overflow: hidden;
-}
-
-.hub-discovery__avatar--photo {
-  background: color-mix(in srgb, var(--tg-theme-text-color) 6%, transparent);
-}
-
-.hub-discovery__avatar--photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.hub-discovery__rating {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--tg-theme-text-color);
-  line-height: 1.2;
-}
-
-.hub-discovery__rating-count {
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-}
-
-.hub-discovery__body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.hub-discovery__name {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hub-discovery__city {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--tg-theme-hint-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hub-discovery__city svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
-.hub-discovery__svcs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-/* Plain text — wraps to 2 lines instead of clipped pills on narrow cards */
-.hub-discovery__services {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--tg-theme-hint-color);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-.hub-discovery__svc {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
-  color: var(--app-cta-fill);
-  letter-spacing: 0.01em;
-  max-width: 120px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
+/*
+ * Карточка тренера переехала в mini-app-trainer-card.css (TASK-092, DEC-001).
+ *
+ * Здесь она жила параллельной копией того же компонента из ice-tab.css, и копии
+ * разошлись: в одной плейсхолдер показывал инициалы, в другой был пустой
+ * прямоугольник. Именно расхождение и есть причина F-5, поэтому дубликат удалён,
+ * а не поправлен. Ниже остаётся только обвязка секции — заголовок и лента.
+ */
 
 .hub-quick-pill {
   flex-shrink: 0;
@@ -1464,12 +1268,12 @@ body.hub-body {
   align-items: center;
   gap: 7px;
   padding: 10px 16px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
   background: var(--tg-theme-secondary-bg-color);
   border: 1.5px solid rgba(128, 128, 128, 0.12);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
@@ -1501,15 +1305,15 @@ body.hub-body {
 
 .hub-quick-pill--primary {
   background: var(--app-cta-fill);
-  color: var(--app-cta-text, #fff);
+  color: var(--app-cta-text);
   border-color: transparent;
   box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.35);
 }
 
-.hub-quick-pill--primary svg { color: var(--app-cta-text, #fff); }
+.hub-quick-pill--primary svg { color: var(--app-cta-text); }
 
 .hub-quick-pill--primary:hover {
-  background: color-mix(in srgb, var(--app-cta-fill) 90%, #000);
+  background: var(--glide-brand-pressed);
   border-color: transparent;
 }
 
@@ -1530,7 +1334,7 @@ body.hub-body {
   align-items: flex-start;
   min-height: 110px;
   padding: 18px 16px 16px;
-  border-radius: 20px;
+  border-radius: var(--app-radius-lg);
   overflow: hidden;
   border: 1.5px solid rgba(var(--accent-rgb), 0.18);
   font: inherit;
@@ -1549,7 +1353,7 @@ html:not(.hub-is-dark) .hub-explore-tile {
 
 .hub-is-dark .hub-explore-tile {
   background: var(--tg-theme-secondary-bg-color);
-  color: #1a1a1a;
+  color: var(--glide-text);
   border-color: rgba(var(--accent-rgb), 0.35);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
 }
@@ -1597,10 +1401,10 @@ html:not(.hub-is-dark) .hub-explore-tile {
   position: absolute;
   top: 12px;
   right: 12px;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
   padding: 3px 7px;
-  border-radius: 7px;
+  border-radius: var(--app-radius-sm);
   background: rgba(var(--accent-rgb), 0.2);
   color: var(--app-cta-fill);
   line-height: 1;
@@ -1610,8 +1414,8 @@ html:not(.hub-is-dark) .hub-explore-tile {
 .hub-is-dark .hub-explore-badge { color: var(--app-cta-fill); }
 
 .hub-explore-label {
-  font-weight: 700;
-  font-size: 14px;
+  font-weight: var(--app-weight-bold);
+  font-size: var(--app-text-body);
   line-height: 1.2;
   letter-spacing: -0.02em;
   margin-bottom: 4px;
@@ -1620,21 +1424,21 @@ html:not(.hub-is-dark) .hub-explore-tile {
 }
 
 .hub-explore-hint {
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   line-height: 1.4;
   opacity: 0.72;
   position: relative;
   z-index: 1;
 }
 
-.hub-is-dark .hub-explore-hint { color: #4a4a4a; opacity: 1; }
+.hub-is-dark .hub-explore-hint { color: var(--glide-hint); opacity: 1; }
 html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); opacity: 1; }
 
 /* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
 
 .hub-acq-hero {
   margin: 0 16px 20px;
-  border-radius: 24px;
+  border-radius: var(--app-radius-xl);
   background: var(--tg-theme-secondary-bg-color);
   border: 1.5px solid rgba(var(--accent-rgb), 0.2);
   padding: 22px 20px;
@@ -1670,7 +1474,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--app-text-body);
   color: var(--tg-theme-hint-color);
 }
 
@@ -1680,8 +1484,8 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   border-radius: 50%;
   background: rgba(var(--accent-rgb), 0.15);
   color: var(--app-cta-fill);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1694,12 +1498,12 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   text-align: center;
   padding: 22px 16px;
   color: var(--tg-theme-hint-color);
-  font-size: 14px;
+  font-size: var(--app-text-body);
   line-height: 1.6;
 }
 
 .hub-empty-icon {
-  font-size: 32px;
+  font-size: var(--app-icon-xl);
   margin-bottom: 8px;
   opacity: 0.55;
 }
@@ -1709,13 +1513,13 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 .state-panel {
   margin: 0 16px 16px;
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.12);
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
-.state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: #ff3b30; }
+.state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: var(--app-danger-ink); }
 .state-panel.loading { color: var(--tg-theme-hint-color); }
 
 /* ─── Footer aside: support (secondary — not booking cards) ───────────── */
@@ -1728,8 +1532,8 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-footer-aside__kicker {
   margin: 0 0 10px 2px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: color-mix(in srgb, var(--tg-theme-hint-color) 88%, transparent);
 }
 
@@ -1743,7 +1547,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   margin: 0;
   padding: 0;
   border-radius: 0;
-  font-size: 11.5px;
+  font-size: var(--app-text-caption);
   line-height: 1.45;
   color: var(--tg-theme-hint-color);
   background: transparent;
@@ -1759,7 +1563,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-footer-aside .hub-footnote strong {
   color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color));
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
 }
 
 .hub-footer-aside .hub-footnote--collapsible {
@@ -1814,15 +1618,15 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-footer-aside .hub-footnote__title {
   color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
 .hub-footer-aside .hub-footnote__teaser {
   margin: 0;
   padding-left: 20px;
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   line-height: 1.4;
   color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, transparent);
 }
@@ -1873,7 +1677,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   transform: translateY(0);
   margin-top: 10px;
   padding: 12px 14px 14px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
   border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 24%, transparent);
 }
@@ -1890,7 +1694,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 .hub-footer-aside .hub-footnote__lead,
 .hub-footer-aside .hub-footnote__cta {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--app-text-caption);
   line-height: 1.45;
   color: var(--tg-theme-hint-color);
 }
@@ -1903,7 +1707,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   margin-top: 8px;
   padding-top: 0;
   border-top: none;
-  font-size: 10.5px;
+  font-size: var(--app-text-kicker);
 }
 
 .hub-footer-aside .hub-support-form {
@@ -1914,8 +1718,8 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 }
 
 .hub-support-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
 }
 
@@ -1923,12 +1727,12 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   width: 100%;
   min-height: 64px;
   padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 13px;
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-caption);
   line-height: 1.4;
   resize: vertical;
   box-sizing: border-box;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-canvas-bg);
   color: var(--tg-theme-text-color);
   border: 1px solid rgba(128, 128, 128, 0.2);
   font-family: inherit;
@@ -1946,7 +1750,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-support-hint {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--app-text-kicker);
   line-height: 1.4;
   color: var(--tg-theme-hint-color);
 }
@@ -1958,7 +1762,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 .hub-support-status {
   margin: 0;
   min-height: 1.35em;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   line-height: 1.45;
   color: var(--tg-theme-hint-color);
 }
@@ -1968,39 +1772,29 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 }
 
 .hub-support-status.hub-support-status--err {
-  color: #c0392b;
+  color: var(--app-danger-ink);
 }
 
 .hub-is-dark .hub-support-status.hub-support-status--err {
-  color: #ff8a80;
+  color: var(--app-danger-ink);
 }
 
 /* ─── Skeleton loading ───────────────────────────────────────────────── */
 
+/*
+ * AC-003: скелетон — часть системы поверхностей. Подложка берётся от карточки
+ * (уровень 1 контракта TASK-088), а не от «вторичного фона Telegram»: иначе в
+ * ICE PAPER плашки уходили в грязно-серый, которого нет в палитре.
+ */
 .hub-skel-shimmer {
-  background: var(--tg-theme-secondary-bg-color);
+  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
   animation: client-hub-skel-pulse 1.2s ease-in-out infinite;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
 }
 
 @keyframes client-hub-skel-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 0.9; }
-}
-
-/* Card-shaped skeleton for next-booking hero */
-.hub-skel-card {
-  margin: 0 16px 20px;
-  border-radius: 24px;
-  height: 160px;
-  opacity: 0.6;
-}
-
-.hub-skel-trainer-card {
-  margin: 0 16px 20px;
-  border-radius: 20px;
-  height: 72px;
-  opacity: 0.5;
 }
 
 /* Row-shaped skeleton for bookings list */
@@ -2015,7 +1809,7 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   border: 1px solid rgba(128, 128, 128, 0.1);
   background: var(--tg-theme-secondary-bg-color);
   min-height: 56px;
@@ -2024,98 +1818,105 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 
 .hub-skel-line {
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--app-radius-pill);
 }
 
 .hub-skel-line--time { width: 44px; height: 16px; }
 .hub-skel-line--primary { width: 65%; height: 13px; }
 .hub-skel-line--secondary { width: 40%; height: 10px; margin-top: 7px; }
 
-/* ─── Unified initial-load skeleton (hero text + card + slot strip) ────── */
-/* Visible only while body has .hub-body--loading, hidden when bootstrap    */
-/* completes. Replaces piece-by-piece pop-in with a single coherent state.  */
+/* ─── Скелетон первой загрузки (TASK-095) ──────────────────────────────── */
+/*
+ * Правило: скелетон повторяет коробку реального компонента, а не рисует
+ * «примерно похожие серые плашки». Где возможно, берутся ровно те же
+ * aspect-ratio, радиусы и ширины, что у настоящих карточек — тогда совпадение
+ * геометрии держится само, а не поддерживается вручную при каждой правке.
+ */
 
 .hub-hero-skel {
   display: none;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 2px;
+  justify-content: center;
 }
 
-.hub-skel-line--hero-greeting { width: 96px; height: 11px; opacity: 0.7; }
-.hub-skel-line--hero-title    { width: 78%;  height: 30px; border-radius: 10px; }
-.hub-skel-line--hero-title-sm { width: 46%;  height: 30px; border-radius: 10px; }
+.hub-skel-line--hero-greeting { width: 148px; height: 12px; opacity: 0.7; }
 
 .hub-initial-skel {
   display: none;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--app-space-2);
   margin: 0 0 20px;
   padding: 0 16px;
 }
 
-.hub-initial-skel__trainer {
-  display: flex;
+.hub-skel-line--kicker { width: 132px; height: 10px; opacity: 0.55; margin: 4px 0; }
+
+/* Коробка карточки льда: та же, что у a.hub-ice-card. */
+.hub-skel-icecard {
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  overflow: hidden;
+}
+
+.hub-skel-band {
+  aspect-ratio: 4 / 1;
+  border-radius: 0;
+}
+
+.hub-skel-icerow {
+  display: grid;
+  grid-template-columns: 78px 1fr;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1px solid rgba(128, 128, 128, 0.1);
-  min-height: 72px;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-4);
+  min-height: 70px;
   box-sizing: border-box;
 }
 
-.hub-skel-avatar {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-}
-
-.hub-initial-skel__trainer-lines {
-  flex: 1;
+.hub-skel-icelines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
   min-width: 0;
+}
+
+/* Коробка строки поиска: те же 39px, что у .hub-search. */
+.hub-skel-search {
+  height: 39px;
+  border-radius: var(--app-radius-md);
+}
+
+/* Коробка карточки тренера: ширина и aspect-ratio из TASK-092. */
+.hub-skel-cards {
+  display: flex;
+  gap: var(--app-space-3);
+  overflow: hidden;
+}
+
+.hub-skel-tcard {
+  flex: 0 0 auto;
+  width: 216px;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--app-space-2);
+  box-sizing: border-box;
 }
 
-.hub-skel-line--trainer-name { width: 58%; height: 14px; }
-.hub-skel-line--trainer-sub  { width: 42%; height: 10px; opacity: 0.65; }
-
-.hub-initial-skel__strip {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hub-skel-line--head { width: 120px; height: 11px; opacity: 0.55; }
-
-.hub-initial-skel__chips {
-  display: flex;
-  gap: 10px;
-}
-
-.hub-skel-chip {
-  flex: 1 1 0;
-  height: 68px;
-  min-width: 84px;
-  border-radius: 14px;
-  opacity: 0.55;
-}
-
-.hub-skel-line--history {
-  width: 55%;
-  height: 10px;
-  opacity: 0.4;
+.hub-skel-tcard__media {
+  aspect-ratio: 4 / 5;
+  border-radius: var(--app-radius-md);
 }
 
 /* Loading-state: skeleton on, real blocks + footnote off until fully ready. */
 body.hub-body--loading .hub-hero-greeting,
-body.hub-body--loading .hub-hero-title,
-body.hub-body--loading .hub-hero-sub,
-body.hub-body--loading #hubHeroActions {
+body.hub-body--loading .hub-ice-zone {
   display: none !important;
 }
 body.hub-body--loading .hub-hero-skel { display: flex; }
@@ -2139,9 +1940,7 @@ body.hub-body--loading #hubFooterAside {
 }
 
 body.hub-body--revealed .hub-hero-greeting,
-body.hub-body--revealed .hub-hero-title,
-body.hub-body--revealed .hub-hero-sub,
-body.hub-body--revealed #hubHeroActions,
+body.hub-body--revealed .hub-ice-zone,
 body.hub-body--revealed #nextBookingBlock,
 body.hub-body--revealed #myTrainerBlock,
 body.hub-body--revealed #hubPrimaryPanel,
@@ -2162,9 +1961,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 
 @media (prefers-reduced-motion: reduce) {
   body.hub-body--revealed .hub-hero-greeting,
-  body.hub-body--revealed .hub-hero-title,
-  body.hub-body--revealed .hub-hero-sub,
-  body.hub-body--revealed #hubHeroActions,
+  body.hub-body--revealed .hub-ice-zone,
   body.hub-body--revealed #nextBookingBlock,
   body.hub-body--revealed #myTrainerBlock,
   body.hub-body--revealed #hubPrimaryPanel,
@@ -2193,7 +1990,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 @media (prefers-reduced-motion: reduce) {
   .hub-skel-shimmer {
     animation: none !important;
-    background: var(--tg-theme-secondary-bg-color) !important;
+    background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid)) !important;
     opacity: 0.88;
   }
   .hub-bookings-mount {
@@ -2219,16 +2016,16 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 }
 
 .hub-saved-section-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
 }
 
 .hub-saved-section-link {
   background: none;
   border: none;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-button-color);
   cursor: pointer;
   padding: 0;
@@ -2254,8 +2051,8 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
   min-width: 68px;
   padding: 10px 12px;
   background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid color-mix(in srgb, #e0245e 25%, transparent);
-  border-radius: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--glide-brand) 25%, transparent);
+  border-radius: var(--app-radius-md);
   cursor: pointer;
   font-family: inherit;
   transition: transform 0.12s ease, background 0.12s ease;
@@ -2263,14 +2060,14 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 .hub-saved-chip:active { transform: scale(0.95); }
 
 .hub-saved-chip-icon {
-  font-size: 18px;
+  font-size: var(--app-icon-md);
   line-height: 1;
 }
 
 .hub-saved-chip-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   overflow: hidden;
   flex-shrink: 0;
   background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
@@ -2283,70 +2080,13 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
 }
 
 .hub-saved-chip-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 64px;
-}
-
-/* ─── Ice Lane: divider с текстом — appear → hold → fade → pause → repeat ── */
-
-.ice-lane {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px 18px 14px;
-  opacity: 0;
-  pointer-events: none;
-  color: var(--app-cta-fill);
-}
-
-.ice-lane__line {
-  flex: 1;
-  height: 1px;
-  background: color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
-  border-radius: 1px;
-}
-
-.ice-lane__wordmark {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  font-family: var(--app-font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  color: color-mix(in srgb, var(--tg-theme-hint-color) 80%, var(--tg-theme-text-color));
-}
-
-/* Cycle starts only after bootstrap — not while skeleton is on screen. */
-body.hub-body--revealed .ice-lane {
-  animation: ice-lane-cycle 9s ease-in-out infinite;
-}
-
-.ice-lane--paused {
-  animation-play-state: paused !important;
-}
-
-/* appear(0→18%) → hold(18→52%) → fade(52→65%) → pause(65→100%) */
-@keyframes ice-lane-cycle {
-  0%   { opacity: 0; }
-  18%  { opacity: 1; }
-  52%  { opacity: 1; }
-  65%  { opacity: 0; }
-  100% { opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.hub-body--revealed .ice-lane {
-    animation: none;
-    opacity: 0.6;
-  }
 }
 
 /* ─── Sticky «Записаться» FAB — primary trainer, above client tab bar ───── */
@@ -2368,12 +2108,12 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
   gap: 8px;
   padding: 14px 20px 14px 18px;
   border: none;
-  border-radius: 18px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-cta-fill);
   color: var(--app-cta-text);
   font: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.01em;
   cursor: pointer;
       box-shadow:
@@ -2400,7 +2140,7 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
 }
 
 .client-hub-book-fab.hub-book-fab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-cta-fill) 70%, #000);
+  outline: 2px solid var(--glide-brand-pressed);
   outline-offset: 3px;
 }
 
@@ -2424,3 +2164,194 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
     animation: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * TASK-091. ЛЁД НА ГЛАВНОЙ.
+ *
+ * Было (TASK-055): строка-тизер внизу первого экрана. Она сообщала факт, но
+ * не продавала — читалась как примечание, а не как товар.
+ * Стало: та же карточка, что на «Льду», в компактном исполнении. Кадр,
+ * время-якорь, каток, условия. Один объект на двух экранах — узнаётся.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.hub-ice-zone {
+  display: flex;
+  flex-direction: column;
+  /*
+   * Было gap 8px и нулевой верх: заголовок «НА ЛЬДУ · ГОРОД» прилипал и к карточке
+   * сверху, и к кадру снизу, из-за чего три разных объекта читались одной массой.
+   * Надзаголовок набран прописными в 10px — у него маленькая оптическая высота,
+   * и 8px рядом с фотографией во всю ширину воспринимаются почти как ноль.
+   */
+  gap: var(--app-space-3);
+  margin: var(--app-space-3) 16px 20px;
+}
+
+.hub-ice-zone[hidden] {
+  display: none;
+}
+
+.hub-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+}
+
+.hub-sec-head[hidden] {
+  display: none;
+}
+
+.hub-kicker {
+  margin: 0;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-sec-link {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-ink-teal);
+  text-decoration: none;
+}
+
+.hub-ice-teaser-wrap[hidden] {
+  display: none;
+}
+
+a.hub-ice-card {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+}
+
+.hub-ice-card__photo {
+  display: block;
+  width: 100%;
+  /* Полоса, а не кадр: на Главной лёд — один из блоков, а не весь экран. */
+  aspect-ratio: 4 / 1;
+  background-color: var(--app-media-bed);
+  background-size: cover;
+  background-position: center 55%;
+  position: relative;
+}
+
+.hub-ice-card__photo--empty {
+  background-image: repeating-linear-gradient(
+      115deg,
+      transparent 0 22px,
+      rgba(127, 127, 127, 0.06) 22px 24px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+}
+
+.hub-ice-card__initial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  color: var(--tg-theme-hint-color);
+  opacity: 0.55;
+}
+
+.hub-ice-card__row {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-4);
+}
+
+.hub-ice-card__when {
+  min-width: 0;
+}
+
+.hub-ice-card__time {
+  display: block;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-ice-card__day {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-ice-card__what {
+  min-width: 0;
+}
+
+.hub-ice-card__name {
+  display: block;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-ice-card__facts {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-ice-card__chev {
+  color: var(--tg-theme-hint-color);
+  font-size: var(--app-text-body);
+  line-height: 1;
+}
+
+/* AC-003: поиск — строка, а не CTA на 15% высоты экрана. */
+.hub-search {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px var(--app-space-3);
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg-solid);
+  font-family: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-hint-color);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-search:active {
+  opacity: 0.75;
+}
+
+.hub-search__ic {
+  width: var(--app-icon-sm);
+  height: var(--app-icon-sm);
+  flex: 0 0 auto;
+}
+

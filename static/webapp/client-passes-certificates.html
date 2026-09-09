@@ -4,14 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы и сертификаты</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202608315"></script>
-  <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=202608315"></script>
+  <link rel="stylesheet" href="theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <style>
@@ -1123,7 +1125,21 @@
             }
 
             if (passState.items.length === 0 && !showShop) {
-              listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              // TASK-096 AC-002. Витрины у этого тренера нет (showShop=false), значит выход —
+              // не «купить здесь», а к другим тренерам.
+              var E = window.MiniAppEmptyState;
+              if (E) {
+                E.renderOrFallback(listEl, {
+                  icon: E.ICONS.ticket,
+                  title: 'Пока нет абонементов',
+                  hint: 'Абонемент оформляет тренер — спросите про него при записи или выберите другого тренера.',
+                  ctaLabel: 'Найти тренера',
+                  ctaPath: 'ice?intent=coach',
+                  fallbackText: 'Пока нет абонементов.',
+                });
+              } else {
+                listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              }
               return;
             }
 
@@ -1509,8 +1525,23 @@
             });
             if (rest.length === 0) {
               if (primaries.length === 0) {
-                listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+                // TASK-096 AC-002: ни одного сертификата — состояние с выходом.
+                var E = window.MiniAppEmptyState;
+                if (E) {
+                  E.renderOrFallback(listEl, {
+                    icon: E.ICONS.gift,
+                    title: 'Пока нет сертификатов',
+                    hint: 'Сертификат на занятия оформляет тренер — его можно попросить как подарок.',
+                    ctaLabel: 'Найти тренера',
+                    ctaPath: 'ice?intent=coach',
+                    fallbackText: 'Пока нет сертификатов.',
+                  });
+                } else {
+                  listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+                }
               } else {
+                // Не пустое состояние: сертификаты есть и показаны выше. Это подпись хвоста
+                // списка, и превращать её в экран с кнопкой было бы неправдой.
                 listEl.innerHTML = '<div class="empty cert-list-rest-empty">Других сертификатов нет.</div>';
               }
               return;

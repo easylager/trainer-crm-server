@@ -1505,11 +1505,14 @@ async def test_webapp_client_shell_assets_served() -> None:
         css = await client.get("/webapp/mini-app-client-shell.css")
         js = await client.get("/webapp/mini-app-client-shell.js")
         bookings_css = await client.get("/webapp/mini-app-client-bookings.css")
+        empty_state_js = await client.get("/webapp/mini-app-empty-state.js")
     assert css.status_code == 200
     assert "client-tab-bar" in css.text
     assert js.status_code == 200
     assert "ClientShell" in js.text
     assert bookings_css.status_code == 200
+    assert empty_state_js.status_code == 200
+    assert "MiniAppEmptyState" in empty_state_js.text
 
 
 @pytest.mark.asyncio
@@ -1655,7 +1658,7 @@ async def test_client_hub_bootstrap_primary_history_absent_when_no_completed(
 @pytest.mark.asyncio
 async def test_webapp_client_tier_a_pages_include_shell() -> None:
     """Tier A client pages load app shell for bottom tab navigation."""
-    paths = ("/webapp/catalog", "/webapp/client-bookings", "/webapp/client-requests")
+    paths = ("/webapp/ice", "/webapp/catalog?trainer_id=1", "/webapp/client-bookings", "/webapp/client-requests")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         for path in paths:
             resp = await client.get(path)
@@ -1837,7 +1840,7 @@ async def test_webapp_book_and_catalog_booking_assets_served() -> None:
     """Booking strangler hosts and shared module assets are reachable."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         book = await client.get("/webapp/book")
-        catalog = await client.get("/webapp/catalog")
+        catalog = await client.get("/webapp/catalog?trainer_id=1")
         bc_js = await client.get("/webapp/booking-client.js")
         bc_css = await client.get("/webapp/booking-client.css")
         bd_js = await client.get("/webapp/booking-deeplink.js")

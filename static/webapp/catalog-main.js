@@ -66,6 +66,7 @@
         slotsForTrainer: [],
         /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
         trainerSlotsArenaIds: [],
+        slotsEmptyOnFilterHint: '',
         /** When true, skip auto-pick from slot availability (URL arena or user toggled chips). */
         trainerSlotsArenaFilterExplicit: false,
         /** Deep link ?slot_id= — open booking form once slots for the card are loaded. */
@@ -205,6 +206,13 @@
         else if (label) {
           chunks.push('<div class="booking-venue-slot-lines">Площадка: ' + escapeHtml(label) + '</div>');
         }
+        var mismatchNotice =
+          window.BookingClient && typeof window.BookingClient.formatPlaceMismatchNotice === 'function'
+            ? window.BookingClient.formatPlaceMismatchNotice(slot)
+            : '';
+        if (mismatchNotice) {
+          chunks.push('<p class="booking-place-mismatch">' + escapeHtml(mismatchNotice) + '</p>');
+        }
         el.className = 'booking-venue-hint';
         if (!chunks.length) {
           el.style.display = 'none';
@@ -334,11 +342,26 @@
       }
 
       /** Same path as tapping a slot row on the trainer card — service/tier can be changed on the form. */
-      function openCatalogBookingFormForSlot(slot) {
+      /**
+       * @param {object} slot
+       * @param {{from?: 'slotPick'|'trainerDetail'}} [opts] откуда открыли форму —
+       *   от этого зависит, куда вернёт «Назад». Раньше форма этого не помнила и
+       *   всегда возвращала на карточку, перепрыгивая через выбор времени.
+       */
+      function openCatalogBookingFormForSlot(slot, opts) {
         if (!slot) return false;
         document.body.classList.remove('catalog-booking-deeplink');
         state.selectedSlot = slot;
+        state.bookingFormOpenedFrom = (opts && opts.from) || 'trainerDetail';
+        clearBookingNotice();
         assignCatalogBookingIdempotencyKeyForSlot();
+        var trainerLineEl = document.getElementById('bookingFormTrainerLine');
+        if (trainerLineEl) {
+          var tSel = state.selectedTrainer;
+          var tName = tSel ? trainerName(tSel) : '';
+          trainerLineEl.textContent = tName ? 'Запись к тренеру: ' + tName : '';
+          trainerLineEl.hidden = !tName;
+        }
         var labelEl = document.getElementById('bookingFormSlotLabel');
         if (labelEl) {
           labelEl.textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
@@ -407,13 +430,48 @@
         return !isNaN(id) && id > 0;
       }
 
-      function isHubDirectBookEntry() {
+      /**
+       * Откуда пришёл прямой вход «сразу на выбор времени» (`?action=book`).
+       *
+       * Таких входов два — Главная и карточка арены, — но контракт возврата знал
+       * только Главную. Из-за этого «Назад» с арены уходило в ветку «показать
+       * карточку тренера», а карточка в этом сценарии никогда не отрисовывалась:
+       * человек упирался в пустой экран. Возвращает 'hub' | 'arena' | ''.
+       */
+      function directBookEntryOrigin() {
         try {
           var qp = new URLSearchParams(window.location.search || '');
-          return qp.get('from') === 'hub' && qp.get('action') === 'book';
+          if (qp.get('action') !== 'book') return '';
+          var from = qp.get('from') || '';
+          return from === 'hub' || from === 'arena' ? from : '';
         } catch (eHub) {
-          return false;
+          return '';
         }
+      }
+
+      /**
+       * id арены, с которой пришли (`catalog?from=arena&arena_id=…`).
+       *
+       * Не привязано к `action=book`: тап по тренеру на арене ведёт на карточку,
+       * а не на выбор времени, поэтому вернуть на арену нужно именно с карточки.
+       */
+      function arenaOriginId() {
+        try {
+          var qp = new URLSearchParams(window.location.search || '');
+          if (qp.get('from') !== 'arena') return null;
+          var raw = qp.get('arena_id');
+          return raw == null || raw === '' ? null : raw;
+        } catch (eArena) {
+          return null;
+        }
+      }
+
+      function directBookEntryArenaId() {
+        return arenaOriginId();
+      }
+
+      function isHubDirectBookEntry() {
+        return directBookEntryOrigin() === 'hub';
       }
 
       function clearCatalogDeepLinkShellClasses() {
@@ -551,12 +609,18 @@
               state.slotsForTrainer = slots || [];
               if (state.pendingDeepLinkSlotId && maybeOpenPendingDeepLinkSlotBooking(t, slots)) return;
               clearCatalogDeepLinkShellClasses();
+              // Карточку тренера рисуем, хотя показываем сразу выбор времени: на неё
+              // ведут «Назад» и возврат из формы заявки, и без этой строки оба
+              // приводили на пустой экран. Отрисовка скрытого экрана дешевле, чем
+              // разбирать в каждой точке возврата, был он отрисован или нет.
+              renderTrainerDetail();
               renderSlotPickList();
               showScreen('screenSlotPick');
             })
             .catch(function() {
               clearCatalogDeepLinkShellClasses();
               state.slotsForTrainer = [];
+              renderTrainerDetail();
               renderSlotPickList();
               showScreen('screenSlotPick');
             });
@@ -1045,17 +1109,24 @@
         if (sid === 'screenBookingForm' || sid === 'screenSlotPick') {
           btn.hidden = false;
           btn.onclick = function() {
-            if (sid === 'screenSlotPick' && isHubDirectBookEntry()) {
+            var origin = directBookEntryOrigin();
+            if (sid === 'screenSlotPick' && origin) {
               if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
-                window.BookingClient.navigateBookingReturn('hub');
-              } else if (typeof window.navigateClientHome === 'function') {
+                window.BookingClient.navigateBookingReturn(origin, {
+                  arenaId: directBookEntryArenaId(),
+                  trainerId: state.trainerId,
+                });
+              } else if (origin === 'hub' && typeof window.navigateClientHome === 'function') {
                 window.navigateClientHome();
               } else if (canBrowserGoBack()) {
                 window.history.back();
               }
               return;
             }
-            if (sid === 'screenBookingForm' && isHubDirectBookEntry()) {
+            // Форма записи возвращает туда, откуда её открыли, а не всегда на
+            // карточку: пришёл через список времени — вернись в список времени,
+            // иначе «Назад» молча отменяет сделанный выбор.
+            if (sid === 'screenBookingForm' && (origin || state.bookingFormOpenedFrom === 'slotPick')) {
               renderSlotPickList();
               showScreen('screenSlotPick');
               return;
@@ -1072,6 +1143,20 @@
             } else {
               showScreen('screenTrainers');
             }
+          };
+          return;
+        }
+        // Пришли с карточки арены — «Назад» возвращает туда же. Без этой ветки
+        // возврат уходил в общий history.back(), который после навигации оболочки
+        // не гарантирует именно арену.
+        if (sid === 'screenTrainerDetail' && arenaOriginId()) {
+          btn.hidden = false;
+          btn.onclick = function() {
+            if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
+              window.BookingClient.navigateBookingReturn('arena', { arenaId: arenaOriginId() });
+              return;
+            }
+            window.history.back();
           };
           return;
         }
@@ -1101,6 +1186,37 @@
         }
         btn.hidden = !canBrowserGoBack();
         btn.onclick = function() { window.history.back(); };
+      }
+
+      /**
+       * Шапка называет то, что на экране.
+       *
+       * Раньше `headerTitle` не трогали ни разу: карточка тренера, выбор времени,
+       * форма записи и экран успеха — все четыре подписаны «Тренеры». Человек,
+       * пришедший с арены, на каждом шаге видел одно и то же слово и не понимал,
+       * к кому он записывается и на каком он шаге.
+       *
+       * Имя тренера держится на всех трёх шагах записи специально: это один и тот
+       * же объект, и подменять его названием шага значит снова потерять, к кому
+       * идёт запись. Шаг подписан внутри экрана — там есть step-title.
+       */
+      function syncCatalogHeaderTitle(screenId) {
+        var el = document.getElementById('headerTitle');
+        if (!el) return;
+        var t = state.selectedTrainer;
+        var name = t ? trainerName(t) : '';
+        var title = 'Тренеры';
+        if (screenId === 'screenSuccess') title = 'Готово';
+        else if (screenId === 'screenRequestForm') title = 'Заявка';
+        else if (
+          name &&
+          (screenId === 'screenTrainerDetail' ||
+            screenId === 'screenSlotPick' ||
+            screenId === 'screenBookingForm')
+        ) {
+          title = name;
+        }
+        el.textContent = title;
       }
 
       function syncClientShellTabBarForScreen(screenId) {
@@ -1139,6 +1255,7 @@
           switchTab(state.activeTab);
         }
         syncClientShellTabBarForScreen(id);
+        syncCatalogHeaderTitle(id);
         syncCatalogHeaderBack();
         syncCatalogTrainerStickyCta(id === 'screenTrainerDetail' && catalogTrainerStickyEligible());
       }
@@ -3341,6 +3458,31 @@
         }, dur);
       }
 
+      /**
+       * Постоянное сообщение на форме записи — для исходов, которые тост не тянет.
+       *
+       * Когда сеть не ответила или ответ не распознан, запись могла всё равно
+       * создаться. Это нельзя показать на 2,4 секунды: человеку нужно прочитать
+       * и пойти проверить «Мои записи». Нативный alert тут тоже не подходит — он
+       * закрывается одним тапом и не оставляет следа на экране.
+       */
+      function showBookingNotice(message) {
+        var el = document.getElementById('bookingFormNotice');
+        if (!el) {
+          showToast(message, 6000);
+          return;
+        }
+        el.textContent = message;
+        el.hidden = false;
+      }
+
+      function clearBookingNotice() {
+        var el = document.getElementById('bookingFormNotice');
+        if (!el) return;
+        el.textContent = '';
+        el.hidden = true;
+      }
+
       /** Toggle save state for current trainer. Optimistic UI update then API call. */
       function toggleSaveTrainer(trainerId) {
         var initData = tg && tg.initData ? tg.initData : '';
@@ -3904,6 +4046,31 @@
         }
       }
 
+      /**
+       * TASK-096 AC-002: один вызов общего компонента пустого состояния на весь каталог.
+       * `iconName` — ключ в MiniAppEmptyState.ICONS; `fallbackText` рисуется, только если
+       * mini-app-empty-state.js не загрузился, чтобы контейнер никогда не оставался пустым.
+       */
+      function renderCatalogEmpty(container, opts) {
+        if (!container) return;
+        var E = window.MiniAppEmptyState;
+        if (!E) {
+          container.innerHTML = '<div class="empty">' + escapeHtml(opts.fallbackText || '') + '</div>';
+          return;
+        }
+        E.renderOrFallback(container, {
+          icon: E.ICONS[opts.iconName] || E.ICONS.search,
+          title: opts.title,
+          hint: opts.hint,
+          ctaLabel: opts.ctaLabel,
+          ctaPath: opts.ctaPath,
+          onCta: opts.onCta,
+          secondaryLabel: opts.secondaryLabel,
+          onSecondary: opts.onSecondary,
+          fallbackText: opts.fallbackText,
+        });
+      }
+
       function resetPickerSearch(kind) {
         var input = document.getElementById(kind + 'SearchInput');
         if (!input || !input.value) return;
@@ -4022,12 +4189,37 @@
               submitCatalogGroupJoinRequest(gid);
             };
           });
+          focusRequestedTrainingGroup(el);
         }).catch(function() { /* no block */ });
+      }
+
+      /**
+       * Раскрывает и подсвечивает группу, ради которой человек сюда пришёл
+       * (`catalog?...&group_id=N` с карточки арены).
+       *
+       * Блок «Набор в группы» свёрнут в <details>: без этого человек, тапнувший
+       * на арене конкретный набор, попадал на карточку и не находил его вовсе.
+       * id съедается после первого применения — иначе группа подсвечивалась бы
+       * заново при каждом возврате на карточку.
+       */
+      function focusRequestedTrainingGroup(root) {
+        var gid = state.pendingFocusGroupId;
+        if (!gid || !root) return;
+        var card = root.querySelector('.catalog-group-join[data-group-id="' + gid + '"]');
+        if (!card) return;
+        state.pendingFocusGroupId = null;
+        var details = root.querySelector('details.trainer-detail-groups-details');
+        if (details) details.open = true;
+        var box = card.closest('.trainer-detail-group-card') || card;
+        box.classList.add('trainer-detail-group-card--focus');
+        if (typeof box.scrollIntoView === 'function') {
+          box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
       function submitCatalogGroupJoinRequest(groupId) {
         var initData = tg && tg.initData ? tg.initData : '';
         if (!initData) {
-          alert('Откройте каталог из Telegram, чтобы отправить заявку.');
+          showToast('Откройте каталог из Telegram, чтобы отправить заявку.');
           return;
         }
         var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
@@ -4046,10 +4238,10 @@
             prefetch.firstPageKey = null;
             prefetch.firstPageData = null;
             clearCatalogSessionStorageCache();
-            alert('Вы добавлены в группу. Тренер увидит вас в списке участников.');
+            showToast('Вы добавлены в группу. Тренер увидит вас в списке участников.');
           })
           .catch(function(e) {
-            alert(e.message || 'Не удалось отправить заявку');
+            showToast(e.message || 'Не удалось отправить заявку');
           });
       }
       /** Summary filter row labels (trainer is chosen on the list screen, not in this panel). */
@@ -4502,7 +4694,16 @@
         getJson('/cities').then(function(data) {
           catalogCityItems = data.items || [];
           if (!catalogCityItems.length) {
-            document.getElementById('cityList').innerHTML = '<div class="empty">Нет городов</div>';
+            // TASK-096 AC-002: пустой список городов — не состояние продукта, а сбой загрузки.
+            // «Нет городов» без кнопки оставляло экран, из которого нельзя выйти.
+            renderCatalogEmpty(document.getElementById('cityList'), {
+              iconName: 'city',
+              title: 'Список городов не загрузился',
+              hint: 'Похоже, пропала связь. Попробуйте открыть список ещё раз.',
+              ctaLabel: 'Повторить',
+              onCta: function() { loadCities(); },
+              fallbackText: 'Нет городов',
+            });
             syncPickerSearchChrome('city', 0, 0, '');
             syncCatalogHeaderBack();
             return;
@@ -4615,8 +4816,17 @@
         loadReq.then(function(data) {
           var items = data.items || [];
           if (!items.length) {
-            var emptyMsg = 'Нет услуг в каталоге';
-            document.getElementById('serviceList').innerHTML = '<div class="empty">' + emptyMsg + '</div>';
+            // TASK-096 AC-002: пустой каталог услуг — сбой, а не состояние. Даём повтор.
+            renderCatalogEmpty(document.getElementById('serviceList'), {
+              iconName: 'retry',
+              title: 'Список услуг не загрузился',
+              hint: 'Похоже, пропала связь. Попробуйте ещё раз или вернитесь к выбору города.',
+              ctaLabel: 'Повторить',
+              onCta: function() { loadServices(); },
+              secondaryLabel: 'Выбрать город',
+              onSecondary: function() { showScreen('screenCity'); },
+              fallbackText: 'Нет услуг в каталоге',
+            });
             var backCityEmpty = document.getElementById('backToCity');
             if (backCityEmpty) backCityEmpty.style.display = state.returnToSummary ? 'none' : 'block';
             syncCatalogHeaderBack();
@@ -4958,7 +5168,15 @@
         var input = document.getElementById('arenaSearchInput');
         var query = input ? input.value : '';
         if (!items.length) {
-          listEl.innerHTML = '<div class="empty">В этом городе арены пока не добавлены</div>';
+          // TASK-096 AC-002: арен в городе нет — выход в другой город, а не сообщение в пустоту.
+          renderCatalogEmpty(listEl, {
+            iconName: 'city',
+            title: 'В этом городе арен пока нет',
+            hint: 'Мы добавляем площадки по городам постепенно. В другом городе они, скорее всего, уже есть.',
+            ctaLabel: 'Выбрать другой город',
+            onCta: function() { showScreen('screenCity'); },
+            fallbackText: 'В этом городе арены пока не добавлены',
+          });
           syncPickerSearchChrome('arena', 0, 0, query);
           return;
         }
@@ -4967,10 +5185,16 @@
         });
         syncPickerSearchChrome('arena', items.length, filtered.length, query);
         if (!filtered.length) {
-          listEl.innerHTML =
-            '<div class="empty">' +
-            'Площадка не найдена<div class="catalog-picker-search__empty-hint">Попробуйте часть названия или адреса</div>' +
-            '</div>';
+          // TASK-096 AC-002: фильтр ничего не нашёл — сбросить его можно кнопкой, а не только
+          // догадавшись очистить поле поиска.
+          renderCatalogEmpty(listEl, {
+            iconName: 'search',
+            title: 'Площадка не найдена',
+            hint: 'Попробуйте часть названия или адреса — или посмотрите все площадки города.',
+            ctaLabel: 'Показать все площадки',
+            onCta: function() { resetPickerSearch('arena'); },
+            fallbackText: 'Площадка не найдена',
+          });
           return;
         }
         var selectedSet = {};
@@ -5680,6 +5904,7 @@
         return fetch('/api/webapp/client/slots?' + q, { headers: headers }).then(function(r) {
           return r.json().then(function(data) {
             if (!r.ok) throw new Error(data.detail || r.statusText);
+            state.slotsEmptyOnFilterHint = data && data.empty_on_filter ? (data.empty_on_filter_hint || '') : '';
             return data;
           });
         });
@@ -5862,12 +6087,20 @@
         var slots = state.slotsForTrainer;
         var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
         if (slots.length === 0) {
+          var emptyHint = (data && data.empty_on_filter_hint) || state.slotsEmptyOnFilterHint || '';
           slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
-          slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
+          slotsHtml +=
+            '<div class="slots-empty slots-empty-hint">' +
+            escapeHtml(emptyHint || 'Оставьте заявку — тренер предложит удобное время.') +
+            '</div>';
         } else {
           var showCount = Math.min(slots.length, 6);
           for (var i = 0; i < showCount; i++) {
             var s = slots[i];
+            var place =
+              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+                : ((s.arena_name && String(s.arena_name).trim()) || '');
             slotsHtml +=
               '<button type="button" class="slot-row" data-slot-index="' +
               i +
@@ -5875,6 +6108,7 @@
               '<span class="slot-row-main"><span class="slot-row-line">' +
               formatSlotLabel(s) +
               '</span>' +
+              (place ? '<span class="slot-row-place">' + escapeHtml(place) + '</span>' : '') +
               slotGroupSpotsPillHtml(s) +
               '</span><span>→</span></button>';
           }
@@ -5889,7 +6123,7 @@
         slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
           btn.onclick = function() {
             var ii = parseInt(btn.dataset.slotIndex, 10);
-            openCatalogBookingFormForSlot(state.slotsForTrainer[ii]);
+            openCatalogBookingFormForSlot(state.slotsForTrainer[ii], { from: 'trainerDetail' });
           };
         });
         var btnMore = document.getElementById('btnShowAllSlots');
@@ -5925,10 +6159,31 @@
         document.getElementById('trainerDetailSecondary').innerHTML = '';
       }
 
+      function wireTrainerArenaChips(root) {
+        if (!root) return;
+        root.querySelectorAll('a.trainer-arena-chip[href]').forEach(function (link) {
+          link.addEventListener('click', function (ev) {
+            var href = link.getAttribute('href');
+            if (!href) return;
+            ev.preventDefault();
+            if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+              window.ClientShell.navigate(href);
+              return;
+            }
+            window.location.href = href;
+          });
+        });
+      }
+
       /**
-       * Multiple arenas: show primary + muted secondaries and a short client hint (request for other venues).
+       * Arenas on the trainer card: chips that open arena cards (TASK-055).
+       * Fallback keeps the pre-055 stack if the chips model is not loaded.
        */
       function buildTrainerArenasBlock(t) {
+        var chipsApi = window.TrainerArenaChips;
+        if (chipsApi && typeof chipsApi.buildTrainerArenaChips === 'function') {
+          return chipsApi.renderTrainerArenaChipsHtml(chipsApi.buildTrainerArenaChips(t));
+        }
         var ids = t.arena_ids || [];
         var names = t.arena_names || [];
         var n = ids.length;
@@ -6001,7 +6256,16 @@
         var arenaIds = t.arena_ids || [];
         var arenaStatClass = 'trainer-detail-stat';
         var arenaInnerHtml;
-        if (arenaIds.length > 1) {
+        var chipsHtml = '';
+        if (window.TrainerArenaChips) {
+          chipsHtml = window.TrainerArenaChips.renderTrainerArenaChipsHtml(
+            window.TrainerArenaChips.buildTrainerArenaChips(t)
+          );
+        }
+        if (chipsHtml) {
+          arenaStatClass += ' trainer-detail-stat--arenas trainer-detail-stat--chips';
+          arenaInnerHtml = chipsHtml;
+        } else if (arenaIds.length > 1) {
           arenaStatClass += ' trainer-detail-stat--arenas';
           arenaInnerHtml = buildTrainerArenasBlock(t);
         } else if (arenaIds.length === 1) {
@@ -6060,7 +6324,7 @@
         }
         statsParts.push(
           '<div class="' + arenaStatClass + '">' +
-            '<div class="trainer-detail-stat-label">Арены</div>' +
+            (chipsHtml ? '' : '<div class="trainer-detail-stat-label">Арены</div>') +
             arenaInnerHtml +
           '</div>'
         );
@@ -6136,6 +6400,7 @@
         var htmlAbout = buildTrainerAboutSectionHtml(desc, eduRows, profileEduDetail, profileExtraForDetail);
 
         document.getElementById('trainerDetailTop').innerHTML = htmlTop;
+        wireTrainerArenaChips(document.getElementById('trainerDetailTop'));
         var aboutEl = document.getElementById('trainerDetailAbout');
         if (aboutEl) {
           aboutEl.innerHTML = htmlAbout;
@@ -6203,12 +6468,118 @@
           });
       }
 
+      /**
+       * Пустой экран «Выберите время» — с выходами, а не с одним абзацем.
+       *
+       * Было: текст «На этой площадке нет свободных слотов. Оставьте заявку —
+       * тренер предложит время, или посмотрите слоты на других аренах.» и больше
+       * ничего. Оба выхода названы словами, ни один не нажимается — ровно тот
+       * тупик, который запрещает AC-002 (TASK-096). Экран достижим с карточки
+       * арены в один тап, то есть это не редкий случай, а основной флоу.
+       *
+       * Кнопка «на других аренах» появляется только когда фильтр по арене
+       * действительно стоит: предлагать снять фильтр, которого нет, — врать.
+       */
+      function renderSlotPickEmptyState(list) {
+        var t = state.selectedTrainer;
+        var filtered = (state.trainerSlotsArenaIds || []).length > 0;
+        var hint = state.slotsEmptyOnFilterHint || '';
+        if (!hint) {
+          hint = filtered
+            ? 'На выбранной площадке свободных слотов нет.'
+            : 'У тренера сейчас нет свободных слотов.';
+        }
+        var html =
+          '<div class="slots-empty">' + escapeHtml(hint) + '</div>' +
+          '<div class="slot-pick-empty-actions">';
+        if (filtered) {
+          html +=
+            '<button type="button" class="btn-primary btn-block" data-slotpick="all-arenas">' +
+            'Показать слоты на других аренах</button>';
+        }
+        html +=
+          '<button type="button" class="' +
+          (filtered ? 'btn-secondary' : 'btn-primary') +
+          ' btn-block" data-slotpick="request">Оставить заявку</button>';
+        if (t) {
+          html +=
+            '<button type="button" class="btn-secondary btn-block" data-slotpick="trainer-card">' +
+            'Открыть карточку тренера</button>';
+        }
+        html += '</div>';
+        list.innerHTML = html;
+
+        var allBtn = list.querySelector('[data-slotpick="all-arenas"]');
+        if (allBtn) {
+          allBtn.onclick = function() {
+            if (!t) return;
+            allBtn.disabled = true;
+            // Снимаем фильтр насовсем: «explicit» означает «человек выбрал сам»,
+            // а он только что попросил обратного.
+            state.trainerSlotsArenaIds = [];
+            state.trainerSlotsArenaFilterExplicit = false;
+            state.slotsEmptyOnFilterHint = '';
+            loadSlotsForTrainer(t.id, t)
+              .then(function(d) {
+                state.slotsForTrainer = (d && d.slots) || [];
+                renderSlotPickList();
+              })
+              .catch(function() {
+                allBtn.disabled = false;
+                showToast('Не удалось загрузить слоты. Попробуйте ещё раз.');
+              });
+          };
+        }
+        var reqBtn = list.querySelector('[data-slotpick="request"]');
+        if (reqBtn) reqBtn.onclick = function() { openLeaveRequestFromDetail(); };
+        var cardBtn = list.querySelector('[data-slotpick="trainer-card"]');
+        if (cardBtn) {
+          cardBtn.onclick = function() {
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          };
+        }
+      }
+
+      /**
+       * Подпись «чьи это слоты и где» над списком времени.
+       *
+       * Экран показывал одно время без единого имени: человек, дошедший сюда с
+       * арены, не мог сказать, к кому записывается. Имя тренера — всегда; место —
+       * только когда оно однозначно: при фильтре по одной арене это её название,
+       * без фильтра — «на разных площадках», потому что арена у каждого слота
+       * своя и она подписана на самой строке.
+       */
+      function paintSlotPickContext() {
+        var el = document.getElementById('slotPickContext');
+        if (!el) return;
+        var t = state.selectedTrainer;
+        if (!t) {
+          el.hidden = true;
+          el.textContent = '';
+          return;
+        }
+        var parts = [trainerName(t)];
+        var slots = state.slotsForTrainer || [];
+        var arenaNames = {};
+        slots.forEach(function(s) {
+          var nm = (s && s.arena_name && String(s.arena_name).trim()) || '';
+          if (nm) arenaNames[nm] = true;
+        });
+        var names = Object.keys(arenaNames);
+        if (names.length === 1) parts.push(names[0]);
+        else if (names.length > 1) parts.push('на разных площадках');
+        el.textContent = parts.join(' · ');
+        el.hidden = false;
+      }
+
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
-        
+        paintSlotPickContext();
+
         if (slots.length === 0) {
-          list.innerHTML = '<div class="slots-empty">Нет слотов</div>';
+          renderSlotPickEmptyState(list);
           return;
         }
         
@@ -6242,8 +6613,16 @@
           daySlots.forEach(function(item) {
             var s = item.slot;
             var i = item.index;
+            // Площадка на строке. «Показать слоты на других аренах» перемешивает
+            // арены в одном списке, и без подписи человек выбирал время, не зная,
+            // куда ему ехать. Тот же помощник, что и на карточке тренера.
+            var place =
+              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+                : ((s.arena_name && String(s.arena_name).trim()) || '');
             html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
               '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>' +
+              (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
               slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
           });
           
@@ -6255,7 +6634,7 @@
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
-            openCatalogBookingFormForSlot(state.slotsForTrainer[i]);
+            openCatalogBookingFormForSlot(state.slotsForTrainer[i], { from: 'slotPick' });
           };
         });
       }
@@ -6291,7 +6670,7 @@
         var phoneEl = document.getElementById('bookingPhone');
         var phCheck = window.CrmPhoneField ? CrmPhoneField.validate(phoneEl) : { ok: false, error: 'Укажите номер телефона.' };
         if (!phCheck.ok) {
-          alert(phCheck.error || 'Укажите номер телефона.');
+          showToast(phCheck.error || 'Укажите номер телефона.');
           return;
         }
         var phone = phCheck.e164;
@@ -6300,7 +6679,7 @@
         if (askName) {
           var fn = (document.getElementById('bookingFirstName') && document.getElementById('bookingFirstName').value || '').trim();
           if (!fn) {
-            alert('Укажите имя');
+            showToast('Укажите имя');
             return;
           }
         }
@@ -6368,12 +6747,14 @@
           var data = out.data;
             if (data == null) {
               if (r.ok) {
-                alert(
+                showBookingNotice(
                   'Ответ сервера не распознан, но запись могла сохраниться. Откройте «Мои записи» в боте. ' +
                     'Повторная кнопка с тем же временем подставит тот же запрос и обычно не дублирует бронь.'
                 );
               } else {
-                alert('Ошибка сервера (' + r.status + '). Проверьте «Мои записи» в боте перед повтором.');
+                showBookingNotice(
+                  'Ошибка сервера (' + r.status + '). Проверьте «Мои записи» в боте перед повтором.'
+                );
               }
               return;
             }
@@ -6387,6 +6768,9 @@
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
               persistCatalogFilters(state.selectedTrainer && state.selectedTrainer.id);
+              // Экран успеха общий с заявкой: если до этого отправляли заявку,
+              // кнопка осталась бы «Мои заявки» и увела бы не туда.
+              paintCatalogSuccessActions('booking');
               if (window.BookingClient) {
                 window.BookingClient.showBookingSuccess({
                   host: 'catalog',
@@ -6403,10 +6787,10 @@
                 updateBookingNameFieldsVisibility();
               }).catch(function() {});
             } else {
-              alert((data && data.detail) || 'Не удалось записаться');
+              showToast((data && data.detail) || 'Не удалось записаться');
             }
         }).catch(function() {
-          alert(
+          showBookingNotice(
             'Сеть не ответила. Запись могла всё равно создаться — проверьте «Мои записи» в боте. ' +
               'Повтор с тем же слотом использует тот же ключ запроса и возвращает успех, если бронь уже есть.'
           );
@@ -6423,16 +6807,33 @@
       }
 
       document.getElementById('btnCloseSuccess').onclick = closeCatalogSuccessToHubOrApp;
-      var btnSuccessBookingsCatalog = document.getElementById('btnSuccessBookingsCatalog');
-      if (btnSuccessBookingsCatalog) {
-        btnSuccessBookingsCatalog.onclick = function () {
+
+      /**
+       * Главная кнопка экрана успеха ведёт туда, где лежит созданное.
+       *
+       * Экран один на запись и на заявку, но кнопка была одна — «Мои записи».
+       * После заявки она уводила в список, где заявки нет: человек её там не
+       * находил и не понимал, отправилась ли она вообще. Заявки живут в
+       * `client-requests`.
+       *
+       * @param {'booking'|'request'} kind
+       */
+      function paintCatalogSuccessActions(kind) {
+        var btn = document.getElementById('btnSuccessBookingsCatalog');
+        if (!btn) return;
+        var isRequest = kind === 'request';
+        var path = isRequest ? 'client-requests' : 'client-bookings';
+        btn.textContent = isRequest ? 'Мои заявки' : 'Мои записи';
+        btn.onclick = function () {
           if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
-            window.ClientShell.navigate('client-bookings');
+            window.ClientShell.navigate(path);
           } else {
             closeCatalogSuccessToHubOrApp();
           }
         };
       }
+
+      paintCatalogSuccessActions('booking');
 
       document.getElementById('backToCity').onclick = function() { showScreen('screenCity'); };
       document.getElementById('backToService').onclick = function() { showScreen('screenService'); };
@@ -6495,7 +6896,7 @@
       });
       function openGeneralRequestForm() {
         if (!state.cityId || !state.serviceId) {
-          alert('Сначала выберите город и занятие в параметрах поиска.');
+          showToast('Сначала выберите город и занятие в параметрах поиска.');
           state.returnToSummary = true;
           renderSummary();
           showScreen('screenSummary');
@@ -6532,7 +6933,7 @@
         if (state.needsProfileName) {
           var rfn = (document.getElementById('requestFirstName') && document.getElementById('requestFirstName').value || '').trim();
           if (!rfn) {
-            alert('Укажите имя');
+            showToast('Укажите имя');
             btn.disabled = false;
             return;
           }
@@ -6555,18 +6956,19 @@
               document.getElementById('successText').innerHTML = isPersonal
                 ? ('✅ <b>Заявка отправлена</b> ' + (trainerName ? trainerName : 'тренеру') + '.<br><br>Когда тренер ответит — напишем вам в боте.')
                 : '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
+              paintCatalogSuccessActions('request');
               showScreen('screenSuccess');
               getClientSession().then(function(session) {
                 applySessionToState(session);
                 updateRequestNameFieldsVisibility();
               }).catch(function() {});
             } else {
-              alert(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
+              showToast(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
             }
             btn.disabled = false;
           });
         }).catch(function() {
-          alert('Ошибка сети. Проверьте интернет и попробуйте снова.');
+          showToast('Ошибка сети. Проверьте интернет и попробуйте снова.');
           btn.disabled = false;
         });
       }
@@ -6624,9 +7026,11 @@
         }
       };
       document.getElementById('tabCatalogFromDetail').onclick = function() {
-        renderSummary();
-        switchTab('catalog');
-        showScreen('screenSummary');
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          window.ClientShell.navigate('ice?intent=coach');
+          return;
+        }
+        window.location.href = 'ice?intent=coach';
       };
       document.getElementById('tabMyTrainerFromDetail').onclick = function() { /* already on my trainer card */ };
 
@@ -6709,6 +7113,10 @@
           }
           var qp = new URLSearchParams(window.location.search || '');
           var explicitTrainerArenaIdsFromUrl = parseExplicitTrainerArenaIdsFromQuery(qp);
+          // Группа с карточки арены: раскроем её в блоке «Набор в группы».
+          var rawGroupId = qp.get('group_id');
+          var parsedGroupId = rawGroupId != null && rawGroupId !== '' ? parseInt(rawGroupId, 10) : NaN;
+          state.pendingFocusGroupId = !isNaN(parsedGroupId) && parsedGroupId > 0 ? parsedGroupId : null;
           bootstrapCollectiveFromQuery(qp).finally(function() {
           applySessionToState(session);
           if (state.collectiveBrand && state.collectiveBrand.default_city_id && !qp.get('city_id')) {

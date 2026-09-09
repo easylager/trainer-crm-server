@@ -4,95 +4,114 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Главная</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202608315"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" /></noscript>
-  <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=optional" as="style" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
-  <script src="mini-app-telegram-chrome.js?v=202608315"></script>
-  <link rel="preload" href="client-home-main.js?v=202608315" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202609046" />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=202608315"></script>
+<link rel="stylesheet" href="theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-telegram-chrome.js?v=202609071"></script>
+  <link rel="preload" href="client-home-main.js?v=202609082" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609081" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202609092" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202608315" />
-  <script src="mini-app-client-shell.js?v=202608315"></script>
+  <script src="mini-app-empty-state.js?v=202609091"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
   <script defer src="mini-app-client-home.js?v=202608315"></script>
+  <!-- TASK-094: не снимать переход по пустой странице. -->
+  <link rel="expect" href="#hubShell" blocking="render" />
 </head>
 <body class="hub-body hub-body--loading ar-pilot ar-pilot--client-home" data-client-shell="tabs">
   <div class="hub-shell" id="hubShell">
 
-    <!-- Hero — короткий заголовок по сценарию; без маркетинговых блоков -->
+    <!--
+      TASK-091 (AC-001). Приветствие — ОДНА строка, разделённая с переключателем
+      профиля. Блоков `greeting` + `title` + `sub`, говоривших одно и то же,
+      больше нет: приветствие показывают, когда показать нечего, а у нас есть
+      лёд, запись и тренеры. Место отдано данным ниже.
+
+      TASK-095 (AC-002). Строка идентичности имеет зарезервированную высоту, а
+      скелетон живёт ВНУТРИ неё, а не под ней. Раньше переключатель профиля
+      монтировался асинхронно, строка вырастала с 0 до 38px и уносила вниз весь
+      экран — это давало 0.0138 CLS из измеренных 0.0218.
+    -->
     <div class="hub-hero" id="hubHero">
-      <!-- EPIC1: greeting + profile chip share one row (no absolute overlap). -->
       <div class="hub-hero-top">
         <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
+        <div class="hub-hero-skel" aria-hidden="true">
+          <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
+        </div>
         <div id="clientProfileSwitcherMount" class="hub-hero-profile-switcher"></div>
       </div>
-      <h1 class="hub-hero-title" id="hubHeroTitle">Добро пожаловать!</h1>
-      <p class="hub-hero-sub" id="hubHeroSub" style="display:none;"></p>
-      <div id="hubHeroActions" class="hub-hero-actions" hidden></div>
-      <!-- Skeleton bars — visible only while bootstrap is in flight. -->
-      <div class="hub-hero-skel" aria-hidden="true">
-        <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
-        <div class="hub-skel-line hub-skel-line--hero-title hub-skel-shimmer"></div>
-        <div class="hub-skel-line hub-skel-line--hero-title-sm hub-skel-shimmer"></div>
-      </div>
     </div>
-
-    <!--
-      Ice Lane — brand signature in first viewport.
-      A single thin amber arc slowly "etches" across the ice, holds at full
-      length, then fades. The brightest point of the stroke gradient is at the
-      right end → as `stroke-dashoffset` reveals more of the path, the bright
-      part appears to lead the trail like a comet head. No characters, no
-      stickers — one deliberate gesture, premium-minimalist.
-      Pure SVG + CSS: stroke-dashoffset + opacity only → GPU-friendly, no JS.
-    -->
-    <div class="ice-lane" id="hubIceLane" aria-hidden="true">
-      <span class="ice-lane__line"></span>
-      <p class="ice-lane__wordmark" id="hubIceWordmark">Чудесного дня на льду 🐧</p>
-      <span class="ice-lane__line"></span>
-    </div>
-
-    <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
 
     <!-- Error / loading panel -->
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
     <!--
-      Unified initial-load skeleton. Shown while /client/hub/bootstrap is in
-      flight; hidden the moment data arrives so the real cards swap in one
-      paint instead of popping in piece by piece. Mirrors the typical post-load
-      layout: large primary card → slot chips strip → short history line.
+      TASK-095 (AC-001). Скелетон — это обещание конкретной формы. Прежний
+      обещал аватар, полосу чипов и строку истории: раскладку, которой на
+      первом экране больше нет. Теперь он повторяет то, что реально приходит —
+      карточка льда, строка поиска, лента тренеров, — и в тех же коробках:
+      те же радиусы, те же aspect-ratio, та же ширина карточки карусели.
     -->
-    <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка хаба">
-      <div class="hub-initial-skel__trainer">
-        <div class="hub-skel-avatar hub-skel-shimmer"></div>
-        <div class="hub-initial-skel__trainer-lines">
-          <div class="hub-skel-line hub-skel-line--trainer-name hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--trainer-sub hub-skel-shimmer"></div>
+    <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка главной">
+      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
+      <div class="hub-skel-icecard">
+        <div class="hub-skel-band hub-skel-shimmer"></div>
+        <div class="hub-skel-icerow">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer"></div>
+          <div class="hub-skel-icelines">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+          </div>
         </div>
       </div>
-      <div class="hub-initial-skel__strip">
-        <div class="hub-skel-line hub-skel-line--head hub-skel-shimmer"></div>
-        <div class="hub-initial-skel__chips">
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
-          <div class="hub-skel-chip hub-skel-shimmer"></div>
+      <div class="hub-skel-search hub-skel-shimmer"></div>
+      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
+      <div class="hub-skel-cards">
+        <div class="hub-skel-tcard">
+          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-skel-tcard">
+          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
         </div>
       </div>
-      <div class="hub-skel-line hub-skel-line--history hub-skel-shimmer"></div>
     </div>
 
     <!-- ── SCENARIO 3: NEXT BOOKING HERO CARD ──────────────────────────── -->
     <div id="nextBookingBlock"></div>
+
+    <!--
+      TASK-091 (AC-002, AC-005). Лёд города — завершённая единица данных, и он
+      стоит НАД сгибом, а не строкой-тизером в хвосте. Для клиента с основным
+      тренером зона уезжает ниже панели тренера (placeIceZone в client-home-main.js):
+      порядок Intent Engine не меняется, меняется только то, что показано первым.
+    -->
+    <div id="hubIceZone" class="hub-ice-zone" hidden>
+      <div class="hub-sec-head">
+        <p class="hub-kicker" id="hubIceKicker">Сегодня на льду</p>
+        <a class="hub-sec-link" id="hubIceAll" href="ice">Весь лёд</a>
+      </div>
+      <div id="hubIceTeaser" class="hub-ice-teaser-wrap"></div>
+      <!--
+        AC-003: поиск остаётся доступным, но перестаёт быть главным объектом
+        первого экрана — строка вместо кнопки на 15% высоты.
+      -->
+      <button type="button" class="hub-search" id="hubSearchRow">
+        <span class="hub-search__ic" aria-hidden="true"></span>
+        <span class="hub-search__text">Найти тренера или каток</span>
+      </button>
+    </div>
 
     <!-- ── SCENARIO 1: MY TRAINER CARD ────────────────────────────────── -->
     <div id="myTrainerBlock" style="display:none;"></div>
@@ -105,6 +124,9 @@
 
     <!-- ── CONTEXTUAL QUICK PILLS (rebook only — no tab duplicates) ─── -->
     <div class="hub-quick-strip" id="quickStrip" hidden></div>
+
+    <!-- Удержание, а не товар: серия недель уехала под контент (решение владельца 2026-09-08) -->
+    <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
 
     <!-- ── UPCOMING BOOKINGS LIST (secondary, below hero) ─────────────── -->
     <div id="upcomingSection" style="display:none;">
@@ -188,6 +210,7 @@
     <span class="hub-book-fab__label">Записаться</span>
   </button>
 
-  <script defer src="client-home-main.js?v=202608315"></script>
+  <script src="ice-teaser-model.js?v=202609082"></script>
+  <script defer src="client-home-main.js?v=202609082"></script>
 </body>
 </html>

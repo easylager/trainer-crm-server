@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from src.application.booking_use_cases import (
+    BOOKING_ARENA_UNSPECIFIED_LABEL,
     active_booking_summaries_by_slot_for_trainer_range,
     list_bookings_for_trainer,
 )
@@ -18,9 +19,9 @@ from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_
 
 @pytest.mark.asyncio
 async def test_venue_label_matches_booking_arenas_str(db_session) -> None:
-    """One booking: schedule summary venue_label == list_bookings_for_trainer arenas_str."""
+    """TASK-056: no booking/slot arena → same placeholder on hub list and schedule summary."""
     tomorrow = date.today() + timedelta(days=1)
-    arena_id, city_id, arena_name = await require_seed_arena_city_name(db_session)
+    arena_id, city_id, _arena_name = await require_seed_arena_city_name(db_session)
     service_id = await require_seed_service_id(db_session)
     r = await db_session.execute(
         text("INSERT INTO trainers (status) VALUES ('active') RETURNING id")
@@ -86,4 +87,4 @@ async def test_venue_label_matches_booking_arenas_str(db_session) -> None:
     assert summaries[slot_id].get("client_telegram_id") == tg
     assert summaries[slot_id].get("client_phone") == phone
 
-    assert venue_label == arenas_str == arena_name
+    assert venue_label == arenas_str == BOOKING_ARENA_UNSPECIFIED_LABEL

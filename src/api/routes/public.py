@@ -25,6 +25,7 @@ from src.application.catalog_use_cases import (
     list_cities,
     list_services,
 )
+from src.application.photo_cdn import photo_url_from_cdn
 from src.application.collective_use_cases import get_collective_by_slug, collective_location_payload
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.lifecycle_use_cases import resolve_lifecycle_snapshot
@@ -181,15 +182,15 @@ def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
     return bool(trainer.get("is_catalog_visible", False))
 
 
-# Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients
-# without affecting realistic catalog UX (cities have well under 32 arenas).
-_ARENA_IDS_FILTER_LIMIT = 32
+# Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients.
+# Ice Discovery cities can exceed 32 arenas; silent truncation is no longer acceptable (TASK-051 AC-005).
+_ARENA_IDS_FILTER_LIMIT = 256
 
 
-def _parse_arena_ids_csv(raw: str | None) -> list[int] | None:
-    """Parse `arena_ids=1,2,3` query into deduped list[int]; None when empty/invalid/missing."""
+def _parse_arena_ids_csv(raw: str | None) -> tuple[list[int] | None, bool, int]:
+    """Parse `arena_ids=1,2,3` into (deduped ids or None, truncated?, unique received count)."""
     if not raw:
-        return None
+        return None, False, 0
     parsed: list[int] = []
     seen: set[int] = set()
     for chunk in raw.split(","):
@@ -204,19 +205,15 @@ def _parse_arena_ids_csv(raw: str | None) -> list[int] | None:
             continue
         seen.add(n)
         parsed.append(n)
-        if len(parsed) >= _ARENA_IDS_FILTER_LIMIT:
-            break
-    return parsed or None
+    if not parsed:
+        return None, False, 0
+    truncated = len(parsed) > _ARENA_IDS_FILTER_LIMIT
+    return parsed[:_ARENA_IDS_FILTER_LIMIT], truncated, len(parsed)
 
 
 def _photo_url_from_cdn(file_key: str) -> str | None:
     """Build CDN URL for file_key if photo_cdn_base_url is set."""
-    base = (Settings().photo_cdn_base_url or "").strip().rstrip("/")
-    if not base or not file_key or ".." in file_key:
-        return None
-    if not file_key.startswith("trainers/"):
-        return None
-    return base + "/" + quote(file_key, safe="/")
+    return photo_url_from_cdn(file_key, Settings().photo_cdn_base_url)
 
 
 def _enrich_trainer_photo_urls(trainer: dict) -> bool:
@@ -476,7 +473,7 @@ async def list_active_trainers(
     if time_slots_filter is not None and len(time_slots_filter) == 0:
         time_slots_filter = None
 
-    arena_ids_filter = _parse_arena_ids_csv(arena_ids)
+    arena_ids_filter, arena_ids_truncated, arena_ids_received = _parse_arena_ids_csv(arena_ids)
 
     # Trainer names/photos change after moderation — must not be served from browser HTTP cache.
     response.headers["Cache-Control"] = "no-store"
@@ -512,7 +509,14 @@ async def list_active_trainers(
         photo_source = "direct"
     else:
         photo_source = "proxy"
-    return {"items": items, "total": total, "_photo_source": photo_source}
+    return {
+        "items": items,
+        "total": total,
+        "_photo_source": photo_source,
+        "arena_ids_truncated": arena_ids_truncated,
+        "arena_ids_received": arena_ids_received,
+        "arena_ids_limit": _ARENA_IDS_FILTER_LIMIT,
+    }
 
 
 @router.get("/training-groups")
@@ -541,7 +545,7 @@ async def list_catalog_training_groups(
     if days_filter is not None and len(days_filter) == 0:
         days_filter = None
 
-    arena_ids_filter = _parse_arena_ids_csv(arena_ids)
+    arena_ids_filter, arena_ids_truncated, arena_ids_received = _parse_arena_ids_csv(arena_ids)
 
     items, total = await list_open_training_groups_catalog(
         session,
@@ -577,7 +581,14 @@ async def list_catalog_training_groups(
         photo_source = "direct"
     else:
         photo_source = "proxy"
-    return {"items": out_items, "total": total, "_photo_source": photo_source}
+    return {
+        "items": out_items,
+        "total": total,
+        "_photo_source": photo_source,
+        "arena_ids_truncated": arena_ids_truncated,
+        "arena_ids_received": arena_ids_received,
+        "arena_ids_limit": _ARENA_IDS_FILTER_LIMIT,
+    }
 
 
 async def assemble_trainer_catalog_payload(

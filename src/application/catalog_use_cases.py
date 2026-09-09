@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_media import attach_arena_media_payloads
 from src.infrastructure.repositories import CatalogRepository
 
 
@@ -31,11 +32,15 @@ async def list_arenas(
     Arenas in a city; optional service_id adds per-arena trainer_count for catalog filter UX.
 
     ``include_unconfirmed=True`` also returns trainer-created arenas pending moderation
-    (TASK-046) — only for authenticated trainer-facing callers, never the public catalog.
+    (TASK-046) and Ice Discovery cards that are not ``published`` (TASK-048) — only for
+    authenticated trainer-facing callers, never the public catalog.
+    The public path also requires ``arena_profiles.status = 'published'`` (TASK-048).
     """
-    return await CatalogRepository(session).list_arenas(
+    items = await CatalogRepository(session).list_arenas(
         city_id, service_id=service_id, include_unconfirmed=include_unconfirmed
     )
+    await attach_arena_media_payloads(session, items)
+    return items
 
 
 async def list_catalog_scenarios(

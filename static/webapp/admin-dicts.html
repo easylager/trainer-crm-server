@@ -176,7 +176,7 @@
       font-size: 11px;
       color: var(--tg-theme-hint-color, #9ca3af);
     }
-    .field input, .field textarea {
+    .field input, .field textarea, .field select {
       width: 100%;
       border-radius: 8px;
       border: 1px solid rgba(148, 163, 184, 0.5);
@@ -191,10 +191,159 @@
       resize: vertical;
       line-height: 1.35;
     }
-    .field input:focus, .field textarea:focus {
+    .field input:focus, .field textarea:focus, .field select:focus {
       outline: none;
       border-color: rgba(59, 130, 246, 0.9);
       box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7);
+    }
+    .field select {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 6px 8px;
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      font-family: inherit;
+    }
+    .amenity-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 4px;
+    }
+    .amenity-grid label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: inherit;
+    }
+    .amenity-grid input { width: auto; }
+    .arena-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .arena-photo {
+      width: 88px;
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.9);
+    }
+    .arena-photo img {
+      display: block;
+      width: 88px;
+      height: 64px;
+      object-fit: cover;
+    }
+    .arena-photo-placeholder {
+      width: 100%;
+      min-height: 64px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(30, 58, 95, 0.9), rgba(15, 23, 42, 0.95));
+      color: var(--tg-theme-hint-color, #9ca3af);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      text-align: center;
+    }
+    .arena-photo-hero {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: rgba(46, 166, 255, 0.9);
+      color: #fff;
+    }
+    .arena-photo-actions {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px 4px;
+    }
+    .arena-photo-add {
+      width: 88px;
+      height: 64px;
+      border-radius: 10px;
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 22px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
+    .ice-week {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .ice-week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .ice-week-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 4px;
+    }
+    .ice-day {
+      background: rgba(15, 23, 42, 0.45);
+      border-radius: 8px;
+      padding: 6px 4px;
+      min-height: 72px;
+    }
+    .ice-day-label {
+      font-size: 10px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      margin-bottom: 4px;
+    }
+    .ice-slot {
+      font-size: 10px;
+      background: rgba(46, 166, 255, 0.18);
+      border-radius: 6px;
+      padding: 3px 4px;
+      margin-bottom: 4px;
+      line-height: 1.25;
+    }
+    .ice-slot-cancelled { opacity: 0.45; text-decoration: line-through; }
+    .ice-slot button {
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      padding: 0 2px;
+      font-size: 11px;
+    }
+    .ice-add {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .ice-add input, .ice-add select {
+      width: 100%;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.7);
+      color: inherit;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    @media (max-width: 600px) {
+      .ice-week-days { grid-template-columns: 1fr 1fr; }
     }
     .field-address { flex: 1; min-width: 0; }
     .field-hint {
@@ -365,6 +514,18 @@
           return r.json();
         });
       }
+      function sendForm(path, formData) {
+        var url = withInit(apiUrl(path));
+        return fetchWithTimeout(url, { method: 'POST', body: formData }, 30000).then(function(r) {
+          if (!r.ok) {
+            return r.json().catch(function() {}).then(function(err) {
+              var msg = (err && err.detail) || ('Ошибка ' + r.status);
+              throw new Error(msg);
+            });
+          }
+          return r.json().catch(function() { return {}; });
+        });
+      }
       function sendJson(method, path, body) {
         var url = withInit(apiUrl(path));
         return fetchWithTimeout(url, {
@@ -389,7 +550,9 @@
         cityQ: '',
         cityIncludeInactive: false,
         arenaQ: '',
-        arenaIncludeInactive: false
+        arenaIncludeInactive: false,
+        iceWeekStart: {},
+        iceOpen: {}
       };
 
       function showAlert(text) {
@@ -403,6 +566,132 @@
         el.classList.add('visible');
         clearTimeout(el._toastT);
         el._toastT = setTimeout(function() { el.classList.remove('visible'); }, 2500);
+      }
+
+      var ICE_KIND_LABELS = {
+        public_skate: 'МК',
+        open_ice: 'Свободное',
+        rental: 'Аренда',
+        school_group: 'Школа',
+        event: 'Событие'
+      };
+      var ICE_DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+      function mondayIso(d) {
+        var day = d instanceof Date ? d : new Date(d);
+        var wd = (day.getDay() + 6) % 7;
+        day.setDate(day.getDate() - wd);
+        return day.toISOString().slice(0, 10);
+      }
+      function shiftWeek(iso, days) {
+        var d = new Date(iso + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      }
+      function shiftWeek(iso, days) {
+        var d = new Date(iso + 'T00:00:00');
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      }
+      function minorFromInput(el) {
+        var raw = (el && el.value || '').trim();
+        if (!raw) return null;
+        var n = Number(raw.replace(',', '.'));
+        if (!isFinite(n)) return null;
+        return Math.round(n * 100);
+      }
+      function icePanel(arenaId) {
+        return document.querySelector('.ice-week[data-arena-id="' + arenaId + '"]');
+      }
+      function renderIceWeek(arenaId, data) {
+        var el = icePanel(arenaId);
+        if (!el) return;
+        var weekStart = data.week_start;
+        state.iceWeekStart[arenaId] = weekStart;
+        var html = '<div class="ice-week-nav">';
+        html += '<button type="button" class="btn-ghost" data-ice="prev">←</button>';
+        html += '<span>Лёд · ' + weekStart + ' · ' + (data.currency_code || '') + '</span>';
+        html += '<span><button type="button" class="btn-ghost" data-ice="copy">Копировать неделю</button>';
+        html += '<button type="button" class="btn-ghost" data-ice="next">→</button></span></div>';
+        html += '<div class="ice-week-days">';
+        (data.days || []).forEach(function(day) {
+          html += '<div class="ice-day" data-date="' + day.local_date + '">';
+          html += '<div class="ice-day-label">' + (ICE_DOW[day.weekday] || '') + ' ' + day.local_date.slice(8) + '</div>';
+          (day.sessions || []).forEach(function(s) {
+            html += '<div class="ice-slot' + (s.status === 'cancelled' ? ' ice-slot-cancelled' : '') + '">';
+            html += escapeHtml((s.starts_at_local || '') + ' ' + (ICE_KIND_LABELS[s.kind] || s.kind));
+            html += '<button type="button" data-ice="del" data-session-id="' + s.id + '" title="Удалить">×</button>';
+            html += '</div>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+        html += '<div class="ice-add">';
+        html += '<input type="date" data-ice-field="local_date" value="' + weekStart + '">';
+        html += '<input type="time" data-ice-field="starts_at_local" value="11:00">';
+        html += '<input type="number" data-ice-field="duration_minutes" min="30" max="120" value="45" placeholder="мин">';
+        html += '<select data-ice-field="kind">';
+        ['public_skate','open_ice','rental','school_group','event'].forEach(function(k) {
+          html += '<option value="' + k + '">' + ICE_KIND_LABELS[k] + '</option>';
+        });
+        html += '</select>';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_adult" placeholder="взр. ' + (data.currency_code || '') + '">';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_child" placeholder="дет.">';
+        html += '<input type="number" step="0.01" min="0" data-ice-field="price_rental" placeholder="прокат">';
+        html += '<label class="muted"><input type="checkbox" data-ice-field="repeat_weekly"> каждую неделю</label>';
+        html += '</div>';
+        html += '<button type="button" class="btn-ghost" data-ice="add" style="margin-top:6px">+ Сеанс</button>';
+        el.innerHTML = html;
+        el.querySelector('[data-ice="prev"]').addEventListener('click', function() {
+          loadIceWeek(arenaId, shiftWeek(weekStart, -7));
+        });
+        el.querySelector('[data-ice="next"]').addEventListener('click', function() {
+          loadIceWeek(arenaId, shiftWeek(weekStart, 7));
+        });
+        el.querySelector('[data-ice="copy"]').addEventListener('click', function() {
+          sendJson('POST', '/admin/arenas/' + arenaId + '/ice-sessions/copy-week', { from_week_start: weekStart })
+            .then(function(res) {
+              showToast('Скопировано: ' + (res.copied || 0));
+              return loadIceWeek(arenaId, shiftWeek(weekStart, 7));
+            })
+            .catch(function(err) { showAlert(err.message || String(err)); });
+        });
+        el.querySelectorAll('[data-ice="del"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            sendJson('DELETE', '/admin/ice-sessions/' + btn.getAttribute('data-session-id'), {})
+              .then(function() { return loadIceWeek(arenaId, weekStart); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        el.querySelector('[data-ice="add"]').addEventListener('click', function() {
+          var payload = {
+            local_date: (el.querySelector('[data-ice-field="local_date"]') || {}).value,
+            starts_at_local: (el.querySelector('[data-ice-field="starts_at_local"]') || {}).value,
+            duration_minutes: Number((el.querySelector('[data-ice-field="duration_minutes"]') || {}).value || 45),
+            kind: (el.querySelector('[data-ice-field="kind"]') || {}).value || 'public_skate',
+            price_adult_minor: minorFromInput(el.querySelector('[data-ice-field="price_adult"]')),
+            price_child_minor: minorFromInput(el.querySelector('[data-ice-field="price_child"]')),
+            price_rental_minor: minorFromInput(el.querySelector('[data-ice-field="price_rental"]')),
+            repeat_weekly: !!(el.querySelector('[data-ice-field="repeat_weekly"]') || {}).checked
+          };
+          sendJson('POST', '/admin/arenas/' + arenaId + '/ice-sessions', payload)
+            .then(function() {
+              showToast('Сеанс сохранён');
+              return loadIceWeek(arenaId, weekStart);
+            })
+            .catch(function(err) { showAlert(err.message || String(err)); });
+        });
+      }
+      function loadIceWeek(arenaId, weekStart) {
+        var start = weekStart || state.iceWeekStart[arenaId] || mondayIso(new Date());
+        return getJson('/admin/arenas/' + arenaId + '/ice-sessions?week_start=' + encodeURIComponent(start) + '&include_cancelled=true')
+          .then(function(data) {
+            var panel = icePanel(arenaId);
+            if (panel) panel.hidden = false;
+            state.iceOpen[arenaId] = true;
+            renderIceWeek(arenaId, data);
+          })
+          .catch(function(err) { showAlert(err.message || String(err)); });
       }
 
       function renderCities() {
@@ -463,6 +752,19 @@
         });
       }
 
+      var AMENITY_OPTIONS = [
+        ['skate_rental', 'Прокат'],
+        ['skate_sharpening', 'Заточка'],
+        ['parking', 'Парковка'],
+        ['locker_rooms', 'Раздевалки'],
+        ['cafe', 'Кафе'],
+        ['accessibility', 'Доступность']
+      ];
+
+      function escapeHtml(s) {
+        return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
       function renderArenas() {
         var card = document.getElementById('arenasCard');
         var btnAdd = document.getElementById('btnAddArena');
@@ -486,24 +788,88 @@
           var addr = (a.address || '').trim();
           var yandexUrl = addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '';
           var googleUrl = addr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr) : '';
+          var hours = (a.opening_hours && a.opening_hours.daily) || {};
+          var amenities = a.amenities || {};
+          var status = a.status || 'published';
           html += '<div class="arena-row" data-id="' + a.id + '">';
           html += '<div class="arena-header">';
           html += '<div>';
-          html += '<div class="arena-name">' + (a.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
-          html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + '</div>';
+          html += '<div class="arena-name">' + escapeHtml(a.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
+          html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + (a.slug ? ' · slug: ' + escapeHtml(a.slug) : '') + '</div>';
           html += '</div>';
           html += '<div style="display:flex;gap:4px;">';
+          html += '<button class="icon-btn" data-role="ice-week" data-id="' + a.id + '" title="Сеансы льда">⛸</button>';
           html += '<button class="icon-btn" data-role="' + (isActive ? 'deactivate' : 'activate') + '" data-id="' + a.id + '" title="' + (isActive ? 'Деактивировать' : 'Вернуть') + '">' + (isActive ? '⏸' : '▶') + '</button>';
-          html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить адрес этой арены на сервер">💾</button>';
+          html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить профиль арены">💾</button>';
           html += '</div>';
           html += '</div>';
           html += '<div class="field-row">';
           html += '<div class="field field-address">';
           html += '<label>Адрес (можно в несколько строк)</label>';
-          html += '<textarea data-field="address" rows="2" placeholder="Улица, дом, ориентиры">' + (a.address || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '</textarea>';
-          html += '<span class="field-hint">💾 Сохранить — записывает адрес этой арены в базу.</span>';
+          html += '<textarea data-field="address" rows="2" placeholder="Улица, дом, ориентиры">' + escapeHtml(a.address || '') + '</textarea>';
           html += '</div>';
           html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Район</label><input data-field="district" value="' + escapeHtml(a.district || '') + '" placeholder="Заводской"></div>';
+          html += '<div class="field"><label>Телефон</label><input data-field="phone" value="' + escapeHtml(a.phone || '') + '" placeholder="+375…"></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Сайт</label><input data-field="website_url" value="' + escapeHtml(a.website_url || '') + '" placeholder="https://"></div>';
+          html += '<div class="field"><label>Публикация</label><select data-field="status">';
+          ['draft','published','archived'].forEach(function(st) {
+            html += '<option value="' + st + '"' + (status === st ? ' selected' : '') + '>' + st + '</option>';
+          });
+          html += '</select></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field field-address"><label>Краткое описание</label>';
+          html += '<textarea data-field="short_description" rows="2">' + escapeHtml(a.short_description || '') + '</textarea></div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Открыт с</label><input data-field="hours_open" placeholder="07:00" value="' + escapeHtml(hours.open || '') + '"></div>';
+          html += '<div class="field"><label>до</label><input data-field="hours_close" placeholder="23:00" value="' + escapeHtml(hours.close || '') + '"></div>';
+          html += '<div class="field"><label>Сезон с (мес.)</label><input data-field="season_start_month" type="number" min="1" max="12" value="' + (a.season_start_month || '') + '"></div>';
+          html += '<div class="field"><label>по (мес.)</label><input data-field="season_end_month" type="number" min="1" max="12" value="' + (a.season_end_month || '') + '"></div>';
+          html += '</div>';
+          html += '<div class="field"><label>Удобства</label><div class="amenity-grid">';
+          AMENITY_OPTIONS.forEach(function(pair) {
+            var checked = amenities[pair[0]] === true ? ' checked' : '';
+            html += '<label><input type="checkbox" data-amenity="' + pair[0] + '"' + checked + '> ' + pair[1] + '</label>';
+          });
+          html += '</div></div>';
+          html += '<div class="field"><label>Фото (до 6). Первое опубликованное — hero. Не загружать картинки из поиска Google.</label>';
+          html += '<div class="arena-gallery" data-arena-id="' + a.id + '">';
+          var gallery = a.gallery || [];
+          if (!gallery.length) {
+            html += '<div class="arena-photo-placeholder">Нет фото — в карточке будет плейсхолдер</div>';
+          }
+          gallery.forEach(function(item, idx) {
+            var variants = item.variants || {};
+            var thumb = variants.thumb || variants.card || variants.hero || '';
+            html += '<div class="arena-photo" data-media-id="' + item.id + '">';
+            if (thumb) html += '<img src="' + escapeHtml(thumb) + '" alt="">';
+            else html += '<div class="arena-photo-placeholder"></div>';
+            if (idx === 0) html += '<span class="arena-photo-hero">hero</span>';
+            html += '<div class="arena-photo-actions">';
+            html += '<button type="button" class="btn-ghost" data-role="photo-up" data-id="' + a.id + '">↑</button>';
+            html += '<button type="button" class="btn-ghost" data-role="photo-down" data-id="' + a.id + '">↓</button>';
+            html += '<button type="button" class="btn-ghost" data-role="photo-del" data-id="' + a.id + '" data-media-id="' + item.id + '">×</button>';
+            html += '</div></div>';
+          });
+          if (gallery.length < 6) {
+            html += '<label class="arena-photo-add">+<input type="file" accept="image/*" data-role="photo-file" data-id="' + a.id + '" hidden></label>';
+          }
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field"><label>Лицензия нового фото</label><select data-field="photo_license">';
+          [['own','своё'],['operator','оператор'],['user','пользователь'],['permitted','с разрешения']].forEach(function(opt) {
+            html += '<option value="' + opt[0] + '">' + opt[1] + '</option>';
+          });
+          html += '</select></div>';
+          html += '<div class="field"><label>Источник / атрибуция</label><input data-field="photo_source" placeholder="URL или «Каток Замок»"></div>';
+          html += '</div></div>';
+          html += '<div class="ice-week" data-arena-id="' + a.id + '" hidden></div>';
+          html += '<span class="field-hint">💾 Сохранить — адрес и профиль. Slug после выдачи не меняется. ⛸ — сетка сеансов льда.</span>';
           html += '<div class="map-links">';
           if (yandexUrl) html += '<a href="' + yandexUrl + '" target="_blank" rel="noopener">Яндекс карта</a>';
           if (googleUrl) html += '<a href="' + googleUrl + '" target="_blank" rel="noopener">Google карта</a>';
@@ -518,9 +884,32 @@
             var row = btn.closest('.arena-row');
             if (!row) return;
             var addressEl = row.querySelector('textarea[data-field="address"], input[data-field="address"]');
-            var address = (addressEl && addressEl.value || '').trim();
-            sendJson('PATCH', '/admin/arenas/' + id, { address: address || null }).then(function() {
-              showToast('Адрес сохранён');
+            var openH = (row.querySelector('[data-field="hours_open"]') || {}).value || '';
+            var closeH = (row.querySelector('[data-field="hours_close"]') || {}).value || '';
+            var amenities = {};
+            row.querySelectorAll('[data-amenity]').forEach(function(cb) {
+              amenities[cb.getAttribute('data-amenity')] = !!cb.checked;
+            });
+            var seasonStart = (row.querySelector('[data-field="season_start_month"]') || {}).value;
+            var seasonEnd = (row.querySelector('[data-field="season_end_month"]') || {}).value;
+            var payload = {
+              address: (addressEl && addressEl.value || '').trim() || null,
+              district: ((row.querySelector('[data-field="district"]') || {}).value || '').trim() || null,
+              phone: ((row.querySelector('[data-field="phone"]') || {}).value || '').trim() || null,
+              website_url: ((row.querySelector('[data-field="website_url"]') || {}).value || '').trim() || null,
+              short_description: ((row.querySelector('[data-field="short_description"]') || {}).value || '').trim() || null,
+              status: (row.querySelector('[data-field="status"]') || {}).value || 'published',
+              season_start_month: seasonStart ? Number(seasonStart) : null,
+              season_end_month: seasonEnd ? Number(seasonEnd) : null,
+              amenities: amenities
+            };
+            if (openH.trim() || closeH.trim()) {
+              payload.opening_hours = { daily: { open: openH.trim() || null, close: closeH.trim() || null } };
+            } else {
+              payload.opening_hours = null;
+            }
+            sendJson('PATCH', '/admin/arenas/' + id, payload).then(function() {
+              showToast('Профиль арены сохранён');
               return loadArenas();
             }).catch(function(err) {
               showAlert(err.message || String(err));
@@ -535,6 +924,85 @@
               .then(function() { return loadArenas(); })
               .catch(function(err) { showAlert(err.message || String(err)); });
           });
+        });
+        card.querySelectorAll('[data-role="photo-file"]').forEach(function(input) {
+          input.addEventListener('change', function() {
+            var file = input.files && input.files[0];
+            if (!file) return;
+            var row = input.closest('.arena-row');
+            var arenaId = Number(input.getAttribute('data-id'));
+            var license = ((row && row.querySelector('[data-field="photo_license"]')) || {}).value || 'own';
+            var source = ((row && row.querySelector('[data-field="photo_source"]')) || {}).value || '';
+            var fd = new FormData();
+            fd.append('file', file);
+            fd.append('license', license);
+            if (license !== 'own') {
+              var trimmed = source.trim();
+              if (!trimmed) {
+                showAlert('Для лицензии не «своё» укажите URL источника или атрибуцию');
+                input.value = '';
+                return;
+              }
+              if (/^https?:\/\//i.test(trimmed)) fd.append('source_url', trimmed);
+              else fd.append('attribution', trimmed);
+            } else if (source.trim()) {
+              fd.append('attribution', source.trim());
+            }
+            sendForm('/admin/arenas/' + arenaId + '/photos', fd)
+              .then(function() { showToast('Фото загружено'); return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); })
+              .then(function() { input.value = ''; });
+          });
+        });
+        function galleryIds(galleryEl) {
+          return Array.prototype.map.call(galleryEl.querySelectorAll('.arena-photo[data-media-id]'), function(el) {
+            return Number(el.getAttribute('data-media-id'));
+          });
+        }
+        card.querySelectorAll('[data-role="photo-up"], [data-role="photo-down"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var gallery = btn.closest('.arena-gallery');
+            var photo = btn.closest('.arena-photo');
+            if (!gallery || !photo) return;
+            var ids = galleryIds(gallery);
+            var id = Number(photo.getAttribute('data-media-id'));
+            var idx = ids.indexOf(id);
+            var swap = btn.getAttribute('data-role') === 'photo-up' ? idx - 1 : idx + 1;
+            if (idx < 0 || swap < 0 || swap >= ids.length) return;
+            var tmp = ids[idx];
+            ids[idx] = ids[swap];
+            ids[swap] = tmp;
+            sendJson('PATCH', '/admin/arenas/' + btn.getAttribute('data-id') + '/photos', { ids: ids })
+              .then(function() { return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        card.querySelectorAll('[data-role="photo-del"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var arenaId = btn.getAttribute('data-id');
+            var mediaId = btn.getAttribute('data-media-id');
+            sendJson('DELETE', '/admin/arenas/' + arenaId + '/photos/' + mediaId, {})
+              .then(function() { return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+        card.querySelectorAll('.icon-btn[data-role="ice-week"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var arenaId = Number(btn.getAttribute('data-id'));
+            var panel = icePanel(arenaId);
+            if (!panel) return;
+            if (!panel.hidden && panel.innerHTML) {
+              panel.hidden = true;
+              delete state.iceOpen[arenaId];
+              return;
+            }
+            state.iceOpen[arenaId] = true;
+            loadIceWeek(arenaId);
+          });
+        });
+        Object.keys(state.iceOpen).forEach(function(id) {
+          var panel = icePanel(id);
+          if (panel) loadIceWeek(Number(id), state.iceWeekStart[id]);
         });
       }
 

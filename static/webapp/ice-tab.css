@@ -1,0 +1,1018 @@
+/**
+ * TASK-053 Ice tab — prototype «Лёд — список» on the Mini App design system.
+ */
+body.ar-pilot--ice {
+  margin: 0;
+  background: var(--tg-theme-bg-color, var(--glide-paper));
+  color: var(--tg-theme-text-color, var(--glide-ink));
+  font-family: var(--app-font-sans, ui-sans-serif, system-ui, sans-serif);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body.ar-pilot--ice .client-app-header {
+  display: none;
+}
+
+.ice-tab {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 0 12px;
+}
+
+.ice-sec {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ice-sec[hidden] {
+  display: none;
+}
+
+.ice-sec + .ice-sec {
+  border-top: 1px solid var(--glide-line);
+}
+
+.ice-sec--hero {
+  padding-top: 18px;
+  gap: 12px;
+}
+
+.ice-kicker {
+  margin: 0;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--glide-ink-teal);
+}
+
+/* TASK-090: имя экрана и город — одна строка, минус ~45px до первой карточки. */
+.ice-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.ice-masthead {
+  margin: 0;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.ice-citypill {
+  flex: 0 0 auto;
+  max-width: 60%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 2px;
+  padding: 7px 12px;
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-paper);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ice-citypill__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ice-citypill::after {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--glide-hint);
+}
+
+.ice-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  padding: 9px 11px;
+}
+
+.ice-search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  color: var(--glide-hint);
+}
+
+.ice-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-body);
+  color: inherit;
+  outline: none;
+}
+
+.ice-search input::placeholder {
+  color: var(--glide-hint);
+}
+
+.ice-chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ice-chips::-webkit-scrollbar {
+  height: 0;
+}
+
+.ice-chip {
+  flex: 0 0 auto;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  padding: 8px 13px;
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
+  background: var(--app-canvas-bg);
+  cursor: pointer;
+}
+
+.ice-chip[aria-pressed='true'] {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
+
+.ice-chips--svc {
+  padding-top: 2px;
+}
+
+.ice-chips--svc[hidden] {
+  display: none;
+}
+
+.ice-chips--svc .ice-chip {
+  font-size: var(--app-text-caption);
+  padding: 6px 10px;
+}
+
+.ice-hint {
+  margin: 0;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
+.ice-hint[hidden] {
+  display: none;
+}
+
+/*
+ * ПЕРЕКЛЮЧАТЕЛЬ «СПИСОК ↔ КАРТА» (TASK-103).
+ *
+ * Почему пилюля, а не сегмент. Сегмент `.ice-seg` стоял в шапке и стоил ~46px
+ * высоты над сгибом — это и была единственная названная причина, по которой карту
+ * выключили в TASK-084 (гейт G-P3, «товар над сгибом»). Вернуть карту прежним
+ * способом значило вернуть и нарушение. Плавающая кнопка стоит ноль высоты
+ * полотна, всегда в зоне большого пальца и одинаково доступна в обоих состояниях.
+ *
+ * Геометрия дна взята из --client-shell-tab-inset, а не из константы: TASK-093
+ * показала, что заявленная высота таб-бара (62px) и измеренная (69px на 390px)
+ * расходятся, и разница уходит под панель.
+ */
+.ice-viewswitch {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 12px);
+  z-index: 8400;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: 11px 18px 11px 15px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.01em;
+  /* Тень плотнее карточной: кнопка висит над контентом, а не лежит в потоке. */
+  box-shadow: 0 4px 14px -2px rgba(15, 26, 34, 0.34), 0 2px 4px rgba(15, 26, 34, 0.16);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ice-viewswitch[hidden] {
+  display: none;
+}
+
+.ice-viewswitch:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
+.ice-viewswitch__icon {
+  display: flex;
+  width: var(--app-icon-sm);
+  height: var(--app-icon-sm);
+}
+
+.ice-viewswitch__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-viewswitch {
+    transition: none;
+  }
+  .ice-viewswitch:active {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+ * ЛОАДЕР КАРТЫ (TASK-103).
+ * До тайлов сцена была ровной серой заливкой, неотличимой от поломки. Требование
+ * лежало в TASK-082, которой никто не занимается; без него возврат карты выглядел
+ * бы хуже, чем её отсутствие.
+ */
+.ice-map-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  background: var(--glide-paper);
+  color: var(--tg-theme-hint-color);
+  font-size: var(--app-text-caption);
+}
+
+.ice-map-loader[hidden] {
+  display: none;
+}
+
+.ice-map-loader__spinner {
+  width: var(--app-icon-lg);
+  height: var(--app-icon-lg);
+  border-radius: var(--app-radius-pill);
+  border: 2px solid var(--glide-line);
+  border-top-color: var(--app-cta-fill);
+  animation: ice-map-spin 0.8s linear infinite;
+}
+
+@keyframes ice-map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-map-loader__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.ice-eyebrow {
+  font-size: var(--app-text-kicker);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  margin: 0;
+}
+
+/*
+ * TASK-090. КАРТОЧКА-ТАБЛО.
+ *
+ * Жанр экрана — расписание, а не витрина товаров: у строки один якорь (время),
+ * и он крупнее всего остального на ступень шкалы. Порядок чтения задан сверху
+ * вниз прямо на кадре: КОГДА (день + время) → ГДЕ (каток + район). Условия и
+ * глубина предложения живут ниже, на поверхности карточки, где контраст
+ * измерим чекером, а не «примерно белый по фотографии».
+ *
+ * Три уровня иерархии, каждый на ступень друг от друга:
+ *   display (29) время → title (20) имя катка → caption (12) район и цены.
+ */
+.ice-board {
+  display: block;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  overflow: hidden;
+}
+
+.ice-board__photo {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  /* 2:1 — кадр катка узнаётся, но не превращает список в ленту афиш. */
+  aspect-ratio: 2 / 1;
+  background-color: var(--app-media-bed);
+  background-size: cover;
+  background-position: center;
+}
+
+/*
+ * AC-006 и Q-001: каток без кадра. Плоский прямоугольник читался как ошибка
+ * загрузки; здесь это осознанная плашка — фактура льда под углом и монограмма.
+ */
+.ice-board__photo--empty {
+  background-image: repeating-linear-gradient(
+      115deg,
+      transparent 0 22px,
+      rgba(127, 127, 127, 0.06) 22px 24px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+}
+
+.ice-board__initial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.55;
+  letter-spacing: -0.02em;
+}
+
+.ice-board__scrim {
+  position: relative;
+  width: 100%;
+  padding: var(--app-space-6) var(--app-space-4) var(--app-space-3);
+  background: var(--app-media-scrim);
+}
+
+.ice-board__day {
+  display: block;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--app-on-media-dim);
+  margin-bottom: 2px;
+}
+
+.ice-board__time {
+  display: block;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  /* Табло: цифры не должны плясать по ширине от строки к строке. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--app-on-media);
+}
+
+.ice-board__name {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--app-on-media);
+}
+
+.ice-board__where {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  color: var(--app-on-media-dim);
+}
+
+.ice-board__facts {
+  display: block;
+  padding: 10px var(--app-space-4);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  line-height: 1.45;
+}
+
+.ice-board__status {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-medium);
+}
+
+/* AC-004: глубина предложения — собственная строка, а не хвост прайса. */
+.ice-board__depth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  padding: 10px var(--app-space-4) var(--app-space-3);
+  border-top: 1px solid var(--app-card-line);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-ink-teal);
+}
+
+.ice-board__go {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* ─── Скелетоны списка (TASK-095) ───────────────────────────────────────── */
+/*
+ * Коробку задаёт сам компонент — .ice-board / .ice-acard остаются как есть,
+ * модификатор только гасит интерактивность и подменяет содержимое мерцанием.
+ * Поэтому скелетон не может «разъехаться» с карточкой при следующей правке.
+ */
+.ice-board--skel,
+.ice-acard--skel {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ice-board--skel::after,
+.ice-acard--skel::after {
+  content: none;
+}
+
+.ice-skel {
+  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
+  animation: ice-skel-pulse 1.2s ease-in-out infinite;
+  border-radius: var(--app-radius-sm);
+  display: block;
+}
+
+.ice-skel--line {
+  height: 12px;
+  width: 58%;
+  border-radius: var(--app-radius-pill);
+}
+
+.ice-skel--short { width: 38%; margin-top: 6px; }
+.ice-skel--wide { width: 72%; }
+
+@keyframes ice-skel-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* AC-004: мерцание выключено, подложка остаётся — ожидание видно, глаз спокоен. */
+  .ice-skel {
+    animation: none !important;
+    opacity: 0.88;
+  }
+}
+
+.ice-acard {
+  display: grid;
+  grid-template-columns: 74px 1fr 12px;
+  gap: 11px;
+  padding: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  box-sizing: border-box;
+  box-shadow: var(--app-card-shadow);
+}
+
+.ice-acard::after {
+  content: '›';
+  align-self: center;
+  font-size: var(--app-icon-lg);
+  line-height: 1;
+  color: var(--glide-hint);
+}
+
+.ice-acard__ph {
+  height: 74px;
+  border-radius: var(--app-radius-sm);
+  background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
+  border: 1px solid var(--glide-line);
+  background-size: cover;
+  background-position: center;
+}
+
+/*
+ * AC-006 / F-5: раньше это была плоская заливка — на скрине списка тренеров
+ * получался ряд мёртвых прямоугольников. Теперь плашка говорит, чья она.
+ */
+.ice-acard__ph--empty {
+  background: repeating-linear-gradient(
+      115deg,
+      transparent 0 14px,
+      rgba(127, 127, 127, 0.06) 14px 16px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ice-acard__mono {
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.6;
+  letter-spacing: -0.02em;
+}
+
+.ice-acard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ice-acard__name {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+/*
+ * Строка специализации: «С нуля · Техника».
+ *
+ * Набрана темнее и плотнее, чем арена под ней, потому что решение принимают по
+ * ней: до этой правки карточка предлагала выбирать по фотографии и имени.
+ * Обрезается в одну строку — две услуги помещаются на 390px, третью модель уже
+ * сворачивает в «+N».
+ */
+.ice-acard__spec {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-text-color, var(--glide-text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ice-acard__meta {
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
+.ice-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  margin-top: 2px;
+}
+
+.ice-live--a {
+  color: var(--app-ok-ink);
+}
+
+.ice-live--b {
+  color: var(--glide-hint);
+}
+
+.ice-live--c {
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-medium);
+}
+
+.ice-live:empty {
+  display: none;
+}
+
+.ice-live__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--app-radius-pill);
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.ice-tier {
+  font-size: var(--app-text-kicker);
+  padding: 1px 5px;
+  border-radius: var(--app-radius-xs);
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.ice-tier--a {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--glide-ink-teal);
+}
+
+.ice-tier--b {
+  background: var(--glide-line);
+  color: var(--glide-hint);
+}
+
+.ice-tier--c {
+  background: var(--glide-paper);
+  color: var(--glide-hint);
+}
+
+.ice-empty {
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-md);
+  padding: 14px;
+  background: var(--glide-paper);
+}
+
+.ice-empty b {
+  display: block;
+  font-size: var(--app-text-body);
+  margin-bottom: 6px;
+}
+
+.ice-empty p {
+  margin: 0;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
+.ice-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ice-results__label {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  margin: 6px 0 0;
+}
+
+.ice-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  padding: 11px 12px;
+  background: var(--app-card-bg);
+  cursor: pointer;
+  color: inherit;
+  box-shadow: var(--app-card-shadow);
+}
+
+.ice-hit b {
+  display: block;
+  font-size: var(--app-text-body);
+}
+
+.ice-hit span {
+  display: block;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  margin-top: 2px;
+}
+
+.ice-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-canvas-bg);
+  overflow: hidden;
+  padding: 0;
+}
+
+.ice-picker[hidden] {
+  display: none;
+}
+
+.ice-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 10px;
+}
+
+.ice-picker h2 {
+  margin: 0;
+  font-size: var(--app-text-headline);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.03em;
+}
+
+.ice-picker__close {
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.ice-picker__tools {
+  padding: 0 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ice-picker__list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 calc(var(--client-shell-tab-inset, 96px) + 12px);
+}
+
+.ice-picker__label {
+  margin: 12px 16px 4px;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+}
+
+.ice-picker__label:first-child {
+  margin-top: 4px;
+}
+
+.ice-picker__item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--glide-line);
+  border-radius: 0;
+  padding: 14px 16px;
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  color: inherit;
+}
+
+.ice-picker__country {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  letter-spacing: 0;
+  color: var(--glide-hint);
+}
+
+.ice-picker__item--current {
+  background: color-mix(in srgb, var(--app-cta-fill) 18%, transparent);
+}
+
+.ice-picker__popular {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.ice-picker__popular:empty {
+  display: none;
+}
+
+.ice-picker__popular-item {
+  flex: 0 0 auto;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  padding: 9px 14px;
+  border-radius: var(--app-radius-pill, 999px);
+  border: 1px solid var(--glide-line);
+  color: inherit;
+  background: var(--glide-paper);
+  cursor: pointer;
+}
+
+.ice-geo {
+  width: 100%;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  padding: 12px;
+  background: transparent;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+  color: inherit;
+}
+
+.ice-list {
+  display: flex;
+  flex-direction: column;
+  /* Карточка-табло выше строки списка — 9px между ними читались как слипание. */
+  gap: var(--app-space-3);
+}
+
+.ice-state {
+  font-size: var(--app-text-body);
+  color: var(--glide-hint);
+  padding: 8px 0;
+}
+
+.ice-map-note {
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  margin: 0;
+}
+
+.ice-map-note a {
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
+}
+
+.ice-map-wrap {
+  padding: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ice-map-wrap[hidden] {
+  display: none;
+}
+
+.ice-map-stage {
+  position: relative;
+  height: min(52vh, 420px);
+  min-height: 280px;
+  background: var(--glide-paper);
+}
+
+.ice-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.ice-near {
+  position: absolute;
+  right: 11px;
+  top: 11px;
+  z-index: 2;
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  padding: 8px 11px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  color: inherit;
+}
+
+.ice-map-sheet {
+  margin: -26px 12px 0;
+  position: relative;
+  z-index: 2;
+  padding-bottom: 8px;
+}
+
+.ice-map-sheet:empty {
+  min-height: 0;
+}
+
+.ice-acard--sheet {
+  box-shadow: 0 2px 4px rgba(15, 26, 34, 0.04), 0 24px 48px -28px rgba(15, 26, 34, 0.45);
+}
+
+.ice-map-offmap {
+  margin: 10px 16px 0;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
+.ice-map-empty {
+  padding: 14px 16px;
+}
+
+.ice-ypin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-50%, -100%);
+}
+
+.ice-ypin__dot {
+  width: 15px;
+  height: 15px;
+  border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
+  transform: rotate(45deg);
+  background: var(--glide-brand);
+  border: 2px solid var(--tg-theme-bg-color);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  display: block;
+}
+
+.ice-ypin--a .ice-ypin__dot {
+  background: var(--app-cta-fill);
+}
+
+.ice-ypin--c .ice-ypin__dot {
+  background: var(--glide-hint);
+  opacity: 0.55;
+  width: 11px;
+  height: 11px;
+}
+
+.ice-ypin--b .ice-ypin__dot {
+  background: var(--glide-hint);
+}
+
+.ice-ypin__label {
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
+  padding: 1px 5px;
+  border-radius: var(--app-radius-xs);
+  white-space: nowrap;
+  color: var(--tg-theme-text-color, var(--glide-text));
+}
+
+.ice-ypin__label:empty {
+  display: none;
+}
+
+.ice-ycluster {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-brand);
+  color: var(--app-cta-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--app-weight-bold);
+  font-size: var(--app-text-body);
+  border: 3px solid var(--tg-theme-bg-color);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+}
+
+/*
+ * TASK-096 (G-P5): «Поделиться расписанием» — единственный шеринг-артефакт вкладки.
+ *
+ * Класс только про геометрию: краски, радиус и состояния берутся у .btn-neutral из
+ * mini-app-components.css. Собственная кнопка здесь означала бы третий вид вторичной
+ * кнопки в клиентском приложении при двух уже существующих.
+ */
+.ice-share {
+  margin-top: var(--app-space-4);
+}
+
+.ice-share[hidden] {
+  display: none;
+}
+
+.ice-share__icon {
+  font-size: var(--app-text-body);
+  line-height: 1;
+}

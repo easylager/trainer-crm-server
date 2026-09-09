@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from aiogram.types import InlineKeyboardMarkup
 
 from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display, format_rubles_byn_display
+from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.validation import truncate_text
 
 # --- Client bot ---
@@ -972,7 +973,7 @@ def build_client_declined_booking_catalog_keyboard(*, webapp_base_url: str | Non
     base = (webapp_base_url or "").rstrip("/")
     if not base.lower().startswith("https://"):
         return None
-    url = f"{base}/webapp/catalog"
+    url = client_discovery_webapp_url(base)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -1001,13 +1002,12 @@ def build_client_rebook_catalog_keyboard(
     base = (webapp_base_url or "").rstrip("/")
     if not base.lower().startswith("https://"):
         return None
-    url = f"{base}/webapp/catalog"
     tid = int(trainer_id) if trainer_id is not None else None
-    if tid is not None and tid > 0:
-        url += f"?trainer_id={tid}"
-        sid = int(service_id) if service_id is not None else None
-        if sid is not None and sid > 0:
-            url += f"&service_id={sid}"
+    url = client_discovery_webapp_url(
+        base,
+        trainer_id=tid if tid and tid > 0 else None,
+        service_id=service_id,
+    )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -1032,7 +1032,7 @@ def build_client_no_response_catalog_keyboard(*, webapp_base_url: str | None):
             [
                 InlineKeyboardButton(
                     text=CLIENT_BUTTON_OPEN_CATALOG_WEBAPP,
-                    web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
+                    web_app=WebAppInfo(url=client_discovery_webapp_url(base)),
                 ),
             ],
         ]

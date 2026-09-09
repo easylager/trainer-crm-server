@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Статус парсеров льда</title>
+  <style>
+    :root {
+      --ground: #0B1218; --surface: #111C24; --ink: #E8F1F6;
+      --ink-soft: #B4C6D1; --ink-mute: #7C93A1; --line: #22333F;
+      --good: #6CC49A; --warn: #D9A45C; --stop: #E08376; --ice: #6FB6D6;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; background: var(--ground); color: var(--ink); }
+    main { max-width: 1280px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+    .sub { color: var(--ink-mute); margin-bottom: 20px; }
+    .stats { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat b { display: block; font-size: 22px; }
+    .stat span { color: var(--ink-mute); font-size: 12px; }
+    .note { border: 1px solid var(--line); background: var(--surface); padding: 12px 14px; margin: 16px 0; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+    button { background: transparent; color: var(--ink-soft); border: 1px solid var(--line); padding: 6px 10px; cursor: pointer; }
+    button[aria-pressed="true"] { color: var(--ink); border-color: var(--ice); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--ink-mute); font-weight: 500; position: sticky; top: 0; background: var(--ground); }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+    .spec_ready .dot { background: var(--good); }
+    .spec_blocked .dot, .reverse_stale .dot { background: var(--stop); }
+    .reverse_ok .dot { background: var(--ice); }
+    .reverse_stale .dot { background: var(--warn); }
+    .skip .dot, .not_probed .dot { background: var(--ink-mute); }
+    a { color: var(--ice); }
+    td.detail { color: var(--ink-soft); max-width: 420px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Статус парсеров льда</h1>
+  <p class="sub">Одна арена — одна стратегия. 40 BY-арен из прода (read-only, 2026-09-05). SoT: <code>data/ice-parser-status.json</code></p>
+  <div class="stats" id="stats"></div>
+  <div class="note">
+    <b>Брест</b> — спека готова: OCR <a href="https://brest.hockey.by/IMG_8523.JPG">IMG_8523.JPG</a> «СВ кат» 21:15–22:15 + HTML-цены. <b>Озерный 39</b> — дубль id=22, skip.
+    <b>Витебск</b> — спека готова; HTML всё ещё 30 апр–3 мая, live обязан <code>drop_past</code>. <b>Неман</b> — спека готова: новость 6 сен 17:00/18:30 Пышки; апрельский виджет не публиковать. <b>Орша</b> — OCR <code>Ld-*</code>, 3 слота.
+  </div>
+  <div class="filters">
+    <button data-f="all" aria-pressed="true">Все</button>
+    <button data-f="minsk">Минск</button>
+    <button data-f="oblasts">Области</button>
+    <button data-f="ready">Спека готова</button>
+    <button data-f="work">В работе</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>id</th><th>Город</th><th>Арена</th><th>Статус</th><th>Стратегия</th><th>Reverse</th><th>Блокер</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</main>
+<script>
+const LABEL = {
+  spec_ready: "Спека готова", spec_blocked: "Нужен BY IP", reverse_ok: "Reverse есть",
+  reverse_stale: "Источник протух", skip: "Не МК", not_probed: "Не трогали"
+};
+const ARENAS = [
+  [2,"Минск","Минск Арена","spec_ready","ABWS JSON","saleframe/55 → calendar+events. Цены minor. Merge на event.","—"],
+  [3,"Минск","ТЦ Замок","spec_ready","HTML одна страница","Сетка :15 + прайс. 7 дней от прогона.","—"],
+  [6,"Минск","Чижовка-арена","spec_ready","HTML таблица колонок","Колонка=день, ячейка HH.MM МА|БА.","—"],
+  [5,"Минск","ЛДС Минской области","spec_ready","HTML блоки МК","Только МАССОВОЕ КАТАНИЕ. Цены с mass_skating.","—"],
+  [10,"Гродно","ТЦ Тринити","spec_ready","JSON API","GET /api/ice.php. Рубли ×100. Прокат 8.00.","—"],
+  [33,"Гомель","Гомельский ЛДС","spec_ready","Еженедельная новость","Пост на gomel.hockey.by. Детской цены нет.","—"],
+  [8,"Минск","Каток ХК Юность","spec_blocked","HTML origin + BY IP","Globalping 200, truncate 10 КБ. Закрыто без BY VPS.","Нужен BY VPS"],
+  [4,"Минск","СДЮШОР (ledlife)","spec_blocked","HTML + BY IP","То же: 10 КБ truncate, сетку не выдумывать.","Нужен BY VPS"],
+  [22,"Брест","Брестский ЛДС","spec_ready","OCR фото + HTML цены","JPG IMG_8523 «СВ кат» 21:15–22:15. kind=open_ice. 7 слотов.","Фото weekly"],
+  [29,"Витебск","Дворец спорта","spec_ready","HTML weekday blocks","Extract OK. HTML всё ещё апр/май. Live: drop_past.","drop_past; источник не обновлён"],
+  [43,"Могилев","Дворец спорта Могилёв","spec_ready","HTML, фильтр kind","Только «массовое катание». 6 слотов.","—"],
+  [7,"Минск","ТЦ DiaMond city","spec_ready","HTML МК + PNG прайс","Только МК. PNG: будни 11/8, вых 12/9, прокат 10. 44 слота.","—"],
+  [11,"Гродно","ЛДС Неман","spec_ready","Новость hockey.by","6 сен 17:00 и 18:30 Пышки 10/7/5. Виджет апрель — drop.","Виджет stale"],
+  [9,"Минск","Олимпик-арена","skip","Нет публичного МК","Тренировочный комплекс.","—"],
+  [12,"Минск","Лыжероллерная трасса","skip","не лёд","Не каток.","—"],
+  [13,"Минск","JUSTSKATE","skip","только школа","","—"],
+  [14,"Минск","Финт","skip","только школа","","—"],
+  [34,"Гомель","Каток Солнечный","skip","нет публичной сетки","Сезонный каток, не ЛДС 33.","Нет extract"],
+  [23,"Барановичи","ЛДС","spec_ready","HTML неделя + OCR PDF","dvorec.by/?p=509, сеанс 45. 16 слотов.","Прайс PDF"],
+  [38,"Бобруйск","Бобруйск-арена","spec_ready","HTML raspisanie","Только «массовое катание». 15 слотов.","—"],
+  [37,"Лида","Ледовый дворец","spec_ready","HTML цены + OCR фото","9/7/6 с HTML, слоты с JPG. 10 слотов, 45 мин.","Фото weekly"],
+  [24,"Пинск","УСК Волна","spec_ready","HTML неделя PolessGU","Тариф 4.40 / 4.18 / прокат 4.20. 18 слотов.","—"],
+  [19,"Солигорск","СЗК","spec_ready","HTML times+prices","szk.by massovoe-katanie. 11 слотов.","—"],
+  [18,"Молодечно","СРЦ","skip","лёд закрыт","Закрыт с 2026-05-01.","Сезон закрыт"],
+  [30,"Новополоцк","Ледовый дворец","spec_ready","HTML таблица","hchimik Дата/Время 45 мин, 9/10 + прокат 6. 5 слотов.","—"],
+  [35,"Жлобин","Металлург","skip","прайс без HH:MM","7.00 / прокат 5.00. /raspisanie/ 404.","Нет сетки"],
+  [20,"Жодино","СДЮШОР","skip","сезон закрыт","Только прайс, слотов нет.","Нет сетки"],
+  [36,"Светлогорск","Ледовый дворец","skip","нет офиц. страницы МК","Не путать с ФОК Калининград.","Нет HTML"],
+  [32,"Горки","Ледовый дворец","spec_ready","HTML на главной","2–3 сен 20:00, 6 сен 17:00. 4–5 отмена. 4.50/4.00/прокат 3.50.","—"],
+  [31,"Орша","Ледовая арена","spec_ready","OCR Ld JPEG","Только лёд Ld-*. 07–13.09: 3 слота, 7/4/прокат 4.","Фото weekly"],
+  [26,"Береза","Ледовая арена","skip","Instagram weekly","Сетка в IG. HTML нет. Не V1.","Instagram"],
+  [25,"Кобрин","Ледовая арена","spec_ready","HTML неделя + цены","kobrininform афиша; drop любительский хоккей. 18 слотов.","—"],
+  [28,"Ивацевичи","Ледовая арена","skip","Instagram @led_arena_basseyn","Живая сетка в IG. Не V1.","Instagram"],
+  [27,"Пружаны","СДЮШОР №2","skip","школа, МК по телефону","Ежедневно кроме пн, сетки нет.","Нет HTML"],
+  [40,"Лунинец","СК Олимп-2011","skip","нет HTML МК","Сайт школы timeout.","Источник недоступен"],
+  [41,"Островец","Ледовая площадка","spec_ready","HTML + прейскурант","45 мин, 6.00/4.00/прокат 5.00. 10 слотов.","—"],
+  [42,"Шклов","Ледовая арена","spec_ready","OCR JPEG по HTTP","sportshklov.by/category/raspisania/ http. 16 слотов.","HTTPS TLS; ходить http"],
+  [15,"Раубичи","РЦОП","skip","МК не проводятся","rau.by/skates.","—"],
+  [16,"Силичи","РГЦ Силичи","skip","зимняя сетка в сентябре","«С 14 декабря» — прошлый сезон.","Не публиковать"],
+  [39,"Озерный","Крытый каток","skip","дубль Брестского ЛДС","Prod ≈ id=22. Не ingest.","Дубль 22"]
+].map(([arena_id,city,name,status,strategy,detail,blocker]) => ({arena_id,city,name,status,strategy,detail,blocker}));
+
+let filter = "all";
+function pass(a) {
+  if (filter === "minsk") return a.city === "Минск";
+  if (filter === "oblasts") return a.city !== "Минск";
+  if (filter === "ready") return a.status === "spec_ready";
+  if (filter === "work") return ["reverse_ok","reverse_stale","spec_blocked"].includes(a.status);
+  return true;
+}
+function render() {
+  const n = (s) => ARENAS.filter(a => a.status === s).length;
+  document.getElementById("stats").innerHTML = [
+    ["Спека готова", n("spec_ready"), "var(--good)"],
+    ["Reverse без спеки", n("reverse_ok")+n("reverse_stale"), "var(--ice)"],
+    ["Только BY IP", n("spec_blocked"), "var(--stop)"],
+    ["Не смотрели", n("not_probed"), "var(--ink-mute)"],
+    ["Не МК", n("skip"), "var(--ink-mute)"]
+  ].map(([l,v,c]) => `<div class="stat"><b style="color:${c}">${v}</b><span>${l}</span></div>`).join("");
+  document.getElementById("tbody").innerHTML = ARENAS.filter(pass).map(a => `
+    <tr class="${a.status}">
+      <td>${a.arena_id}</td><td>${a.city}</td><td>${a.name}</td>
+      <td><span class="dot"></span>${LABEL[a.status]}</td>
+      <td>${a.strategy}</td><td class="detail">${a.detail}</td><td>${a.blocker}</td>
+    </tr>`).join("");
+}
+document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => {
+  filter = b.dataset.f;
+  document.querySelectorAll("[data-f]").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  render();
+});
+render();
+</script>
+</body>
+</html>

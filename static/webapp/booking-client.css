@@ -5,9 +5,64 @@
 
 .booking-success-note {
   color: var(--tg-theme-hint-color);
-  font-size: 14px;
+  font-size: var(--app-text-body);
   display: inline-block;
   margin-top: 10px;
+}
+
+/*
+ * TASK-096 AC-004 — момент первого успеха.
+ *
+ * Нумерованный список, а не абзац: человек читает этот экран один раз в жизни и
+ * за секунду, и ему нужно увидеть последовательность, а не текст. Нумерация —
+ * настоящая <ol>, поэтому она же читается скринридером как список из N шагов.
+ */
+.booking-first-success {
+  /* .success-msg центрирует текст — для блока со списком шагов это разъезжается:
+     центрированный заголовок над левым списком читается как две разные карточки. */
+  text-align: left;
+}
+
+.booking-first-success__title {
+  margin: 0 0 6px;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--tg-theme-text-color);
+}
+
+.booking-first-success__lede {
+  margin: 0 0 14px;
+  font-size: var(--app-text-body);
+  color: var(--tg-theme-hint-color);
+}
+
+.booking-first-success__steps {
+  margin: 0;
+  padding: 0 0 0 1.35em;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--app-text-body);
+  line-height: 1.45;
+  color: var(--tg-theme-text-color);
+  text-align: left;
+}
+
+.booking-first-success__steps li::marker {
+  color: var(--tg-theme-hint-color);
+  font-weight: var(--app-weight-semibold);
+}
+
+.booking-place-mismatch {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  font-size: var(--app-text-body);
+  line-height: 1.45;
+  color: var(--tg-theme-text-color);
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+  border-radius: var(--app-radius-sm);
 }
 
 .booking-screen-state--success #screenSuccess,
@@ -29,7 +84,7 @@
 }
 
 .booking-success-panel .success-msg {
-  font-size: 16px;
+  font-size: var(--app-text-lead);
   line-height: 1.5;
 }
 
@@ -66,7 +121,7 @@
 
 .booking-form-skeleton__line {
   height: 14px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--tg-theme-secondary-bg-color);
   animation: booking-skel-pulse 1.2s ease-in-out infinite;
 }
@@ -97,12 +152,13 @@
   bottom: 0;
   z-index: 40;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: var(--tg-theme-bg-color);
+  background: var(--app-float-bg);
   border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
   pointer-events: none;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: var(--app-float-shadow);
 }
 
 .catalog-trainer-sticky-cta--visible {
@@ -119,12 +175,12 @@ body.client-shell-body .catalog-trainer-sticky-cta {
   max-width: 480px;
   margin: 0 auto;
   box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
 }
 
 .catalog-trainer-sticky-cta .btn-primary {
   width: 100%;
-  border-radius: 14px;
-  font-weight: 600;
+  border-radius: var(--app-radius-md);
+  font-weight: var(--app-weight-semibold);
   min-height: 48px;
 }

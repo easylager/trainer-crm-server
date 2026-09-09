@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Арена</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=202609061"></script>
+  <link rel="stylesheet" href="theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
+  <link rel="stylesheet" href="arena-card.css?v=202609093" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
+  <script src="arena-card-model.js?v=202609095"></script>
+  <!-- Переход не должен снимать пустую страницу: ждём разметку экрана. -->
+  <link rel="expect" href="#arenaRoot" blocking="render" />
+</head>
+<body class="ar-pilot ar-pilot--arena" data-client-shell="tabs">
+  <div class="header client-app-header">
+    <h1 class="header-title client-app-header__title" id="headerTitle">Арена</h1>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack">Назад</button>
+    </div>
+  </div>
+
+  <!--
+    TASK-094 AC-003. Шапка арены рисуется только после трёх запросов, то есть
+    её нет в DOM в момент, когда браузер снимает новый документ для перехода.
+    Поэтому здесь стоит пустая шапка того же размера: она существует к первому
+    кадру, несёт имя перехода и заодно работает скелетоном вместо строки
+    «Загрузка карточки…». paint() заменит её настоящей.
+  -->
+  <div id="arenaRoot" class="arena-card">
+    <div class="arena-hero arena-hero--pending" id="arenaBoot" aria-label="Загрузка карточки катка"></div>
+  </div>
+
+  <div class="arena-modal" id="arenaModal" hidden>
+    <form class="arena-modal__sheet" id="arenaModalForm">
+      <h2 id="arenaModalTitle">Сообщить об ошибке</h2>
+      <p class="arena-sub" id="arenaModalLead">Укажите поле и верное значение — не письмо в поддержку.</p>
+      <label>
+        Поле
+        <select id="arenaModalField" name="field"></select>
+      </label>
+      <label>
+        Предлагаемое значение
+        <input id="arenaModalValue" name="value" type="text" maxlength="240" autocomplete="off" />
+      </label>
+      <button type="submit" class="arena-btn arena-btn--pri" id="arenaModalSubmit">Отправить</button>
+      <button type="button" class="arena-btn" id="arenaModalCancel">Отмена</button>
+    </form>
+  </div>
+
+  <script src="arena-card.js?v=202609095"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -19,7 +20,9 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    Boolean,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -123,6 +126,9 @@ class Trainer(Base):
     arenas: Mapped[list["Arena"]] = relationship(
         "Arena", secondary="trainer_arenas", back_populates="trainers", lazy="raise"
     )
+    cities: Mapped[list["City"]] = relationship(
+        "City", secondary="trainer_cities", lazy="raise"
+    )
 
 
 class TrainerLinkToken(Base):
@@ -150,7 +156,9 @@ class TrainerLinkToken(Base):
 
 
 class City(Base):
-    """City for filtering trainers. Admin fills; trainer profile has one city.
+    """City for filtering trainers. Admin fills; trainer_profiles.city_id is the primary city.
+
+    Catalog membership is ``trainer_cities`` (profile city plus cities of public arenas).
 
     ``country`` (ISO 3166-1 alpha-2: ``BY``/``RU``) drives display currency —
     see ``src.shared.currency.resolve_currency``. ``price_group`` selects which row of
@@ -169,7 +177,12 @@ class City(Base):
 
 
 class Arena(Base):
-    """Venue/arena in a city: real place with address and optional coords for map link."""
+    """Venue/arena in a city: real place with address and optional coords for map link.
+
+    ``is_active`` is soft-delete. ``is_confirmed`` is post-hoc moderation of trainer-created
+    workplaces (TASK-046) — not the Ice Discovery vitrine flag. Publication of the catalog
+    card lives on ``ArenaProfile.status`` (draft|published|archived).
+    """
     __tablename__ = "arenas"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -190,6 +203,189 @@ class Arena(Base):
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
     )
+    profile: Mapped[Optional["ArenaProfile"]] = relationship(
+        back_populates="arena", uselist=False, lazy="raise"
+    )
+
+
+class ArenaProfile(Base):
+    """
+    Ice Discovery vitrine for one arena (1:1). Not parser config (see ice_parser_jobs).
+
+    ``status`` publishes the catalog card (draft|published|archived). It is not
+    ``arenas.is_confirmed``, which is post-hoc moderation of trainer-created workplaces.
+    ``slug`` is unique per city and must stay stable after first issue — do not edit from
+    admin without an explicit warning (future public URLs).
+    """
+
+    __tablename__ = "arena_profiles"
+    __table_args__ = (
+        UniqueConstraint("city_id", "slug", name="uq_arena_profiles_city_slug"),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_arena_profiles_status",
+        ),
+        CheckConstraint(
+            "season_start_month IS NULL OR (season_start_month BETWEEN 1 AND 12)",
+            name="ck_arena_profiles_season_start",
+        ),
+        CheckConstraint(
+            "season_end_month IS NULL OR (season_end_month BETWEEN 1 AND 12)",
+            name="ck_arena_profiles_season_end",
+        ),
+    )
+
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), primary_key=True
+    )
+    city_id: Mapped[int] = mapped_column(
+        ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slug: Mapped[str] = mapped_column(String(160), nullable=False)
+    district: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    timezone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    short_description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    social_urls: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    season_end_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+
+    arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")
+
+
+class Media(Base):
+    """Owner-typed image metadata (TASK-049). Files live in object storage; rows are not trainer_photos.
+
+    ``owner_type`` is polymorphic (arena|coach|collective). Arena photos use this table;
+    trainer catalog still reads ``trainer_photos``. Do not scrape search-engine images.
+    """
+
+    __tablename__ = "media"
+    __table_args__ = (
+        Index("ix_media_owner", "owner_type", "owner_id"),
+        CheckConstraint(
+            "owner_type IN ('arena', 'coach', 'collective')",
+            name="ck_media_owner_type",
+        ),
+        CheckConstraint(
+            "license IN ('own', 'operator', 'user', 'permitted')",
+            name="ck_media_license",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'published', 'rejected')",
+            name="ck_media_status",
+        ),
+        CheckConstraint(
+            "license = 'own' OR COALESCE(btrim(source_url), '') <> '' "
+            "OR COALESCE(btrim(attribution), '') <> ''",
+            name="ck_media_license_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    owner_id: Mapped[int] = mapped_column(Integer(), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    variants: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
+    width: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    blurhash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    license: Mapped[str] = mapped_column(String(20), nullable=False)
+    attribution: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
+
+
+class IceSession(Base):
+    """Canonical public-skate / open-ice slot (TASK-050).
+
+    Admin manual entry and later parsers write the same columns after transform+validate.
+    Client Ice tab will read only ``public_skate`` and ``open_ice``. Recurrence instances
+    share ``recurrence_key``; cancelling one row must not resurrect on rematerialize.
+    """
+
+    __tablename__ = "ice_sessions"
+    __table_args__ = (
+        Index("ix_ice_sessions_arena_starts", "arena_id", "starts_at_utc"),
+        Index("ix_ice_sessions_local_date_arena", "local_date", "arena_id"),
+        Index(
+            "uq_ice_sessions_recurrence_date",
+            "recurrence_key",
+            "local_date",
+            unique=True,
+            postgresql_where=text("recurrence_key IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "kind IN ('public_skate', 'open_ice', 'rental', 'school_group', 'event')",
+            name="ck_ice_sessions_kind",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'cancelled', 'superseded')",
+            name="ck_ice_sessions_status",
+        ),
+        CheckConstraint(
+            "price_adult_minor IS NULL OR price_adult_minor >= 0",
+            name="ck_ice_sessions_price_adult",
+        ),
+        CheckConstraint(
+            "price_child_minor IS NULL OR price_child_minor >= 0",
+            name="ck_ice_sessions_price_child",
+        ),
+        CheckConstraint(
+            "price_rental_minor IS NULL OR price_rental_minor >= 0",
+            name="ck_ice_sessions_price_rental",
+        ),
+        CheckConstraint(
+            "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
+            name="ck_ice_sessions_duration",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    arena_id: Mapped[int] = mapped_column(
+        ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    starts_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    local_date: Mapped[date] = mapped_column(Date(), nullable=False)
+    starts_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    ends_at_local: Mapped[time] = mapped_column(Time(), nullable=False)
+    price_adult_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_child_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_rental_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    price_minor: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    currency_code: Mapped[str] = mapped_column(String(3), nullable=False)
+    price_note: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    session_label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    age_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    capacity_note: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    external_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
+    recurrence_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+
+
+class IceCityInterest(Base):
+    """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
+
+    __tablename__ = "ice_city_interest"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False, server_default="skate")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table
@@ -198,7 +394,25 @@ trainer_arenas_table = Table(
     Base.metadata,
     Column("trainer_id", ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False),
     Column("arena_id", ForeignKey("arenas.id", ondelete="CASCADE"), nullable=False),
+    Column("is_public", Boolean(), nullable=False, server_default=text("true")),
     UniqueConstraint("trainer_id", "arena_id", name="uq_trainer_arenas_trainer_arena"),
+)
+
+# Catalog geography: profile city (is_primary) plus cities of public trainer_arenas.
+trainer_cities_table = Table(
+    "trainer_cities",
+    Base.metadata,
+    Column("trainer_id", ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False),
+    Column("city_id", ForeignKey("cities.id", ondelete="CASCADE"), nullable=False),
+    Column("is_primary", Boolean(), nullable=False, server_default=text("false")),
+    UniqueConstraint("trainer_id", "city_id", name="uq_trainer_cities_trainer_city"),
+    Index("ix_trainer_cities_city_id", "city_id"),
+    Index(
+        "uq_trainer_cities_one_primary",
+        "trainer_id",
+        unique=True,
+        postgresql_where=text("is_primary"),
+    ),
 )
 
 
@@ -503,7 +717,7 @@ class ClientFamilyAccessMember(Base):
 # Orthogonal to ClientFamilyAccessMember above: that table is "several Telegram accounts
 # share ONE clients row" (e.g. both parents see the same kid's bookings). This table is the
 # mirror case — "one Telegram account acts as SEVERAL clients rows" (one parent, several kids,
-# each with independent booking history). See .ai/DECISION-multi-profile-clients.md.
+# each with independent booking history). See docs/adr/004-multi-profile-clients.md.
 CLIENT_PROFILE_ROLE_SELF = "self"
 CLIENT_PROFILE_ROLE_GUARDIAN = "guardian"
 
@@ -1379,6 +1593,46 @@ class TrainerDemandEvent(Base):
     source: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     # sha256(ip || ua || trainer_id || day) — irreversible, narrow window. Never store IP/UA in cleartext.
     dedup_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+
+
+# ---------------------------------------------------------------------------
+# Client share events (TASK-096, gate G-P5) — what a client sent into a chat.
+#
+# Deliberately not trainer_demand_events: that one is Lead Mode and requires trainer_id,
+# while the headline artifact is a city's ice schedule, which has no trainer at all.
+# ---------------------------------------------------------------------------
+
+CLIENT_SHARE_KIND_ICE_CITY_DAY = "ice_city_day"
+CLIENT_SHARE_KIND_TRAINER = "trainer"
+
+CLIENT_SHARE_KINDS = (
+    CLIENT_SHARE_KIND_ICE_CITY_DAY,
+    CLIENT_SHARE_KIND_TRAINER,
+)
+
+
+class ClientShareEvent(Base):
+    """Append-only: a client opened the Telegram share dialog for one artifact."""
+    __tablename__ = "client_share_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    share_context: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    city_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("cities.id", ondelete="SET NULL"), nullable=True
+    )
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
+    trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    # sha256(telegram_id || kind || day) — irreversible. Counts people, not identities.
+    actor_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
 
 

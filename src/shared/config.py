@@ -118,10 +118,17 @@ class Settings(BaseSettings):
     legacy_trainers_api_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # CDN base URL for photos (e.g. https://cdn.yourdomain.com or R2 public URL). When set, API returns photo URLs as {photo_cdn_base_url}/{file_key} instead of presigned S3; client loads from CDN.
     photo_cdn_base_url: str | None = None
+    # TASK-083 / PDEC-004: set once notification_service's outbound traffic is tunneled through a
+    # real Belarus VPS (see scripts/provision-by-egress-vps.sh). Presence alone satisfies
+    # ice_parser_jobs.config["requires_by_egress"] on this worker — the flag itself is never cleared.
+    by_egress_proxy_url: str | None = None
     # Optional: Telegram ID to send test notifications (e.g. "inactive client" push scripts)
     notify_telegram_id: int | None = None
     # Base URL for Telegram Web App (trainer schedule). Must be HTTPS in production. Example: https://api.yoursite.com
     webapp_base_url: str = "http://localhost:8000"
+    # Ice tab map (Yandex Maps JS API 2.1). Browser key — restrict by HTTP referrer in the Yandex cabinet.
+    # Missing key → Ice map empty state. No OSM/Leaflet fallback.
+    yandex_maps_js_api_key: str | None = None
 
     # Plain-text suffix for amounts in bots, Telegram HTML, and Mini App UI (default BYN per ISO 4217).
     byr_display_sign: str = "BYN"

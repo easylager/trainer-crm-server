@@ -125,6 +125,7 @@ from src.bot.handlers.relay_handlers import (
 )
 from src.bot import messages as msg
 from src.shared.config import Settings
+from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.mini_app_https import mini_app_https_base
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.audit import ACTOR_CLIENT_BOT, audit_log
@@ -1130,7 +1131,7 @@ async def cmd_settings(message: Message) -> None:
     """Menu 'Тренеры и запись': open catalog Mini App (HTTPS) or show settings screen."""
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
-        catalog_url = f"{base}/webapp/catalog"
+        catalog_url = client_discovery_webapp_url(base)
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=catalog_url))],
         ])
@@ -1149,7 +1150,7 @@ async def cmd_request(message: Message) -> None:
     """Legacy command: request is created from catalog context (list footer or trainer card)."""
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
-        catalog_url = f"{base}/webapp/catalog"
+        catalog_url = client_discovery_webapp_url(base)
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=catalog_url))],
         ])
@@ -1360,7 +1361,7 @@ async def cmd_book(message: Message) -> None:
         catalog_url = f"{base}/webapp/catalog?{q}"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=catalog_url))],
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, web_app=WebAppInfo(url=f"{base}/webapp/catalog"))],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, web_app=WebAppInfo(url=client_discovery_webapp_url(base)))],
         ])
         await message.answer(msg.CLIENT_MENU_BOOKING_MOVED, reply_markup=kb)
         return

@@ -9,7 +9,7 @@
 **Tech Stack:** FastAPI + SQLAlchemy async, vanilla JS Mini Apps (`static/webapp/`), pytest + httpx ASGITransport.
 
 **Design:** `docs/plans/2026-09-04-client-multi-profile-booking-design.md`  
-**Prior art:** `.ai/EPIC1-client-multi-profile.md`, `static/webapp/client-profile-switcher.js`, `src/application/client_profile_use_cases.py`
+**Prior art:** `docs/epics/client-multi-profile.md`, `static/webapp/client-profile-switcher.js`, `src/application/client_profile_use_cases.py`
 
 ---
 

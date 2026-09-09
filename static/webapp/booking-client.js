@@ -217,19 +217,71 @@
     });
   }
 
+  function formatPlaceMismatchNotice(slot) {
+    if (!slot || !slot.place_mismatch) return '';
+    var name = (slot.arena_name && String(slot.arena_name).trim()) || '';
+    if (name) {
+      return 'Занятие пройдёт на площадке «' + name + '», а не на арене, с которой вы открыли запись.';
+    }
+    return 'Место занятия отличается от арены, с которой вы открыли запись.';
+  }
+
+  function escSuccessHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /**
+   * TASK-096 AC-004 — момент первого успеха.
+   *
+   * Экран после первой записи отличается от экрана после пятидесятой, потому что
+   * отличается сам человек: тот, кто записался впервые, не знает, сработало ли,
+   * кто ответит и что будет дальше. Эта неизвестность и портит первый успех —
+   * не отсутствие анимации. Поэтому «момент» — три честных факта о будущем.
+   *
+   * Каждый пункт выводится из базы (`is_first_booking`, `reminder_plan` приходят
+   * с сервера). Ни одного придуманного: нет плана напоминаний — нет и строки
+   * про напоминания, вместо неё не появляется утешительная неправда (AC-005).
+   */
+  function formatFirstBookingSuccess(data) {
+    var steps = ['Тренер подтвердит запись — уведомление придёт сюда, в бот.'];
+    var plan = data && data.reminder_plan ? String(data.reminder_plan).trim() : '';
+    if (plan) {
+      steps.push('Напомним о тренировке ' + escSuccessHtml(plan) + '.');
+    }
+    steps.push('Детали, адрес и отмена — всегда в «Моих записях».');
+
+    return (
+      '<div class="booking-first-success">' +
+      '<p class="booking-first-success__title">Готово. Это ваша первая запись.</p>' +
+      '<p class="booking-first-success__lede">Дальше всё делаем мы:</p>' +
+      '<ol class="booking-first-success__steps">' +
+      steps
+        .map(function (line) {
+          return '<li>' + line + '</li>';
+        })
+        .join('') +
+      '</ol>' +
+      '</div>'
+    );
+  }
+
   function formatSuccessMessage(data, opts) {
     opts = opts || {};
-    var main = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+    var first = data && data.is_first_booking ? formatFirstBookingSuccess(data) : '';
+    var main = first || '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
     var ctx = '';
     if (opts.requestId) {
       ctx =
         '<br><span class="booking-success-note">Запись связана с вашей заявкой и откликом тренера.</span>';
-    } else if (data && data.used_primary_venue_for_online_booking) {
-      ctx =
-        '<br><span class="booking-success-note">Запись на <strong>основную площадку</strong>. Для занятий на другой арене из фильтра используйте заявку — тренер запишет вас вручную.</span>';
     }
-    var foot =
-      '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
+    // Первый экран уже сказал, где живут детали и отмена, — повторять это ниже
+    // значило бы дважды написать одно и то же на одном экране.
+    var foot = first
+      ? ''
+      : '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
     return main + ctx + foot;
   }
 
@@ -310,6 +362,12 @@
   function resolveBookingReturn(from, ctx) {
     ctx = ctx || {};
     if (from === 'hub') return { type: 'hub', path: 'client-home' };
+    // Вход с карточки арены (`catalog?from=arena&...`). Раньше этой ветки не было,
+    // и «Назад» с выбора времени уводило на неотрисованный экран карточки тренера —
+    // человек, пришедший с арены, попадал на пустую страницу вместо арены.
+    if (from === 'arena' && ctx.arenaId != null && ctx.arenaId !== '') {
+      return { type: 'arena', path: 'arena?ref=' + encodeURIComponent(String(ctx.arenaId)) };
+    }
     if (from === 'requests') return { type: 'shell', path: 'client-requests' };
     if (from === 'saved-trainers') return { type: 'shell', path: 'client-saved-trainers' };
     if (from === 'catalog' && ctx.trainerId) {
@@ -318,7 +376,7 @@
     if (ctx.trainerId) {
       return { type: 'catalog-trainer', path: 'catalog?trainer_id=' + encodeURIComponent(String(ctx.trainerId)) };
     }
-    return { type: 'catalog', path: 'catalog?tab=catalog' };
+    return { type: 'catalog', path: 'ice?intent=coach' };
   }
 
   function navigateBookingReturn(from, ctx) {
@@ -369,7 +427,9 @@
     validateBookingForm: validateBookingForm,
     buildBookingPayload: buildBookingPayload,
     submitBooking: submitBooking,
+    formatPlaceMismatchNotice: formatPlaceMismatchNotice,
     formatSuccessMessage: formatSuccessMessage,
+    formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
     resolveBookingReturn: resolveBookingReturn,
     navigateBookingReturn: navigateBookingReturn,
