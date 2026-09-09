@@ -31,6 +31,12 @@ body.ar-pilot--ice .client-app-header {
   display: none;
 }
 
+/* display:flex ниже перебивает UA [hidden]; без этого хост катков
+   остаётся в потоке при чипе «Тренеры». */
+.ice-list[hidden] {
+  display: none;
+}
+
 .ice-sec + .ice-sec {
   border-top: 1px solid var(--glide-line);
 }

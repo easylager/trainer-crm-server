@@ -17,10 +17,10 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609094" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609095" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
-  <script src="ice-tab-model.js?v=202609094"></script>
+  <script src="ice-tab-model.js?v=202609095"></script>
   <script src="ice-map-model.js?v=202609074"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
@@ -72,7 +72,10 @@
     </div>
     <div class="ice-sec" id="iceListSec">
       <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
-      <div class="ice-list" id="iceList"></div>
+      <div id="iceList">
+        <div class="ice-list" id="iceListSkate"></div>
+        <div class="ice-list" id="iceListCoach" hidden></div>
+      </div>
       <!--
         TASK-096 (G-P5): шеринг-артефакт №1. Кнопка стоит ПОД списком, а не в шапке —
         поделиться расписанием хочется после того, как его просмотрел, и первый экран
@@ -138,6 +141,6 @@
   </button>
 
   <script src="ice-map.js?v=202609091"></script>
-  <script src="ice-tab.js?v=202609094"></script>
+  <script src="ice-tab.js?v=202609095"></script>
 </body>
 </html>

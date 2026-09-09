@@ -741,6 +741,19 @@ describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
     );
   });
 
+  it('does not paint leftover rows when loadedIntent was already cleared', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'coach',
+        loadedIntent: null,
+        items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
+      }),
+      'skeleton'
+    );
+  });
+
   it('keeps live cards on a same-lens refresh', () => {
     const { listPaintMode } = loadModel();
     assert.equal(
@@ -752,6 +765,15 @@ describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
       }),
       'items'
     );
+  });
+});
+
+describe('listHostId (skate boards and trainer rows are different DOM hosts)', () => {
+  it('keeps катки and тренеры in separate list elements', () => {
+    const { listHostId } = loadModel();
+    assert.equal(listHostId('skate'), 'iceListSkate');
+    assert.equal(listHostId('group'), 'iceListSkate');
+    assert.equal(listHostId('coach'), 'iceListCoach');
   });
 });
 

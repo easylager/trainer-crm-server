@@ -358,8 +358,20 @@
     return new Array(n + 1).join(one);
   }
 
+  function listEl() {
+    return $(M.listHostId(state.intent));
+  }
+
+  function showActiveList() {
+    var skate = $('iceListSkate');
+    var coach = $('iceListCoach');
+    var coachOn = state.intent === 'coach';
+    if (skate) skate.hidden = coachOn;
+    if (coach) coach.hidden = !coachOn;
+  }
+
   function renderList() {
-    var list = $('iceList');
+    var list = listEl();
     var cap = $('iceCaption');
     if (cap) {
       cap.textContent = M.formatSortCaption({
@@ -383,6 +395,7 @@
       // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
       // Текстовая строка обещала одну форму, а приходила совсем другая.
       list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
+      showActiveList();
       return;
     }
     if (paint === 'empty') {
@@ -394,6 +407,7 @@
         hasSkate: M.shouldShowSkateChip(state.skateCount),
       });
       renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
+      showActiveList();
       return;
     }
     list.innerHTML = state.items
@@ -401,6 +415,7 @@
         return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
+    showActiveList();
   }
 
   function recordIceInterest() {
@@ -420,7 +435,7 @@
       })
       .then(function () {
         renderEmpty(
-          $('iceList'),
+          listEl(),
           {
             title: 'Записали',
             body: 'Когда появится расписание в этом городе — вы уже в списке желающих.',
@@ -539,6 +554,7 @@
       var next = kind.slice('intent:'.length);
       return function () {
         state.intent = M.coerceIntent(next);
+        renderList();
         setChips();
         setViewToggle();
         persist();
@@ -616,7 +632,7 @@
   function loadFailed() {
     // TASK-096: «Попробуйте ещё раз» without a button is an instruction the screen doesn't honour.
     renderEmpty(
-      $('iceList'),
+      listEl(),
       {
         title: 'Не удалось загрузить список',
         body: 'Похоже, пропала связь. Список загрузится заново по кнопке.',
@@ -773,6 +789,7 @@
   function switchToCoach() {
     state.intent = 'coach';
     state.view = 'list';
+    renderList();
     setChips();
     setViewToggle();
     persist();
@@ -1057,6 +1074,7 @@
         var action = M.intentChipAction(intent);
         if (action.type !== 'list') return;
         state.intent = M.coerceIntent(action.intent);
+        renderList();
         setChips();
         setViewToggle();
         persist();

@@ -661,6 +661,9 @@
   /**
    * How the Ice list should paint. Items from the previous lens must not be
    * re-skinned as the other card (wide skate board → compact trainer row).
+   *
+   * loadedIntent === null means "we have not confirmed this lens". Leftover
+   * rows in memory still belong to the other card and must not paint.
    */
   function listPaintMode(opts) {
     opts = opts || {};
@@ -668,11 +671,16 @@
     var items = opts.items || [];
     var loading = !!opts.loading;
     var loaded = opts.loadedIntent ? coerceIntent(opts.loadedIntent) : null;
-    var wrongLens = !!(loaded && loaded !== intent);
-    if (wrongLens) return 'skeleton';
+    if (loaded !== intent) {
+      if (loading || items.length) return 'skeleton';
+    }
     if (loading && !items.length) return 'skeleton';
     if (!items.length) return 'empty';
     return 'items';
+  }
+
+  function listHostId(intent) {
+    return coerceIntent(intent) === INTENTS.coach ? 'iceListCoach' : 'iceListSkate';
   }
 
   function formatSortCaption(opts) {
@@ -805,6 +813,7 @@
     formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
     listPaintMode: listPaintMode,
+    listHostId: listHostId,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,
