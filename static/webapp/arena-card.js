@@ -74,33 +74,71 @@
     global.location.href = path;
   }
 
-  function goBooking(trainerId, action) {
-    var href = M.buildBookingHref({
-      trainerId: trainerId,
-      arenaId: state.card && state.card.id,
-      action: action || 'book',
-    });
-    shellNav(href);
+  /**
+   * С арены всегда открываем карточку тренера — `action` здесь больше нет.
+   *
+   * Раньше параметр по умолчанию подставлял `'book'`, поэтому «не передавать
+   * действие» было невозможно: любой вызов всё равно уходил на выбор времени.
+   *
+   * @param {string|number} trainerId
+   * @param {{groupId?: string|number}} [opts] группа, если тапнули строку набора
+   */
+  function goBooking(trainerId, opts) {
+    opts = opts || {};
+    shellNav(
+      M.buildBookingHref({
+        trainerId: trainerId,
+        arenaId: state.card && state.card.id,
+        groupId: opts.groupId,
+      })
+    );
   }
 
-  function goWrite(trainer) {
-    var url = trainer && trainer.contact_telegram_url;
-    if (url) {
-      global.location.href = url;
-      return;
-    }
-    goBooking(trainer && trainer.id, null);
-  }
+  /*
+   * goWrite убран вместе с развилкой по can_book: тренер без онлайн-записи тоже
+   * ведёт на карточку, а «Написать» живёт там — рядом с ценой, услугами и
+   * заявкой. Уводить человека в личку из списка на арене значило показать ему
+   * контакт раньше, чем он узнал, кому пишет.
+   */
 
+  /**
+   * Фото тренера. Готовый url — не единственный вариант, и в этом была ошибка.
+   *
+   * Сервер (`_enrich_trainer_photo_urls`) проставляет `url`/`list_url` только когда
+   * настроен CDN или доступен presign S3. Без них он отдаёт `file_key` и
+   * `_source: "proxy"`, рассчитывая, что клиент сам соберёт ссылку на прокси —
+   * ровно это делает вкладка «Лёд» (`ice-tab-model.js:trainerPhotoUrl`). Карточка
+   * арены такой ветки не имела и молча рисовала пустой кружок вместо фотографии.
+   */
   function photoUrl(trainer) {
     var photos = (trainer && trainer.photos) || [];
-    if (!photos.length) return '';
-    return photos[0].list_url || photos[0].url || '';
+    var ph = photos[0] || {};
+    if (ph.list_url) return ph.list_url;
+    if (ph.url) return ph.url;
+    var fk = ph.file_key_list || ph.file_key;
+    if (fk) return '/api/public/photos/' + encodeURIComponent(fk);
+    return '';
   }
 
   function trainerName(t) {
     var p = (t && t.profile) || t || {};
     return [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || 'Тренер';
+  }
+
+  /**
+   * Первая буква имени для тренера без фотографии.
+   *
+   * Тот же приём, что у катка без кадра и у карточки на «Льду» (TASK-090 / AC-006):
+   * пустое место должно что-то говорить. Эмодзи в имени пропускаем — «🪴» в кружке
+   * читается как чужой значок, а не как инициал.
+   */
+  function trainerInitial(t) {
+    var name = trainerName(t);
+    for (var i = 0; i < name.length; i++) {
+      var ch = name[i];
+      if (/[A-Za-zА-Яа-яЁёІіЎў]/.test(ch)) return ch.toUpperCase();
+    }
+    return '?';
   }
 
   function renderHero() {
@@ -327,7 +365,9 @@
         '">' +
         (ava
           ? '<img class="arena-coach__ava" alt="" src="' + esc(ava) + '">'
-          : '<i class="arena-coach__ava"></i>') +
+          : '<i class="arena-coach__ava arena-coach__ava--mono" aria-hidden="true">' +
+            esc(trainerInitial(t)) +
+            '</i>') +
         '<span class="arena-coach__b"><b>' +
         esc(trainerName(t)) +
         '</b><span>' +
@@ -624,19 +664,23 @@
     if (!t) return;
     var action = t.getAttribute('data-action');
     if (action === 'trainer') {
-      var can = t.getAttribute('data-can-book') === '1';
-      var tid = t.getAttribute('data-trainer');
-      if (can) goBooking(tid, 'book');
-      else {
-        var trainer = ((state.trainers && state.trainers.items) || []).filter(function (x) {
-          return String(x.id) === String(tid);
-        })[0];
-        goWrite(trainer || { id: tid });
-      }
+      /*
+       * Тренер с арены ведёт СТРОГО на его карточку — не на выбор времени.
+       *
+       * Раньше при can_book прыгали сразу на слоты (`action=book`), и человек
+       * попадал на список голого времени: чьи это слоты, что за тренер, где они
+       * проходят — по экрану непонятно. А если слотов на этой арене нет, экран
+       * оказывался тупиком. Карточка — единственное место, где есть весь
+       * контекст: цена, услуги, арены, слоты и выход в заявку. С неё же «Назад»
+       * честно возвращает на арену.
+       */
+      goBooking(t.getAttribute('data-trainer'));
       return;
     }
     if (action === 'group') {
-      goBooking(t.getAttribute('data-trainer'), 'book');
+      // Группа ведёт на карточку тренера и раскрывает там именно этот набор.
+      // Прыжок на общий список времени терял выбранную группу.
+      goBooking(t.getAttribute('data-trainer'), { groupId: t.getAttribute('data-group') });
       return;
     }
     if (action === 'open-day') {

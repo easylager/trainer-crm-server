@@ -341,6 +341,18 @@ a.arena-row {
   object-fit: cover;
 }
 
+/* Монограмма вместо фотографии — тот же приём, что у карточки тренера на «Льду». */
+.arena-coach__ava--mono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+
 .arena-coach__b {
   display: flex;
   flex-direction: column;

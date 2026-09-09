@@ -342,11 +342,26 @@
       }
 
       /** Same path as tapping a slot row on the trainer card — service/tier can be changed on the form. */
-      function openCatalogBookingFormForSlot(slot) {
+      /**
+       * @param {object} slot
+       * @param {{from?: 'slotPick'|'trainerDetail'}} [opts] откуда открыли форму —
+       *   от этого зависит, куда вернёт «Назад». Раньше форма этого не помнила и
+       *   всегда возвращала на карточку, перепрыгивая через выбор времени.
+       */
+      function openCatalogBookingFormForSlot(slot, opts) {
         if (!slot) return false;
         document.body.classList.remove('catalog-booking-deeplink');
         state.selectedSlot = slot;
+        state.bookingFormOpenedFrom = (opts && opts.from) || 'trainerDetail';
+        clearBookingNotice();
         assignCatalogBookingIdempotencyKeyForSlot();
+        var trainerLineEl = document.getElementById('bookingFormTrainerLine');
+        if (trainerLineEl) {
+          var tSel = state.selectedTrainer;
+          var tName = tSel ? trainerName(tSel) : '';
+          trainerLineEl.textContent = tName ? 'Запись к тренеру: ' + tName : '';
+          trainerLineEl.hidden = !tName;
+        }
         var labelEl = document.getElementById('bookingFormSlotLabel');
         if (labelEl) {
           labelEl.textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
@@ -415,13 +430,48 @@
         return !isNaN(id) && id > 0;
       }
 
-      function isHubDirectBookEntry() {
+      /**
+       * Откуда пришёл прямой вход «сразу на выбор времени» (`?action=book`).
+       *
+       * Таких входов два — Главная и карточка арены, — но контракт возврата знал
+       * только Главную. Из-за этого «Назад» с арены уходило в ветку «показать
+       * карточку тренера», а карточка в этом сценарии никогда не отрисовывалась:
+       * человек упирался в пустой экран. Возвращает 'hub' | 'arena' | ''.
+       */
+      function directBookEntryOrigin() {
         try {
           var qp = new URLSearchParams(window.location.search || '');
-          return qp.get('from') === 'hub' && qp.get('action') === 'book';
+          if (qp.get('action') !== 'book') return '';
+          var from = qp.get('from') || '';
+          return from === 'hub' || from === 'arena' ? from : '';
         } catch (eHub) {
-          return false;
+          return '';
         }
+      }
+
+      /**
+       * id арены, с которой пришли (`catalog?from=arena&arena_id=…`).
+       *
+       * Не привязано к `action=book`: тап по тренеру на арене ведёт на карточку,
+       * а не на выбор времени, поэтому вернуть на арену нужно именно с карточки.
+       */
+      function arenaOriginId() {
+        try {
+          var qp = new URLSearchParams(window.location.search || '');
+          if (qp.get('from') !== 'arena') return null;
+          var raw = qp.get('arena_id');
+          return raw == null || raw === '' ? null : raw;
+        } catch (eArena) {
+          return null;
+        }
+      }
+
+      function directBookEntryArenaId() {
+        return arenaOriginId();
+      }
+
+      function isHubDirectBookEntry() {
+        return directBookEntryOrigin() === 'hub';
       }
 
       function clearCatalogDeepLinkShellClasses() {
@@ -559,12 +609,18 @@
               state.slotsForTrainer = slots || [];
               if (state.pendingDeepLinkSlotId && maybeOpenPendingDeepLinkSlotBooking(t, slots)) return;
               clearCatalogDeepLinkShellClasses();
+              // Карточку тренера рисуем, хотя показываем сразу выбор времени: на неё
+              // ведут «Назад» и возврат из формы заявки, и без этой строки оба
+              // приводили на пустой экран. Отрисовка скрытого экрана дешевле, чем
+              // разбирать в каждой точке возврата, был он отрисован или нет.
+              renderTrainerDetail();
               renderSlotPickList();
               showScreen('screenSlotPick');
             })
             .catch(function() {
               clearCatalogDeepLinkShellClasses();
               state.slotsForTrainer = [];
+              renderTrainerDetail();
               renderSlotPickList();
               showScreen('screenSlotPick');
             });
@@ -1053,17 +1109,24 @@
         if (sid === 'screenBookingForm' || sid === 'screenSlotPick') {
           btn.hidden = false;
           btn.onclick = function() {
-            if (sid === 'screenSlotPick' && isHubDirectBookEntry()) {
+            var origin = directBookEntryOrigin();
+            if (sid === 'screenSlotPick' && origin) {
               if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
-                window.BookingClient.navigateBookingReturn('hub');
-              } else if (typeof window.navigateClientHome === 'function') {
+                window.BookingClient.navigateBookingReturn(origin, {
+                  arenaId: directBookEntryArenaId(),
+                  trainerId: state.trainerId,
+                });
+              } else if (origin === 'hub' && typeof window.navigateClientHome === 'function') {
                 window.navigateClientHome();
               } else if (canBrowserGoBack()) {
                 window.history.back();
               }
               return;
             }
-            if (sid === 'screenBookingForm' && isHubDirectBookEntry()) {
+            // Форма записи возвращает туда, откуда её открыли, а не всегда на
+            // карточку: пришёл через список времени — вернись в список времени,
+            // иначе «Назад» молча отменяет сделанный выбор.
+            if (sid === 'screenBookingForm' && (origin || state.bookingFormOpenedFrom === 'slotPick')) {
               renderSlotPickList();
               showScreen('screenSlotPick');
               return;
@@ -1080,6 +1143,20 @@
             } else {
               showScreen('screenTrainers');
             }
+          };
+          return;
+        }
+        // Пришли с карточки арены — «Назад» возвращает туда же. Без этой ветки
+        // возврат уходил в общий history.back(), который после навигации оболочки
+        // не гарантирует именно арену.
+        if (sid === 'screenTrainerDetail' && arenaOriginId()) {
+          btn.hidden = false;
+          btn.onclick = function() {
+            if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
+              window.BookingClient.navigateBookingReturn('arena', { arenaId: arenaOriginId() });
+              return;
+            }
+            window.history.back();
           };
           return;
         }
@@ -1109,6 +1186,37 @@
         }
         btn.hidden = !canBrowserGoBack();
         btn.onclick = function() { window.history.back(); };
+      }
+
+      /**
+       * Шапка называет то, что на экране.
+       *
+       * Раньше `headerTitle` не трогали ни разу: карточка тренера, выбор времени,
+       * форма записи и экран успеха — все четыре подписаны «Тренеры». Человек,
+       * пришедший с арены, на каждом шаге видел одно и то же слово и не понимал,
+       * к кому он записывается и на каком он шаге.
+       *
+       * Имя тренера держится на всех трёх шагах записи специально: это один и тот
+       * же объект, и подменять его названием шага значит снова потерять, к кому
+       * идёт запись. Шаг подписан внутри экрана — там есть step-title.
+       */
+      function syncCatalogHeaderTitle(screenId) {
+        var el = document.getElementById('headerTitle');
+        if (!el) return;
+        var t = state.selectedTrainer;
+        var name = t ? trainerName(t) : '';
+        var title = 'Тренеры';
+        if (screenId === 'screenSuccess') title = 'Готово';
+        else if (screenId === 'screenRequestForm') title = 'Заявка';
+        else if (
+          name &&
+          (screenId === 'screenTrainerDetail' ||
+            screenId === 'screenSlotPick' ||
+            screenId === 'screenBookingForm')
+        ) {
+          title = name;
+        }
+        el.textContent = title;
       }
 
       function syncClientShellTabBarForScreen(screenId) {
@@ -1147,6 +1255,7 @@
           switchTab(state.activeTab);
         }
         syncClientShellTabBarForScreen(id);
+        syncCatalogHeaderTitle(id);
         syncCatalogHeaderBack();
         syncCatalogTrainerStickyCta(id === 'screenTrainerDetail' && catalogTrainerStickyEligible());
       }
@@ -3349,6 +3458,31 @@
         }, dur);
       }
 
+      /**
+       * Постоянное сообщение на форме записи — для исходов, которые тост не тянет.
+       *
+       * Когда сеть не ответила или ответ не распознан, запись могла всё равно
+       * создаться. Это нельзя показать на 2,4 секунды: человеку нужно прочитать
+       * и пойти проверить «Мои записи». Нативный alert тут тоже не подходит — он
+       * закрывается одним тапом и не оставляет следа на экране.
+       */
+      function showBookingNotice(message) {
+        var el = document.getElementById('bookingFormNotice');
+        if (!el) {
+          showToast(message, 6000);
+          return;
+        }
+        el.textContent = message;
+        el.hidden = false;
+      }
+
+      function clearBookingNotice() {
+        var el = document.getElementById('bookingFormNotice');
+        if (!el) return;
+        el.textContent = '';
+        el.hidden = true;
+      }
+
       /** Toggle save state for current trainer. Optimistic UI update then API call. */
       function toggleSaveTrainer(trainerId) {
         var initData = tg && tg.initData ? tg.initData : '';
@@ -4055,12 +4189,37 @@
               submitCatalogGroupJoinRequest(gid);
             };
           });
+          focusRequestedTrainingGroup(el);
         }).catch(function() { /* no block */ });
+      }
+
+      /**
+       * Раскрывает и подсвечивает группу, ради которой человек сюда пришёл
+       * (`catalog?...&group_id=N` с карточки арены).
+       *
+       * Блок «Набор в группы» свёрнут в <details>: без этого человек, тапнувший
+       * на арене конкретный набор, попадал на карточку и не находил его вовсе.
+       * id съедается после первого применения — иначе группа подсвечивалась бы
+       * заново при каждом возврате на карточку.
+       */
+      function focusRequestedTrainingGroup(root) {
+        var gid = state.pendingFocusGroupId;
+        if (!gid || !root) return;
+        var card = root.querySelector('.catalog-group-join[data-group-id="' + gid + '"]');
+        if (!card) return;
+        state.pendingFocusGroupId = null;
+        var details = root.querySelector('details.trainer-detail-groups-details');
+        if (details) details.open = true;
+        var box = card.closest('.trainer-detail-group-card') || card;
+        box.classList.add('trainer-detail-group-card--focus');
+        if (typeof box.scrollIntoView === 'function') {
+          box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
       function submitCatalogGroupJoinRequest(groupId) {
         var initData = tg && tg.initData ? tg.initData : '';
         if (!initData) {
-          alert('Откройте каталог из Telegram, чтобы отправить заявку.');
+          showToast('Откройте каталог из Telegram, чтобы отправить заявку.');
           return;
         }
         var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
@@ -4079,10 +4238,10 @@
             prefetch.firstPageKey = null;
             prefetch.firstPageData = null;
             clearCatalogSessionStorageCache();
-            alert('Вы добавлены в группу. Тренер увидит вас в списке участников.');
+            showToast('Вы добавлены в группу. Тренер увидит вас в списке участников.');
           })
           .catch(function(e) {
-            alert(e.message || 'Не удалось отправить заявку');
+            showToast(e.message || 'Не удалось отправить заявку');
           });
       }
       /** Summary filter row labels (trainer is chosen on the list screen, not in this panel). */
@@ -5964,7 +6123,7 @@
         slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
           btn.onclick = function() {
             var ii = parseInt(btn.dataset.slotIndex, 10);
-            openCatalogBookingFormForSlot(state.slotsForTrainer[ii]);
+            openCatalogBookingFormForSlot(state.slotsForTrainer[ii], { from: 'trainerDetail' });
           };
         });
         var btnMore = document.getElementById('btnShowAllSlots');
@@ -6309,16 +6468,118 @@
           });
       }
 
+      /**
+       * Пустой экран «Выберите время» — с выходами, а не с одним абзацем.
+       *
+       * Было: текст «На этой площадке нет свободных слотов. Оставьте заявку —
+       * тренер предложит время, или посмотрите слоты на других аренах.» и больше
+       * ничего. Оба выхода названы словами, ни один не нажимается — ровно тот
+       * тупик, который запрещает AC-002 (TASK-096). Экран достижим с карточки
+       * арены в один тап, то есть это не редкий случай, а основной флоу.
+       *
+       * Кнопка «на других аренах» появляется только когда фильтр по арене
+       * действительно стоит: предлагать снять фильтр, которого нет, — врать.
+       */
+      function renderSlotPickEmptyState(list) {
+        var t = state.selectedTrainer;
+        var filtered = (state.trainerSlotsArenaIds || []).length > 0;
+        var hint = state.slotsEmptyOnFilterHint || '';
+        if (!hint) {
+          hint = filtered
+            ? 'На выбранной площадке свободных слотов нет.'
+            : 'У тренера сейчас нет свободных слотов.';
+        }
+        var html =
+          '<div class="slots-empty">' + escapeHtml(hint) + '</div>' +
+          '<div class="slot-pick-empty-actions">';
+        if (filtered) {
+          html +=
+            '<button type="button" class="btn-primary btn-block" data-slotpick="all-arenas">' +
+            'Показать слоты на других аренах</button>';
+        }
+        html +=
+          '<button type="button" class="' +
+          (filtered ? 'btn-secondary' : 'btn-primary') +
+          ' btn-block" data-slotpick="request">Оставить заявку</button>';
+        if (t) {
+          html +=
+            '<button type="button" class="btn-secondary btn-block" data-slotpick="trainer-card">' +
+            'Открыть карточку тренера</button>';
+        }
+        html += '</div>';
+        list.innerHTML = html;
+
+        var allBtn = list.querySelector('[data-slotpick="all-arenas"]');
+        if (allBtn) {
+          allBtn.onclick = function() {
+            if (!t) return;
+            allBtn.disabled = true;
+            // Снимаем фильтр насовсем: «explicit» означает «человек выбрал сам»,
+            // а он только что попросил обратного.
+            state.trainerSlotsArenaIds = [];
+            state.trainerSlotsArenaFilterExplicit = false;
+            state.slotsEmptyOnFilterHint = '';
+            loadSlotsForTrainer(t.id, t)
+              .then(function(d) {
+                state.slotsForTrainer = (d && d.slots) || [];
+                renderSlotPickList();
+              })
+              .catch(function() {
+                allBtn.disabled = false;
+                showToast('Не удалось загрузить слоты. Попробуйте ещё раз.');
+              });
+          };
+        }
+        var reqBtn = list.querySelector('[data-slotpick="request"]');
+        if (reqBtn) reqBtn.onclick = function() { openLeaveRequestFromDetail(); };
+        var cardBtn = list.querySelector('[data-slotpick="trainer-card"]');
+        if (cardBtn) {
+          cardBtn.onclick = function() {
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          };
+        }
+      }
+
+      /**
+       * Подпись «чьи это слоты и где» над списком времени.
+       *
+       * Экран показывал одно время без единого имени: человек, дошедший сюда с
+       * арены, не мог сказать, к кому записывается. Имя тренера — всегда; место —
+       * только когда оно однозначно: при фильтре по одной арене это её название,
+       * без фильтра — «на разных площадках», потому что арена у каждого слота
+       * своя и она подписана на самой строке.
+       */
+      function paintSlotPickContext() {
+        var el = document.getElementById('slotPickContext');
+        if (!el) return;
+        var t = state.selectedTrainer;
+        if (!t) {
+          el.hidden = true;
+          el.textContent = '';
+          return;
+        }
+        var parts = [trainerName(t)];
+        var slots = state.slotsForTrainer || [];
+        var arenaNames = {};
+        slots.forEach(function(s) {
+          var nm = (s && s.arena_name && String(s.arena_name).trim()) || '';
+          if (nm) arenaNames[nm] = true;
+        });
+        var names = Object.keys(arenaNames);
+        if (names.length === 1) parts.push(names[0]);
+        else if (names.length > 1) parts.push('на разных площадках');
+        el.textContent = parts.join(' · ');
+        el.hidden = false;
+      }
+
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
-        
+        paintSlotPickContext();
+
         if (slots.length === 0) {
-          var emptyHint = state.slotsEmptyOnFilterHint || '';
-          list.innerHTML =
-            '<div class="slots-empty">' +
-            escapeHtml(emptyHint || 'Нет слотов') +
-            '</div>';
+          renderSlotPickEmptyState(list);
           return;
         }
         
@@ -6352,8 +6613,16 @@
           daySlots.forEach(function(item) {
             var s = item.slot;
             var i = item.index;
+            // Площадка на строке. «Показать слоты на других аренах» перемешивает
+            // арены в одном списке, и без подписи человек выбирал время, не зная,
+            // куда ему ехать. Тот же помощник, что и на карточке тренера.
+            var place =
+              window.TrainerArenaChips && typeof window.TrainerArenaChips.formatSlotPlaceCaption === 'function'
+                ? window.TrainerArenaChips.formatSlotPlaceCaption(s)
+                : ((s.arena_name && String(s.arena_name).trim()) || '');
             html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
               '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>' +
+              (place ? '<span class="slot-card-place">' + escapeHtml(place) + '</span>' : '') +
               slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
           });
           
@@ -6365,7 +6634,7 @@
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
-            openCatalogBookingFormForSlot(state.slotsForTrainer[i]);
+            openCatalogBookingFormForSlot(state.slotsForTrainer[i], { from: 'slotPick' });
           };
         });
       }
@@ -6401,7 +6670,7 @@
         var phoneEl = document.getElementById('bookingPhone');
         var phCheck = window.CrmPhoneField ? CrmPhoneField.validate(phoneEl) : { ok: false, error: 'Укажите номер телефона.' };
         if (!phCheck.ok) {
-          alert(phCheck.error || 'Укажите номер телефона.');
+          showToast(phCheck.error || 'Укажите номер телефона.');
           return;
         }
         var phone = phCheck.e164;
@@ -6410,7 +6679,7 @@
         if (askName) {
           var fn = (document.getElementById('bookingFirstName') && document.getElementById('bookingFirstName').value || '').trim();
           if (!fn) {
-            alert('Укажите имя');
+            showToast('Укажите имя');
             return;
           }
         }
@@ -6478,12 +6747,14 @@
           var data = out.data;
             if (data == null) {
               if (r.ok) {
-                alert(
+                showBookingNotice(
                   'Ответ сервера не распознан, но запись могла сохраниться. Откройте «Мои записи» в боте. ' +
                     'Повторная кнопка с тем же временем подставит тот же запрос и обычно не дублирует бронь.'
                 );
               } else {
-                alert('Ошибка сервера (' + r.status + '). Проверьте «Мои записи» в боте перед повтором.');
+                showBookingNotice(
+                  'Ошибка сервера (' + r.status + '). Проверьте «Мои записи» в боте перед повтором.'
+                );
               }
               return;
             }
@@ -6497,6 +6768,9 @@
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
               persistCatalogFilters(state.selectedTrainer && state.selectedTrainer.id);
+              // Экран успеха общий с заявкой: если до этого отправляли заявку,
+              // кнопка осталась бы «Мои заявки» и увела бы не туда.
+              paintCatalogSuccessActions('booking');
               if (window.BookingClient) {
                 window.BookingClient.showBookingSuccess({
                   host: 'catalog',
@@ -6513,10 +6787,10 @@
                 updateBookingNameFieldsVisibility();
               }).catch(function() {});
             } else {
-              alert((data && data.detail) || 'Не удалось записаться');
+              showToast((data && data.detail) || 'Не удалось записаться');
             }
         }).catch(function() {
-          alert(
+          showBookingNotice(
             'Сеть не ответила. Запись могла всё равно создаться — проверьте «Мои записи» в боте. ' +
               'Повтор с тем же слотом использует тот же ключ запроса и возвращает успех, если бронь уже есть.'
           );
@@ -6533,16 +6807,33 @@
       }
 
       document.getElementById('btnCloseSuccess').onclick = closeCatalogSuccessToHubOrApp;
-      var btnSuccessBookingsCatalog = document.getElementById('btnSuccessBookingsCatalog');
-      if (btnSuccessBookingsCatalog) {
-        btnSuccessBookingsCatalog.onclick = function () {
+
+      /**
+       * Главная кнопка экрана успеха ведёт туда, где лежит созданное.
+       *
+       * Экран один на запись и на заявку, но кнопка была одна — «Мои записи».
+       * После заявки она уводила в список, где заявки нет: человек её там не
+       * находил и не понимал, отправилась ли она вообще. Заявки живут в
+       * `client-requests`.
+       *
+       * @param {'booking'|'request'} kind
+       */
+      function paintCatalogSuccessActions(kind) {
+        var btn = document.getElementById('btnSuccessBookingsCatalog');
+        if (!btn) return;
+        var isRequest = kind === 'request';
+        var path = isRequest ? 'client-requests' : 'client-bookings';
+        btn.textContent = isRequest ? 'Мои заявки' : 'Мои записи';
+        btn.onclick = function () {
           if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
-            window.ClientShell.navigate('client-bookings');
+            window.ClientShell.navigate(path);
           } else {
             closeCatalogSuccessToHubOrApp();
           }
         };
       }
+
+      paintCatalogSuccessActions('booking');
 
       document.getElementById('backToCity').onclick = function() { showScreen('screenCity'); };
       document.getElementById('backToService').onclick = function() { showScreen('screenService'); };
@@ -6605,7 +6896,7 @@
       });
       function openGeneralRequestForm() {
         if (!state.cityId || !state.serviceId) {
-          alert('Сначала выберите город и занятие в параметрах поиска.');
+          showToast('Сначала выберите город и занятие в параметрах поиска.');
           state.returnToSummary = true;
           renderSummary();
           showScreen('screenSummary');
@@ -6642,7 +6933,7 @@
         if (state.needsProfileName) {
           var rfn = (document.getElementById('requestFirstName') && document.getElementById('requestFirstName').value || '').trim();
           if (!rfn) {
-            alert('Укажите имя');
+            showToast('Укажите имя');
             btn.disabled = false;
             return;
           }
@@ -6665,18 +6956,19 @@
               document.getElementById('successText').innerHTML = isPersonal
                 ? ('✅ <b>Заявка отправлена</b> ' + (trainerName ? trainerName : 'тренеру') + '.<br><br>Когда тренер ответит — напишем вам в боте.')
                 : '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
+              paintCatalogSuccessActions('request');
               showScreen('screenSuccess');
               getClientSession().then(function(session) {
                 applySessionToState(session);
                 updateRequestNameFieldsVisibility();
               }).catch(function() {});
             } else {
-              alert(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
+              showToast(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
             }
             btn.disabled = false;
           });
         }).catch(function() {
-          alert('Ошибка сети. Проверьте интернет и попробуйте снова.');
+          showToast('Ошибка сети. Проверьте интернет и попробуйте снова.');
           btn.disabled = false;
         });
       }
@@ -6821,6 +7113,10 @@
           }
           var qp = new URLSearchParams(window.location.search || '');
           var explicitTrainerArenaIdsFromUrl = parseExplicitTrainerArenaIdsFromQuery(qp);
+          // Группа с карточки арены: раскроем её в блоке «Набор в группы».
+          var rawGroupId = qp.get('group_id');
+          var parsedGroupId = rawGroupId != null && rawGroupId !== '' ? parseInt(rawGroupId, 10) : NaN;
+          state.pendingFocusGroupId = !isNaN(parsedGroupId) && parsedGroupId > 0 ? parsedGroupId : null;
           bootstrapCollectiveFromQuery(qp).finally(function() {
           applySessionToState(session);
           if (state.collectiveBrand && state.collectiveBrand.default_city_id && !qp.get('city_id')) {

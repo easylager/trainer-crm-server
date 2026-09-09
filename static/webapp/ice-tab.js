@@ -305,6 +305,9 @@
       '<span class="ice-acard__name">' +
       esc(view.name) +
       '</span>' +
+      // Специализация — то, чем тренеры отличаются. Пустой строки не бывает:
+      // услуга есть у каждого, кто попал в выдачу (по ней же работает фильтр).
+      (view.spec ? '<span class="ice-acard__spec">' + esc(view.spec) + '</span>' : '') +
       '<span class="ice-acard__meta">' +
       esc(view.meta) +
       '</span>' +

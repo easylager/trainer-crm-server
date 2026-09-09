@@ -2177,8 +2177,14 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
 .hub-ice-zone {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-2);
-  margin: 0 16px 16px;
+  /*
+   * Было gap 8px и нулевой верх: заголовок «НА ЛЬДУ · ГОРОД» прилипал и к карточке
+   * сверху, и к кадру снизу, из-за чего три разных объекта читались одной массой.
+   * Надзаголовок набран прописными в 10px — у него маленькая оптическая высота,
+   * и 8px рядом с фотографией во всю ширину воспринимаются почти как ноль.
+   */
+  gap: var(--app-space-3);
+  margin: var(--app-space-3) 16px 20px;
 }
 
 .hub-ice-zone[hidden] {

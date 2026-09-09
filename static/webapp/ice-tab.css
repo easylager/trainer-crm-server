@@ -571,6 +571,23 @@ body.ar-pilot--ice .client-app-header {
   letter-spacing: -0.01em;
 }
 
+/*
+ * Строка специализации: «С нуля · Техника».
+ *
+ * Набрана темнее и плотнее, чем арена под ней, потому что решение принимают по
+ * ней: до этой правки карточка предлагала выбирать по фотографии и имени.
+ * Обрезается в одну строку — две услуги помещаются на 390px, третью модель уже
+ * сворачивает в «+N».
+ */
+.ice-acard__spec {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-text-color, var(--glide-text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ice-acard__meta {
   font-size: var(--app-text-caption);
   color: var(--glide-hint);

@@ -2458,6 +2458,11 @@
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(var(--accent-rgb), 0.22);
     }
+    /* Группа, ради которой пришли с арены: её надо найти глазами сразу. */
+    .trainer-detail-group-card--focus {
+      border-color: rgba(var(--accent-rgb), 0.85);
+      box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.18);
+    }
     .trainer-detail-group-name { font-size: var(--app-text-lead); font-weight: var(--app-weight-semibold); margin-bottom: 4px; }
     .trainer-detail-group-meta { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); margin-bottom: 4px; }
     .trainer-detail-group-sched { font-size: var(--app-text-body); margin: 6px 0; }
@@ -2474,6 +2479,34 @@
       gap: 12px;
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
+    /* Чьи слоты и где — строка под заголовком «Выберите время». */
+    .slot-pick-context {
+      margin: -4px 0 14px;
+      font-size: var(--app-text-body);
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-pick-context[hidden] { display: none; }
+    /* Площадка на строке слота: вторична по отношению ко времени, но читаема. */
+    .slot-pick-list .slot-card-place {
+      font-size: var(--app-text-caption);
+      color: var(--tg-theme-hint-color);
+    }
+    /*
+     * Пустой «Выберите время». Раньше `.slots-empty` был описан только внутри
+     * .trainer-detail-slots, поэтому на этом экране текст падал голым абзацем
+     * без отступов — и без единой кнопки под ним.
+     */
+    .slot-pick-list .slots-empty {
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      padding: 4px 0 16px;
+    }
+    .slot-pick-empty-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
     .slot-pick-list .day-block { margin-bottom: 20px; }
     /* Day headers — readable on phones (was 11px vs 16px slot time). */
     .slot-pick-list .day-title {
@@ -2689,6 +2722,31 @@
     }
     .form-block textarea { min-height: 60px; resize: vertical; }
 
+    /*
+     * Неопределённый исход записи. Не красный «провал»: запись могла и создаться,
+     * и пугать человека там, где мы сами не знаем результата, нечестно. Нейтральный
+     * акцент + текст, который остаётся на экране.
+     */
+    .booking-form-notice {
+      margin: 12px 0 0;
+      padding: 12px 14px;
+      border-radius: var(--app-radius-sm);
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+    }
+    .booking-form-notice[hidden] { display: none; }
+    /* К кому запись — набрано сильнее времени: это главный факт этого экрана. */
+    .booking-trainer-line {
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
+      color: var(--tg-theme-text-color);
+      margin: 0 0 4px;
+      line-height: 1.35;
+    }
+    .booking-trainer-line[hidden] { display: none; }
     .booking-slot-label { font-size: var(--app-text-body); margin-bottom: 12px; color: var(--tg-theme-hint-color); }
     .booking-service-line {
       font-size: var(--app-text-body);

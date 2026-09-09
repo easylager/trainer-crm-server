@@ -15,15 +15,15 @@
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <script src="client-profile-switcher.js?v=202609049"></script>
-  <link rel="preload" href="catalog-main.js?v=202609070" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202609061" />
+  <link rel="preload" href="catalog-main.js?v=202609096" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202609096" />
   <link rel="stylesheet" href="booking-client.css?v=202609092" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
-  <script src="booking-client.js?v=202609092"></script>
+  <script src="booking-client.js?v=202609094"></script>
   <script src="booking-deeplink.js?v=202609022"></script>
   <script>
     (function () {
@@ -250,9 +250,13 @@
   </div>
   <div id="screenSlotPick" data-screen>
     <div class="step-title">Выберите время</div>
+    <!-- Чьи это слоты и где: без строки экран был списком голого времени. -->
+    <p id="slotPickContext" class="slot-pick-context" hidden></p>
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
+    <!-- К кому запись. Последний экран перед созданием обязан назвать тренера. -->
+    <p id="bookingFormTrainerLine" class="booking-trainer-line" hidden></p>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
     <div id="bookingFormServiceBlock" class="form-block" style="display: none;">
       <label for="bookingFormServiceSelect">Услуга</label>
@@ -296,6 +300,12 @@
       <textarea id="bookingComment" rows="2" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
     <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Записаться</button>
+    <!--
+      Неопределённый исход записи (сеть не ответила / ответ не распознан). Это не
+      тост: сообщение длинное, требует действия и должно остаться на экране,
+      пока человек его не отработает.
+    -->
+    <p id="bookingFormNotice" class="booking-form-notice" hidden role="alert"></p>
   </div>
   <div id="screenSuccess" data-screen>
     <div class="booking-success-panel">
@@ -440,7 +450,7 @@
   </div>
 
   <script src="trainer-arena-chips-model.js?v=202609061"></script>
-  <script defer src="catalog-main.js?v=202609070"></script>
+  <script defer src="catalog-main.js?v=202609096"></script>
   <script defer src="mini-app-client-home.js?v=202609022"></script>
 </body>
 </html>

@@ -362,6 +362,12 @@
   function resolveBookingReturn(from, ctx) {
     ctx = ctx || {};
     if (from === 'hub') return { type: 'hub', path: 'client-home' };
+    // Вход с карточки арены (`catalog?from=arena&...`). Раньше этой ветки не было,
+    // и «Назад» с выбора времени уводило на неотрисованный экран карточки тренера —
+    // человек, пришедший с арены, попадал на пустую страницу вместо арены.
+    if (from === 'arena' && ctx.arenaId != null && ctx.arenaId !== '') {
+      return { type: 'arena', path: 'arena?ref=' + encodeURIComponent(String(ctx.arenaId)) };
+    }
     if (from === 'requests') return { type: 'shell', path: 'client-requests' };
     if (from === 'saved-trainers') return { type: 'shell', path: 'client-saved-trainers' };
     if (from === 'catalog' && ctx.trainerId) {

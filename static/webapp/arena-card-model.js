@@ -227,10 +227,7 @@
       var s = sessions[i];
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
-      if (nowState === 'past') continue;
-      if (nowState === 'live') {
-        meta = meta ? 'идёт · ' + meta : 'идёт';
-      }
+      if (nowState !== 'upcoming') continue;
       var cta = iceRowCta(s);
       rows.push({
         nature: 'ice',
@@ -393,6 +390,10 @@
     var parts = ['from=arena'];
     if (opts.trainerId != null) parts.push('trainer_id=' + encodeURIComponent(String(opts.trainerId)));
     if (opts.arenaId != null) parts.push('arena_id=' + encodeURIComponent(String(opts.arenaId)));
+    // Группу нужно донести до карточки тренера: на арене человек тапает конкретный
+    // набор («Группа · 3 места»), и без id он попадал на общий список времени —
+    // группа, которую он выбрал, просто терялась по дороге.
+    if (opts.groupId != null) parts.push('group_id=' + encodeURIComponent(String(opts.groupId)));
     if (opts.action) parts.push('action=' + encodeURIComponent(String(opts.action)));
     return 'catalog?' + parts.join('&');
   }

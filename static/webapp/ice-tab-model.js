@@ -16,6 +16,7 @@
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
+  var MINSK_TZ = 'Europe/Minsk';
 
   function pluralRu(n, one, few, many) {
     var abs = Math.abs(n) % 100;
@@ -241,16 +242,98 @@
     return clean ? clean.charAt(0).toUpperCase() : '?';
   }
 
+  /** Максимум услуг в строке специализации: третья уже не читается на 390px. */
+  var TRAINER_SPEC_MAX = 2;
+
+  /**
+   * «С нуля · Техника» — то, чем тренеры отличаются друг от друга.
+   *
+   * Услуга есть у каждого тренера в выдаче (её же фильтруют чипы над списком),
+   * поэтому это единственный различающий факт, который не оставит половину
+   * карточек пустыми. Длинные названия из справочника режутся до сути: карточка
+   * не место для «Обучение катанию «с нуля»» во всю ширину.
+   */
+  function trainerSpecLine(item) {
+    var services = (item && item.services) || [];
+    var names = [];
+    for (var i = 0; i < services.length; i++) {
+      var raw = services[i] && services[i].service_name;
+      var name = shortServiceName(raw);
+      if (name && names.indexOf(name) < 0) names.push(name);
+    }
+    if (!names.length) return '';
+    if (names.length <= TRAINER_SPEC_MAX) return names.join(' · ');
+    return names.slice(0, TRAINER_SPEC_MAX).join(' · ') + ' +' + (names.length - TRAINER_SPEC_MAX);
+  }
+
+  function shortServiceName(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    // Названия в справочнике — административные («Обучение катанию «с нуля»»).
+    // На карточке нужен ярлык, и он обязан совпадать с подписью чипа-фильтра,
+    // иначе человек не свяжет выбранный фильтр с тем, что видит в списке.
+    if (/с\s*нуля/i.test(s)) return 'С нуля';
+    if (/совершенствован/i.test(s)) return 'Техника';
+    if (/хоккей/i.test(s)) return 'Хоккей';
+    if (/фигурн/i.test(s)) return 'Фигурное';
+    return s;
+  }
+
+  function formatTrainerPriceFrom(item) {
+    var services = (item && item.services) || [];
+    var min = null;
+    for (var i = 0; i < services.length; i++) {
+      var s = services[i] || {};
+      var v = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
+      if (v == null) continue;
+      var n = Number(v);
+      if (isNaN(n)) continue;
+      if (min == null || n < min) min = n;
+    }
+    if (min == null) return '';
+    var num = min === Math.floor(min) ? String(min) : min.toFixed(2);
+    // «BYN» захардкожен так же, как в каталоге (formatCatalogServicePrice):
+    // валюты в услуге нет, и расходиться с каталогом на одном и том же товаре
+    // хуже, чем разделить с ним известное ограничение по Москве.
+    return 'от ' + num + ' BYN';
+  }
+
+  function formatTrainerExperience(profile) {
+    var years = Number(profile && profile.experience_years);
+    if (!years || years < 1) return '';
+    return years + ' ' + pluralRu(years, 'год', 'года', 'лет') + ' опыта';
+  }
+
   function trainerCardView(item) {
     item = item || {};
     var p = item.profile || {};
     var parts = [];
     if (item.primary_arena_name) parts.push(String(item.primary_arena_name));
-    var rating = p.rating_avg;
-    var count = Number(p.rating_count) || 0;
-    if (rating != null && count > 0) {
-      parts.push('★ ' + Number(rating).toFixed(1));
+
+    /*
+     * Факты для выбора, по убыванию силы: цена → стаж → рейтинг.
+     *
+     * Каждый добавляется, только если он ЕСТЬ. Ни «цена по запросу», ни «стаж не
+     * указан», ни нулевых звёзд: пустой факт не сообщает ничего, но выглядит как
+     * недостаток тренера, а не как недостаток данных.
+     *
+     * Больше одного факта в строку не ставим — рядом с длинным названием арены
+     * («Ледовый дворец спорта Минской области») строка и так уходит в две.
+     */
+    var facts = [];
+    var price = formatTrainerPriceFrom(item);
+    if (price) facts.push(price);
+    if (!facts.length) {
+      var exp = formatTrainerExperience(p);
+      if (exp) facts.push(exp);
     }
+    if (!facts.length) {
+      var rating = p.rating_avg;
+      var count = Number(p.rating_count) || 0;
+      if (rating != null && count > 0) facts.push('★ ' + Number(rating).toFixed(1));
+    }
+    parts = parts.concat(facts);
+
     var live = item.can_book ? 'Записаться' : 'Открыть профиль';
     var slots = Number(item.free_slots_14d);
     if (slots > 0) {
@@ -265,6 +348,7 @@
       // TASK-090 / AC-006: без фото была мёртвая заливка. Монограмма — тот же
       // приём, что у катка без кадра: пустое место должно что-то говорить.
       initial: initialOf(displayName),
+      spec: trainerSpecLine(item),
       meta: parts.join(' · '),
       live: live,
       tone: 'a',
@@ -303,8 +387,23 @@
     return n < 10 ? '0' + n : String(n);
   }
 
-  function isoDayUtc(d) {
-    return d.toISOString().slice(0, 10);
+  function minskDateIso(now) {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: MINSK_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    var y = '1970';
+    var m = '01';
+    var d = '01';
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (parts[i].type === 'year') y = parts[i].value;
+      if (parts[i].type === 'month') m = parts[i].value;
+      if (parts[i].type === 'day') d = parts[i].value;
+    }
+    return y + '-' + m + '-' + d;
   }
 
   function addDaysIso(iso, days) {
@@ -336,7 +435,7 @@
     live = live || {};
     var localDate = String(live.local_date || '').slice(0, 10);
     if (!localDate) return '';
-    var today = isoDayUtc(now instanceof Date ? now : new Date());
+    var today = minskDateIso(now instanceof Date ? now : new Date());
     if (localDate === today) return 'Сегодня';
     if (localDate === addDaysIso(today, 1)) return 'Завтра';
     return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
