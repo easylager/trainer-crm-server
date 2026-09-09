@@ -226,16 +226,62 @@
     return 'Место занятия отличается от арены, с которой вы открыли запись.';
   }
 
+  function escSuccessHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /**
+   * TASK-096 AC-004 — момент первого успеха.
+   *
+   * Экран после первой записи отличается от экрана после пятидесятой, потому что
+   * отличается сам человек: тот, кто записался впервые, не знает, сработало ли,
+   * кто ответит и что будет дальше. Эта неизвестность и портит первый успех —
+   * не отсутствие анимации. Поэтому «момент» — три честных факта о будущем.
+   *
+   * Каждый пункт выводится из базы (`is_first_booking`, `reminder_plan` приходят
+   * с сервера). Ни одного придуманного: нет плана напоминаний — нет и строки
+   * про напоминания, вместо неё не появляется утешительная неправда (AC-005).
+   */
+  function formatFirstBookingSuccess(data) {
+    var steps = ['Тренер подтвердит запись — уведомление придёт сюда, в бот.'];
+    var plan = data && data.reminder_plan ? String(data.reminder_plan).trim() : '';
+    if (plan) {
+      steps.push('Напомним о тренировке ' + escSuccessHtml(plan) + '.');
+    }
+    steps.push('Детали, адрес и отмена — всегда в «Моих записях».');
+
+    return (
+      '<div class="booking-first-success">' +
+      '<p class="booking-first-success__title">Готово. Это ваша первая запись.</p>' +
+      '<p class="booking-first-success__lede">Дальше всё делаем мы:</p>' +
+      '<ol class="booking-first-success__steps">' +
+      steps
+        .map(function (line) {
+          return '<li>' + line + '</li>';
+        })
+        .join('') +
+      '</ol>' +
+      '</div>'
+    );
+  }
+
   function formatSuccessMessage(data, opts) {
     opts = opts || {};
-    var main = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+    var first = data && data.is_first_booking ? formatFirstBookingSuccess(data) : '';
+    var main = first || '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
     var ctx = '';
     if (opts.requestId) {
       ctx =
         '<br><span class="booking-success-note">Запись связана с вашей заявкой и откликом тренера.</span>';
     }
-    var foot =
-      '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
+    // Первый экран уже сказал, где живут детали и отмена, — повторять это ниже
+    // значило бы дважды написать одно и то же на одном экране.
+    var foot = first
+      ? ''
+      : '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
     return main + ctx + foot;
   }
 
@@ -377,6 +423,7 @@
     submitBooking: submitBooking,
     formatPlaceMismatchNotice: formatPlaceMismatchNotice,
     formatSuccessMessage: formatSuccessMessage,
+    formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
     resolveBookingReturn: resolveBookingReturn,
     navigateBookingReturn: navigateBookingReturn,

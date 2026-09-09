@@ -386,6 +386,7 @@ from src.application.client_share_message import (
     share_body_for_native_share_dialog,
 )
 from src.application.client_delight_metrics import record_client_share
+from src.application.client_first_success import build_first_booking_success
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
@@ -1924,6 +1925,16 @@ async def post_client_booking(
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
     if client_request_id is None and place_mismatch:
         out["place_mismatch"] = True
+    # TASK-096 AC-004: момент первого успеха. Считается ДО кэширования идемпотентности —
+    # повтор того же запроса обязан вернуть тот же экран, а не «уже не первая».
+    out.update(
+        await build_first_booking_success(
+            session,
+            client_id=client_id,
+            slot_date=slot.get("slot_date"),
+            start_time=slot.get("start_time"),
+        )
+    )
     if idem_cache_key:
         await set_idempotency_response(session, idem_cache_key, dict(out))
     background_tasks.add_task(
