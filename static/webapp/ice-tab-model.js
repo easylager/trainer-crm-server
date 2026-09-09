@@ -95,8 +95,76 @@
 
   function filterIceCities(cities) {
     return (cities || []).filter(function (c) {
-      return (Number(c.skate_count) || 0) > 0 || (Number(c.trainer_count) || 0) > 0;
+      return (
+        (Number(c.skate_count) || 0) > 0 ||
+        (Number(c.trainer_count) || 0) > 0 ||
+        (Number(c.map_rink_count) || 0) > 0
+      );
     });
+  }
+
+  function buildIceInterestUrl() {
+    return '/api/public/ice/interest';
+  }
+
+  function buildGroupsProbeUrl(opts) {
+    opts = opts || {};
+    var params = ['limit=1'];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    return '/api/public/training-groups?' + params.join('&');
+  }
+
+  function shouldShowGroupChip(count) {
+    return Number(count) > 0;
+  }
+
+  function shouldShowSkateChip(count) {
+    return count == null || Number(count) > 0;
+  }
+
+  function sanitizeIntent(intent, opts) {
+    opts = opts || {};
+    var hasSkate = opts.hasSkate !== false;
+    if (intent === INTENTS.group && !opts.hasGroups) intent = INTENTS.skate;
+    if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.group) return INTENTS.group;
+    return hasSkate ? INTENTS.skate : INTENTS.coach;
+  }
+
+  function rankServiceChips(services) {
+    return (services || [])
+      .filter(function (s) {
+        return Number(s.trainer_count) > 0;
+      })
+      .sort(function (a, b) {
+        var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+        var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+        if (sa !== sb) return sa - sb;
+        return Number(a.id) - Number(b.id);
+      });
+  }
+
+  function rankPopularCities(cities, limit) {
+    var list = (cities || []).slice();
+    var cap = limit == null ? 8 : Number(limit);
+    list.sort(function (a, b) {
+      var wa =
+        (Number(a.map_rink_count) || 0) +
+        (Number(a.skate_count) || 0) +
+        (Number(a.trainer_count) || 0);
+      var wb =
+        (Number(b.map_rink_count) || 0) +
+        (Number(b.skate_count) || 0) +
+        (Number(b.trainer_count) || 0);
+      if (wa !== wb) return wb - wa;
+      var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+      var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+      if (sa !== sb) return sa - sb;
+      return Number(a.id) - Number(b.id);
+    });
+    return list.slice(0, cap);
   }
 
   function pickCityIntent(city, currentIntent) {
@@ -519,6 +587,18 @@
    */
   function formatEmptyList(intent, opts) {
     opts = opts || {};
+    var trainers = Number(opts.trainerCount) || 0;
+    var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
+      return {
+        kind: 'coming-soon',
+        title: 'Скоро добавим катки',
+        body: 'В этом городе уже есть тренеры. Расписание массового катания подключим — нажмите, если хотите кататься здесь.',
+        cta: 'Хочу кататься здесь',
+        action: { label: 'Хочу кататься здесь', kind: 'ice-interest' },
+        secondary: { label: 'Показать тренеров', kind: 'intent:coach' },
+      };
+    }
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
@@ -542,6 +622,13 @@
           body: 'В городе есть другие тренеры — снимите фильтр по услуге.',
           action: { label: 'Показать всех тренеров', kind: 'clear-service' },
           secondary: { label: 'Сменить город', kind: 'city' },
+        };
+      }
+      if (opts.hasSkate === false) {
+        return {
+          title: 'В этом городе пока нет тренеров',
+          body: 'Смените город — расписания катков здесь пока тоже нет.',
+          action: { label: 'Сменить город', kind: 'city' },
         };
       }
       return {
@@ -661,7 +748,14 @@
     buildTrainersUrl: buildTrainersUrl,
     buildServicesUrl: buildServicesUrl,
     buildIceCitiesUrl: buildIceCitiesUrl,
+    buildIceInterestUrl: buildIceInterestUrl,
+    buildGroupsProbeUrl: buildGroupsProbeUrl,
     filterIceCities: filterIceCities,
+    rankServiceChips: rankServiceChips,
+    rankPopularCities: rankPopularCities,
+    shouldShowGroupChip: shouldShowGroupChip,
+    shouldShowSkateChip: shouldShowSkateChip,
+    sanitizeIntent: sanitizeIntent,
     pickCityIntent: pickCityIntent,
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,

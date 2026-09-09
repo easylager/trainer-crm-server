@@ -61,7 +61,7 @@
 
 ## Fixture
 
-`data/fixtures/grodno-neman/` — `news446875.html` (live extract) + `scheduleMK.html` (сырой UTF-16, stale evidence) + `expected.json`.
+`.ai/data/fixtures/grodno-neman/` — `news446875.html` (live extract) + `scheduleMK.html` (сырой UTF-16, stale evidence) + `expected.json`.
 
 ## Blockers / notes
 

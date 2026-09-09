@@ -810,6 +810,29 @@ body.ar-pilot--ice .client-app-header {
   background: color-mix(in srgb, var(--app-cta-fill) 18%, transparent);
 }
 
+.ice-picker__popular {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.ice-picker__popular:empty {
+  display: none;
+}
+
+.ice-picker__popular-item {
+  flex: 0 0 auto;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  padding: 9px 14px;
+  border-radius: var(--app-radius-pill, 999px);
+  border: 1px solid var(--glide-line);
+  color: inherit;
+  background: var(--glide-paper);
+  cursor: pointer;
+}
+
 .ice-geo {
   width: 100%;
   border: 1px solid var(--glide-line);

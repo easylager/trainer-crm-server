@@ -19,4 +19,4 @@
 
 ## Fixture
 
-`data/fixtures/raubichi-rcop/` — `skates.html` + `expected.json` (`sessions: []`).
+`.ai/data/fixtures/raubichi-rcop/` — `skates.html` + `expected.json` (`sessions: []`).

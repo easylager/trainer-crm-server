@@ -55,7 +55,7 @@
 
 ## Fixture
 
-`data/fixtures/brest-lds/` — `prices.html`, `schedule.html`, `IMG_8523.JPG` + `expected.json` (7 слотов).
+`.ai/data/fixtures/brest-lds/` — `prices.html`, `schedule.html`, `IMG_8523.JPG` + `expected.json` (7 слотов).
 
 ## Blockers / notes
 

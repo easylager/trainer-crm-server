@@ -53,7 +53,7 @@
 
 ## Fixture
 
-`data/fixtures/soligorsk-szk/` — `massovoe-katanie.html` + `expected.json`.
+`.ai/data/fixtures/soligorsk-szk/` — `massovoe-katanie.html` + `expected.json`.
 
 ## Blockers / notes
 

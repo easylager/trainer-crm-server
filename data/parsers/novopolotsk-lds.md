@@ -55,7 +55,7 @@
 
 ## Fixture
 
-`data/fixtures/novopolotsk-lds/` — `mass-skating.html` + `expected.json` (5 слотов).
+`.ai/data/fixtures/novopolotsk-lds/` — `mass-skating.html` + `expected.json` (5 слотов).
 
 ## Blockers / notes
 

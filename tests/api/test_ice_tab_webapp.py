@@ -58,9 +58,8 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert 'data-intent="group"' not in body
     assert "ice-masthead" in body
     assert "iceServiceChips" in body
+    assert "iceCityPopular" in body
     # TASK-103: карта вернулась, но сегмент «Список / Карта» в шапку — нет.
-    # Он стоил ~46px над сгибом и был причиной выключения карты в TASK-084 (G-P3).
-    # Проверяем именно отсутствие сегмента, а не отсутствие переключателя вообще.
     assert "iceViewSeg" not in body
     assert "iceViewSwitch" in body
     assert "iceMapSec" in body
@@ -78,6 +77,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     page_js = js.text + model.text + body
     assert "/api/public/ice/arenas" in page_js
     assert "/api/public/ice/cities" in page_js
+    assert "/api/public/ice/interest" in page_js
     assert "/api/public/trainers" in page_js
     assert "/api/public/services" in page_js
     assert "intent=skate" in page_js or "intent: 'skate'" in page_js or 'intent: "skate"' in page_js
@@ -85,7 +85,10 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "computeTier" not in page_js
     assert "data_tier" not in page_js
     assert "formatLiveLine" in model.text
-    assert "formatEmptyList" in model.text
+    assert "Хочу кататься здесь" in model.text
+    # Hint copy lives in the model for tests; it must not paint a banner on the Ice tab.
+    assert "Каталог тренеров теперь здесь" not in js.text
+    assert "Каталог тренеров теперь здесь" not in body
     assert "#c2761a" not in css.text.lower()
     assert ".ice-ypin__label" in css.text
     assert "color: inherit" not in css.text.split(".ice-ypin__label")[1].split("}")[0]

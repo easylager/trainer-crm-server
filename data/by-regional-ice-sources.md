@@ -1,6 +1,6 @@
 # BY regional ice sources (SPEC probe, 2026-09-05)
 
-Prod dump: `data/by-arenas-prod.csv` (191 active arenas, **READ ONLY** SELECT). Ice Discovery V1 remains Minsk-first; this file is the next-city queue.
+Prod dump: `.ai/data/by-arenas-prod.csv` (191 active arenas, **READ ONLY** SELECT). Ice Discovery V1 remains Minsk-first; this file is the next-city queue.
 
 Москва/МО (102) и СПб (49) — не очередь парсеров МК, пока продукт не снимет CITY_LOCK.
 

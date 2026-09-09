@@ -57,7 +57,7 @@
 
 ## Fixture
 
-`data/fixtures/vitebsk-ds/` — `massovoe-katanie.html` + `event-jsonld.json` (24afisha Event 5–6 сен, PT60M, 7.00–8.00 BYN, без HH:MM) + `expected.json`.
+`.ai/data/fixtures/vitebsk-ds/` — `massovoe-katanie.html` + `event-jsonld.json` (24afisha Event 5–6 сен, PT60M, 7.00–8.00 BYN, без HH:MM) + `expected.json`.
 
 ## Blockers / notes
 

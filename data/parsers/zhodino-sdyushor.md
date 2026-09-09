@@ -22,4 +22,4 @@ Punycode-сайт: https://www.xn----8sbkhlnbugdd1c.xn--90ais/ (ледоваяп
 
 ## Fixture
 
-`data/fixtures/zhodino-sdyushor/` — `raspisanie.html`, `ceny.html` + `expected.json` (`sessions: []`).
+`.ai/data/fixtures/zhodino-sdyushor/` — `raspisanie.html`, `ceny.html` + `expected.json` (`sessions: []`).

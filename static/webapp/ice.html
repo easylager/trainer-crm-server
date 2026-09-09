@@ -17,10 +17,10 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609093" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609094" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
-  <script src="ice-tab-model.js?v=202609093"></script>
+  <script src="ice-tab-model.js?v=202609094"></script>
   <script src="ice-map-model.js?v=202609074"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
@@ -119,6 +119,8 @@
       </div>
       <button type="button" class="ice-geo" id="iceGeoBtn">Определить по геолокации</button>
     </div>
+    <p class="ice-picker__label" id="iceCityPopularLabel" hidden>Популярные города</p>
+    <div class="ice-picker__popular" id="iceCityPopular"></div>
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
@@ -136,6 +138,6 @@
   </button>
 
   <script src="ice-map.js?v=202609091"></script>
-  <script src="ice-tab.js?v=202609093"></script>
+  <script src="ice-tab.js?v=202609094"></script>
 </body>
 </html>

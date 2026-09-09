@@ -189,11 +189,11 @@ describe('formatLiveLine (prototype: three prices, not mashed live.text)', () =>
 });
 
 describe('formatEmptyList', () => {
-  it('skate empty does not dump the trainers-moved hint into the list', () => {
-    const { formatEmptyList, trainersMovedHint } = loadModel();
+  it('skate empty does not dump a catalog-moved banner into the list', () => {
+    const { formatEmptyList } = loadModel();
     const empty = formatEmptyList('skate');
     assert.match(empty.title, /массового катания|катков/i);
-    assert.ok(!empty.body.includes(trainersMovedHint()));
+    assert.ok(!/каталог тренеров теперь здесь/i.test(empty.title + empty.body));
     assert.match(empty.body, /город|Тренер/i);
   });
 
@@ -210,6 +210,24 @@ describe('formatEmptyList', () => {
     const empty = formatEmptyList('coach', { serviceName: 'Фигурное катание' });
     assert.match(empty.title, /услуг/i);
     assert.match(empty.body, /фильтр|город/i);
+  });
+
+  it('coach empty does not point at a hidden skate chip', () => {
+    const { formatEmptyList } = loadModel();
+    const noSkate = formatEmptyList('coach', { hasSkate: false });
+    assert.ok(!/Покататься/i.test(noSkate.title + noSkate.body));
+    assert.notEqual(noSkate.action && noSkate.action.kind, 'intent:skate');
+    const withSkate = formatEmptyList('coach', { hasSkate: true });
+    assert.equal(withSkate.action.kind, 'intent:skate');
+  });
+
+  it('shows coming-soon when the city has trainers but no map rinks', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('skate', { trainerCount: 3, mapRinkCount: 0 });
+    assert.equal(empty.kind, 'coming-soon');
+    assert.match(empty.title, /скоро/i);
+    assert.match(empty.cta, /кататься/i);
+    assert.equal(formatEmptyList('skate', { trainerCount: 0, mapRinkCount: 0 }).kind, undefined);
   });
 });
 
@@ -244,6 +262,66 @@ describe('pickFallbackCity (EDGE-001)', () => {
     ]);
     assert.equal(city.id, 1);
     assert.equal(city.name, 'Минск');
+  });
+});
+
+describe('rankServiceChips (2026-09-07 Тренеры service filter)', () => {
+  it('drops services with zero bookable trainers in the current city', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 1, name: 'Обучение катанию «с нуля»', sort_order: 0, trainer_count: 2 },
+      { id: 2, name: 'Совершенствование катания', sort_order: 1, trainer_count: 0 },
+      { id: 3, name: 'Фигурное катание', sort_order: 2, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [1, 3]);
+  });
+
+  it('orders by sort_order then id', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 9, name: 'B', sort_order: 5, trainer_count: 1 },
+      { id: 2, name: 'A', sort_order: 1, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [2, 9]);
+  });
+
+  it('buildTrainersUrl carries service_id only when set', () => {
+    const { buildTrainersUrl } = loadModel();
+    assert.match(buildTrainersUrl({ cityId: 2, serviceId: 3 }), /service_id=3/);
+    assert.doesNotMatch(buildTrainersUrl({ cityId: 2 }), /service_id=/);
+  });
+});
+
+describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
+  it('ranks by map rinks + trainers so a long city list surfaces the busy ones first', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 1, name: 'Минск', map_rink_count: 5, trainer_count: 6, sort_order: 0 },
+      { id: 2, name: 'Раубичи', map_rink_count: 0, trainer_count: 0, sort_order: 29 },
+      { id: 3, name: 'Гродно', map_rink_count: 2, trainer_count: 0, sort_order: 16 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [1, 3, 2]);
+  });
+
+  it('caps the result so the picker never shows a wall of chips', () => {
+    const { rankPopularCities } = loadModel();
+    const cities = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      name: 'City ' + i,
+      map_rink_count: 25 - i,
+      trainer_count: 0,
+    }));
+    assert.equal(rankPopularCities(cities, 8).length, 8);
+    assert.equal(rankPopularCities(cities).length, 8);
+  });
+
+  it('ties break by sort_order then id, never by insertion order alone', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 9, name: 'B', map_rink_count: 0, trainer_count: 0, sort_order: 5 },
+      { id: 2, name: 'A', map_rink_count: 0, trainer_count: 0, sort_order: 1 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [2, 9]);
   });
 });
 
@@ -465,6 +543,38 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
   it('does not put a booking CTA on MK rows even when rendering a mixed list', () => {
     const { listRowCta } = loadModel();
     assert.equal(listRowCta({ live: { kind: 'session' }, can_book: true }), null);
+  });
+});
+
+describe('group chip visibility', () => {
+  it('hides Группы until the city has at least one open group', () => {
+    const { shouldShowGroupChip, sanitizeIntent, buildGroupsProbeUrl } = loadModel();
+    assert.equal(shouldShowGroupChip(0), false);
+    assert.equal(shouldShowGroupChip(null), false);
+    assert.equal(shouldShowGroupChip(2), true);
+    assert.equal(sanitizeIntent('group', { hasGroups: false }), 'skate');
+    assert.equal(sanitizeIntent('group', { hasGroups: true }), 'group');
+    assert.equal(sanitizeIntent('coach', { hasGroups: false }), 'coach');
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /\/api\/public\/training-groups/);
+  });
+});
+
+describe('skate chip visibility (2026-09-07 cities without a live rink)', () => {
+  it('stays visible until probed, then hides once the city has zero skate arenas', () => {
+    const { shouldShowSkateChip } = loadModel();
+    assert.equal(shouldShowSkateChip(null), true);
+    assert.equal(shouldShowSkateChip(undefined), true);
+    assert.equal(shouldShowSkateChip(0), false);
+    assert.equal(shouldShowSkateChip(3), true);
+  });
+
+  it('falls back Покататься -> Тренеры when the city has no skate arenas', () => {
+    const { sanitizeIntent } = loadModel();
+    assert.equal(sanitizeIntent('skate', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('skate', { hasSkate: true }), 'skate');
+    assert.equal(sanitizeIntent(undefined, { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('coach', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('group', { hasGroups: true, hasSkate: false }), 'group');
   });
 });
 

@@ -22,7 +22,7 @@
 
 ## Fixture
 
-`data/fixtures/bereza-lds/expected.json` (пусто).
+`.ai/data/fixtures/bereza-lds/expected.json` (пусто).
 
 ## Blockers / notes
 

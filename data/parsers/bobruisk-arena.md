@@ -51,7 +51,7 @@
 
 ## Fixture
 
-`data/fixtures/bobruisk-arena/` — `raspisanie.html`, `massovye-kataniya.html` + `expected.json` (15 слотов).
+`.ai/data/fixtures/bobruisk-arena/` — `raspisanie.html`, `massovye-kataniya.html` + `expected.json` (15 слотов).
 
 ## Blockers / notes
 

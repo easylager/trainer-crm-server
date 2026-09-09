@@ -42,7 +42,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 SOURCE_ETALON = "etalon_073"
-TARGET_ARENA_IDS = (2, 3, 6, 5, 7, 8, 4, 115)
+TARGET_ARENA_IDS = (
+    2, 3, 6, 5, 7, 8, 4, 115,
+    # Regional BY rinks: 25 arena_profiles seeded via scripts/seed_regional_arenas.py,
+    # dossiers in data/arena-cards/<slug>.md.
+    22, 23, 25, 24, 10, 11, 20, 28, 37, 40, 43, 18, 30, 31, 41, 27, 15, 16, 19, 42, 33, 26, 32, 38, 29,
+)
 DEFAULT_TZ = "Europe/Minsk"
 PHONE_MAX_LEN = 32
 SESSION_HORIZON_DAYS = 7
@@ -534,9 +539,11 @@ def parse_dossier(path: Path) -> ArenaCard:
 
 def discover_dossiers(cards_dir: Path) -> list[Path]:
     paths = []
-    for path in sorted(cards_dir.glob("minsk-*.md")):
+    for path in sorted(cards_dir.glob("*.md")):
         name = path.name.lower()
         if "load-report" in name or "stand-report" in name or name == "readme.md":
+            continue
+        if name.startswith("task-"):
             continue
         paths.append(path)
     return paths

@@ -62,7 +62,7 @@
 
 ## Fixture
 
-`data/fixtures/orsha-arena/` — `schedule.html`, `prices.html`, `Ld-31-06.jpg`, `OL-31-06.jpg`, `Ld-07-13.jpg`, `Ol-07-13.jpg` + `expected.json` (3 слота недели 07–13).
+`.ai/data/fixtures/orsha-arena/` — `schedule.html`, `prices.html`, `Ld-31-06.jpg`, `OL-31-06.jpg`, `Ld-07-13.jpg`, `Ol-07-13.jpg` + `expected.json` (3 слота недели 07–13).
 
 ## Blockers / notes
 

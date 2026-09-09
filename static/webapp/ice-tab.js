@@ -17,6 +17,7 @@
     services: [],
     cities: [],
     items: [],
+    skateCount: null,
     total: 0,
     cursor: null,
     loading: false,
@@ -90,7 +91,11 @@
 
   function setChips() {
     document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      btn.setAttribute('aria-pressed', btn.getAttribute('data-intent') === state.intent ? 'true' : 'false');
+      var intent = btn.getAttribute('data-intent');
+      btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
+      if (intent === 'skate') {
+        btn.hidden = !M.shouldShowSkateChip(state.skateCount);
+      }
     });
     renderServiceChips();
   }
@@ -210,6 +215,11 @@
         },
         listReady: function () {
           return !state.loading && !!state.cityId;
+        },
+        getCityCenter: function () {
+          var city = cityFromState(state.cityId) || {};
+          if (city.latitude == null || city.longitude == null) return null;
+          return [Number(city.latitude), Number(city.longitude)];
         },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
@@ -367,8 +377,12 @@
       return;
     }
     if (!state.items.length) {
+      var city = cityFromState(state.cityId) || {};
       var empty = M.formatEmptyList(state.intent, {
         serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
+        trainerCount: city.trainer_count,
+        mapRinkCount: city.map_rink_count,
+        hasSkate: M.shouldShowSkateChip(state.skateCount),
       });
       renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
       return;
@@ -378,6 +392,35 @@
         return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
+  }
+
+  function recordIceInterest() {
+    if (!state.cityId) return;
+    fetch(M.buildIceInterestUrl(), {
+      method: 'POST',
+      cache: 'no-store',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({
+        city_id: state.cityId,
+        intent: 'skate',
+        source: 'coming_soon_cta',
+      }),
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function () {
+        renderEmpty(
+          $('iceList'),
+          {
+            title: 'Записали',
+            body: 'Когда появится расписание в этом городе — вы уже в списке желающих.',
+            action: { label: 'Показать тренеров', kind: 'intent:coach' },
+          },
+          'ice'
+        );
+      })
+      .catch(function () {});
   }
 
   /**
@@ -476,6 +519,11 @@
     if (kind === 'retry') {
       return function () {
         loadList();
+      };
+    }
+    if (kind === 'ice-interest') {
+      return function () {
+        recordIceInterest();
       };
     }
     if (kind && kind.indexOf('intent:') === 0) {
@@ -723,6 +771,7 @@
     }
     state.cityId = city.id;
     state.cityName = city.name || '';
+    state.skateCount = city.skate_count;
     var nextIntent = M.pickCityIntent(city, state.intent);
     if (nextIntent !== state.intent) state.intent = nextIntent;
     if (state.intent === 'coach') state.view = 'list';
@@ -742,10 +791,45 @@
     loadList();
   }
 
+  function onCityPick(ev) {
+    var item = ev.target.closest('[data-city-id]');
+    if (!item) return;
+    var id = Number(item.getAttribute('data-city-id'));
+    var city = state.cities.filter(function (c) {
+      return Number(c.id) === id;
+    })[0];
+    openCityPicker(false);
+    applyCity(city || { id: id, name: item.getAttribute('data-city-name') || '' });
+  }
+
   function renderCityPicker(filter) {
     var box = $('iceCityList');
+    var popularBox = $('iceCityPopular');
+    var popularLabel = $('iceCityPopularLabel');
     if (!box) return;
     var q = String(filter || '').trim().toLowerCase();
+    if (!q) {
+      var popular = M.rankPopularCities(state.cities, 8);
+      if (popularBox) {
+        popularBox.innerHTML = popular
+          .map(function (c) {
+            return (
+              '<button type="button" class="ice-picker__popular-item" data-city-id="' +
+              esc(c.id) +
+              '" data-city-name="' +
+              esc(c.name) +
+              '">' +
+              esc(c.name) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+      if (popularLabel) popularLabel.hidden = popular.length === 0;
+    } else {
+      if (popularBox) popularBox.innerHTML = '';
+      if (popularLabel) popularLabel.hidden = true;
+    }
     var rows = state.cities.filter(function (c) {
       return !q || String(c.name || '').toLowerCase().indexOf(q) >= 0;
     });
@@ -1025,16 +1109,11 @@
 
     var cityList = $('iceCityList');
     if (cityList) {
-      cityList.addEventListener('click', function (ev) {
-        var item = ev.target.closest('[data-city-id]');
-        if (!item) return;
-        var id = Number(item.getAttribute('data-city-id'));
-        var city = state.cities.filter(function (c) {
-          return Number(c.id) === id;
-        })[0];
-        openCityPicker(false);
-        applyCity(city || { id: id, name: item.getAttribute('data-city-name') || '' });
-      });
+      cityList.addEventListener('click', onCityPick);
+    }
+    var cityPopular = $('iceCityPopular');
+    if (cityPopular) {
+      cityPopular.addEventListener('click', onCityPick);
     }
 
     var geo = $('iceGeoBtn');

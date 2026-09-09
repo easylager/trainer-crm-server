@@ -55,7 +55,7 @@
 
 ## Fixture
 
-`data/fixtures/gomel-lds/` — `news445332.html` + `expected.json`.
+`.ai/data/fixtures/gomel-lds/` — `news445332.html` + `expected.json`.
 
 ## Blockers / notes
 

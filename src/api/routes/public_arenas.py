@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from src.application.arena_public_use_cases import (
     list_public_arena_sessions,
     list_public_arena_trainers,
     list_public_ice_arenas,
+    record_ice_city_interest,
     search_public_ice,
 )
 from src.application.client_delight_metrics import record_client_share
@@ -150,6 +152,31 @@ async def get_ice_city_day_share(
         "summary": summary_line(day, city_name=city_name),
         "share_context": ctx,
     }
+
+
+class IceCityInterestBody(BaseModel):
+    city_id: int
+    intent: str = "skate"
+    source: str = Field(default="coming_soon_cta", max_length=32)
+
+
+@router.post("/ice/interest")
+async def post_ice_interest(
+    body: IceCityInterestBody,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Record that a client asked for skating in a city that has trainers but no map rinks."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        payload = await record_ice_city_interest(
+            session, city_id=body.city_id, intent=body.intent, source=body.source
+        )
+    except IcePublicQueryError as exc:
+        raise _query_error(exc) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    return payload
 
 
 @router.get("/search")

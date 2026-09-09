@@ -1,6 +1,6 @@
 """One-shot ice ingest: run due ice_parser_jobs against a local DB only.
 
-Makes enabled Minsk MK jobs due, then IceIngestScheduler.run_due(now).
+Makes enabled Minsk + regional BY MK jobs due, then IceIngestScheduler.run_due(now).
 Never writes to cloud/prod databases.
 
 Usage:
@@ -43,6 +43,23 @@ MINSK_MK_PARSER_KEYS = frozenset(
         "minskarena_saleframe_v1",
         "zamok_html_v1",
         "chizhovka_html_v1",
+        "brest_lds_v1",
+        "baranovichi_lds_v1",
+        "kobrin_lds_v1",
+        "pinsk_volna_v1",
+        "grodno_triniti_v1",
+        "grodno_neman_v1",
+        "lida_lds_v1",
+        "novopolotsk_lds_v1",
+        "vitebsk_ds_v1",
+        "mogilev_ds_v1",
+        "orsha_arena_v1",
+        "gorki_lds_v1",
+        "ostrovets_lds_v1",
+        "bobruisk_arena_v1",
+        "soligorsk_szk_v1",
+        "shklov_arena_v1",
+        "gomel_lds_v1",
         "ledby_html_v1",
         "diamond_html_v1",
         "minskarena_speed_oval_v1",

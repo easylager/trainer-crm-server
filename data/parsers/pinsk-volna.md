@@ -52,7 +52,7 @@
 
 ## Fixture
 
-`data/fixtures/pinsk-volna/` — `schedule.html`, `tariff.html` + `expected.json` (18 слотов).
+`.ai/data/fixtures/pinsk-volna/` — `schedule.html`, `tariff.html` + `expected.json` (18 слотов).
 
 ## Blockers / notes
 

@@ -30,7 +30,7 @@ hockey.by/icearenas:
 
 ## Fixture
 
-`data/fixtures/ozerny-rink/expected.json` (пусто).
+`.ai/data/fixtures/ozerny-rink/expected.json` (пусто).
 
 ## Blockers / notes
 
