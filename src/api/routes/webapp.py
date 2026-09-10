@@ -2192,40 +2192,6 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
         pass
 
 
-async def _bg_notify_trainer_client_request_immediate(request_id: int) -> None:
-    """
-    Immediate trainer DM for a personalized client_request (pass order, certificate order, etc.).
-    Avoids gaps when the batch notifier is delayed.
-    """
-    from aiogram import Bot
-    from aiogram.client.default import DefaultBotProperties
-    from aiogram.enums import ParseMode
-
-    from src.bot.notification_loops import process_request_notifications_batch
-    from src.infrastructure.db.session import async_session_factory
-
-    settings = Settings()
-    bot = Bot(
-        token=settings.telegram_bot_token_trainer,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    try:
-        async with async_session_factory() as session:
-            await process_request_notifications_batch(
-                bot,
-                session,
-                only_request_id=request_id,
-                bypass_quiet_hours_for_that_request=True,
-            )
-    except Exception:
-        logger.exception(
-            "Background client_request trainer notify failed (request_id=%s)",
-            request_id,
-        )
-    finally:
-        await bot.session.close()
-
-
 class ClientRequestCreateBody(BaseModel):
     """Create request from catalog Mini App: city, service, optional comment and trainer_id."""
     city_id: int
@@ -2239,7 +2205,6 @@ class ClientRequestCreateBody(BaseModel):
 @router.post("/client/request")
 async def post_client_request(
     body: ClientRequestCreateBody,
-    background_tasks: BackgroundTasks,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -2260,8 +2225,7 @@ async def post_client_request(
     request_id = await create_client_request(
         session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
     )
-    # Immediate DM — batch notifier can lag minutes; personalized requests must not wait.
-    background_tasks.add_task(_bg_notify_trainer_client_request_immediate, int(request_id))
+    # Trainer DM: only notification_service request loop (claim-before-send). No API immediate path.
     return {"success": True, "request_id": request_id}
 
 
@@ -2336,7 +2300,6 @@ async def get_client_pass_order_catalog_endpoint(
 
 @router.post("/client/pass-order/request")
 async def post_client_pass_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientPassOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -2372,9 +2335,6 @@ async def post_client_pass_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {
@@ -2430,7 +2390,6 @@ async def get_client_cert_order_catalog_endpoint(
 
 @router.post("/client/cert-order/request")
 async def post_client_cert_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientCertOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -2469,9 +2428,6 @@ async def post_client_cert_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {
@@ -10211,7 +10167,6 @@ class ClientCollectivePassOrderRequestBody(BaseModel):
 
 @router.post("/client/collective-pass-order/request")
 async def post_client_collective_pass_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientCollectivePassOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -10248,9 +10203,6 @@ async def post_client_collective_pass_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {

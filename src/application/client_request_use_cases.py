@@ -1030,7 +1030,7 @@ async def get_client_request_notification_payload_for_trainer(
 async def mark_request_trainer_notified(
     session: AsyncSession, request_id: int, trainer_id: int
 ) -> bool:
-    """Record that we sent this trainer a notification about this request. False if another worker already inserted."""
+    """Claim this (request, trainer) for the notifier. False if another worker already claimed."""
     try:
         await session.execute(
             text("""
@@ -1044,6 +1044,22 @@ async def mark_request_trainer_notified(
     except IntegrityError:
         await session.rollback()
         return False
+
+
+async def release_request_trainer_notification(
+    session: AsyncSession, request_id: int, trainer_id: int
+) -> None:
+    """Drop a claim so the loop can retry after a failed Telegram send."""
+    await session.execute(
+        text(
+            """
+            DELETE FROM client_request_notifications
+            WHERE client_request_id = :rid AND trainer_id = :tid
+            """
+        ),
+        {"rid": request_id, "tid": trainer_id},
+    )
+    await session.commit()
 
 
 async def get_pending_response_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:
