@@ -87,6 +87,8 @@
         passIssueFilteredClients: [],
         passIssueSelectedClientId: null,
         passIssueSelectedClient: null,
+        savingPassProduct: false,
+        savingCertProduct: false,
         certIssueSubmitting: false,
         certIssueIdempotencyKey: null,
         certIssuePurchasedByName: null,
@@ -1584,6 +1586,7 @@
         return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
       }
       document.getElementById('btnSaveCertForm').onclick = function() {
+        if (state.savingCertProduct) return;
         var anyAmount = document.getElementById('certAnyAmount').checked;
         var amountCents = null;
         if (!anyAmount) {
@@ -1600,6 +1603,13 @@
         if (expiresDaysInput && expiresDaysInput.value) {
           var d = parseInt(expiresDaysInput.value, 10);
           if (!isNaN(d) && d > 0) { expiresInDays = d; }
+        }
+        var certBtn = document.getElementById('btnSaveCertForm');
+        state.savingCertProduct = true;
+        if (certBtn) certBtn.disabled = true;
+        function unlockCertSave() {
+          state.savingCertProduct = false;
+          if (certBtn) certBtn.disabled = false;
         }
         if (state.editingCertId) {
           var body = {
@@ -1619,7 +1629,8 @@
               if (o.ok) { showScreen('screenList'); setTab('certs'); loadCertList(); }
               else { alert(o.data.detail || 'Ошибка сохранения'); }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { alert('Ошибка сети'); })
+            .then(unlockCertSave);
         } else {
           fetch(apiUrl('/trainer/certificate-products'), {
             method: 'POST',
@@ -1637,7 +1648,8 @@
               if (o.ok && o.data.id) { showScreen('screenList'); setTab('certs'); loadCertList(); }
               else { alert(o.data.detail || 'Ошибка создания'); }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { alert('Ошибка сети'); })
+            .then(unlockCertSave);
         }
       };
       document.getElementById('btnDeleteCert').onclick = function() {
@@ -1669,6 +1681,7 @@
       };
 
       document.getElementById('btnSaveForm').onclick = function() {
+        if (state.savingPassProduct) return;
         var name = (document.getElementById('inputName').value || '').trim();
         var sessions = parseInt(document.getElementById('inputSessions').value, 10);
         var priceByn = parseInt(document.getElementById('inputPrice').value, 10);
@@ -1687,6 +1700,13 @@
           alert('Выбранные тарифы не настроены в профиле для этих услуг.');
           return;
         }
+        var passBtn = document.getElementById('btnSaveForm');
+        state.savingPassProduct = true;
+        if (passBtn) passBtn.disabled = true;
+        function unlockPassSave() {
+          state.savingPassProduct = false;
+          if (passBtn) passBtn.disabled = false;
+        }
         if (state.editingId) {
           var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
@@ -1699,7 +1719,8 @@
               if (o.ok) { showScreen('screenList'); loadList(); }
               else { alert(o.data.detail || 'Ошибка сохранения'); }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { alert('Ошибка сети'); })
+            .then(unlockPassSave);
         } else {
           var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products'), {
@@ -1712,7 +1733,8 @@
               if (o.ok && o.data.id) { showScreen('screenList'); loadList(); }
               else { alert(o.data.detail || 'Ошибка создания'); }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { alert('Ошибка сети'); })
+            .then(unlockPassSave);
         }
       };
 
