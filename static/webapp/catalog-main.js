@@ -981,11 +981,10 @@
           inp.value = String(tier.id);
           var pb = tier.price_byn;
           var priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
-          var priceHtml = escapeHtml(priceNum) + ' <i class="nbrb-icon">&#xe901;</i>';
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
-          tierTxt.innerHTML = escapeHtml(catalogTierLabelRu(tier)) + ' — ' + priceHtml;
+          tierTxt.textContent = catalogTierLabelRu(tier) + ' — ' + priceNum + ' BYN';
           lab.appendChild(tierTxt);
           inp.addEventListener('change', function() {
             state.catalogBookingPriceVariantId = parseInt(inp.value, 10);
@@ -1110,6 +1109,21 @@
           btn.hidden = false;
           btn.onclick = function() {
             var origin = directBookEntryOrigin();
+            var hubSlot = false;
+            try {
+              var qpBack = new URLSearchParams(window.location.search || '');
+              hubSlot = qpBack.get('from') === 'hub' && !!(qpBack.get('slot_id') && String(qpBack.get('slot_id')).trim());
+            } catch (eHubSlot) { /* ignore */ }
+            if (sid === 'screenBookingForm' && hubSlot) {
+              if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
+                window.BookingClient.navigateBookingReturn('hub');
+              } else if (typeof window.navigateClientHome === 'function') {
+                window.navigateClientHome();
+              } else if (canBrowserGoBack()) {
+                window.history.back();
+              }
+              return;
+            }
             if (sid === 'screenSlotPick' && origin) {
               if (window.BookingClient && typeof window.BookingClient.navigateBookingReturn === 'function') {
                 window.BookingClient.navigateBookingReturn(origin, {

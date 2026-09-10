@@ -655,30 +655,20 @@ select {
 }
 
 /*
- * Знак белорусского рубля (НБРБ, nbrb.by) — TASK-043. Официальный знак не входит в
- * обычные системные шрифты, поэтому он распространяется как иконочный шрифт: код точки
- * &#xe901; рисуется глифом знака, а не буквами "BYN". RUB не нуждается в этом — обычный
- * символ ₽ есть в системных шрифтах уже сейчас (см. src/shared/byr_currency_display.py).
- *
- * Использование: <i class="nbrb-icon">&#xe901;</i> вместо текста "BYN"/"Br".
- * Только для BY-сумм на HTML-страницах вебаппа — в Telegram-боте (plain text) недоступно.
+ * TASK-109: NBRB PUA glyph (U+E901) is tofu in Telegram WebView.
+ * Hide the private-use character and print BYN if any leftover .nbrb-icon remains.
  */
-@font-face {
-  font-family: "NBRB Byn";
-  src:
-    url("fonts/nbrb/nbrb.woff2") format("woff2"),
-    url("fonts/nbrb/nbrb.woff") format("woff"),
-    url("fonts/nbrb/nbrb.ttf") format("truetype");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 .nbrb-icon {
-  font-family: "NBRB Byn", sans-serif;
+  font-family: inherit !important;
   font-style: normal;
-  font-weight: normal;
+  font-size: 0;
   line-height: 1;
   speak: none;
-  -webkit-font-smoothing: antialiased;
+}
+.nbrb-icon::after {
+  content: "BYN";
+  font-size: 15px;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
 }

@@ -1851,6 +1851,8 @@ async def test_webapp_book_and_catalog_booking_assets_served() -> None:
     assert "catalog-main.js" in catalog.text
     assert bc_js.status_code == 200
     assert "BookingClient" in bc_js.text
+    assert "catalogFormBackAction" in bc_js.text
+    assert "formatPriceAmountHtml" in bc_js.text
     assert bc_css.status_code == 200
     assert "booking-success-note" in bc_css.text
     assert bd_js.status_code == 200
