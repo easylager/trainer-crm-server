@@ -33,7 +33,10 @@ names the same fields the profile will ask for instead of promising a shorter li
 ``bookings_this_week_count`` / ``bookings_next_week_count`` = non-cancelled bookings in that week window.
 ``open_loop_pending_bookings_count`` = future sessions with status ``pending`` (trainer confirm).
 ``open_loop_clients_no_upcoming_count`` = distinct clients in the same ``rel`` scope as CRM (bookings, roster, groups) with no future pending/confirmed session.
-``open_loop_clients_no_telegram_count`` = clients in the same scope as ``list_trainer_clients`` (non-removed bookings, explicit roster, or active/trial group) with ``telegram_id`` null.
+``open_loop_clients_no_telegram_count`` = clients in the same scope as ``list_trainer_clients``
+(non-removed bookings, explicit roster, or active/trial group) with **no reachable bot chat** —
+``sql_client_notify_telegram_id`` is null (own ``telegram_id`` or guardian account link). A child
+profile linked to a parent Telegram must **not** inflate this count or the «Клиенты без бота» hub hint.
 ``fill_slots_invite_candidates_count`` = clients eligible for hub «напомнить о слотах»: CRM scope, Telegram linked,
 no upcoming pending/confirmed session (same filter as ``list_trainer_fill_slots_invite_candidates``).
 ``has_crm_subscription_access`` = active trial/paid row with CRM base (``get_trainer_entitlements``); when false after
@@ -48,6 +51,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import count_trainer_fill_slots_invite_candidates
+from src.application.client_profile_use_cases import sql_client_notify_telegram_id
 from src.application.collective_use_cases import (
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
     get_effective_studio_access_mode,
@@ -495,7 +499,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                 (
                     SELECT COUNT(DISTINCT c.id)::int
                     FROM clients c
-                    WHERE c.telegram_id IS NULL
+                    WHERE """
+            + sql_client_notify_telegram_id("c")
+            + """ IS NULL
                       AND NOT c.is_sandbox
                       AND (
                           EXISTS (

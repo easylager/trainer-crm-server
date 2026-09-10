@@ -12,6 +12,8 @@
         } catch (e) {}
       }
       var initData = tg && tg.initData ? tg.initData : '';
+      var RuText = window.RuText;
+      var genitiveCountRu = RuText && RuText.genitiveCountRu;
 
       /** Max upcoming bookings shown below the hero card. */
       var HUB_UPCOMING_MAX = 5;
@@ -88,16 +90,6 @@
           .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
-      function pluralWeeksHub(n) {
-        n = Number(n) || 0;
-        var abs100 = n % 100;
-        var abs10 = n % 10;
-        if (abs100 >= 11 && abs100 <= 14) return 'недель';
-        if (abs10 === 1) return 'неделя';
-        if (abs10 >= 2 && abs10 <= 4) return 'недели';
-        return 'недель';
-      }
-
       /**
        * TASK-091 (AC-002, AC-005). Лёд города карточкой, а не строкой-примечанием.
        * Зона показывается всегда, когда в городе есть будущий сеанс: это и есть
@@ -155,28 +147,13 @@
         if (anchor && anchor.parentNode === shell) shell.insertBefore(zone, anchor);
       }
 
-      function renderStreakRibbon(activity) {
+      /** Hub streak ribbon hidden for now — copy felt odd and said little to the client. */
+      function renderStreakRibbon(_activity) {
         var el = document.getElementById('hubStreakRibbon');
         if (!el) return;
-        var sw = activity && activity.streak_weeks != null ? Number(activity.streak_weeks) : 0;
-        if (sw < 1) {
-          el.style.display = 'none';
-          el.innerHTML = '';
-          el.onclick = null;
-          return;
-        }
-        var line =
-          sw === 1
-            ? '🔥 Вы на льду уже неделю — так держать!'
-            : '🔥 Вы супер! Уже ' + sw + ' ' + pluralWeeksHub(sw) + ' на льду подряд!';
-        el.style.display = 'flex';
-        el.innerHTML =
-          '<span>' +
-          esc(line) +
-          '</span><span class="hub-streak-ribbon__cta">Вся активность</span>';
-        el.onclick = function () {
-          navigateTo('client-stats');
-        };
+        el.style.display = 'none';
+        el.innerHTML = '';
+        el.onclick = null;
       }
 
       /** PRD E1 parity with trainer hub: server sets hub_in_session inside [start, end) in Minsk wall time. */
@@ -1662,8 +1639,16 @@
           return loadAndRenderDiscovery().then(finishHubInitialLoading, finishHubInitialLoading);
         }
 
-        /* Bootstrap API: single round-trip, then wait for scenario async work */
-        return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson() })
+        /* Bootstrap API: wait for acting profile so X-Profile-Id is set (default child ≠ self). */
+        var profilesReady =
+          window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function'
+            ? ClientProfileSwitcher.init()
+            : Promise.resolve();
+
+        return profilesReady
+          .then(function () {
+            return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson() });
+          })
           .then(jsonOrThrow)
           .then(function(hub) {
             var days = (hub.bookings || {}).days || [];

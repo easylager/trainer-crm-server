@@ -940,9 +940,9 @@
 
           <div id="colInviteCard" style="display:none; margin-top:14px;">
             <div class="col-card-title">Пригласить тренера</div>
-            <p class="col-hint" id="colInviteHint">Одноразовая ссылка в trainer-бот — коллега станет member.</p>
+            <p class="col-hint" id="colInviteHint">Одноразовая ссылка в trainer-бот. Коллега присоединится к команде.</p>
             <button type="button" class="col-issue-btn" id="colIssueInvite">Создать ссылку-приглашение</button>
-            <button type="button" class="col-preview-btn" id="colInviteUpgradeBtn" hidden style="margin-top:10px;">Расширить pool подписки</button>
+            <button type="button" class="col-preview-btn" id="colInviteUpgradeBtn" hidden style="margin-top:10px;">Увеличить лимит подписки</button>
             <div class="col-link-box" id="colInviteBox" style="display:none; margin-top:12px;">
               <div class="col-link-text" id="colInviteLink"></div>
               <button type="button" class="col-copy-btn" id="colCopyInvite">Копировать</button>
@@ -964,7 +964,7 @@
 
       <div id="colMemberArea" style="display:none;">
         <div class="col-card">
-          <p class="col-hero__eyebrow" id="colMemberEyebrow">Member</p>
+          <p class="col-hero__eyebrow" id="colMemberEyebrow">Тренер</p>
           <h2 class="col-member-headline" id="colMemberHeadline">—</h2>
           <p class="col-hint" id="colMemberHint">Ссылка ниже — для ваших клиентов в этой организации.</p>
         </div>
@@ -1059,6 +1059,12 @@
         if (m.display_name) return m.display_name;
         if (m.telegram_username) return '@' + m.telegram_username;
         return 'Тренер #' + m.trainer_id;
+      }
+
+      function collectiveRoleLabel(role) {
+        if (role === 'owner') return 'Владелец';
+        if (role === 'admin') return 'Администратор';
+        return 'Тренер';
       }
 
       function copyText(text, btn, okLabel) {
@@ -1452,8 +1458,8 @@
         });
         var isCenter = studioData && isCenterCatalogMode(studioData);
         var transferHint = isCenter
-          ? 'Передать управление центром тренеру «' + label + '»? Вы останетесь member без admin-доступа.'
-          : 'Передать управление студией тренеру «' + label + '»? Вы останетесь member.';
+          ? 'Передать управление центром тренеру «' + label + '»? Вы останетесь участником без доступа администратора.'
+          : 'Передать управление студией тренеру «' + label + '»? Вы останетесь участником.';
         confirmStudioAction(
           transferHint,
           function() {
@@ -1470,7 +1476,7 @@
               })
               .then(function(d) {
                 if (d && d.studio) renderStudio(d.studio);
-                if (tg && tg.showAlert) tg.showAlert('Студия передана. Теперь вы member.');
+                if (tg && tg.showAlert) tg.showAlert('Студия передана. Теперь вы участник.');
               })
               .catch(showPatchError);
           }
@@ -1689,7 +1695,7 @@
         if (!el) return;
         var canPromote = !!(studioData && studioData.can_promote_admin);
         el.innerHTML = (members || []).map(function(m) {
-          var badge = m.role === 'owner' ? 'owner' : (m.role === 'admin' ? 'admin' : 'member');
+          var badge = collectiveRoleLabel(m.role);
           var badgeClass = m.role === 'owner'
             ? 'col-badge col-badge--owner'
             : (m.role === 'admin' ? 'col-badge col-badge--admin' : 'col-badge');
@@ -2009,7 +2015,7 @@
         }
         var caps = colCapabilities(data);
         var orgLabel = caps.organization_label || 'студия';
-        var rolePrefix = data.role === 'owner' ? 'Owner' : (data.role === 'admin' ? 'Admin' : 'Member');
+        var rolePrefix = collectiveRoleLabel(data.role);
         document.getElementById('colRoleEyebrow').textContent = rolePrefix + ' · ' + orgLabel;
         renderSeatsMeter(data);
         syncCollectiveNavLabels(data);
@@ -2022,7 +2028,7 @@
           if (data.role === 'admin') {
             adminHint.hidden = false;
             adminHint.textContent =
-              'Вы — admin: сетка и бренд доступны. Приглашения, подписка и роли — у owner.';
+              'Вы — администратор: сетка и бренд доступны. Приглашения, подписка и роли — у владельца.';
           } else {
             adminHint.hidden = true;
             adminHint.textContent = '';
@@ -2111,7 +2117,7 @@
           var upgradeBtn = document.getElementById('colInviteUpgradeBtn');
           if (!data.can_invite) {
             document.getElementById('colInviteHint').textContent =
-              'Все места заняты — расширьте pool подписки или отзовите неиспользованные приглашения.';
+              'Все места заняты. Увеличьте лимит подписки или отзовите неиспользованные приглашения.';
             if (upgradeBtn) {
               upgradeBtn.hidden = false;
               upgradeBtn.onclick = function() {
@@ -2121,7 +2127,7 @@
             }
           } else {
             document.getElementById('colInviteHint').textContent =
-              'Одноразовая ссылка в trainer-бот — коллега станет member.';
+              'Одноразовая ссылка в trainer-бот. Коллега присоединится к команде.';
             if (upgradeBtn) upgradeBtn.hidden = true;
           }
         } else if (inviteCardEl) {
@@ -2181,7 +2187,7 @@
             issueBtnEl.textContent = 'Создать ссылку-приглашение';
             issueBtnEl.disabled = false;
             if (String(e.message || '').toLowerCase().indexOf('seats full') >= 0) {
-              showError('Все места заняты — расширьте pool подписки ниже.');
+              showError('Все места заняты. Увеличьте лимит подписки ниже.');
               var upgradeBtn = document.getElementById('colInviteUpgradeBtn');
               if (upgradeBtn) upgradeBtn.hidden = false;
               return;
@@ -2604,12 +2610,12 @@
         el.innerHTML =
           renderSection(
             'Дорожка',
-            'Lane / lane_self — аренда дорожки без персонального тренера центра',
+            'Аренда дорожки без персонального тренера центра',
             laneProducts
           ) +
           renderSection(
             'Тренер центра',
-            'center_coach — персональные занятия с тренером центра',
+            'Персональные занятия с тренером центра',
             coachProducts
           );
         if (selectEl) {

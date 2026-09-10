@@ -8,7 +8,7 @@
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
-  var BOOKINGS_WARM_KEY = 'tcb_bookings_warm_v1';
+  var BOOKINGS_WARM_KEY = 'tcb_bookings_warm_v2';
   var BOOKINGS_WARM_TTL_MS = 90000;
 
   var TAB_ICONS = {
@@ -713,9 +713,17 @@
 
   function writeBookingsWarmCache(payload) {
     try {
+      var profileId = null;
+      if (global.ClientProfileSwitcher && typeof global.ClientProfileSwitcher.getActiveProfileId === 'function') {
+        profileId = global.ClientProfileSwitcher.getActiveProfileId();
+      }
       sessionStorage.setItem(
         BOOKINGS_WARM_KEY,
-        JSON.stringify({ ts: Date.now(), days: payload.days || [] })
+        JSON.stringify({
+          ts: Date.now(),
+          days: payload.days || [],
+          profile_id: profileId != null ? Number(profileId) : null,
+        })
       );
     } catch (e) { /* quota */ }
   }
@@ -729,6 +737,15 @@
         sessionStorage.removeItem(BOOKINGS_WARM_KEY);
         return null;
       }
+      var acting = null;
+      if (global.ClientProfileSwitcher && typeof global.ClientProfileSwitcher.getActiveProfileId === 'function') {
+        acting = global.ClientProfileSwitcher.getActiveProfileId();
+      }
+      // Stale/wrong-profile warm data (often empty from a pre-profile race) must not paint.
+      if (acting != null && parsed.profile_id != null && Number(parsed.profile_id) !== Number(acting)) {
+        sessionStorage.removeItem(BOOKINGS_WARM_KEY);
+        return null;
+      }
       return parsed;
     } catch (e) {
       return null;
@@ -739,10 +756,17 @@
   function prefetchBookingsWarmCache() {
     var initData = getInitData();
     if (!initData) return Promise.resolve();
-    return fetch('/api/webapp/client/bookings', {
-      headers: { 'X-Telegram-Init-Data': initData },
-      cache: 'no-store',
-    })
+    var ready =
+      global.ClientProfileSwitcher && typeof global.ClientProfileSwitcher.init === 'function'
+        ? global.ClientProfileSwitcher.init()
+        : Promise.resolve();
+    return ready
+      .then(function () {
+        return fetch('/api/webapp/client/bookings', {
+          headers: { 'X-Telegram-Init-Data': initData },
+          cache: 'no-store',
+        });
+      })
       .then(function (r) {
         return r.ok ? r.json() : null;
       })
@@ -814,6 +838,8 @@
   function renderEmptyState(container, options) {
     if (!container) return;
     options = options || {};
+    var title = options.title || 'Пока пусто';
+    var fallbackHtml = '<div class="empty">' + escHtml(title) + '</div>';
     var comp = global.MiniAppEmptyState;
     if (!comp || typeof comp.render !== 'function') {
       if (global.console && global.console.error) {
@@ -821,13 +847,12 @@
       }
       // TASK-103: without this, «Мои записи» keeps the skeleton forever when the
       // shared file 404s — the list fetch already succeeded, only the empty paint failed.
-      container.innerHTML =
-        '<div class="empty">' + escHtml(options.title || 'Пока пусто') + '</div>';
+      container.innerHTML = fallbackHtml;
       return;
     }
-    comp.render(container, {
+    var painted = comp.render(container, {
       icon: options.icon || TAB_ICONS.catalog,
-      title: options.title || 'Пока пусто',
+      title: title,
       hint: options.hint,
       ctaLabel: options.ctaLabel,
       ctaPath: options.ctaPath,
@@ -837,6 +862,11 @@
       secondaryPath: options.secondaryPath,
       onSecondary: options.onSecondary,
     });
+    // Same stuck-skeleton failure when CTA is omitted: MiniAppEmptyState returns false
+    // and leaves the container untouched (e.g. empty booking history for a parent profile).
+    if (!painted) {
+      container.innerHTML = fallbackHtml;
+    }
   }
 
   function renderSkeletonList(container, count) {

@@ -5175,7 +5175,7 @@
       function arenaSetupErrorDetail(data, status) {
         if (!data) return 'Не удалось сохранить. Попробуйте ещё раз.';
         if (typeof data.detail === 'string') return data.detail;
-        if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) return data.detail[0].msg;
+        if (Array.isArray(data.detail)) return 'Проверьте заполненные поля и попробуйте снова.';
         if (status === 403) return 'Сессия устарела — перезапустите мини-приложение.';
         return 'Не удалось сохранить. Попробуйте ещё раз.';
       }

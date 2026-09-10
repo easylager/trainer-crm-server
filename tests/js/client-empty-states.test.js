@@ -212,4 +212,20 @@ describe('подключение и отсутствие рецидивов (TAS
     assert.ok(idx >= 0, 'ожидали лог про незагруженный компонент');
     assert.match(shell.slice(idx, idx + 500), /container\.innerHTML/);
   });
+
+  it('оболочка снимает скелетон, если empty state отказался рисовать (нет CTA)', () => {
+    const shell = read('mini-app-client-shell.js');
+    assert.match(shell, /if\s*\(\s*!painted\s*\)/);
+    assert.match(shell, /Same stuck-skeleton failure when CTA is omitted/);
+  });
+
+  it('история записей даёт выход из пустого состояния (иначе скелетон навсегда)', () => {
+    const html = read('client-bookings.html');
+    const idx = html.indexOf('Пока нет прошедших записей');
+    assert.ok(idx >= 0);
+    const window = html.slice(idx, idx + 700);
+    assert.match(window, /ctaLabel/);
+    assert.match(window, /К предстоящим|Найти тренера/);
+    assert.match(window, /onCta|ctaPath/);
+  });
 });

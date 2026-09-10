@@ -4,7 +4,7 @@ Prefixes: client bot vs trainer bot.
 
 Voice (UX):
 - Client bot: «Вы», нейтрально-дружелюбно; без канцелярита; CTA ведут в меню («Тренеры и запись», «Мои записи»), не в несуществующие команды.
-- Trainer bot: «ты», коротко и по делу; пуши: заголовок + суть + CTA «Обзор» (кнопка слева от поля ввода).
+- Trainer bot: «Вы», коротко и по делу; пуши: заголовок + суть + CTA «Обзор» (кнопка слева от поля ввода).
 - Кнопки «назад»/пагинация: префикс ◀️ / ▶️ где уместно; не дублировать десяток эмодзи в одном абзаце.
 - Не хардкодить тексты в handlers — только через константы здесь.
 """
@@ -30,7 +30,7 @@ CLIENT_FALLBACK = "Нажмите кнопку <b>Главная</b> слева 
 
 # Bot-mediated relay when trainer ↔ client can't use native Telegram DM
 CLIENT_RELAY_REPLY_PROMPT = "Напишите здесь — тренер увидит сообщение сразу."
-TRAINER_RELAY_REPLY_PROMPT = "Напиши здесь — отправим клиенту."
+TRAINER_RELAY_REPLY_PROMPT = "Напишите здесь — отправим клиенту."
 TRAINER_BOOKING_RELAY_SELF_DISABLED = "Эта кнопка выключена в настройках сервера."
 TRAINER_BOOKING_RELAY_SELF_NOT_SELF_CLIENT = (
     "Кнопка только для записи, где клиент привязан к вашему же Telegram (локальный тест)."
@@ -337,9 +337,9 @@ CLIENT_PICK_TRAINER_DONE = "Тренер выбран. Нажмите «Запи
 
 # --- Trainer bot: client requests (list = Новые / В работе, tap → detail) ---
 TRAINER_REQUESTS_TITLE = "📋 <b>Заявки клиентов</b>"
-TRAINER_REQUESTS_FILTER_LINE = "По твоему городу и услугам из профиля."
-TRAINER_REQUESTS_EMPTY = "Пока нет заявок по твоему профилю (город + услуги). Заполни профиль на сайте."
-TRAINER_REQUESTS_SECTION_NEW = "📥 <b>Новые</b> — откликнись, клиент увидит тебя в списке."
+TRAINER_REQUESTS_FILTER_LINE = "По вашему городу и услугам из профиля."
+TRAINER_REQUESTS_EMPTY = "Пока нет заявок по вашему профилю (город + услуги). Заполните профиль на сайте."
+TRAINER_REQUESTS_SECTION_NEW = "📥 <b>Новые</b> — откликнитесь, клиент увидит вас в списке."
 TRAINER_REQUESTS_SECTION_IN_PROGRESS = "✓ <b>В работе</b> — отклик есть, можно записать клиента на слот."
 TRAINER_REQUESTS_SECTION_NEW_EMPTY = "📥 Новых заявок нет."
 TRAINER_REQUESTS_SECTION_IN_PROGRESS_EMPTY = "✓ В работе заявок нет."
@@ -349,7 +349,7 @@ TRAINER_REQUESTS_PAGE_NEXT = "▶️ Далее"
 TRAINER_REQUEST_DETAIL_HEAD = "<b>{city}</b>  ·  <b>{service}</b>"
 TRAINER_REQUEST_DETAIL_COMMENT = "💬 Комментарий клиента: {comment}"
 TRAINER_REQUEST_DETAIL_RESPONDED_HINT = (
-    "Ты уже откликнулся на эту заявку. Клиент видит тебя в списке откликнувшихся."
+    "Вы уже откликнулись на эту заявку. Клиент видит вас в списке откликнувшихся."
 )
 TRAINER_REQUEST_ROW = "{index}. {city}, {service}. {comment}"
 TRAINER_REQUEST_ROW_NO_COMMENT = "{index}. {city}, {service}"
@@ -362,12 +362,12 @@ TRAINER_REQUESTS_BACK_TO_LIST = "◀️ К списку заявок"
 TRAINER_REQUEST_WRITE_CLIENT = "✉️ Написать клиенту"
 TRAINER_REQUEST_BOOK_CLIENT = "Записать клиента"
 TRAINER_REQUEST_REMIND_WHEN_SLOTS = "Напомнить когда появятся слоты"
-TRAINER_REQUEST_REMIND_SLOTS_SET = "Напомним, когда появятся свободные слоты — запиши клиента по этой заявке."
-TRAINER_REQUEST_BOOK_CHOOSE_SLOT = "Выбери слот для записи клиента по заявке:"
+TRAINER_REQUEST_REMIND_SLOTS_SET = "Напомним, когда появятся свободные слоты — запишите клиента по этой заявке."
+TRAINER_REQUEST_BOOK_CHOOSE_SLOT = "Выберите слот для записи клиента по заявке:"
 TRAINER_REQUEST_BOOK_SUCCESS = "Клиент записан. Заявка закрыта, клиенту отправлено уведомление."
 TRAINER_REQUEST_REMIND_HAS_SLOTS = (
     "<b>Заявка ждёт записи</b>\n\n"
-    "По заявке есть свободные слоты — запиши клиента или напиши ему."
+    "По заявке есть свободные слоты — запишите клиента или напишите ему."
 )
 TRAINER_PENDING_BOOKING_REMINDER = (
     "📩 <b>Заявки ждут действий</b>\n\n"
@@ -579,9 +579,9 @@ def format_client_booking_rescheduled_html(
     return "".join(parts)
 
 
-TRAINER_RESPOND_SUCCESS = "Отклик отправлен. Клиент увидит тебя в списке и сможет записаться или написать."
+TRAINER_RESPOND_SUCCESS = "Отклик отправлен. Клиент увидит вас в списке и сможет записаться или написать."
 TRAINER_RESPOND_PROMPT_COMMENT = (
-    "Напиши комментарий для клиента (необязательно).\n\n"
+    "Напишите комментарий для клиента (необязательно).\n\n"
     "Например: <i>Когда появится слот на это время — запишу вас</i> или <i>Могу предложить Ср 18:00, Пт 19:00</i>.\n\n"
     "Клиент увидит это в откликах. Или нажми «Отправить без комментария»."
 )
@@ -612,7 +612,7 @@ TRAINER_DIGEST_OWED_LINE_REQUESTS_ONLY = (
     "💬 Ждут ответа: <b>{count}</b> {word} в каталоге."
 )
 TRAINER_DIGEST_OWED_LINE_CONFIRMS_ONLY = (
-    "💬 Ждут твоего решения: <b>{count}</b> {word} на подтверждение."
+    "💬 Ждут вашего решения: <b>{count}</b> {word} на подтверждение."
 )
 TRAINER_DIGEST_OWED_LINE_BOTH = (
     "💬 Ждут ответа: <b>{req_count}</b> {req_word} в каталоге "
@@ -622,7 +622,7 @@ TRAINER_DIGEST_OWED_LINE_BOTH = (
 # Morning recommendation — exactly one 👉 line, picked by priority ladder in
 # trainer_digest_format._pick_morning_recommendation. Goal: close the open loop.
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_OPENS_DAY = (
-    "👉 Начни день с {name} — у клиента это первое занятие. "
+    "👉 Начните день с {name} — у клиента это первое занятие. "
     "Первые минуты знакомства часто решают, вернётся ли человек."
 )
 TRAINER_DIGEST_MORNING_REC_FIRST_TIMER_LATER = (
@@ -647,7 +647,7 @@ TRAINER_DIGEST_MORNING_LITE_HEADER = (
     "в каталоге ждут ответа."
 )
 TRAINER_DIGEST_MORNING_LITE_REC = (
-    "👉 Ответ в первый час обычно решает, выберет клиент тебя или соседа."
+    "👉 Ответ в первый час обычно решает, выберет клиент вас или другого тренера."
 )
 
 # --- Sunday digest — perspective + ledger.
@@ -682,24 +682,24 @@ TRAINER_DIGEST_WEEKLY_REC_QUIET = (
     "так чаще возвращаются к регулярным тренировкам."
 )
 TRAINER_DIGEST_WEEKLY_REC_ALL_GOOD = (
-    "👉 Неделя собрана. Воскресенье — твоё."
+    "👉 Неделя собрана. Воскресенье — ваше."
 )
 
 # Drought ladder (src/application/trainer_digest_use_cases.py::_weekly_drought_block).
 # Appears before the weekly recommendation when triggered; case 7 = silence.
 TRAINER_DIGEST_DROUGHT_OPEN_REQUESTS = (
-    "💬 На неделе тихо — но тебя ждут <b>{count}</b> {word} в каталоге. "
+    "💬 На неделе тихо — но вас ждут <b>{count}</b> {word} в каталоге. "
     "Ответ в первый час обычно решает."
 )
 TRAINER_DIGEST_DROUGHT_CATALOG_HIDDEN = (
-    "👁 На неделе пусто — и тебя сейчас не видно в каталоге. Включим обратно?"
+    "👁 На неделе пусто — и вас сейчас не видно в каталоге. Включить профиль обратно?"
 )
 TRAINER_DIGEST_DROUGHT_NO_SLOTS = (
     "📭 Клиенту сейчас не из чего выбрать: свободных окон нет на ближайшие "
     "<b>{horizon_days}</b> дней. Добавим несколько?"
 )
 TRAINER_DIGEST_DROUGHT_DORMANT = (
-    "💭 На неделе пусто. {names} давно не появлялись — может, написать им первым?"
+    "💭 На неделе пусто. {names} давно не появлялись — возможно, стоит написать им?"
 )
 TRAINER_DIGEST_DROUGHT_PROFILE_INCOMPLETE = (
     "✏️ Сейчас затишье — хороший момент довести профиль. "
@@ -2361,7 +2361,7 @@ TRAINER_REPEAT_BOOKING_PRICE_TIER = (
     "Для этой услуги несколько тарифов — запишите клиента из расписания в мини-приложении."
 )
 TRAINER_REPEAT_BOOKING_SCHEDULE_ERROR = "Не удалось создать слот: {detail}"
-TRAINER_FEEDBACK_PROMPT = "Напиши отзыв о занятии (необязательно, можно коротко):"
+TRAINER_FEEDBACK_PROMPT = "Напишите отзыв о занятии (необязательно, можно коротко):"
 TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
 TRAINER_START_WELCOME = (
     "👋 Привет!\n\n"
@@ -2395,19 +2395,19 @@ TRAINER_AFTER_LINK_STEP_DEACTIVATED = (
 )
 # Кнопка под первым сообщением (Web App → страница быстрой настройки).
 TRAINER_ONBOARDING_START_BUTTON = "Начать"
-TRAINER_LINK_INVALID = "Ссылка недействительна или уже использована. Получи новую на сайте после оплаты."
+TRAINER_LINK_INVALID = "Ссылка недействительна или уже использована. Получите новую на сайте после оплаты."
 TRAINER_LINK_TELEGRAM_CONFLICT = (
     "Этот Telegram уже привязан к <b>другому</b> профилю тренера в системе.\n\n"
-    "Если ты уже работаешь в боте — просто открой чат и нажми «Обзор» (команда /start без ссылки). "
-    "Если это ошибка — напиши в поддержку (кнопка ниже)."
+    "Если вы уже работаете в боте — просто откройте чат и нажмите «Обзор» (команда /start без ссылки). "
+    "Если это ошибка — напишите в поддержку (кнопка ниже)."
 )
 # После первой привязки по ссылке: активируется полный доступ на пробный период.
 TRAINER_WELCOME_TRIAL_ACTIVATED = (
     "🎁 <b>Пробный период — {tier_name}</b>\n\n"
-    "До <b>{expires_date}</b> у тебя открыт полный доступ ко всем модулям платформы: "
+    "До <b>{expires_date}</b> у вас открыт полный доступ ко всем модулям платформы: "
     "CRM, онлайн-запись, абонементы, сертификаты, аналитика и группы.\n\n"
     "Когда пробный период закончится, собери свой план в разделе "
-    "<b>«Подписка»</b> в «Обзор» — оставь только то, что реально используешь."
+    "<b>«Подписка»</b> в «Обзор» — оставьте только то, что действительно используете."
 )
 TRAINER_WELCOME_PAID_GRANT_ACTIVATED = (
     "💳 <b>Подписка активирована — {label}</b>\n\n"
@@ -2417,36 +2417,36 @@ TRAINER_WELCOME_PAID_GRANT_ACTIVATED = (
 TRAINER_FALLBACK = "Откройте «Обзор» слева от поля ввода — там все разделы. Помощь: /guide"
 
 # Trainer: errors and hints
-TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обнови «Моё расписание» в приложении."
-TRAINER_ERROR_CANCEL_FAILED = "Не удалось отменить запись (уже отменена или не найдена). Обнови расписание в приложении."
+TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обновите «Моё расписание» в приложении."
+TRAINER_ERROR_CANCEL_FAILED = "Не удалось отменить запись (уже отменена или не найдена). Обновите расписание в приложении."
 TRAINER_ERROR_BOOKING_CLOSED_OR_NOT_FOUND = "Запись не найдена или уже закрыта. Открой «Моё расписание» в приложении снова."
-TRAINER_ERROR_FEEDBACK_SAVE_FAILED = "Не удалось сохранить отзыв. Попробуй ещё раз или пропусти."
-TRAINER_ERROR_RESPOND_FAILED = "Не удалось откликнуться (заявка уже закрыта или отклик уже был). Обнови «Заявки клиентов»."
+TRAINER_ERROR_FEEDBACK_SAVE_FAILED = "Не удалось сохранить отзыв. Попробуйте ещё раз или пропустите."
+TRAINER_ERROR_RESPOND_FAILED = "Не удалось откликнуться (заявка уже закрыта или отклик уже был). Обновите «Заявки клиентов»."
 TRAINER_ERROR_NO_SERVICES = (
-    "У тебя не указана ни одна услуга. Добавь услугу в профиле в мини-приложении или в личном кабинете на сайте."
+    "У вас не указана ни одна услуга. Добавьте услугу в профиле в мини-приложении или в личном кабинете на сайте."
 )
 TRAINER_ERROR_REQUEST_GONE = (
     "Заявка не найдена или уже закрыта. Открой «Заявки клиентов» заново."
 )
 TRAINER_REQUEST_BOOK_NO_SLOTS_TWO_WEEKS = (
-    "Нет свободных слотов на ближайшие 2 недели. Добавь слоты в разделе «Расписание»."
+    "Нет свободных слотов на ближайшие 2 недели. Добавьте слоты в разделе «Расписание»."
 )
 TRAINER_ERROR_REQUEST_BOOK_PAYLOAD = (
-    "Не удалось обработать выбор. Открой список заявок и попробуй снова."
+    "Не удалось обработать выбор. Откройте список заявок и попробуйте снова."
 )
-TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT = "Не удалось обработать выбор. Попробуй снова."
+TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT = "Не удалось обработать выбор. Попробуйте снова."
 TRAINER_ERROR_SLOT_TAKEN_FOR_REQUEST = (
-    "Слот уже занят или недоступен. Выбери другой слот из списка."
+    "Слот уже занят или недоступен. Выберите другой слот из списка."
 )
 
 # Trainer: Web App intros (HTTPS) — informal «ты» like TRAINER_START_WELCOME
 TRAINER_EDITOR_OPEN_HINT = (
-    "Открой <b>«Обзор»</b> слева от поля ввода и зайди в расписание — "
+    "Откройте <b>«Обзор»</b> слева от поля ввода и перейдите в расписание — "
     "там шаблон недели, календарь слотов и применение на неделю. "
     "По клику на свободный слот можно записать клиента."
 )
 TRAINER_BOOKINGS_OPEN_WEBAPP = (
-    "Открой <b>«Моё расписание»</b> — занятые слоты с деталями записи: подтвердить, отменить, провести занятие, написать клиенту."
+    "Откройте <b>«Моё расписание»</b> — занятые слоты с деталями записи: подтвердить, отменить, провести занятие, написать клиенту."
 )
 # When WEBAPP_BASE_URL is not HTTPS: chat list only; full «slots + booking actions» UI is in Mini App.
 TRAINER_BOOKINGS_CHAT_MODE_INTRO = (
@@ -2468,13 +2468,13 @@ TRAINER_CLIENTS_HTTPS_REQUIRED = (
     "Раздел «Мои клиенты» доступен при HTTPS (нужен WEBAPP_BASE_URL в продакшене)."
 )
 TRAINER_CLIENTS_OPEN_WEBAPP = (
-    "Открой список клиентов с записями: там видно телефон и последнее занятие."
+    "Откройте список клиентов с записями: там видны телефон и последнее занятие."
 )
 TRAINER_REQUESTS_OPEN_WEBAPP = (
-    "Открой «Заявки клиентов» — там можно откликнуться, записать клиента на слот или отклонить заявку."
+    "Откройте «Заявки клиентов» — там можно откликнуться, записать клиента на слот или отклонить заявку."
 )
 TRAINER_PASSES_INTRO_WEBAPP = (
-    "Настрой абонементы (N занятий за цену) и сертификаты (номинал на сумму или «любая сумма»). "
+    "Настройте абонементы (N занятий за цену) и сертификаты (номинал на сумму или «любая сумма»). "
     "Клиенты видят это в карточке тренера."
 )
 TRAINER_PASSES_HTTPS_REQUIRED = (
@@ -2518,7 +2518,7 @@ TRAINER_INVITE_ERR_NO_CLIENT_BOT_USERNAME = (
 )
 TRAINER_INVITE_ERR_PROFILE_INCOMPLETE = (
     "Не получилось собрать ссылку: в профиле нужны <b>город</b> и хотя бы одна <b>услуга</b>. "
-    "Укажи в профиле в мини-приложении или в кабинете на сайте и снова нажми «Пригласить клиента»."
+    "Укажите в профиле в мини-приложении или в кабинете на сайте и снова нажмите «Пригласить клиента»."
 )
 
 # Trainer: access gate.
@@ -2653,9 +2653,9 @@ TRAINER_SCHEDULE_TITLE = (
     "• <b>Шаблон</b> — образец недели (день + время). Его можно менять в любой момент.\n"
     "• <b>Недели</b> — текущая и следующая. Слоты на неделю можно добавлять вручную по дням или применить шаблон.\n\n"
     "«Применить на неделю из шаблона» <b>полностью заменяет</b> расписание на выбранную неделю: все свободные слоты удаляются, создаются заново из шаблона. Занятые слоты не трогаем. Перед применением будет запрос подтверждения.\n\n"
-    "<b>Твой шаблон:</b>"
+    "<b>Ваш шаблон:</b>"
 )
-TRAINER_SCHEDULE_EMPTY = "Шаблон пуст. Ниже добавь слоты в шаблон или сразу на выбранную неделю."
+TRAINER_SCHEDULE_EMPTY = "Шаблон пуст. Ниже добавьте слоты в шаблон или сразу на выбранную неделю."
 TRAINER_SCHEDULE_ROW = "{day} {time} — {duration} мин"
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
@@ -2716,27 +2716,27 @@ TRAINER_BUTTON_MY_SLOTS = "📋 Моё расписание"
 # Text for the main menu button (left of input) when it opens Web App schedule
 TRAINER_MENU_SCHEDULE_WEBAPP = "Расписание"
 # Short message when /schedule or menu opens Web App (one button below)
-TRAINER_SCHEDULE_OPEN_WEBAPP = "📋 Нажми кнопку ниже, чтобы открыть расписание в приложении."
+TRAINER_SCHEDULE_OPEN_WEBAPP = "📋 Нажмите кнопку ниже, чтобы открыть расписание в приложении."
 TRAINER_BUTTON_MY_BOOKINGS = "📋 Моё расписание"
 TRAINER_BUTTON_BACK = "Назад"
 TRAINER_BUTTON_BACK_TO_SCHEDULE = "◀️ Расписание"
 TRAINER_BUTTON_BACK_TO_MENU = "◀️ В главное меню"
 TRAINER_BUTTON_CLIENTS = "👥 Мои клиенты"
-TRAINER_SCHEDULE_CHOOSE_WEEK = "На какую неделю добавляешь слоты?"
+TRAINER_SCHEDULE_CHOOSE_WEEK = "На какую неделю добавить слоты?"
 TRAINER_SCHEDULE_THIS_WEEK = "Эта неделя ({start}–{end})"
 TRAINER_SCHEDULE_NEXT_WEEK = "Следующая неделя ({start}–{end})"
-TRAINER_SCHEDULE_CHOOSE_DAY = "Выбери день недели:"
-TRAINER_SCHEDULE_CHOOSE_TIME = "Отметь все нужные часы (повторное нажатие снимает отметку), затем «Готово»:"
+TRAINER_SCHEDULE_CHOOSE_DAY = "Выберите день недели:"
+TRAINER_SCHEDULE_CHOOSE_TIME = "Отметьте все нужные часы (повторное нажатие снимает отметку), затем «Готово»:"
 TRAINER_SCHEDULE_CHOOSE_DURATION = "Длительность занятия (для всех выбранных слотов):"
 TRAINER_SCHEDULE_DONE = "Готово ({count})"
 TRAINER_SCHEDULE_CANCEL_ADD = "Отмена"
-TRAINER_SCHEDULE_SELECT_AT_LEAST_ONE = "Выбери хотя бы один час."
+TRAINER_SCHEDULE_SELECT_AT_LEAST_ONE = "Выберите хотя бы один час."
 TRAINER_SCHEDULE_BOOKED_SLOT_CANNOT_REMOVE = "Занятой слот нельзя убрать из расписания."
 TRAINER_SCHEDULE_ADDED = "Слот добавлен в шаблон."
 TRAINER_SCHEDULE_ADDED_MULTI = "В шаблон добавлено слотов: {count}."
 TRAINER_SCHEDULE_DAY_CLEARED = "Слоты на этот день в шаблоне убраны."
 TRAINER_SCHEDULE_DAY_CLEARED_WEEK = "Слоты на этот день убраны. Добавить слоты на другой день?"
-TRAINER_SCHEDULE_TEMPLATE_CHOOSE_ANOTHER_DAY = "Выбери другой день или вернись в расписание."
+TRAINER_SCHEDULE_TEMPLATE_CHOOSE_ANOTHER_DAY = "Выберите другой день или вернитесь в расписание."
 TRAINER_SCHEDULE_ADDED_TO_WEEK = "На выбранную неделю добавлено слотов: {count}."
 TRAINER_SCHEDULE_ADDED_TO_WEEK_MORE = "На неделю добавлено слотов: {count}. Добавить слоты на другой день?"
 TRAINER_SCHEDULE_GENERATED = "Расписание на неделю заменено. Создано слотов: {count}. Посмотреть: «Моё расписание»."
@@ -3631,7 +3631,7 @@ TRAINER_SUBSCRIPTION_WITHOUT_TIER = (
     "Чтобы вернуть ведение записей и онлайн-запись, выберите тариф ниже — в своём темпе."
 )
 TRAINER_SUBSCRIPTION_ACTIVE = (
-    "Подписка на платформу активна до <b>{expires_date}</b>. Ты в каталоге.\n\n"
+    "Подписка на платформу активна до <b>{expires_date}</b>. Вы в каталоге.\n\n"
     "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 мес, год или 1,5 года."
 )
 TRAINER_SUBSCRIPTION_EXPIRED = (
@@ -4072,7 +4072,7 @@ ADMIN_COLLECTIVE_INVOICE_CONFIRMED = (
 )
 
 TRAINER_COLLECTIVE_CLAIM_SUCCESS = (
-    "🏢 Студия <b>{name}</b> активирована — вы owner.\n\n"
+    "🏢 Студия <b>{name}</b> активирована — вы владелец.\n\n"
     "Клиентская ссылка и приглашения команды — в приложении, раздел «Студия»."
 )
 TRAINER_COLLECTIVE_CLAIM_INVALID = "Ссылка активации студии недействительна или уже использована."
@@ -4086,7 +4086,7 @@ TRAINER_COLLECTIVE_INVITE_SUCCESS = (
 )
 TRAINER_COLLECTIVE_INVITE_INVALID = "Ссылка приглашения недействительна или уже использована."
 TRAINER_COLLECTIVE_INVITE_ALREADY = "Вы уже состоите в другой студии."
-TRAINER_COLLECTIVE_INVITE_SEATS_FULL = "В студии заняты все места — попросите owner расширить команду."
+TRAINER_COLLECTIVE_INVITE_SEATS_FULL = "В студии заняты все места — попросите владельца расширить команду."
 TRAINER_COLLECTIVE_SESSION_BOOKING_PENDING = (
     "📥 <b>Заявка в центр «{collective_name}»</b>\n"
     "Клиент: {client_name}\n"

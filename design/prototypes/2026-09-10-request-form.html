@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Request form — type calm</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --tg-theme-bg-color: #0a1014;
+      --tg-theme-secondary-bg-color: #151c22;
+      --tg-theme-text-color: #f2f7fa;
+      --tg-theme-hint-color: #8a9aab;
+      --tg-theme-button-color: #2ec4c6;
+      --tg-theme-button-text-color: #0a1014;
+      --tg-theme-section-bg-color: #1a2229;
+      --app-font-sans: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --app-text-caption: 12px;
+      --app-text-body: 14px;
+      --app-text-lead: 17px;
+      --app-text-title: 20px;
+      --app-text-headline: 24px;
+      --app-weight-regular: 400;
+      --app-weight-medium: 500;
+      --app-weight-semibold: 600;
+      --app-radius-md: 12px;
+      --app-space-2: 8px;
+      --app-space-3: 12px;
+      --app-space-4: 16px;
+      --app-space-5: 20px;
+      --app-space-6: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: #05080a;
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    .page-head {
+      max-width: 820px;
+      margin: 0 auto 20px;
+    }
+    .page-head h1 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .page-head p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #9aabbb;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .phone {
+      background: var(--tg-theme-bg-color);
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      min-height: 520px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chrome {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--tg-theme-section-bg-color);
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+    }
+    .chrome__title {
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
+    }
+    .chrome__back {
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-medium);
+      color: var(--tg-theme-text-color);
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 7px 12px;
+    }
+
+    .pane {
+      padding: 16px 16px 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9aabbb;
+    }
+    .tag--bad { color: #ff8f8f; }
+    .tag--good { color: #6fd6a8; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: auto;
+      padding: 14px 18px;
+      border: 0;
+      border-radius: 0;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      font: inherit;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-semibold);
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+      cursor: pointer;
+    }
+
+    /* ——— NOW (chaos) ——— */
+    .now .request-sheet__title {
+      margin: 0 0 8px;
+      font-size: var(--app-text-headline);
+      font-weight: var(--app-weight-semibold);
+      line-height: 1.3;
+      letter-spacing: -0.02em;
+    }
+    .now .request-sheet__note {
+      margin: 0 0 22px;
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .now .request-sheet__label {
+      display: block;
+      margin: 0 0 6px;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+    }
+    .now .request-sheet__hint {
+      margin: 0 0 10px;
+      font-size: var(--app-text-caption);
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .now textarea {
+      width: 100%;
+      min-height: 128px;
+      margin-bottom: 20px;
+      padding: 14px 16px;
+      border-radius: var(--app-radius-md);
+      border: 1px solid var(--tg-theme-button-color);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-hint-color);
+      font: inherit;
+      font-size: var(--app-text-lead);
+      line-height: 1.45;
+      resize: vertical;
+    }
+
+    /* ——— PROPOSED ——— */
+    .next .request-sheet__title {
+      margin: 0 0 6px;
+      font-size: var(--app-text-title);
+      font-weight: var(--app-weight-semibold);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .next .request-sheet__note {
+      margin: 0 0 20px;
+      font-size: var(--app-text-caption);
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .next .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex: 1;
+    }
+    .next .request-sheet__label {
+      margin: 0;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-medium);
+      color: var(--tg-theme-hint-color);
+    }
+    .next textarea {
+      width: 100%;
+      flex: 1;
+      min-height: 140px;
+      padding: 14px 16px;
+      border-radius: var(--app-radius-md);
+      border: 1px solid rgba(255,255,255,0.16);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: var(--app-text-body);
+      line-height: 1.45;
+      resize: vertical;
+    }
+    .next textarea:focus {
+      outline: none;
+      border-color: var(--tg-theme-button-color);
+    }
+    .next textarea::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+
+    .notes {
+      max-width: 820px;
+      margin: 24px auto 0;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: #12181e;
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px;
+      line-height: 1.5;
+      color: #b7c5d2;
+    }
+    .notes strong { color: #e8f0f6; font-weight: 600; }
+    .notes ul { margin: 8px 0 0; padding-left: 1.2em; }
+  </style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>Форма заявки — спокойная иерархия</h1>
+    <p>Слева как сейчас. Справа предложение: три роли текста вместо пяти, подсказка уезжает в placeholder.</p>
+  </div>
+
+  <div class="grid">
+    <!-- NOW -->
+    <section class="phone now" aria-label="Сейчас">
+      <div class="chrome">
+        <div class="chrome__title">Заявка</div>
+        <button type="button" class="chrome__back">Назад</button>
+      </div>
+      <div class="pane">
+        <div class="tag tag--bad">Сейчас · 5 ролей текста</div>
+        <h2 class="request-sheet__title">Для Максима Василенко</h2>
+        <p class="request-sheet__note">Сообщение уйдёт только ему.</p>
+        <label class="request-sheet__label" for="c1">Комментарий</label>
+        <p class="request-sheet__hint">Когда удобно, возраст, что хотите получить.</p>
+        <textarea id="c1" readonly>Пн и Ср после 18:00, ребёнку 8 лет</textarea>
+        <button type="button" class="btn">Отправить заявку</button>
+      </div>
+    </section>
+
+    <!-- NEXT -->
+    <section class="phone next" aria-label="Предложение">
+      <div class="chrome">
+        <div class="chrome__title">Заявка</div>
+        <button type="button" class="chrome__back">Назад</button>
+      </div>
+      <div class="pane">
+        <div class="tag tag--good">Предложение · 3 роли</div>
+        <h2 class="request-sheet__title">Для Максима Василенко</h2>
+        <p class="request-sheet__note">Сообщение уйдёт только ему.</p>
+        <div class="field">
+          <label class="request-sheet__label" for="c2">Комментарий</label>
+          <textarea id="c2" placeholder="Когда удобно, возраст, что хотите получить">Пн и Ср после 18:00, ребёнку 8 лет</textarea>
+        </div>
+        <button type="button" class="btn">Отправить заявку</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <strong>Что меняется</strong>
+    <ul>
+      <li>Заголовок: <code>headline 24</code> → <code>title 20</code> — chrome уже говорит «Заявка», имя не должно кричать.</li>
+      <li>Подзаголовок: <code>body 14</code> → <code>caption 12</code> — одна тихая строка про приватность.</li>
+      <li>Убираем отдельный hint под лейблом — он дублирует placeholder и даёт второй caption рядом с лейблом.</li>
+      <li>Поле: <code>lead 17</code> → <code>body 14</code>, чтобы набор не был крупнее заголовка.</li>
+      <li>Лейбл «Комментарий» остаётся, но как мета (hint-цвет, medium), не как ещё один жирный заголовок.</li>
+    </ul>
+  </div>
+</body>
+</html>

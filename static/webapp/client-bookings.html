@@ -15,13 +15,13 @@
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
   <script src="mini-app-telegram-chrome.js?v=202609031"></script>
-  <script src="client-profile-switcher.js?v=202609048"></script>
+  <script src="client-profile-switcher.js?v=202609110"></script>
   <link rel="stylesheet" href="mini-app-client-bookings.css?v=202609031" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609031" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609031" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609031" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
-  <script src="mini-app-client-shell.js?v=202609085"></script>
+  <script src="mini-app-client-shell.js?v=202609111"></script>
   <script>
     (function () {
       try {
@@ -366,14 +366,23 @@
         });
       }
 
+      function ensureProfilesReady() {
+        if (window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function') {
+          return ClientProfileSwitcher.init();
+        }
+        return Promise.resolve();
+      }
+
       function startBookingsFetch() {
         if (!bookingsFetchPromise) {
-          bookingsFetchPromise = getJson(apiUrl('/client/bookings'));
+          // Must wait for profile switcher: without X-Profile-Id the server resolves to
+          // self, while create-booking uses the default child — empty list after success.
+          bookingsFetchPromise = ensureProfilesReady().then(function () {
+            return getJson(apiUrl('/client/bookings'));
+          });
         }
         return bookingsFetchPromise;
       }
-
-      startBookingsFetch();
 
       function postJson(url, body) {
         return fetch(url, {
@@ -876,7 +885,10 @@
         state.historyLoading = true;
         var qs = 'offset=' + state.historyOffset + '&limit=20';
         if (state.trainerFilter != null) qs += '&trainer_id=' + state.trainerFilter;
-        return getJson(apiUrl('/client/bookings/history?' + qs))
+        return ensureProfilesReady()
+          .then(function () {
+            return getJson(apiUrl('/client/bookings/history?' + qs));
+          })
           .then(function(data) {
             var newDays = data.days || [];
             var count = 0;
@@ -910,12 +922,32 @@
         var listEl = document.getElementById('listContent');
         var days = state.historyDays;
         if (!days.length) {
+          // MiniAppEmptyState refuses to paint without a CTA — missing exit left the
+          // history skeleton up forever for profiles with no past bookings (e.g. parent).
           if (window.ClientShell && typeof window.ClientShell.renderEmptyState === 'function') {
-            window.ClientShell.renderEmptyState(listEl, {
-              icon: window.ClientShell.TAB_ICONS.bookings,
-              title: state.trainerFilter != null ? 'Нет записей с выбранным тренером' : 'Пока нет прошедших записей',
-              hint: state.trainerFilter != null ? '' : 'Здесь появятся ваши тренировки после первого посещения.',
-            });
+            if (state.trainerFilter != null) {
+              window.ClientShell.renderEmptyState(listEl, {
+                icon: window.ClientShell.TAB_ICONS.bookings,
+                title: 'Нет записей с выбранным тренером',
+                hint: 'Снимите фильтр или выберите другого тренера.',
+                ctaLabel: 'Показать всех',
+                onCta: function() {
+                  state.trainerFilter = null;
+                  renderTrainerChips();
+                  loadHistory(true);
+                },
+              });
+            } else {
+              window.ClientShell.renderEmptyState(listEl, {
+                icon: window.ClientShell.TAB_ICONS.bookings,
+                title: 'Пока нет прошедших записей',
+                hint: 'Здесь появятся ваши тренировки после первого посещения.',
+                ctaLabel: 'К предстоящим',
+                onCta: function() {
+                  switchMode('upcoming');
+                },
+              });
+            }
           } else {
             listEl.innerHTML = '<div class="empty">Пока нет прошедших записей.</div>';
           }
@@ -1153,23 +1185,23 @@
         } else {
           showScreen('screenList');
         }
+        // Warm cache may be empty from a pre-profile race — only paint non-empty warm
+        // data, and only when it matches the acting profile (see ClientShell warm key).
         var warm =
           window.ClientShell && window.ClientShell.readBookingsWarmCache
             ? window.ClientShell.readBookingsWarmCache()
             : null;
-        if (warm && Array.isArray(warm.days)) {
+        if (warm && Array.isArray(warm.days) && warm.days.length > 0) {
           state.days = warm.days;
           bookingsWarmFingerprint = fingerprintBookingsDays(warm.days);
           bookingsHydratedFromWarm = true;
-          if (warm.days.length === 0) {
-            renderEmptyBookingsList();
-          } else {
-            if (ctx.openBookingId == null) {
-              renderAllBookings();
-              document.body.classList.add('bookings-body--revealed');
-            }
-            tryOpenBookingFromQuery();
+          if (ctx.openBookingId == null) {
+            renderAllBookings();
+            document.body.classList.add('bookings-body--revealed');
           }
+          tryOpenBookingFromQuery();
+        } else {
+          renderBookingsListSkeleton(2);
         }
       })();
 

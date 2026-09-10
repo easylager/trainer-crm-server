@@ -41,9 +41,7 @@
       function parseApiErrorMessage(r, data) {
         if (data && data.detail) {
           if (typeof data.detail === 'string') return data.detail;
-          if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) {
-            return String(data.detail[0].msg);
-          }
+          if (Array.isArray(data.detail)) return 'Проверьте заполненные поля и попробуйте снова.';
         }
         if (r.status === 401) {
           return 'Сессия Telegram не передана. Закройте mini-app и откройте «Статистику» снова из бота.';
@@ -54,7 +52,7 @@
         if (r.status >= 500) {
           return 'Ошибка сервера (' + r.status + '). Попробуйте позже.';
         }
-        return r.statusText || ('Ошибка ' + r.status);
+        return 'Не удалось загрузить статистику. Попробуйте ещё раз.';
       }
 
       function fetchJsonPath(path) {

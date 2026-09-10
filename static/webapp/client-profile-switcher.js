@@ -381,6 +381,12 @@
   }
 
   /* ── public API + auto-init ──────────────────────────────────────── */
+  // Shared ready promise: pages that list bookings/hub must wait so the fetch patch
+  // already knows the acting profile. Without this, the first /client/bookings races
+  // with profile load, goes out without X-Profile-Id, resolves to self, and caches empty
+  // while the booking was attributed to the default child.
+  var readyPromise = null;
+
   window.ClientProfileSwitcher = {
     getActiveProfileId: function () {
       return state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
@@ -391,8 +397,16 @@
     getProfiles: function () {
       return state.profiles.slice();
     },
+    isReady: function () {
+      return state.loaded;
+    },
+    /**
+     * Idempotent. Resolves once profiles (and default) are known so callers can
+     * safely hit profile-scoped APIs.
+     */
     init: function () {
-      return loadProfiles().then(function () {
+      if (readyPromise) return readyPromise;
+      readyPromise = loadProfiles().then(function () {
         var mount = document.getElementById('clientProfileSwitcherMount');
         // Shown even with a single (self) profile — the sheet it opens is the only entry
         // point to "Добавить ребёнка", so a first-time parent must be able to find it too.
@@ -400,6 +414,7 @@
         if (mount && state.profiles.length >= 1) renderChip(mount);
         return state;
       });
+      return readyPromise;
     },
   };
 

@@ -415,8 +415,9 @@
         var sel = document.getElementById(selectId);
         var aid = sel ? parseInt(sel.value, 10) : NaN;
         if (isNaN(aid)) return null;
-        var primaryId = scheduleEditorPrimaryArenaId();
-        if (primaryId != null && aid === primaryId) return null;
+        // Always keep the explicit venue — including the primary arena. Collapsing primary →
+        // null hid the chip in «Добавлено вручную» and let the server fall back to default/
+        // grid venue (e.g. Замок), so the first drum slot silently landed on the wrong rink.
         return aid;
       }
 
@@ -5065,8 +5066,10 @@
             formatMinuteClock(endM) +
             '</span>' +
             scheduleEditorArenaChipHtml(
-              ps.arenaId,
-              scheduleEditorArenaNameById(ps.arenaId)
+              ps.arenaId != null ? ps.arenaId : scheduleEditorPrimaryArenaId(),
+              scheduleEditorArenaNameById(
+                ps.arenaId != null ? ps.arenaId : scheduleEditorPrimaryArenaId()
+              )
             ) +
             '<span class="precise-slot-tag__dur">' +
             ps.durationMinutes +
@@ -5190,8 +5193,15 @@
         }
         if (!state.preciseSlots) state.preciseSlots = [];
         var psRow = { startMinutes: ev.startMin, durationMinutes: ev.dur };
-        var precArenaPick = readPreciseArenaPickForSave();
-        if (precArenaPick != null) psRow.arenaId = precArenaPick;
+        var arsPrecAdd = state.trainerScheduleArenas || [];
+        if (arsPrecAdd.length > 1) {
+          var precArenaPick = readPreciseArenaPickForSave();
+          if (precArenaPick == null) {
+            setPreciseError('Выберите площадку для этого слота.');
+            return;
+          }
+          psRow.arenaId = precArenaPick;
+        }
         state.preciseSlots.push(psRow);
         setPreciseError('');
         renderPreciseSlotsAdded();
@@ -5257,6 +5267,23 @@
         }
         syncPreciseArenaWrapsAfterSlotsChanged();
         syncPreciseManualSlotsPanelDisplay();
+        var hintEl = document.getElementById('editHint');
+        if (hintEl && state.editMode === 'calendar' && !(typeof slotIntentUseCenterUi === 'function' && slotIntentUseCenterUi()) && !(typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi())) {
+          if (isPrecise) {
+            hintEl.textContent =
+              'Точное время: выберите площадку, крутите барабан начала и длительность, затем «Добавить». ' +
+              'Список ниже — что уйдёт в день после «Готово». Уже занятый слот с записью убрать нельзя.';
+          } else {
+            hintEl.textContent =
+              'Быстро: отметьте начала на сетке площадки. Свободное окно снимается повторным нажатием; слот с записью — нельзя. «Готово» сохраняет изменения.';
+          }
+        }
+        if (hintEl && state.editMode === 'template' && !(typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi())) {
+          if (isPrecise) {
+            hintEl.textContent =
+              'Точное время в шаблоне: площадка + барабан → «Добавить». «Готово» сохранит шаблон; сетка «Быстро» — отдельная вкладка.';
+          }
+        }
       }
 
       function initPreciseFormEvents() {
@@ -8705,7 +8732,7 @@
           ? 'Смена центра: нажмите на время — добавить или убрать свободное окно. С записью снять нельзя. «Готово» — когда есть изменения.'
           : useCalGroup
             ? 'Групповые слоты: параметры для новых начал. Свободное окно снимите повторным нажатием на время; со записью — нельзя. «Готово» — когда есть изменения.'
-            : 'Индивидуальные слоты: нажмите на время — добавить или убрать свободное окно. Запись на слот снять нельзя. «Готово» — когда есть изменения.';
+            : 'Быстро: отметьте начала на сетке площадки. Свободное окно снимается повторным нажатием; слот с записью — нельзя. «Готово» сохраняет изменения.';
         var capWrap = document.getElementById('slotCapacityWrap');
         var capInput = document.getElementById('slotCapacityInput');
         if (capInput) capInput.setAttribute('min', useCalGroup ? '2' : '1');
@@ -9178,6 +9205,7 @@
               };
               if (multiArenaTpl) {
                 var aeTpl = ps.arenaId != null ? ps.arenaId : tplPrecArenaPick;
+                if (aeTpl == null) aeTpl = scheduleEditorPrimaryArenaId();
                 if (aeTpl != null) rowTpl.arena_id = aeTpl;
               }
               slotsPayload.push(rowTpl);
@@ -9251,6 +9279,7 @@
               };
               if (multiArenaPrec) {
                 var aidEnt = ps.arenaId != null ? ps.arenaId : precArenaPayload;
+                if (aidEnt == null) aidEnt = scheduleEditorPrimaryArenaId();
                 if (aidEnt != null) entPrec.arena_id = aidEnt;
               }
               slotEntries.push(entPrec);

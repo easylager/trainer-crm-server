@@ -21,7 +21,22 @@ WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED = (
     "Групповые занятия доступны с модулем «Группы» в подписке. Оформите тариф в «Подписке»."
 )
 
+MINIAPP_ADMIN_NOT_CONFIGURED_DETAIL_RU = "Административное мини-приложение временно недоступно. Попробуйте позже."
+MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU = "Административное мини-приложение доступно только в Telegram."
+MINIAPP_NOT_ADMIN_DETAIL_RU = "У вас нет доступа к этому разделу."
+MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU = "Эта платформа мини-приложения пока не поддерживается."
+MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение временно недоступно. Попробуйте позже."
+MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение тренера временно недоступно. Попробуйте позже."
+MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение клиента временно недоступно. Попробуйте позже."
+
 __all__ = [
+    "MINIAPP_ADMIN_NOT_CONFIGURED_DETAIL_RU",
+    "MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU",
+    "MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU",
+    "MINIAPP_NOT_ADMIN_DETAIL_RU",
+    "MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU",
+    "MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU",
+    "MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU",
     "TRAINER_WEBAPP_FORBIDDEN_DETAIL",
     "WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED",
     "WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED",

@@ -28,6 +28,11 @@ from tests.api.test_public_arenas import _insert_arena, _insert_city
 from src.application.ice_session_use_cases import create_ice_session
 
 
+def _minsk_today() -> date:
+    """City day pages use Europe/Minsk; CI runners are often UTC — date.today() drifts."""
+    return datetime.now(ZoneInfo("Europe/Minsk")).date()
+
+
 async def _add_today_session(
     db_session,
     arena_id: int,
@@ -36,7 +41,7 @@ async def _add_today_session(
     price_adult_minor: int | None = 850,
 ) -> int:
     """
-    Сеанс на сегодня, поздним временем.
+    Сеанс на сегодня (по Минску), поздним временем.
 
     23:30 не украшение: выборка отбрасывает сеансы с ``starts_at_utc <= now``
     (PDEC-005), и тест, поставленный на утро, разваливался бы каждый раз после
@@ -45,7 +50,7 @@ async def _add_today_session(
     created = await create_ice_session(
         db_session,
         arena_id,
-        local_date=date.today(),
+        local_date=_minsk_today(),
         starts_at_local=starts_at_local,
         duration_minutes=45,
         kind="public_skate",

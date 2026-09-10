@@ -270,7 +270,7 @@ def test_morning_recommendation_first_timer_opens_day() -> None:
     d = _morning_digest_fixture([_session(hh=9, name="Виктория Шевченко", first=True)])
     out = format_morning_digest(d)
     rec = out.rstrip().split("\n")[-1]
-    assert "Начни день с Виктория Ш." in rec
+    assert "Начните день с Виктория Ш." in rec
     assert "первое занятие" in rec
 
 
@@ -514,7 +514,7 @@ def test_weekly_drought_open_requests_line() -> None:
             drought={"triggered": True, "case": 1, "data": {"open_requests_count": 4}}
         )
     )
-    assert "тебя ждут <b>4</b> заявки в каталоге" in out
+    assert "вас ждут <b>4</b> заявки в каталоге" in out
 
 
 def test_weekly_drought_case_7_silence() -> None:
