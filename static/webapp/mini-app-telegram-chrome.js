@@ -641,9 +641,9 @@ window.wireHubSlotMessageButtons = function (root) {
         s
       )
     ) {
-      return 'Что-то пошло не так';
+      return 'Не удалось выполнить действие';
     }
-    return s;
+    return 'Не удалось выполнить действие';
   }
 
   function webappApiUrl(url) {

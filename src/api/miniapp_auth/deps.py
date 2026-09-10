@@ -16,6 +16,15 @@ from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.api.miniapp_auth.vk_launch_params import verify_vk_miniapp_launch_principal
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError
+from src.shared.webapp_http_messages import (
+    MINIAPP_ADMIN_NOT_CONFIGURED_DETAIL_RU,
+    MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
+    MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU,
+    MINIAPP_NOT_ADMIN_DETAIL_RU,
+    MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
+    MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU,
+    MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU,
+)
 
 # User-visible copy for Telegram/VK Mini Apps (never leak English auth diagnostics in JSON).
 MINIAPP_CREDENTIAL_USER_DETAIL_RU = "Что-то пошло не так"
@@ -40,7 +49,7 @@ def reject_unsupported_miniapp_platform_normalized(platform: str) -> None:
         return
     raise HTTPException(
         status_code=501,
-        detail=f"Mini App platform {platform!r} is not supported yet",
+        detail=MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
     )
 
 
@@ -97,14 +106,14 @@ def _principal_from_credential_trainer(cred: MiniappCredentialIn) -> MiniAppPrin
     if cred.platform == MiniAppPlatform.MAX.value:
         secret = Settings().vk_mini_app_protected_key
         if not (secret or "").strip():
-            raise HTTPException(status_code=503, detail="VK Mini App not configured")
+            raise HTTPException(status_code=503, detail=MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU)
         try:
             return verify_vk_miniapp_launch_principal(cred.raw, secret)
         except InitDataAuthError:
             raise miniapp_credential_http_exception() from None
     token = Settings().telegram_bot_token_trainer
     if not token:
-        raise HTTPException(status_code=503, detail="Trainer Mini App not configured")
+        raise HTTPException(status_code=503, detail=MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU)
     try:
         return verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
@@ -118,14 +127,14 @@ def get_client_miniapp_principal(
     if cred.platform == MiniAppPlatform.MAX.value:
         secret = Settings().vk_mini_app_protected_key
         if not (secret or "").strip():
-            raise HTTPException(status_code=503, detail="VK Mini App not configured")
+            raise HTTPException(status_code=503, detail=MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU)
         try:
             return verify_vk_miniapp_launch_principal(cred.raw, secret)
         except InitDataAuthError:
             raise miniapp_credential_http_exception() from None
     token = Settings().telegram_bot_token_client
     if not token:
-        raise HTTPException(status_code=503, detail="Client Mini App not configured")
+        raise HTTPException(status_code=503, detail=MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU)
     try:
         return verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
@@ -153,16 +162,16 @@ def get_admin_miniapp_principal(
     if cred.platform == MiniAppPlatform.MAX.value:
         raise HTTPException(
             status_code=501,
-            detail="Admin Mini App from MAX/VK is not supported — use Telegram.",
+            detail=MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
         )
     token = Settings().telegram_bot_token_admin
     if not token:
-        raise HTTPException(status_code=503, detail="Admin Web App not configured")
+        raise HTTPException(status_code=503, detail=MINIAPP_ADMIN_NOT_CONFIGURED_DETAIL_RU)
     try:
         principal = verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
         raise miniapp_credential_http_exception() from None
     allowed = Settings().admin_telegram_ids or []
     if principal.user_id not in allowed:
-        raise HTTPException(status_code=403, detail="Not an admin")
+        raise HTTPException(status_code=403, detail=MINIAPP_NOT_ADMIN_DETAIL_RU)
     return principal
