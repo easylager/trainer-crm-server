@@ -1925,10 +1925,7 @@
           return;
         }
         if (cand.action === 'share_link') {
-          ensureTrainerSectionsAccess(function() {
-            var headBtn = document.getElementById('hubShareBookingLinkBtn');
-            if (headBtn) headBtn.click();
-          });
+          shareTrainerInviteLink();
           return;
         }
         if (cand.action === 'client_notes') {
@@ -2902,6 +2899,7 @@
       }
 
       function prefetchHubInviteShare() {
+        if (!getInitData()) return;
         if (hubInviteShareCache && hubInviteShareCache.link) return;
         if (hubInviteShareInflight) return;
         hubInviteShareInflight = fetch(
@@ -2910,7 +2908,8 @@
         )
           .then(function (r) { return r.json(); })
           .then(function (body) {
-            hubInviteShareCache = parseHubInviteShare(body);
+            var parsed = parseHubInviteShare(body);
+            if (parsed.link) hubInviteShareCache = parsed;
           })
           .catch(function () { /* клик сам повторит запрос */ })
           .then(function () { hubInviteShareInflight = null; });
@@ -2929,38 +2928,93 @@
         return false;
       }
 
-      function copyHubInviteLink(link) {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(link).then(
-            function () { hubToast('Ссылка скопирована — вставьте её в чат с учеником.'); },
-            function () { hubToast(link); }
-          );
+      function markHubInviteShared() {
+        dismissHubShareLinkGrowthHintPersisted();
+        postHubClientInviteLinkFirstCopyRecorded();
+      }
+
+      function notifyHubInviteCopied() {
+        var toastEl = document.getElementById('hubInlineToast');
+        if (toastEl) {
+          showHubInlineToast('Ссылка скопирована', 'Отправьте её клиентам в Telegram.', {});
           return;
         }
-        hubToast(link);
+        hubToast('Ссылка скопирована — отправьте её клиентам.');
+      }
+
+      function revealHubInviteLinkFallback(link) {
+        openHubShareBookingLinkModal({ services: [] }, { skipPrefetchOnce: true });
+        showHubShareLinkManualCopy(link, 'Скопируйте ссылку вручную из поля выше.', false);
       }
 
       function shareTrainerInviteLink() {
-        if (hubInviteShareCache && hubInviteShareCache.link) {
-          if (openHubInviteShare(hubInviteShareCache)) return;
-          copyHubInviteLink(hubInviteShareCache.link);
+        try {
+          var webapp = hubTelegramWebApp();
+          if (webapp && webapp.HapticFeedback && typeof webapp.HapticFeedback.impactOccurred === 'function') {
+            webapp.HapticFeedback.impactOccurred('light');
+          }
+        } catch (eHaptic) { /* noop */ }
+
+        var cached = hubInviteShareCache && hubInviteShareCache.link ? hubInviteShareCache : null;
+        if (cached) {
+          /* Same tick as the tap — Telegram swallows t.me/share/url after await/fetch. */
+          if (openHubInviteShare(cached)) {
+            markHubInviteShared();
+            return;
+          }
+          if (copyTextViaExecCommandHub(cached.link)) {
+            markHubInviteShared();
+            notifyHubInviteCopied();
+            return;
+          }
+          revealHubInviteLinkFallback(cached.link);
           return;
         }
-        fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
-          .then(function (r) { return r.json(); })
-          .then(function (body) {
-            var payload = parseHubInviteShare(body);
-            hubInviteShareCache = payload;
-            if (!payload.link) {
-              hubToast('Ссылка для учеников появится чуть позже.');
-              return;
-            }
-            if (openHubInviteShare(payload)) return;
-            copyHubInviteLink(payload.link);
-          })
-          .catch(function () {
-            hubToast('Не получилось получить ссылку. Попробуйте ещё раз.');
-          });
+
+        var toastEl = document.getElementById('hubInlineToast');
+        if (toastEl) {
+          showHubInlineToast('Готовим ссылку', 'Откроем её через секунду.', {});
+        }
+
+        function afterInvitePayload(payload) {
+          if (payload && payload.link) hubInviteShareCache = payload;
+          if (!payload || !payload.link) {
+            hubToast('Ссылка для учеников появится чуть позже.');
+            return;
+          }
+          /* Gesture is gone: native share would no-op. Show the link on screen. */
+          if (copyTextViaExecCommandHub(payload.link)) markHubInviteShared();
+          revealHubInviteLinkFallback(payload.link);
+        }
+
+        function fetchInviteThenReveal() {
+          return fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
+            .then(function (r) { return r.json(); })
+            .then(function (body) { afterInvitePayload(parseHubInviteShare(body)); });
+        }
+
+        var pending = hubInviteShareInflight;
+        if (!pending) {
+          prefetchHubInviteShare();
+          pending = hubInviteShareInflight;
+        }
+        if (pending) {
+          pending
+            .then(function () {
+              if (hubInviteShareCache && hubInviteShareCache.link) {
+                afterInvitePayload(hubInviteShareCache);
+                return;
+              }
+              return fetchInviteThenReveal();
+            })
+            .catch(function () {
+              hubToast('Не получилось получить ссылку. Попробуйте ещё раз.');
+            });
+          return;
+        }
+        fetchInviteThenReveal().catch(function () {
+          hubToast('Не получилось получить ссылку. Попробуйте ещё раз.');
+        });
       }
 
       /** Hide «Ближайшие записи» block when there is nothing to show (no empty-state copy). */
@@ -3288,11 +3342,7 @@
           return;
         }
         if (h === '__share_link__') {
-          ensureTrainerSectionsAccess(function() {
-            var btnShare = document.getElementById('hubShareBookingLinkBtn');
-            if (btnShare && !btnShare.hidden) btnShare.click();
-            else hubToast('Ссылка появится после настройки города и услуг в профиле.');
-          });
+          shareTrainerInviteLink();
           return;
         }
         navigateTo(h);
@@ -3891,7 +3941,8 @@
         fetch(apiUrlWithQuery('/trainer/slots/' + id + '/group-hub'), { headers: headersJson() })
           .then(function(r) {
             if (r.status === 404) {
-              if (tg && tg.showAlert) tg.showAlert('Слот не найден или не групповой.');
+              var webapp404 = hubTelegramWebApp();
+              if (webapp404 && webapp404.showAlert) webapp404.showAlert('Слот не найден или не групповой.');
               return Promise.reject(null);
             }
             if (!r.ok) return Promise.reject(new Error('bad'));
@@ -3968,7 +4019,8 @@
           .catch(function(e) {
             releaseHubReopenGroupCover();
             if (e === null) return;
-            if (tg && tg.showAlert) tg.showAlert('Не удалось загрузить группу.');
+            var webappErr = hubTelegramWebApp();
+            if (webappErr && webappErr.showAlert) webappErr.showAlert('Не удалось загрузить группу.');
           });
       }
 
@@ -3980,9 +4032,25 @@
         return { ok: false, e164: '', error: 'Укажите номер телефона.' };
       }
 
+      function hubTelegramWebApp() {
+        return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      }
+
       function hubToast(msg) {
-        if (tg && tg.showAlert) tg.showAlert(msg);
-        else alert(msg);
+        var toastEl = document.getElementById('hubInlineToast');
+        var titleEl = document.getElementById('hubInlineToastTitle');
+        var textEl = document.getElementById('hubInlineToastText');
+        var actionBtn = document.getElementById('hubInlineToastAction');
+        var closeBtn = document.getElementById('hubInlineToastClose');
+        if (toastEl && titleEl && textEl && actionBtn && closeBtn) {
+          showHubInlineToast('Готово', msg, {});
+        }
+        var webapp = hubTelegramWebApp();
+        if (webapp && typeof webapp.showAlert === 'function') {
+          try { webapp.showAlert(msg); } catch (eAlert) { /* Mini App often drops this after fetch */ }
+          return;
+        }
+        if (!(toastEl && titleEl && textEl && actionBtn && closeBtn)) alert(msg);
       }
 
       function hideHubInlineToast() {
@@ -8160,44 +8228,10 @@
         var btnShare = document.getElementById('hubShareBookingLinkBtn');
         if (btnShare) {
           btnShare.onclick = function() {
-            // Universal invite link: works for all trainers, no subscription gate, no service selection.
-            // Fetched fresh each click (response is fast — trainer_id lookup only).
-            fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
-              .then(function(r) {
-                return r.json().then(function(data) {
-                  if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
-                  return data;
-                });
-              })
-              .then(function(data) {
-                var link = data && data.link ? String(data.link).trim() : '';
-                if (!link) {
-                  hubToast('Ссылка недоступна. Попробуйте позже.');
-                  return;
-                }
-                if (copyTextViaExecCommandHub(link)) {
-                  dismissHubShareLinkGrowthHintPersisted();
-                  postHubClientInviteLinkFirstCopyRecorded();
-                  hubToast('Ссылка скопирована — отправьте её клиентам.');
-                  return;
-                }
-                copyTextToClipboardHub(link).then(function(ok) {
-                  if (ok) {
-                    dismissHubShareLinkGrowthHintPersisted();
-                    postHubClientInviteLinkFirstCopyRecorded();
-                    hubToast('Ссылка скопирована — отправьте её клиентам.');
-                    return;
-                  }
-                  // Clipboard unavailable: show fallback modal with manual copy
-                  openHubShareBookingLinkModal({ services: [] }, { skipPrefetchOnce: true });
-                  showHubShareLinkManualCopy(link, 'Скопируйте ссылку вручную из поля выше.', false);
-                });
-              })
-              .catch(function(err) {
-                hubToast((err && err.message) || 'Не удалось сформировать ссылку.');
-              });
+            shareTrainerInviteLink();
           };
         }
+        prefetchHubInviteShare();
         wireHubShareBookingLinkModal();
         wireHubFillSlotsInvitesModal();
         applyHubShareButtonVisibility();
@@ -8415,8 +8449,9 @@
 
         sec.removeAttribute('hidden');
         try {
-          if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
-            tg.HapticFeedback.notificationOccurred('success');
+          var webappHaptic = hubTelegramWebApp();
+          if (webappHaptic && webappHaptic.HapticFeedback && typeof webappHaptic.HapticFeedback.notificationOccurred === 'function') {
+            webappHaptic.HapticFeedback.notificationOccurred('success');
           }
         } catch (eH) {}
 
@@ -8594,6 +8629,7 @@
           }
           renderHubQuickStrip();
           setupQuickActions();
+          prefetchHubInviteShare();
         }
         if (bs && bs.subscription_status) {
           showHubSubscriptionCelebrationIfPending();

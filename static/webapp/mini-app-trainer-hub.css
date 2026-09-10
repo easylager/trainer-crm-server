@@ -460,8 +460,8 @@
       position: fixed;
       left: 12px;
       right: 12px;
-      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-      z-index: 160;
+      bottom: calc(12px + var(--trainer-shell-tab-inset, 80px));
+      z-index: 9600;
       display: flex;
       align-items: flex-start;
       gap: 12px;
@@ -1101,6 +1101,10 @@
       overflow-y: hidden;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+    }
+    /* Invite fallback sits above the tab bar (z-index 9000); otherwise Copy is untappable. */
+    #hubModalShareBookingLink.hub-book-flow-overlay {
+      z-index: 9600;
     }
     /* Quick-book: дата/время открывается поверх модалки «Записать клиента», иначе оба overlay z-index 260 и DOM ставит книгу выше — шаг скрыт. */
     #hubModalQuickBookDatetime.hub-book-flow-overlay {
