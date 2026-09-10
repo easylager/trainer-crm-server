@@ -5,7 +5,7 @@ Revises: 0201_merge_interest_share
 """
 from __future__ import annotations
 
-import asyncio
+from alembic import op
 
 revision = "0202_minsk_speed_oval_identity"
 down_revision = "0201_merge_interest_share"
@@ -14,22 +14,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    # Must use Alembic's connection: env.py wraps the whole upgrade in one
+    # transaction, so a second engine would not see uncommitted schema (CI fails
+    # with UndefinedTableError: relation "cities" does not exist).
+    from src.application.minsk_speed_oval_identity import repair_speed_oval_identity_sync
 
-    from src.application.minsk_speed_oval_identity import repair_speed_oval_identity
-    from src.shared.config import Settings
-
-    settings = Settings()
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _run() -> None:
-        async with factory() as session:
-            await repair_speed_oval_identity(session)
-            await session.commit()
-        await engine.dispose()
-
-    asyncio.run(_run())
+    repair_speed_oval_identity_sync(op.get_bind())
 
 
 def downgrade() -> None:

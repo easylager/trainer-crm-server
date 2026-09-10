@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.minsk_speed_oval import (
@@ -32,70 +32,66 @@ def arena_row_needs_speed_oval_repair(row: Mapping[str, Any], *, minsk_city_id: 
     return False
 
 
-async def _minsk_city_id(session: AsyncSession) -> int | None:
-    row = (
-        await session.execute(
-            text(
-                """
-                SELECT id FROM cities
-                WHERE country = 'BY' AND name = 'Минск'
-                ORDER BY id
-                LIMIT 1
-                """
-            )
+def _minsk_city_id_sync(conn: Connection) -> int | None:
+    row = conn.execute(
+        text(
+            """
+            SELECT id FROM cities
+            WHERE country = 'BY' AND name = 'Минск'
+            ORDER BY id
+            LIMIT 1
+            """
         )
     ).scalar()
     if row is not None:
         return int(row)
-    row = (
-        await session.execute(
-            text(
-                """
-                SELECT id FROM cities
-                WHERE country = 'BY' AND name ILIKE 'Минск%'
-                ORDER BY id
-                LIMIT 1
-                """
-            )
+    row = conn.execute(
+        text(
+            """
+            SELECT id FROM cities
+            WHERE country = 'BY' AND name ILIKE 'Минск%'
+            ORDER BY id
+            LIMIT 1
+            """
         )
     ).scalar()
     return int(row) if row is not None else None
 
 
-async def repair_speed_oval_identity(session: AsyncSession) -> bool:
-    """Return True when arena 115 (speed oval parser target) was repaired."""
-    minsk_id = await _minsk_city_id(session)
+def repair_speed_oval_identity_sync(conn: Connection) -> bool:
+    """Return True when arena 115 (speed oval parser target) was repaired.
+
+    Sync path for Alembic: must use the migration connection so uncommitted DDL
+    from earlier revisions in the same transaction is visible.
+    """
+    minsk_id = _minsk_city_id_sync(conn)
     if minsk_id is None:
         return False
 
-    job_arena = (
-        await session.execute(
-            text("SELECT arena_id FROM ice_parser_jobs WHERE parser_key = :key ORDER BY id LIMIT 1"),
-            {"key": PARSER_KEY},
-        )
+    job_arena = conn.execute(
+        text("SELECT arena_id FROM ice_parser_jobs WHERE parser_key = :key ORDER BY id LIMIT 1"),
+        {"key": PARSER_KEY},
     ).scalar()
     if job_arena is not None and int(job_arena) != ARENA_ID:
         return False
 
-    row = (
-        await session.execute(
-            text(
-                """
-                SELECT a.name, a.city_id, c.country, p.slug
-                FROM arenas a
-                JOIN cities c ON c.id = a.city_id
-                LEFT JOIN arena_profiles p ON p.arena_id = a.id
-                WHERE a.id = :id
-                """
-            ),
-            {"id": ARENA_ID},
-        )
+    row = conn.execute(
+        text(
+            """
+            SELECT a.name, a.city_id, c.country, p.slug
+            FROM arenas a
+            JOIN cities c ON c.id = a.city_id
+            LEFT JOIN arena_profiles p ON p.arena_id = a.id
+            WHERE a.id = :id
+            """
+        ),
+        {"id": ARENA_ID},
     ).mappings().first()
     if row is None:
         return False
 
     if not arena_row_needs_speed_oval_repair(row, minsk_city_id=minsk_id):
-        await session.execute(
+        conn.execute(
             text(
                 """
                 UPDATE arena_profiles
@@ -108,7 +104,7 @@ async def repair_speed_oval_identity(session: AsyncSession) -> bool:
         )
         return False
 
-    await session.execute(
+    conn.execute(
         text(
             """
             UPDATE arenas
@@ -132,14 +128,12 @@ async def repair_speed_oval_identity(session: AsyncSession) -> bool:
         },
     )
 
-    profile = (
-        await session.execute(
-            text("SELECT 1 FROM arena_profiles WHERE arena_id = :id"),
-            {"id": ARENA_ID},
-        )
+    profile = conn.execute(
+        text("SELECT 1 FROM arena_profiles WHERE arena_id = :id"),
+        {"id": ARENA_ID},
     ).scalar()
     if profile is None:
-        await session.execute(
+        conn.execute(
             text(
                 """
                 INSERT INTO arena_profiles (
@@ -159,7 +153,7 @@ async def repair_speed_oval_identity(session: AsyncSession) -> bool:
         )
         return True
 
-    await session.execute(
+    conn.execute(
         text(
             """
             UPDATE arena_profiles
@@ -180,3 +174,8 @@ async def repair_speed_oval_identity(session: AsyncSession) -> bool:
         },
     )
     return True
+
+
+async def repair_speed_oval_identity(session: AsyncSession) -> bool:
+    """Async wrapper used by application/tests."""
+    return await session.run_sync(lambda sync_sess: repair_speed_oval_identity_sync(sync_sess.connection()))
