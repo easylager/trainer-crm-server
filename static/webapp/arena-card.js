@@ -182,8 +182,8 @@
     var n = gallery.length || (hero.mode === 'photo' ? 1 : 0);
     var cls = 'arena-hero' + (hero.mode === 'photo' ? ' arena-hero--photo' : ' arena-hero--placeholder');
     var style = url ? ' style="background-image:url(\'' + esc(url).replace(/'/g, '%27') + '\')"' : '';
-    var galleryHtml = n
-      ? '<span class="arena-hero__gallery">' + (state.galleryIndex + 1) + ' / ' + n + ' фото</span>'
+    var galleryHtml = n === 1
+      ? '<span class="arena-hero__gallery">Фото</span>'
       : '';
     return (
       '<div class="' +
