@@ -119,7 +119,7 @@ def test_unknown_amenities_stay_unset(cards) -> None:
         "cafe": True,
         "accessibility": True,
     }
-    assert oval.website_url == "https://minskarena.by/"
+    assert oval.website_url == "https://minskarena.by/page.html?slug=massovie-katania"
 
 
 def test_photo_decisions_skip_google_social_and_403_not_grant(cards) -> None:

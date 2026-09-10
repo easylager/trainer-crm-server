@@ -546,10 +546,10 @@ async def test_ice_list_of_sixty_arenas_is_not_n_plus_one(
 
 
 @pytest.mark.asyncio
-async def test_bbox_mixed_cities_keep_per_arena_currency(
+async def test_bbox_skips_ru_arenas_in_ice_discovery(
     app_use_test_db, db_session
 ) -> None:
-    """EDGE-001: bbox spanning cities must not collapse to one list-level currency."""
+    """Ice V1 is BY-only: Moscow rinks stay out of the client Mini App even inside bbox."""
     by_city = await _insert_city(db_session, name=f"IceBY-{uuid.uuid4().hex[:6]}", country="BY")
     ru_city = await _insert_city(db_session, name=f"IceRU-{uuid.uuid4().hex[:6]}", country="RU")
     by_arena = await _insert_arena(
@@ -565,15 +565,16 @@ async def test_bbox_mixed_cities_keep_per_arena_currency(
             "/api/public/ice/arenas",
             params={"bbox": "53.0,27.0,55.0,33.0", "intent": "skate", "limit": 20},
         )
+        cities = await client.get("/api/public/ice/cities")
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    assert "currency_code" not in payload or payload.get("currency_code") is None
-    by_row = next(it for it in payload["items"] if it["id"] == by_arena)
-    ru_row = next(it for it in payload["items"] if it["id"] == ru_arena)
-    assert by_row["currency_code"] == "BYN"
-    assert ru_row["currency_code"] == "RUB"
-    assert by_row["live"]["currency_code"] == "BYN"
-    assert ru_row["live"]["currency_code"] == "RUB"
+    ids = {it["id"] for it in payload["items"]}
+    assert by_arena in ids
+    assert ru_arena not in ids
+    assert cities.status_code == 200, cities.text
+    city_ids = {int(it["id"]) for it in cities.json()["items"]}
+    assert by_city in city_ids
+    assert ru_city not in city_ids
 
 
 @pytest.mark.asyncio
