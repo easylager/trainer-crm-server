@@ -493,7 +493,7 @@
     mount.innerHTML =
       '<div class="st-empty-block">' +
         '<div class="st-empty-icon-wrap"><span class="st-empty-icon">♥</span></div>' +
-        '<div class="st-empty-title">Здесь будут ваши тренеры</div>' +
+        '<div class="st-empty-title">Здесь появятся сохранённые тренеры</div>' +
         '<div class="st-empty-desc">Сохраняйте тех, кто понравился — чтобы возвращаться к ним одним тапом и быстро записываться.</div>' +
         '<button type="button" class="st-empty-cta" id="btnEmptyCatalog">Найти тренера</button>' +
       '</div>';
