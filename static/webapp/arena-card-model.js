@@ -385,6 +385,15 @@
     return { label: 'Написать', kind: 'ghost' };
   }
 
+  function ticketCta(card) {
+    var href = String((card && card.tickets_url) || '').trim();
+    if (!href) return null;
+    var lower = href.toLowerCase();
+    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
+    if (/\s/.test(href)) return null;
+    return { href: href, label: 'Купить билет' };
+  }
+
   function buildBookingHref(opts) {
     opts = opts || {};
     var parts = ['from=arena'];
@@ -525,6 +534,7 @@
     heroView: heroView,
     ribbonLegend: ribbonLegend,
     trainerCta: trainerCta,
+    ticketCta: ticketCta,
     buildBookingHref: buildBookingHref,
     parseArenaRef: parseArenaRef,
     iceSectionMode: iceSectionMode,

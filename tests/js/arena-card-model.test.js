@@ -354,6 +354,19 @@ describe('iceRowCta', () => {
   });
 });
 
+describe('ticketCta', () => {
+  it('shows Купить билет only for an http(s) tickets_url', () => {
+    const { ticketCta } = loadModel();
+    assert.equal(ticketCta({}), null);
+    assert.equal(ticketCta({ tickets_url: '  ' }), null);
+    assert.equal(ticketCta({ tickets_url: 'javascript:alert(1)' }), null);
+    assert.deepEqual(ticketCta({ tickets_url: 'https://koronaticket.by/rink' }), {
+      href: 'https://koronaticket.by/rink',
+      label: 'Купить билет',
+    });
+  });
+});
+
 describe('trainerCta', () => {
   it('uses Записаться only when can_book is true, otherwise Написать', () => {
     const { trainerCta } = loadModel();
