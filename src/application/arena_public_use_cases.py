@@ -34,6 +34,7 @@ from src.application.training_group_use_cases import (
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
 from src.shared.currency import currency_for_country
+from src.shared.ice_discovery_scope import ICE_DISCOVERY_COUNTRY
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
@@ -387,6 +388,7 @@ LEFT JOIN (
     GROUP BY tg.arena_id
 ) og ON og.arena_id = a.id
 WHERE a.is_active AND a.is_confirmed
+  AND c.country = :ice_country
   AND (p.status IS NULL OR p.status = :published)
 """
 
@@ -428,6 +430,7 @@ async def _load_ice_arena_rows(
         "slot_tz": NOTIFICATION_TZ,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
     where = []
     if city_id is not None:
@@ -512,11 +515,16 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND (p.status IS NULL OR p.status = :published)
                        ) AS longitude
                 FROM cities c
-                WHERE c.is_active
+                WHERE c.is_active AND c.country = :ice_country
                 ORDER BY c.sort_order, c.id
                 """
             ),
-            {"published": ARENA_PROFILE_STATUS_PUBLISHED, "st": STATUS_ACTIVE, "now": now},
+            {
+                "published": ARENA_PROFILE_STATUS_PUBLISHED,
+                "st": STATUS_ACTIVE,
+                "now": now,
+                "ice_country": ICE_DISCOVERY_COUNTRY,
+            },
         )
     ).mappings()
     items = []
@@ -616,6 +624,7 @@ async def get_hub_ice_teaser(
         "now": now,
         "st": STATUS_ACTIVE,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
     city_filter = ""
     if city_id is not None:
@@ -647,6 +656,7 @@ JOIN LATERAL (
     LIMIT 1
 ) nxt ON true
 WHERE a.is_active AND a.is_confirmed
+  AND c.country = :ice_country
 {city_filter}  AND (p.status IS NULL OR p.status = :published)
 ORDER BY nxt.starts_at_utc, a.id
 LIMIT 1
@@ -694,6 +704,7 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
         "slot_tz": NOTIFICATION_TZ,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
     sql = _LIST_SQL
     if arena_ref.isdigit():
@@ -911,6 +922,7 @@ async def search_public_ice(
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
         WHERE a.is_active AND a.is_confirmed
+          AND c.country = :ice_country
           AND (p.status IS NULL OR p.status = :published)
           AND (
             to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
@@ -928,6 +940,7 @@ async def search_public_ice(
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
             WHERE a.is_active AND a.is_confirmed
+              AND c.country = :ice_country
               AND (p.status IS NULL OR p.status = :published)
               AND (
                 to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
@@ -941,7 +954,13 @@ async def search_public_ice(
         """
     arenas = await session.execute(
         text(arena_sql),
-        {"q": query, "like": like, "lim": cap, "published": ARENA_PROFILE_STATUS_PUBLISHED},
+        {
+            "q": query,
+            "like": like,
+            "lim": cap,
+            "published": ARENA_PROFILE_STATUS_PUBLISHED,
+            "ice_country": ICE_DISCOVERY_COUNTRY,
+        },
     )
     trainers = await session.execute(
         text(
@@ -967,7 +986,7 @@ async def search_public_ice(
             """
             SELECT id, name
             FROM cities
-            WHERE is_active
+            WHERE is_active AND country = :ice_country
               AND (
                 to_tsvector('simple', coalesce(name, '')) @@ plainto_tsquery('simple', :q)
                 OR name ILIKE :like
@@ -976,7 +995,7 @@ async def search_public_ice(
             LIMIT :lim
             """
         ),
-        {"q": query, "like": like, "lim": cap},
+        {"q": query, "like": like, "lim": cap, "ice_country": ICE_DISCOVERY_COUNTRY},
     )
     arena_items = [
         {

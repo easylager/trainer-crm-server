@@ -43,6 +43,14 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.shared.minsk_speed_oval import (
+    ADDRESS as SPEED_OVAL_ADDRESS,
+    ARENA_ID as SPEED_OVAL_ARENA_ID,
+    LATITUDE as SPEED_OVAL_LATITUDE,
+    LONGITUDE as SPEED_OVAL_LONGITUDE,
+    NAME as SPEED_OVAL_NAME,
+    SLUG as SPEED_OVAL_SLUG,
+)
 from src.shared.ops_db_guard import (
     ProdDatabaseError,
     add_i_know_this_is_prod_argument,
@@ -749,6 +757,37 @@ def resolve_photo_bytes(
     return None, _content_type_for(decision.url_or_file)
 
 
+async def _sync_speed_oval_arena_row(session: Any, arena_id: int) -> None:
+    """Keep arenas row aligned with the oval dossier (prod once had CSKA in Moscow on id=115)."""
+    from sqlalchemy import text
+
+    await session.execute(
+        text(
+            """
+            UPDATE arenas a
+            SET city_id = c.id,
+                name = :name,
+                address = :address,
+                latitude = :lat,
+                longitude = :lon,
+                is_active = true,
+                is_confirmed = true
+            FROM cities c
+            WHERE a.id = :arena_id
+              AND c.country = 'BY'
+              AND c.name = 'Минск'
+            """
+        ),
+        {
+            "arena_id": arena_id,
+            "name": SPEED_OVAL_NAME,
+            "address": SPEED_OVAL_ADDRESS,
+            "lat": SPEED_OVAL_LATITUDE,
+            "lon": SPEED_OVAL_LONGITUDE,
+        },
+    )
+
+
 def profile_patch(card: ArenaCard) -> dict[str, Any]:
     return {
         "district": card.district,
@@ -804,6 +843,8 @@ async def apply_card(
         None, False, "sessions disabled"
     )
     try:
+        if card.slug == SPEED_OVAL_SLUG and target_id == SPEED_OVAL_ARENA_ID:
+            await _sync_speed_oval_arena_row(session, target_id)
         await apply_admin_arena_profile_patch(session, target_id, profile_patch(card))
         if card.verified_at is not None:
             verified_ts = datetime(
