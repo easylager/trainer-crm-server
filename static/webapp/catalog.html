@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <script src="client-profile-switcher.js?v=202609110"></script>
   <link rel="preload" href="catalog-main.js?v=202609110" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202609110" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202609111" />
   <link rel="stylesheet" href="booking-client.css?v=202609092" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
@@ -331,9 +331,10 @@
       <label for="requestLastName" style="margin-top:10px;display:block;">Фамилия</label>
       <input type="text" id="requestLastName" autocomplete="family-name" maxlength="64" placeholder="Необязательно" />
     </div>
-    <label class="request-sheet__label" for="requestComment">Комментарий</label>
-    <p class="request-sheet__hint">Когда удобно, возраст, что хотите получить.</p>
-    <textarea id="requestComment" class="request-comment-input" rows="5" maxlength="2000" placeholder="Пн и Ср после 18:00, ребёнку 8 лет"></textarea>
+    <div class="request-sheet__field">
+      <label class="request-sheet__label" for="requestComment">Комментарий</label>
+      <textarea id="requestComment" class="request-comment-input" rows="5" maxlength="2000" placeholder="Когда удобно, возраст, что хотите получить"></textarea>
+    </div>
     <div class="request-form-actions">
       <button type="button" class="btn-block btn-primary" id="btnSubmitRequestWithComment">Отправить заявку</button>
     </div>
