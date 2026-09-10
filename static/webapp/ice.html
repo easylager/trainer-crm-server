@@ -4,33 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Лёд</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609061"></script>
-  <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609022" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    media="print"
-    onload="this.media='all'"
-  />
-  <noscript>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    />
-  </noscript>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js?v=202609061"></script>
+  <link rel="stylesheet" href="theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609073" />
-  <script src="mini-app-client-shell.js?v=202609068"></script>
-  <script src="ru-text.js?v=202609103"></script>
-  <script src="ice-tab-model.js?v=202609074"></script>
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609095" />
+  <script src="mini-app-empty-state.js?v=202609091"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
+  <script src="ice-tab-model.js?v=202609095"></script>
   <script src="ice-map-model.js?v=202609074"></script>
+  <!-- TASK-094: не снимать переход по пустой странице. -->
+  <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
 <body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
   <div class="header client-app-header">
@@ -44,10 +37,13 @@
   <div id="iceRoot" class="ice-tab">
     <div class="ice-sec ice-sec--hero">
       <p class="ice-kicker">Где кататься</p>
-      <h1 class="ice-masthead">Лёд</h1>
-      <button type="button" class="ice-citypill" id="iceCityChange">
-        <span class="ice-citypill__name" id="iceCityName">Город</span>
-      </button>
+      <!-- TASK-090: masthead и город в одной строке — первый экран отдан карточкам. -->
+      <div class="ice-hero-top">
+        <h1 class="ice-masthead">Лёд</h1>
+        <button type="button" class="ice-citypill" id="iceCityChange">
+          <span class="ice-citypill__name" id="iceCityName">Город</span>
+        </button>
+      </div>
       <div class="ice-search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input
@@ -67,19 +63,42 @@
       </div>
       <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
       <!--
-        Переключатель «Список / Карта» убран в TASK-084 (AC-003, DEC-002).
-        Разметка карты ниже (#iceMapSec) и весь её код оставлены на месте:
-        возврат = вернуть этот блок и поставить MAP_ENABLED = true в ice-tab.js.
+        TASK-103: карта вернулась, но переключатель сюда — нет.
+        Сегмент «Список / Карта» стоял здесь и стоил ~46px над сгибом; это и было
+        названной причиной его удаления в TASK-084 (гейт G-P3 «товар над сгибом»).
+        Теперь переключатель — плавающая пилюля #iceViewSwitch в конце документа:
+        ноль высоты полотна, один тап в обе стороны.
       -->
     </div>
     <div class="ice-sec" id="iceListSec">
-      <p class="ice-eyebrow" id="iceCaption">Загрузка…</p>
-      <div class="ice-list" id="iceList"></div>
+      <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
+      <div id="iceList">
+        <div class="ice-list" id="iceListSkate"></div>
+        <div class="ice-list" id="iceListCoach" hidden></div>
+      </div>
+      <!--
+        TASK-096 (G-P5): шеринг-артефакт №1. Кнопка стоит ПОД списком, а не в шапке —
+        поделиться расписанием хочется после того, как его просмотрел, и первый экран
+        по-прежнему принадлежит товару (G-P3).
+      -->
+      <button type="button" class="btn-neutral btn-block ice-share" id="iceShareBtn" hidden>
+        <span class="ice-share__icon" aria-hidden="true">↗</span>
+        <span class="ice-share__label" id="iceShareLabel">Поделиться расписанием</span>
+      </button>
     </div>
     <div class="ice-map-wrap" id="iceMapSec" hidden>
       <div class="ice-map-empty" id="iceMapEmpty" hidden></div>
       <div class="ice-map-stage" id="iceMapStage">
         <div id="iceMapCanvas" class="ice-map-canvas" role="application" aria-label="Карта катков"></div>
+        <!--
+          TASK-103: пока Яндекс не отдал тайлы, сцена показывает лоадер, а не пустую
+          серую заливку. Серый прямоугольник неотличим от поломки, и без этого возврат
+          карты выглядел бы хуже её отсутствия.
+        -->
+        <div class="ice-map-loader" id="iceMapLoader" role="status" aria-live="polite">
+          <span class="ice-map-loader__spinner" aria-hidden="true"></span>
+          <span class="ice-map-loader__text">Загружаем карту…</span>
+        </div>
         <button type="button" class="ice-near" id="iceNearBtn">◎ Рядом со мной</button>
       </div>
       <div class="ice-map-sheet" id="iceMapSheet"></div>
@@ -103,10 +122,25 @@
       </div>
       <button type="button" class="ice-geo" id="iceGeoBtn">Определить по геолокации</button>
     </div>
+    <p class="ice-picker__label" id="iceCityPopularLabel" hidden>Популярные города</p>
+    <div class="ice-picker__popular" id="iceCityPopular"></div>
     <div class="ice-picker__list" id="iceCityList"></div>
   </div>
 
-  <script src="ice-map.js?v=202609074"></script>
-  <script src="ice-tab.js?v=202609074"></script>
+  <!--
+    TASK-103: переключатель «Список ↔ Карта».
+    Плавающая пилюля, а не сегмент в шапке: сегмент занимал верх первого экрана и
+    нарушал G-P3 («товар над сгибом»), из-за чего карту и выключили в TASK-084.
+    Здесь он стоит ноль высоты полотна и одинаково доступен в обоих состояниях.
+    Скрыт по умолчанию: показывается только для чипов «Покататься» и «Группы» —
+    тренеров на карте нет.
+  -->
+  <button type="button" class="ice-viewswitch" id="iceViewSwitch" hidden aria-pressed="false">
+    <span class="ice-viewswitch__icon" id="iceViewSwitchIcon" aria-hidden="true"></span>
+    <span class="ice-viewswitch__label" id="iceViewSwitchLabel">Карта</span>
+  </button>
+
+  <script src="ice-map.js?v=202609091"></script>
+  <script src="ice-tab.js?v=202609095"></script>
 </body>
 </html>

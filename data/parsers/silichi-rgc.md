@@ -20,4 +20,4 @@ V1: нет адаптера. Ждать пост открытия сезона, 
 
 ## Fixture
 
-`data/fixtures/silichi-rgc/` — `aktualnoe-vremya-raboti.html` + `expected.json` (`sessions: []`).
+`.ai/data/fixtures/silichi-rgc/` — `aktualnoe-vremya-raboti.html` + `expected.json` (`sessions: []`).

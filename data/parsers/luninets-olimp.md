@@ -18,4 +18,4 @@
 
 ## Fixture
 
-`data/fixtures/luninets-olimp/expected.json` — `sessions: []`, `fetch_timeout: true`.
+`.ai/data/fixtures/luninets-olimp/expected.json` — `sessions: []`, `fetch_timeout: true`.

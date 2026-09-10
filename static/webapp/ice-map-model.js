@@ -196,21 +196,33 @@
     var minLatSpan = 0.22;
     var minLonSpan = 0.42;
     var onMap = splitMapAndList(items).onMap;
-    if (!onMap.length) return null;
+    var fallback = opts.fallbackCenter;
+    if (!fallback || !isFinite(Number(fallback[0])) || !isFinite(Number(fallback[1]))) {
+      fallback = null;
+    }
     var minLat;
     var maxLat;
     var minLon;
     var maxLon;
-    var lats = onMap.map(function (it) {
-      return Number(it.latitude);
-    });
-    var lons = onMap.map(function (it) {
-      return Number(it.longitude);
-    });
-    minLat = Math.min.apply(null, lats) - pad;
-    maxLat = Math.max.apply(null, lats) + pad;
-    minLon = Math.min.apply(null, lons) - pad;
-    maxLon = Math.max.apply(null, lons) + pad;
+    if (onMap.length) {
+      var lats = onMap.map(function (it) {
+        return Number(it.latitude);
+      });
+      var lons = onMap.map(function (it) {
+        return Number(it.longitude);
+      });
+      minLat = Math.min.apply(null, lats) - pad;
+      maxLat = Math.max.apply(null, lats) + pad;
+      minLon = Math.min.apply(null, lons) - pad;
+      maxLon = Math.max.apply(null, lons) + pad;
+    } else if (fallback) {
+      minLat = Number(fallback[0]) - minLatSpan / 2;
+      maxLat = Number(fallback[0]) + minLatSpan / 2;
+      minLon = Number(fallback[1]) - minLonSpan / 2;
+      maxLon = Number(fallback[1]) + minLonSpan / 2;
+    } else {
+      return null;
+    }
     if (maxLat - minLat < minLatSpan) {
       var midLat = (minLat + maxLat) / 2;
       minLat = midLat - minLatSpan / 2;

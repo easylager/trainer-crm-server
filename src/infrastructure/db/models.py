@@ -247,6 +247,7 @@ class ArenaProfile(Base):
     short_description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     website_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    tickets_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     social_urls: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
@@ -374,6 +375,18 @@ class IceSession(Base):
     observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+
+
+class IceCityInterest(Base):
+    """Client tap on Ice tab «скоро добавим катки» for a city without map rinks."""
+
+    __tablename__ = "ice_city_interest"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False, server_default="skate")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table
@@ -1581,6 +1594,46 @@ class TrainerDemandEvent(Base):
     source: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     # sha256(ip || ua || trainer_id || day) — irreversible, narrow window. Never store IP/UA in cleartext.
     dedup_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+
+
+# ---------------------------------------------------------------------------
+# Client share events (TASK-096, gate G-P5) — what a client sent into a chat.
+#
+# Deliberately not trainer_demand_events: that one is Lead Mode and requires trainer_id,
+# while the headline artifact is a city's ice schedule, which has no trainer at all.
+# ---------------------------------------------------------------------------
+
+CLIENT_SHARE_KIND_ICE_CITY_DAY = "ice_city_day"
+CLIENT_SHARE_KIND_TRAINER = "trainer"
+
+CLIENT_SHARE_KINDS = (
+    CLIENT_SHARE_KIND_ICE_CITY_DAY,
+    CLIENT_SHARE_KIND_TRAINER,
+)
+
+
+class ClientShareEvent(Base):
+    """Append-only: a client opened the Telegram share dialog for one artifact."""
+    __tablename__ = "client_share_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    share_context: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    city_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("cities.id", ondelete="SET NULL"), nullable=True
+    )
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
+    trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    # sha256(telegram_id || kind || day) — irreversible. Counts people, not identities.
+    actor_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
 
 

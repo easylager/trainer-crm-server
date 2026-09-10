@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -133,6 +134,45 @@ async def _add_future_session(
         )
     await db_session.flush()
     return session_id
+
+
+async def _add_minsk_session(
+    db_session,
+    arena_id: int,
+    *,
+    when: datetime,
+    duration_minutes: int = 45,
+    price_adult_minor: int = 850,
+) -> int:
+    """Insert a public_skate slot at a Europe/Minsk wall-clock instant."""
+    local = when.astimezone(ZoneInfo("Europe/Minsk"))
+    created = await create_ice_session(
+        db_session,
+        arena_id,
+        local_date=local.date(),
+        starts_at_local=local.strftime("%H:%M"),
+        duration_minutes=duration_minutes,
+        kind="public_skate",
+        price_adult_minor=price_adult_minor,
+    )
+    await db_session.flush()
+    return int(created["id"])
+
+
+def _session_ids_from_feed(payload: dict) -> set[int]:
+    ids: set[int] = set()
+    for day in payload.get("days") or []:
+        for slot in day.get("sessions") or []:
+            ids.add(int(slot["id"]))
+    return ids
+
+
+def _session_hhmm_from_feed(payload: dict) -> list[str]:
+    times: list[str] = []
+    for day in payload.get("days") or []:
+        for slot in day.get("sessions") or []:
+            times.append(str(slot.get("starts_at_local") or "")[:5])
+    return times
 
 
 @pytest.mark.asyncio
@@ -330,6 +370,56 @@ async def test_expired_sessions_are_not_current_in_list_or_feed(
 
 
 @pytest.mark.asyncio
+async def test_started_session_is_not_current_on_ice_list_or_feed(
+    app_use_test_db, db_session
+) -> None:
+    """PDEC-005: an in-progress MK slot is past for the vitrine (starts_at > now, UTC+3).
+
+    Repro: 13:10 Europe/Minsk still showing 12:15 on Ice tab / hub because the
+    filter used ends_at >= now. A 90-minute session that started 55 minutes ago
+    has not ended yet — and must still disappear, while the next start stays.
+    """
+    now_minsk = datetime.now(ZoneInfo("Europe/Minsk"))
+    started = now_minsk - timedelta(minutes=55)
+    upcoming = now_minsk + timedelta(hours=2)
+    cid = await _insert_city(db_session, name=f"IceNow-{uuid.uuid4().hex[:6]}")
+    mixed = await _insert_arena(db_session, cid, name="ТЦ Diamond city")
+    only_live = await _insert_arena(db_session, cid, name="Только идущий сеанс")
+    await _add_minsk_session(db_session, mixed, when=started, duration_minutes=90)
+    upcoming_id = await _add_minsk_session(
+        db_session, mixed, when=upcoming, duration_minutes=45, price_adult_minor=1100
+    )
+    await _add_minsk_session(db_session, only_live, when=started, duration_minutes=90)
+
+    from src.application.arena_public_use_cases import get_hub_ice_teaser
+
+    teaser = await get_hub_ice_teaser(db_session, city_id=cid)
+    assert teaser is not None
+    assert teaser["arena_id"] == mixed
+    assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        listed = await client.get(
+            "/api/public/ice/arenas", params={"city_id": cid, "intent": "skate"}
+        )
+        feed_mixed = await client.get(f"/api/public/arenas/{mixed}/sessions")
+        feed_live = await client.get(f"/api/public/arenas/{only_live}/sessions")
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["items"]
+    assert {it["id"] for it in items} == {mixed}
+    live = items[0]["live"]
+    assert live["kind"] == "session"
+    assert str(live["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+    assert started.strftime("%H:%M") not in str(live.get("text") or "")
+
+    mixed_times = _session_hhmm_from_feed(feed_mixed.json())
+    assert upcoming.strftime("%H:%M") in mixed_times
+    assert started.strftime("%H:%M") not in mixed_times
+    assert upcoming_id in _session_ids_from_feed(feed_mixed.json())
+    assert _session_ids_from_feed(feed_live.json()) == set()
+
+
+@pytest.mark.asyncio
 async def test_catalog_arena_ids_filter_accepts_forty_or_flags_truncation(
     app_use_test_db, db_session
 ) -> None:
@@ -456,10 +546,10 @@ async def test_ice_list_of_sixty_arenas_is_not_n_plus_one(
 
 
 @pytest.mark.asyncio
-async def test_bbox_mixed_cities_keep_per_arena_currency(
+async def test_bbox_skips_ru_arenas_in_ice_discovery(
     app_use_test_db, db_session
 ) -> None:
-    """EDGE-001: bbox spanning cities must not collapse to one list-level currency."""
+    """Ice V1 is BY-only: Moscow rinks stay out of the client Mini App even inside bbox."""
     by_city = await _insert_city(db_session, name=f"IceBY-{uuid.uuid4().hex[:6]}", country="BY")
     ru_city = await _insert_city(db_session, name=f"IceRU-{uuid.uuid4().hex[:6]}", country="RU")
     by_arena = await _insert_arena(
@@ -475,15 +565,16 @@ async def test_bbox_mixed_cities_keep_per_arena_currency(
             "/api/public/ice/arenas",
             params={"bbox": "53.0,27.0,55.0,33.0", "intent": "skate", "limit": 20},
         )
+        cities = await client.get("/api/public/ice/cities")
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    assert "currency_code" not in payload or payload.get("currency_code") is None
-    by_row = next(it for it in payload["items"] if it["id"] == by_arena)
-    ru_row = next(it for it in payload["items"] if it["id"] == ru_arena)
-    assert by_row["currency_code"] == "BYN"
-    assert ru_row["currency_code"] == "RUB"
-    assert by_row["live"]["currency_code"] == "BYN"
-    assert ru_row["live"]["currency_code"] == "RUB"
+    ids = {it["id"] for it in payload["items"]}
+    assert by_arena in ids
+    assert ru_arena not in ids
+    assert cities.status_code == 200, cities.text
+    city_ids = {int(it["id"]) for it in cities.json()["items"]}
+    assert by_city in city_ids
+    assert ru_city not in city_ids
 
 
 @pytest.mark.asyncio
@@ -581,3 +672,50 @@ async def test_ice_cities_omit_empty_and_count_skate_vs_trainers(
     assert by_id[skate_id]["skate_count"] >= 1
     assert by_id[coach_id]["trainer_count"] >= 1
     assert by_id[coach_id]["skate_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, db_session) -> None:
+    empty_cid = await _insert_city(db_session, name=f"IceEmpty-{uuid.uuid4().hex[:6]}")
+    rink_cid = await _insert_city(db_session, name=f"IceRink-{uuid.uuid4().hex[:6]}")
+    coach_cid = await _insert_city(db_session, name=f"IceCoach-{uuid.uuid4().hex[:6]}")
+    await _insert_arena(db_session, rink_cid, name="Каток на карте", latitude=55.75, longitude=37.62)
+    tr = await db_session.execute(
+        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+    )
+    tid = int(tr.scalar_one())
+    await db_session.execute(
+        text("INSERT INTO trainer_cities (trainer_id, city_id, is_primary) VALUES (:t, :c, true)"),
+        {"t": tid, "c": coach_cid},
+    )
+    await db_session.flush()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/ice/cities")
+        all_cities = await client.get("/api/public/cities")
+        interest = await client.post(
+            "/api/public/ice/interest",
+            json={"city_id": coach_cid, "intent": "skate", "source": "coming_soon_cta"},
+        )
+        missing = await client.post("/api/public/ice/interest", json={"city_id": 9_999_999})
+    assert resp.status_code == 200, resp.text
+    ids = {it["id"] for it in resp.json()["items"]}
+    assert empty_cid not in ids
+    assert rink_cid in ids
+    assert coach_cid in ids
+    all_ids = {it["id"] for it in all_cities.json()["items"]}
+    assert empty_cid in all_ids
+    coach = next(it for it in resp.json()["items"] if it["id"] == coach_cid)
+    assert coach["trainer_count"] >= 1
+    assert coach["map_rink_count"] == 0
+    rink = next(it for it in resp.json()["items"] if it["id"] == rink_cid)
+    assert rink["map_rink_count"] >= 1
+    assert rink["latitude"] is not None
+    assert interest.status_code == 200, interest.text
+    assert interest.json()["ok"] is True
+    assert missing.status_code == 404
+    counted = await db_session.execute(
+        text("SELECT COUNT(*) FROM ice_city_interest WHERE city_id = :cid"),
+        {"cid": coach_cid},
+    )
+    assert int(counted.scalar_one()) == 1
+

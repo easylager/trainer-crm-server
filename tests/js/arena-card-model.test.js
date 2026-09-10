@@ -195,7 +195,7 @@ describe('buildRibbonForDay', () => {
     });
   });
 
-  it('labels a live ice session as идёт', () => {
+  it('drops an in-progress ice session from the ribbon (PDEC-005)', () => {
     const { buildRibbonForDay } = loadModel();
     const rows = buildRibbonForDay({
       localDate: '2026-09-06',
@@ -214,11 +214,10 @@ describe('buildRibbonForDay', () => {
       weekday: 6,
       now: new Date('2026-09-06T07:20:00Z'),
     });
-    assert.equal(rows[0].nowState, 'live');
-    assert.match(rows[0].meta, /идёт/i);
+    assert.equal(rows.length, 0);
   });
 
-  it('keeps a live session as идёт and drops ones that already ended', () => {
+  it('drops live and ended ice rows, keeps the next start', () => {
     const { buildRibbonForDay } = loadModel();
     const rows = buildRibbonForDay({
       localDate: '2026-09-06',
@@ -258,13 +257,10 @@ describe('buildRibbonForDay', () => {
       weekday: 6,
       now: new Date('2026-09-06T07:20:00Z'),
     });
-    assert.equal(rows.length, 2);
-    assert.equal(rows[0].nowState, 'live');
-    assert.equal(rows[0].title, 'Массовое катание');
-    assert.match(rows[0].meta, /идёт/i);
-    assert.equal(rows[1].nowState, 'upcoming');
-    assert.equal(rows[1].title, 'Свободный лёд');
-    assert.ok(!/идёт/i.test(rows[1].meta));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].nowState, 'upcoming');
+    assert.equal(rows[0].title, 'Свободный лёд');
+    assert.ok(!/идёт/i.test(rows[0].meta));
   });
 });
 
@@ -355,6 +351,19 @@ describe('iceRowCta', () => {
     assert.equal(linked.ctaKind, 'ghost');
     assert.equal(linked.bookable, false);
     assert.equal(linked.href, 'https://chizhovka.example');
+  });
+});
+
+describe('ticketCta', () => {
+  it('shows Купить билет only for an http(s) tickets_url', () => {
+    const { ticketCta } = loadModel();
+    assert.equal(ticketCta({}), null);
+    assert.equal(ticketCta({ tickets_url: '  ' }), null);
+    assert.equal(ticketCta({ tickets_url: 'javascript:alert(1)' }), null);
+    assert.deepEqual(ticketCta({ tickets_url: 'https://koronaticket.by/rink' }), {
+      href: 'https://koronaticket.by/rink',
+      label: 'Купить билет',
+    });
   });
 });
 

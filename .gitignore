@@ -76,7 +76,6 @@ Thumbs.db
 # Personal résumés (HTML/PDF локально; остальной docs/ проекта продолжаем версионировать)
 docs/cv-max-vasilenko-*
 
-
 # Состояние работы агента (.ai) — единый экземпляр вне git, общий для всех worktree.
 # Реальный каталог: ~/Projects/.trainer-crm-state (в репозитории только симлинк).
 .ai
@@ -86,3 +85,6 @@ docs/cv-max-vasilenko-*
 .playwright-mcp/
 /ar-before.json
 /*.png
+
+uv.lock
+

@@ -245,7 +245,6 @@ from src.application.trainer_access_state import (
 )
 from src.shared.trainer_status import normalize_trainer_status_value
 from src.application.trainer_link import (
-    get_trainer_id_by_telegram_id_from_principal,
     get_trainer_id_for_webapp_trainer_operations_from_principal,
     get_trainer_id_linked_any_status_from_principal,
 )
@@ -343,7 +342,11 @@ from src.application.demand_signals_use_cases import (
     get_signals_since,
 )
 from src.infrastructure.db import async_session_factory
-from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
+from src.infrastructure.db.models import (
+    CLIENT_SHARE_KIND_TRAINER,
+    SUBSCRIPTION_TIERS,
+    TRAINER_STATUS_ACTIVE,
+)
 from src.shared.webapp_http_messages import (
     TRAINER_WEBAPP_FORBIDDEN_DETAIL,
     WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
@@ -381,6 +384,8 @@ from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
 )
+from src.application.client_delight_metrics import record_client_share
+from src.application.client_first_success import build_first_booking_success
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
@@ -1919,6 +1924,16 @@ async def post_client_booking(
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
     if client_request_id is None and place_mismatch:
         out["place_mismatch"] = True
+    # TASK-096 AC-004: момент первого успеха. Считается ДО кэширования идемпотентности —
+    # повтор того же запроса обязан вернуть тот же экран, а не «уже не первая».
+    out.update(
+        await build_first_booking_success(
+            session,
+            client_id=client_id,
+            slot_date=slot.get("slot_date"),
+            start_time=slot.get("start_time"),
+        )
+    )
     if idem_cache_key:
         await set_idempotency_response(session, idem_cache_key, dict(out))
     background_tasks.add_task(
@@ -2177,40 +2192,6 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
         pass
 
 
-async def _bg_notify_trainer_client_request_immediate(request_id: int) -> None:
-    """
-    Immediate trainer DM for a personalized client_request (pass order, certificate order, etc.).
-    Avoids gaps when the batch notifier is delayed.
-    """
-    from aiogram import Bot
-    from aiogram.client.default import DefaultBotProperties
-    from aiogram.enums import ParseMode
-
-    from src.bot.notification_loops import process_request_notifications_batch
-    from src.infrastructure.db.session import async_session_factory
-
-    settings = Settings()
-    bot = Bot(
-        token=settings.telegram_bot_token_trainer,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    try:
-        async with async_session_factory() as session:
-            await process_request_notifications_batch(
-                bot,
-                session,
-                only_request_id=request_id,
-                bypass_quiet_hours_for_that_request=True,
-            )
-    except Exception:
-        logger.exception(
-            "Background client_request trainer notify failed (request_id=%s)",
-            request_id,
-        )
-    finally:
-        await bot.session.close()
-
-
 class ClientRequestCreateBody(BaseModel):
     """Create request from catalog Mini App: city, service, optional comment and trainer_id."""
     city_id: int
@@ -2224,7 +2205,6 @@ class ClientRequestCreateBody(BaseModel):
 @router.post("/client/request")
 async def post_client_request(
     body: ClientRequestCreateBody,
-    background_tasks: BackgroundTasks,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -2245,8 +2225,7 @@ async def post_client_request(
     request_id = await create_client_request(
         session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
     )
-    # Immediate DM — batch notifier can lag minutes; personalized requests must not wait.
-    background_tasks.add_task(_bg_notify_trainer_client_request_immediate, int(request_id))
+    # Trainer DM: only notification_service request loop (claim-before-send). No API immediate path.
     return {"success": True, "request_id": request_id}
 
 
@@ -2321,7 +2300,6 @@ async def get_client_pass_order_catalog_endpoint(
 
 @router.post("/client/pass-order/request")
 async def post_client_pass_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientPassOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -2357,9 +2335,6 @@ async def post_client_pass_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {
@@ -2415,7 +2390,6 @@ async def get_client_cert_order_catalog_endpoint(
 
 @router.post("/client/cert-order/request")
 async def post_client_cert_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientCertOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -2454,9 +2428,6 @@ async def post_client_cert_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {
@@ -2861,8 +2832,11 @@ async def get_client_hub_bootstrap(
     try:
         sess_row = await read_client_bot_session(telegram_id, session)
         city_id = (sess_row or {}).get("city_id")
-        if city_id is not None:
-            ice_teaser = await get_hub_ice_teaser(session, city_id=int(city_id))
+        # TASK-091 AC-005: у нового клиента города ещё нет, но первый экран всё
+        # равно обязан показать лёд. Без city_id берём ближайший сеанс по стране.
+        ice_teaser = await get_hub_ice_teaser(
+            session, city_id=int(city_id) if city_id is not None else None
+        )
     except Exception:
         logger.exception("client hub ice teaser failed")
     return {
@@ -2949,6 +2923,19 @@ async def get_client_share_trainer(
     service_line = services[0] if services else None
 
     share_body = share_body_for_native_share_dialog(share_text, deep_link)
+
+    # TASK-096 (G-P5): until now share_context was accepted and thrown away, so the share rate
+    # was unknowable rather than low. This endpoint is only called from a «Поделиться» click
+    # handler, so one row here == one intent to share. It is *not* "a message was sent" —
+    # Telegram never tells us that, and the column must not be read as if it did.
+    await record_client_share(
+        session,
+        kind=CLIENT_SHARE_KIND_TRAINER,
+        share_context=raw_ctx or "catalog",
+        trainer_id=trainer_id,
+        telegram_id=client_catalog_telegram_key(principal),
+        payload={"city": city_name} if city_name else None,
+    )
 
     return {
         "share_url": deep_link,
@@ -4320,7 +4307,7 @@ async def post_trainer_subscription_bepaid_checkout(
             status_code=400,
             detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
         )
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
@@ -4401,7 +4388,7 @@ async def post_trainer_subscription_invoice_request(
             status_code=400,
             detail="Запрос счёта доступен только в режиме «счёт / ЕРИП» (invoice).",
         )
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
@@ -4455,7 +4442,7 @@ async def post_trainer_subscription_mock_checkout(
             status_code=404,
             detail="Mock checkout is not available when payment_sandbox is disabled",
         )
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
@@ -4505,7 +4492,7 @@ async def get_trainer_pass_products(
     session: AsyncSession = Depends(get_session),
 ):
     """List trainer's pass products. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
@@ -4530,7 +4517,7 @@ async def post_trainer_pass_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Create a pass product. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
@@ -4569,7 +4556,7 @@ async def patch_trainer_pass_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Update pass product. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
@@ -4591,7 +4578,7 @@ async def delete_trainer_pass_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Delete pass product only if no purchases. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
@@ -4747,6 +4734,7 @@ class AdminArenaPatchBody(BaseModel):
     is_active: bool | None = None
     phone: str | None = None
     website_url: str | None = None
+    tickets_url: str | None = None
     short_description: str | None = None
     district: str | None = None
     timezone: str | None = None
@@ -4773,7 +4761,7 @@ async def get_admin_arenas(
     sql = """
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
-               p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
                p.amenities, p.status
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -4805,12 +4793,13 @@ async def get_admin_arenas(
             "short_description": row[10],
             "phone": row[11],
             "website_url": row[12],
-            "social_urls": row[13] or {},
-            "opening_hours": row[14],
-            "season_start_month": row[15],
-            "season_end_month": row[16],
-            "amenities": row[17] or {},
-            "status": row[18] or "published",
+            "tickets_url": row[13],
+            "social_urls": row[14] or {},
+            "opening_hours": row[15],
+            "season_start_month": row[16],
+            "season_end_month": row[17],
+            "amenities": row[18] or {},
+            "status": row[19] or "published",
         }
         for row in rows
     ]
@@ -5138,7 +5127,7 @@ async def get_trainer_certificate_products(
     session: AsyncSession = Depends(get_session),
 ):
     """List trainer's certificate products. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_certificate_products(session, trainer_id, active_only=active_only)
@@ -5160,7 +5149,7 @@ async def post_trainer_certificate_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Create certificate product. amount_cents=null means 'any amount'. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     product_id = await create_certificate_product(
@@ -5192,7 +5181,7 @@ async def patch_trainer_certificate_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Update certificate product. Auth: trainer initData. Use model_dump(exclude_unset=True) to only send changed fields."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     payload = body.model_dump(exclude_unset=True)
@@ -5227,7 +5216,7 @@ async def delete_trainer_certificate_product(
     session: AsyncSession = Depends(get_session),
 ):
     """Delete certificate product. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await delete_certificate_product(session, product_id, trainer_id)
@@ -5243,7 +5232,7 @@ async def get_trainer_certificates(
     session: AsyncSession = Depends(get_session),
 ):
     """List certificate instances issued by this trainer. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_trainer_certificate_instances(session, trainer_id, active_only=active_only)
@@ -5346,7 +5335,7 @@ async def post_trainer_certificate_issue(
     session: AsyncSession = Depends(get_session),
 ):
     """Issue a certificate: create instance, generate PDF, save file_url; optionally send PDF to recipient_email. Idempotent by Idempotency-Key. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if idempotency_key:
@@ -5461,7 +5450,7 @@ async def get_trainer_certificate_file(
     session: AsyncSession = Depends(get_session),
 ):
     """Download certificate PDF. Auth: trainer initData; certificate must belong to trainer."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     file_key = await get_certificate_file_key(session, certificate_id, trainer_id)
@@ -5484,7 +5473,7 @@ async def get_trainer_welcome_link_eligibility(
     session: AsyncSession = Depends(get_session),
 ):
     """Services list and whether trainer must pick one for generic welcome link."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     services = await list_trainer_services_for_welcome_link(session, trainer_id)
@@ -5500,7 +5489,7 @@ async def get_trainer_public_booking_link_eligibility(
     session: AsyncSession = Depends(get_session),
 ):
     """Services list for reusable public booking link. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_allows_online_booking(session, trainer_id):
@@ -5530,7 +5519,7 @@ async def get_trainer_public_booking_link(
     Deep-link payload matches client bot /start client_{city}_{service_or_0}_{trainer}.
     When service_id is omitted, client first chooses service in the booking flow.
     """
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_allows_online_booking(session, trainer_id):
@@ -5586,7 +5575,7 @@ async def get_trainer_welcome_link(
     session: AsyncSession = Depends(get_session),
 ):
     """Generic one-time invite link. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
@@ -5647,7 +5636,7 @@ async def get_trainer_client_welcome_link(
     One-time welcome link that binds the opening Telegram account to this existing client row
     (trainer-created client without telegram_id). Same service_id rules as generic welcome link.
     """
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -5853,7 +5842,7 @@ async def get_trainer_welcome_link_pass(
     session: AsyncSession = Depends(get_session),
 ):
     """One-time pass invite link. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     from src.application.pass_product_use_cases import get_pass_product
@@ -5883,7 +5872,7 @@ async def post_trainer_welcome_link_cert(
     session: AsyncSession = Depends(get_session),
 ):
     """One-time cert welcome link: issue cert (no recipient name/phone), create token, return link. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
@@ -5924,7 +5913,7 @@ async def post_trainer_certificates_redeem_by_code(
     session: AsyncSession = Depends(get_session),
 ):
     """Redeem certificate by code. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
@@ -5943,7 +5932,7 @@ async def post_trainer_certificate_redeem_by_id(
     session: AsyncSession = Depends(get_session),
 ):
     """Redeem certificate by instance id. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     result = await redeem_certificate(session, trainer_id, certificate_instance_id=certificate_id)
@@ -8712,7 +8701,7 @@ async def get_trainer_requests_summary(
     session: AsyncSession = Depends(get_session),
 ):
     """Lightweight hub: count of requests the trainer has not answered yet. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     n = await count_unanswered_requests_for_trainer(session, trainer_id)
@@ -8726,7 +8715,7 @@ async def get_trainer_requests(
 ):
     """List client requests for this trainer (city+service match). New first, then in progress. Auth: trainer initData."""
     logger.info("GET /trainer/requests authenticated")
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_requests_for_trainer(session, trainer_id)
@@ -8752,7 +8741,7 @@ async def post_trainer_request_respond(
     session: AsyncSession = Depends(get_session),
 ):
     """Respond to request (optional comment). Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     comment = (body.trainer_comment or "").strip() or None
@@ -8769,7 +8758,7 @@ async def post_trainer_request_decline(
     session: AsyncSession = Depends(get_session),
 ):
     """Decline request (hide from trainer list). Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await create_request_decline(session, request_id, trainer_id)
@@ -8788,7 +8777,7 @@ async def post_trainer_request_remind_slots(
     session: AsyncSession = Depends(get_session),
 ):
     """Set 'remind me when I have slots' for this request. Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     was_new = await add_trainer_pending_request_booking(session, trainer_id, request_id)
@@ -8802,7 +8791,7 @@ async def get_trainer_request_slots(
     session: AsyncSession = Depends(get_session),
 ):
     """Available slots for next 2 weeks (for booking client from request). Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
@@ -8847,7 +8836,7 @@ async def post_trainer_request_book(
     session: AsyncSession = Depends(get_session),
 ):
     """Create booking for client from request (trainer books client). Auth: trainer initData."""
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
@@ -10178,7 +10167,6 @@ class ClientCollectivePassOrderRequestBody(BaseModel):
 
 @router.post("/client/collective-pass-order/request")
 async def post_client_collective_pass_order_request(
-    background_tasks: BackgroundTasks,
     body: ClientCollectivePassOrderRequestBody,
     cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
@@ -10215,9 +10203,6 @@ async def post_client_collective_pass_order_request(
         out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
-        background_tasks.add_task(
-            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
-        )
         return out
     err = str(result.get("error") or "unknown")
     mapping: dict[str, tuple[int, str]] = {

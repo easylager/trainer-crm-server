@@ -62,7 +62,8 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "Завтра" in page_js
     assert "Неделя" in page_js
     assert "Расписание уточняется" in page_js
-    assert "Это ваш каток?" in page_js
+    assert "Это ваш каток?" not in page_js
+    assert "Забрать страницу" not in page_js
     assert "Сообщить об ошибке" in page_js
     assert js.status_code == 200
     assert css.status_code == 200
@@ -75,6 +76,10 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "maybeOpenArenaDeepLink" in shell
     assert "arena?ref=" in shell
     assert "iceRowCta" in model.text
+    assert "ticketCta" in model.text
+    assert "id=\"arenaTicketsCta\"" in body
+    assert "Купить билет" in body
+    assert "arena-tickets-cta" in css.text
     assert "bookable: false" in model.text or "bookable:false" in model.text
     assert 'data-action="book"' not in js.text
 
@@ -279,3 +284,44 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     assert "Расписание уточняется" in js
     assert "Позвонить" in js
     assert "Сайт катка" in js
+
+
+@pytest.mark.asyncio
+async def test_public_arena_card_exposes_tickets_url(app_use_test_db, db_session) -> None:
+    r = await db_session.execute(
+        text("SELECT id FROM cities WHERE COALESCE(is_active, true) ORDER BY id LIMIT 1")
+    )
+    city_id = r.scalar()
+    if city_id is None:
+        pytest.skip("need seed city")
+    ins = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (city_id, name, address, is_active, is_confirmed)
+            VALUES (:cid, :n, 'пр. Победителей, 65', true, true)
+            RETURNING id
+            """
+        ),
+        {"cid": int(city_id), "n": f"Zamok-{uuid.uuid4().hex[:6]}"},
+    )
+    arena_id = int(ins.scalar_one())
+    await ensure_arena_profile(db_session, arena_id, city_id=int(city_id), name="Zamok")
+    await db_session.execute(
+        text("UPDATE arena_profiles SET tickets_url = :url WHERE arena_id = :id"),
+        {"id": arena_id, "url": "https://koronaticket.by/rink"},
+    )
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        card = await client.get(f"/api/public/arenas/{arena_id}")
+    assert card.status_code == 200
+    body = card.json()
+    assert body["tickets_url"] == "https://koronaticket.by/rink"
+    await db_session.execute(
+        text("UPDATE arena_profiles SET tickets_url = :url WHERE arena_id = :id"),
+        {"id": arena_id, "url": "javascript:alert(1)"},
+    )
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        stripped = await client.get(f"/api/public/arenas/{arena_id}")
+    assert stripped.status_code == 200
+    assert stripped.json()["tickets_url"] is None

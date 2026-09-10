@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -17,8 +19,18 @@ from src.application.arena_public_use_cases import (
     list_public_arena_sessions,
     list_public_arena_trainers,
     list_public_ice_arenas,
+    record_ice_city_interest,
     search_public_ice,
 )
+from src.application.client_delight_metrics import record_client_share
+from src.application.client_share_message import share_body_for_native_share_dialog
+from src.application.ice_city_day import (
+    compose_ice_city_day_share_message,
+    get_city_ice_day,
+    ice_city_day_page_url,
+    summary_line,
+)
+from src.infrastructure.db.models import CLIENT_SHARE_KIND_ICE_CITY_DAY
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
@@ -72,6 +84,99 @@ async def get_public_ice_arenas(
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
+
+
+@router.get("/ice/share/{city_id}")
+async def get_ice_city_day_share(
+    city_id: int,
+    response: Response,
+    share_context: str | None = Query(
+        None, description="Где нажали «Поделиться»: ice_tab (вкладка «Лёд»)."
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Готовое сообщение для Telegram share: ссылка на публичную страницу «Лёд сегодня».
+
+    Контракт тот же, что у ``/api/webapp/client/share-trainer``
+    (``share_url``/``share_body``/``share_text``), поэтому фронт переиспользует
+    ``openTelegramShareUrlFromMiniApp`` без правок.
+
+    Ручка публичная и по этой причине **не знает, кто поделился**: у события шеринга
+    города остаётся ``actor_hash = NULL``. Это осознанный размен — доля шеринга по
+    людям здесь не считается, зато вкладка «Лёд» работает и до авторизации, как и вся
+    остальная публичная витрина Ice Discovery.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    row = (
+        await session.execute(
+            text("SELECT id, name FROM cities WHERE id = :cid AND is_active"),
+            {"cid": int(city_id)},
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    city_name = str(row[1])
+
+    day = await get_city_ice_day(session, city_id=int(city_id))
+    page_url = ice_city_day_page_url(
+        base_url=Settings().webapp_base_url, city_name=city_name
+    )
+    share_text = compose_ice_city_day_share_message(
+        city_name=city_name, day=day, page_url=page_url
+    )
+    share_body = share_body_for_native_share_dialog(share_text, page_url)
+
+    ctx = (share_context or "").strip().lower() or "ice_tab"
+    await record_client_share(
+        session,
+        kind=CLIENT_SHARE_KIND_ICE_CITY_DAY,
+        share_context=ctx,
+        city_id=int(city_id),
+        payload={
+            "local_date": day.get("local_date"),
+            "arena_count": day.get("arena_count"),
+            "session_count": day.get("session_count"),
+        },
+    )
+
+    return {
+        "share_url": page_url,
+        "share_body": share_body,
+        "share_text": share_text,
+        "city_name": city_name,
+        "local_date": day.get("local_date"),
+        "day_label": day.get("day_label"),
+        "arena_count": day.get("arena_count"),
+        "session_count": day.get("session_count"),
+        "summary": summary_line(day, city_name=city_name),
+        "share_context": ctx,
+    }
+
+
+class IceCityInterestBody(BaseModel):
+    city_id: int
+    intent: str = "skate"
+    source: str = Field(default="coming_soon_cta", max_length=32)
+
+
+@router.post("/ice/interest")
+async def post_ice_interest(
+    body: IceCityInterestBody,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Record that a client asked for skating in a city that has trainers but no map rinks."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        payload = await record_ice_city_interest(
+            session, city_id=body.city_id, intent=body.intent, source=body.source
+        )
+    except IcePublicQueryError as exc:
+        raise _query_error(exc) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    return payload
 
 
 @router.get("/search")

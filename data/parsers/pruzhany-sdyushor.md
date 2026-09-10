@@ -26,7 +26,7 @@
 
 ## Fixture
 
-`data/fixtures/pruzhany-sdyushor/` — `sport.html` (муниципальная страница) + `expected.json` (пусто).
+`.ai/data/fixtures/pruzhany-sdyushor/` — `sport.html` (муниципальная страница) + `expected.json` (пусто).
 
 ## Blockers / notes
 

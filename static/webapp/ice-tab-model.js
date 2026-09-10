@@ -16,6 +16,7 @@
 
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
+  var MINSK_TZ = 'Europe/Minsk';
 
   function pluralRu(n, one, few, many) {
     var abs = Math.abs(n) % 100;
@@ -94,8 +95,76 @@
 
   function filterIceCities(cities) {
     return (cities || []).filter(function (c) {
-      return (Number(c.skate_count) || 0) > 0 || (Number(c.trainer_count) || 0) > 0;
+      return (
+        (Number(c.skate_count) || 0) > 0 ||
+        (Number(c.trainer_count) || 0) > 0 ||
+        (Number(c.map_rink_count) || 0) > 0
+      );
     });
+  }
+
+  function buildIceInterestUrl() {
+    return '/api/public/ice/interest';
+  }
+
+  function buildGroupsProbeUrl(opts) {
+    opts = opts || {};
+    var params = ['limit=1'];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    return '/api/public/training-groups?' + params.join('&');
+  }
+
+  function shouldShowGroupChip(count) {
+    return Number(count) > 0;
+  }
+
+  function shouldShowSkateChip(count) {
+    return count == null || Number(count) > 0;
+  }
+
+  function sanitizeIntent(intent, opts) {
+    opts = opts || {};
+    var hasSkate = opts.hasSkate !== false;
+    if (intent === INTENTS.group && !opts.hasGroups) intent = INTENTS.skate;
+    if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.group) return INTENTS.group;
+    return hasSkate ? INTENTS.skate : INTENTS.coach;
+  }
+
+  function rankServiceChips(services) {
+    return (services || [])
+      .filter(function (s) {
+        return Number(s.trainer_count) > 0;
+      })
+      .sort(function (a, b) {
+        var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+        var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+        if (sa !== sb) return sa - sb;
+        return Number(a.id) - Number(b.id);
+      });
+  }
+
+  function rankPopularCities(cities, limit) {
+    var list = (cities || []).slice();
+    var cap = limit == null ? 8 : Number(limit);
+    list.sort(function (a, b) {
+      var wa =
+        (Number(a.map_rink_count) || 0) +
+        (Number(a.skate_count) || 0) +
+        (Number(a.trainer_count) || 0);
+      var wb =
+        (Number(b.map_rink_count) || 0) +
+        (Number(b.skate_count) || 0) +
+        (Number(b.trainer_count) || 0);
+      if (wa !== wb) return wb - wa;
+      var sa = a.sort_order == null ? 9999 : Number(a.sort_order);
+      var sb = b.sort_order == null ? 9999 : Number(b.sort_order);
+      if (sa !== sb) return sa - sb;
+      return Number(a.id) - Number(b.id);
+    });
+    return list.slice(0, cap);
   }
 
   function pickCityIntent(city, currentIntent) {
@@ -217,10 +286,12 @@
   function trainerPhotoUrl(item) {
     var photos = (item && item.photos) || [];
     var ph = photos[0] || {};
-    if (ph.list_url) return ph.list_url;
-    if (ph.url) return ph.url;
+    // Same-origin proxy first: public R2 CDN 404s while /api/public/photos works
+    // (trainer profile already prefers file_key for this reason).
     var fk = ph.file_key_list || ph.file_key;
     if (fk) return '/api/public/photos/' + encodeURIComponent(fk);
+    if (ph.list_url) return ph.list_url;
+    if (ph.url) return ph.url;
     if (item && item.thumb) return item.thumb;
     return '';
   }
@@ -233,26 +304,121 @@
     return name || 'Тренер';
   }
 
+  /** Первая буква имени для плашки без фото. Эмодзи в имени пропускаем. */
+  function initialOf(name) {
+    var clean = String(name || '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+    return clean ? clean.charAt(0).toUpperCase() : '?';
+  }
+
+  /** Максимум услуг в строке специализации: третья уже не читается на 390px. */
+  var TRAINER_SPEC_MAX = 2;
+
+  /**
+   * «С нуля · Техника» — то, чем тренеры отличаются друг от друга.
+   *
+   * Услуга есть у каждого тренера в выдаче (её же фильтруют чипы над списком),
+   * поэтому это единственный различающий факт, который не оставит половину
+   * карточек пустыми. Длинные названия из справочника режутся до сути: карточка
+   * не место для «Обучение катанию «с нуля»» во всю ширину.
+   */
+  function trainerSpecLine(item) {
+    var services = (item && item.services) || [];
+    var names = [];
+    for (var i = 0; i < services.length; i++) {
+      var raw = services[i] && services[i].service_name;
+      var name = shortServiceName(raw);
+      if (name && names.indexOf(name) < 0) names.push(name);
+    }
+    if (!names.length) return '';
+    if (names.length <= TRAINER_SPEC_MAX) return names.join(' · ');
+    return names.slice(0, TRAINER_SPEC_MAX).join(' · ') + ' +' + (names.length - TRAINER_SPEC_MAX);
+  }
+
+  function shortServiceName(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    // Названия в справочнике — административные («Обучение катанию «с нуля»»).
+    // На карточке нужен ярлык, и он обязан совпадать с подписью чипа-фильтра,
+    // иначе человек не свяжет выбранный фильтр с тем, что видит в списке.
+    if (/с\s*нуля/i.test(s)) return 'С нуля';
+    if (/совершенствован/i.test(s)) return 'Техника';
+    if (/хоккей/i.test(s)) return 'Хоккей';
+    if (/фигурн/i.test(s)) return 'Фигурное';
+    return s;
+  }
+
+  function formatTrainerPriceFrom(item) {
+    var services = (item && item.services) || [];
+    var min = null;
+    for (var i = 0; i < services.length; i++) {
+      var s = services[i] || {};
+      var v = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
+      if (v == null) continue;
+      var n = Number(v);
+      if (isNaN(n)) continue;
+      if (min == null || n < min) min = n;
+    }
+    if (min == null) return '';
+    var num = min === Math.floor(min) ? String(min) : min.toFixed(2);
+    // «BYN» захардкожен так же, как в каталоге (formatCatalogServicePrice):
+    // валюты в услуге нет, и расходиться с каталогом на одном и том же товаре
+    // хуже, чем разделить с ним известное ограничение по Москве.
+    return 'от ' + num + ' BYN';
+  }
+
+  function formatTrainerExperience(profile) {
+    var years = Number(profile && profile.experience_years);
+    if (!years || years < 1) return '';
+    return years + ' ' + pluralRu(years, 'год', 'года', 'лет') + ' опыта';
+  }
+
   function trainerCardView(item) {
     item = item || {};
     var p = item.profile || {};
     var parts = [];
     if (item.primary_arena_name) parts.push(String(item.primary_arena_name));
-    var rating = p.rating_avg;
-    var count = Number(p.rating_count) || 0;
-    if (rating != null && count > 0) {
-      parts.push('★ ' + Number(rating).toFixed(1));
+
+    /*
+     * Факты для выбора, по убыванию силы: цена → стаж → рейтинг.
+     *
+     * Каждый добавляется, только если он ЕСТЬ. Ни «цена по запросу», ни «стаж не
+     * указан», ни нулевых звёзд: пустой факт не сообщает ничего, но выглядит как
+     * недостаток тренера, а не как недостаток данных.
+     *
+     * Больше одного факта в строку не ставим — рядом с длинным названием арены
+     * («Ледовый дворец спорта Минской области») строка и так уходит в две.
+     */
+    var facts = [];
+    var price = formatTrainerPriceFrom(item);
+    if (price) facts.push(price);
+    if (!facts.length) {
+      var exp = formatTrainerExperience(p);
+      if (exp) facts.push(exp);
     }
+    if (!facts.length) {
+      var rating = p.rating_avg;
+      var count = Number(p.rating_count) || 0;
+      if (rating != null && count > 0) facts.push('★ ' + Number(rating).toFixed(1));
+    }
+    parts = parts.concat(facts);
+
     var live = item.can_book ? 'Записаться' : 'Открыть профиль';
     var slots = Number(item.free_slots_14d);
     if (slots > 0) {
       live += ' · ' + slots + ' ' + pluralRu(slots, 'слот', 'слота', 'слотов');
     }
+    var displayName = trainerDisplayName(item);
     return {
       kind: 'trainer',
-      name: trainerDisplayName(item),
+      name: displayName,
       href: trainerHref(item),
       thumb: trainerPhotoUrl(item),
+      // TASK-090 / AC-006: без фото была мёртвая заливка. Монограмма — тот же
+      // приём, что у катка без кадра: пустое место должно что-то говорить.
+      initial: initialOf(displayName),
+      spec: trainerSpecLine(item),
       meta: parts.join(' · '),
       live: live,
       tone: 'a',
@@ -291,8 +457,23 @@
     return n < 10 ? '0' + n : String(n);
   }
 
-  function isoDayUtc(d) {
-    return d.toISOString().slice(0, 10);
+  function minskDateIso(now) {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: MINSK_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    var y = '1970';
+    var m = '01';
+    var d = '01';
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (parts[i].type === 'year') y = parts[i].value;
+      if (parts[i].type === 'month') m = parts[i].value;
+      if (parts[i].type === 'day') d = parts[i].value;
+    }
+    return y + '-' + m + '-' + d;
   }
 
   function addDaysIso(iso, days) {
@@ -320,16 +501,20 @@
     return parts.join(' · ');
   }
 
+  function sessionDayLabel(live, now) {
+    live = live || {};
+    var localDate = String(live.local_date || '').slice(0, 10);
+    if (!localDate) return '';
+    var today = minskDateIso(now instanceof Date ? now : new Date());
+    if (localDate === today) return 'Сегодня';
+    if (localDate === addDaysIso(today, 1)) return 'Завтра';
+    return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+  }
+
   function sessionWhenLabel(live, now) {
     live = live || {};
     var time = String(live.starts_at_local || '').slice(0, 5);
-    var localDate = String(live.local_date || '').slice(0, 10);
-    var today = isoDayUtc(now instanceof Date ? now : new Date());
-    var day = '';
-    if (localDate && localDate === today) day = 'Сегодня';
-    else if (localDate && localDate === addDaysIso(today, 1)) day = 'Завтра';
-    else if (localDate) day = localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
-    return [day, time].filter(Boolean).join(' ');
+    return [sessionDayLabel(live, now), time].filter(Boolean).join(' ');
   }
 
   function formatLiveLine(item, now) {
@@ -357,42 +542,159 @@
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
   }
 
+  /**
+   * TASK-090. Карточка «Льда» — табло, а не строка списка: кадр во всю ширину,
+   * время как якорь, глубина предложения отдельной строкой. Функция чистая:
+   * решает, ЧТО написано в каждом слоте, разметку собирает ice-tab.js.
+   */
+  function boardCardView(item, now) {
+    item = item || {};
+    var live = item.live || {};
+    var isSession = String(live.kind || '') === 'session';
+    var name = String(item.name || '');
+    var currency = live.currency_code || item.currency_code || '';
+    var prices = isSession ? formatThreePrices(live) : '';
+    if (prices && currency) prices += ' ' + currency;
+    var more = Number(live.more_count);
+    var depth;
+    if (isSession && more > 0) {
+      // more_count — все будущие сеансы, а не «за неделю»: обещать окно нельзя.
+      depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
+    } else if (isSession) {
+      depth = 'Расписание и цены';
+    } else {
+      depth = 'Открыть карточку катка';
+    }
+    return {
+      href: arenaHref(item),
+      photo: item.card || item.thumb || '',
+      initial: initialOf(name),
+      isSession: isSession,
+      day: isSession ? sessionDayLabel(live, now) : '',
+      time: isSession ? String(live.starts_at_local || '').slice(0, 5) : '',
+      name: name,
+      where: formatMeta(item),
+      prices: prices,
+      status: isSession ? '' : formatLiveLine(item, now),
+      depth: depth,
+      tone: liveTone(item),
+    };
+  }
+
+  /**
+   * TASK-096 AC-002: an empty state must offer the way out, not merely name it in prose.
+   * Each shape now carries `action` (and sometimes `secondary`) — an intent the view turns into a
+   * real button: `intent:<id>` switches the chip, `city` opens the city picker, `clear-service`
+   * drops the service filter, `retry` reloads.
+   */
   function formatEmptyList(intent, opts) {
     opts = opts || {};
+    var trainers = Number(opts.trainerCount) || 0;
+    var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
+      return {
+        kind: 'coming-soon',
+        title: 'Скоро добавим катки',
+        body: 'В этом городе уже есть тренеры. Расписание массового катания подключим — нажмите, если хотите кататься здесь.',
+        cta: 'Хочу кататься здесь',
+        action: { label: 'Хочу кататься здесь', kind: 'ice-interest' },
+        secondary: { label: 'Показать тренеров', kind: 'intent:coach' },
+      };
+    }
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
-        body: 'В этом городе нет будущих сеансов. Смените город или откройте чип «Тренеры».',
+        body: 'В этом городе нет будущих сеансов — но тренеры здесь есть.',
+        action: { label: 'Показать тренеров', kind: 'intent:coach' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     if (intent === INTENTS.group) {
       return {
         title: 'Групп с набором нет',
-        body: 'Площадки появятся, когда откроется набор. Чип «Тренеры» — список тренеров города.',
+        body: 'Площадки появятся, когда откроется набор. Пока можно записаться к тренеру.',
+        action: { label: 'Показать тренеров', kind: 'intent:coach' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     if (intent === INTENTS.coach) {
       if (opts.serviceName) {
         return {
           title: 'Нет тренеров по этой услуге',
-          body: 'Снимите фильтр или смените город.',
+          body: 'В городе есть другие тренеры — снимите фильтр по услуге.',
+          action: { label: 'Показать всех тренеров', kind: 'clear-service' },
+          secondary: { label: 'Сменить город', kind: 'city' },
+        };
+      }
+      if (opts.hasSkate === false) {
+        return {
+          title: 'В этом городе пока нет тренеров',
+          body: 'Смените город — расписания катков здесь пока тоже нет.',
+          action: { label: 'Сменить город', kind: 'city' },
         };
       }
       return {
         title: 'В этом городе пока нет тренеров',
-        body: 'Смените город или вернитесь к чипу «Покататься».',
+        body: 'Посмотрите массовые катания или выберите другой город.',
+        action: { label: 'Показать массовые катания', kind: 'intent:skate' },
+        secondary: { label: 'Сменить город', kind: 'city' },
       };
     }
     return {
       title: 'В этом городе пока нет катков',
-      body: 'Смените город или откройте чип «Тренеры».',
+      body: 'Посмотрите тренеров города или выберите другой город.',
+      action: { label: 'Показать тренеров', kind: 'intent:coach' },
+      secondary: { label: 'Сменить город', kind: 'city' },
     };
+  }
+
+  /** Search dropdown with no hits. Was «Ничего не найдено» — a literal dead end. */
+  function formatEmptySearch(query) {
+    var q = String(query || '').trim();
+    return {
+      title: q ? 'По запросу «' + q + '» ничего нет' : 'Ничего не найдено',
+      body: 'Поиск ищет по каткам, тренерам и городам. Можно открыть весь лёд города списком.',
+      action: { label: 'Показать весь лёд города', kind: 'clear-search' },
+    };
+  }
+
+  /**
+   * How the Ice list should paint. Items from the previous lens must not be
+   * re-skinned as the other card (wide skate board → compact trainer row).
+   *
+   * loadedIntent === null means "we have not confirmed this lens". Leftover
+   * rows in memory still belong to the other card and must not paint.
+   */
+  function listPaintMode(opts) {
+    opts = opts || {};
+    var intent = coerceIntent(opts.intent);
+    var items = opts.items || [];
+    var loading = !!opts.loading;
+    var loaded = opts.loadedIntent ? coerceIntent(opts.loadedIntent) : null;
+    if (loaded !== intent) {
+      if (loading || items.length) return 'skeleton';
+    }
+    if (loading && !items.length) return 'skeleton';
+    if (!items.length) return 'empty';
+    return 'items';
+  }
+
+  function listHostId(intent) {
+    return coerceIntent(intent) === INTENTS.coach ? 'iceListCoach' : 'iceListSkate';
   }
 
   function formatSortCaption(opts) {
     opts = opts || {};
     var total = Number(opts.total);
     if (isNaN(total)) total = (opts.items || []).length;
+    var intent = coerceIntent(opts.intent);
+    var loaded = opts.loadedIntent ? coerceIntent(opts.loadedIntent) : null;
+    var wrongLens = !!(loaded && loaded !== intent);
+    // TASK-095: пока данных нет, «Пока нет катков» — не пустое состояние, а ложь
+    // о результате запроса, которого ещё не было. Подпись ждёт вместе со списком.
+    if ((opts.loading && !total) || wrongLens) {
+      return intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
+    }
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
@@ -476,7 +778,14 @@
     buildTrainersUrl: buildTrainersUrl,
     buildServicesUrl: buildServicesUrl,
     buildIceCitiesUrl: buildIceCitiesUrl,
+    buildIceInterestUrl: buildIceInterestUrl,
+    buildGroupsProbeUrl: buildGroupsProbeUrl,
     filterIceCities: filterIceCities,
+    rankServiceChips: rankServiceChips,
+    rankPopularCities: rankPopularCities,
+    shouldShowGroupChip: shouldShowGroupChip,
+    shouldShowSkateChip: shouldShowSkateChip,
+    sanitizeIntent: sanitizeIntent,
     pickCityIntent: pickCityIntent,
     serviceChipLabel: serviceChipLabel,
     cityCountryLabel: cityCountryLabel,
@@ -498,8 +807,13 @@
     liveTone: liveTone,
     formatThreePrices: formatThreePrices,
     formatLiveLine: formatLiveLine,
+    sessionDayLabel: sessionDayLabel,
+    boardCardView: boardCardView,
     formatEmptyList: formatEmptyList,
+    formatEmptySearch: formatEmptySearch,
     formatSortCaption: formatSortCaption,
+    listPaintMode: listPaintMode,
+    listHostId: listHostId,
     groupSearchResults: groupSearchResults,
     pickFallbackCity: pickFallbackCity,
     saveIceState: saveIceState,

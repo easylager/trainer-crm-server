@@ -17,11 +17,14 @@
     services: [],
     cities: [],
     items: [],
+    skateCount: null,
     total: 0,
     cursor: null,
     loading: false,
+    loadedIntent: null,
   };
   var searchTimer = null;
+  var fetchGen = 0;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -90,42 +93,64 @@
 
   function setChips() {
     document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      btn.setAttribute('aria-pressed', btn.getAttribute('data-intent') === state.intent ? 'true' : 'false');
+      var intent = btn.getAttribute('data-intent');
+      btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
+      if (intent === 'skate') {
+        btn.hidden = !M.shouldShowSkateChip(state.skateCount);
+      }
     });
     renderServiceChips();
   }
 
   /*
-   * TASK-084 AC-003 / DEC-002: карта на «Льду» выключена в этом проходе.
+   * КАРТА (TASK-103, вернулась после TASK-084).
    *
-   * Код карты — ice-map.js, ice-map-model.js, разметка #iceMapSec и её тесты —
-   * намеренно НЕ удалён. Решение владельца 2026-09-08 звучало условием: убрать можно,
-   * если мы сможем её вернуть. Возврат = поставить здесь true и вернуть переключатель
-   * «Список / Карта» в ice.html; больше ничего.
+   * Карту выключали не потому, что она плохая, а потому что сегмент «Список / Карта»
+   * занимал верх первого экрана — против гейта G-P3 «товар над сгибом». Поэтому
+   * вернулась она с другим носителем переключателя: плавающая пилюля #iceViewSwitch,
+   * ноль высоты полотна (см. ice-tab.css).
    *
-   * Флаг проверяется в ДВУХ местах не для надёжности, а по необходимости: скрыть
-   * переключатель мало — вид «карта» мог остаться в sessionStorage с прошлой сессии
-   * или прийти из ?view=map, и тогда экран открылся бы картой без способа вернуться
-   * в список.
+   * Флага MAP_ENABLED больше нет, и это осознанно. Он существовал, чтобы гасить один
+   * класс багов: вид «карта» мог остаться в sessionStorage или прийти из ?view=map, и
+   * экран открывался картой без способа вернуться в список. Правильное лекарство —
+   * не второй предохранитель, а невозможность самого состояния: список ВСЕГДА
+   * стартовое состояние экрана (см. boot(), где сохранённый и урловый view=map
+   * сознательно игнорируются). Тогда «застрять на карте при входе» просто нечему.
+   *
+   * Тренеров на карте нет, поэтому для чипа «Тренеры» карта и переключатель скрыты.
    */
-  var MAP_ENABLED = false;
+  var VIEWSWITCH_ICONS = {
+    // Пин — «переключиться на карту»; список — «вернуться к списку».
+    map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>',
+  };
+
+  function mapAllowed() {
+    return state.intent !== 'coach';
+  }
 
   function mapViewActive() {
-    return MAP_ENABLED && state.intent !== 'coach' && state.view === 'map';
+    return mapAllowed() && state.view === 'map';
   }
 
   function setViewToggle() {
-    var allowed = MAP_ENABLED && state.intent !== 'coach';
-    var seg = $('iceViewSeg');
-    if (seg) seg.hidden = !allowed;
-    document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
-      var view = btn.getAttribute('data-view') === 'map' ? 'map' : 'list';
-      var effective = allowed && state.view === 'map' ? 'map' : 'list';
-      btn.setAttribute('aria-pressed', view === effective ? 'true' : 'false');
-    });
+    var allowed = mapAllowed();
+    var showMapView = mapViewActive();
+
+    var sw = $('iceViewSwitch');
+    if (sw) {
+      sw.hidden = !allowed;
+      // aria-pressed отвечает на «карта включена?», а подпись зовёт в другое
+      // состояние — иначе кнопка называлась бы тем, что уже видно на экране.
+      sw.setAttribute('aria-pressed', showMapView ? 'true' : 'false');
+      var icon = $('iceViewSwitchIcon');
+      var label = $('iceViewSwitchLabel');
+      if (icon) icon.innerHTML = showMapView ? VIEWSWITCH_ICONS.list : VIEWSWITCH_ICONS.map;
+      if (label) label.textContent = showMapView ? 'Список' : 'Карта';
+    }
+
     var listSec = $('iceListSec');
     var mapSec = $('iceMapSec');
-    var showMapView = mapViewActive();
     if (listSec) listSec.hidden = showMapView;
     if (mapSec) mapSec.hidden = !showMapView;
     if (showMapView) {
@@ -136,11 +161,25 @@
     }
   }
 
+  function setView(next) {
+    var wanted = next === 'map' && mapAllowed() ? 'map' : 'list';
+    if (state.view === wanted) return;
+    state.view = wanted;
+    setViewToggle();
+    persist();
+    if (wanted === 'list') {
+      // Возврат в список — наверх: иначе после карты полотно открывается с середины.
+      global.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }
+
   function showMap() {
     if (!global.IceMap) {
       var emptyEl = $('iceMapEmpty');
       var stageEl = $('iceMapStage');
+      var loaderEl = $('iceMapLoader');
       if (stageEl) stageEl.hidden = true;
+      if (loaderEl) loaderEl.hidden = true;
       if (emptyEl && global.IceMapModel) {
         emptyEl.hidden = false;
         emptyEl.innerHTML =
@@ -156,6 +195,7 @@
         nearBtn: $('iceNearBtn'),
         offMapEl: $('iceMapOffMap'),
         stageEl: $('iceMapStage'),
+        loaderEl: $('iceMapLoader'),
         listUrl: function (extra) {
           extra = extra || {};
           var opts = {
@@ -177,6 +217,11 @@
         },
         listReady: function () {
           return !state.loading && !!state.cityId;
+        },
+        getCityCenter: function () {
+          var city = cityFromState(state.cityId) || {};
+          if (city.latitude == null || city.longitude == null) return null;
+          return [Number(city.latitude), Number(city.longitude)];
         },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
@@ -200,42 +245,54 @@
     return ' style="background-image:url(\'' + esc(src).replace(/'/g, '%27') + '\')"';
   }
 
+  /**
+   * TASK-090: карточка катка — табло, а не строка CRM.
+   * Кадр во всю ширину несёт карточку; время и имя лежат на кадре под скримом
+   * и читаются сверху вниз «когда → где»; условия и глубина предложения —
+   * отдельными строками на поверхности карточки, где контраст измерим.
+   */
   function renderArenaCard(item) {
-    var tone = M.liveTone(item);
-    var tier = String(item.tier || 'C').toUpperCase();
-    var thumb = item.thumb;
-    var live = M.formatLiveLine(item);
-    var href = M.arenaHref(item);
-    var cta = M.listRowCta(item);
-    if (cta) live += ' · ' + cta;
+    var v = M.boardCardView(item);
+    var photo = v.photo
+      ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
+      : '<span class="ice-board__photo ice-board__photo--empty">' +
+        '<span class="ice-board__initial" aria-hidden="true">' +
+        esc(v.initial) +
+        '</span>';
+    var scrim =
+      '<span class="ice-board__scrim">' +
+      (v.isSession
+        ? '<span class="ice-board__day">' +
+          esc(v.day) +
+          '</span><span class="ice-board__time">' +
+          esc(v.time) +
+          '</span>'
+        : '') +
+      '<span class="ice-board__name">' +
+      esc(v.name) +
+      '</span>' +
+      (v.where ? '<span class="ice-board__where">' + esc(v.where) + '</span>' : '') +
+      '</span>';
+    var facts = v.isSession
+      ? v.prices
+        ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
+        : ''
+      : '<span class="ice-board__status">' + esc(v.status) + '</span>';
     return (
-      '<a class="ice-acard" href="' +
-      esc(href) +
+      '<a class="ice-board" href="' +
+      esc(v.href) +
       '" data-href="' +
-      esc(href) +
+      esc(v.href) +
       '">' +
-      '<span class="ice-acard__ph' +
-      (thumb ? '' : ' ice-acard__ph--empty') +
-      '"' +
-      acardThumbStyle(thumb) +
-      '></span>' +
-      '<span class="ice-acard__body">' +
-      '<span class="ice-acard__name">' +
-      esc(item.name) +
-      '<span class="ice-tier ice-tier--' +
-      tone +
-      '">' +
-      esc(tier) +
-      '</span></span>' +
-      '<span class="ice-acard__meta">' +
-      esc(M.formatMeta(item)) +
+      photo +
+      scrim +
       '</span>' +
-      '<span class="ice-live ice-live--' +
-      tone +
-      '">' +
-      esc(live) +
+      (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
+      '<span class="ice-board__depth">' +
+      esc(v.depth) +
+      '<span class="ice-board__go" aria-hidden="true">→</span>' +
       '</span>' +
-      '</span></a>'
+      '</a>'
     );
   }
 
@@ -251,11 +308,18 @@
       (view.thumb ? '' : ' ice-acard__ph--empty') +
       '"' +
       acardThumbStyle(view.thumb) +
-      '></span>' +
+      '>' +
+      (view.thumb
+        ? ''
+        : '<span class="ice-acard__mono" aria-hidden="true">' + esc(view.initial || '?') + '</span>') +
+      '</span>' +
       '<span class="ice-acard__body">' +
       '<span class="ice-acard__name">' +
       esc(view.name) +
       '</span>' +
+      // Специализация — то, чем тренеры отличаются. Пустой строки не бывает:
+      // услуга есть у каждого, кто попал в выдачу (по ней же работает фильтр).
+      (view.spec ? '<span class="ice-acard__spec">' + esc(view.spec) + '</span>' : '') +
       '<span class="ice-acard__meta">' +
       esc(view.meta) +
       '</span>' +
@@ -268,35 +332,82 @@
     );
   }
 
+  /**
+   * TASK-095. Скелетоны собираются из тех же классов, что и живые карточки
+   * (.ice-board / .ice-acard плюс модификатор), поэтому геометрия совпадает по
+   * построению: правка карточки автоматически правит и её скелетон.
+   */
+  function boardSkeletons(n) {
+    var one =
+      '<div class="ice-board ice-board--skel" aria-hidden="true">' +
+      '<span class="ice-board__photo ice-skel"></span>' +
+      '<span class="ice-board__facts"><span class="ice-skel ice-skel--line"></span></span>' +
+      '<span class="ice-board__depth"><span class="ice-skel ice-skel--line ice-skel--wide"></span></span>' +
+      '</div>';
+    return new Array(n + 1).join(one);
+  }
+
+  function trainerSkeletons(n) {
+    var one =
+      '<div class="ice-acard ice-acard--skel" aria-hidden="true">' +
+      '<span class="ice-acard__ph ice-skel"></span>' +
+      '<span class="ice-acard__body">' +
+      '<span class="ice-skel ice-skel--line"></span>' +
+      '<span class="ice-skel ice-skel--line ice-skel--short"></span>' +
+      '</span></div>';
+    return new Array(n + 1).join(one);
+  }
+
+  function listEl() {
+    return $(M.listHostId(state.intent));
+  }
+
+  function showActiveList() {
+    var skate = $('iceListSkate');
+    var coach = $('iceListCoach');
+    var coachOn = state.intent === 'coach';
+    if (skate) skate.hidden = coachOn;
+    if (coach) coach.hidden = !coachOn;
+  }
+
   function renderList() {
-    var list = $('iceList');
+    var list = listEl();
     var cap = $('iceCaption');
     if (cap) {
       cap.textContent = M.formatSortCaption({
         total: state.total,
         items: state.items,
         intent: state.intent,
+        loadedIntent: state.loadedIntent,
         serviceLabel: currentServiceLabel(),
+        loading: state.loading,
       });
     }
+    setShareButton();
     if (!list) return;
-    if (state.loading && !state.items.length) {
-      list.innerHTML =
-        '<div class="ice-state">' +
-        (state.intent === 'coach' ? 'Загрузка тренеров…' : 'Загрузка катков…') +
-        '</div>';
+    var paint = M.listPaintMode({
+      intent: state.intent,
+      loadedIntent: state.loadedIntent,
+      items: state.items,
+      loading: state.loading,
+    });
+    if (paint === 'skeleton') {
+      // TASK-095: вместо строки «Загрузка катков…» — коробки будущих карточек.
+      // Текстовая строка обещала одну форму, а приходила совсем другая.
+      list.innerHTML = state.intent === 'coach' ? trainerSkeletons(3) : boardSkeletons(2);
+      showActiveList();
       return;
     }
-    if (!state.items.length) {
+    if (paint === 'empty') {
+      var city = cityFromState(state.cityId) || {};
       var empty = M.formatEmptyList(state.intent, {
         serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
+        trainerCount: city.trainer_count,
+        mapRinkCount: city.map_rink_count,
+        hasSkate: M.shouldShowSkateChip(state.skateCount),
       });
-      list.innerHTML =
-        '<div class="ice-empty"><b>' +
-        esc(empty.title) +
-        '</b><p>' +
-        esc(empty.body) +
-        '</p></div>';
+      renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
+      showActiveList();
       return;
     }
     list.innerHTML = state.items
@@ -304,6 +415,181 @@
         return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
       })
       .join('');
+    showActiveList();
+  }
+
+  function recordIceInterest() {
+    if (!state.cityId) return;
+    fetch(M.buildIceInterestUrl(), {
+      method: 'POST',
+      cache: 'no-store',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({
+        city_id: state.cityId,
+        intent: 'skate',
+        source: 'coming_soon_cta',
+      }),
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function () {
+        renderEmpty(
+          listEl(),
+          {
+            title: 'Записали',
+            body: 'Когда появится расписание в этом городе — вы уже в списке желающих.',
+            action: { label: 'Показать тренеров', kind: 'intent:coach' },
+          },
+          'ice'
+        );
+      })
+      .catch(function () {});
+  }
+
+  /**
+   * TASK-096 (G-P5). Кнопка видна только там, где есть что переслать: город выбран,
+   * намерение «покататься», список не пуст и не грузится. Артефакт — расписание
+   * массовых катаний города; для «тренеров» его не существует, а шеринг тренера уже
+   * живёт в четырёх других точках.
+   */
+  function shareAvailable() {
+    return !!(
+      state.cityId &&
+      state.intent === 'skate' &&
+      !state.loading &&
+      state.items.length
+    );
+  }
+
+  function setShareButton() {
+    var btn = $('iceShareBtn');
+    if (!btn) return;
+    var show = shareAvailable();
+    btn.hidden = !show;
+    if (!show) return;
+    var label = $('iceShareLabel');
+    if (label) {
+      label.textContent = state.cityName
+        ? 'Поделиться расписанием — ' + state.cityName
+        : 'Поделиться расписанием';
+    }
+    btn.setAttribute(
+      'aria-label',
+      state.cityName
+        ? 'Поделиться расписанием катков: ' + state.cityName
+        : 'Поделиться расписанием катков'
+    );
+  }
+
+  function openIceShareDialog() {
+    if (!state.cityId) return;
+    var btn = $('iceShareBtn');
+    if (btn) btn.disabled = true;
+    fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
+      .then(function (data) {
+        if (!data) return;
+        var shareUrl = String(data.share_url || '').trim();
+        var shareBody = String(data.share_body || '').trim();
+        var shareText = String(data.share_text || '').trim();
+        if (!shareUrl && !shareText) return;
+        if (typeof global.openTelegramShareUrlFromMiniApp === 'function') {
+          global.openTelegramShareUrlFromMiniApp({
+            shareUrl: shareUrl,
+            shareBody: shareBody,
+            fullMessage: shareText,
+          });
+          return;
+        }
+        var href = shareUrl
+          ? 'https://t.me/share/url?url=' +
+            encodeURIComponent(shareUrl) +
+            (shareBody ? '&text=' + encodeURIComponent(shareBody) : '')
+          : 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
+        global.location.href = href;
+      })
+      .catch(function () {})
+      .then(function () {
+        if (btn) btn.disabled = false;
+      });
+  }
+
+  /**
+   * TASK-096 AC-002. Turns a model-side `{title, body, action, secondary}` shape into a real
+   * empty state with tappable exits. `kind` strings are resolved here because only the view
+   * knows how to switch a chip or open the city sheet.
+   */
+  function emptyAction(kind) {
+    if (kind === 'city') {
+      return function () {
+        openCityPicker(true);
+      };
+    }
+    if (kind === 'clear-service') {
+      return function () {
+        state.serviceId = null;
+        renderServiceChips();
+        persist();
+        loadTrainers();
+      };
+    }
+    if (kind === 'clear-search') {
+      return function () {
+        var input = $('iceSearchInput');
+        if (input) input.value = '';
+        showSearch('');
+      };
+    }
+    if (kind === 'retry') {
+      return function () {
+        loadList();
+      };
+    }
+    if (kind === 'ice-interest') {
+      return function () {
+        recordIceInterest();
+      };
+    }
+    if (kind && kind.indexOf('intent:') === 0) {
+      var next = kind.slice('intent:'.length);
+      return function () {
+        state.intent = M.coerceIntent(next);
+        renderList();
+        setChips();
+        setViewToggle();
+        persist();
+        loadList();
+      };
+    }
+    return null;
+  }
+
+  function renderEmpty(container, shape, iconName) {
+    if (!container) return;
+    var comp = global.MiniAppEmptyState;
+    var action = shape && shape.action;
+    var onCta = action ? emptyAction(action.kind) : null;
+    if (!comp || !onCta) {
+      // Degradation, not a designed state: the panel keeps the copy so the screen is never blank.
+      container.innerHTML =
+        '<div class="ice-empty"><b>' +
+        esc(shape.title) +
+        '</b><p>' +
+        esc(shape.body || '') +
+        '</p></div>';
+      return;
+    }
+    var secondary = shape.secondary;
+    var onSecondary = secondary ? emptyAction(secondary.kind) : null;
+    comp.render(container, {
+      icon: comp.ICONS[iconName || 'ice'],
+      title: shape.title,
+      hint: shape.body,
+      ctaLabel: action.label,
+      onCta: onCta,
+      secondaryLabel: onSecondary ? secondary.label : null,
+      onSecondary: onSecondary,
+    });
   }
 
   function applyArenaPayload(data) {
@@ -344,17 +630,40 @@
   }
 
   function loadFailed() {
-    var list = $('iceList');
-    if (list) {
-      list.innerHTML =
-        '<div class="ice-empty"><b>Не удалось загрузить список</b><p>Попробуйте ещё раз.</p></div>';
+    // TASK-096: «Попробуйте ещё раз» without a button is an instruction the screen doesn't honour.
+    renderEmpty(
+      listEl(),
+      {
+        title: 'Не удалось загрузить список',
+        body: 'Похоже, пропала связь. Список загрузится заново по кнопке.',
+        action: { label: 'Повторить', kind: 'retry' },
+      },
+      'retry'
+    );
+  }
+
+  function beginListFetch(lens) {
+    fetchGen += 1;
+    var gen = fetchGen;
+    state.loading = true;
+    if (state.loadedIntent !== lens) {
+      state.items = [];
+      state.total = 0;
+      state.loadedIntent = null;
     }
+    renderList();
+    return gen;
+  }
+
+  function isCurrentFetch(gen, lens) {
+    if (gen !== fetchGen) return false;
+    if (lens === 'coach') return state.intent === 'coach';
+    return state.intent !== 'coach';
   }
 
   function loadArenas() {
     if (!state.cityId) return Promise.resolve();
-    state.loading = true;
-    renderList();
+    var gen = beginListFetch('skate');
     var url = M.buildListUrl({
       cityId: state.cityId,
       intent: state.intent,
@@ -362,14 +671,17 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!isCurrentFetch(gen, 'skate')) return;
         state.loading = false;
         applyArenaPayload(data);
+        state.loadedIntent = 'skate';
         if (state.intent === 'skate' && !state.items.length) {
           return maybeOpenTrainersWhenNoSkate();
         }
         onListLoaded();
       })
       .catch(function () {
+        if (!isCurrentFetch(gen, 'skate')) return;
         state.loading = false;
         loadFailed();
       });
@@ -377,8 +689,7 @@
 
   function loadTrainers() {
     if (!state.cityId) return Promise.resolve();
-    state.loading = true;
-    renderList();
+    var gen = beginListFetch('coach');
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
       serviceId: state.serviceId,
@@ -386,11 +697,14 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         applyTrainerPayload(data);
+        state.loadedIntent = 'coach';
         onListLoaded();
       })
       .catch(function () {
+        if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         loadFailed();
       });
@@ -475,6 +789,7 @@
   function switchToCoach() {
     state.intent = 'coach';
     state.view = 'list';
+    renderList();
     setChips();
     setViewToggle();
     persist();
@@ -505,6 +820,7 @@
     }
     state.cityId = city.id;
     state.cityName = city.name || '';
+    state.skateCount = city.skate_count;
     var nextIntent = M.pickCityIntent(city, state.intent);
     if (nextIntent !== state.intent) state.intent = nextIntent;
     if (state.intent === 'coach') state.view = 'list';
@@ -524,10 +840,45 @@
     loadList();
   }
 
+  function onCityPick(ev) {
+    var item = ev.target.closest('[data-city-id]');
+    if (!item) return;
+    var id = Number(item.getAttribute('data-city-id'));
+    var city = state.cities.filter(function (c) {
+      return Number(c.id) === id;
+    })[0];
+    openCityPicker(false);
+    applyCity(city || { id: id, name: item.getAttribute('data-city-name') || '' });
+  }
+
   function renderCityPicker(filter) {
     var box = $('iceCityList');
+    var popularBox = $('iceCityPopular');
+    var popularLabel = $('iceCityPopularLabel');
     if (!box) return;
     var q = String(filter || '').trim().toLowerCase();
+    if (!q) {
+      var popular = M.rankPopularCities(state.cities, 8);
+      if (popularBox) {
+        popularBox.innerHTML = popular
+          .map(function (c) {
+            return (
+              '<button type="button" class="ice-picker__popular-item" data-city-id="' +
+              esc(c.id) +
+              '" data-city-name="' +
+              esc(c.name) +
+              '">' +
+              esc(c.name) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+      if (popularLabel) popularLabel.hidden = popular.length === 0;
+    } else {
+      if (popularBox) popularBox.innerHTML = '';
+      if (popularLabel) popularLabel.hidden = true;
+    }
     var rows = state.cities.filter(function (c) {
       return !q || String(c.name || '').toLowerCase().indexOf(q) >= 0;
     });
@@ -670,7 +1021,12 @@
             '</span></button>';
         });
       });
-      box.innerHTML = html || '<div class="ice-state">Ничего не найдено</div>';
+      if (html) {
+        box.innerHTML = html;
+        return;
+      }
+      // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
+      renderEmpty(box, M.formatEmptySearch(query), 'search');
     });
   }
 
@@ -689,7 +1045,26 @@
       showSearch('');
       return;
     }
-    if (href) shellNav(href);
+    if (href) {
+      markHeroForTransition(card);
+      shellNav(href);
+    }
+  }
+
+  /*
+   * TASK-094 AC-003. Кадр тапнутой карточки получает имя перехода — и только он:
+   * в списке таких элементов пять, а view-transition-name обязано быть
+   * уникальным в документе, иначе браузер отменит переход целиком.
+   * Снимок уходящей страницы делается в pageswap, то есть уже после этой
+   * пометки, — успеваем.
+   */
+  function markHeroForTransition(card) {
+    var prev = document.querySelectorAll('[data-vt-hero]');
+    var i;
+    for (i = 0; i < prev.length; i++) prev[i].removeAttribute('data-vt-hero');
+    if (!card || typeof card.querySelector !== 'function') return;
+    var photo = card.querySelector('.ice-board__photo');
+    if (photo) photo.setAttribute('data-vt-hero', '1');
   }
 
   function bind() {
@@ -699,6 +1074,7 @@
         var action = M.intentChipAction(intent);
         if (action.type !== 'list') return;
         state.intent = M.coerceIntent(action.intent);
+        renderList();
         setChips();
         setViewToggle();
         persist();
@@ -720,14 +1096,17 @@
       });
     }
 
-    document.querySelectorAll('#iceViewSeg button').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var view = btn.getAttribute('data-view') || 'list';
-        state.view = view === 'map' ? 'map' : 'list';
-        setViewToggle();
-        persist();
+    var viewSwitch = $('iceViewSwitch');
+    if (viewSwitch) {
+      viewSwitch.addEventListener('click', function () {
+        setView(mapViewActive() ? 'list' : 'map');
       });
-    });
+    }
+
+    var shareBtn = $('iceShareBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', openIceShareDialog);
+    }
 
     var search = $('iceSearchInput');
     if (search) {
@@ -780,16 +1159,11 @@
 
     var cityList = $('iceCityList');
     if (cityList) {
-      cityList.addEventListener('click', function (ev) {
-        var item = ev.target.closest('[data-city-id]');
-        if (!item) return;
-        var id = Number(item.getAttribute('data-city-id'));
-        var city = state.cities.filter(function (c) {
-          return Number(c.id) === id;
-        })[0];
-        openCityPicker(false);
-        applyCity(city || { id: id, name: item.getAttribute('data-city-name') || '' });
-      });
+      cityList.addEventListener('click', onCityPick);
+    }
+    var cityPopular = $('iceCityPopular');
+    if (cityPopular) {
+      cityPopular.addEventListener('click', onCityPick);
     }
 
     var geo = $('iceGeoBtn');
@@ -838,15 +1212,39 @@
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
     if (saved && saved.serviceId) state.serviceId = Number(saved.serviceId) || null;
-    if (saved && saved.view === 'map') state.view = 'map';
+    /*
+     * TASK-103 AC-001: список — всегда стартовое состояние.
+     *
+     * Здесь сознательно НЕ восстанавливается ни saved.view, ни ?view=map. Это и есть
+     * замена флагу MAP_ENABLED: раньше два предохранителя гасили случай «экран
+     * открылся картой без способа вернуться», теперь этого случая не существует.
+     * Требование владельца 2026-09-09 звучит так же: клиент сначала попадает на список.
+     *
+     * state.view всё ещё пишется в sessionStorage — им пользуется восстановление
+     * скролла на pageshow; читать его как стартовый вид просто некому.
+     */
+    state.view = 'list';
     try {
       var params = new URLSearchParams(global.location.search || '');
-      if (params.get('view') === 'map') state.view = 'map';
       var urlIntent = M.intentFromSearch(global.location.search || '');
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
+      // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
+      if (params.get('focus') === 'search') {
+        global.setTimeout(function () {
+          var input = $('iceSearchInput');
+          if (input && typeof input.focus === 'function') input.focus();
+        }, 0);
+      }
     } catch (e) { /* */ }
     setChips();
     setViewToggle();
+    /*
+     * TASK-095: скелетон рисуется первым же кадром, не дожидаясь резолва города.
+     * Иначе между появлением экрана и первым запросом список — пустое место, и
+     * на переходе с Главной (TASK-094) въезжает наполовину собранная страница.
+     */
+    state.loading = true;
+    renderList();
     resolveCity().then(function () {
       if (saved && saved.scrollY) {
         global.setTimeout(function () {

@@ -3891,7 +3891,8 @@
         fetch(apiUrlWithQuery('/trainer/slots/' + id + '/group-hub'), { headers: headersJson() })
           .then(function(r) {
             if (r.status === 404) {
-              if (tg && tg.showAlert) tg.showAlert('Слот не найден или не групповой.');
+              var webapp404 = hubTelegramWebApp();
+              if (webapp404 && webapp404.showAlert) webapp404.showAlert('Слот не найден или не групповой.');
               return Promise.reject(null);
             }
             if (!r.ok) return Promise.reject(new Error('bad'));
@@ -3968,7 +3969,8 @@
           .catch(function(e) {
             releaseHubReopenGroupCover();
             if (e === null) return;
-            if (tg && tg.showAlert) tg.showAlert('Не удалось загрузить группу.');
+            var webappErr = hubTelegramWebApp();
+            if (webappErr && webappErr.showAlert) webappErr.showAlert('Не удалось загрузить группу.');
           });
       }
 
@@ -3980,9 +3982,20 @@
         return { ok: false, e164: '', error: 'Укажите номер телефона.' };
       }
 
+      function hubTelegramWebApp() {
+        return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      }
+
       function hubToast(msg) {
-        if (tg && tg.showAlert) tg.showAlert(msg);
-        else alert(msg);
+        /* Was `if (tg && tg.showAlert)` — `tg` is not in scope, so copy succeeded and the popup threw. */
+        var webapp = hubTelegramWebApp();
+        if (webapp && typeof webapp.showAlert === 'function') {
+          try {
+            webapp.showAlert(msg);
+            return;
+          } catch (eAlert) { /* fall through */ }
+        }
+        alert(msg);
       }
 
       function hideHubInlineToast() {
@@ -8415,8 +8428,9 @@
 
         sec.removeAttribute('hidden');
         try {
-          if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
-            tg.HapticFeedback.notificationOccurred('success');
+          var webappHaptic = hubTelegramWebApp();
+          if (webappHaptic && webappHaptic.HapticFeedback && typeof webappHaptic.HapticFeedback.notificationOccurred === 'function') {
+            webappHaptic.HapticFeedback.notificationOccurred('success');
           }
         } catch (eH) {}
 

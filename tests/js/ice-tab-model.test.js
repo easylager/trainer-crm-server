@@ -189,11 +189,11 @@ describe('formatLiveLine (prototype: three prices, not mashed live.text)', () =>
 });
 
 describe('formatEmptyList', () => {
-  it('skate empty does not dump the trainers-moved hint into the list', () => {
-    const { formatEmptyList, trainersMovedHint } = loadModel();
+  it('skate empty does not dump a catalog-moved banner into the list', () => {
+    const { formatEmptyList } = loadModel();
     const empty = formatEmptyList('skate');
     assert.match(empty.title, /массового катания|катков/i);
-    assert.ok(!empty.body.includes(trainersMovedHint()));
+    assert.ok(!/каталог тренеров теперь здесь/i.test(empty.title + empty.body));
     assert.match(empty.body, /город|Тренер/i);
   });
 
@@ -210,6 +210,24 @@ describe('formatEmptyList', () => {
     const empty = formatEmptyList('coach', { serviceName: 'Фигурное катание' });
     assert.match(empty.title, /услуг/i);
     assert.match(empty.body, /фильтр|город/i);
+  });
+
+  it('coach empty does not point at a hidden skate chip', () => {
+    const { formatEmptyList } = loadModel();
+    const noSkate = formatEmptyList('coach', { hasSkate: false });
+    assert.ok(!/Покататься/i.test(noSkate.title + noSkate.body));
+    assert.notEqual(noSkate.action && noSkate.action.kind, 'intent:skate');
+    const withSkate = formatEmptyList('coach', { hasSkate: true });
+    assert.equal(withSkate.action.kind, 'intent:skate');
+  });
+
+  it('shows coming-soon when the city has trainers but no map rinks', () => {
+    const { formatEmptyList } = loadModel();
+    const empty = formatEmptyList('skate', { trainerCount: 3, mapRinkCount: 0 });
+    assert.equal(empty.kind, 'coming-soon');
+    assert.match(empty.title, /скоро/i);
+    assert.match(empty.cta, /кататься/i);
+    assert.equal(formatEmptyList('skate', { trainerCount: 0, mapRinkCount: 0 }).kind, undefined);
   });
 });
 
@@ -244,6 +262,66 @@ describe('pickFallbackCity (EDGE-001)', () => {
     ]);
     assert.equal(city.id, 1);
     assert.equal(city.name, 'Минск');
+  });
+});
+
+describe('rankServiceChips (2026-09-07 Тренеры service filter)', () => {
+  it('drops services with zero bookable trainers in the current city', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 1, name: 'Обучение катанию «с нуля»', sort_order: 0, trainer_count: 2 },
+      { id: 2, name: 'Совершенствование катания', sort_order: 1, trainer_count: 0 },
+      { id: 3, name: 'Фигурное катание', sort_order: 2, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [1, 3]);
+  });
+
+  it('orders by sort_order then id', () => {
+    const { rankServiceChips } = loadModel();
+    const ranked = rankServiceChips([
+      { id: 9, name: 'B', sort_order: 5, trainer_count: 1 },
+      { id: 2, name: 'A', sort_order: 1, trainer_count: 1 },
+    ]);
+    assert.deepEqual(ranked.map((s) => s.id), [2, 9]);
+  });
+
+  it('buildTrainersUrl carries service_id only when set', () => {
+    const { buildTrainersUrl } = loadModel();
+    assert.match(buildTrainersUrl({ cityId: 2, serviceId: 3 }), /service_id=3/);
+    assert.doesNotMatch(buildTrainersUrl({ cityId: 2 }), /service_id=/);
+  });
+});
+
+describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
+  it('ranks by map rinks + trainers so a long city list surfaces the busy ones first', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 1, name: 'Минск', map_rink_count: 5, trainer_count: 6, sort_order: 0 },
+      { id: 2, name: 'Раубичи', map_rink_count: 0, trainer_count: 0, sort_order: 29 },
+      { id: 3, name: 'Гродно', map_rink_count: 2, trainer_count: 0, sort_order: 16 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [1, 3, 2]);
+  });
+
+  it('caps the result so the picker never shows a wall of chips', () => {
+    const { rankPopularCities } = loadModel();
+    const cities = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      name: 'City ' + i,
+      map_rink_count: 25 - i,
+      trainer_count: 0,
+    }));
+    assert.equal(rankPopularCities(cities, 8).length, 8);
+    assert.equal(rankPopularCities(cities).length, 8);
+  });
+
+  it('ties break by sort_order then id, never by insertion order alone', () => {
+    const { rankPopularCities } = loadModel();
+    const ranked = rankPopularCities([
+      { id: 9, name: 'B', map_rink_count: 0, trainer_count: 0, sort_order: 5 },
+      { id: 2, name: 'A', map_rink_count: 0, trainer_count: 0, sort_order: 1 },
+    ]);
+    assert.deepEqual(ranked.map((c) => c.id), [2, 9]);
   });
 });
 
@@ -439,6 +517,22 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
     free_slots_14d: 5,
   };
 
+  it('prefers same-origin proxy over a CDN list_url that 404s in Mini App', () => {
+    const { trainerCardView } = loadModel();
+    const view = trainerCardView({
+      ...trainer,
+      photos: [
+        {
+          file_key: 'trainers/9/full.jpg',
+          file_key_list: 'trainers/9/list.jpg',
+          list_url: 'https://cdn.example/broken.jpg',
+          url: 'https://cdn.example/broken-full.jpg',
+        },
+      ],
+    });
+    assert.equal(view.thumb, '/api/public/photos/trainers%2F9%2Flist.jpg');
+  });
+
   it('maps public trainer payload into ice-acard fields and the existing profile deep-link', () => {
     const { trainerCardView } = loadModel();
     const view = trainerCardView(trainer);
@@ -468,6 +562,38 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
   });
 });
 
+describe('group chip visibility', () => {
+  it('hides Группы until the city has at least one open group', () => {
+    const { shouldShowGroupChip, sanitizeIntent, buildGroupsProbeUrl } = loadModel();
+    assert.equal(shouldShowGroupChip(0), false);
+    assert.equal(shouldShowGroupChip(null), false);
+    assert.equal(shouldShowGroupChip(2), true);
+    assert.equal(sanitizeIntent('group', { hasGroups: false }), 'skate');
+    assert.equal(sanitizeIntent('group', { hasGroups: true }), 'group');
+    assert.equal(sanitizeIntent('coach', { hasGroups: false }), 'coach');
+    assert.match(buildGroupsProbeUrl({ cityId: 2 }), /\/api\/public\/training-groups/);
+  });
+});
+
+describe('skate chip visibility (2026-09-07 cities without a live rink)', () => {
+  it('stays visible until probed, then hides once the city has zero skate arenas', () => {
+    const { shouldShowSkateChip } = loadModel();
+    assert.equal(shouldShowSkateChip(null), true);
+    assert.equal(shouldShowSkateChip(undefined), true);
+    assert.equal(shouldShowSkateChip(0), false);
+    assert.equal(shouldShowSkateChip(3), true);
+  });
+
+  it('falls back Покататься -> Тренеры when the city has no skate arenas', () => {
+    const { sanitizeIntent } = loadModel();
+    assert.equal(sanitizeIntent('skate', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('skate', { hasSkate: true }), 'skate');
+    assert.equal(sanitizeIntent(undefined, { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('coach', { hasSkate: false }), 'coach');
+    assert.equal(sanitizeIntent('group', { hasGroups: true, hasSkate: false }), 'group');
+  });
+});
+
 describe('session restore', () => {
   it('round-trips lens, city and scroll', () => {
     const { saveIceState, loadIceState, ICE_STATE_KEY } = loadModel();
@@ -490,5 +616,196 @@ describe('session restore', () => {
     assert.equal(loaded.serviceId, 3);
     assert.equal(loaded.view, 'map');
     assert.equal(loaded.scrollY, 420);
+  });
+});
+
+describe('boardCardView (TASK-090: карточка-табло)', () => {
+  const sessionItem = {
+    id: 3,
+    slug: 'tts-zamok',
+    name: 'ТЦ Замок',
+    district: 'Центральный район',
+    tier: 'A',
+    thumb: '/photos/3_thumb.jpg',
+    card: '/photos/3_card.jpg',
+    live: {
+      kind: 'session',
+      local_date: '2026-09-06',
+      starts_at_local: '18:15',
+      price_adult_minor: 1000,
+      price_child_minor: 800,
+      price_rental_minor: 900,
+      currency_code: 'BYN',
+      more_count: 69,
+    },
+  };
+  const now = new Date('2026-09-06T08:00:00Z');
+
+  it('AC-002: время и день — отдельные слоты, а не склеенная строка', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.time, '18:15');
+    assert.equal(v.day, 'Сегодня');
+    assert.equal(v.isSession, true);
+  });
+
+  it('AC-001: полноширинный кадр берёт card (800px), а не thumb (320px)', () => {
+    const { boardCardView } = loadModel();
+    assert.equal(boardCardView(sessionItem, now).photo, '/photos/3_card.jpg');
+    const noCard = Object.assign({}, sessionItem, { card: null });
+    assert.equal(boardCardView(noCard, now).photo, '/photos/3_thumb.jpg');
+  });
+
+  it('AC-004: глубина предложения — свой слот, без обещания недельного окна', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(sessionItem, now);
+    assert.equal(v.depth, 'Ещё 69 сеансов в расписании');
+    assert.ok(!v.depth.includes('недел'));
+    assert.ok(!v.prices.includes('69'));
+    assert.match(v.prices, /взр\. 10 · дет\. 8 · прокат \+9 BYN/);
+  });
+
+  it('единственный сеанс не превращается в «ещё 0»', () => {
+    const { boardCardView } = loadModel();
+    const one = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { more_count: 0 }),
+    });
+    assert.equal(boardCardView(one, now).depth, 'Расписание и цены');
+  });
+
+  it('AC-006: каток без расписания отдаёт текст статуса, а не пустые слоты', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(
+      { id: 9, name: 'Юность', district: 'Центральный район', tier: 'B', live: { kind: 'unknown' } },
+      now
+    );
+    assert.equal(v.isSession, false);
+    assert.equal(v.time, '');
+    assert.ok(v.status.length > 0);
+    assert.equal(v.depth, 'Открыть карточку катка');
+  });
+
+  it('AC-006: каток без кадра получает монограмму, а не пустой прямоугольник', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView({ id: 9, name: 'Юность', live: { kind: 'unknown' } }, now);
+    assert.equal(v.photo, '');
+    assert.equal(v.initial, 'Ю');
+  });
+
+  it('монограмма тренера пропускает эмодзи в имени', () => {
+    const { trainerCardView } = loadModel();
+    const v = trainerCardView({ id: 1, name: '🌱 Максим Василенко' });
+    assert.equal(v.initial, 'М');
+  });
+
+  it('завтрашний сеанс подписан «Завтра», послезавтрашний — датой', () => {
+    const { boardCardView } = loadModel();
+    const tomorrow = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { local_date: '2026-09-07' }),
+    });
+    assert.equal(boardCardView(tomorrow, now).day, 'Завтра');
+    const later = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, { local_date: '2026-09-10' }),
+    });
+    assert.equal(boardCardView(later, now).day, '10.09');
+  });
+
+  it('«Сегодня» считается по Europe/Minsk, не по UTC-календарю', () => {
+    const { boardCardView, sessionDayLabel } = loadModel();
+    const afterUtcMidnight = new Date('2026-09-06T22:10:00Z');
+    const minskToday = Object.assign({}, sessionItem, {
+      live: Object.assign({}, sessionItem.live, {
+        local_date: '2026-09-07',
+        starts_at_local: '12:15',
+      }),
+    });
+    assert.equal(boardCardView(minskToday, afterUtcMidnight).day, 'Сегодня');
+    assert.equal(
+      sessionDayLabel({ local_date: '2026-09-06' }, afterUtcMidnight),
+      '06.09'
+    );
+  });
+});
+
+describe('listPaintMode (lens switch must not re-skin leftover cards)', () => {
+  it('shows trainer skeletons while skate rows are still in memory', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'coach',
+        loadedIntent: 'skate',
+        items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
+      }),
+      'skeleton'
+    );
+  });
+
+  it('does not paint leftover rows when loadedIntent was already cleared', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'coach',
+        loadedIntent: null,
+        items: [{ id: 3, name: 'ТЦ Замок', tier: 'A' }],
+      }),
+      'skeleton'
+    );
+  });
+
+  it('keeps live cards on a same-lens refresh', () => {
+    const { listPaintMode } = loadModel();
+    assert.equal(
+      listPaintMode({
+        loading: true,
+        intent: 'skate',
+        loadedIntent: 'skate',
+        items: [{ id: 3, tier: 'A' }],
+      }),
+      'items'
+    );
+  });
+});
+
+describe('listHostId (skate boards and trainer rows are different DOM hosts)', () => {
+  it('keeps катки and тренеры in separate list elements', () => {
+    const { listHostId } = loadModel();
+    assert.equal(listHostId('skate'), 'iceListSkate');
+    assert.equal(listHostId('group'), 'iceListSkate');
+    assert.equal(listHostId('coach'), 'iceListCoach');
+  });
+});
+
+describe('formatSortCaption во время загрузки (TASK-095)', () => {
+  it('пока идёт запрос, подпись не объявляет пустой результат', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(formatSortCaption({ total: 0, items: [], intent: 'skate', loading: true }), 'Ищем катки…');
+    assert.equal(formatSortCaption({ total: 0, items: [], intent: 'coach', loading: true }), 'Ищем тренеров…');
+  });
+
+  it('смена линзы не оставляет подпись «N катков» над скелетоном тренеров', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(
+      formatSortCaption({
+        total: 4,
+        items: [{ tier: 'A' }],
+        intent: 'coach',
+        loadedIntent: 'skate',
+        loading: true,
+      }),
+      'Ищем тренеров…'
+    );
+  });
+
+  it('после ответа пустой результат называется своим именем', () => {
+    const { formatSortCaption } = loadModel();
+    assert.match(formatSortCaption({ total: 0, items: [], intent: 'skate' }), /Пока нет катков/);
+  });
+
+  it('загрузка с уже показанными карточками не стирает счётчик', () => {
+    const { formatSortCaption } = loadModel();
+    const caption = formatSortCaption({ total: 5, items: [{ tier: 'A' }], intent: 'skate', loading: true });
+    assert.match(caption, /^5 катков/);
   });
 });

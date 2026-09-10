@@ -249,6 +249,9 @@ describe('city camera (selected city, not the world)', () => {
     const empty = mapStartDecision({ key: 'live-key', listItems: [], intent: 'skate' });
     assert.equal(empty.kind, 'no-arenas');
     assert.equal(empty.showMap, false);
+    const moscow = cityCameraFromItems([], { fallbackCenter: [55.7558, 37.6173] });
+    assert.ok(moscow.center[0] > 55.5 && moscow.center[0] < 56);
+    assert.ok(moscow.center[1] > 37 && moscow.center[1] < 38);
   });
 });
 

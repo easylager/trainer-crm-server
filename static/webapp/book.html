@@ -4,23 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202608315"></script>
   <script src="mini-app-phone-field.js?v=202608315"></script>
-  <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202608315" />
-  <link rel="stylesheet" href="booking-client.css?v=202609061" />
+  <link rel="stylesheet" href="theme.css?v=202609109" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <link rel="stylesheet" href="booking-client.css?v=202609092" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202608315" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <script src="mini-app-telegram-chrome.js?v=202608315"></script>
   <script src="client-profile-switcher.js?v=202609048"></script>
-  <script src="ru-text.js?v=202609103"></script>
-  <script src="booking-client.js?v=202609061"></script>
+  <script src="booking-client.js?v=202609109"></script>
   <script src="booking-deeplink.js?v=202608315"></script>
-  <script src="mini-app-client-shell.js?v=202609062"></script>
+  <script src="mini-app-empty-state.js?v=202609091"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -145,8 +146,8 @@
       border-color: var(--tg-theme-button-color);
       transform: translateY(-1px);
     }
-    .slot-card:active {
-      opacity: 0.8;
+    .slot-card:active { 
+      opacity: 0.8; 
       transform: scale(0.98);
     }
     .slot-time {
@@ -319,7 +320,7 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .error {
+    .error { 
       color: var(--app-danger);
       background: rgba(255, 59, 48, 0.08);
       border-radius: 16px;
@@ -516,34 +517,34 @@
       fill: none;
       flex-shrink: 0;
     }
-
+    
     /* Анимации появления */
     @keyframes card-enter {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
+      from { 
+        opacity: 0; 
+        transform: translateY(10px); 
       }
-      to {
-        opacity: 1;
-        transform: translateY(0);
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
       }
     }
-
+    
     @keyframes hero-enter {
-      from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98); 
       }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
       }
     }
-
+    
     .slot-card {
       animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-
+    
     .slot-card:nth-child(1) { animation-delay: 0.05s; }
     .slot-card:nth-child(2) { animation-delay: 0.1s; }
     .slot-card:nth-child(3) { animation-delay: 0.15s; }
@@ -552,15 +553,15 @@
     .slot-card:nth-child(6) { animation-delay: 0.3s; }
     .slot-card:nth-child(7) { animation-delay: 0.35s; }
     .slot-card:nth-child(8) { animation-delay: 0.4s; }
-
+    
     .week-nav {
       animation: hero-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-
+    
     .day-block {
       animation: card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-
+    
     .day-block:nth-child(1) { animation-delay: 0.1s; }
     .day-block:nth-child(2) { animation-delay: 0.2s; }
     .day-block:nth-child(3) { animation-delay: 0.3s; }

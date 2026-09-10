@@ -93,6 +93,7 @@
 | [lead-mode-revenue-retention.md](plans/lead-mode-revenue-retention.md) | Удержание выручки после триала |
 | [organizations-completion-backlog.md](plans/organizations-completion-backlog.md) | Что осталось достроить в организациях |
 | [2026-09-04-epic3-arenas-sdd-release-plan.md](plans/2026-09-04-epic3-arenas-sdd-release-plan.md) · [r1](plans/2026-09-04-epic3-r1-foundation.md) | Релизный план EPIC3 для агентов |
+| [2026-09-09-merge-epics-to-master.md](plans/2026-09-09-merge-epics-to-master.md) | Кат двух эпиков (premium + региональные парсеры) в master/прод |
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |

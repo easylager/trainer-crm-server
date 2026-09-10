@@ -53,7 +53,7 @@
 
 ## Fixture
 
-`data/fixtures/kobrin-lds/` — `schedule.html`, `prices.html` + `expected.json` (18 слотов).
+`.ai/data/fixtures/kobrin-lds/` — `schedule.html`, `prices.html` + `expected.json` (18 слотов).
 
 ## Blockers / notes
 

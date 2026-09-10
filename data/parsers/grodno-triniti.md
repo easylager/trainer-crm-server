@@ -51,7 +51,7 @@
 
 ## Fixture
 
-`data/fixtures/grodno-triniti/` — `ice.json`, `prajs.html`, `expected.json`.
+`.ai/data/fixtures/grodno-triniti/` — `ice.json`, `prajs.html`, `expected.json`.
 
 ## Blockers / notes
 

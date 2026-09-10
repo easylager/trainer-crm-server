@@ -27,6 +27,7 @@ from src.api.routes import (
     webhooks_router,
 )
 from src.api.routes.public_arenas import router as public_arenas_router
+from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
 from src.application.landing_manifest import inject_landing_html
@@ -998,6 +999,19 @@ def webapp_catalog_main_js(request: Request):
     )
 
 
+@app.get("/webapp/ru-person-name.js")
+def webapp_ru_person_name_js(request: Request):
+    """Russian person-name join + genitive/dative for client request copy."""
+    path = _WEBAPP_DIR / "ru-person-name.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card.css")
 def webapp_arena_card_css(request: Request):
     """TASK-052 arena card styles. Use ``?v=…`` for long cache."""
@@ -1258,6 +1272,19 @@ def webapp_client_requests_main_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-trainer-card.css")
+def webapp_trainer_card_css(request: Request):
+    """Единый компонент карточки тренера (TASK-092). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-card.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-home.css")
 def webapp_client_home_page_css(request: Request):
     """Client hub page styles (split from client-home.html). Use ``?v=…`` for long cache."""
@@ -1366,6 +1393,19 @@ def webapp_mini_app_client_shell_css(request: Request):
 def webapp_mini_app_client_shell_js(request: Request):
     """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "mini-app-client-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-empty-state.js")
+def webapp_mini_app_empty_state_js(request: Request):
+    """Shared client empty-state renderer (TASK-096). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-empty-state.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -1594,6 +1634,7 @@ async def health():
 
 app.include_router(public_router)
 app.include_router(public_arenas_router)
+app.include_router(public_ice_page_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)

@@ -25,7 +25,7 @@
 
 ## Fixture
 
-`data/fixtures/ivatsevichi-lds/expected.json` (пусто).
+`.ai/data/fixtures/ivatsevichi-lds/expected.json` (пусто).
 
 ## Blockers / notes
 

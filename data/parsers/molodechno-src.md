@@ -20,4 +20,4 @@
 
 ## Fixture
 
-`data/fixtures/molodechno-src/` — `ledovaya-arena.html` + `expected.json` (`sessions: []`).
+`.ai/data/fixtures/molodechno-src/` — `ledovaya-arena.html` + `expected.json` (`sessions: []`).

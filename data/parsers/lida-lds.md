@@ -59,7 +59,7 @@
 
 ## Fixture
 
-`data/fixtures/lida-lds/` — `massovoe-katanie.html`, `raspisanije.html`, `week-2026-09-01.jpg` + `expected.json` (10 слотов).
+`.ai/data/fixtures/lida-lds/` — `massovoe-katanie.html`, `raspisanije.html`, `week-2026-09-01.jpg` + `expected.json` (10 слотов).
 
 ## Blockers / notes
 

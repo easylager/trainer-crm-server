@@ -19,8 +19,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   margin-bottom: 16px;
   padding-bottom: 8px;
   min-width: 0;
@@ -41,9 +41,9 @@ body {
 }
 .filter-btn {
   padding: 8px 14px;
-  border-radius: 20px;
+  border-radius: var(--app-radius-xl);
   border: none;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   background: var(--tg-theme-secondary-bg-color);
   color: var(--tg-theme-text-color);
   cursor: pointer;
@@ -56,7 +56,7 @@ body {
 /* Advanced Filter System */
 .filter-panel {
   background: var(--tg-theme-secondary-bg-color);
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   margin-bottom: 16px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -76,13 +76,13 @@ body {
 }
 
 .filter-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
 }
 
 .filter-summary {
-  font-size: 13px;
+  font-size: var(--app-text-body);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
@@ -93,7 +93,7 @@ body {
   border: none;
   background: none;
   color: var(--tg-theme-hint-color);
-  font-size: 16px;
+  font-size: var(--app-text-lead);
   cursor: pointer;
   transition: transform 0.2s ease;
 }
@@ -123,8 +123,8 @@ body {
 }
 
 .filter-section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-hint-color);
   margin-bottom: 8px;
   text-transform: uppercase;
@@ -139,11 +139,11 @@ body {
 
 .filter-chip {
   padding: 6px 12px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   border: 1px solid rgba(0, 0, 0, 0.12);
   background: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
-  font-size: 13px;
+  font-size: var(--app-text-body);
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
@@ -171,10 +171,10 @@ body {
   flex: 1;
   padding: 8px 12px;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   background: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
 .filter-range input:focus {
@@ -191,13 +191,13 @@ body {
 
 .filter-preset {
   padding: 8px 14px;
-  border-radius: 20px;
+  border-radius: var(--app-radius-xl);
   border: none;
-  font-size: 13px;
+  font-size: var(--app-text-body);
   background: var(--app-cta-fill);
   color: var(--app-cta-text);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: var(--app-weight-medium);
   transition: all 0.15s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -217,7 +217,7 @@ body {
   justify-content: space-between;
   padding: 8px 0;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: var(--app-text-body);
   color: var(--tg-theme-hint-color);
 }
 
@@ -225,7 +225,7 @@ body {
   background: none;
   border: none;
   color: var(--app-cta-fill);
-  font-size: 13px;
+  font-size: var(--app-text-body);
   cursor: pointer;
   text-decoration: underline;
 }
@@ -236,8 +236,8 @@ body {
   margin-bottom: 12px;
 }
 .week-nav span {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: var(--app-weight-semibold);
+  font-size: var(--app-text-body);
 }
 .week-nav button {
   width: 36px;
@@ -246,7 +246,7 @@ body {
   border: none;
   background: var(--tg-theme-secondary-bg-color);
   color: var(--tg-theme-text-color);
-  font-size: 18px;
+  font-size: var(--app-text-lead);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -256,8 +256,8 @@ body {
   margin-bottom: 20px;
 }
 .day-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
   color: var(--tg-theme-text-color);
   opacity: 0.82;
   margin-bottom: 10px;
@@ -271,7 +271,7 @@ body {
   gap: 10px;
   padding: 12px 14px;
   margin-bottom: 6px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   background: var(--tg-theme-secondary-bg-color);
   border: 2px solid transparent;
   width: 100%;
@@ -299,11 +299,11 @@ body {
 }
 .slot-main { flex: 1; min-width: 0; }
 .slot-time {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: var(--app-weight-semibold);
+  font-size: var(--app-text-body);
 }
 .slot-venue {
-  font-size: 13px;
+  font-size: var(--app-text-body);
   color: var(--tg-theme-hint-color);
   margin-top: 4px;
   line-height: 1.35;
@@ -324,9 +324,9 @@ body {
   height: 16px;
   padding: 0 3px;
   margin-right: 6px;
-  border-radius: 4px;
-  font-size: 9px;
-  font-weight: 700;
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
   line-height: 1;
   letter-spacing: -0.02em;
   overflow: hidden;
@@ -349,24 +349,24 @@ body {
   color: var(--app-cta-text);
 }
 .slot-client-hint {
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
 .slot-status {
-  font-size: 13px;
+  font-size: var(--app-text-body);
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   flex-shrink: 0;
   align-self: center;
 }
 .slot-status.available {
-  background: rgba(52, 199, 89, 0.2);
-  color: #34c759;
+  background: var(--app-ok-wash);
+  color: var(--app-ok-ink);
 }
 .slot-status.booked {
-  background: rgba(255, 149, 0, 0.25);
-  color: #c65c00;
+  background: var(--app-attention-wash);
+  color: var(--app-attention-ink);
 }
 .slot-status.cancelled {
   background: rgba(142, 142, 147, 0.2);
@@ -377,16 +377,61 @@ body {
   padding: 24px;
   color: var(--tg-theme-hint-color);
 }
-.error { color: #ff3b30; }
+.error { color: var(--app-danger-ink); }
+/* TASK-096: `.empty` survives only as a loading/degradation fallback. A real empty state is
+   `.client-empty-state` below — it is required to offer a way out. */
 .empty {
   text-align: center;
   padding: 32px 16px;
   color: var(--tg-theme-hint-color);
-  font-size: 15px;
+  font-size: var(--app-text-body);
+}
+
+/* ─── Shared empty state (TASK-096, moved here from mini-app-client-shell.css) ───────────
+   Lives in components, not the shell: screens without a tab bar need empty states too. */
+
+.client-empty-state {
+  text-align: center;
+  padding: 36px 20px 28px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.client-empty-state__icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  color: var(--app-cta-fill);
+  opacity: 0.85;
+}
+
+.client-empty-state__title {
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--tg-theme-text-color);
+}
+
+.client-empty-state__hint {
+  font-size: var(--app-text-body);
+  line-height: 1.45;
+  color: var(--tg-theme-hint-color);
+  margin: 0 0 18px;
+}
+
+.client-empty-state .btn-primary,
+.client-empty-state .btn-neutral {
+  max-width: 280px;
+  margin: 0 auto;
+}
+
+.client-empty-state__secondary {
+  margin-top: 10px;
 }
 .detail-block { margin-bottom: 16px; }
-.detail-label { font-size: 12px; color: var(--tg-theme-hint-color); margin-bottom: 4px; text-transform: uppercase; }
-.detail-value { font-size: 15px; }
+.detail-label { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); margin-bottom: 4px; text-transform: uppercase; }
+.detail-value { font-size: var(--app-text-body); }
 /* Booking detail — schedule slot (design layer) */
 #screenDetail {
   font-family: var(--app-font-sans);
@@ -398,15 +443,15 @@ body {
 }
 .bd-screen-head { margin-bottom: 14px; }
 .bd-screen-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
 }
 .bd-hero {
   position: relative;
-  border-radius: 20px;
+  border-radius: var(--app-radius-xl);
   padding: 20px 20px 22px;
   margin-bottom: 16px;
   overflow: hidden;
@@ -426,24 +471,24 @@ body {
 }
 .bd-hero-inner { position: relative; z-index: 1; }
 .bd-hero-kicker {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
   margin-bottom: 10px;
 }
 .bd-hero-time {
-  font-size: clamp(26px, 7vw, 32px);
-  font-weight: 700;
+  font-size: clamp(var(--app-text-headline), 7vw, var(--app-text-display));
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.04em;
   line-height: 1.1;
   color: var(--tg-theme-text-color);
 }
 .bd-hero-date {
   margin-top: 10px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
 }
 .bd-client {
@@ -451,7 +496,7 @@ body {
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
-  border-radius: 18px;
+  border-radius: var(--app-radius-lg);
   margin-bottom: 16px;
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.14);
@@ -465,8 +510,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.02em;
   color: var(--app-cta-text);
   background: var(--app-cta-fill);
@@ -474,16 +519,16 @@ body {
 }
 .bd-client-body { flex: 1; min-width: 0; }
 .bd-client-name {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   line-height: 1.25;
   word-break: break-word;
 }
 .bd-tel {
   display: inline-block;
   margin-top: 6px;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
   color: var(--app-cta-fill);
   text-decoration: none;
   letter-spacing: 0.02em;
@@ -533,15 +578,15 @@ a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
 }
 .bd-tel:active { opacity: 0.8; }
 .bd-section-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
   margin: 4px 0 10px 4px;
 }
 .bd-rows {
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   overflow: hidden;
   border: 1px solid rgba(128, 128, 128, 0.12);
   margin-bottom: 8px;
@@ -565,16 +610,16 @@ a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
 }
 .bd-row-text { flex: 1; min-width: 0; }
 .bd-row-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--tg-theme-hint-color);
   margin-bottom: 4px;
 }
-.bd-row-value { font-size: 15px; line-height: 1.45; word-break: break-word; }
+.bd-row-value { font-size: var(--app-text-body); line-height: 1.45; word-break: break-word; }
 .bd-comment .bd-row-value {
-  font-size: 14px;
+  font-size: var(--app-text-body);
   font-style: italic;
   color: var(--tg-theme-text-color);
   opacity: 0.92;
@@ -632,7 +677,7 @@ a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
 .bd-btn--outline-danger {
   background: transparent;
   border: 1.5px solid rgba(255, 59, 48, 0.5);
-  color: #ff453a;
+  color: var(--app-danger-ink);
   box-shadow: none;
 }
 /* Мягкий акцент (регулярность и т.п.): тот же объём, что у surface */
@@ -644,13 +689,13 @@ a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
 }
 .bd-btn--confirm {
   background: var(--app-success);
-  color: #0a2e16;
+  color: var(--app-ok-on);
   box-shadow: var(--app-btn-shadow-cta);
 }
 .bd-btn--decline {
   background: transparent;
   border: 1.5px solid rgba(255, 59, 48, 0.45);
-  color: #ff453a;
+  color: var(--app-danger-ink);
   box-shadow: none;
 }
 .btn-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -658,10 +703,10 @@ a[href^="tel:"]:not(.bd-btn):not(.btn-primary):not(.btn-secondary) {
   flex: 1;
   min-width: 120px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   border: none;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
   text-align: center;
   text-decoration: none;
@@ -836,7 +881,7 @@ a.btn-secondary {
   box-sizing: border-box;
   background: transparent;
   border: 1.5px solid rgba(255, 59, 48, 0.5);
-  color: #ff453a;
+  color: var(--app-danger-ink);
   box-shadow: none;
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
@@ -890,8 +935,8 @@ a.btn-secondary {
 }
 .btn-danger:not(.btn-block) {
   padding: 12px;
-  border-radius: 10px;
-  font-size: 14px;
+  border-radius: var(--app-radius-md);
+  font-size: var(--app-text-body);
 }
 .btn-danger:active { transform: scale(0.985); opacity: 0.92; }
 /* Нейтральная кнопка — тот же surface, что и tertiary CTA */
@@ -926,8 +971,8 @@ a.btn-secondary {
   gap: 6px;
   margin-top: 16px;
   padding: 10px 0;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   cursor: pointer;
   border: none;
@@ -938,24 +983,24 @@ a.btn-secondary {
 .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
 .back-link:active { opacity: 0.7; }
 .form-block { margin-bottom: 16px; }
-.form-block .form-label { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
+.form-block .form-label { font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); color: var(--tg-theme-hint-color); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
 .form-block textarea {
   width: 100%;
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   border: none;
   background: var(--tg-theme-secondary-bg-color);
   color: var(--tg-theme-text-color);
-  font-size: 15px;
+  font-size: var(--app-text-body);
   line-height: 1.4;
   min-height: 100px;
   resize: vertical;
   display: block;
   box-sizing: border-box;
 }
-.decline-screen .screen-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-.decline-screen .screen-hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 16px; }
-.decline-screen .card-wrap { background: var(--tg-theme-secondary-bg-color) !important; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+.decline-screen .screen-title { font-size: var(--app-text-lead); font-weight: var(--app-weight-semibold); margin-bottom: 8px; }
+.decline-screen .screen-hint { font-size: var(--app-text-body); color: var(--tg-theme-hint-color); margin-bottom: 16px; }
+.decline-screen .card-wrap { background: var(--tg-theme-secondary-bg-color) !important; border-radius: var(--app-radius-md); padding: 16px; margin-bottom: 20px; }
 .decline-screen .btn-primary { width: 100%; margin-bottom: 12px; }
 .modal-overlay {
   position: fixed;
@@ -971,14 +1016,14 @@ a.btn-secondary {
 }
 .modal {
   background: var(--tg-theme-bg-color);
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   padding: 20px;
   max-width: 360px;
   width: 100%;
 }
-.modal h3 { margin: 0 0 12px; font-size: 17px; }
+.modal h3 { margin: 0 0 12px; font-size: var(--app-text-lead); }
 .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
-.modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; }
+.modal .actions button { flex: 1; padding: 12px; border-radius: var(--app-radius-md); border: none; font-weight: var(--app-weight-semibold); cursor: pointer; }
 
 /* showAppConfirm (mini-app-confirm.js) — native confirm() is unthemable (system blue OK) */
 .modal-overlay.app-confirm-overlay {
@@ -988,15 +1033,15 @@ a.btn-secondary {
 }
 .app-confirm-modal .app-confirm-message {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--app-text-body);
   line-height: 1.45;
   color: var(--tg-theme-text-color);
 }
 .app-confirm-modal .app-confirm-title:not([hidden]) {
   display: block;
   margin: 0 0 10px;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   color: var(--tg-theme-text-color);
 }
 .app-confirm-modal .app-confirm-actions {
@@ -1067,7 +1112,7 @@ a.btn-secondary {
 /* Single visible screen — avoids layout “tearing” when toggling views in WebView */
 [data-screen] { display: none !important; width: 100%; }
 [data-screen].active { display: block !important; }
-.no-bot, .detail-value .no-bot { font-size: 11px; color: var(--tg-theme-hint-color, #666); font-style: italic; margin-left: 4px; }
+.no-bot, .detail-value .no-bot { font-size: var(--app-text-caption); color: var(--tg-theme-hint-color); font-style: italic; margin-left: 4px; }
 /* Палитра из theme.css — не дублируйте hex здесь */
 body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-text-color) !important; }
 .filter-btn, .week-nav button, .slot-card { background: var(--tg-theme-secondary-bg-color) !important; color: var(--tg-theme-text-color) !important; }
@@ -1097,7 +1142,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   max-width: 400px;
   margin: 0 auto;
   padding: 22px 18px 20px;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   box-shadow: var(--app-btn-shadow-surface, 0 2px 12px rgba(0, 0, 0, 0.08));
   border: 1px solid rgba(0, 0, 0, 0.06);
@@ -1107,28 +1152,28 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   max-width: none;
 }
 .bd-trainer-gate__card--compact .bd-trainer-gate__title {
-  font-size: 16px;
+  font-size: var(--app-text-lead);
 }
 .bd-trainer-gate__card--compact .bd-trainer-gate__hint {
-  font-size: 13px;
+  font-size: var(--app-text-body);
 }
 .bd-trainer-gate__icon {
-  font-size: 32px;
+  font-size: var(--app-text-display);
   line-height: 1;
   text-align: center;
   margin-bottom: 10px;
 }
 .bd-trainer-gate__title {
   margin: 0 0 10px;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   text-align: center;
   color: var(--tg-theme-text-color);
 }
 .bd-trainer-gate__hint {
   margin: 0 0 18px;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   line-height: 1.45;
   text-align: center;
   color: var(--tg-theme-hint-color);
@@ -1167,7 +1212,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
 .ma-schedule-skel-day-title {
   height: 12px;
   width: 132px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   margin-bottom: 10px;
 }
 .ma-schedule-skel-slot {
@@ -1177,7 +1222,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   gap: 10px;
   padding: 12px 14px;
   margin-bottom: 6px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   background: var(--tg-theme-secondary-bg-color);
   border: 2px solid transparent;
   pointer-events: none;
@@ -1186,12 +1231,12 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
 .ma-schedule-skel-line--time {
   height: 15px;
   width: 42%;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
 }
 .ma-schedule-skel-line--sub {
   height: 12px;
   width: 72%;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   margin-top: 6px;
 }
 .ma-schedule-skel-day .ma-schedule-skel-slot:nth-child(2) .ma-schedule-skel-line--time { width: 40%; }
@@ -1202,14 +1247,14 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
 .ma-schedule-skel-pill {
   width: 56px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-sm);
   flex-shrink: 0;
   align-self: center;
 }
 .bd-skel-booking { pointer-events: none; }
 .bd-skel-hero-placeholder {
   height: 118px;
-  border-radius: 20px;
+  border-radius: var(--app-radius-xl);
   margin-bottom: 16px;
   border: 1px solid rgba(var(--accent-rgb), 0.28);
   box-sizing: border-box;
@@ -1219,7 +1264,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
-  border-radius: 18px;
+  border-radius: var(--app-radius-lg);
   margin-bottom: 16px;
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.14);
@@ -1231,17 +1276,17 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   flex-shrink: 0;
 }
 .bd-skel-client-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.bd-skel-line { border-radius: 8px; }
+.bd-skel-line { border-radius: var(--app-radius-sm); }
 .bd-skel-line--name { height: 17px; width: 68%; }
 .bd-skel-line--tel { height: 14px; width: 44%; }
 .bd-skel-section-label {
   height: 11px;
   width: 100px;
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   margin: 4px 0 10px 4px;
 }
 .bd-skel-rows {
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   overflow: hidden;
   border: 1px solid rgba(128, 128, 128, 0.12);
 }
@@ -1251,7 +1296,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   border-bottom: 1px solid rgba(128, 128, 128, 0.08);
 }
 .bd-skel-row-pad:last-child { border-bottom: none; }
-.bd-skel-row-line { height: 14px; border-radius: 7px; margin-bottom: 6px; }
+.bd-skel-row-line { height: 14px; border-radius: var(--app-radius-sm); margin-bottom: 6px; }
 .bd-skel-row-line:last-child { margin-bottom: 0; }
 .bd-skel-row-line--w1 { width: 88%; }
 .bd-skel-row-line--w2 { width: 62%; }
@@ -1268,7 +1313,8 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   top: 10px;
   bottom: 10px;
   width: 3px;
-  border-radius: 2px;
+  /* Полоска шириной 3px — это форма, а не карточка: ей положена пилюля, а не ступень шкалы. */
+  border-radius: var(--app-radius-pill);
   pointer-events: none;
 }
 .slot-row.slot-row--svc-accent-sky::before {
@@ -1309,7 +1355,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   gap: 0;
   width: 100%;
   min-height: 48px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.14);
   box-sizing: border-box;
@@ -1333,8 +1379,8 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   border-radius: 0;
   background: transparent;
   color: var(--tg-theme-text-color);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   font-family: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -1353,7 +1399,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   opacity: 0.88;
 }
 .crm-phone-country-flag {
-  font-size: 16px;
+  font-size: var(--app-text-lead);
   line-height: 1;
 }
 .crm-phone-country-dial {
@@ -1361,7 +1407,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   letter-spacing: 0.02em;
 }
 .crm-phone-country-chevron {
-  font-size: 10px;
+  font-size: var(--app-text-kicker);
   opacity: 0.55;
   margin-left: 2px;
 }
@@ -1381,7 +1427,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   border-radius: 0;
   background: transparent;
   color: var(--tg-theme-text-color);
-  font-size: 16px;
+  font-size: var(--app-text-lead);
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   box-shadow: none;
@@ -1410,7 +1456,7 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   left: 0;
   right: 0;
   padding: 6px;
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.16);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
@@ -1424,24 +1470,24 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   text-align: left;
   padding: 12px 14px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--app-radius-md);
   background: transparent;
   color: var(--tg-theme-text-color);
-  font-size: 15px;
+  font-size: var(--app-text-body);
   font-family: inherit;
   cursor: pointer;
 }
 .crm-phone-country-option--active,
 .crm-phone-country-option[aria-selected='true'] {
   background: rgba(var(--accent-rgb-alt), 0.14);
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
 }
 .crm-phone-country-option:active {
   opacity: 0.9;
 }
 .crm-phone-hint {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   line-height: 1.45;
   color: var(--tg-theme-hint-color);
 }
@@ -1454,7 +1500,7 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
 
 /* Context: client booking forms (book.html, catalog). */
 .form-block .crm-phone-field-row {
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   border: 1px solid rgba(128, 128, 128, 0.12);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -1464,13 +1510,13 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 .form-block .crm-phone-national-input {
-  font-size: 15px;
+  font-size: var(--app-text-body);
   line-height: 48px;
 }
 
 /* Context: trainer profile .field stack. */
 .field .crm-phone-field-row {
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   border-width: 2px;
   border-color: transparent;
   background: var(--tg-theme-bg-color);
@@ -1494,11 +1540,11 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
     0 0 0 3px rgba(var(--accent-rgb), 0.12);
 }
 .cr-card .crm-phone-national-input {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
 }
 .cr-card .crm-phone-national-input::placeholder {
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   opacity: 0.45;
 }
 
@@ -1518,11 +1564,11 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
     0 0 0 2px rgba(var(--accent-rgb-alt), 0.12);
 }
 .book-new-client .crm-phone-national-input {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
 }
 .book-new-client .crm-phone-national-input::placeholder {
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   opacity: 0.55;
 }
 
@@ -1536,10 +1582,10 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
   width: 100%;
   margin-top: 6px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   color: var(--tg-theme-text-color);
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: var(--app-weight-semibold);
+  font-size: var(--app-text-body);
   text-decoration: none;
   background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
   border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
@@ -1551,7 +1597,7 @@ html[data-app-theme='dark'] .crm-phone-country-btn::after {
 }
 .tc-pass-link__arrow {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--app-text-lead);
   color: var(--tg-theme-button-color);
   opacity: 0.85;
 }

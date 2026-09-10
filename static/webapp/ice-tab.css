@@ -31,8 +31,14 @@ body.ar-pilot--ice .client-app-header {
   display: none;
 }
 
+/* display:flex ниже перебивает UA [hidden]; без этого хост катков
+   остаётся в потоке при чипе «Тренеры». */
+.ice-list[hidden] {
+  display: none;
+}
+
 .ice-sec + .ice-sec {
-  border-top: 1px solid var(--glide-line, #e2e6e5);
+  border-top: 1px solid var(--glide-line);
 }
 
 .ice-sec--hero {
@@ -42,36 +48,52 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-kicker {
   margin: 0;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
+}
+
+/* TASK-090: имя экрана и город — одна строка, минус ~45px до первой карточки. */
+.ice-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
 }
 
 .ice-masthead {
   margin: 0;
-  font-size: 34px;
-  font-weight: 700;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.045em;
   line-height: 1.05;
 }
 
 .ice-citypill {
-  align-self: flex-start;
+  flex: 0 0 auto;
+  max-width: 60%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin: 2px 0 2px;
   padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  background: var(--glide-paper, #f1f3f2);
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-paper);
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   color: inherit;
   cursor: pointer;
+}
+
+.ice-citypill__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ice-citypill::after {
@@ -81,16 +103,16 @@ body.ar-pilot--ice .client-app-header {
   margin-left: 2px;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid var(--glide-hint, #5e6b6b);
+  border-top: 5px solid var(--glide-hint);
 }
 
 .ice-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  background: var(--glide-paper);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 9px 11px;
 }
 
@@ -101,7 +123,7 @@ body.ar-pilot--ice .client-app-header {
   stroke: currentColor;
   fill: none;
   stroke-width: 2;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-search input {
@@ -110,13 +132,13 @@ body.ar-pilot--ice .client-app-header {
   border: 0;
   background: transparent;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   color: inherit;
   outline: none;
 }
 
 .ice-search input::placeholder {
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-chips {
@@ -133,20 +155,20 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chip {
   flex: 0 0 auto;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   padding: 8px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  color: var(--glide-hint, #5e6b6b);
-  background: var(--tg-theme-bg-color, #fff);
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
+  background: var(--app-canvas-bg);
   cursor: pointer;
 }
 
 .ice-chip[aria-pressed='true'] {
-  background: var(--app-cta-fill, #45B9BB);
-  border-color: var(--app-cta-fill, #45B9BB);
-  color: var(--app-cta-text, #04262a);
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
 }
 
 .ice-chips--svc {
@@ -158,58 +180,330 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-chips--svc .ice-chip {
-  font-size: 12px;
+  font-size: var(--app-text-caption);
   padding: 6px 10px;
 }
 
 .ice-hint {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-hint[hidden] {
   display: none;
 }
 
-.ice-seg {
-  display: flex;
-  background: var(--glide-paper, #f1f3f2);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 9px;
-  padding: 3px;
+/*
+ * ПЕРЕКЛЮЧАТЕЛЬ «СПИСОК ↔ КАРТА» (TASK-103).
+ *
+ * Почему пилюля, а не сегмент. Сегмент `.ice-seg` стоял в шапке и стоил ~46px
+ * высоты над сгибом — это и была единственная названная причина, по которой карту
+ * выключили в TASK-084 (гейт G-P3, «товар над сгибом»). Вернуть карту прежним
+ * способом значило вернуть и нарушение. Плавающая кнопка стоит ноль высоты
+ * полотна, всегда в зоне большого пальца и одинаково доступна в обоих состояниях.
+ *
+ * Геометрия дна взята из --client-shell-tab-inset, а не из константы: TASK-093
+ * показала, что заявленная высота таб-бара (62px) и измеренная (69px на 390px)
+ * расходятся, и разница уходит под панель.
+ */
+.ice-viewswitch {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 12px);
+  z-index: 8400;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: 11px 18px 11px 15px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.01em;
+  /* Тень плотнее карточной: кнопка висит над контентом, а не лежит в потоке. */
+  box-shadow: 0 4px 14px -2px rgba(15, 26, 34, 0.34), 0 2px 4px rgba(15, 26, 34, 0.16);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.ice-seg[hidden] {
+.ice-viewswitch[hidden] {
   display: none;
 }
 
-.ice-seg button {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 650;
-  padding: 6px 0;
-  border-radius: 6px;
-  border: 0;
-  background: transparent;
-  color: var(--glide-hint, #5e6b6b);
-  cursor: pointer;
+.ice-viewswitch:active {
+  transform: translateX(-50%) scale(0.96);
 }
 
-.ice-seg button[aria-pressed='true'] {
-  background: var(--tg-theme-bg-color, #fff);
-  color: var(--tg-theme-text-color, var(--glide-ink));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+.ice-viewswitch__icon {
+  display: flex;
+  width: var(--app-icon-sm);
+  height: var(--app-icon-sm);
+}
+
+.ice-viewswitch__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-viewswitch {
+    transition: none;
+  }
+  .ice-viewswitch:active {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+ * ЛОАДЕР КАРТЫ (TASK-103).
+ * До тайлов сцена была ровной серой заливкой, неотличимой от поломки. Требование
+ * лежало в TASK-082, которой никто не занимается; без него возврат карты выглядел
+ * бы хуже, чем её отсутствие.
+ */
+.ice-map-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  background: var(--glide-paper);
+  color: var(--tg-theme-hint-color);
+  font-size: var(--app-text-caption);
+}
+
+.ice-map-loader[hidden] {
+  display: none;
+}
+
+.ice-map-loader__spinner {
+  width: var(--app-icon-lg);
+  height: var(--app-icon-lg);
+  border-radius: var(--app-radius-pill);
+  border: 2px solid var(--glide-line);
+  border-top-color: var(--app-cta-fill);
+  animation: ice-map-spin 0.8s linear infinite;
+}
+
+@keyframes ice-map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-map-loader__spinner {
+    animation-duration: 2.4s;
+  }
 }
 
 .ice-eyebrow {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 10.5px;
+  font-size: var(--app-text-kicker);
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 0;
+}
+
+/*
+ * TASK-090. КАРТОЧКА-ТАБЛО.
+ *
+ * Жанр экрана — расписание, а не витрина товаров: у строки один якорь (время),
+ * и он крупнее всего остального на ступень шкалы. Порядок чтения задан сверху
+ * вниз прямо на кадре: КОГДА (день + время) → ГДЕ (каток + район). Условия и
+ * глубина предложения живут ниже, на поверхности карточки, где контраст
+ * измерим чекером, а не «примерно белый по фотографии».
+ *
+ * Три уровня иерархии, каждый на ступень друг от друга:
+ *   display (29) время → title (20) имя катка → caption (12) район и цены.
+ */
+.ice-board {
+  display: block;
+  position: relative;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  overflow: hidden;
+}
+
+.ice-board__photo {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  /* 2:1 — кадр катка узнаётся, но не превращает список в ленту афиш. */
+  aspect-ratio: 2 / 1;
+  background-color: var(--app-media-bed);
+  background-size: cover;
+  background-position: center;
+}
+
+/*
+ * AC-006 и Q-001: каток без кадра. Плоский прямоугольник читался как ошибка
+ * загрузки; здесь это осознанная плашка — фактура льда под углом и монограмма.
+ */
+.ice-board__photo--empty {
+  background-image: repeating-linear-gradient(
+      115deg,
+      transparent 0 22px,
+      rgba(127, 127, 127, 0.06) 22px 24px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+}
+
+.ice-board__initial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.55;
+  letter-spacing: -0.02em;
+}
+
+.ice-board__scrim {
+  position: relative;
+  width: 100%;
+  padding: var(--app-space-6) var(--app-space-4) var(--app-space-3);
+  background: var(--app-media-scrim);
+}
+
+.ice-board__day {
+  display: block;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--app-on-media-dim);
+  margin-bottom: 2px;
+}
+
+.ice-board__time {
+  display: block;
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  /* Табло: цифры не должны плясать по ширине от строки к строке. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--app-on-media);
+}
+
+.ice-board__name {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--app-on-media);
+}
+
+.ice-board__where {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  color: var(--app-on-media-dim);
+}
+
+.ice-board__facts {
+  display: block;
+  padding: 10px var(--app-space-4);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  line-height: 1.45;
+}
+
+.ice-board__status {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-medium);
+}
+
+/* AC-004: глубина предложения — собственная строка, а не хвост прайса. */
+.ice-board__depth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  padding: 10px var(--app-space-4) var(--app-space-3);
+  border-top: 1px solid var(--app-card-line);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  color: var(--glide-ink-teal);
+}
+
+.ice-board__go {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* ─── Скелетоны списка (TASK-095) ───────────────────────────────────────── */
+/*
+ * Коробку задаёт сам компонент — .ice-board / .ice-acard остаются как есть,
+ * модификатор только гасит интерактивность и подменяет содержимое мерцанием.
+ * Поэтому скелетон не может «разъехаться» с карточкой при следующей правке.
+ */
+.ice-board--skel,
+.ice-acard--skel {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ice-board--skel::after,
+.ice-acard--skel::after {
+  content: none;
+}
+
+.ice-skel {
+  background: color-mix(in srgb, var(--glide-line) 62%, var(--app-card-bg-solid));
+  animation: ice-skel-pulse 1.2s ease-in-out infinite;
+  border-radius: var(--app-radius-sm);
+  display: block;
+}
+
+.ice-skel--line {
+  height: 12px;
+  width: 58%;
+  border-radius: var(--app-radius-pill);
+}
+
+.ice-skel--short { width: 38%; margin-top: 6px; }
+.ice-skel--wide { width: 72%; }
+
+@keyframes ice-skel-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* AC-004: мерцание выключено, подложка остаётся — ожидание видно, глаз спокоен. */
+  .ice-skel {
+    animation: none !important;
+    opacity: 0.88;
+  }
 }
 
 .ice-acard {
@@ -217,36 +511,57 @@ body.ar-pilot--ice .client-app-header {
   grid-template-columns: 74px 1fr 12px;
   gap: 11px;
   padding: 10px;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 11px;
-  background: var(--tg-theme-bg-color, #fff);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
   width: 100%;
   text-align: left;
   cursor: pointer;
   color: inherit;
   text-decoration: none;
   box-sizing: border-box;
+  box-shadow: var(--app-card-shadow);
 }
 
 .ice-acard::after {
   content: '›';
   align-self: center;
-  font-size: 22px;
+  font-size: var(--app-icon-lg);
   line-height: 1;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-acard__ph {
   height: 74px;
-  border-radius: 8px;
-  background: linear-gradient(150deg, var(--ice-mist, #e6f1ff), var(--glide-paper, #f1f3f2));
-  border: 1px solid var(--glide-line, #e2e6e5);
+  border-radius: var(--app-radius-sm);
+  background: linear-gradient(150deg, var(--glide-line), var(--glide-paper));
+  border: 1px solid var(--glide-line);
   background-size: cover;
   background-position: center;
 }
 
+/*
+ * AC-006 / F-5: раньше это была плоская заливка — на скрине списка тренеров
+ * получался ряд мёртвых прямоугольников. Теперь плашка говорит, чья она.
+ */
 .ice-acard__ph--empty {
-  background: var(--glide-paper, #f1f3f2);
+  background: repeating-linear-gradient(
+      115deg,
+      transparent 0 14px,
+      rgba(127, 127, 127, 0.06) 14px 16px
+    ),
+    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ice-acard__mono {
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-hint);
+  opacity: 0.6;
+  letter-spacing: -0.02em;
 }
 
 .ice-acard__body {
@@ -257,36 +572,53 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-acard__name {
-  font-size: 14.5px;
-  font-weight: 680;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
+/*
+ * Строка специализации: «С нуля · Техника».
+ *
+ * Набрана темнее и плотнее, чем арена под ней, потому что решение принимают по
+ * ней: до этой правки карточка предлагала выбирать по фотографии и имени.
+ * Обрезается в одну строку — две услуги помещаются на 390px, третью модель уже
+ * сворачивает в «+N».
+ */
+.ice-acard__spec {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-text-color, var(--glide-text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ice-acard__meta {
-  font-size: 12px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-live {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
-  font-weight: 620;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   margin-top: 2px;
 }
 
 .ice-live--a {
-  color: var(--ice-blue, #2a6e8f);
+  color: var(--app-ok-ink);
 }
 
 .ice-live--b {
-  color: #8a6a2b;
+  color: var(--glide-hint);
 }
 
 .ice-live--c {
-  color: var(--glide-hint, #5e6b6b);
-  font-weight: 500;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-medium);
 }
 
 .ice-live:empty {
@@ -296,52 +628,51 @@ body.ar-pilot--ice .client-app-header {
 .ice-live__dot {
   width: 6px;
   height: 6px;
-  border-radius: 99px;
+  border-radius: var(--app-radius-pill);
   background: currentColor;
   flex: 0 0 auto;
 }
 
 .ice-tier {
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 9.5px;
+  font-size: var(--app-text-kicker);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--app-radius-xs);
   margin-left: 6px;
   vertical-align: 1px;
 }
 
 .ice-tier--a {
   background: rgba(var(--accent-rgb), 0.16);
-  color: var(--glide-ink-teal, #0b6e70);
+  color: var(--glide-ink-teal);
 }
 
 .ice-tier--b {
-  background: var(--ice-mist, #e6f1ff);
-  color: var(--ice-blue, #2a6e8f);
+  background: var(--glide-line);
+  color: var(--glide-hint);
 }
 
 .ice-tier--c {
-  background: var(--glide-paper, #f1f3f2);
-  color: var(--glide-hint, #5e6b6b);
+  background: var(--glide-paper);
+  color: var(--glide-hint);
 }
 
 .ice-empty {
-  border: 1px dashed var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 14px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-empty b {
   display: block;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   margin-bottom: 6px;
 }
 
 .ice-empty p {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-results {
@@ -351,11 +682,11 @@ body.ar-pilot--ice .client-app-header {
 }
 
 .ice-results__label {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
   margin: 6px 0 0;
 }
 
@@ -363,23 +694,24 @@ body.ar-pilot--ice .client-app-header {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 11px 12px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-card-bg);
   cursor: pointer;
   color: inherit;
+  box-shadow: var(--app-card-shadow);
 }
 
 .ice-hit b {
   display: block;
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
 .ice-hit span {
   display: block;
-  font-size: 12px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   margin-top: 2px;
 }
 
@@ -389,7 +721,7 @@ body.ar-pilot--ice .client-app-header {
   z-index: 8000;
   display: flex;
   flex-direction: column;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-canvas-bg);
   overflow: hidden;
   padding: 0;
 }
@@ -408,16 +740,16 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-picker h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--app-text-headline);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.03em;
 }
 
 .ice-picker__close {
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--glide-ink-teal, #0b6e70);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
   background: none;
   border: 0;
   padding: 8px 0;
@@ -442,11 +774,11 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-picker__label {
   margin: 12px 16px 4px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-picker__label:first-child {
@@ -461,37 +793,60 @@ body.ar-pilot--ice .client-app-header {
   gap: 2px;
   text-align: left;
   border: 0;
-  border-bottom: 1px solid var(--glide-line, #e2e6e5);
+  border-bottom: 1px solid var(--glide-line);
   border-radius: 0;
   padding: 14px 16px;
   background: transparent;
   font: inherit;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.02em;
   cursor: pointer;
   color: inherit;
 }
 
 .ice-picker__country {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   letter-spacing: 0;
-  color: var(--glide-hint, #5e6b6b);
+  color: var(--glide-hint);
 }
 
 .ice-picker__item--current {
-  background: color-mix(in srgb, var(--app-cta-fill, #45B9BB) 18%, transparent);
+  background: color-mix(in srgb, var(--app-cta-fill) 18%, transparent);
+}
+
+.ice-picker__popular {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.ice-picker__popular:empty {
+  display: none;
+}
+
+.ice-picker__popular-item {
+  flex: 0 0 auto;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  padding: 9px 14px;
+  border-radius: var(--app-radius-pill, 999px);
+  border: 1px solid var(--glide-line);
+  color: inherit;
+  background: var(--glide-paper);
+  cursor: pointer;
 }
 
 .ice-geo {
   width: 100%;
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
   padding: 12px;
   background: transparent;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
   color: inherit;
 }
@@ -499,24 +854,25 @@ body.ar-pilot--ice .client-app-header {
 .ice-list {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  /* Карточка-табло выше строки списка — 9px между ними читались как слипание. */
+  gap: var(--app-space-3);
 }
 
 .ice-state {
-  font-size: 14px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-body);
+  color: var(--glide-hint);
   padding: 8px 0;
 }
 
 .ice-map-note {
-  font-size: 13px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   margin: 0;
 }
 
 .ice-map-note a {
-  color: var(--glide-ink-teal, #0b6e70);
-  font-weight: 600;
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
 }
 
 .ice-map-wrap {
@@ -533,7 +889,7 @@ body.ar-pilot--ice .client-app-header {
   position: relative;
   height: min(52vh, 420px);
   min-height: 280px;
-  background: var(--glide-paper, #f1f3f2);
+  background: var(--glide-paper);
 }
 
 .ice-map-canvas {
@@ -546,12 +902,12 @@ body.ar-pilot--ice .client-app-header {
   right: 11px;
   top: 11px;
   z-index: 2;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
-  border-radius: 9px;
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 8px 11px;
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   cursor: pointer;
   color: inherit;
@@ -574,8 +930,8 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-map-offmap {
   margin: 10px 16px 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #5e6b6b);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .ice-map-empty {
@@ -593,38 +949,38 @@ body.ar-pilot--ice .client-app-header {
 .ice-ypin__dot {
   width: 15px;
   height: 15px;
-  border-radius: 99px 99px 99px 2px;
+  border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
   transform: rotate(45deg);
-  background: var(--ice-blue, #2a6e8f);
-  border: 2px solid var(--tg-theme-bg-color, #fff);
+  background: var(--glide-brand);
+  border: 2px solid var(--tg-theme-bg-color);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   display: block;
 }
 
 .ice-ypin--a .ice-ypin__dot {
-  background: var(--app-cta-fill, #45B9BB);
+  background: var(--app-cta-fill);
 }
 
 .ice-ypin--c .ice-ypin__dot {
-  background: var(--glide-hint, #5e6b6b);
+  background: var(--glide-hint);
   opacity: 0.55;
   width: 11px;
   height: 11px;
 }
 
 .ice-ypin--b .ice-ypin__dot {
-  background: var(--ice-blue, #2a6e8f);
+  background: var(--glide-hint);
 }
 
 .ice-ypin__label {
-  font-size: 10.5px;
-  font-weight: 700;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #e2e6e5);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  background: var(--app-float-bg);
+  border: 1px solid var(--glide-line);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   white-space: nowrap;
-  color: var(--tg-theme-text-color, var(--glide-text, #101617));
+  color: var(--tg-theme-text-color, var(--glide-text));
 }
 
 .ice-ypin__label:empty {
@@ -634,15 +990,35 @@ body.ar-pilot--ice .client-app-header {
 .ice-ycluster {
   width: 38px;
   height: 38px;
-  border-radius: 99px;
-  background: var(--ice-blue, #2a6e8f);
-  color: #fff;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-brand);
+  color: var(--app-cta-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 750;
-  font-size: 14px;
-  border: 3px solid var(--tg-theme-bg-color, #fff);
+  font-weight: var(--app-weight-bold);
+  font-size: var(--app-text-body);
+  border: 3px solid var(--tg-theme-bg-color);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
+}
+
+/*
+ * TASK-096 (G-P5): «Поделиться расписанием» — единственный шеринг-артефакт вкладки.
+ *
+ * Класс только про геометрию: краски, радиус и состояния берутся у .btn-neutral из
+ * mini-app-components.css. Собственная кнопка здесь означала бы третий вид вторичной
+ * кнопки в клиентском приложении при двух уже существующих.
+ */
+.ice-share {
+  margin-top: var(--app-space-4);
+}
+
+.ice-share[hidden] {
+  display: none;
+}
+
+.ice-share__icon {
+  font-size: var(--app-text-body);
+  line-height: 1;
 }

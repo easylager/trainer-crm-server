@@ -8,14 +8,13 @@
       .replace(/"/g, '&quot;');
   }
 
-  // TASK-043: currency defaults to 'BYN' so every existing single-arg call keeps its
-  // exact prior markup except the BYN glyph (now the NBRB icon font, see theme.css,
-  // instead of the text "BYN"). Pass 'RUB' for a RU-city trainer's price.
+  // TASK-043/109: currency defaults to 'BYN'. Telegram WebView cannot paint the NBRB
+  // private-use glyph, so BY amounts use the letters "BYN". Pass 'RUB' for ₽.
   function formatPriceBynHtml(priceByn, currency) {
     if (priceByn == null) return escapeHtml('по запросу');
     var num = priceByn === Math.floor(priceByn) ? String(priceByn) : priceByn.toFixed(2);
     if (currency === 'RUB') return escapeHtml(num) + ' ₽';
-    return escapeHtml(num) + ' <i class="nbrb-icon">&#xe901;</i>';
+    return escapeHtml(num) + ' BYN';
   }
 
   function buildRatingText(profile) {

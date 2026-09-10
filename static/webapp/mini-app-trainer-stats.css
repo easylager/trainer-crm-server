@@ -411,7 +411,7 @@
     /* Money hero */
     /* Бухгалтерия: премиальная сетка, DM Sans — не один «простынёй» блок */
     .money-tab-root {
-      font-family: "DM Sans", var(--app-font-sans);
+      font-family: var(--app-font-sans);
       display: flex;
       flex-direction: column;
       gap: 16px;

@@ -54,7 +54,7 @@
 
 ## Fixture
 
-`data/fixtures/shklov-arena/` — `raspisania-category.html`, `week-2026-09-02.html`, `31.08-06.09.2026.jpg`, `uslugi.html`, `expected.json`.
+`.ai/data/fixtures/shklov-arena/` — `raspisania-category.html`, `week-2026-09-02.html`, `31.08-06.09.2026.jpg`, `uslugi.html`, `expected.json`.
 
 ## Blockers / notes
 

@@ -4,37 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренеры</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202609022"></script>
   <script src="mini-app-phone-field.js?v=202609022"></script>
-  <link rel="stylesheet" href="theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609041" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609022" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    media="print"
-    onload="this.media='all'"
-  />
-  <noscript>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
-    />
-  </noscript>
-  <script src="mini-app-telegram-chrome.js?v=202609071"></script>
-  <script src="client-profile-switcher.js?v=202609049"></script>
-  <link rel="preload" href="catalog-main.js?v=202609070" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202609061" />
-  <link rel="stylesheet" href="booking-client.css?v=202609061" />
+  <link rel="stylesheet" href="theme.css?v=202609109" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
+  <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <script src="client-profile-switcher.js?v=202609049"></script>
+  <link rel="preload" href="catalog-main.js?v=202609110" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202609110" />
+  <link rel="stylesheet" href="booking-client.css?v=202609092" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <script src="mini-app-client-shell.js?v=202609062"></script>
-  <script src="ru-text.js?v=202609103"></script>
-  <script src="booking-client.js?v=202609070"></script>
+  <script src="mini-app-empty-state.js?v=202609091"></script>
+  <script src="mini-app-client-shell.js?v=202609085"></script>
+  <script src="booking-client.js?v=202609109"></script>
   <script src="booking-deeplink.js?v=202609022"></script>
   <script>
     (function () {
@@ -195,7 +184,7 @@
       <button type="button" class="catalog-mode-btn active" data-mode="trainers" role="tab" aria-selected="true">Тренеры</button>
       <button type="button" class="catalog-mode-btn" data-mode="groups" role="tab" aria-selected="false">Группы с набором</button>
     </div>
-
+    
     <!-- Time Filters Panel -->
     <div class="filter-panel" id="timeFilters">
       <div class="filter-header" id="timeFiltersHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="timeFiltersContent">
@@ -261,9 +250,13 @@
   </div>
   <div id="screenSlotPick" data-screen>
     <div class="step-title">Выберите время</div>
+    <!-- Чьи это слоты и где: без строки экран был списком голого времени. -->
+    <p id="slotPickContext" class="slot-pick-context" hidden></p>
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
+    <!-- К кому запись. Последний экран перед созданием обязан назвать тренера. -->
+    <p id="bookingFormTrainerLine" class="booking-trainer-line" hidden></p>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
     <div id="bookingFormServiceBlock" class="form-block" style="display: none;">
       <label for="bookingFormServiceSelect">Услуга</label>
@@ -307,6 +300,12 @@
       <textarea id="bookingComment" rows="2" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
     <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Записаться</button>
+    <!--
+      Неопределённый исход записи (сеть не ответила / ответ не распознан). Это не
+      тост: сообщение длинное, требует действия и должно остаться на экране,
+      пока человек его не отработает.
+    -->
+    <p id="bookingFormNotice" class="booking-form-notice" hidden role="alert"></p>
   </div>
   <div id="screenSuccess" data-screen>
     <div class="booking-success-panel">
@@ -323,17 +322,18 @@
     </div>
   </div>
 
-  <div id="screenRequestForm" data-screen>
-    <div id="requestFormTitle" class="step-title">Комментарий к заявке</div>
-    <div id="requestFormContext" class="request-form-context"></div>
-    <p class="request-form-hint">Напишите, что важно для тренера: удобные день и время, возраст, цели.</p>
+  <div id="screenRequestForm" data-screen class="request-sheet">
+    <h2 id="requestFormTitle" class="request-sheet__title">Заявка</h2>
+    <p id="requestFormContext" class="request-sheet__note"></p>
     <div id="requestNameBlockCatalog" class="form-block" style="display:none;">
       <label for="requestFirstName">Имя *</label>
       <input type="text" id="requestFirstName" autocomplete="given-name" maxlength="64" placeholder="Как к вам обращаться" />
       <label for="requestLastName" style="margin-top:10px;display:block;">Фамилия</label>
       <input type="text" id="requestLastName" autocomplete="family-name" maxlength="64" placeholder="Необязательно" />
     </div>
-    <textarea id="requestComment" class="request-comment-input" rows="4" maxlength="2000" placeholder="Например: Пн и Ср после 18:00, ребёнку 8 лет, хочу научить кататься с нуля"></textarea>
+    <label class="request-sheet__label" for="requestComment">Комментарий</label>
+    <p class="request-sheet__hint">Когда удобно, возраст, что хотите получить.</p>
+    <textarea id="requestComment" class="request-comment-input" rows="5" maxlength="2000" placeholder="Пн и Ср после 18:00, ребёнку 8 лет"></textarea>
     <div class="request-form-actions">
       <button type="button" class="btn-block btn-primary" id="btnSubmitRequestWithComment">Отправить заявку</button>
     </div>
@@ -451,7 +451,8 @@
   </div>
 
   <script src="trainer-arena-chips-model.js?v=202609061"></script>
-  <script defer src="catalog-main.js?v=202609070"></script>
+  <script src="ru-person-name.js?v=202609110"></script>
+  <script defer src="catalog-main.js?v=202609110"></script>
   <script defer src="mini-app-client-home.js?v=202609022"></script>
 </body>
 </html>

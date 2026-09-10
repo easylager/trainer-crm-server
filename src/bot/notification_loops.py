@@ -74,6 +74,7 @@ from src.application.client_request_use_cases import (
     get_pending_response_notifications,
     mark_no_response_reminder_sent,
     mark_request_trainer_notified,
+    release_request_trainer_notification,
     mark_response_notified,
 )
 from src.application.client_pass_order_use_cases import (
@@ -1013,6 +1014,7 @@ async def process_request_notifications_batch(
     only_request_id: int | None = None,
     bypass_quiet_hours_for_that_request: bool = False,
 ) -> None:
+    """Send pending «new request» DMs. Claim before send so two workers cannot double-fire."""
     pending = await get_pending_request_notifications(session)
     for p in pending:
         if only_request_id is not None and int(p["request_id"]) != only_request_id:
@@ -1032,12 +1034,15 @@ async def process_request_notifications_batch(
         if not tid:
             continue
 
+        request_id = int(p["request_id"])
+        trainer_id = int(p["trainer_id"])
+        claimed = await mark_request_trainer_notified(session, request_id, trainer_id)
+        if not claimed:
+            continue
         try:
             await _deliver_trainer_new_request_message(trainer_bot, session, p)
-            await mark_request_trainer_notified(
-                session, p["request_id"], p["trainer_id"]
-            )
         except Exception as e:
+            await release_request_trainer_notification(session, request_id, trainer_id)
             logger.warning("Request notifier send to %s: %s", tid, e)
 
 

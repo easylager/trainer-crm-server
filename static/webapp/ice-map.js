@@ -132,6 +132,7 @@
     var nearBtn = opts.nearBtn;
     var offMapEl = opts.offMapEl;
     var stageEl = opts.stageEl;
+    var loaderEl = opts.loaderEl;
     var listItems = [];
     var mapItems = [];
     var selected = null;
@@ -180,9 +181,23 @@
       return items || [];
     }
 
+    /*
+     * TASK-103: лоадер живёт ровно между «начали грузить» и «на сцене что-то есть».
+     * Гасится здесь и в renderEmpty, потому что это два единственных исхода запуска:
+     * либо сцена показана, либо вместо неё пустое состояние. Держать флаг отдельно и
+     * снимать его вручную в каждой ветке start() значило бы однажды забыть ветку и
+     * оставить спиннер поверх готовой карты.
+     */
+    function setLoading(on) {
+      if (loaderEl) loaderEl.hidden = !on;
+    }
+
     function showStage(on) {
       if (stageEl) stageEl.hidden = !on;
       if (nearBtn) nearBtn.hidden = !on;
+      // И «карта готова», и «вместо карты пустое состояние» одинаково означают,
+      // что ждать больше нечего. Оба исхода проходят здесь.
+      setLoading(false);
     }
 
     function setOffMapNote() {
@@ -472,6 +487,9 @@
             if (sheetEl) sheetEl.innerHTML = '';
             return;
           }
+          // Единственная по-настоящему долгая ветка: тянем SDK Яндекса по сети.
+          // Всё выше решается синхронно и лоадера не заслуживает.
+          setLoading(true);
           return loadYmaps(resolved).then(function (api) {
             ymaps = api;
             hideEmpty(emptyEl);

@@ -410,12 +410,82 @@
     return true;
   }
 
+  /* ── TASK-094: направление перехода ───────────────────────────────────────
+   *
+   * Направление знает только уходящая страница — новая видит лишь то, что её
+   * открыли. Поэтому оно кладётся в sessionStorage перед уходом и читается на
+   * pagereveal. Навигационный API, когда он есть, точнее (ловит и системную
+   * кнопку «назад»), поэтому он в приоритете, а флаг — фолбэк.
+   */
+  var NAV_DIR_KEY = 'tcb_nav_dir_v1';
+  var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
+
+  function rememberNavDirection(path) {
+    var from = TAB_ORDER[resolveActiveTab()];
+    var toTab = null;
+    var key = normalizeRoutePath(path).split('?')[0];
+    if (key === 'client-home') toTab = 'home';
+    else if (key === 'ice' || key === 'catalog' || key === 'arena') toTab = 'catalog';
+    else if (key === 'client-bookings') toTab = 'bookings';
+    var to = TAB_ORDER[toTab];
+    // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда
+    // вернёт системная кнопка, и её направление посчитает Navigation API.
+    var dir = from != null && to != null && to < from ? 'back' : 'forward';
+    try {
+      global.sessionStorage.setItem(NAV_DIR_KEY, dir);
+    } catch (e) {
+      /* приватный режим — переход просто будет кросс-фейдом */
+    }
+  }
+
+  function takeNavDirection() {
+    try {
+      var dir = global.sessionStorage.getItem(NAV_DIR_KEY);
+      global.sessionStorage.removeItem(NAV_DIR_KEY);
+      return dir === 'back' || dir === 'forward' ? dir : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function bindViewTransitions() {
+    // Нет поддержки — ничего не подписываем, навигация остаётся как была.
+    if (!('onpagereveal' in global)) return;
+    global.addEventListener('pagereveal', function (ev) {
+      if (!ev.viewTransition) return;
+      // Флаг снимаем всегда, иначе он протечёт в следующий переход.
+      var stored = takeNavDirection();
+      /*
+       * Навигационный API отвечает на другой вопрос: он знает про движение по
+       * стеку истории, а не про смысл перехода. Уход «Лёд → Главная» — это
+       * push вперёд по стеку, но назад по вкладкам. Поэтому API имеет право
+       * утверждать только «это возврат по истории»; смысл остальных переходов
+       * знает уходившая страница, и он лежит во флаге.
+       */
+      var traversalBack = false;
+      var nav = global.navigation;
+      if (nav && nav.activation && nav.activation.from && nav.activation.entry) {
+        var fromIndex = nav.activation.from.index;
+        var toIndex = nav.activation.entry.index;
+        traversalBack =
+          typeof fromIndex === 'number' && typeof toIndex === 'number' && toIndex >= 0 && toIndex < fromIndex;
+      }
+      var dir = traversalBack ? 'back' : stored || 'forward';
+      try {
+        ev.viewTransition.types.add(dir);
+      } catch (e) {
+        /* types не поддержаны — останется кросс-фейд по умолчанию */
+      }
+    });
+  }
+
   function navigate(path) {
     if (isSameTabRoute(path)) {
       closeMoreSheet();
       syncTabBarActive();
       return;
     }
+    rememberNavDirection(path);
     var url = withInit(webappBasePath() + path);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
     global.location.href = url;
@@ -488,6 +558,53 @@
 
     applyTabBarVisibility();
     syncTabBarActive();
+    observeTabBarMetrics();
+  }
+
+  /*
+   * Фактическая высота панели → --client-tab-bar-measured (TASK-093).
+   *
+   * CSS знает только заявленные 62px, а панель рендерится в 69px: высота зависит от
+   * гарнитуры и от того, перенеслась ли подпись. Разница уходила в нижний отступ
+   * полотна, и последние 7px контента оставались под панелью на каждом экране.
+   *
+   * Пишем в ОТДЕЛЬНУЮ переменную, а не в --client-tab-bar-height: та задаёт панели
+   * min-height, и запись измеренного значения обратно в неё замкнула бы наблюдателя
+   * сам на себя.
+   */
+  function syncTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    var h = Math.round(bar.getBoundingClientRect().height);
+    if (!h) return;
+    try {
+      document.documentElement.style.setProperty('--client-tab-bar-measured', h + 'px');
+    } catch (e) { /* */ }
+  }
+
+  function observeTabBarMetrics() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    syncTabBarMetrics();
+
+    /*
+     * Наблюдатель нужен не «на всякий случай»: первый замер снимается системным
+     * фолбэком, Golos Text доезжает позже и меняет высоту подписи. Без пересчёта
+     * мы зафиксировали бы высоту чужого шрифта.
+     */
+    if (typeof global.ResizeObserver === 'function') {
+      try {
+        new global.ResizeObserver(syncTabBarMetrics).observe(bar);
+      } catch (e) {
+        global.addEventListener('resize', syncTabBarMetrics);
+      }
+    } else {
+      global.addEventListener('resize', syncTabBarMetrics);
+    }
+
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(syncTabBarMetrics).catch(function () { /* */ });
+    }
   }
 
   function writeCatalogWarmCache(payload) {
@@ -688,43 +805,38 @@
       .replace(/"/g, '&quot;');
   }
 
+  /**
+   * TASK-096: one renderer, not two. The implementation lives in mini-app-empty-state.js so that
+   * shell-free screens can use it; this stays as the call site the shell's own screens already use.
+   * The old version tolerated an empty state with no CTA — that is exactly what AC-002 forbids,
+   * so the shared renderer now refuses it instead of quietly drawing a dead end.
+   */
   function renderEmptyState(container, options) {
     if (!container) return;
     options = options || {};
-    var icon = options.icon || TAB_ICONS.catalog;
-    var title = escHtml(options.title || 'Пока пусто');
-    var hint = options.hint ? escHtml(options.hint) : '';
-    var ctaLabel = options.ctaLabel;
-    var ctaPath = options.ctaPath;
-
-    var html =
-      '<div class="client-empty-state" role="status">' +
-      '<div class="client-empty-state__icon">' +
-      icon +
-      '</div>' +
-      '<p class="client-empty-state__title">' +
-      title +
-      '</p>';
-    if (hint) {
-      html += '<p class="client-empty-state__hint">' + hint + '</p>';
+    var comp = global.MiniAppEmptyState;
+    if (!comp || typeof comp.render !== 'function') {
+      if (global.console && global.console.error) {
+        global.console.error('ClientShell.renderEmptyState: mini-app-empty-state.js is not loaded');
+      }
+      // TASK-103: without this, «Мои записи» keeps the skeleton forever when the
+      // shared file 404s — the list fetch already succeeded, only the empty paint failed.
+      container.innerHTML =
+        '<div class="empty">' + escHtml(options.title || 'Пока пусто') + '</div>';
+      return;
     }
-    if (ctaLabel && ctaPath) {
-      html +=
-        '<button type="button" class="btn-primary btn-block client-empty-state__cta" data-nav-path="' +
-        ctaPath +
-        '">' +
-        ctaLabel +
-        '</button>';
-    }
-    html += '</div>';
-    container.innerHTML = html;
-    var cta = container.querySelector('.client-empty-state__cta');
-    if (cta) {
-      cta.addEventListener('click', function () {
-        hapticSelection();
-        navigate(cta.getAttribute('data-nav-path'));
-      });
-    }
+    comp.render(container, {
+      icon: options.icon || TAB_ICONS.catalog,
+      title: options.title || 'Пока пусто',
+      hint: options.hint,
+      ctaLabel: options.ctaLabel,
+      ctaPath: options.ctaPath,
+      ctaHref: options.ctaHref,
+      onCta: options.onCta,
+      secondaryLabel: options.secondaryLabel,
+      secondaryPath: options.secondaryPath,
+      onSecondary: options.onSecondary,
+    });
   }
 
   function renderSkeletonList(container, count) {
@@ -812,6 +924,13 @@
       navigate('client-home');
     };
   }
+
+  /*
+   * Подписка на pagereveal — на уровне модуля, а не в boot(): событие
+   * срабатывает до первой отрисовки, то есть раньше DOMContentLoaded.
+   * Подписаться позже значит не получить первый же переход.
+   */
+  bindViewTransitions();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

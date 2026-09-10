@@ -4,12 +4,24 @@
  */
 body.ar-pilot--arena {
   margin: 0;
-  background: var(--tg-theme-bg-color, var(--glide-paper));
+  background: var(--app-canvas-bg);
   color: var(--tg-theme-text-color, var(--glide-ink));
   font-family: var(--app-font-sans, ui-sans-serif, system-ui, sans-serif);
   min-height: 100vh;
   overflow-x: hidden;
-  padding-bottom: 72px;
+  /*
+   * Отступ считается оболочкой от ФАКТИЧЕСКОЙ высоты панели (TASK-093), а не своим
+   * числом: 72px было ещё одной догадкой, разошедшейся с реальными 87px.
+   */
+  padding-bottom: var(--client-shell-tab-inset);
+}
+
+body.ar-pilot--arena.arena-has-tickets {
+  padding-bottom: calc(var(--client-shell-tab-inset) + 72px);
+}
+
+body.ar-pilot--arena.arena-has-tickets.client-shell-tabs-hidden {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
 }
 
 body.ar-pilot--arena .client-app-header {
@@ -36,12 +48,21 @@ body.ar-pilot--arena .client-app-header {
   display: flex;
   align-items: flex-end;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--glide-line, var(--line, #dce5ea));
+  border-bottom: 1px solid var(--glide-line);
   background:
-    radial-gradient(120% 120% at 20% 0, var(--ice-mist, #e6f1ff), transparent 62%),
-    linear-gradient(158deg, var(--app-surface-row-bot, #f2f6f9), var(--tg-theme-bg-color, #fff));
+    radial-gradient(120% 120% at 20% 0, var(--glide-line), transparent 62%),
+    linear-gradient(158deg, var(--app-surface-row-bot), var(--tg-theme-bg-color));
   clip-path: var(--app-ribbon-clip-container, none);
   overflow: hidden;
+}
+
+/*
+ * TASK-094. Пустая шапка до прихода данных: та же коробка, что у настоящей,
+ * чтобы переход со списка «Льда» морфил кадр в неё, а не в пустоту, и чтобы
+ * появление фото не двигало макет.
+ */
+.arena-hero--pending {
+  border-bottom-color: transparent;
 }
 
 .arena-hero--photo {
@@ -62,7 +83,7 @@ body.ar-pilot--arena .client-app-header {
   width: 120%;
   height: 40%;
   transform: rotate(-8deg);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tg-theme-text-color, #fff) 18%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tg-theme-text-color) 18%, transparent), transparent);
   pointer-events: none;
 }
 
@@ -78,8 +99,8 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-hero__txt h1 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 750;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
   color: inherit;
@@ -87,12 +108,12 @@ body.ar-pilot--arena .client-app-header {
 
 .arena-hero--photo .arena-hero__txt h1,
 .arena-hero--photo .arena-hero__meta {
-  color: #fff;
+  color: var(--glide-on-deep);
 }
 
 .arena-hero__meta {
-  font-size: 12.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-hero__gallery {
@@ -100,18 +121,18 @@ body.ar-pilot--arena .client-app-header {
   right: 11px;
   bottom: 11px;
   z-index: 1;
-  font-size: 11px;
-  font-weight: 650;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 6px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  background: var(--glide-line);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 3px 7px;
   color: var(--tg-theme-text-color);
 }
 
 .arena-sec {
   padding: 14px 16px;
-  border-top: 1px solid var(--glide-line, #eaf0f4);
+  border-top: 1px solid var(--glide-line);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -122,28 +143,27 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-h {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.015em;
   margin: 0;
 }
 
 .arena-new {
   display: inline-block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9.5px;
+  font-size: var(--app-text-kicker);
   letter-spacing: 0.1em;
   padding: 2px 5px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
-  color: var(--app-cta-fill);
+  border-radius: var(--app-radius-xs);
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
   vertical-align: 2px;
   margin-left: 6px;
 }
 
 .arena-sub {
-  font-size: 13px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   margin: 0;
 }
 
@@ -154,12 +174,12 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-amen span {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--app-surface-row-bot, #e8eff3);
-  border: 1px solid var(--glide-line, #eaf0f4);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-row-bot);
+  border: 1px solid var(--glide-line);
   color: var(--glide-ink, inherit);
 }
 
@@ -169,20 +189,20 @@ body.ar-pilot--arena .client-app-header {
 }
 
 .arena-day {
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 6px 11px;
   border-radius: 999px;
-  border: 1px solid var(--glide-line, #dce5ea);
-  color: var(--glide-hint, #72868f);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
   background: transparent;
   cursor: pointer;
 }
 
 .arena-day[aria-pressed='true'] {
-  background: var(--tg-theme-text-color, #0f1a22);
-  color: var(--tg-theme-bg-color, #fff);
-  border-color: var(--tg-theme-text-color, #0f1a22);
+  background: var(--tg-theme-text-color);
+  color: var(--tg-theme-bg-color);
+  border-color: var(--tg-theme-text-color);
 }
 
 .arena-rows {
@@ -198,10 +218,10 @@ body.ar-pilot--arena .client-app-header {
   grid-template-columns: 46px minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
-  border: 1px solid var(--glide-line, #eaf0f4);
-  border-left: 3px solid var(--ice-blue, #2a6e8f);
-  background: var(--app-surface-row-bot, #f2f6f9);
-  border-radius: 4px;
+  border: 1px solid var(--glide-line);
+  border-left: 3px solid var(--app-ok);
+  background: var(--app-surface-row-bot);
+  border-radius: var(--app-radius-xs);
   padding: 9px 10px;
   width: 100%;
   text-align: left;
@@ -216,22 +236,21 @@ a.arena-row {
 }
 
 .arena-row--lesson {
-  border-left-color: var(--app-cta-fill, #45B9BB);
+  border-left-color: var(--app-cta-fill);
 }
 
 .arena-row--empty {
-  border-left-color: var(--glide-hint, #72868f);
+  border-left-color: var(--glide-hint);
   opacity: 0.7;
 }
 
 .arena-row--live .arena-row__m span {
-  color: var(--ice-blue, #2a6e8f);
-  font-weight: 620;
+  color: var(--app-ok-ink);
+  font-weight: var(--app-weight-semibold);
 }
 
 .arena-row__t {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--app-text-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -243,20 +262,20 @@ a.arena-row {
 }
 
 .arena-row__m b {
-  font-size: 13.5px;
-  font-weight: 640;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
 .arena-row__m span {
-  font-size: 11.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
   overflow-wrap: anywhere;
 }
 
 .arena-cta {
-  font-size: 11.5px;
-  font-weight: 660;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   padding: 6px 10px;
   border-radius: 999px;
   white-space: nowrap;
@@ -266,8 +285,8 @@ a.arena-row {
 }
 
 .arena-cta--ghost {
-  border: 1px solid var(--glide-line, #dce5ea);
-  color: var(--glide-hint, #72868f);
+  border: 1px solid var(--glide-line);
+  color: var(--glide-hint);
   background: transparent;
 }
 
@@ -280,8 +299,8 @@ a.arena-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 11.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-legend span {
@@ -293,12 +312,12 @@ a.arena-row {
 .arena-sw {
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: var(--app-radius-xs);
   display: inline-block;
 }
 
 .arena-sw--ice {
-  background: var(--ice-blue, #2a6e8f);
+  background: var(--glide-brand);
 }
 
 .arena-sw--lesson {
@@ -311,22 +330,35 @@ a.arena-row {
   gap: 10px;
   align-items: center;
   width: 100%;
-  border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-sm);
   padding: 9px 10px;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-card-bg);
   text-align: left;
   color: inherit;
   cursor: pointer;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-coach__ava {
   width: 38px;
   height: 38px;
-  border-radius: 99px;
-  background: linear-gradient(145deg, var(--ice-mist, #e1eef4), var(--app-surface-row-bot, #e8eff3));
-  border: 1px solid var(--glide-line, #eaf0f4);
+  border-radius: var(--app-radius-pill);
+  background: linear-gradient(145deg, var(--glide-line), var(--app-surface-row-bot));
+  border: 1px solid var(--glide-line);
   object-fit: cover;
+}
+
+/* Монограмма вместо фотографии — тот же приём, что у карточки тренера на «Льду». */
+.arena-coach__ava--mono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
 }
 
 .arena-coach__b {
@@ -336,13 +368,13 @@ a.arena-row {
 }
 
 .arena-coach__b b {
-  font-size: 13.5px;
-  font-weight: 660;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
 }
 
 .arena-coach__b span {
-  font-size: 11.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-fake-row {
@@ -350,20 +382,21 @@ a.arena-row {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 9px;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-sm);
   padding: 12px;
-  font-size: 14px;
+  font-size: var(--app-text-body);
   width: 100%;
   text-align: left;
   color: inherit;
-  background: var(--tg-theme-bg-color, #fff);
+  background: var(--app-card-bg);
   text-decoration: none;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-fake-row span {
-  color: var(--glide-hint, #72868f);
-  font-size: 13px;
+  color: var(--glide-hint);
+  font-size: var(--app-text-caption);
   white-space: nowrap;
 }
 
@@ -371,15 +404,15 @@ a.arena-row {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 11.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-fresh a,
 .arena-fresh button.linkish {
   color: var(--glide-ink-teal, var(--app-cta-fill));
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   background: none;
   border: 0;
   padding: 0;
@@ -389,38 +422,39 @@ a.arena-row {
 }
 
 .arena-empty {
-  border: 1px dashed var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 14px;
-  background: var(--app-surface-row-bot, #f2f6f9);
+  background: var(--app-surface-row-bot);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .arena-empty b {
-  font-size: 14px;
+  font-size: var(--app-text-body);
 }
 
 .arena-empty p {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-btn {
   display: block;
   width: 100%;
   text-align: center;
-  font-size: 14px;
-  font-weight: 680;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--glide-line, #dce5ea);
-  background: var(--tg-theme-bg-color, #fff);
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg);
   color: inherit;
   cursor: pointer;
   text-decoration: none;
+  box-shadow: var(--app-card-shadow);
 }
 
 .arena-btn--pri {
@@ -430,40 +464,66 @@ a.arena-row {
   clip-path: var(--app-ribbon-clip-sm, none);
 }
 
+.arena-tickets-cta {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 100%);
+  bottom: var(--client-shell-tab-inset, 80px);
+  z-index: 8500;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--app-canvas-bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-sizing: border-box;
+  box-shadow: 0 -10px 24px -12px rgba(15, 26, 34, 0.28);
+}
+
+body.client-shell-tabs-hidden .arena-tickets-cta {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.arena-tickets-cta[hidden] {
+  display: none;
+}
+
+.arena-tickets-cta .arena-btn {
+  margin: 0;
+}
+
 .arena-owner {
-  border: 1px solid var(--glide-line, #dce5ea);
-  border-radius: 10px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
   padding: 12px;
-  background: var(--app-surface-row-bot, #f2f6f9);
+  background: var(--app-surface-row-bot);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .arena-owner b {
-  font-size: 13.5px;
+  font-size: var(--app-text-body);
 }
 
 .arena-owner p {
   margin: 0;
-  font-size: 12px;
-  color: var(--glide-hint, #72868f);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
 }
 
 .arena-closed {
-  border: 1px solid var(--glide-line, #dce5ea);
+  border: 1px solid var(--glide-line);
   border-left: 3px solid var(--app-cta-fill);
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   padding: 12px;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
 }
 
 .arena-state {
   padding: 28px 16px;
   text-align: center;
-  color: var(--glide-hint, #72868f);
+  color: var(--glide-hint);
 }
 
 .arena-modal {
@@ -482,22 +542,23 @@ a.arena-row {
 
 .arena-modal__sheet {
   width: min(480px, 100%);
-  background: var(--tg-theme-bg-color, #fff);
-  border-radius: 16px 16px 0 0;
+  background: var(--app-float-bg);
+  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
+  box-shadow: var(--app-float-shadow);
 }
 
 .arena-modal__sheet h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--app-text-lead);
 }
 
 .arena-modal__sheet label {
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -507,9 +568,9 @@ a.arena-row {
 .arena-modal__sheet input {
   font: inherit;
   padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--glide-line, #dce5ea);
-  background: var(--tg-theme-bg-color, #fff);
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--glide-line);
+  background: var(--app-canvas-bg);
   color: inherit;
 }
 
@@ -528,7 +589,7 @@ a.arena-row {
   }
   .arena-cta {
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: var(--app-text-caption);
     white-space: normal;
     max-width: 88px;
     text-align: center;

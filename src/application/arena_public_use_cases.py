@@ -10,12 +10,17 @@ import json
 import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_media import attach_arena_media_payloads
-from src.application.arena_profile import ARENA_PROFILE_STATUS_PUBLISHED, is_in_season
+from src.application.arena_profile import (
+    ARENA_PROFILE_STATUS_PUBLISHED,
+    is_in_season,
+    public_http_url,
+)
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -29,6 +34,7 @@ from src.application.training_group_use_cases import (
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
 from src.shared.currency import currency_for_country
+from src.shared.ice_discovery_scope import ICE_DISCOVERY_COUNTRY
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
@@ -45,12 +51,20 @@ DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 100
 SEARCH_LIMIT = 8
 
+# PDEC-005: vitrine shows only slots that have not started. An in-progress
+# session is past — live line / pin / hub card all show start time, so
+# "12:45 сегодня" at 13:10 is a lie even if the ice is still open.
 _CURRENT_SESSION_SQL = """
     s.status = :st
     AND s.kind IN ('public_skate', 'open_ice')
-    AND s.ends_at_utc >= :now
+    AND s.starts_at_utc > :now
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
 """
+
+
+def _today_minsk() -> date:
+    """Calendar day for Ice copy and default feed window (UTC+3, no DST)."""
+    return datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
 
 
 class IcePublicQueryError(ValueError):
@@ -270,10 +284,14 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
 def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     hero = item.get("hero")
     thumb = None
+    card = None
     if isinstance(hero, Mapping):
         variants = hero.get("variants") or {}
         if isinstance(variants, Mapping):
             thumb = variants.get("thumb") or variants.get("card")
+            # TASK-090: карточка «Льда» показывает кадр во всю ширину. thumb — 320px,
+            # на 390pt при DPR2 это мыло, поэтому список отдаёт ещё и card (800px).
+            card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
     return {
         "id": item["id"],
@@ -288,6 +306,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "distance_km": item.get("distance_km"),
         "tier": item["tier"],
         "thumb": thumb,
+        "card": card,
         "currency_code": item.get("currency_code"),
         "live": live,
         "live_line": live.get("text"),
@@ -298,6 +317,7 @@ _LIST_SQL = f"""
 SELECT
     a.id, a.city_id, a.name, a.address, a.latitude, a.longitude,
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
+    p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
     p.amenities, p.status, p.verified_at,
     c.country, c.name AS city_name,
@@ -368,6 +388,7 @@ LEFT JOIN (
     GROUP BY tg.arena_id
 ) og ON og.arena_id = a.id
 WHERE a.is_active AND a.is_confirmed
+  AND c.country = :ice_country
   AND (p.status IS NULL OR p.status = :published)
 """
 
@@ -409,6 +430,7 @@ async def _load_ice_arena_rows(
         "slot_tz": NOTIFICATION_TZ,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
     where = []
     if city_id is not None:
@@ -440,7 +462,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
     rows = (
         await session.execute(
             text(
-                """
+                f"""
                 SELECT c.id, c.name, c.sort_order, c.country,
                        (
                            SELECT COUNT(*)::int
@@ -452,10 +474,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND EXISTS (
                                  SELECT 1 FROM ice_sessions s
                                  WHERE s.arena_id = a.id
-                                   AND s.status = :st
-                                   AND s.kind IN ('public_skate', 'open_ice')
-                                   AND s.ends_at_utc >= :now
-                                   AND (s.valid_until IS NULL OR s.valid_until >= :now)
+                                   AND {_CURRENT_SESSION_SQL}
                              )
                        ) AS skate_count,
                        (
@@ -467,21 +486,56 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                                  SELECT 1 FROM trainer_cities tc
                                  WHERE tc.trainer_id = t.id AND tc.city_id = c.id
                              )
-                       ) AS trainer_count
+                       ) AS trainer_count,
+                       (
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS map_rink_count,
+                       (
+                           SELECT AVG(a.latitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS latitude,
+                       (
+                           SELECT AVG(a.longitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS longitude
                 FROM cities c
-                WHERE c.is_active
+                WHERE c.is_active AND c.country = :ice_country
                 ORDER BY c.sort_order, c.id
                 """
             ),
-            {"published": ARENA_PROFILE_STATUS_PUBLISHED, "st": STATUS_ACTIVE, "now": now},
+            {
+                "published": ARENA_PROFILE_STATUS_PUBLISHED,
+                "st": STATUS_ACTIVE,
+                "now": now,
+                "ice_country": ICE_DISCOVERY_COUNTRY,
+            },
         )
     ).mappings()
     items = []
     for row in rows:
         skate_count = int(row["skate_count"] or 0)
         trainer_count = int(row["trainer_count"] or 0)
-        if skate_count <= 0 and trainer_count <= 0:
+        map_rink_count = int(row["map_rink_count"] or 0)
+        if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0:
             continue
+        lat = row["latitude"]
+        lon = row["longitude"]
         items.append(
             {
                 "id": int(row["id"]),
@@ -490,6 +544,9 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "country": row["country"],
                 "skate_count": skate_count,
                 "trainer_count": trainer_count,
+                "map_rink_count": map_rink_count,
+                "latitude": float(lat) if lat is not None else None,
+                "longitude": float(lon) if lon is not None else None,
             }
         )
     return items
@@ -535,7 +592,7 @@ async def list_public_ice_arenas(
     rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
-    today = date.today()
+    today = _today_minsk()
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
     return {
@@ -553,21 +610,34 @@ async def get_hub_ice_teaser(
 
     Same MK filter as Ice tab intent=skate (tier A). No geolocation — distance
     stays unset. Hub bootstrap uses this so home load stays one round-trip.
+
+    TASK-091. Два изменения против TASK-055:
+      * без города клиента больше не отдаём None. Первый экран Главной обязан
+        показать товар и новичку (AC-005), а город у него появляется только
+        после первого выбора. Без city_id берём ближайший сеанс по стране —
+        ровно то же, что делает вкладка «Лёд» своим pickFallbackCity;
+      * отдаём кадр арены и название города: карточка на Главной — тот же
+        объект, что карточка на «Льду», а не строка-тизер.
     """
-    if city_id is None:
-        return None
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
         "now": now,
         "st": STATUS_ACTIVE,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
-        "city_id": int(city_id),
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
+    city_filter = ""
+    if city_id is not None:
+        params["city_id"] = int(city_id)
+        city_filter = "  AND a.city_id = :city_id\n"
     sql = f"""
 SELECT
     a.id AS arena_id,
     p.slug AS arena_slug,
     a.name AS arena_name,
+    p.district AS arena_district,
+    a.city_id AS city_id,
+    c.name AS city_name,
     nxt.kind,
     nxt.starts_at_utc,
     nxt.local_date,
@@ -576,6 +646,7 @@ SELECT
     nxt.currency_code
 FROM arenas a
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
 JOIN LATERAL (
     SELECT s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
            s.price_adult_minor, s.currency_code
@@ -585,8 +656,8 @@ JOIN LATERAL (
     LIMIT 1
 ) nxt ON true
 WHERE a.is_active AND a.is_confirmed
-  AND a.city_id = :city_id
-  AND (p.status IS NULL OR p.status = :published)
+  AND c.country = :ice_country
+{city_filter}  AND (p.status IS NULL OR p.status = :published)
 ORDER BY nxt.starts_at_utc, a.id
 LIMIT 1
 """
@@ -595,16 +666,31 @@ LIMIT 1
         return None
     local_date = row["local_date"]
     starts_utc = row["starts_at_utc"]
+    media_holder: dict[str, Any] = {"id": int(row["arena_id"])}
+    await attach_arena_media_payloads(session, [media_holder])
+    hero = media_holder.get("hero")
+    thumb = None
+    card = None
+    if isinstance(hero, Mapping):
+        variants = hero.get("variants") or {}
+        if isinstance(variants, Mapping):
+            thumb = variants.get("thumb") or variants.get("card")
+            card = variants.get("card") or variants.get("hero") or thumb
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
         "arena_name": row["arena_name"],
+        "arena_district": row["arena_district"],
+        "city_id": int(row["city_id"]) if row["city_id"] is not None else None,
+        "city_name": row["city_name"],
         "kind": row["kind"],
         "starts_at_utc": starts_utc.isoformat() if hasattr(starts_utc, "isoformat") else str(starts_utc),
         "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
         "starts_at_local": _hhmm(row["starts_at_local"]),
         "price_adult_minor": row["price_adult_minor"],
         "currency_code": row["currency_code"],
+        "thumb": thumb,
+        "card": card,
         "distance_km": None,
     }
 
@@ -618,6 +704,7 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
         "slot_tz": NOTIFICATION_TZ,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
+        "ice_country": ICE_DISCOVERY_COUNTRY,
     }
     sql = _LIST_SQL
     if arena_ref.isdigit():
@@ -679,11 +766,12 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "short_description": row.get("short_description"),
         "phone": row.get("phone"),
         "website_url": row.get("website_url"),
+        "tickets_url": public_http_url(row.get("tickets_url")),
         "social_urls": _as_mapping(row.get("social_urls")),
         "opening_hours": _as_mapping(row.get("opening_hours")),
         "season_start_month": season_start,
         "season_end_month": season_end,
-        "in_season": is_in_season(season_start, season_end, date.today().month),
+        "in_season": is_in_season(season_start, season_end, _today_minsk().month),
         "amenities": _as_mapping(row.get("amenities")),
         "contacts": {
             "phone": row.get("phone"),
@@ -712,24 +800,21 @@ async def list_public_arena_sessions(
     row = await _load_arena_by_ref(session, arena_ref)
     if row is None:
         return None
-    start = date_from or date.today()
+    start = date_from or _today_minsk()
     end = date_to or (start + timedelta(days=14))
     if end < start:
         start, end = end, start
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                    price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                    price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
                    source_id, observed_at, valid_until, confidence
             FROM ice_sessions s
             WHERE s.arena_id = :aid
-              AND s.status = :st
-              AND s.kind IN ('public_skate', 'open_ice')
-              AND s.ends_at_utc >= :now
-              AND (s.valid_until IS NULL OR s.valid_until >= :now)
+              AND {_CURRENT_SESSION_SQL}
               AND s.local_date >= :dfrom AND s.local_date <= :dto
             ORDER BY s.local_date, s.starts_at_local, s.id
             """
@@ -837,6 +922,7 @@ async def search_public_ice(
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
         WHERE a.is_active AND a.is_confirmed
+          AND c.country = :ice_country
           AND (p.status IS NULL OR p.status = :published)
           AND (
             to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
@@ -854,6 +940,7 @@ async def search_public_ice(
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
             WHERE a.is_active AND a.is_confirmed
+              AND c.country = :ice_country
               AND (p.status IS NULL OR p.status = :published)
               AND (
                 to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
@@ -867,7 +954,13 @@ async def search_public_ice(
         """
     arenas = await session.execute(
         text(arena_sql),
-        {"q": query, "like": like, "lim": cap, "published": ARENA_PROFILE_STATUS_PUBLISHED},
+        {
+            "q": query,
+            "like": like,
+            "lim": cap,
+            "published": ARENA_PROFILE_STATUS_PUBLISHED,
+            "ice_country": ICE_DISCOVERY_COUNTRY,
+        },
     )
     trainers = await session.execute(
         text(
@@ -893,7 +986,7 @@ async def search_public_ice(
             """
             SELECT id, name
             FROM cities
-            WHERE is_active
+            WHERE is_active AND country = :ice_country
               AND (
                 to_tsvector('simple', coalesce(name, '')) @@ plainto_tsquery('simple', :q)
                 OR name ILIKE :like
@@ -902,7 +995,7 @@ async def search_public_ice(
             LIMIT :lim
             """
         ),
-        {"q": query, "like": like, "lim": cap},
+        {"q": query, "like": like, "lim": cap, "ice_country": ICE_DISCOVERY_COUNTRY},
     )
     arena_items = [
         {
@@ -934,3 +1027,96 @@ async def search_public_ice(
             {"type": "city", "items": city_items},
         ],
     }
+
+
+_ICE_CITIES_SQL = """
+SELECT
+  c.id,
+  c.name,
+  c.sort_order,
+  c.country,
+  COUNT(DISTINCT rink.id)::int AS map_rink_count,
+  COUNT(DISTINCT coach.trainer_id)::int AS trainer_count,
+  AVG(rink.latitude) AS latitude,
+  AVG(rink.longitude) AS longitude
+FROM cities c
+LEFT JOIN (
+  SELECT a.city_id, a.id, a.latitude, a.longitude
+  FROM arenas a
+  LEFT JOIN arena_profiles p ON p.arena_id = a.id
+  WHERE a.is_active AND a.is_confirmed
+    AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+    AND (p.status IS NULL OR p.status = :published)
+) rink ON rink.city_id = c.id
+LEFT JOIN (
+  SELECT tc.city_id, tc.trainer_id
+  FROM trainer_cities tc
+  JOIN trainers t ON t.id = tc.trainer_id
+    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+  UNION
+  SELECT p.city_id, p.trainer_id
+  FROM trainer_profiles p
+  JOIN trainers t ON t.id = p.trainer_id
+    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+  WHERE p.city_id IS NOT NULL
+) coach ON coach.city_id = c.id
+WHERE c.is_active
+GROUP BY c.id, c.name, c.sort_order, c.country
+HAVING COUNT(DISTINCT rink.id) > 0 OR COUNT(DISTINCT coach.trainer_id) > 0
+ORDER BY c.sort_order, c.id
+"""
+
+
+async def list_ice_cities(session: AsyncSession) -> dict[str, Any]:
+    """Cities that belong on the Ice tab picker: a map rink and/or a catalog trainer."""
+    result = await session.execute(
+        text(_ICE_CITIES_SQL), {"published": ARENA_PROFILE_STATUS_PUBLISHED}
+    )
+    items: list[dict[str, Any]] = []
+    for row in result.mappings():
+        lat = row["latitude"]
+        lon = row["longitude"]
+        items.append(
+            {
+                "id": int(row["id"]),
+                "name": row["name"],
+                "sort_order": int(row["sort_order"] or 0),
+                "country": row["country"],
+                "map_rink_count": int(row["map_rink_count"] or 0),
+                "trainer_count": int(row["trainer_count"] or 0),
+                "latitude": float(lat) if lat is not None else None,
+                "longitude": float(lon) if lon is not None else None,
+            }
+        )
+    return {"items": items}
+
+
+async def record_ice_city_interest(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    intent: str | None = None,
+    source: str | None = None,
+) -> dict[str, Any] | None:
+    """Persist a client tap that they want skating in a city without map rinks."""
+    found = await session.execute(
+        text("SELECT 1 FROM cities WHERE id = :id AND is_active"),
+        {"id": int(city_id)},
+    )
+    if found.first() is None:
+        return None
+    intent_value = parse_intent(intent) if intent else INTENT_SKATE
+    src = str(source or "coming_soon_cta").strip()[:32] or "coming_soon_cta"
+    inserted = await session.execute(
+        text(
+            """
+            INSERT INTO ice_city_interest (city_id, intent, source)
+            VALUES (:city_id, :intent, :source)
+            RETURNING id
+            """
+        ),
+        {"city_id": int(city_id), "intent": intent_value, "source": src},
+    )
+    await session.commit()
+    return {"ok": True, "id": int(inserted.scalar_one())}
+

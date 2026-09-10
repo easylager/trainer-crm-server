@@ -50,7 +50,7 @@
 
 ## Fixture
 
-`data/fixtures/gorki-lds/` — `mass-skating-home-excerpt.html`, `uslugi.html`, `expected.json` (3 слота).
+`.ai/data/fixtures/gorki-lds/` — `mass-skating-home-excerpt.html`, `uslugi.html`, `expected.json` (3 слота).
 
 ## Blockers / notes
 

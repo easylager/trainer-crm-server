@@ -207,3 +207,108 @@ async def test_the_first_screen_never_demands_a_profile(app_use_test_db, db_sess
     assert (data.get("next_step") or {}).get("key") == "share_link", (
         "следующий шаг после расписания — отдать ссылку ученику, а не заполнять анкету"
     )
+
+
+@pytest.mark.asyncio
+async def test_unmoderated_trainer_can_create_pass_and_use_crm_tools(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Каталожная модерация не блокирует абонементы, сертификаты, заявки и ссылки.
+    Тот же ``pending_profile``, что после /start: карточки в каталоге нет — CRM есть.
+    """
+    trainer_tg = _fresh_tg_id()
+    r = await db_session.execute(
+        text("INSERT INTO trainers (status) VALUES ('pending_profile') RETURNING id")
+    )
+    trainer_id = int(r.fetchone()[0])
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": trainer_tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    service_id = await require_seed_service_id(db_session)
+    headers = {"X-Telegram-Init-Data": "mock"}
+
+    with _as_trainer(trainer_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            setup = await c.post(
+                QUICK_SETUP_URL,
+                headers=headers,
+                json={
+                    "service_ids": [service_id],
+                    "days": [{"day_of_week": 0, "hours": [9]}],
+                    "duration_minutes": 60,
+                },
+            )
+            assert setup.status_code == 200, setup.text
+
+            created = await c.post(
+                "/api/webapp/trainer/pass-products",
+                headers=headers,
+                json={
+                    "name": "Тестовый",
+                    "sessions_total": 5,
+                    "price_cents": 10000,
+                    "service_ids": [],
+                    "tier_kinds": [],
+                },
+            )
+            listed = await c.get("/api/webapp/trainer/pass-products", headers=headers)
+            cert_created = await c.post(
+                "/api/webapp/trainer/certificate-products",
+                headers=headers,
+                json={"name": "Сертификат 50", "amount_cents": 5000, "expires_in_days": 90},
+            )
+            certs = await c.get("/api/webapp/trainer/certificate-products", headers=headers)
+            requests = await c.get("/api/webapp/trainer/requests/summary", headers=headers)
+            welcome = await c.get("/api/webapp/trainer/welcome-link/eligibility", headers=headers)
+
+    assert created.status_code == 200, created.text
+    assert isinstance(created.json().get("id"), int)
+    assert listed.status_code == 200, listed.text
+    assert any(p.get("id") == created.json()["id"] for p in (listed.json().get("items") or []))
+    assert cert_created.status_code == 200, cert_created.text
+    assert isinstance(cert_created.json().get("id"), int)
+    assert certs.status_code == 200, certs.text
+    assert any(p.get("id") == cert_created.json()["id"] for p in (certs.json().get("items") or []))
+    assert requests.status_code == 200, requests.text
+    assert welcome.status_code == 200, welcome.text
+
+    r = await db_session.execute(
+        text("SELECT status FROM trainers WHERE id = :t"),
+        {"t": trainer_id},
+    )
+    assert r.scalar() == "pending_profile"
+
+
+@pytest.mark.asyncio
+async def test_deactivated_trainer_still_cannot_create_pass_product(
+    app_use_test_db, db_session
+) -> None:
+    """The one closed door: admin paused the account."""
+    trainer_tg = _fresh_tg_id()
+    r = await db_session.execute(
+        text("INSERT INTO trainers (status) VALUES ('deactivated') RETURNING id")
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": trainer_tg, "id": int(r.fetchone()[0])},
+    )
+    await db_session.commit()
+
+    with _as_trainer(trainer_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            created = await c.post(
+                "/api/webapp/trainer/pass-products",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "name": "Тестовый",
+                    "sessions_total": 5,
+                    "price_cents": 10000,
+                    "service_ids": [],
+                    "tier_kinds": [],
+                },
+            )
+    assert created.status_code == 403

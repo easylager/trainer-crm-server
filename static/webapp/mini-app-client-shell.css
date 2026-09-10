@@ -4,13 +4,59 @@
  */
 
 :root {
+  /*
+   * ВЫСОТА ПАНЕЛИ: заявленная и измеренная — это два разных числа (TASK-093).
+   *
+   * --client-tab-bar-height здесь работает как ПОЛ (min-height панели), а не как
+   * истина. Фактическая высота зависит от гарнитуры, длины подписи и того,
+   * перенеслась ли она: замер на 390px дал 69px против заявленных 62px. Разница
+   * уходила в нижний отступ полотна, и последние 7px контента навсегда оставались
+   * под панелью.
+   *
+   * Поэтому реальную высоту пишет JS в --client-tab-bar-measured, а отступ считается
+   * от максимума. Подставить «правильную» константу вместо 62 нельзя по той же
+   * причине, по которой не годилось 62: число зависит от условий рендера.
+   * Без JS всё сводится к прежнему поведению.
+   */
   --client-tab-bar-height: 62px;
   --client-tab-bar-margin: 18px;
-  --client-shell-tab-inset: calc(var(--client-tab-bar-height) + var(--client-tab-bar-margin) + env(safe-area-inset-bottom, 0px));
+  --client-shell-tab-inset: calc(
+    max(var(--client-tab-bar-height), var(--client-tab-bar-measured, 0px)) +
+    var(--client-tab-bar-margin) + env(safe-area-inset-bottom, 0px)
+  );
 }
 
 body.client-shell-body {
   padding-bottom: var(--client-shell-tab-inset);
+}
+
+/*
+ * СКРИМ под панелью. Панель — плавающая пилюля с полями по бокам, поэтому контент
+ * проходит и под ней, и мимо неё. Без затухания строка обрывается на полуслове без
+ * всякого признака, что там край, и выглядит забытой, а не продолжающейся.
+ *
+ * Градиент гасит текст ДО того, как он доедет до панели, и делает это фоном холста —
+ * не «стеклом»: theme.css относит стекло к витринному языку, а таб-бар клиент видит
+ * десятки раз в неделю.
+ *
+ * z-index 8999 — строго под панелью (9000) и над контентом.
+ */
+body.client-shell-body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--client-shell-tab-inset) + 20px);
+  z-index: 8999;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--app-canvas-bg) 58%);
+}
+
+/* Панели нет — гасить нечего. */
+body.client-shell-body.client-shell-tabs-hidden::after,
+body.client-shell-body.client-shell-more-open::after {
+  display: none;
 }
 
 body.client-shell-body.client-shell-tabs-hidden {
@@ -41,8 +87,8 @@ body.client-shell-body.client-shell-more-open .client-tab-bar {
 .client-app-header__title {
   flex: 1;
   min-width: 0;
-  font-size: 19px;
-  font-weight: 700;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.03em;
   line-height: 1.15;
   overflow: hidden;
@@ -75,9 +121,9 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   min-height: var(--client-tab-bar-height);
   padding: 8px 8px;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--tg-theme-bg-color) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ice-deep) 14%, transparent);
-  border-radius: 22px;
+  background: color-mix(in srgb, var(--app-float-bg) 94%, transparent);
+  border: 1px solid var(--app-float-line);
+  border-radius: var(--app-radius-xl);
   backdrop-filter: saturate(140%) blur(20px);
   -webkit-backdrop-filter: saturate(140%) blur(20px);
   box-shadow: var(--shadow-floating);
@@ -102,14 +148,14 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   background: transparent;
   color: color-mix(in srgb, var(--tg-theme-hint-color) 85%, var(--tg-theme-text-color));
   font-family: inherit;
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
   line-height: 1.1;
   letter-spacing: 0.005em;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   transition: color 0.18s ease, background 0.18s ease, transform 0.18s ease;
   position: relative;
 }
@@ -141,7 +187,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   justify-content: center;
   width: 40px;
   height: 30px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   color: inherit;
   background-image: none !important;
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
@@ -179,9 +225,11 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   bottom: 0;
   z-index: 9101;
   max-height: min(78vh, 520px);
-  padding: 8px 16px calc(12px + var(--client-tab-bar-height) + env(safe-area-inset-bottom, 0px));
-  border-radius: 20px 20px 0 0;
-  background: var(--tg-theme-bg-color);
+  /* Тот же замер, что у полотна: заявленная высота панели здесь так же врала. */
+  padding: 8px 16px calc(12px + var(--client-shell-tab-inset));
+  /* Шторка — уровень «плавающая», её ступень радиуса по контракту xl, а не lg. */
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+  background: var(--app-float-bg);
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
   transform: translateY(100%);
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -197,7 +245,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 .client-more-sheet__handle {
   width: 40px;
   height: 5px;
-  border-radius: 3px;
+  border-radius: var(--app-radius-pill);
   background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
   margin: 4px auto 10px;
   flex-shrink: 0;
@@ -218,8 +266,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-more-sheet__title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
   letter-spacing: -0.02em;
   margin: 0 0 4px;
   padding: 0 4px;
@@ -232,9 +280,9 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 .client-more-sheet__subtitle {
   margin: 0 0 12px;
   padding: 0 4px;
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   line-height: 1.4;
-  font-weight: 500;
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
 }
 
@@ -258,7 +306,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   width: 100%;
   padding: 12px 14px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--app-radius-md);
   background: var(--tg-theme-secondary-bg-color);
   color: var(--tg-theme-text-color);
   font-family: inherit;
@@ -275,7 +323,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   flex-shrink: 0;
   width: 1.6em;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font-size: 1.45rem;
+  font-size: var(--app-icon-lg);
   line-height: 1;
   text-align: center;
 }
@@ -287,8 +335,8 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-more-sheet__label {
   display: block;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   letter-spacing: -0.01em;
 }
 
@@ -307,49 +355,15 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-more-sheet__hint {
   display: block;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
   color: var(--tg-theme-hint-color);
   margin-top: 2px;
 }
 
 /* ─── Shared empty state ─────────────────────────────────────────────────── */
-
-.client-empty-state {
-  text-align: center;
-  padding: 36px 20px 28px;
-  max-width: 320px;
-  margin: 0 auto;
-}
-
-.client-empty-state__icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 14px;
-  color: var(--app-cta-fill);
-  opacity: 0.85;
-}
-
-.client-empty-state__title {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-  color: var(--tg-theme-text-color);
-}
-
-.client-empty-state__hint {
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--tg-theme-hint-color);
-  margin: 0 0 18px;
-}
-
-.client-empty-state .btn-primary,
-.client-empty-state .btn-neutral {
-  max-width: 280px;
-  margin: 0 auto;
-}
+/* TASK-096: `.client-empty-state` moved to mini-app-components.css. Screens without a tab bar
+   (абонементы, сертификаты, покупка) never load this file, and they need empty states too. */
 
 /* ─── Shared skeleton (aligned with hub) ─────────────────────────────────── */
 
@@ -360,7 +374,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-skel-card {
-  border-radius: 14px;
+  border-radius: var(--app-radius-lg);
   background: var(--tg-theme-secondary-bg-color);
   padding: 14px 16px;
   min-height: 72px;
@@ -368,7 +382,7 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 
 .client-skel-line {
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-pill);
   background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, var(--tg-theme-secondary-bg-color));
   margin-bottom: 8px;
 }

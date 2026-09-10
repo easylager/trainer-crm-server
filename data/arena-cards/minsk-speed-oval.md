@@ -11,7 +11,7 @@
 |---|---|---|---|
 | district | Центральный район | тот же комплекс, что Минск Арена (пр-т Победителей 111); Nominatim reverse главной арены `lat=53.9394&lon=27.4685` → `city_district=Центральный район` | 2026-09-07 |
 | phone | +375 44 780-85-01 | ABWS init `settings.supportPhone` для seid=139: «Конькобежный стадион: +375(44)7808501» | 2026-09-07 |
-| website_url | https://minskarena.by/ | официальный сайт МКСК; билеты МК oval: https://saleframe.minskarena.by/service/139 | 2026-09-07 |
+| website_url | https://minskarena.by/page.html?slug=massovie-katania | страница массового катания на овале; билеты: https://saleframe.minskarena.by/service/139 | 2026-09-10 |
 | opening_hours | unknown | сетка МК только в кассе ABWS calendar, не как часы объекта | 2026-09-07 |
 | season | unknown | на object.html нет месяцев сезона | 2026-09-07 |
 | amenities | skate_rental: true; skate_sharpening: unknown; parking: true; locker_rooms: unknown; cafe: true; accessibility: true | skate_rental: ABWS service/138 «Прокат коньков на конькобежном стадионе». parking/cafe: ABWS `GET /api/v3/arena/home` objects id=7 «Паркинг», id=12 «Кафе, ресторан» того же комплекса. accessibility: описание object id=4 — физкультурно-оздоровительные услуги людям с инвалидностью | 2026-09-07 |

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth.deps import miniapp_credential_http_exception
-from src.application.trainer_link import get_trainer_id_by_telegram_id
+from src.application.trainer_link import get_trainer_id_for_webapp_trainer_operations
 from src.application.training_group_series_notifications import notify_clients_group_series_schedule_updated
 from src.application.training_group_use_cases import (
     TG_ACTIVE,
@@ -125,7 +125,7 @@ async def get_trainer_training_groups(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -145,7 +145,7 @@ async def post_trainer_training_groups(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -198,7 +198,7 @@ async def get_trainer_training_group_detail(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -223,7 +223,7 @@ async def get_trainer_training_group_upcoming_slots(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -244,7 +244,7 @@ async def put_trainer_training_group_schedule_rules(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -306,7 +306,7 @@ async def post_cancel_training_group_slot(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -329,7 +329,7 @@ async def post_cancel_training_group_slots_in_range(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -355,7 +355,7 @@ async def patch_trainer_training_group(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -405,7 +405,7 @@ async def post_trainer_training_group_member(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -451,7 +451,7 @@ async def delete_trainer_training_group_member(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -474,7 +474,7 @@ async def post_approve_join_request(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):
@@ -497,7 +497,7 @@ async def post_reject_join_request(
     if not raw:
         raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, tid)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, tid)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_groups_access(session, trainer_id):

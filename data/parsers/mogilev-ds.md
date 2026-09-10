@@ -54,7 +54,7 @@
 
 ## Fixture
 
-`data/fixtures/mogilev-ds/` — `raspisanie.html`, `uslugi.html` + `expected.json` (6 слотов).
+`.ai/data/fixtures/mogilev-ds/` — `raspisanie.html`, `uslugi.html` + `expected.json` (6 слотов).
 
 ## Blockers / notes
 

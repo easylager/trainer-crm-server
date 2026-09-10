@@ -226,16 +226,62 @@
     return 'Место занятия отличается от арены, с которой вы открыли запись.';
   }
 
+  function escSuccessHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /**
+   * TASK-096 AC-004 — момент первого успеха.
+   *
+   * Экран после первой записи отличается от экрана после пятидесятой, потому что
+   * отличается сам человек: тот, кто записался впервые, не знает, сработало ли,
+   * кто ответит и что будет дальше. Эта неизвестность и портит первый успех —
+   * не отсутствие анимации. Поэтому «момент» — три честных факта о будущем.
+   *
+   * Каждый пункт выводится из базы (`is_first_booking`, `reminder_plan` приходят
+   * с сервера). Ни одного придуманного: нет плана напоминаний — нет и строки
+   * про напоминания, вместо неё не появляется утешительная неправда (AC-005).
+   */
+  function formatFirstBookingSuccess(data) {
+    var steps = ['Тренер подтвердит запись — уведомление придёт сюда, в бот.'];
+    var plan = data && data.reminder_plan ? String(data.reminder_plan).trim() : '';
+    if (plan) {
+      steps.push('Напомним о тренировке ' + escSuccessHtml(plan) + '.');
+    }
+    steps.push('Детали, адрес и отмена — всегда в «Моих записях».');
+
+    return (
+      '<div class="booking-first-success">' +
+      '<p class="booking-first-success__title">Готово. Это ваша первая запись.</p>' +
+      '<p class="booking-first-success__lede">Дальше всё делаем мы:</p>' +
+      '<ol class="booking-first-success__steps">' +
+      steps
+        .map(function (line) {
+          return '<li>' + line + '</li>';
+        })
+        .join('') +
+      '</ol>' +
+      '</div>'
+    );
+  }
+
   function formatSuccessMessage(data, opts) {
     opts = opts || {};
-    var main = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+    var first = data && data.is_first_booking ? formatFirstBookingSuccess(data) : '';
+    var main = first || '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
     var ctx = '';
     if (opts.requestId) {
       ctx =
         '<br><span class="booking-success-note">Запись связана с вашей заявкой и откликом тренера.</span>';
     }
-    var foot =
-      '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
+    // Первый экран уже сказал, где живут детали и отмена, — повторять это ниже
+    // значило бы дважды написать одно и то же на одном экране.
+    var foot = first
+      ? ''
+      : '<br><span class="booking-success-note">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
     return main + ctx + foot;
   }
 
@@ -313,9 +359,56 @@
     }
   }
 
+  function queryParam(query, key) {
+    if (!query) return null;
+    if (typeof query.get === 'function') return query.get(key);
+    var v = query[key];
+    return v == null ? null : String(v);
+  }
+
+  /**
+   * Catalog header «Назад» on booking / slot-pick screens.
+   * Hub nearest-slot (`from=hub&slot_id`) must return to hub — not an empty trainer tab.
+   * Hub «book again» (`action=book`) still goes form → slot pick → hub.
+   */
+  function catalogFormBackAction(query, screenId) {
+    var fromHub = queryParam(query, 'from') === 'hub';
+    var slotRaw = queryParam(query, 'slot_id');
+    var hasSlot = slotRaw != null && String(slotRaw).trim() !== '';
+    var isBookAction = queryParam(query, 'action') === 'book';
+    if (screenId === 'screenSlotPick' && fromHub && isBookAction) return 'hub';
+    if (screenId === 'screenBookingForm' && fromHub && hasSlot) return 'hub';
+    if (screenId === 'screenBookingForm' && fromHub && isBookAction) return 'slot-pick';
+    if (screenId === 'screenBookingForm' || screenId === 'screenSlotPick') return 'trainer-detail';
+    return null;
+  }
+
+  function escapePriceHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Amount + currency for HTML. BYN is letters — NBRB PUA glyph does not render in Telegram WebView. */
+  function formatPriceAmountHtml(amount, currency) {
+    if (amount == null) return escapePriceHtml('по запросу');
+    var n = Number(amount);
+    var num = n === Math.floor(n) ? String(n) : n.toFixed(2);
+    if (currency === 'RUB') return escapePriceHtml(num) + ' ₽';
+    return escapePriceHtml(num) + ' BYN';
+  }
+
   function resolveBookingReturn(from, ctx) {
     ctx = ctx || {};
     if (from === 'hub') return { type: 'hub', path: 'client-home' };
+    // Вход с карточки арены (`catalog?from=arena&...`). Раньше этой ветки не было,
+    // и «Назад» с выбора времени уводило на неотрисованный экран карточки тренера —
+    // человек, пришедший с арены, попадал на пустую страницу вместо арены.
+    if (from === 'arena' && ctx.arenaId != null && ctx.arenaId !== '') {
+      return { type: 'arena', path: 'arena?ref=' + encodeURIComponent(String(ctx.arenaId)) };
+    }
     if (from === 'requests') return { type: 'shell', path: 'client-requests' };
     if (from === 'saved-trainers') return { type: 'shell', path: 'client-saved-trainers' };
     if (from === 'catalog' && ctx.trainerId) {
@@ -377,7 +470,10 @@
     submitBooking: submitBooking,
     formatPlaceMismatchNotice: formatPlaceMismatchNotice,
     formatSuccessMessage: formatSuccessMessage,
+    formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
+    catalogFormBackAction: catalogFormBackAction,
+    formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,
     navigateBookingReturn: navigateBookingReturn,
     hapticSuccess: hapticSuccess,

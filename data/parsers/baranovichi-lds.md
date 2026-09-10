@@ -50,7 +50,7 @@
 
 ## Fixture
 
-`data/fixtures/baranovichi-lds/` — `schedule.html`, `mass-skating.html`, `prices.pdf`, `prices-page1-sm.jpg` + `expected.json` (16 слотов).
+`.ai/data/fixtures/baranovichi-lds/` — `schedule.html`, `mass-skating.html`, `prices.pdf`, `prices-page1-sm.jpg` + `expected.json` (16 слотов).
 
 ## Blockers / notes
 

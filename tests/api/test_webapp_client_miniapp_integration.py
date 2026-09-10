@@ -1271,10 +1271,10 @@ async def test_client_request_create_list_patch_delete(app_use_test_db, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_client_personalized_request_lists_and_schedules_trainer_notify(
+async def test_client_personalized_request_lists_without_api_immediate_notify(
     app_use_test_db, db_session
 ) -> None:
-    """Персональная заявка (trainer_id) видна клиенту и ставит immediate notify в background."""
+    """Персональная заявка (trainer_id) видна клиенту; DM шлёт только notification_service."""
     ref_day, _ = _minsk_monday_reference()
     slot_day = ref_day + timedelta(days=4)
     trainer_id, service_id, _slot_id = await _create_trainer_online_with_slot(
@@ -1284,38 +1284,42 @@ async def test_client_personalized_request_lists_and_schedules_trainer_notify(
     assert service_id == sid
     ctg = _fresh_client_telegram_id()
 
-    notify_mock = MagicMock()
     with patch_client_init_auth(ctg):
-        with patch(
-            "src.api.routes.webapp._bg_notify_trainer_client_request_immediate",
-            new=notify_mock,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                cr = await client.post(
-                    "/api/webapp/client/request",
-                    json={
-                        "city_id": cid,
-                        "service_id": sid,
-                        "comment": "персонально",
-                        "trainer_id": trainer_id,
-                        "first_name": "Клиент",
-                    },
-                    headers={"X-Telegram-Init-Data": "mock"},
-                )
-                assert cr.status_code == 200
-                rid = cr.json()["request_id"]
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            cr = await client.post(
+                "/api/webapp/client/request",
+                json={
+                    "city_id": cid,
+                    "service_id": sid,
+                    "comment": "персонально",
+                    "trainer_id": trainer_id,
+                    "first_name": "Клиент",
+                },
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert cr.status_code == 200
+            rid = cr.json()["request_id"]
 
-                listed = await client.get(
-                    "/api/webapp/client/requests",
-                    headers={"X-Telegram-Init-Data": "mock"},
-                )
-                assert listed.status_code == 200
-                item = next((x for x in (listed.json().get("items") or []) if x.get("id") == rid), None)
-                assert item is not None
-                assert item.get("is_personalized") is True
-                assert item.get("trainer_id") == trainer_id
+            listed = await client.get(
+                "/api/webapp/client/requests",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert listed.status_code == 200
+            item = next((x for x in (listed.json().get("items") or []) if x.get("id") == rid), None)
+            assert item is not None
+            assert item.get("is_personalized") is True
+            assert item.get("trainer_id") == trainer_id
 
-    notify_mock.assert_called_once_with(int(rid))
+    n = await db_session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM client_request_notifications
+            WHERE client_request_id = :rid
+            """
+        ),
+        {"rid": rid},
+    )
+    assert int(n.scalar() or 0) == 0
 
 
 @pytest.mark.asyncio
@@ -1333,35 +1337,34 @@ async def test_client_general_and_personal_requests_both_listed(
     ctg = _fresh_client_telegram_id()
 
     with patch_client_init_auth(ctg):
-        with patch("src.api.routes.webapp._bg_notify_trainer_client_request_immediate", new=MagicMock()):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                g = await client.post(
-                    "/api/webapp/client/request",
-                    json={"city_id": cid, "service_id": sid, "comment": "общая", "first_name": "Клиент"},
-                    headers={"X-Telegram-Init-Data": "mock"},
-                )
-                p = await client.post(
-                    "/api/webapp/client/request",
-                    json={
-                        "city_id": cid,
-                        "service_id": sid,
-                        "comment": "персональная",
-                        "trainer_id": trainer_id,
-                        "first_name": "Клиент",
-                    },
-                    headers={"X-Telegram-Init-Data": "mock"},
-                )
-                assert g.status_code == 200 and p.status_code == 200
-                listed = await client.get(
-                    "/api/webapp/client/requests",
-                    headers={"X-Telegram-Init-Data": "mock"},
-                )
-                items = listed.json().get("items") or []
-                assert len([x for x in items if x.get("status") != "archived"]) >= 2
-                personalized = [x for x in items if x.get("is_personalized")]
-                general = [x for x in items if not x.get("is_personalized")]
-                assert len(personalized) >= 1
-                assert len(general) >= 1
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            g = await client.post(
+                "/api/webapp/client/request",
+                json={"city_id": cid, "service_id": sid, "comment": "общая", "first_name": "Клиент"},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            p = await client.post(
+                "/api/webapp/client/request",
+                json={
+                    "city_id": cid,
+                    "service_id": sid,
+                    "comment": "персональная",
+                    "trainer_id": trainer_id,
+                    "first_name": "Клиент",
+                },
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert g.status_code == 200 and p.status_code == 200
+            listed = await client.get(
+                "/api/webapp/client/requests",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            items = listed.json().get("items") or []
+            assert len([x for x in items if x.get("status") != "archived"]) >= 2
+            personalized = [x for x in items if x.get("is_personalized")]
+            general = [x for x in items if not x.get("is_personalized")]
+            assert len(personalized) >= 1
+            assert len(general) >= 1
 
 
 @pytest.mark.asyncio
@@ -1505,11 +1508,14 @@ async def test_webapp_client_shell_assets_served() -> None:
         css = await client.get("/webapp/mini-app-client-shell.css")
         js = await client.get("/webapp/mini-app-client-shell.js")
         bookings_css = await client.get("/webapp/mini-app-client-bookings.css")
+        empty_state_js = await client.get("/webapp/mini-app-empty-state.js")
     assert css.status_code == 200
     assert "client-tab-bar" in css.text
     assert js.status_code == 200
     assert "ClientShell" in js.text
     assert bookings_css.status_code == 200
+    assert empty_state_js.status_code == 200
+    assert "MiniAppEmptyState" in empty_state_js.text
 
 
 @pytest.mark.asyncio
@@ -1848,6 +1854,8 @@ async def test_webapp_book_and_catalog_booking_assets_served() -> None:
     assert "catalog-main.js" in catalog.text
     assert bc_js.status_code == 200
     assert "BookingClient" in bc_js.text
+    assert "catalogFormBackAction" in bc_js.text
+    assert "formatPriceAmountHtml" in bc_js.text
     assert bc_css.status_code == 200
     assert "booking-success-note" in bc_css.text
     assert bd_js.status_code == 200
