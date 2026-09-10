@@ -154,7 +154,7 @@ async def test_response_batch_marks_sent_only_after_telegram_ok(db_session) -> N
 
 @pytest.mark.asyncio
 async def test_request_batch_marks_sent_only_after_telegram_ok(db_session) -> None:
-    """Pending request notify: INSERT into client_request_notifications only after successful send."""
+    """Pending request notify: claim released on Telegram failure; kept after successful send."""
     city_id = await require_seed_city_id(db_session)
     service_id = await require_seed_service_id(db_session)
     tr_tid = 888_000_000 + (unique_test_telegram_id() % 99_999_999)
