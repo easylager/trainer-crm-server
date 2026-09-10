@@ -27,6 +27,7 @@
         }
       }
       var initData = tg ? tg.initData : '';
+      var RuText = window.RuText;
       var ISSUED_PAGE_SIZE = 20;
       function initDataParam() {
         return initData ? '?init_data=' + encodeURIComponent(initData) : '';

@@ -26,6 +26,7 @@
         }
       }
 
+      var RuText = window.RuText;
       var state = {
         cityId: null,
         cityName: '',

@@ -14,6 +14,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;
+  var ruText = RuText;
+
   var AMENITY_ORDER = [
     ['skate_rental', 'Прокат'],
     ['skate_sharpening', 'Заточка'],

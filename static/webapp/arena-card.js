@@ -4,6 +4,7 @@
 (function (global) {
   'use strict';
 
+  var RuText = global.RuText;
   var M = global.ArenaCardModel;
   var root = document.getElementById('arenaRoot');
   var state = {

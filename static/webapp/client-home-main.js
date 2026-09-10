@@ -12,6 +12,8 @@
         } catch (e) {}
       }
       var initData = tg && tg.initData ? tg.initData : '';
+      var RuText = window.RuText;
+      var genitiveCountRu = RuText && RuText.genitiveCountRu;
 
       /** Max upcoming bookings shown below the hero card. */
       var HUB_UPCOMING_MAX = 5;
