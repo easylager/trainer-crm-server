@@ -74,9 +74,9 @@ body.hub-body {
   margin-top: 0;
 }
 
-/* Week streak ribbon (Duolingo-style retention nudge → client-stats) */
+/* Week streak ribbon hidden for now (copy felt odd; revisit later). */
 .hub-streak-ribbon {
-  display: flex;
+  display: none !important;
   flex-direction: column;
   width: calc(100% - 36px);
   max-width: 504px;
