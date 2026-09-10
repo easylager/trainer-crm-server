@@ -359,6 +359,47 @@
     }
   }
 
+  function queryParam(query, key) {
+    if (!query) return null;
+    if (typeof query.get === 'function') return query.get(key);
+    var v = query[key];
+    return v == null ? null : String(v);
+  }
+
+  /**
+   * Catalog header «Назад» on booking / slot-pick screens.
+   * Hub nearest-slot (`from=hub&slot_id`) must return to hub — not an empty trainer tab.
+   * Hub «book again» (`action=book`) still goes form → slot pick → hub.
+   */
+  function catalogFormBackAction(query, screenId) {
+    var fromHub = queryParam(query, 'from') === 'hub';
+    var slotRaw = queryParam(query, 'slot_id');
+    var hasSlot = slotRaw != null && String(slotRaw).trim() !== '';
+    var isBookAction = queryParam(query, 'action') === 'book';
+    if (screenId === 'screenSlotPick' && fromHub && isBookAction) return 'hub';
+    if (screenId === 'screenBookingForm' && fromHub && hasSlot) return 'hub';
+    if (screenId === 'screenBookingForm' && fromHub && isBookAction) return 'slot-pick';
+    if (screenId === 'screenBookingForm' || screenId === 'screenSlotPick') return 'trainer-detail';
+    return null;
+  }
+
+  function escapePriceHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Amount + currency for HTML. BYN is letters — NBRB PUA glyph does not render in Telegram WebView. */
+  function formatPriceAmountHtml(amount, currency) {
+    if (amount == null) return escapePriceHtml('по запросу');
+    var n = Number(amount);
+    var num = n === Math.floor(n) ? String(n) : n.toFixed(2);
+    if (currency === 'RUB') return escapePriceHtml(num) + ' ₽';
+    return escapePriceHtml(num) + ' BYN';
+  }
+
   function resolveBookingReturn(from, ctx) {
     ctx = ctx || {};
     if (from === 'hub') return { type: 'hub', path: 'client-home' };
@@ -431,6 +472,8 @@
     formatSuccessMessage: formatSuccessMessage,
     formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
+    catalogFormBackAction: catalogFormBackAction,
+    formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,
     navigateBookingReturn: navigateBookingReturn,
     hapticSuccess: hapticSuccess,
