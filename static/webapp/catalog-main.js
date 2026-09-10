@@ -2868,7 +2868,20 @@
         });
       }
 
+      function trainerNameParts(t) {
+        var p = t && t.profile ? t.profile : {};
+        return {
+          first_name: (p.first_name || '').toString(),
+          last_name: (p.last_name || '').toString(),
+        };
+      }
+
       function trainerName(t) {
+        var ru = window.RuPersonName;
+        if (ru && typeof ru.formatPersonNameFromTrainer === 'function') {
+          var formatted = ru.formatPersonNameFromTrainer(t);
+          if (formatted) return formatted;
+        }
         var p = t && t.profile;
         if (!p) return 'Тренер';
         var n = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
@@ -6855,20 +6868,34 @@
       function updateRequestFormContext() {
         var titleEl = document.getElementById('requestFormTitle');
         var ctxEl = document.getElementById('requestFormContext');
-        if (state.requestForTrainer) {
-          titleEl.textContent = 'Заявка для ' + state.requestForTrainer.name;
-          ctxEl.innerHTML = '<div class="context-line">Заявка придёт <strong>только этому тренеру</strong>.</div>';
+        if (!titleEl || !ctxEl) return;
+        var ru = window.RuPersonName;
+        var t = state.requestForTrainer;
+        if (t) {
+          var heading =
+            ru && typeof ru.requestHeading === 'function'
+              ? ru.requestHeading(t.first_name, t.last_name)
+              : '';
+          titleEl.textContent = heading || t.name || 'Заявка тренеру';
+          var female = ru && typeof ru.guessGender === 'function' && ru.guessGender(t.first_name) === 'f';
+          ctxEl.textContent = female ? 'Сообщение уйдёт только ей.' : 'Сообщение уйдёт только ему.';
         } else {
-          titleEl.textContent = 'Общая заявка';
-          ctxEl.innerHTML = '<div class="context-line">Любой тренер по вашему городу и услуге увидит заявку.</div>';
+          titleEl.textContent = 'Подбор тренера';
+          ctxEl.textContent = 'Увидят тренеры по городу и занятию, которые вы выбрали.';
         }
       }
 
       function openLeaveRequestFromDetail() {
         var t = state.selectedTrainer;
         if (!t) return;
+        var parts = trainerNameParts(t);
         var name = trainerName(t);
-        state.requestForTrainer = { id: t.id, name: name };
+        state.requestForTrainer = {
+          id: t.id,
+          name: name,
+          first_name: parts.first_name,
+          last_name: parts.last_name,
+        };
         state.requestFormOpenedFrom = 'trainerDetail';
         document.getElementById('requestComment').value = '';
         updateRequestFormContext();
@@ -6966,10 +6993,20 @@
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
               var isPersonal = !!(state.requestForTrainer && state.requestForTrainer.id);
-              var trainerName = isPersonal && state.requestForTrainer.name ? state.requestForTrainer.name : '';
-              document.getElementById('successText').innerHTML = isPersonal
-                ? ('✅ <b>Заявка отправлена</b> ' + (trainerName ? trainerName : 'тренеру') + '.<br><br>Когда тренер ответит — напишем вам в боте.')
-                : '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
+              var ruName = window.RuPersonName;
+              var dat =
+                isPersonal && ruName && typeof ruName.dativeLine === 'function'
+                  ? ruName.dativeLine(state.requestForTrainer.first_name, state.requestForTrainer.last_name)
+                  : '';
+              var successEl = document.getElementById('successText');
+              if (isPersonal) {
+                successEl.innerHTML = dat
+                  ? ('Заявку отправили ' + dat + '.<br><br>Когда ответит — напишем в боте.')
+                  : 'Заявку отправили тренеру.<br><br>Когда ответит — напишем в боте.';
+              } else {
+                successEl.innerHTML =
+                  'Заявку отправили.<br><br>Когда появится подходящий тренер — напишем в боте.';
+              }
               paintCatalogSuccessActions('request');
               showScreen('screenSuccess');
               getClientSession().then(function(session) {

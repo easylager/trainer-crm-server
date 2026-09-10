@@ -62,7 +62,8 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "Завтра" in page_js
     assert "Неделя" in page_js
     assert "Расписание уточняется" in page_js
-    assert "Это ваш каток?" in page_js
+    assert "Это ваш каток?" not in page_js
+    assert "Забрать страницу" not in page_js
     assert "Сообщить об ошибке" in page_js
     assert js.status_code == 200
     assert css.status_code == 200
