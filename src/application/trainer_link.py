@@ -201,7 +201,11 @@ async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) ->
 
 
 async def get_trainer_id_by_telegram_id(session: AsyncSession, telegram_id: int) -> int | None:
-    """Return trainer id if linked and status=active (bot access allowed), else None."""
+    """Return trainer id if linked and catalog-status=active, else None.
+
+    Not a CRM gate. ``status='active'`` means listed in the public catalog.
+    Trainer Mini App operations must use :func:`get_trainer_id_for_webapp_trainer_operations`.
+    """
     r = await session.execute(
         text("SELECT id FROM trainers WHERE telegram_id = :tid AND status = 'active' LIMIT 1"),
         {"tid": telegram_id},
@@ -228,8 +232,9 @@ async def get_trainer_id_for_webapp_trainer_operations(session: AsyncSession, te
     the first second. Profile completeness and catalog moderation no longer gate this — moderation
     only decides whether the public catalog lists the trainer.
 
-    Payments, catalog products, and other catalog-facing surfaces still use
-    ``get_trainer_id_by_telegram_id`` (active only).
+    Use this for trainer Mini App CRM: schedule, passes, certificates, welcome links,
+    requests, groups, platform-subscription checkout. Public catalog listings still
+    filter ``status = 'active'`` themselves.
     """
     from src.infrastructure.db.models import TRAINER_STATUS_DEACTIVATED
 
@@ -245,7 +250,10 @@ async def get_trainer_id_by_telegram_id_from_principal(
     session: AsyncSession,
     principal: MiniAppPrincipal,
 ) -> int | None:
-    """Active trainer id for Mini App principal (Telegram or MAX)."""
+    """Catalog-active trainer id for Mini App principal (Telegram or MAX).
+
+    Do not use for the trainer's own CRM. Same rule as :func:`get_trainer_id_by_telegram_id`.
+    """
     row = await get_trainer_row_for_miniapp_principal(session, principal)
     if not row:
         return None

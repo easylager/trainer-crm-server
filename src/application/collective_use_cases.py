@@ -1129,9 +1129,9 @@ async def ensure_trainer_id_for_collective_bot_user(
     """
     from sqlalchemy.exc import IntegrityError
 
-    from src.application.trainer_link import get_trainer_id_by_telegram_id
+    from src.application.trainer_link import get_trainer_id_linked_any_status
 
-    existing = await get_trainer_id_by_telegram_id(session, telegram_id)
+    existing = await get_trainer_id_linked_any_status(session, telegram_id)
     if existing is not None:
         return existing, None
 
@@ -1159,7 +1159,7 @@ async def ensure_trainer_id_for_collective_bot_user(
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        retry = await get_trainer_id_by_telegram_id(session, telegram_id)
+        retry = await get_trainer_id_linked_any_status(session, telegram_id)
         if retry is not None:
             return retry, None
         return None, "telegram_other_trainer"

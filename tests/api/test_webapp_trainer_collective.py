@@ -97,6 +97,30 @@ async def test_get_collective_studio_pending_profile_owner(app_use_test_db, db_s
 
 
 @pytest.mark.asyncio
+async def test_ensure_collective_bot_user_reuses_pending_profile_trainer(db_session) -> None:
+    """Pending catalog status must not look like 'another trainer already owns this Telegram'."""
+    from src.application.collective_use_cases import ensure_trainer_id_for_collective_bot_user
+
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO trainers (status, telegram_id, created_at)
+            VALUES ('pending_profile', :tg, NOW())
+            RETURNING id
+            """
+        ),
+        {"tg": tg},
+    )
+    trainer_id = int(r.scalar_one())
+    await db_session.commit()
+
+    found, err = await ensure_trainer_id_for_collective_bot_user(db_session, tg)
+    assert err is None
+    assert found == trainer_id
+
+
+@pytest.mark.asyncio
 async def test_get_collective_studio_includes_subscription_checkout(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
