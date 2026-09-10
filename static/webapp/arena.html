@@ -16,10 +16,10 @@
   <script src="mini-app-telegram-chrome.js?v=202609071"></script>  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="arena-card.css?v=202609093" />
+  <link rel="stylesheet" href="arena-card.css?v=202609101" />
   <script src="mini-app-empty-state.js?v=202609091"></script>
   <script src="mini-app-client-shell.js?v=202609085"></script>
-  <script src="arena-card-model.js?v=202609095"></script>
+  <script src="arena-card-model.js?v=202609101"></script>
   <!-- Переход не должен снимать пустую страницу: ждём разметку экрана. -->
   <link rel="expect" href="#arenaRoot" blocking="render" />
 </head>
@@ -60,6 +60,10 @@
     </form>
   </div>
 
-  <script src="arena-card.js?v=202609095"></script>
+  <div class="arena-tickets-cta" id="arenaTicketsCta" hidden>
+    <a class="arena-btn arena-btn--pri" id="arenaTicketsCtaLink" href="#" rel="noopener noreferrer" target="_blank">Купить билет</a>
+  </div>
+
+  <script src="arena-card.js?v=202609101"></script>
 </body>
 </html>

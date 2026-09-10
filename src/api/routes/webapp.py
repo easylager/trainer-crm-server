@@ -4778,6 +4778,7 @@ class AdminArenaPatchBody(BaseModel):
     is_active: bool | None = None
     phone: str | None = None
     website_url: str | None = None
+    tickets_url: str | None = None
     short_description: str | None = None
     district: str | None = None
     timezone: str | None = None
@@ -4804,7 +4805,7 @@ async def get_admin_arenas(
     sql = """
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
-               p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
+               p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
                p.amenities, p.status
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -4836,12 +4837,13 @@ async def get_admin_arenas(
             "short_description": row[10],
             "phone": row[11],
             "website_url": row[12],
-            "social_urls": row[13] or {},
-            "opening_hours": row[14],
-            "season_start_month": row[15],
-            "season_end_month": row[16],
-            "amenities": row[17] or {},
-            "status": row[18] or "published",
+            "tickets_url": row[13],
+            "social_urls": row[14] or {},
+            "opening_hours": row[15],
+            "season_start_month": row[16],
+            "season_end_month": row[17],
+            "amenities": row[18] or {},
+            "status": row[19] or "published",
         }
         for row in rows
     ]

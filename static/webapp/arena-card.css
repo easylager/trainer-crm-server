@@ -16,6 +16,14 @@ body.ar-pilot--arena {
   padding-bottom: var(--client-shell-tab-inset);
 }
 
+body.ar-pilot--arena.arena-has-tickets {
+  padding-bottom: calc(var(--client-shell-tab-inset) + 72px);
+}
+
+body.ar-pilot--arena.arena-has-tickets.client-shell-tabs-hidden {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
 body.ar-pilot--arena .client-app-header {
   margin-bottom: 0;
 }
@@ -454,6 +462,32 @@ a.arena-row {
   color: var(--app-cta-text);
   border-color: transparent;
   clip-path: var(--app-ribbon-clip-sm, none);
+}
+
+.arena-tickets-cta {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 100%);
+  bottom: var(--client-shell-tab-inset, 80px);
+  z-index: 8500;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--app-canvas-bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-sizing: border-box;
+  box-shadow: 0 -10px 24px -12px rgba(15, 26, 34, 0.28);
+}
+
+body.client-shell-tabs-hidden .arena-tickets-cta {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.arena-tickets-cta[hidden] {
+  display: none;
+}
+
+.arena-tickets-cta .arena-btn {
+  margin: 0;
 }
 
 .arena-owner {

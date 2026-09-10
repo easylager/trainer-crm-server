@@ -142,6 +142,23 @@ def validate_amenities(value: Mapping[str, Any] | None) -> dict[str, bool]:
     return out
 
 
+def public_http_url(raw: Any) -> str | None:
+    """http(s) only. Empty, javascript:, or whitespace in the value → None."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    lower = value.lower()
+    if not (lower.startswith("https://") or lower.startswith("http://")):
+        return None
+    if any(ch.isspace() or ch in "<>\"'" for ch in value):
+        return None
+    if len(value) > 512:
+        return None
+    return value
+
+
 def validate_profile_status(status: str | None) -> str:
     value = (status or ARENA_PROFILE_STATUS_PUBLISHED).strip()
     if value not in ARENA_PROFILE_STATUSES:
@@ -397,6 +414,17 @@ async def apply_admin_arena_profile_patch(
     if "status" in fields and fields["status"] is not None:
         assignments.append("status = :status")
         params["status"] = validate_profile_status(str(fields["status"]))
+    if "tickets_url" in fields:
+        raw = fields["tickets_url"]
+        if raw is None or str(raw).strip() == "":
+            assignments.append("tickets_url = :tickets_url")
+            params["tickets_url"] = None
+        else:
+            url = public_http_url(raw)
+            if not url:
+                raise ValueError("tickets_url must be an http(s) URL")
+            assignments.append("tickets_url = :tickets_url")
+            params["tickets_url"] = url
     if not assignments:
         return
     await session.execute(

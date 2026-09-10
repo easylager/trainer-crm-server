@@ -74,6 +74,38 @@
     global.location.href = path;
   }
 
+  function openExternal(url) {
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (tg && typeof tg.openLink === 'function') {
+      try {
+        tg.openLink(url, { try_instant_view: false });
+        return;
+      } catch (e1) {
+        try {
+          tg.openLink(url);
+          return;
+        } catch (e2) { /* fall through */ }
+      }
+    }
+    global.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  function setTicketsCta() {
+    var bar = document.getElementById('arenaTicketsCta');
+    var link = document.getElementById('arenaTicketsCtaLink');
+    var cta = M.ticketCta(state.card);
+    if (!bar || !link) return;
+    if (!cta) {
+      bar.hidden = true;
+      document.body.classList.remove('arena-has-tickets');
+      return;
+    }
+    bar.hidden = false;
+    link.href = cta.href;
+    link.textContent = cta.label;
+    document.body.classList.add('arena-has-tickets');
+  }
+
   /**
    * С арены всегда открываем карточку тренера — `action` здесь больше нет.
    *
@@ -540,6 +572,7 @@
       renderPractice() +
       renderFreshness() +
       renderOwner();
+    setTicketsCta();
   }
 
   function paintRowsOnly() {
@@ -704,6 +737,8 @@
   function showError(text) {
     if (!root) return;
     root.innerHTML = '<div class="arena-state">' + esc(text) + '</div>';
+    state.card = null;
+    setTicketsCta();
   }
 
   function resolveRef() {
@@ -764,6 +799,15 @@
     if (form) form.addEventListener('submit', submitModal);
     var cancel = document.getElementById('arenaModalCancel');
     if (cancel) cancel.addEventListener('click', closeModal);
+    var ticketsLink = document.getElementById('arenaTicketsCtaLink');
+    if (ticketsLink) {
+      ticketsLink.addEventListener('click', function (ev) {
+        var href = ticketsLink.getAttribute('href');
+        if (!href || href === '#') return;
+        ev.preventDefault();
+        openExternal(href);
+      });
+    }
     if (global.ClientShell && typeof global.ClientShell.setForcedTab === 'function') {
       global.ClientShell.setForcedTab('catalog');
     }

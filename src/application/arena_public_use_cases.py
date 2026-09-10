@@ -16,7 +16,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_media import attach_arena_media_payloads
-from src.application.arena_profile import ARENA_PROFILE_STATUS_PUBLISHED, is_in_season
+from src.application.arena_profile import (
+    ARENA_PROFILE_STATUS_PUBLISHED,
+    is_in_season,
+    public_http_url,
+)
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -312,6 +316,7 @@ _LIST_SQL = f"""
 SELECT
     a.id, a.city_id, a.name, a.address, a.latitude, a.longitude,
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
+    p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
     p.amenities, p.status, p.verified_at,
     c.country, c.name AS city_name,
@@ -750,6 +755,7 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "short_description": row.get("short_description"),
         "phone": row.get("phone"),
         "website_url": row.get("website_url"),
+        "tickets_url": public_http_url(row.get("tickets_url")),
         "social_urls": _as_mapping(row.get("social_urls")),
         "opening_hours": _as_mapping(row.get("opening_hours")),
         "season_start_month": season_start,

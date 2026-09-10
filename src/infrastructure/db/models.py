@@ -247,6 +247,7 @@ class ArenaProfile(Base):
     short_description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     website_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    tickets_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     social_urls: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     opening_hours: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     season_start_month: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
