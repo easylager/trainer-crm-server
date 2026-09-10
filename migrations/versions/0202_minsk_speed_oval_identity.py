@@ -1,16 +1,14 @@
 """Fix arena_id=115 when prod row is Moscow CSKA; Конькобежный стадион belongs in Minsk.
 
-Revision ID: 0200_minsk_speed_oval_identity
-Revises: 0199_ice_city_interest
+Revision ID: 0202_minsk_speed_oval_identity
+Revises: 0201_merge_interest_share
 """
 from __future__ import annotations
 
 import asyncio
 
-from alembic import op
-
-revision = "0200_minsk_speed_oval_identity"
-down_revision = "0199_ice_city_interest"
+revision = "0202_minsk_speed_oval_identity"
+down_revision = "0201_merge_interest_share"
 branch_labels = None
 depends_on = None
 
