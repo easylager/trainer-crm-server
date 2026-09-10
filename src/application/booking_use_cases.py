@@ -3079,7 +3079,8 @@ async def list_trainer_fill_slots_invite_candidates(
     include_with_upcoming: bool = False,
 ) -> list[dict]:
     """
-    Clients for hub «напомнить про слоты»: CRM scope (booking, explicit roster, or active/trial group), Telegram linked.
+    Clients for hub «напомнить про слоты»: CRM scope (booking, explicit roster, or active/trial group),
+    reachable Telegram (own ``telegram_id`` or guardian account via ``client_profile_links``).
 
     By default excludes clients who already have a future pending/confirmed session (focused nudge).
     With ``include_with_upcoming=True``, returns everyone in scope (still sorted: без записи first).
@@ -3087,6 +3088,7 @@ async def list_trainer_fill_slots_invite_candidates(
     cap = 250 if include_with_upcoming else 10
     lim = max(1, min(int(limit), cap))
     upcoming_filter_sql = "" if include_with_upcoming else "WHERE has_upcoming_flag = 0"
+    notify_tg = sql_client_notify_telegram_id("c")
     # Sandbox isolation: drop demo identity at every CTE source — bookings (b.is_sandbox), roster
     # join, and the final clients filter. A sandbox client never has telegram_id, but we still belt-
     # and-suspenders the filter via c.is_sandbox to guard against future schema drift.
@@ -3145,14 +3147,18 @@ async def list_trainer_fill_slots_invite_candidates(
                     c.id AS client_id,
                     COALESCE(NULLIF(TRIM(c.first_name), ''), '') AS first_name,
                     COALESCE(NULLIF(TRIM(c.last_name), ''), '') AS last_name,
-                    c.telegram_id,
+                    """
+            + notify_tg
+            + """ AS telegram_id,
                     COALESCE(NULLIF(TRIM(c.telegram_username), ''), '') AS telegram_username,
                     CASE WHEN hu.client_id IS NULL THEN 0 ELSE 1 END AS has_upcoming_flag,
                     ls.last_date,
                     ls.last_ts
                 FROM rel r
                 INNER JOIN clients c ON c.id = r.client_id
-                    AND c.telegram_id IS NOT NULL
+                    AND """
+            + notify_tg
+            + """ IS NOT NULL
                     AND NOT c.is_sandbox
                 LEFT JOIN has_upcoming hu ON hu.client_id = c.id
                 LEFT JOIN last_sess ls ON ls.client_id = c.id
@@ -3337,7 +3343,9 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                     ls.last_ts
                 FROM rel r
                 INNER JOIN clients c ON c.id = r.client_id
-                    AND c.telegram_id IS NOT NULL
+                    AND """
+            + sql_client_notify_telegram_id("c")
+            + """ IS NOT NULL
                     AND NOT c.is_sandbox
                 LEFT JOIN has_upcoming hu ON hu.client_id = c.id
                 LEFT JOIN last_sess ls ON ls.client_id = c.id
