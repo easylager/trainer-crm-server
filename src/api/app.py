@@ -999,6 +999,19 @@ def webapp_catalog_main_js(request: Request):
     )
 
 
+@app.get("/webapp/ru-person-name.js")
+def webapp_ru_person_name_js(request: Request):
+    """Russian person-name join + genitive/dative for client request copy."""
+    path = _WEBAPP_DIR / "ru-person-name.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/arena-card.css")
 def webapp_arena_card_css(request: Request):
     """TASK-052 arena card styles. Use ``?v=…`` for long cache."""

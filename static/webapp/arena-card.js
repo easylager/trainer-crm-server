@@ -541,20 +541,12 @@
       tier: state.card.tier,
       hasSessions: hasAnySessions(),
     }) === 'pending';
-    if (pending) {
-      return (
-        '<div class="arena-sec"><div class="arena-owner">' +
-        '<b>Знаете расписание этого катка?</b>' +
-        '<p>Подскажите время и цены — проверим и опубликуем со ссылкой на источник.</p>' +
-        '<button type="button" class="arena-btn" data-action="claim-schedule">Дополнить карточку</button>' +
-        '</div></div>'
-      );
-    }
+    if (!pending) return '';
     return (
       '<div class="arena-sec"><div class="arena-owner">' +
-      '<b>Это ваш каток?</b>' +
-      '<p>Заберите страницу: ведите расписание сами, добавьте фото и своих тренеров.</p>' +
-      '<button type="button" class="arena-btn" data-action="claim">Забрать страницу</button>' +
+      '<b>Знаете расписание этого катка?</b>' +
+      '<p>Подскажите время и цены — проверим и опубликуем со ссылкой на источник.</p>' +
+      '<button type="button" class="arena-btn" data-action="claim-schedule">Дополнить карточку</button>' +
       '</div></div>'
     );
   }
@@ -603,12 +595,7 @@
     var value = document.getElementById('arenaModalValue');
     if (!modal) return;
     modal.dataset.kind = kind;
-    if (kind === 'claim') {
-      title.textContent = 'Забрать страницу';
-      lead.textContent = 'Оставьте контакт — заявка уйдёт администратору.';
-      field.innerHTML = '<option value="claim">Контакт оператора катка</option>';
-      value.placeholder = 'телефон или сайт';
-    } else if (kind === 'claim-schedule') {
+    if (kind === 'claim-schedule') {
       title.textContent = 'Дополнить карточку';
       lead.textContent = 'Время и цены массового катания — проверим по источнику.';
       field.innerHTML = '<option value="schedule">Расписание МК</option>';
@@ -722,7 +709,6 @@
       return;
     }
     if (action === 'report') openModal('report');
-    if (action === 'claim') openModal('claim');
     if (action === 'claim-schedule') openModal('claim-schedule');
   }
 
