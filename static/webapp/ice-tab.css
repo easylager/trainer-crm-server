@@ -240,6 +240,15 @@ body.ar-pilot--ice .client-app-header {
   transform: translateX(-50%) scale(0.96);
 }
 
+/*
+ * Мини-карточка выбранной арены (.ice-map-sheet) сидит у таб-бара.
+ * Без сдвига пилюля «Список» ложится поверх карточки — тап не доходит.
+ * Высота карточки ~94px (thumb 74 + padding); +10px зазор над ней.
+ */
+body.ice-map-sheet-open .ice-viewswitch {
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 12px + 104px);
+}
+
 .ice-viewswitch__icon {
   display: flex;
   width: var(--app-icon-sm);

@@ -208,17 +208,27 @@
       offMapEl.hidden = !note;
     }
 
+    function syncSheetFabClearance() {
+      /* Lift the floating «Список» pill above the mini arena card (see ice-tab.css). */
+      var open = !!(sheetEl && String(sheetEl.innerHTML || '').trim());
+      if (global.document && global.document.body) {
+        global.document.body.classList.toggle('ice-map-sheet-open', open);
+      }
+    }
+
     function paintSheet(item, asNearest) {
       selected = item || null;
       nearestMode = !!asNearest;
       if (!sheetEl) return;
       if (!item) {
         sheetEl.innerHTML = '';
+        syncSheetFabClearance();
         return;
       }
       var meta = MM.formatSheetMeta(item, { nearest: asNearest });
       if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
       sheetEl.innerHTML = sheetHtml(item, meta, arenaHref(item));
+      syncSheetFabClearance();
     }
 
     function defaultSheet() {
@@ -485,6 +495,7 @@
             showStage(false);
             renderEmpty(emptyEl, decision.empty);
             if (sheetEl) sheetEl.innerHTML = '';
+            syncSheetFabClearance();
             return;
           }
           // Единственная по-настоящему долгая ветка: тянем SDK Яндекса по сети.
@@ -587,6 +598,7 @@
       if (!sheetEl) return;
       sheetEl.innerHTML =
         '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+      syncSheetFabClearance();
     }
 
     if (nearBtn && nearMePolicyOk()) {
