@@ -261,6 +261,14 @@
         return out;
       }
 
+      function catalogSubmissionMissingStepKeys() {
+        var raw = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
+        if ((!raw || !raw.length) && state.catalogNeedFields && state.catalogNeedFields.length) {
+          raw = state.catalogNeedFields;
+        }
+        return profileBlockTourMissingStepKeys(Array.isArray(raw) ? raw : []);
+      }
+
       /**
        * Одна карусель каталога: gaps в каноническом порядке, телефон всегда рядом с именем.
        * Витрину (about/experience) не подмешиваем — иначе снова «вторая карусель».
@@ -288,12 +296,22 @@
         return out;
       }
 
-      function catalogSubmissionMissingStepKeys() {
-        var raw = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
-        if ((!raw || !raw.length) && state.catalogNeedFields && state.catalogNeedFields.length) {
-          raw = state.catalogNeedFields;
-        }
-        return profileBlockTourMissingStepKeys(Array.isArray(raw) ? raw : []);
+      function catalogLocalPhoneE164() {
+        var phoneEl = document.getElementById('phone');
+        if (!phoneEl) return '';
+        if (window.CrmPhoneField) return CrmPhoneField.getE164(phoneEl) || '';
+        return String(phoneEl.value || '').trim();
+      }
+
+      /** В карусели каталога на шаге телефона прячем «Другие контакты» — иначе красный баннер
+       *  про «заполните поля» читается как будто соцсети обязательны. */
+      function syncCatalogPhoneStepExtrasVisibility() {
+        var extra = document.getElementById('profileContactsExtraField');
+        if (!extra) return;
+        var hide =
+          state.profileFocusedTask === 'catalog' &&
+          profileBlockTourEffectiveStepKey() === 'phone';
+        extra.hidden = !!hide;
       }
 
       /** Visible tour step — override rewinds to an already-complete block («Назад»). */
@@ -2710,6 +2728,8 @@
         try { flow.style.removeProperty('height'); } catch (eHc) {}
         try { flow.style.removeProperty('top'); } catch (eTc) {}
         resetObFlowInsetCache();
+        var extra = document.getElementById('profileContactsExtraField');
+        if (extra) extra.hidden = false;
       }
 
       function startFocusedProfileTask(task, from) {
@@ -2895,6 +2915,7 @@
             backBtnF.setAttribute('aria-label', idxF > 0 ? 'Предыдущий шаг' : 'Пропустить');
           }
           obFlowMountStep(currKeyF || 'services');
+          syncCatalogPhoneStepExtrasVisibility();
           syncProfileBlockTourNextCta();
           syncProfileTourBarInset();
           return;
@@ -3175,9 +3196,36 @@
           try {
             dirtyF = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
           } catch (eDf) {}
+          /* Каталог / телефон: локально номер есть, а dirty не сработал (маска) — всё равно Save. */
+          if (state.profileFocusedTask === 'catalog' && stepAtClick === 'phone') {
+            var localPh = catalogLocalPhoneE164();
+            var phoneMsg = localPh ? validatePhoneMessage(localPh) : 'Укажите номер телефона.';
+            if (phoneMsg) {
+              haptic('warning');
+              setObFlowError(phoneMsg);
+              showSaveToast('Нужен телефон', phoneMsg, 'warning');
+              focusFormFieldForReadinessKey('phone');
+              return;
+            }
+            var missPhone = catalogSubmissionMissingStepKeys();
+            if (dirtyF || profileBlockTourUiStepStillMissing('phone', missPhone)) {
+              setObFlowError('');
+              state.profileBlockTourAdvanceFromKey = stepAtClick;
+              save({ force: true });
+              return;
+            }
+            profileBlockTourAdvanceOneStep(stepAtClick, missPhone);
+            syncProfileBlockTourBar();
+            return;
+          }
           if (dirtyF) {
             var btnSvF = document.getElementById('btnSave');
-            if (!btnSvF || btnSvF.disabled) {
+            /* В карусели каталога Save всё равно вызываем: btnSave может быть disabled
+               из‑за чужих полей (цены услуг), draft-save телефона от этого не должен страдать. */
+            if (
+              state.profileFocusedTask !== 'catalog' &&
+              (!btnSvF || btnSvF.disabled)
+            ) {
               var whyF = profileBlockTourExplainSaveBlocked();
               haptic('warning');
               setObFlowError(whyF);
@@ -3186,7 +3234,7 @@
             }
             setObFlowError('');
             state.profileBlockTourAdvanceFromKey = stepAtClick;
-            save();
+            save(state.profileFocusedTask === 'catalog' ? { force: true } : undefined);
             return;
           }
           /* Без dirty: для catalog нельзя перепрыгнуть незакрытый submission-шаг. */
@@ -3194,12 +3242,14 @@
             var missCat = catalogSubmissionMissingStepKeys();
             if (profileBlockTourUiStepStillMissing(stepAtClick, missCat)) {
               haptic('warning');
-              setObFlowError('Заполните поля шага и нажмите «Сохранить».');
-              showSaveToast(
-                'Сначала закончите этот шаг',
-                'Для каталога нужны имя и телефон — как на карточке хаба.',
-                'warning'
-              );
+              var needHint =
+                stepAtClick === 'phone'
+                  ? 'Укажите телефон и нажмите «Сохранить».'
+                  : stepAtClick === 'anketa_main'
+                    ? 'Укажите имя и нажмите «Сохранить».'
+                    : 'Заполните обязательные поля шага и нажмите «Сохранить».';
+              setObFlowError(needHint);
+              showSaveToast('Сначала закончите этот шаг', needHint, 'warning');
               focusFormFieldForReadinessKey(stepAtClick === 'anketa_main' ? 'full_name' : stepAtClick);
               return;
             }
@@ -6045,9 +6095,11 @@
         return p.then(function() { return postNewIfFilled(); });
       }
 
-      function save() {
+      function save(opts) {
+        opts = opts || {};
         var btn = document.getElementById('btnSave');
-        if (btn && btn.disabled) return;
+        /* Карусель каталога: кнопка может быть disabled из‑за цен услуг — телефон всё равно сохраняем. */
+        if (btn && btn.disabled && !opts.force) return;
         var parsed;
         try {
           parsed = JSON.parse(readFormSnapshot());
