@@ -37,7 +37,10 @@
         window.location.href = webappPageUrl('trainer-home');
       }
       /** Covers full profile UI while we close the block tour — avoids a flash of the «normal» profile before navigation. */
-      function showProfileToHubTransitionOverlay() {
+      function showProfileToHubTransitionOverlay(opts) {
+        opts = opts || {};
+        var title = opts.title || 'Базовый профиль готов';
+        var hint = opts.hint || 'Сейчас откроется главная';
         var id = 'profileToHubTransitionOverlay';
         var el = document.getElementById(id);
         if (!el) {
@@ -49,11 +52,15 @@
           el.innerHTML =
             '<div class="profile-to-hub-transition__inner">' +
             '<div class="profile-to-hub-transition__icon" aria-hidden="true">✓</div>' +
-            '<div class="profile-to-hub-transition__title">Базовый профиль готов</div>' +
-            '<p class="profile-to-hub-transition__hint">Сейчас откроется главная</p>' +
+            '<div class="profile-to-hub-transition__title"></div>' +
+            '<p class="profile-to-hub-transition__hint"></p>' +
             '</div>';
           document.body.appendChild(el);
         }
+        var titleEl = el.querySelector('.profile-to-hub-transition__title');
+        var hintEl = el.querySelector('.profile-to-hub-transition__hint');
+        if (titleEl) titleEl.textContent = title;
+        if (hintEl) hintEl.textContent = hint;
         el.hidden = false;
         requestAnimationFrame(function() {
           el.classList.add('profile-to-hub-transition--visible');
@@ -200,6 +207,10 @@
       /** Рельс сессии всегда полон — вызывать перед любым чтением (в т.ч. после reload страницы). */
       function profileBlockTourEnsureRail() {
         if (state.profileFocusedTask && PROFILE_FOCUSED_TASKS[state.profileFocusedTask]) {
+          /* Не затирать динамический рельс (task=catalog из missing_fields). */
+          if (state.profileBlockTourSessionSealOrder && state.profileBlockTourSessionSealOrder.length) {
+            return state.profileBlockTourSessionSealOrder;
+          }
           var focusedRail = PROFILE_FOCUSED_TASKS[state.profileFocusedTask].rail.slice();
           state.profileBlockTourSessionSealOrder = focusedRail;
           return focusedRail;
@@ -245,7 +256,20 @@
         if (has('min_hours_before_booking')) out.push('min_hours_before_booking');
         if (has('services')) out.push('services');
         if (has('arenas')) out.push('arenas');
+        /* Submission-tier: фото обязательно для очереди модерации (не optional). */
+        if (has('photo')) out.push('photo');
         return out;
+      }
+
+      /**
+       * Рельс для «Хочу в каталог»: сначала реальные пробелы submission-tier,
+       * иначе витрина (фото / о себе) — карточку уже можно отправить на проверку.
+       */
+      function buildCatalogFocusedRail() {
+        var missing = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
+        var steps = profileBlockTourMissingStepKeys(Array.isArray(missing) ? missing : []);
+        if (steps.length) return steps;
+        return ['photo', 'about', 'experience', 'education'];
       }
 
       /** Visible tour step — override rewinds to an already-complete block («Назад»). */
@@ -2488,6 +2512,15 @@
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
+        /* С хаба «Хочу в каталог»: рельс строится из submission gaps (см. buildCatalogFocusedRail). */
+        catalog: {
+          rail: ['photo', 'about', 'experience', 'education'],
+          title: 'Карточка для каталога',
+          subtitle: 'Закройте то, чего не хватает для публикации. Можно пропустить шаг — вернётесь позже.',
+          stepLabel: 'Каталог',
+          nextSave: 'Сохранить',
+          nextDone: 'Готово',
+        },
       };
 
       /** Последний смонтированный в слоте ключ шага — чтобы не перемонтировать одно и то же. */
@@ -2645,8 +2678,10 @@
         state.profileBlockTourActive = true;
         state.profileBlockTourHubRedirectScheduled = false;
         profileBlockTourResetWizardStacks();
-        state.profileBlockTourSessionSealOrder = spec.rail.slice();
-        state.profileBlockTourDisplayedStepOverride = spec.rail[0];
+        var rail = task === 'catalog' ? buildCatalogFocusedRail() : spec.rail.slice();
+        if (!rail.length) rail = spec.rail.slice();
+        state.profileBlockTourSessionSealOrder = rail;
+        state.profileBlockTourDisplayedStepOverride = rail[0];
         state.profileBlockTourSessionVisitedLastForward = false;
         syncProfileBlockTourBar();
       }
@@ -2660,16 +2695,62 @@
 
       function finishFocusedProfileTask() {
         var dest = focusedTaskReturnUrl();
+        var catalogish =
+          state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine';
         state.profileBlockTourActive = false;
         state.profileFocusedTask = null;
         state.profileFocusedReturn = 'hub';
         profileBlockTourResetWizardStacks();
         obFlowClose();
-        try {
-          window.location.href = dest;
-        } catch (eNav) {
-          window.location.href = dest;
+
+        function goDest() {
+          try {
+            window.location.href = dest;
+          } catch (eNav) {
+            window.location.href = dest;
+          }
         }
+
+        function overlayForCatalogExit() {
+          var d = state.moderation_readiness || {};
+          var t = state.trainer || {};
+          if (t.is_catalog_visible === true && d.complete && (d.already_submitted_for_moderation || t.status === 'active')) {
+            showProfileToHubTransitionOverlay({
+              title: 'Отправили на проверку',
+              hint: 'В каталоге появитесь после модерации — это не мгновенно',
+            });
+            return;
+          }
+          if (t.is_catalog_visible === true && d.complete) {
+            showProfileToHubTransitionOverlay({
+              title: 'Карточка готова',
+              hint: 'Отправляем на проверку. Сейчас откроется главная',
+            });
+            return;
+          }
+          if (catalogish) {
+            showProfileToHubTransitionOverlay({
+              title: 'Сохранили',
+              hint: 'Для каталога ещё нужно дозаполнить профиль — подсказка останется на главной',
+            });
+            return;
+          }
+          showProfileToHubTransitionOverlay();
+        }
+
+        overlayForCatalogExit();
+        haptic('success');
+        var submitP = Promise.resolve();
+        try {
+          submitP = maybeAutoSubmitForModeration() || Promise.resolve();
+        } catch (eMod) {
+          submitP = Promise.resolve();
+        }
+        submitP
+          .catch(function() { return null; })
+          .then(function() {
+            setTimeout(goDest, 1100);
+          });
       }
 
       /**
