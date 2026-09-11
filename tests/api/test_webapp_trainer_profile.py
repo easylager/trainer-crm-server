@@ -804,17 +804,23 @@ def test_profile_focused_prices_task_contract() -> None:
     assert "get('task')" in js
 
 
-def test_profile_focused_vitrine_task_contract() -> None:
-    """S7 / AC-008: catalog CTA opens the vitrine overlay, not the seven-section form."""
+def test_profile_focused_catalog_task_contract() -> None:
+    """Catalog CTA opens one submission-gap carousel (task=catalog), not polish vitrine."""
     js = (_PROFILE_WEBAPP / "trainer-profile-main.js").read_text(encoding="utf-8")
     html = (_PROFILE_WEBAPP / "trainer-profile.html").read_text(encoding="utf-8")
     js_home = (_PROFILE_WEBAPP / "trainer-home-main.js").read_text(encoding="utf-8")
     css = (_PROFILE_WEBAPP / "mini-app-trainer-profile.css").read_text(encoding="utf-8")
-    assert "vitrine:" in js
+    assert "catalog:" in js
+    assert "vitrine:" in js  # legacy alias kept for old deep links
+    assert "if (task === 'vitrine') task = 'catalog'" in js
+    assert "buildCatalogFocusedRail" in js
     assert "containerId: 'profileNavPhoto'" in js
-    assert "containerId: 'profileNavAbout'" in js
+    assert "containerId: 'profileNavContacts'" in js
     assert 'id="profileNavPhoto"' in html
-    assert "task=vitrine" in js_home
+    assert 'id="profileNavContacts"' in html
+    assert "task=catalog" in js_home
+    assert "openHubCatalogProfileGaps" in js_home
+    assert "task=vitrine" not in js_home
     assert "from=hub" in js_home
     assert "navigateTo('trainer-profile')" not in js_home
     assert "navigateToWithHash('trainer-profile'" not in js_home
