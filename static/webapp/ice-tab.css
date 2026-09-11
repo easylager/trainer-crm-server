@@ -240,15 +240,6 @@ body.ar-pilot--ice .client-app-header {
   transform: translateX(-50%) scale(0.96);
 }
 
-/*
- * Мини-карточка выбранной арены (.ice-map-sheet) сидит у таб-бара.
- * Без сдвига пилюля «Список» ложится поверх карточки — тап не доходит.
- * Высота карточки ~94px (thumb 74 + padding); +10px зазор над ней.
- */
-body.ice-map-sheet-open .ice-viewswitch {
-  bottom: calc(var(--client-shell-tab-inset, 80px) + 12px + 104px);
-}
-
 .ice-viewswitch__icon {
   display: flex;
   width: var(--app-icon-sm);
@@ -899,6 +890,65 @@ body.ice-map-sheet-open .ice-viewswitch {
   height: min(52vh, 420px);
   min-height: 280px;
   background: var(--glide-paper);
+}
+
+/*
+ * Режим карты: карта съедает чёрную дыру под чипами, мини-карточка лежит
+ * поверх низа карты над пилюлей «Список» (пилюля остаётся у таб-бара).
+ */
+body.ice-view-map .ice-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--client-shell-tab-inset, 80px));
+  padding-bottom: 0;
+}
+
+body.ice-view-map .ice-sec--hero {
+  flex: 0 0 auto;
+  padding-bottom: 10px;
+}
+
+body.ice-view-map .ice-map-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  padding: 0;
+}
+
+body.ice-view-map .ice-map-stage {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 240px;
+}
+
+body.ice-view-map .ice-map-sheet {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  /* Пилюля ~46px + зазор; sheet внутри wrap, чье дно уже над таб-баром. */
+  bottom: 58px;
+  margin: 0;
+  z-index: 3;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+body.ice-view-map .ice-map-sheet:empty {
+  display: none;
+}
+
+body.ice-view-map .ice-map-sheet .ice-acard,
+body.ice-view-map .ice-map-sheet .ice-empty {
+  pointer-events: auto;
+}
+
+body.ice-view-map .ice-map-offmap {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 8px;
+  margin: 0;
+  z-index: 2;
 }
 
 .ice-map-canvas {

@@ -153,11 +153,11 @@
     var mapSec = $('iceMapSec');
     if (listSec) listSec.hidden = showMapView;
     if (mapSec) mapSec.hidden = !showMapView;
+    if (document.body) {
+      document.body.classList.toggle('ice-view-map', !!showMapView);
+    }
     if (showMapView) {
       showMap();
-      if (mapSec && typeof mapSec.scrollIntoView === 'function') {
-        mapSec.scrollIntoView({ block: 'start' });
-      }
     }
   }
 
@@ -979,6 +979,7 @@
       if (searchSec) searchSec.hidden = true;
       if (listSec) listSec.hidden = mapViewActive();
       if (mapSec) mapSec.hidden = !mapViewActive();
+      if (document.body) document.body.classList.toggle('ice-view-map', mapViewActive());
       if (mapViewActive() && mapCtl) mapCtl.resize();
       return;
     }
@@ -989,6 +990,7 @@
       if (searchSec) searchSec.hidden = false;
       if (listSec) listSec.hidden = true;
       if (mapSec) mapSec.hidden = true;
+      if (document.body) document.body.classList.remove('ice-view-map');
       var html = '';
       grouped.forEach(function (g) {
         if (!g.items.length) return;
