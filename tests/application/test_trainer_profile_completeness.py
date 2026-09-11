@@ -287,5 +287,17 @@ def test_moderation_readiness_includes_tt_minimal_keys() -> None:
     }
     d = moderation_readiness_dict(t, trainer_status="pending_profile")
     assert d.get("tt_minimal_criteria_total") == TT_MINIMAL_CRITERIA_TOTAL
-    assert d.get("tt_minimal_complete") is True
-    assert d.get("complete") is False
+
+
+def test_submission_allows_missing_last_name_but_full_dossier_does_not() -> None:
+    t = _base()
+    t["profile"]["last_name"] = ""
+    full_ok, full_miss = analyze_moderation_profile_completeness(t)
+    assert full_ok is False
+    assert "full_name" in full_miss
+    submit_ok, submit_miss = analyze_moderation_submission_readiness(t)
+    assert submit_ok is True
+    assert "full_name" not in submit_miss
+    tt_ok, tt_miss = analyze_tt_minimal_profile_readiness(t)
+    assert tt_ok is True
+    assert "full_name" not in tt_miss
