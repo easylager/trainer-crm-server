@@ -1606,15 +1606,20 @@
        * Ключевое условие — is_catalog_visible. Заполненная анкета сама по себе не значит
        * «опубликуйте меня»: тренер может доводить карточку для своих же учеников. Раньше этого
        * условия не было, и полнота профиля молча превращалась в публикацию.
+       *
+       * @param {{ force?: boolean }} [opts] force=true — не доверять клиентскому
+       *   moderation_readiness.complete (после карусели состояние может быть stale); сервер сам
+       *   ответит 422 / noop / submitted.
        */
-      function maybeAutoSubmitForModeration() {
+      function maybeAutoSubmitForModeration(opts) {
+        opts = opts || {};
         var t = state.trainer;
         var d = state.moderation_readiness || {};
         var st = (t && t.status) ? String(t.status).trim() : '';
-        if (!t || t.is_catalog_visible !== true) return Promise.resolve();
-        if (st !== 'pending_profile' || !d.complete || d.already_submitted_for_moderation) {
-          return Promise.resolve();
-        }
+        if (!t || t.is_catalog_visible !== true) return Promise.resolve({ kind: 'opt_out' });
+        if (st !== 'pending_profile') return Promise.resolve({ kind: 'wrong_status' });
+        if (d.already_submitted_for_moderation) return Promise.resolve({ kind: 'already' });
+        if (!opts.force && !d.complete) return Promise.resolve({ kind: 'incomplete_client' });
         return fetch(apiUrl('/trainer/onboarding/submit-for-moderation'), {
           method: 'POST',
           headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
@@ -1622,11 +1627,24 @@
         })
           .then(parseJsonResponse)
           .then(function(sub) {
-            if (!sub.ok) return Promise.resolve();
-            if (sub.data && sub.data.noop) return Promise.resolve();
-            return loadProfile();
+            if (!sub.ok) {
+              var missing = [];
+              try {
+                var det = sub.data && sub.data.detail;
+                if (det && Array.isArray(det.missing_labels_ru)) missing = det.missing_labels_ru;
+                else if (det && Array.isArray(det.missing_fields)) missing = det.missing_fields;
+              } catch (eMiss) {}
+              return { kind: 'incomplete', missing: missing };
+            }
+            if (sub.data && sub.data.noop) {
+              return { kind: 'noop', reason: sub.data.reason || '' };
+            }
+            if (sub.data && sub.data.submitted) {
+              return loadProfile().then(function() { return { kind: 'submitted' }; });
+            }
+            return { kind: 'ok' };
           })
-          .catch(function() { return Promise.resolve(); });
+          .catch(function() { return { kind: 'error' }; });
       }
 
       function _pad2(n) {
@@ -2711,45 +2729,53 @@
           }
         }
 
-        function overlayForCatalogExit() {
-          var d = state.moderation_readiness || {};
-          var t = state.trainer || {};
-          if (t.is_catalog_visible === true && d.complete && (d.already_submitted_for_moderation || t.status === 'active')) {
+        function overlayFromSubmitResult(result) {
+          result = result || {};
+          if (result.kind === 'submitted' || result.kind === 'already' || result.kind === 'noop') {
             showProfileToHubTransitionOverlay({
               title: 'Отправили на проверку',
               hint: 'В каталоге появитесь после модерации — это не мгновенно',
             });
             return;
           }
-          if (t.is_catalog_visible === true && d.complete) {
+          if (result.kind === 'incomplete') {
+            var miss = (result.missing || []).slice(0, 3).join(', ');
             showProfileToHubTransitionOverlay({
-              title: 'Карточка готова',
-              hint: 'Отправляем на проверку. Сейчас откроется главная',
+              title: 'Сохранили',
+              hint: miss
+                ? ('Для проверки ещё нужно: ' + miss)
+                : 'Для каталога ещё нужно дозаполнить профиль — подсказка на главной',
             });
             return;
           }
           if (catalogish) {
             showProfileToHubTransitionOverlay({
               title: 'Сохранили',
-              hint: 'Для каталога ещё нужно дозаполнить профиль — подсказка останется на главной',
+              hint: 'Сейчас откроется главная',
             });
             return;
           }
           showProfileToHubTransitionOverlay();
         }
 
-        overlayForCatalogExit();
         haptic('success');
-        var submitP = Promise.resolve();
+        /* Свежий readiness + force submit: иначе stale complete=false → админ-бот молчит. */
+        var chain = Promise.resolve();
         try {
-          submitP = maybeAutoSubmitForModeration() || Promise.resolve();
-        } catch (eMod) {
-          submitP = Promise.resolve();
+          chain = loadProfile();
+        } catch (eLoad) {
+          chain = Promise.resolve();
         }
-        submitP
+        chain
           .catch(function() { return null; })
           .then(function() {
-            setTimeout(goDest, 1100);
+            if (!catalogish) return { kind: 'skip' };
+            return maybeAutoSubmitForModeration({ force: true });
+          })
+          .catch(function() { return { kind: 'error' }; })
+          .then(function(result) {
+            overlayFromSubmitResult(result);
+            setTimeout(goDest, 1200);
           });
       }
 
