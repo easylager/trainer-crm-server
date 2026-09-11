@@ -307,7 +307,8 @@
         profileBlockTourResetWizardStacks();
         var rail = task === 'catalog' ? buildCatalogFocusedRail() : spec.rail.slice();
         if (task === 'catalog' && !rail.length) {
-          finishFocusedProfileTask();
+          /* Пробелов нет — очередь модерации без пустой карусели. */
+          finishFocusedProfileTask({ submit: true });
           return;
         }
         if (!rail.length) rail = spec.rail.slice();
@@ -391,7 +392,8 @@
             syncProfileBlockTourBar();
             return;
           }
-          finishFocusedProfileTask();
+          /* «Не сейчас» на первом шаге — уйти на хаб без отправки на модерацию. */
+          finishFocusedProfileTask({ submit: false });
           return;
         }
         try {
@@ -2763,7 +2765,15 @@
         return webappPageUrl('trainer-home');
       }
 
-      function finishFocusedProfileTask() {
+      /**
+       * Закрыть focused-карусель и вернуться на хаб/онбординг.
+       * @param {{ submit?: boolean }} [opts]
+       *   submit:true  — тренер дошёл до конца / пробелов нет → force queue moderation
+       *   submit:false — «Не сейчас» / крестик → только уйти, без отправки на проверку
+       */
+      function finishFocusedProfileTask(opts) {
+        opts = opts || {};
+        var wantSubmit = opts.submit === true;
         var dest = focusedTaskReturnUrl();
         var catalogish =
           state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine';
@@ -2800,6 +2810,13 @@
             });
             return;
           }
+          if (result.kind === 'dismissed') {
+            showProfileToHubTransitionOverlay({
+              title: 'Позже',
+              hint: 'Вернёмся на главную — каталог можно дозаполнить в любой момент',
+            });
+            return;
+          }
           if (catalogish) {
             showProfileToHubTransitionOverlay({
               title: 'Сохранили',
@@ -2810,8 +2827,13 @@
           showProfileToHubTransitionOverlay();
         }
 
-        haptic('success');
-        /* Свежий readiness + force submit: иначе stale complete=false → админ-бот молчит. */
+        haptic(wantSubmit ? 'success' : 'warning');
+        /* Submit только после явного завершения карусели. «Не сейчас» / X — не в очередь. */
+        if (!wantSubmit || !catalogish) {
+          overlayFromSubmitResult({ kind: wantSubmit ? 'skip' : 'dismissed' });
+          setTimeout(goDest, wantSubmit ? 900 : 900);
+          return;
+        }
         var chain = Promise.resolve();
         try {
           chain = loadProfile();
@@ -2821,7 +2843,6 @@
         chain
           .catch(function() { return null; })
           .then(function() {
-            if (!catalogish) return { kind: 'skip' };
             return maybeAutoSubmitForModeration({ force: true });
           })
           .catch(function() { return { kind: 'error' }; })
@@ -2859,13 +2880,13 @@
               } else {
                 state.profileBlockTourHubRedirectScheduled = true;
                 haptic('success');
-                finishFocusedProfileTask();
+                finishFocusedProfileTask({ submit: true });
                 return;
               }
             } else {
               state.profileBlockTourHubRedirectScheduled = true;
               haptic('success');
-              finishFocusedProfileTask();
+              finishFocusedProfileTask({ submit: true });
               return;
             }
           }
@@ -3515,7 +3536,8 @@
             return;
           }
           if (state.profileFocusedTask) {
-            finishFocusedProfileTask();
+            /* Крестик = отложить, не «готово к модерации». */
+            finishFocusedProfileTask({ submit: false });
             return;
           }
           /* Отложить онбординг: закрываем визард и уводим на хаб.
