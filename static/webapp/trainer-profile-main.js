@@ -158,6 +158,8 @@
         profileFocusedTask: null,
         /** Where to go after the overlay: `onboarding` (Done screen) or `hub`. */
         profileFocusedReturn: 'hub',
+        /** `?need=full_name,phone` с хаба — запасной список gaps до готовности moderation_readiness. */
+        catalogNeedFields: null,
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
@@ -262,14 +264,27 @@
       }
 
       /**
-       * Рельс для «Хочу в каталог»: сначала реальные пробелы submission-tier,
-       * иначе витрина (фото / о себе) — карточку уже можно отправить на проверку.
+       * Рельс для «Хочу в каталог» / «Дозаполнить»: ТОЛЬКО submission-пробелы.
+       * Fallback на витрину (фото/о себе) — лишь когда пробелов нет (карточка уже готова).
+       * Список gaps берём из moderation_readiness, иначе из ?need= с хаба (тот же список,
+       * что в тексте next_step — иначе снова рассинхрон «карточка vs карусель»).
        */
       function buildCatalogFocusedRail() {
         var missing = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
+        if ((!missing || !missing.length) && state.catalogNeedFields && state.catalogNeedFields.length) {
+          missing = state.catalogNeedFields;
+        }
         var steps = profileBlockTourMissingStepKeys(Array.isArray(missing) ? missing : []);
         if (steps.length) return steps;
         return ['photo', 'about', 'experience', 'education'];
+      }
+
+      function catalogSubmissionMissingStepKeys() {
+        var raw = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
+        if ((!raw || !raw.length) && state.catalogNeedFields && state.catalogNeedFields.length) {
+          raw = state.catalogNeedFields;
+        }
+        return profileBlockTourMissingStepKeys(Array.isArray(raw) ? raw : []);
       }
 
       /** Visible tour step — override rewinds to an already-complete block («Назад»). */
@@ -2794,10 +2809,28 @@
           var spec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
           if (state.profileBlockTourSessionVisitedLastForward) {
             if (state.profileBlockTourHubRedirectScheduled) return;
-            state.profileBlockTourHubRedirectScheduled = true;
-            haptic('success');
-            finishFocusedProfileTask();
-            return;
+            /* Каталог: нельзя «закончить», пока submission-пробелы на месте. */
+            if (state.profileFocusedTask === 'catalog') {
+              var stillCat = catalogSubmissionMissingStepKeys();
+              if (stillCat.length) {
+                state.profileBlockTourSessionVisitedLastForward = false;
+                state.profileBlockTourHubRedirectScheduled = false;
+                state.profileBlockTourDisplayedStepOverride = stillCat[0];
+                haptic('warning');
+                setObFlowError('Сначала заполните: этот шаг нужен для каталога.');
+                /* fall through to remount the gap step */
+              } else {
+                state.profileBlockTourHubRedirectScheduled = true;
+                haptic('success');
+                finishFocusedProfileTask();
+                return;
+              }
+            } else {
+              state.profileBlockTourHubRedirectScheduled = true;
+              haptic('success');
+              finishFocusedProfileTask();
+              return;
+            }
           }
           obFlowOpen();
           var railF = profileBlockTourEnsureRail();
@@ -3024,7 +3057,15 @@
 
       /** First TTV gap in canonical wizard order (same as server append order, but robust if API changes). */
       function profileBlockTourCanonicalFirstMissing() {
-        var rawMissing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var rawMissing;
+        if (state.profileFocusedTask === 'catalog') {
+          rawMissing = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
+          if ((!rawMissing || !rawMissing.length) && state.catalogNeedFields) {
+            rawMissing = state.catalogNeedFields;
+          }
+        } else {
+          rawMissing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        }
         var missing = profileBlockTourMissingStepKeys(rawMissing);
         var j;
         for (j = 0; j < PROFILE_TT_BLOCK_ORDER.length; j++) {
@@ -3134,6 +3175,24 @@
             save();
             return;
           }
+          /* Без dirty: для catalog нельзя перепрыгнуть незакрытый submission-шаг. */
+          if (state.profileFocusedTask === 'catalog') {
+            var missCat = catalogSubmissionMissingStepKeys();
+            if (profileBlockTourUiStepStillMissing(stepAtClick, missCat)) {
+              haptic('warning');
+              setObFlowError('Заполните поля шага и нажмите «Сохранить».');
+              showSaveToast(
+                'Сначала закончите этот шаг',
+                'Для каталога нужны имя, фамилия и телефон — как на карточке хаба.',
+                'warning'
+              );
+              focusFormFieldForReadinessKey(stepAtClick === 'anketa_main' ? 'full_name' : stepAtClick);
+              return;
+            }
+            profileBlockTourAdvanceOneStep(stepAtClick, missCat);
+            syncProfileBlockTourBar();
+            return;
+          }
           profileBlockTourAdvanceOneStep(stepAtClick, []);
           syncProfileBlockTourBar();
           return;
@@ -3214,6 +3273,18 @@
         if (state.profileFocusedTask) {
           var advanceKeyF = state.profileBlockTourAdvanceFromKey;
           profileBlockTourClearAdvanceStash();
+          if (state.profileFocusedTask === 'catalog') {
+            var missF = catalogSubmissionMissingStepKeys();
+            if (advanceKeyF != null && profileBlockTourUiStepStillMissing(advanceKeyF, missF)) {
+              haptic('warning');
+              setObFlowError('Заполните поля шага и нажмите «Сохранить».');
+              syncProfileBlockTourBar();
+              return;
+            }
+            if (advanceKeyF != null) profileBlockTourAdvanceOneStep(advanceKeyF, missF);
+            syncProfileBlockTourBar();
+            return;
+          }
           if (advanceKeyF != null) profileBlockTourAdvanceOneStep(advanceKeyF, []);
           syncProfileBlockTourBar();
           return;
@@ -3249,13 +3320,24 @@
       function maybeEnterProfileBlockTourFromQuery() {
         var task = null;
         var from = null;
+        var needRaw = null;
         try {
           var sp = new URLSearchParams(window.location.search);
           task = sp.get('task');
           from = sp.get('from');
+          needRaw = sp.get('need');
           if (task && PROFILE_FOCUSED_TASKS[task]) {
+            if (needRaw) {
+              state.catalogNeedFields = String(needRaw)
+                .split(',')
+                .map(function(s) { return String(s || '').trim(); })
+                .filter(Boolean);
+            } else {
+              state.catalogNeedFields = null;
+            }
             sp.delete('task');
             sp.delete('from');
+            sp.delete('need');
             var qsF = sp.toString();
             var pathF = window.location.pathname + (qsF ? '?' + qsF : '') + (window.location.hash || '');
             history.replaceState(null, '', pathF);
