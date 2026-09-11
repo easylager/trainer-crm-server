@@ -24,16 +24,14 @@ ACTION_OPEN_ONBOARDING = "open_onboarding"
 ACTION_SHARE_LINK = "share_link"
 ACTION_OPEN_PROFILE = "open_profile"
 ACTION_ENABLE_CATALOG = "enable_catalog"
-# Opt-in уже дан, анкета дырявая — открыть карусель ровно по submission-пробелам.
+# Opt-in уже дан — открыть ту же карусель catalog (без второго «флоу»).
 ACTION_OPEN_CATALOG_PROFILE = "open_catalog_profile"
 ACTION_DISMISS = "dismiss"
 
-# Короткие имена полей для карточки. Формулировки из MISSING_FIELD_LABELS_RU написаны для
-# списка на вкладке «Статус» («краткое описание (не менее 25 символов)») и в предложение не
-# ложатся. Ключи те же, поэтому карточка и профиль просят буквально одно и то же — раньше
-# карточка обещала «фото и пару слов о себе», а профиль встречал списком из восьми пунктов.
+# Короткие имена полей для карточки. Ключи = submission missing_fields.
+# Фамилия для каталога необязательна → full_name в тексте = «имя».
 _CATALOG_CARD_FIELD_WORDS: dict[str, str] = {
-    "full_name": "имя и фамилия",
+    "full_name": "имя",
     "phone": "телефон",
     "photo": "фото",
     "city": "город",
@@ -63,7 +61,6 @@ STEP_REFRESH_WEEK = "refresh_week"
 STEP_SHARE_LINK = "share_link"
 STEP_SET_ARENA = "set_arena"
 STEP_CATALOG_INVITE = "catalog_invite"
-STEP_CATALOG_FINISH = "catalog_finish"
 
 
 def _plural(n: int, one: str, few: str, many: str) -> str:
@@ -98,11 +95,7 @@ def resolve_trainer_next_step(
     # must not hide the «отправьте ссылку ученику» card — see TASK-027.
     has_booking = bool(checklist.get("has_real_booking"))
     real_bookings = int(checklist.get("real_bookings_count") or 0)
-    # Opt-in (тумблер / «Хочу в каталог») — ответ на приглашение. Публикация в клиентском
-    # каталоге ещё требует модерации (status=active). После согласия нельзя снова спрашивать
-    # «Хочу в каталог», но если анкета дырявая — нужна другая карточка с теми же полями.
     catalog_opted_in = bool(checklist.get("is_catalog_visible"))
-    catalog_invite_answered = catalog_opted_in or catalog_invite_dismissed
     catalog_missing = list(checklist.get("catalog_missing_fields") or [])
     catalog_need = _catalog_card_requirements(catalog_missing)
 
@@ -151,42 +144,42 @@ def resolve_trainer_next_step(
     # После первой записи карточку «отправьте ссылку» больше не держим.
     # Повторять ссылку — дело хинтов, не отдельного блока на хабе.
 
-    # 5. Поток есть — только теперь каталог перестаёт быть обещанием и становится предложением.
-    if real_bookings >= CATALOG_INVITE_MIN_BOOKINGS and not catalog_invite_answered:
-        word = _plural(real_bookings, "занятие", "занятия", "занятий")
-        tail = f"Для карточки не хватает: {catalog_need}." if catalog_need else "Карточка уже готова."
-        return {
-            "key": STEP_CATALOG_INVITE,
-            "title": "Вас уже записывают",
-            "body": (
-                f"{real_bookings} {word} по вашей ссылке. "
-                f"Хотите, чтобы вас находили новые ученики? {tail}"
-            ),
-            # Кнопка включает показ в каталоге и ведёт в профиль. Раньше она вела просто в
-            # профиль, а согласие на публикацию было спрятано в «Настройках» — тренер жал
-            # «Заполнить профиль» и попадал на экран, который просил сходить ещё куда-то.
-            "cta": {"label": "Хочу в каталог", "action": ACTION_ENABLE_CATALOG},
-            "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
-        }
-
-    # 5b. Согласие уже есть, но submission-tier дырявый — иначе хаб молчит, а админ-бот
-    # тоже (submit no-op). Карточка называет ТЕ ЖЕ поля, что откроет карусель task=catalog.
+    # 5. Одна карточка каталога → одна карусель ``task=catalog`` (телефон + имя в рельсе).
+    #    Не opted-in: согласие + карусель. Уже opted-in, но дыры: та же карусель без второго флоу.
     if (
         real_bookings >= CATALOG_INVITE_MIN_BOOKINGS
-        and catalog_opted_in
         and not bool(checklist.get("is_active"))
-        and catalog_need
+        and not (catalog_opted_in and not catalog_need)
+        and not (catalog_invite_dismissed and not catalog_opted_in)
     ):
-        return {
-            "key": STEP_CATALOG_FINISH,
-            "title": "Почти в каталоге",
-            "body": (
-                f"Вы уже согласились на публикацию. "
-                f"Для проверки не хватает: {catalog_need}."
-            ),
-            "cta": {"label": "Дозаполнить", "action": ACTION_OPEN_CATALOG_PROFILE},
-            "secondary": None,
-        }
+        word = _plural(real_bookings, "занятие", "занятия", "занятий")
+        if catalog_opted_in and catalog_need:
+            return {
+                "key": STEP_CATALOG_INVITE,
+                "title": "Вас уже записывают",
+                "body": (
+                    f"{real_bookings} {word} по вашей ссылке. "
+                    f"Для карточки в каталоге не хватает: {catalog_need}."
+                ),
+                "cta": {"label": "Продолжить", "action": ACTION_OPEN_CATALOG_PROFILE},
+                "secondary": None,
+            }
+        if not catalog_opted_in:
+            tail = (
+                f"Для карточки не хватает: {catalog_need}."
+                if catalog_need
+                else "Карточка уже готова."
+            )
+            return {
+                "key": STEP_CATALOG_INVITE,
+                "title": "Вас уже записывают",
+                "body": (
+                    f"{real_bookings} {word} по вашей ссылке. "
+                    f"Хотите, чтобы вас находили новые ученики? {tail}"
+                ),
+                "cta": {"label": "Хочу в каталог", "action": ACTION_ENABLE_CATALOG},
+                "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
+            }
 
     # Подсказывать нечего — и это нормальное состояние работающего кабинета.
     return None

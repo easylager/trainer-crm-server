@@ -237,10 +237,8 @@
         var ln = document.getElementById('last_name');
         var city = document.getElementById('city_id');
         var fnv = fn ? String(fn.value || '').trim() : '';
-        var lnv = ln ? String(ln.value || '').trim() : '';
         var cityVal = city ? String(city.value || '').trim() : '';
         if (!fnv) return fn;
-        if (!lnv) return ln;
         if (!cityVal) return city;
         return fn || ln || city;
       }
@@ -264,19 +262,30 @@
       }
 
       /**
-       * Рельс для «Хочу в каталог» / «Дозаполнить»: ТОЛЬКО submission-пробелы.
-       * Fallback на витрину (фото/о себе) — лишь когда пробелов нет (карточка уже готова).
-       * Список gaps берём из moderation_readiness, иначе из ?need= с хаба (тот же список,
-       * что в тексте next_step — иначе снова рассинхрон «карточка vs карусель»).
+       * Одна карусель каталога: gaps в каноническом порядке, телефон всегда рядом с именем.
+       * Витрину (about/experience) не подмешиваем — иначе снова «вторая карусель».
        */
       function buildCatalogFocusedRail() {
-        var missing = (state.moderation_readiness && state.moderation_readiness.missing_fields) || [];
-        if ((!missing || !missing.length) && state.catalogNeedFields && state.catalogNeedFields.length) {
-          missing = state.catalogNeedFields;
+        var steps = catalogSubmissionMissingStepKeys();
+        var order = [
+          'anketa_main',
+          'phone',
+          'session_duration_minutes',
+          'min_hours_before_booking',
+          'services',
+          'arenas',
+          'photo',
+        ];
+        var out = [];
+        var i;
+        for (i = 0; i < order.length; i++) {
+          if (steps.indexOf(order[i]) >= 0) out.push(order[i]);
         }
-        var steps = profileBlockTourMissingStepKeys(Array.isArray(missing) ? missing : []);
-        if (steps.length) return steps;
-        return ['photo', 'about', 'experience', 'education'];
+        for (i = 0; i < steps.length; i++) {
+          if (out.indexOf(steps[i]) < 0) out.push(steps[i]);
+        }
+        /* Готово к модерации — карусель не открываем (пустой рельс → сразу finish/submit). */
+        return out;
       }
 
       function catalogSubmissionMissingStepKeys() {
@@ -1070,7 +1079,7 @@
         var ln = pr.last_name != null ? String(pr.last_name).trim() : '';
         if (!draft) {
           if (!fn) errs.push(['first_name', 'Укажите имя.']);
-          if (!ln) errs.push(['last_name', 'Укажите фамилию.']);
+          /* Фамилия необязательна для каталога и TTV — полный досье всё ещё может просить её в статусе. */
         }
         var birthEl = document.getElementById('birth_date');
         var birthDisplay = birthEl ? String(birthEl.value || '').trim() : '';
@@ -2470,13 +2479,13 @@
           containerId: 'anketaStart',
           tabId: 'form',
           title: 'Познакомимся',
-          subtitle: 'Имя и город — первое, что видят клиенты в каталоге.',
+          subtitle: 'Имя обязательно. Фамилия — по желанию. Город — как в каталоге.',
         },
         phone: {
           containerId: 'profileNavContacts',
           tabId: 'form',
           title: 'Как с вами связаться',
-          subtitle: 'Телефон нужен, чтобы подтверждать записи. Остальные контакты — по желанию.',
+          subtitle: 'Телефон нужен для каталога и подтверждения записей.',
         },
         session_duration_minutes: {
           containerId: 'obSessionDurationWrap',
@@ -2545,11 +2554,11 @@
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
-        /* С хаба «Хочу в каталог»: рельс строится из submission gaps (см. buildCatalogFocusedRail). */
+        /* С хаба «Хочу в каталог»: одна карусель по submission gaps (имя + телефон…). */
         catalog: {
-          rail: ['photo', 'about', 'experience', 'education'],
+          rail: ['anketa_main', 'phone'],
           title: 'Карточка для каталога',
-          subtitle: 'Закройте то, чего не хватает для публикации. Можно пропустить шаг — вернётесь позже.',
+          subtitle: 'Имя и телефон — обязательно. Фамилию можно пропустить.',
           stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
@@ -2712,6 +2721,11 @@
         state.profileBlockTourHubRedirectScheduled = false;
         profileBlockTourResetWizardStacks();
         var rail = task === 'catalog' ? buildCatalogFocusedRail() : spec.rail.slice();
+        if (task === 'catalog' && !rail.length) {
+          /* Пробелов нет — сразу submit / хаб, без пустой карусели. */
+          finishFocusedProfileTask();
+          return;
+        }
         if (!rail.length) rail = spec.rail.slice();
         state.profileBlockTourSessionSealOrder = rail;
         state.profileBlockTourDisplayedStepOverride = rail[0];
@@ -3183,7 +3197,7 @@
               setObFlowError('Заполните поля шага и нажмите «Сохранить».');
               showSaveToast(
                 'Сначала закончите этот шаг',
-                'Для каталога нужны имя, фамилия и телефон — как на карточке хаба.',
+                'Для каталога нужны имя и телефон — как на карточке хаба.',
                 'warning'
               );
               focusFormFieldForReadinessKey(stepAtClick === 'anketa_main' ? 'full_name' : stepAtClick);

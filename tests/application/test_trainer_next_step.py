@@ -12,7 +12,6 @@ from src.application.trainer_next_step import (
     ACTION_OPEN_CATALOG_PROFILE,
     ACTION_SHARE_LINK,
     CATALOG_INVITE_MIN_BOOKINGS,
-    STEP_CATALOG_FINISH,
     STEP_CATALOG_INVITE,
     STEP_SET_ARENA,
     STEP_REFRESH_WEEK,
@@ -180,12 +179,8 @@ def test_working_practice_gets_no_card_at_all() -> None:
     assert step is None
 
 
-def test_catalog_finish_card_when_opted_in_but_gaps_remain() -> None:
-    """
-    Opt-in без дыр в карусели ломал доверие: карточка обещала имя/телефон, витрина их не
-    спрашивала, хаб после согласия молчал. После opt-in с пробелами — отдельная карточка
-    с теми же полями и CTA в task=catalog.
-    """
+def test_catalog_same_card_and_carousel_when_opted_in_with_phone_gap() -> None:
+    """Одна карточка catalog_invite → та же карусель; фамилия не в списке пробелов."""
     step = resolve_trainer_next_step(
         _checklist(
             weekly_template_count=5,
@@ -194,14 +189,15 @@ def test_catalog_finish_card_when_opted_in_but_gaps_remain() -> None:
             real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
             is_active=False,
             is_catalog_visible=True,
-            catalog_missing_fields=["full_name", "phone"],
+            catalog_missing_fields=["phone"],
         )
     )
     assert step is not None
-    assert step["key"] == STEP_CATALOG_FINISH
+    assert step["key"] == STEP_CATALOG_INVITE
     assert step["cta"]["action"] == ACTION_OPEN_CATALOG_PROFILE
-    assert "имя и фамилия и телефон" in step["body"]
-    assert "Хочу в каталог" not in (step["cta"]["label"] or "")
+    assert step["cta"]["label"] == "Продолжить"
+    assert "телефон" in step["body"]
+    assert "фамилия" not in step["body"]
 
 
 def test_catalog_invite_gone_after_opt_in_when_profile_ready() -> None:

@@ -4,16 +4,17 @@ Single source of truth: trainer profile completeness for moderation submit vs fu
 Two tiers (same aggregate shape as get_trainer() / TrainerRepository.get_by_id):
 
 **A — Submission readiness (queue / submit-for-moderation):** checks all full-profile rules
-except optional-for-submit fields: description, education, experience_years.
+except optional-for-submit fields: description, education, experience_years, **and last name**
+(first name is enough for the public catalog queue).
 
 **B — Full profile (catalog trust / dossier):** strict «about the trainer» bar:
-full name, phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
+full name (first + last), phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
 (text or structured entries), experience_years >= 0, session length [15,240],
 booking window [0,168], at least one service and one arena.
 
-**C — TTV minimal (time-to-value):** 5 checks — identity + contacts + city + services + arenas;
+**C — TTV minimal (time-to-value):** 5 checks — first name + contacts + city + services + arenas;
 enough to open schedule + trial booking in Mini App while status is still pending_profile
-(no photo/bio/education/birth_date/experience required). Session length and booking window stay in
+(no photo/bio/education/birth_date/experience/last name required). Session length and booking window stay in
 «Настройки» with product defaults in API until the trainer adjusts them (full tier still validates).
 Progressive profiling fills the rest toward tier A/B later.
 
@@ -35,6 +36,8 @@ MIN_DESCRIPTION_CHARS = 25
 MODERATION_CRITERIA_TOTAL = 11
 
 # Submission tier: full checks minus these keys (still validated in full tier).
+# last_name is not a separate key — it rides inside ``full_name`` on the full tier;
+# submission relaxes that to first_name-only (see analyze_moderation_submission_readiness).
 SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS: frozenset[str] = frozenset(
     {"description", "education", "experience_years"}
 )
@@ -46,6 +49,8 @@ TT_MINIMAL_CRITERIA_TOTAL = 5
 
 # Stable keys for API, tests, and i18n.
 MISSING_FIELD_LABELS_RU: dict[str, str] = {
+    # Full dossier still means both names; submission/TTV labels for the same key are overridden
+    # in missing_labels_ru when only first_name is required.
     "full_name": "имя и фамилия",
     "phone": "телефон",
     "description": f"краткое описание (не менее {MIN_DESCRIPTION_CHARS} символов)",
@@ -145,6 +150,7 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
 
     Intentionally excludes: photo, long description, education text/entries, birth_date, experience_years,
     session_duration_minutes, min_hours_before_booking (use defaults / settings; full tier still checks).
+    Last name is optional here too — same rule as catalog submission (first name is enough).
     """
     missing: list[str] = []
     profile = trainer.get("profile")
@@ -152,8 +158,7 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
         profile = {}
 
     fn = (profile.get("first_name") or "").strip()
-    ln = (profile.get("last_name") or "").strip()
-    if not fn or not ln:
+    if not fn:
         missing.append("full_name")
 
     phone = (profile.get("phone") or "").strip()
@@ -180,22 +185,28 @@ def is_tt_minimal_profile_complete(trainer: dict[str, Any]) -> bool:
 
 def is_intro_block_complete(trainer: dict[str, Any]) -> bool:
     """
-    «Знакомство»: identity + contacts only — full_name, phone, city.
+    «Знакомство»: identity + contacts — first name, phone, city (фамилия необязательна).
     Narrower than TT-minimal (which also requires services/arenas from later Mini App steps).
     """
     profile = trainer.get("profile")
     if not isinstance(profile, dict):
         return False
     fn = (profile.get("first_name") or "").strip()
-    ln = (profile.get("last_name") or "").strip()
     phone = (profile.get("phone") or "").strip()
-    return bool(fn and ln and phone and profile.get("city_id") is not None)
+    return bool(fn and phone and profile.get("city_id") is not None)
 
 
 def analyze_moderation_submission_readiness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Submission tier (8 criteria): enough to enter moderation queue, relaxed bio block."""
+    """
+    Submission tier (catalog queue): full checks minus bio/education/experience, and
+    **фамилия необязательна** — достаточно имени (full dossier still wants both names).
+    """
     _, full_missing = analyze_moderation_profile_completeness(trainer)
     submit_missing = [k for k in full_missing if k not in SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS]
+    profile = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
+    fn = (profile.get("first_name") or "").strip()
+    if fn and "full_name" in submit_missing:
+        submit_missing = [k for k in submit_missing if k != "full_name"]
     return len(submit_missing) == 0, submit_missing
 
 
@@ -208,9 +219,15 @@ def is_ready_for_moderation_submission(trainer: dict[str, Any]) -> bool:
 is_profile_complete_for_moderation = is_ready_for_moderation_submission
 
 
-def missing_labels_ru(missing_keys: list[str]) -> list[str]:
+def missing_labels_ru(missing_keys: list[str], *, first_name_only: bool = False) -> list[str]:
     """Ordered human-readable list for UI (Russian, short)."""
-    return [MISSING_FIELD_LABELS_RU[k] for k in missing_keys if k in MISSING_FIELD_LABELS_RU]
+    out: list[str] = []
+    for k in missing_keys:
+        if k == "full_name" and first_name_only:
+            out.append("имя")
+        elif k in MISSING_FIELD_LABELS_RU:
+            out.append(MISSING_FIELD_LABELS_RU[k])
+    return out
 
 
 def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | None = None) -> dict[str, Any]:
@@ -221,7 +238,7 @@ def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | 
     out: dict[str, Any] = {
         "complete": submit_ok,
         "missing_fields": submit_missing,
-        "missing_labels_ru": missing_labels_ru(submit_missing),
+        "missing_labels_ru": missing_labels_ru(submit_missing, first_name_only=True),
         "moderation_criteria_total": MODERATION_SUBMISSION_CRITERIA_TOTAL,
         "full_profile_complete": full_ok,
         "full_profile_missing_fields": full_missing,
@@ -229,7 +246,7 @@ def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | 
         "full_profile_criteria_total": MODERATION_CRITERIA_TOTAL,
         "tt_minimal_complete": tt_ok,
         "tt_minimal_missing_fields": tt_missing,
-        "tt_minimal_missing_labels_ru": missing_labels_ru(tt_missing),
+        "tt_minimal_missing_labels_ru": missing_labels_ru(tt_missing, first_name_only=True),
         "tt_minimal_criteria_total": TT_MINIMAL_CRITERIA_TOTAL,
     }
     if trainer_status is not None:

@@ -2885,6 +2885,8 @@
        * если moderation_readiness ещё не подгрузился.
        */
       function enableHubCatalogListing() {
+        var missing =
+          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
         fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
           method: 'PATCH',
           headers: headersJson(),
@@ -2892,11 +2894,19 @@
         })
           .then(function () {
             if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            /* Не прячем next_step в null навсегда: после reload придёт catalog_finish при дырах. */
-            navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
+            if (missing.length) {
+              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
+            } else {
+              /* Анкета готова — heal на хабе отправит в модерацию. */
+              navigateTo('trainer-home');
+            }
           })
           .catch(function () {
-            navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
+            if (missing.length) {
+              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
+            } else {
+              navigateTo('trainer-home');
+            }
           });
       }
 
