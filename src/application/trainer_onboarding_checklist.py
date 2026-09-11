@@ -553,4 +553,21 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
             resolve_solo_trainer_capabilities(effective_studio_access_mode)
         )
 
+    # Heal stuck «хочу в каталог»: тумблер on, анкета готова, pending_profile, но
+    # moderation_submitted_at пуст — карусель/хаб иногда не вызывали submit (клиентский
+    # gate по stale readiness или finish без maybeAutoSubmit). Тогда админ-бот молчит,
+    # а тренер думает, что заявка ушла. Idempotent: already_submitted → noop.
+    if (
+        bool(out.get("is_catalog_visible"))
+        and bool(out.get("profile_complete"))
+        and not bool(out.get("is_active"))
+        and not bool(out.get("moderation_submitted"))
+        and st == TRAINER_STATUS_PENDING_PROFILE
+    ):
+        from src.application.trainer_use_cases import try_submit_trainer_for_moderation_review
+
+        heal = await try_submit_trainer_for_moderation_review(session, trainer_id)
+        if heal.get("submitted"):
+            out["moderation_submitted"] = True
+
     return out
