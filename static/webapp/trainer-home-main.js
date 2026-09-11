@@ -2853,10 +2853,26 @@
           enableHubCatalogListing();
           return;
         }
+        if (action === 'open_catalog_profile') {
+          openHubCatalogProfileGaps();
+          return;
+        }
         if (action === 'dismiss') {
           persistHubNextStepDismissed(step.key);
           renderHubNextStep(null);
         }
+      }
+
+      function hubCatalogNeedQuery() {
+        var missing =
+          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
+        if (!missing.length) return '';
+        return '&need=' + encodeURIComponent(missing.join(','));
+      }
+
+      /** Opt-in уже есть — только карусель по тем же gaps, что в тексте карточки. */
+      function openHubCatalogProfileGaps() {
+        navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
       }
 
       /**
@@ -2865,6 +2881,8 @@
        * Включение тумблера и есть просьба о публикации: сервер сам поставит карточку в очередь
        * на проверку, если анкета уже полная. Профиль открываем следом по task=catalog — рельс
        * из реальных submission-пробелов (имя/телефон/фото…), а не только витрина «о себе».
+       * `need=` дублирует catalog_missing_fields с карточки, чтобы карусель не открыла витрину,
+       * если moderation_readiness ещё не подгрузился.
        */
       function enableHubCatalogListing() {
         fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
@@ -2874,12 +2892,11 @@
         })
           .then(function () {
             if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            /* Сразу прячем приглашение: ответ уже дан, даже если модерация ещё впереди. */
-            renderHubNextStep(null);
-            navigateTo('trainer-profile?task=catalog&from=hub');
+            /* Не прячем next_step в null навсегда: после reload придёт catalog_finish при дырах. */
+            navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
           })
           .catch(function () {
-            navigateTo('trainer-profile?task=catalog&from=hub');
+            navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
           });
       }
 
