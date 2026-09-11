@@ -893,8 +893,8 @@ body.ar-pilot--ice .client-app-header {
 }
 
 /*
- * Режим карты: карта съедает чёрную дыру под чипами, мини-карточка лежит
- * поверх низа карты над пилюлей «Список» (пилюля остаётся у таб-бара).
+ * Режим карты: карта заполняет место под чипами; мини-карточка — ПОД картой
+ * в потоке (не overlay), чтобы не перекрывать пины. Пилюля «Список» у таб-бара.
  */
 body.ice-view-map .ice-tab {
   display: flex;
@@ -905,50 +905,55 @@ body.ice-view-map .ice-tab {
 
 body.ice-view-map .ice-sec--hero {
   flex: 0 0 auto;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+/* Список/поиск не должны оставлять чёрную дыру над картой. */
+body.ice-view-map #iceListSec,
+body.ice-view-map #iceSearchSec {
+  display: none !important;
 }
 
 body.ice-view-map .ice-map-wrap {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   position: relative;
-  padding: 0;
+  /* Место под пилюлю «Список» над таб-баром, чтобы она не ела карточку. */
+  padding: 0 0 58px;
 }
 
 body.ice-view-map .ice-map-stage {
   flex: 1 1 auto;
   height: auto;
-  min-height: 240px;
+  min-height: 200px;
 }
 
 body.ice-view-map .ice-map-sheet {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  /* Пилюля ~46px + зазор; sheet внутри wrap, чье дно уже над таб-баром. */
-  bottom: 58px;
-  margin: 0;
-  z-index: 3;
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 auto;
+  margin: 8px 12px 0;
+  z-index: 2;
   padding-bottom: 0;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 body.ice-view-map .ice-map-sheet:empty {
   display: none;
-}
-
-body.ice-view-map .ice-map-sheet .ice-acard,
-body.ice-view-map .ice-map-sheet .ice-empty {
-  pointer-events: auto;
+  margin: 0;
 }
 
 body.ice-view-map .ice-map-offmap {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 8px;
-  margin: 0;
-  z-index: 2;
+  flex: 0 0 auto;
+  margin: 6px 16px 0;
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
 }
 
 .ice-map-canvas {
