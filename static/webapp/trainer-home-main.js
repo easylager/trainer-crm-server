@@ -1973,7 +1973,7 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
-          navigateTo('trainer-profile?task=vitrine&from=hub');
+          openHubCatalogProfileGaps();
           return;
         }
         if (cand.action === 'trainer_referral') {
@@ -2842,7 +2842,7 @@
           return;
         }
         if (action === 'open_profile') {
-          navigateTo('trainer-profile?task=vitrine&from=hub');
+          openHubCatalogProfileGaps();
           return;
         }
         if (action === 'share_link') {

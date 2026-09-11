@@ -270,8 +270,8 @@
       }
 
       /**
-       * Одна карусель каталога: gaps в каноническом порядке, телефон всегда рядом с именем.
-       * Витрину (about/experience) не подмешиваем — иначе снова «вторая карусель».
+       * Одна самодостаточная карусель каталога: все submission-пробелы (имя, телефон, фото…).
+       * Без about/experience/education — они не нужны для очереди модерации.
        */
       function buildCatalogFocusedRail() {
         var steps = catalogSubmissionMissingStepKeys();
@@ -292,8 +292,29 @@
         for (i = 0; i < steps.length; i++) {
           if (out.indexOf(steps[i]) < 0) out.push(steps[i]);
         }
-        /* Готово к модерации — карусель не открываем (пустой рельс → сразу finish/submit). */
         return out;
+      }
+
+      function startFocusedProfileTask(task, from) {
+        /* vitrine → тот же catalog-флоу (одна карусель для попадания в каталог). */
+        if (task === 'vitrine') task = 'catalog';
+        var spec = PROFILE_FOCUSED_TASKS[task];
+        if (!spec) return;
+        state.profileFocusedTask = task;
+        state.profileFocusedReturn = from === 'onboarding' ? 'onboarding' : 'hub';
+        state.profileBlockTourActive = true;
+        state.profileBlockTourHubRedirectScheduled = false;
+        profileBlockTourResetWizardStacks();
+        var rail = task === 'catalog' ? buildCatalogFocusedRail() : spec.rail.slice();
+        if (task === 'catalog' && !rail.length) {
+          finishFocusedProfileTask();
+          return;
+        }
+        if (!rail.length) rail = spec.rail.slice();
+        state.profileBlockTourSessionSealOrder = rail;
+        state.profileBlockTourDisplayedStepOverride = rail[0];
+        state.profileBlockTourSessionVisitedLastForward = false;
+        syncProfileBlockTourBar();
       }
 
       function catalogLocalPhoneE164() {
@@ -2564,19 +2585,22 @@
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
-        vitrine: {
-          rail: ['photo', 'about', 'experience', 'education'],
+        /*
+         * Единственная карусель «в каталог». Старый task=vitrine (фото/о себе/образование)
+         * оставляем как алиас — иначе хаб/инбокс открывали витрину без телефона.
+         */
+        catalog: {
+          rail: ['anketa_main', 'phone', 'photo'],
           title: 'Карточка для каталога',
-          subtitle: 'Это витрина, не кабинет. Можно пропустить любой шаг — записи уже идут.',
-          stepLabel: 'Витрина',
+          subtitle: 'Имя, телефон и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
+          stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
         },
-        /* С хаба «Хочу в каталог»: одна карусель по submission gaps (имя + телефон…). */
-        catalog: {
-          rail: ['anketa_main', 'phone'],
+        vitrine: {
+          rail: ['anketa_main', 'phone', 'photo'],
           title: 'Карточка для каталога',
-          subtitle: 'Имя и телефон — обязательно. Фамилию можно пропустить.',
+          subtitle: 'Имя, телефон и фото — чтобы отправить на проверку. Фамилию можно пропустить.',
           stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
@@ -2730,27 +2754,6 @@
         resetObFlowInsetCache();
         var extra = document.getElementById('profileContactsExtraField');
         if (extra) extra.hidden = false;
-      }
-
-      function startFocusedProfileTask(task, from) {
-        var spec = PROFILE_FOCUSED_TASKS[task];
-        if (!spec) return;
-        state.profileFocusedTask = task;
-        state.profileFocusedReturn = from === 'onboarding' ? 'onboarding' : 'hub';
-        state.profileBlockTourActive = true;
-        state.profileBlockTourHubRedirectScheduled = false;
-        profileBlockTourResetWizardStacks();
-        var rail = task === 'catalog' ? buildCatalogFocusedRail() : spec.rail.slice();
-        if (task === 'catalog' && !rail.length) {
-          /* Пробелов нет — сразу submit / хаб, без пустой карусели. */
-          finishFocusedProfileTask();
-          return;
-        }
-        if (!rail.length) rail = spec.rail.slice();
-        state.profileBlockTourSessionSealOrder = rail;
-        state.profileBlockTourDisplayedStepOverride = rail[0];
-        state.profileBlockTourSessionVisitedLastForward = false;
-        syncProfileBlockTourBar();
       }
 
       function focusedTaskReturnUrl() {
