@@ -1,5 +1,5 @@
 /**
- * Ice map layout: fill viewport; mini card above «Список», not under it.
+ * Ice map: mini card below the map (not over pins); list pill at tab bar.
  * Run: node --test tests/js/ice-map-sheet-fab.test.js
  */
 'use strict';
@@ -15,25 +15,26 @@ function read(name) {
   return fs.readFileSync(path.join(webapp, name), 'utf8');
 }
 
-describe('ice map layout (карта + мини-карточка)', () => {
-  it('в режиме карты растягивает сцену и не поднимает пилюлю в центр', () => {
+describe('ice map layout — карточка под картой', () => {
+  it('мини-карточка в потоке, не absolute overlay', () => {
     const css = read('ice-tab.css');
-    assert.match(css, /body\.ice-view-map\s+\.ice-map-stage/);
-    assert.match(css, /body\.ice-view-map\s+\.ice-map-sheet/);
-    assert.ok(!/ice-map-sheet-open/.test(css), 'старый сдвиг пилюли в центр убран');
+    const block = css.slice(
+      css.indexOf('body.ice-view-map .ice-map-sheet {'),
+      css.indexOf('body.ice-view-map .ice-map-sheet:empty')
+    );
+    assert.match(block, /position:\s*relative/);
+    assert.ok(!/position:\s*absolute/.test(block), 'не должна перекрывать пины');
   });
 
-  it('мини-карточка absolute над пилюлей, пилюля остаётся у таб-бара', () => {
+  it('список скрыт в режиме карты (без чёрной дыры над картой)', () => {
     const css = read('ice-tab.css');
-    const sheet = css.slice(css.indexOf('body.ice-view-map .ice-map-sheet'), css.indexOf('body.ice-view-map .ice-map-sheet:empty'));
-    assert.match(sheet, /position:\s*absolute/);
-    assert.match(sheet, /bottom:\s*58px/);
-    assert.ok(!/ice-map-sheet-open[\s\S]{0,80}104px/.test(css));
+    assert.match(css, /body\.ice-view-map\s+#iceListSec/);
+    assert.match(css, /display:\s*none\s*!important/);
   });
 
-  it('тело помечается ice-view-map при включении карты', () => {
-    const js = read('ice-tab.js');
-    assert.match(js, /ice-view-map/);
-    assert.ok(!/scrollIntoView/.test(js) || !/mapSec\.scrollIntoView/.test(js));
+  it('после paintSheet вызывается fitToViewport', () => {
+    const js = read('ice-map.js');
+    assert.match(js, /fitToViewport/);
+    assert.match(js, /Sheet in-flow changes map stage height/);
   });
 });

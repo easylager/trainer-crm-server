@@ -214,11 +214,19 @@
       if (!sheetEl) return;
       if (!item) {
         sheetEl.innerHTML = '';
-        return;
+      } else {
+        var meta = MM.formatSheetMeta(item, { nearest: asNearest });
+        if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
+        sheetEl.innerHTML = sheetHtml(item, meta, arenaHref(item));
       }
-      var meta = MM.formatSheetMeta(item, { nearest: asNearest });
-      if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
-      sheetEl.innerHTML = sheetHtml(item, meta, arenaHref(item));
+      /* Sheet in-flow changes map stage height — keep Yandex viewport in sync. */
+      if (map && map.container && typeof map.container.fitToViewport === 'function') {
+        try {
+          map.container.fitToViewport();
+        } catch (err) {
+          /* ignore */
+        }
+      }
     }
 
     function defaultSheet() {
