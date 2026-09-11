@@ -178,6 +178,26 @@ def test_working_practice_gets_no_card_at_all() -> None:
     assert step is None
 
 
+def test_catalog_invite_gone_after_opt_in_even_before_moderation() -> None:
+    """
+    «Хочу в каталог» включает is_catalog_visible сразу; status=active — только после модерации.
+    Пока админ не одобрил, клиенты тренера не видят — но приглашение уже отвечено и не
+    должно снова висеть на хабе с той же кнопкой.
+    """
+    step = resolve_trainer_next_step(
+        _checklist(
+            weekly_template_count=5,
+            has_future_slots=True,
+            has_any_booking=True,
+            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
+            is_active=False,
+            is_catalog_visible=True,
+            catalog_missing_fields=["phone"],
+        )
+    )
+    assert step is None
+
+
 def test_deactivated_and_studio_trainers_are_left_alone() -> None:
     assert resolve_trainer_next_step(_checklist(schedule_unlocked=False)) is None
     assert resolve_trainer_next_step(_checklist(studio_access_mode="admin_only")) is None

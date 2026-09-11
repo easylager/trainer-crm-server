@@ -95,7 +95,10 @@ def resolve_trainer_next_step(
     # must not hide the «отправьте ссылку ученику» card — see TASK-027.
     has_booking = bool(checklist.get("has_real_booking"))
     real_bookings = int(checklist.get("real_bookings_count") or 0)
-    in_catalog = bool(checklist.get("is_active")) and bool(checklist.get("is_catalog_visible"))
+    # Opt-in (тумблер / «Хочу в каталог») — ответ на приглашение. Публикация в клиентском
+    # каталоге ещё требует модерации (status=active), но карточку-приглашение после согласия
+    # держать нельзя: тренер уже сказал «да», дозаполнение и «на проверке» живут в инбоксе.
+    catalog_invite_answered = bool(checklist.get("is_catalog_visible")) or catalog_invite_dismissed
 
     # 1. Недели нет — работать нечем. Это единственный по-настоящему обязательный шаг.
     if not has_week and not has_slots:
@@ -143,11 +146,7 @@ def resolve_trainer_next_step(
     # Повторять ссылку — дело хинтов, не отдельного блока на хабе.
 
     # 5. Поток есть — только теперь каталог перестаёт быть обещанием и становится предложением.
-    if (
-        real_bookings >= CATALOG_INVITE_MIN_BOOKINGS
-        and not in_catalog
-        and not catalog_invite_dismissed
-    ):
+    if real_bookings >= CATALOG_INVITE_MIN_BOOKINGS and not catalog_invite_answered:
         word = _plural(real_bookings, "занятие", "занятия", "занятий")
         need = _catalog_card_requirements(checklist.get("catalog_missing_fields"))
         tail = f"Для карточки не хватает: {need}." if need else "Карточка уже готова."

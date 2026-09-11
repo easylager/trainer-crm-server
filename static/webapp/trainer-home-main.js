@@ -2863,8 +2863,8 @@
        * «Хочу в каталог» — включаем показ и открываем профиль.
        *
        * Включение тумблера и есть просьба о публикации: сервер сам поставит карточку в очередь
-       * на проверку, если анкета уже полная. Профиль открываем следом, потому что чаще всего
-       * чего-то не хватает, и список недостающего живёт там.
+       * на проверку, если анкета уже полная. Профиль открываем следом по task=catalog — рельс
+       * из реальных submission-пробелов (имя/телефон/фото…), а не только витрина «о себе».
        */
       function enableHubCatalogListing() {
         fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
@@ -2874,10 +2874,12 @@
         })
           .then(function () {
             if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            navigateTo('trainer-profile?task=vitrine&from=hub');
+            /* Сразу прячем приглашение: ответ уже дан, даже если модерация ещё впереди. */
+            renderHubNextStep(null);
+            navigateTo('trainer-profile?task=catalog&from=hub');
           })
           .catch(function () {
-            navigateTo('trainer-profile?task=vitrine&from=hub');
+            navigateTo('trainer-profile?task=catalog&from=hub');
           });
       }
 
