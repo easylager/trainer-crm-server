@@ -39,4 +39,25 @@ describe('catalog carousel — одна самодостаточная кару�
     assert.ok(!/education/.test(catalogBlock));
     assert.ok(!/about/.test(catalogBlock));
   });
+
+  it('«Не сейчас» / крестик не шлют на модерацию', () => {
+    const js = read('trainer-profile-main.js');
+    assert.match(js, /finishFocusedProfileTask\(\{ submit: false \}\)/);
+    assert.match(js, /finishFocusedProfileTask\(\{ submit: true \}\)/);
+    assert.match(
+      js,
+      /wantSubmit = opts\.submit === true/
+    );
+    /* Force-submit только внутри ветки wantSubmit, не на каждый finish. */
+    const finishFn = js.slice(
+      js.indexOf('function finishFocusedProfileTask'),
+      js.indexOf('function syncProfileBlockTourBar')
+    );
+    assert.match(finishFn, /if \(!wantSubmit \|\| !catalogish\)/);
+    assert.match(finishFn, /maybeAutoSubmitForModeration\(\{ force: true \}\)/);
+    assert.ok(
+      finishFn.indexOf('if (!wantSubmit || !catalogish)') <
+        finishFn.indexOf('maybeAutoSubmitForModeration({ force: true })')
+    );
+  });
 });
