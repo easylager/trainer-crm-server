@@ -354,9 +354,15 @@ async def ensure_trainer_profile_row(session: AsyncSession, trainer_id: int) -> 
 
 async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession, trainer_id: int) -> None:
     """
-    Invariant: moderation_feedback + moderation_submitted_at only apply when the aggregate meets
-    submission readiness (8 criteria). If submission is incomplete and status is pending_profile,
-    clear both so partial drafts never look «in moderation» or retain stale moderator comments.
+    Invariant: moderation_submitted_at only applies when the aggregate meets submission
+    readiness (8 criteria). If submission is incomplete and status is pending_profile, clear the
+    queue stamp so a partial draft never looks «in moderation».
+
+    Does NOT touch moderation_feedback: that is the moderator's own comment, not a queue-state
+    flag. A carousel walking several missing fields one PATCH at a time is "incomplete" on every
+    step until the last one — clearing feedback here wiped the moderator's note the instant the
+    trainer saved the *first* fixed field, before they had addressed the rest. Feedback is only
+    meant to clear on an actual resubmit (mark_queued_for_moderation_review).
     """
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
@@ -366,13 +372,10 @@ async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession
     st = (trainer.get("status") or "").strip()
     if st != TRAINER_STATUS_PENDING_PROFILE:
         return
-    fb = trainer.get("moderation_feedback")
-    sub_at = trainer.get("moderation_submitted_at")
-    fb_empty = fb is None or (isinstance(fb, str) and not str(fb).strip())
-    if fb_empty and sub_at is None:
+    if trainer.get("moderation_submitted_at") is None:
         return
     repo = TrainerRepository(session)
-    await repo.clear_moderation_feedback_and_submitted_at(trainer_id)
+    await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
 
 
@@ -449,6 +452,38 @@ async def discard_active_trainer_text_revision_with_feedback(
     await repo.set_moderation_feedback(trainer_id, feedback)
     await session.commit()
     return True
+
+
+def _pending_trainer_patch_has_real_change(
+    trainer: dict[str, Any],
+    updates: dict[str, Any],
+    service_ids: list[int] | None,
+    services: list[dict[str, Any]] | None,
+    arena_ids: list[int] | None,
+) -> bool:
+    """
+    True only if the patch actually moves a submission-relevant value (profile fields,
+    services, arenas) versus what is already stored. A pending_profile trainer's carousel
+    saves one PATCH per step; without this check, resending an unchanged value (or patching
+    an unrelated field like schedule_grid_step_minutes) cleared moderation_submitted_at and
+    re-triggered a fresh admin notification on every step.
+    """
+    if updates and active_trainer_revision_diff(trainer, updates):
+        return True
+    if services is not None or service_ids is not None:
+        new_ids = (
+            {int(s["service_id"]) for s in services}
+            if services is not None
+            else {int(x) for x in (service_ids or [])}
+        )
+        cur_ids = {int(x) for x in (trainer.get("service_ids") or [])}
+        if new_ids != cur_ids:
+            return True
+    if arena_ids is not None:
+        cur_arena_ids = {int(x) for x in (trainer.get("arena_ids") or [])}
+        if {int(x) for x in arena_ids} != cur_arena_ids:
+            return True
+    return False
 
 
 async def update_trainer_profile(
@@ -563,8 +598,7 @@ async def update_trainer_profile(
         await repo.set_schedule_grid_step_minutes(
             trainer_id, normalize_trainer_schedule_grid_step(schedule_grid_step_minutes)
         )
-    dirty = bool(updates) or services is not None or service_ids is not None or arena_ids is not None or primary_arena_id_set
-    if dirty:
+    if _pending_trainer_patch_has_real_change(trainer, updates, service_ids, services, arena_ids):
         await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
     await _demote_status_if_profile_incomplete(session, trainer_id)
@@ -600,9 +634,10 @@ async def update_trainer_status(session: AsyncSession, trainer_id: int, status: 
 
 async def set_trainer_catalog_visibility(session: AsyncSession, trainer_id: int, *, visible: bool) -> bool:
     """Toggle public catalog listing; trainer may remain status=active."""
-    repo = TrainerRepository(session)
-    if not await repo.exists(trainer_id):
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
         return False
+    repo = TrainerRepository(session)
     if not await repo.set_is_catalog_visible(trainer_id, visible):
         return False
     if visible:
@@ -612,6 +647,12 @@ async def set_trainer_catalog_visibility(session: AsyncSession, trainer_id: int,
         )
 
         await record_feature_first_use(session, trainer_id, FEATURE_CATALOG_ENABLED)
+    elif (trainer.get("status") or "").strip() == TRAINER_STATUS_PENDING_PROFILE:
+        # Opting out withdraws the queue stamp: admin's /pending already excludes opted-out
+        # trainers (list_trainer_ids_eligible_for_admin_moderation checks is_catalog_visible),
+        # but without this the stamp survives and a later opt-in silently no-ops as
+        # "already_submitted" instead of queuing + notifying admins as a fresh request.
+        await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
     return True
 

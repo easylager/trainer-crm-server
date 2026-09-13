@@ -99,6 +99,14 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     # «Отправлен на проверку», а не «готов к отправке»: profile_complete — это лишь 8 критериев.
     # Сбрасывается в False, когда модерация вернула фидбек, — шаг снова становится действием.
     moderation_submitted = bool(readiness and readiness.get("already_submitted_for_moderation"))
+    moderation_feedback = trainer.get("moderation_feedback")
+    moderation_feedback = moderation_feedback.strip() if isinstance(moderation_feedback, str) else ""
+    # Опубликоваться попросили (тумблер on), заявка в pending_profile, и модератор оставил
+    # комментарий — это действие, а не фоновое ожидание: хаб должен показать его отдельно
+    # от «хотите в каталог» и не зависеть от порога записей/показа «Не сейчас».
+    catalog_needs_revision = bool(
+        trainer.get("is_catalog_visible") and st == TRAINER_STATUS_PENDING_PROFILE and moderation_feedback
+    )
 
     out: dict[str, Any] = {
         "trainer_status": st,
@@ -108,6 +116,8 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,
         "moderation_submitted": moderation_submitted,
+        "moderation_feedback": moderation_feedback or None,
+        "catalog_needs_revision": catalog_needs_revision,
         "weekly_template_count": 0,
         "slots_this_week_count": 0,
         "slots_next_week_count": 0,
@@ -552,22 +562,5 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["capabilities"] = organization_capabilities_to_dict(
             resolve_solo_trainer_capabilities(effective_studio_access_mode)
         )
-
-    # Heal stuck «хочу в каталог»: тумблер on, анкета готова, pending_profile, но
-    # moderation_submitted_at пуст — карусель/хаб иногда не вызывали submit (клиентский
-    # gate по stale readiness или finish без maybeAutoSubmit). Тогда админ-бот молчит,
-    # а тренер думает, что заявка ушла. Idempotent: already_submitted → noop.
-    if (
-        bool(out.get("is_catalog_visible"))
-        and bool(out.get("profile_complete"))
-        and not bool(out.get("is_active"))
-        and not bool(out.get("moderation_submitted"))
-        and st == TRAINER_STATUS_PENDING_PROFILE
-    ):
-        from src.application.trainer_use_cases import try_submit_trainer_for_moderation_review
-
-        heal = await try_submit_trainer_for_moderation_review(session, trainer_id)
-        if heal.get("submitted"):
-            out["moderation_submitted"] = True
 
     return out

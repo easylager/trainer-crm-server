@@ -30,7 +30,15 @@ async def list_trainer_ids_eligible_for_admin_moderation(session: AsyncSession) 
             )
             if has_queue:
                 eligible_ids.append(int(tid))
-        elif st == TRAINER_STATUS_PENDING_PROFILE and is_ready_for_moderation_submission(full):
+        elif (
+            st == TRAINER_STATUS_PENDING_PROFILE
+            and bool(full.get("is_catalog_visible"))
+            and is_ready_for_moderation_submission(full)
+        ):
+            # is_catalog_visible gate: a trainer who opted out (or never opted in) must not
+            # show up for admin approval just because their fields happen to be complete —
+            # same "publication is the trainer's decision" rule as the submit endpoint
+            # (try_submit_trainer_for_moderation_review), applied to the /pending listing too.
             eligible_ids.append(int(tid))
     return eligible_ids
 
