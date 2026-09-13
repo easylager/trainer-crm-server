@@ -61,6 +61,16 @@ STEP_REFRESH_WEEK = "refresh_week"
 STEP_SHARE_LINK = "share_link"
 STEP_SET_ARENA = "set_arena"
 STEP_CATALOG_INVITE = "catalog_invite"
+STEP_CATALOG_NEEDS_REVISION = "catalog_needs_revision"
+
+_FEEDBACK_PREVIEW_MAX_CHARS = 140
+
+
+def _feedback_preview(text: str) -> str:
+    t = text.strip()
+    if len(t) <= _FEEDBACK_PREVIEW_MAX_CHARS:
+        return t
+    return t[:_FEEDBACK_PREVIEW_MAX_CHARS].rstrip() + "…"
 
 
 def _plural(n: int, one: str, few: str, many: str) -> str:
@@ -134,6 +144,24 @@ def resolve_trainer_next_step(
                 "Он выберет время сам — вам придёт уведомление."
             ),
             "cta": {"label": "Отправить ученику", "action": ACTION_SHARE_LINK},
+            "secondary": None,
+        }
+
+    # 4. Модератор попросил правки по карточке каталога. Это действие, а не рост-приглашение:
+    #    показываем сразу, независимо от порога записей и от «Не сейчас» на первичном приглашении —
+    #    тренер уже сам попросился в каталог, ждать 5 занятий тут бессмысленно.
+    if bool(checklist.get("catalog_needs_revision")):
+        feedback = checklist.get("moderation_feedback") or ""
+        return {
+            "key": STEP_CATALOG_NEEDS_REVISION,
+            "title": "Модератор попросил поправить карточку",
+            "body": (
+                f"«{_feedback_preview(str(feedback))}» — исправьте в анкете и сохраните, "
+                "заявка уйдёт на повторную проверку автоматически."
+                if feedback
+                else "Откройте анкету, чтобы увидеть комментарий, исправьте и сохраните."
+            ),
+            "cta": {"label": "Исправить анкету", "action": ACTION_OPEN_CATALOG_PROFILE},
             "secondary": None,
         }
 

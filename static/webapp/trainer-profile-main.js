@@ -1685,6 +1685,16 @@
         if (st !== 'pending_profile') return Promise.resolve({ kind: 'wrong_status' });
         if (d.already_submitted_for_moderation) return Promise.resolve({ kind: 'already' });
         if (!opts.force && !d.complete) return Promise.resolve({ kind: 'incomplete_client' });
+        /* Модератор оставил комментарий: submission tier уже выполнен (иначе заявка не дошла
+           бы до проверки), поэтому d.complete держится true всю сессию правок. Внутри
+           фокусной карусели (несколько шагов = несколько PATCH до явного «Готово») это
+           раньше означало резотправку и стирание фидбека уже на первом промежуточном шаге,
+           до того как тренер реально что-то поправил. Вне карусели (Анкета/фото/образование/
+           тумблер) сохранение — уже единственное деливерат-действие, там резотправка нужна
+           сразу, как и просит баннер «внесите правки и снова сохраните анкету». */
+        if (!opts.force && state.profileFocusedTask && t.moderation_feedback) {
+          return Promise.resolve({ kind: 'needs_revision_pending_finish' });
+        }
         return fetch(apiUrl('/trainer/onboarding/submit-for-moderation'), {
           method: 'POST',
           headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
@@ -2793,10 +2803,20 @@
 
         function overlayFromSubmitResult(result) {
           result = result || {};
-          if (result.kind === 'submitted' || result.kind === 'already' || result.kind === 'noop') {
+          if (result.kind === 'submitted') {
             showProfileToHubTransitionOverlay({
               title: 'Отправили на проверку',
               hint: 'В каталоге появитесь после модерации — это не мгновенно',
+            });
+            return;
+          }
+          /* 'already' / noop — ничего заново не отправляли, заявка и так уже в очереди.
+             Раньше эта ветка показывала тот же тост «Отправили на проверку», что и реальную
+             отправку — тренер не мог отличить новую заявку от уже поданной. */
+          if (result.kind === 'already' || result.kind === 'noop') {
+            showProfileToHubTransitionOverlay({
+              title: 'Сохранили',
+              hint: 'Заявка уже на проверке у модератора — новую отправлять не нужно',
             });
             return;
           }
@@ -3767,6 +3787,7 @@
        */
       function renderCatalogVisibility() {
         var t = state.trainer || {};
+        var d = state.moderation_readiness || {};
         var st = (t.status || '').trim();
         var shellTitle = document.getElementById('catalogVisibilityShell');
         var card = document.getElementById('catalogVisibilityCard');
@@ -3789,8 +3810,18 @@
             ? 'Клиенты находят вас в общем списке. Выключите — останется запись по вашей ссылке.'
             : 'Вас нет в общем списке. Запись по вашей ссылке работает как обычно.';
         } else if (want) {
-          hintEl.textContent =
-            'Готовим карточку к проверке. Как только всё будет заполнено, отправим её модератору.';
+          /* Тумблер включён не значит «уже в каталоге» — уточняем реальный этап тем же
+             состоянием, что показывает подробный блок ниже, чтобы «включено» и «не вижу себя
+             в каталоге» не выглядели противоречием. */
+          var fbNow = t.moderation_feedback;
+          if (fbNow != null && String(fbNow).trim()) {
+            hintEl.textContent = 'Модератор попросил доработать карточку — подробности ниже.';
+          } else if (d.already_submitted_for_moderation) {
+            hintEl.textContent = 'Заявка на проверке у модератора — обычно отвечаем в течение рабочего дня.';
+          } else {
+            hintEl.textContent =
+              'Готовим карточку к проверке. Как только всё будет заполнено, отправим её модератору.';
+          }
         } else {
           hintEl.textContent =
             'Пока только по вашей ссылке — это нормально. Включите, когда захотите, чтобы вас находили новые ученики.';
