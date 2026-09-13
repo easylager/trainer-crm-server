@@ -1,4 +1,8 @@
-"""Stale moderation queue state is cleared when the aggregate is incomplete for moderation."""
+"""Stale moderation queue stamp is cleared when the aggregate is incomplete for moderation.
+
+moderation_feedback (the moderator's own comment) must survive an incomplete aggregate —
+only moderation_submitted_at (the queue-membership stamp) is a function of readiness.
+"""
 import pytest
 from sqlalchemy import text
 
@@ -13,7 +17,9 @@ from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 
 
 @pytest.mark.asyncio
-async def test_moderation_feedback_cleared_when_profile_becomes_incomplete(db_session) -> None:
+async def test_moderation_submitted_at_cleared_but_feedback_kept_when_profile_becomes_incomplete(
+    db_session,
+) -> None:
     r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
     sid = r.scalar()
     r2 = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
@@ -71,8 +77,10 @@ async def test_moderation_feedback_cleared_when_profile_becomes_incomplete(db_se
     row2 = await get_trainer(db_session, tid)
     assert row2 is not None
     assert row2["status"] == "pending_profile"
-    assert row2.get("moderation_feedback") is None
+    # Queue stamp drops (draft no longer looks "submitted")...
     assert row2.get("moderation_submitted_at") is None
+    # ...but the moderator's own comment is not this function's to erase.
+    assert (row2.get("moderation_feedback") or "").strip() == "Исправьте описание"
 
 
 @pytest.mark.asyncio

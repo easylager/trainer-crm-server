@@ -1223,19 +1223,6 @@ class TrainerRepository:
             {"id": trainer_id},
         )
 
-    async def clear_moderation_feedback_and_submitted_at(self, trainer_id: int) -> None:
-        """Drop queue state when profile is no longer eligible for moderation (incomplete aggregate)."""
-        await self._session.execute(
-            text(
-                """
-                UPDATE trainers
-                SET moderation_feedback = NULL, moderation_submitted_at = NULL
-                WHERE id = :id
-                """
-            ),
-            {"id": trainer_id},
-        )
-
     async def mark_queued_for_moderation_review(self, trainer_id: int) -> bool:
         """Clear feedback and stamp submit time (idempotent duplicate detection). Returns True if row exists."""
         r = await self._session.execute(
