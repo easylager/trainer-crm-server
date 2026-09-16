@@ -50,13 +50,25 @@
   }
 
   /**
+   * The nearest match has no distance cap on the server (it always returns the closest
+   * item in the whole database, however far). A visitor with no served city nearby would
+   * otherwise get silently assigned whatever city happens to be geographically closest —
+   * e.g. someone thousands of km away still "matches" Minsk. Beyond this radius we treat
+   * it as "no confident match" rather than guessing.
+   */
+  var MAX_MATCH_DISTANCE_KM = 150;
+
+  /**
    * Extract a usable city_id from GET /api/public/ice/arenas?near=...&limit=1.
-   * Defensive against empty/malformed responses — never throws.
+   * Defensive against empty/malformed responses — never throws. Rejects matches farther
+   * than MAX_MATCH_DISTANCE_KM (see above) — a distant nearest-anything is not a real match.
    */
   function pickCityFromNearResponse(data) {
     if (!data || !Array.isArray(data.items) || !data.items.length) return null;
     var first = data.items[0];
     if (!first || first.city_id == null) return null;
+    var dist = first.distance_km;
+    if (dist != null && Number(dist) > MAX_MATCH_DISTANCE_KM) return null;
     var id = parseInt(first.city_id, 10);
     return isNaN(id) || id <= 0 ? null : id;
   }
@@ -85,6 +97,7 @@
 
   return {
     DECLINED_STORAGE_KEY: DECLINED_STORAGE_KEY,
+    MAX_MATCH_DISTANCE_KM: MAX_MATCH_DISTANCE_KM,
     shouldAutoGeolocate: shouldAutoGeolocate,
     pickCityFromNearResponse: pickCityFromNearResponse,
     buildNearUrl: buildNearUrl,

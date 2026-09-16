@@ -97,6 +97,33 @@ describe('pickCityFromNearResponse', () => {
     assert.equal(M.pickCityFromNearResponse({ items: [{ city_id: 0 }] }), null);
     assert.equal(M.pickCityFromNearResponse({ items: [{ city_id: -3 }] }), null);
   });
+
+  it('accepts a match within MAX_MATCH_DISTANCE_KM', () => {
+    const M = loadModel();
+    assert.equal(
+      M.pickCityFromNearResponse({ items: [{ city_id: 7, distance_km: M.MAX_MATCH_DISTANCE_KM }] }),
+      7
+    );
+  });
+
+  it('rejects a match farther than MAX_MATCH_DISTANCE_KM — no served city nearby, don\'t guess', () => {
+    const M = loadModel();
+    assert.equal(
+      M.pickCityFromNearResponse({ items: [{ city_id: 7, distance_km: M.MAX_MATCH_DISTANCE_KM + 1 }] }),
+      null
+    );
+    // Real-world case this guards against: visitor far from any served city still gets
+    // a "nearest" result back from the server (it has no distance cap of its own).
+    assert.equal(
+      M.pickCityFromNearResponse({ items: [{ city_id: 1, distance_km: 6500 }] }),
+      null
+    );
+  });
+
+  it('accepts a match with no distance_km field (backend didn\'t compute one)', () => {
+    const M = loadModel();
+    assert.equal(M.pickCityFromNearResponse({ items: [{ city_id: 5 }] }), 5);
+  });
 });
 
 describe('buildNearUrl', () => {
