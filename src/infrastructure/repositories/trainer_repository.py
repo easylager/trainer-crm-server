@@ -1418,7 +1418,7 @@ class TrainerRepository:
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
-                   t.primary_arena_id
+                   t.primary_arena_id, t.arena_work_format
         """
         if order_by == "rating":
             # Bayesian: (v/(v+m))*R + (m/(v+m))*C. Must be in SELECT when using DISTINCT (PG rule).
@@ -1436,7 +1436,7 @@ class TrainerRepository:
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
-                   t.primary_arena_id,
+                   t.primary_arena_id, t.arena_work_format,
                    ({has_rating_expr}) AS _has_rating,
                    ({score_expr}) AS _score
         """
@@ -1621,10 +1621,12 @@ class TrainerRepository:
             tid = row[0]
             arena_ids = arenas_by_id.get(tid, [])
             arena_names = [arena_names_by_id.get(aid, "—") for aid in arena_ids]
-            # session_duration_minutes=13, min_hours_before_booking=14, primary_arena_id=15; rating: _has_rating=16, _score=17
+            # session_duration_minutes=13, min_hours_before_booking=14, primary_arena_id=15,
+            # arena_work_format=16; rating: _has_rating=17, _score=18
             duration = row[13] if len(row) > 13 and row[13] is not None else 45
             min_hours = int(row[14]) if len(row) > 14 and row[14] is not None else 3
             primary_arena_id = row[15] if len(row) > 15 else None
+            arena_work_format = (str(row[16]).strip() or None) if len(row) > 16 and row[16] is not None else None
             primary_arena_name = (
                 (arena_names_by_id.get(primary_arena_id) or "").strip() or None
                 if primary_arena_id is not None
@@ -1657,6 +1659,7 @@ class TrainerRepository:
                     "arena_names": arena_names,
                     "primary_arena_id": primary_arena_id,
                     "primary_arena_name": primary_arena_name,
+                    "arena_work_format": arena_work_format,
                     "free_slots_14d": free_slots_by_id.get(tid, 0),
                     "has_pass_products": tid in pass_trainer_ids,
                     "has_certificate_products": tid in cert_trainer_ids,

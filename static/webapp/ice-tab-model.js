@@ -378,7 +378,11 @@
     item = item || {};
     var p = item.profile || {};
     var parts = [];
-    if (item.primary_arena_name) parts.push(String(item.primary_arena_name));
+    if (item.primary_arena_name) {
+      parts.push(String(item.primary_arena_name));
+    } else if (item.arena_work_format === 'online') {
+      parts.push('Онлайн');
+    }
 
     /*
      * Факты для выбора, по убыванию силы: цена → стаж → рейтинг.

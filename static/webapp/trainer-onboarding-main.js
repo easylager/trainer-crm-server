@@ -901,6 +901,22 @@
     syncDurationLock();
     renderGrid();
     syncCta();
+    if (mode === 'online') submitArenaOnlineFormat();
+  }
+
+  /* «Онлайн» takes effect immediately (like arena create) rather than waiting for the final
+     quick-setup submit — same endpoint the profile screen uses, client-visible: an "Онлайн"
+     tag replaces the arena name on this trainer's card in «Лёд» (ice-tab-model.js). */
+  function submitArenaOnlineFormat() {
+    fetch(apiUrl('/trainer/profile/arena-setup'), {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ mode: 'online' }),
+    })
+      .then(function (r) { return r.ok ? null : Promise.reject(); })
+      .catch(function () {
+        note('Не удалось сохранить формат «Онлайн». Проверьте соединение и попробуйте ещё раз.', true);
+      });
   }
 
   /* ── Сетка недели ── */

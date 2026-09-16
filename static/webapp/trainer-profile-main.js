@@ -5853,6 +5853,13 @@
           );
           return;
         }
+        if (fmt === 'online') {
+          showArenaSetupStatus(
+            'Вы указали формат «Онлайн» — клиенты видят пометку «Онлайн» вместо площадки. Сетку расписания задаёте в «Настройках».',
+            'ok'
+          );
+          return;
+        }
         if (fmt === 'pending_request') {
           var txt = (state.trainer.arena_request_text || '').trim();
           showArenaSetupStatus(
@@ -5886,37 +5893,54 @@
         btnMobile.className = 'filter-btn arena-empty-btn';
         btnMobile.textContent = 'Занимаюсь выездом / без постоянной площадки';
         btnMobile.addEventListener('click', function() {
-          if (
-            !window.confirm(
-              'Выездной формат без привязки к арене из справочника. Продолжить?'
-            )
-          ) {
-            return;
-          }
-          var er = document.getElementById('err_arena_setup');
-          btnMobile.disabled = true;
-          postArenaSetup({ mode: 'mobile' })
-            .then(function(o) {
-              btnMobile.disabled = false;
-              if (!o.ok) {
-                if (er) {
-                  er.textContent = arenaSetupErrorDetail(o.data, o.status);
-                  er.hidden = false;
-                }
-                return;
-              }
-              afterArenaSetupSuccess(o.data);
-            })
-            .catch(function() {
-              btnMobile.disabled = false;
-              if (er) {
-                er.textContent = 'Не удалось сохранить. Проверьте соединение.';
-                er.hidden = false;
-              }
-            });
+          submitArenaWorkFormat(
+            'mobile',
+            btnMobile,
+            'Выездной формат без привязки к арене из справочника. Продолжить?'
+          );
         });
         box.appendChild(btnMobile);
+
+        var btnOnline = document.createElement('button');
+        btnOnline.type = 'button';
+        btnOnline.className = 'filter-btn arena-empty-btn';
+        btnOnline.textContent = 'Провожу занятия онлайн';
+        btnOnline.addEventListener('click', function() {
+          submitArenaWorkFormat(
+            'online',
+            btnOnline,
+            'Без привязки к арене — в «Лёд» клиенты увидят у вас пометку «Онлайн» вместо площадки. Продолжить?'
+          );
+        });
+        box.appendChild(btnOnline);
         if (!profileArenaPickerEnabled()) renderArenaSupportBlock(box);
+      }
+
+      /* Shared by "Занимаюсь выездом" / "Провожу занятия онлайн" — same request shape
+         (POST /trainer/profile/arena-setup, mode = work format), same success/error handling. */
+      function submitArenaWorkFormat(mode, btn, confirmText) {
+        if (!window.confirm(confirmText)) return;
+        var er = document.getElementById('err_arena_setup');
+        btn.disabled = true;
+        postArenaSetup({ mode: mode })
+          .then(function(o) {
+            btn.disabled = false;
+            if (!o.ok) {
+              if (er) {
+                er.textContent = arenaSetupErrorDetail(o.data, o.status);
+                er.hidden = false;
+              }
+              return;
+            }
+            afterArenaSetupSuccess(o.data);
+          })
+          .catch(function() {
+            btn.disabled = false;
+            if (er) {
+              er.textContent = 'Не удалось сохранить. Проверьте соединение.';
+              er.hidden = false;
+            }
+          });
       }
 
       function renderArenas() {

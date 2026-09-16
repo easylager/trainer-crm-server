@@ -45,6 +45,7 @@ from src.application.arena_schedule_preset import (
 from src.application.trainer_notification_prefs import validate_push_notification_window
 from src.application.trainer_arena_setup_use_cases import (
     set_trainer_arena_mobile,
+    set_trainer_arena_online,
 )
 from src.application.trainer_arena_create_use_cases import create_trainer_arena
 from src.application.trainer_use_cases import (
@@ -214,7 +215,10 @@ async def post_trainer_arena_setup_for_webapp(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
-    Arena self-service (TASK-046): mobile format, or create a real arena directly.
+    Arena self-service (TASK-046): mobile or online format, or create a real arena directly.
+
+    ``mode=online`` is client-visible (see ``set_trainer_arena_online``) — unlike ``mobile``,
+    which only satisfies the trainer's own onboarding gate.
 
     ``mode=create`` writes a real ``arenas`` row (``is_confirmed=false``) and auto-attaches
     it to the trainer — no waiting on support/admin to use it (AC-002/AC-003). Superseded
@@ -231,8 +235,9 @@ async def post_trainer_arena_setup_for_webapp(
     """
     trainer_id = await _linked_trainer_id(session, principal)
     mode = (body.mode or "").strip().lower()
-    if mode == "mobile":
-        trainer = await set_trainer_arena_mobile(session, trainer_id)
+    if mode in ("mobile", "online"):
+        setter = set_trainer_arena_mobile if mode == "mobile" else set_trainer_arena_online
+        trainer = await setter(session, trainer_id)
         if not trainer:
             raise HTTPException(status_code=404, detail="Trainer not found")
         readiness = moderation_readiness_dict(
@@ -280,7 +285,7 @@ async def post_trainer_arena_setup_for_webapp(
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, response)
         return response
-    raise HTTPException(status_code=422, detail="mode must be mobile or create")
+    raise HTTPException(status_code=422, detail="mode must be mobile, online, or create")
 
 
 @router.get("/trainer/profile/arenas")
