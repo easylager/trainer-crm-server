@@ -516,8 +516,16 @@ async def run_trainer_quick_setup(
     """
     One call: services + defaults + weekly template + concrete slots for QUICK_SETUP_WEEKS.
 
-    Idempotent by construction — templates are replaced per weekday and
-    ``replace_week_with_template`` only clears *free* slots, so re-running never destroys a booking.
+    NOT a single DB transaction: ``replace_templates_for_day``/``replace_week_with_template``
+    each commit internally, once per weekday plus once per week (~9 commits total). ``_day_grid``
+    is deliberately evaluated for every day *before* any of those writes (below) so a bad grid
+    (slot outside the arena's operating hours, fixed-duration mismatch) always raises before
+    anything is written — that was the main source of a partial week (some days saved, some not).
+    The one residual gap: ``replace_templates_for_day`` can still raise on a same-day overlap with
+    a pre-existing *group* class — rare for a first-run trainer, who has none yet — and if it does,
+    earlier days in this call stay committed. Retrying with the same payload is always safe though:
+    each day/week replace is a delete+insert keyed by (trainer, day)/(trainer, week), so re-running
+    never duplicates and never destroys an existing booking.
     """
     if duration_minutes < 15 or duration_minutes > 480:
         raise QuickSetupError("Длительность занятия должна быть от 15 до 480 минут.")
@@ -535,16 +543,16 @@ async def run_trainer_quick_setup(
     )
     presets = await _validate_and_link_arenas(session, trainer_id, arena_ids_used)
 
+    # Two passes on purpose: resolve every day's grid (pure computation, no writes) first, so a
+    # QuickSetupError on e.g. day 5 (Friday) raises before day 0-4 were ever written — not after.
     by_day = {d.day_of_week: d for d in days}
+    day_grids: dict[int, tuple[dict[int, int], dict[int, int], dict[int, int]]] = {}
     for dow in range(7):
-        minute_to_capacity: dict[int, int] = {}
-        minute_to_arena_id: dict[int, int] = {}
-        minute_to_duration: dict[int, int] = {}
         day = by_day.get(dow)
-        if day is not None:
-            minute_to_capacity, minute_to_arena_id, minute_to_duration = _day_grid(
-                day, presets, duration_minutes
-            )
+        day_grids[dow] = _day_grid(day, presets, duration_minutes) if day is not None else ({}, {}, {})
+
+    for dow in range(7):
+        minute_to_capacity, minute_to_arena_id, minute_to_duration = day_grids[dow]
         # Days the trainer left empty are written too, so unchecking a day actually clears it —
         # but only its individual rows: onboarding cannot draw group classes, so it must not
         # delete them either.

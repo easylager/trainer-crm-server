@@ -5469,10 +5469,12 @@
         if (kind === 'warn') st.className += ' arena-setup-status--warn';
       }
 
-      function postArenaSetup(body) {
+      function postArenaSetup(body, idemKey) {
+        var h = headersJson();
+        if (idemKey) h['Idempotency-Key'] = idemKey;
         return fetch(apiUrl('/trainer/profile/arena-setup'), {
           method: 'POST',
-          headers: headersJson(),
+          headers: h,
           body: JSON.stringify(body),
         }).then(function(r) {
           return r.json().then(function(data) {
@@ -5636,6 +5638,10 @@
         prefills = prefills || {};
         box.innerHTML = '';
         clearArenaSetupMessages();
+        /* One key per open create-form: a double-tap or the "всё равно создать" duplicate-retry
+           within this same session reuse it, so the server sees repeats as one logical submit
+           and never writes two arenas (there is no DB uniqueness constraint on `arenas`). */
+        var idemKey = 'arn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
         var title = document.createElement('p');
         title.className = 'hint arena-empty-lead';
         title.textContent = 'Арена появится в расписании сразу — команда проверит её позже.';
@@ -5713,7 +5719,7 @@
             confirm_duplicate: !!confirmDuplicate,
             /* Selected city from the form — may not be PATCH'ed yet (PDEC-001 / draft). */
             city_id: (state.trainer.profile && state.trainer.profile.city_id) || null,
-          })
+          }, idemKey)
             .then(function(o) {
               submit.disabled = false;
               if (!o.ok) {

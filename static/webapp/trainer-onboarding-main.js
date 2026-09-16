@@ -152,6 +152,13 @@
     hoursExpanded: false,
     alreadyDone: false,
     busy: false,
+    /* Bumped on every city change / arena create so a stale in-flight quick-setup refetch
+       (see afterCreatedArena) can detect it is no longer current and skip applying itself. */
+    arenaRefreshToken: 0,
+    /* One key per open create-form session (see openArenaCreate) — reused across retries
+       (double-tap, "создать всё равно" after a duplicate warning) so the server treats them
+       as one logical submit; there is no DB uniqueness constraint on `arenas`. */
+    arenaCreateIdemKey: null,
   };
 
   var el = {};
@@ -374,6 +381,7 @@
 
   function arenaMetaLabel(arena) {
     var bits = [];
+    if (arena.is_confirmed === false) bits.push('на проверке');
     if (arena.address) bits.push(arena.address);
     else if (arena.city_name) bits.push(arena.city_name);
     var off = arenaOffset(arena);
@@ -650,6 +658,7 @@
     if (next != null && isNaN(next)) next = null;
     if (next === state.cityId) return;
     state.cityId = next;
+    state.arenaRefreshToken++;
     dropArenasOutsideCity();
     closeArenaCreate();
     haptic('light');
@@ -675,6 +684,7 @@
       el.obArenaCreateDup.innerHTML = '';
     }
     setArenaCreateStatus('');
+    state.arenaCreateIdemKey = null;
   }
 
   function openArenaCreate(prefillName) {
@@ -682,6 +692,7 @@
       note('Сначала выберите город.', true);
       return;
     }
+    state.arenaCreateIdemKey = 'arn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     if (el.obArenaCreateWrap) el.obArenaCreateWrap.hidden = false;
     if (el.obArenaCreateName) {
       el.obArenaCreateName.value = prefillName || el.obArenaCreateName.value || '';
@@ -720,6 +731,7 @@
       hour_start: 6,
       hour_end: 23,
       fixed_duration_minutes: null,
+      is_confirmed: false,
     };
     var exists = false;
     for (var i = 0; i < state.arenas.length; i++) {
@@ -736,11 +748,15 @@
     renderArenaTabs();
     renderGrid();
     syncCta();
-    /* Refresh grids from GET so a venue with a real preset replaces the stub. */
+    /* Refresh grids from GET so a venue with a real preset replaces the stub. Guarded by a
+       token: if the trainer changes city (or creates another arena) before this resolves, a
+       stale response must not snap state.cityId / state.arenas back — same bug class already
+       fixed once for citySel.onchange in the profile screen. */
+    var refreshToken = ++state.arenaRefreshToken;
     fetch(apiUrl('/trainer/onboarding/quick-setup'), { headers: apiHeaders() })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data) return;
+        if (!data || refreshToken !== state.arenaRefreshToken) return;
         if (data.arenas) state.arenas = data.arenas;
         if (data.cities) state.cities = data.cities;
         if (data.city_id != null) state.cityId = Number(data.city_id);
@@ -767,9 +783,14 @@
     }
     if (el.obArenaCreateSubmit) el.obArenaCreateSubmit.disabled = true;
     setArenaCreateStatus('Добавляем…', false);
+    if (!state.arenaCreateIdemKey) {
+      state.arenaCreateIdemKey = 'arn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+    var idemHeaders = apiHeaders();
+    idemHeaders['Idempotency-Key'] = state.arenaCreateIdemKey;
     fetch(apiUrl('/trainer/profile/arena-setup'), {
       method: 'POST',
-      headers: apiHeaders(),
+      headers: idemHeaders,
       body: JSON.stringify({
         mode: 'create',
         arena_name: nm,

@@ -13,7 +13,7 @@ import asyncio
 import logging
 from datetime import time as dt_time
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,6 +211,7 @@ async def post_trainer_arena_setup_for_webapp(
     body: TrainerArenaSetupBody,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Arena self-service (TASK-046): mobile format, or create a real arena directly.
@@ -218,6 +219,12 @@ async def post_trainer_arena_setup_for_webapp(
     ``mode=create`` writes a real ``arenas`` row (``is_confirmed=false``) and auto-attaches
     it to the trainer — no waiting on support/admin to use it (AC-002/AC-003). Superseded
     the old ``mode=request`` text-only support ticket (AC-006), which no longer exists.
+
+    Optional ``Idempotency-Key`` on create: there is no DB uniqueness constraint on ``arenas``,
+    and the geocode call inside ``create_trainer_arena`` can take a few seconds, so a double-tap
+    or retried request could otherwise create two real (unconfirmed) arenas. Same 24h cache
+    mechanism as ``POST /client/booking``; only a *successful* create is cached — a
+    ``duplicate_warning`` is not, so a resubmit after the trainer edits the name still re-checks.
     """
     trainer_id = await _linked_trainer_id(session, principal)
     mode = (body.mode or "").strip().lower()
@@ -231,6 +238,14 @@ async def post_trainer_arena_setup_for_webapp(
         )
         return {"trainer": trainer, "moderation_readiness": readiness}
     if mode == "create":
+        from src.application.certificate_use_cases import get_idempotency_response, set_idempotency_response
+
+        ik = (idempotency_key or "").strip()
+        idem_cache_key = f"arenacreate_{trainer_id}_{ik}"[:64] if ik else ""
+        if idem_cache_key:
+            cached = await get_idempotency_response(session, idem_cache_key)
+            if isinstance(cached, dict) and cached.get("status") == "created":
+                return cached
         try:
             result = await create_trainer_arena(
                 session,
@@ -253,12 +268,15 @@ async def post_trainer_arena_setup_for_webapp(
             trainer,
             trainer_status=(trainer.get("status") or "").strip() or None,
         )
-        return {
+        response = {
             "status": "created",
             "arena_id": result.get("arena_id"),
             "trainer": trainer,
             "moderation_readiness": readiness,
         }
+        if idem_cache_key:
+            await set_idempotency_response(session, idem_cache_key, response)
+        return response
     raise HTTPException(status_code=422, detail="mode must be mobile or create")
 
 

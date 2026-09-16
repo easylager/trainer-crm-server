@@ -8402,7 +8402,8 @@ async def get_trainer_onboarding_quick_setup(
                    COALESCE(p.minute_offset, 0) AS minute_offset,
                    COALESCE(p.hour_start, 6) AS hour_start,
                    COALESCE(p.hour_end, 23) AS hour_end,
-                   p.slot_duration_minutes
+                   p.slot_duration_minutes,
+                   a.is_confirmed
             FROM arenas a
             JOIN cities c ON c.id = a.city_id AND c.is_active = true
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
@@ -8423,6 +8424,7 @@ async def get_trainer_onboarding_quick_setup(
             "hour_start": int(row[7]),
             "hour_end": int(row[8]),
             "fixed_duration_minutes": int(row[9]) if row[9] is not None else None,
+            "is_confirmed": bool(row[10]),
         }
         for row in r_arenas.fetchall()
     ]
@@ -8497,8 +8499,10 @@ async def post_trainer_onboarding_quick_setup(
     The entire first run in one request: services + defaults + weekly template + two weeks of slots,
     and the invite link to hand to a client.
 
-    This is the only write the onboarding makes. If it succeeds the trainer has a working practice;
-    if it fails nothing half-configured is left behind (single transaction per use case).
+    This is the only write the onboarding makes. Not one DB transaction — see
+    ``run_trainer_quick_setup``'s docstring for what that means on partial failure — but every
+    write it performs is a per-day/per-week replace, so retrying this same request after a 400
+    is always safe and self-heals whatever was left half-done.
     """
     from src.application.trainer_quick_setup_use_cases import (
         QuickSetupError,

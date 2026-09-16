@@ -51,17 +51,69 @@ async def list_arenas_pending_moderation(session: AsyncSession) -> list[dict[str
     return out
 
 
+async def get_arena_pending_row(session: AsyncSession, arena_id: int) -> dict[str, Any] | None:
+    """Single-arena version of ``list_arenas_pending_moderation`` — used by the create-time admin push."""
+    r = await session.execute(
+        text(
+            """
+            SELECT a.id, a.name, a.address, a.latitude, a.longitude,
+                   c.name AS city_name,
+                   t.id AS trainer_id, t.telegram_id AS trainer_telegram_id,
+                   tp.first_name, tp.last_name
+            FROM arenas a
+            JOIN cities c ON c.id = a.city_id
+            LEFT JOIN trainers t ON t.id = a.created_by_trainer_id
+            LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+            WHERE a.id = :id
+            """
+        ),
+        {"id": arena_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    trainer_name = " ".join(p for p in [row[8], row[9]] if p).strip() or None
+    return {
+        "id": row[0],
+        "name": row[1],
+        "address": row[2],
+        "latitude": row[3],
+        "longitude": row[4],
+        "city_name": row[5],
+        "trainer_id": row[6],
+        "trainer_telegram_id": row[7],
+        "trainer_name": trainer_name,
+    }
+
+
 async def approve_arena(session: AsyncSession, arena_id: int, admin_id: int) -> bool:
-    """Confirm a trainer-created arena — makes it visible in the public client catalog."""
+    """
+    Confirm a trainer-created arena — makes it visible in the public client catalog.
+
+    Refuses (returns False, no-op) when coordinates are missing: auto-geocoding can fail
+    silently at creation time, and an arena with no lat/lon would be confirmed yet absent
+    from every map/"nearby" surface with no signal why. The admin bot flow requires manual
+    coordinate entry (``set_arena_coordinates``) before retrying approve in that case.
+    """
     r = await session.execute(
         text(
             """
             UPDATE arenas
             SET is_confirmed = true, confirmed_at = :now, confirmed_by_admin_id = :admin_id
-            WHERE id = :id AND is_active
+            WHERE id = :id AND is_active AND latitude IS NOT NULL AND longitude IS NOT NULL
             """
         ),
         {"id": arena_id, "now": datetime.now(timezone.utc), "admin_id": admin_id},
+    )
+    await session.commit()
+    return r.rowcount > 0
+
+
+async def set_arena_coordinates(session: AsyncSession, arena_id: int, latitude: float, longitude: float) -> bool:
+    """Manual coordinate entry when auto-geocoding failed — unblocks ``approve_arena``."""
+    r = await session.execute(
+        text("UPDATE arenas SET latitude = :lat, longitude = :lon WHERE id = :id AND is_active"),
+        {"lat": latitude, "lon": longitude, "id": arena_id},
     )
     await session.commit()
     return r.rowcount > 0

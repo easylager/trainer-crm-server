@@ -3,6 +3,7 @@ Admin bot: moderation of trainers (approve / reject), platform stats Mini App, s
 """
 import html
 import logging
+import re
 
 from aiogram import Bot, Router
 from aiogram.client.default import DefaultBotProperties
@@ -24,9 +25,12 @@ from src.application.support_use_cases import (
 from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
 from src.application.admin_arena_moderation import (
     approve_arena,
+    get_arena_pending_row,
     list_arenas_pending_moderation,
     reject_arena,
+    set_arena_coordinates,
 )
+from src.bot.admin_arena_card import format_admin_arena_pending_caption
 from src.application.booking_problem_admin_use_cases import (
     count_booking_problem_reports_for_admin,
     list_booking_problem_reports_for_admin,
@@ -136,6 +140,8 @@ _admin_awaiting_feedback: dict[int, int] = {}
 # admin user_id -> support_id (awaiting reply text)
 _admin_awaiting_support_reply: dict[int, int] = {}
 ADMIN_SUPPORT_REPLY_PREFIX = "admin:support:reply:"
+# admin user_id -> arena_id (awaiting manual "lat, lon" text — geocoding failed at creation)
+_admin_awaiting_arena_coords: dict[int, int] = {}
 
 
 def _is_admin(user_id: int | None) -> bool:
@@ -2329,26 +2335,34 @@ async def on_needs_edit(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-def _format_admin_arena_pending_caption(arena: dict) -> str:
-    """TASK-046: short text card for one trainer-created arena awaiting confirmation."""
-    name_esc = html.escape((arena.get("name") or "—").strip())
-    address_esc = html.escape((arena.get("address") or "—").strip())
-    city_esc = html.escape((arena.get("city_name") or "—").strip())
-    coords = arena.get("latitude"), arena.get("longitude")
-    coords_str = f"{coords[0]:.5f}, {coords[1]:.5f}" if coords[0] is not None and coords[1] is not None else "не определены"
-    trainer_name = (arena.get("trainer_name") or "").strip()
-    trainer_tg = arena.get("trainer_telegram_id")
-    trainer_line = trainer_name or (f"id={arena.get('trainer_id')}" if arena.get("trainer_id") else "—")
-    if trainer_tg:
-        trainer_line += f" (<code>{html.escape(str(trainer_tg))}</code>)"
-    return (
-        f"<b>Новая арена #{arena['id']}</b>\n"
-        f"Название: {name_esc}\n"
-        f"Город: {city_esc}\n"
-        f"Адрес: {address_esc}\n"
-        f"Координаты: {coords_str}\n"
-        f"Добавил тренер: {trainer_line}"
-    )
+_format_admin_arena_pending_caption = format_admin_arena_pending_caption
+
+
+def _arena_pending_keyboard(arena_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=msg.ADMIN_BUTTON_APPROVE,
+            callback_data=f"{ADMIN_ARENA_APPROVE_PREFIX}{arena_id}",
+        ),
+        InlineKeyboardButton(
+            text=msg.ADMIN_BUTTON_REJECT,
+            callback_data=f"{ADMIN_ARENA_REJECT_PREFIX}{arena_id}",
+        ),
+    ]])
+
+
+def _parse_admin_coords_text(text_in: str) -> tuple[float, float] | None:
+    """Accept "lat, lon" / "lat lon" (comma or whitespace separated); reject out-of-range values."""
+    parts = [p for p in re.split(r"[,\s]+", (text_in or "").strip()) if p]
+    if len(parts) != 2:
+        return None
+    try:
+        lat, lon = float(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+        return None
+    return lat, lon
 
 
 @router.message(Command("pending_arenas"))
@@ -2365,21 +2379,17 @@ async def cmd_pending_arenas(message: Message) -> None:
         return
     for arena in pending:
         caption = _format_admin_arena_pending_caption(arena)
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(
-                text=msg.ADMIN_BUTTON_APPROVE,
-                callback_data=f"{ADMIN_ARENA_APPROVE_PREFIX}{arena['id']}",
-            ),
-            InlineKeyboardButton(
-                text=msg.ADMIN_BUTTON_REJECT,
-                callback_data=f"{ADMIN_ARENA_REJECT_PREFIX}{arena['id']}",
-            ),
-        ]])
-        await message.answer(caption, reply_markup=keyboard)
+        await message.answer(caption, reply_markup=_arena_pending_keyboard(arena["id"]))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_ARENA_APPROVE_PREFIX))
 async def on_arena_approve(callback: CallbackQuery) -> None:
+    """
+    Approve requires coordinates. If auto-geocoding failed at creation, this does not confirm —
+    it puts the admin into a one-shot "send coordinates" prompt (see on_admin_message) and the
+    admin re-taps Подтвердить afterwards. Keeps "auto-geocode, else admin enters manually, only
+    then approve" as one linear, unambiguous path instead of a silent confirm-with-no-coords.
+    """
     user_id = callback.from_user.id if callback.from_user else 0
     if not _is_admin(user_id):
         await callback.answer("Нет доступа", show_alert=True)
@@ -2389,7 +2399,23 @@ async def on_arena_approve(callback: CallbackQuery) -> None:
         await callback.answer()
         return
     async with async_session_factory() as session:
-        ok = await approve_arena(session, arena_id, user_id)
+        arena = await get_arena_pending_row(session, arena_id)
+        if arena is None:
+            await callback.answer()
+            await callback.message.answer(f"Арена #{arena_id} не найдена.")
+            return
+        needs_coords = arena.get("latitude") is None or arena.get("longitude") is None
+        ok = False if needs_coords else await approve_arena(session, arena_id, user_id)
+    if needs_coords:
+        _admin_awaiting_arena_coords[user_id] = arena_id
+        await callback.answer("Сначала укажите координаты", show_alert=True)
+        await callback.message.answer(
+            f"У арены #{arena_id} не определены координаты (автогеокодинг не сработал).\n"
+            "Пришлите их одним сообщением в формате «широта, долгота», например:\n"
+            "<code>53.9006, 27.5590</code>\n"
+            "После сохранения нажмите «Подтвердить» ещё раз. Отменить — /cancel."
+        )
+        return
     if ok:
         audit_log("arena.approved", ACTOR_ADMIN_BOT, user_id, {"arena_id": arena_id})
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -2425,7 +2451,7 @@ async def on_arena_reject(callback: CallbackQuery) -> None:
 
 @router.message()
 async def on_admin_message(message: Message) -> None:
-    """Handle: 1) awaiting moderation feedback; 2) awaiting support reply."""
+    """Handle: 1) awaiting moderation feedback; 2) awaiting support reply; 3) awaiting arena coords."""
     user_id = message.from_user.id if message.from_user else 0
     if not _is_admin(user_id):
         return
@@ -2433,10 +2459,47 @@ async def on_admin_message(message: Message) -> None:
     if text.lower() in ("/cancel", "отмена", "отменить"):
         _admin_awaiting_feedback.pop(user_id, None)
         support_id = _admin_awaiting_support_reply.pop(user_id, None)
+        arena_coords_id = _admin_awaiting_arena_coords.pop(user_id, None)
         if support_id is not None:
             await message.answer(msg.ADMIN_SUPPORT_REPLY_CANCELLED)
+        elif arena_coords_id is not None:
+            await message.answer("Ввод координат отменён.")
         else:
             await message.answer(msg.ADMIN_NEEDS_EDIT_CANCELLED)
+        return
+
+    arena_coords_id = _admin_awaiting_arena_coords.pop(user_id, None)
+    if arena_coords_id is not None:
+        coords = _parse_admin_coords_text(text)
+        if coords is None:
+            _admin_awaiting_arena_coords[user_id] = arena_coords_id
+            await message.answer(
+                "Не понял координаты. Формат: «широта, долгота», например: 53.9006, 27.5590"
+                " (или /cancel)."
+            )
+            return
+        lat, lon = coords
+        async with async_session_factory() as session:
+            saved = await set_arena_coordinates(session, arena_coords_id, lat, lon)
+            arena = await get_arena_pending_row(session, arena_coords_id) if saved else None
+        if not saved:
+            await message.answer(
+                f"Не удалось сохранить координаты для арены #{arena_coords_id}"
+                " (возможно, она уже неактивна)."
+            )
+            return
+        audit_log(
+            "arena.coords_set",
+            ACTOR_ADMIN_BOT,
+            user_id,
+            {"arena_id": arena_coords_id, "latitude": lat, "longitude": lon},
+        )
+        await message.answer(f"Координаты арены #{arena_coords_id} сохранены: {lat:.5f}, {lon:.5f}")
+        if arena:
+            await message.answer(
+                _format_admin_arena_pending_caption(arena),
+                reply_markup=_arena_pending_keyboard(arena_coords_id),
+            )
         return
 
     support_id = _admin_awaiting_support_reply.pop(user_id, None)

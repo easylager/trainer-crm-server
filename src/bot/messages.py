@@ -2603,6 +2603,7 @@ ADMIN_TRAINER_CARD = (
 )
 # Prepended to full moderation caption when trainer submits for review (async notify).
 ADMIN_NOTIFY_NEW_MODERATION_PREFIX = "🆕 <b>Отправлено на модерацию</b>\n\n"
+ADMIN_NOTIFY_NEW_ARENA_PREFIX = "🆕 "
 ADMIN_BUTTON_APPROVE = "✅ Одобрить"
 ADMIN_BUTTON_REJECT = "❌ Отклонить"
 ADMIN_BUTTON_NEEDS_EDIT = "✏️ Нужны правки"

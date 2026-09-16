@@ -225,5 +225,13 @@ async def create_trainer_arena(
 
     await ensure_arena_profile(session, int(arena_id), city_id=city_id, name=nm)
     await session.commit()
+
+    from src.application.admin_arena_notify import notify_admins_new_trainer_arena
+
+    try:
+        await notify_admins_new_trainer_arena(int(arena_id))
+    except Exception:  # noqa: BLE001
+        logger.exception("notify admins after trainer arena create failed arena_id=%s", arena_id)
+
     updated_trainer = await repo.get_by_id(trainer_id)
     return {"status": "created", "arena_id": arena_id, "trainer": updated_trainer}
