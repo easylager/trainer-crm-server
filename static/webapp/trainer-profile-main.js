@@ -5215,6 +5215,54 @@
         });
       }
 
+      var arenaChipsNoteTimer = null;
+
+      /* Standing legend for the ★ / «в карточке» chip controls — must stay visible without a
+         hover, since this is a touch-only mini-app and a `title` tooltip never fires there. */
+      function arenaChipsLegendText(count) {
+        var pub = '«в карточке» — площадку увидят клиенты в каталоге. «только слоты» — она только '
+          + 'для вашего расписания, в каталоге не показывается (но записаться на неё всё ещё можно).';
+        if (count > 1) {
+          return '★ — основная площадка: на неё попадёт клиент, если в каталоге выберет «Любая '
+            + 'арена». ' + pub;
+        }
+        return pub;
+      }
+
+      function renderArenaChipsNote(count) {
+        var note = document.getElementById('arenaChipsNote');
+        if (!note) return;
+        if (arenaChipsNoteTimer) {
+          clearTimeout(arenaChipsNoteTimer);
+          arenaChipsNoteTimer = null;
+        }
+        note.classList.remove('arena-chips-note--flash');
+        if (!count) {
+          note.hidden = true;
+          note.textContent = '';
+          return;
+        }
+        note.hidden = false;
+        note.textContent = arenaChipsLegendText(count);
+      }
+
+      /* Brief confirmation after a tap (e.g. "«ТЦ Замок» — основная площадка"), then reverts to
+         the standing legend — the immediate feedback a touch UI needs since there is no hover
+         state to preview what a control does before committing to the tap. */
+      function flashArenaChipsNote(text) {
+        var note = document.getElementById('arenaChipsNote');
+        if (!note) return;
+        if (arenaChipsNoteTimer) clearTimeout(arenaChipsNoteTimer);
+        note.hidden = false;
+        note.textContent = text;
+        note.classList.add('arena-chips-note--flash');
+        var count = canonicalArenaIds().length;
+        arenaChipsNoteTimer = setTimeout(function() {
+          arenaChipsNoteTimer = null;
+          renderArenaChipsNote(count);
+        }, 3000);
+      }
+
       function updateArenaChips() {
         var chips = document.getElementById('arenaChips');
         if (!chips) return;
@@ -5222,6 +5270,7 @@
         if (!ids.length) {
           chips.innerHTML = '';
           chips.hidden = true;
+          renderArenaChipsNote(0);
           return;
         }
         chips.hidden = false;
@@ -5249,9 +5298,20 @@
           html += '</div>';
         });
         chips.innerHTML = html;
+        /* Don't stomp an active flash confirmation — updateArenaChips() re-runs mid-flight on
+           every server round-trip (success or revert-on-failure), which would otherwise cut the
+           3s confirmation short before the trainer can read it. Its own timeout still fires and
+           reverts to the legend on schedule regardless of how many re-renders happen meanwhile. */
+        if (!arenaChipsNoteTimer) renderArenaChipsNote(ids.length);
         chips.querySelectorAll('[data-arena-star]').forEach(function(btn) {
           btn.addEventListener('click', function() {
-            setPrimaryArena(btn.getAttribute('data-arena-star'));
+            var aid = Number(btn.getAttribute('data-arena-star'));
+            setPrimaryArena(aid);
+            var a = findArenaById(aid);
+            var name = (a && a.name) ? a.name : ('Арена #' + aid);
+            flashArenaChipsNote(
+              '«' + name + '» — основная площадка: на неё попадёт клиент, если в каталоге выберет «Любая арена».'
+            );
           });
         });
         chips.querySelectorAll('[data-arena-public]').forEach(function(btn) {
@@ -5261,6 +5321,13 @@
             var next = !arenaIsPublic(aid);
             setArenaIsPublicLocal(aid, next);
             updateArenaChips();
+            var a = findArenaById(aid);
+            var name = (a && a.name) ? a.name : ('Арена #' + aid);
+            flashArenaChipsNote(
+              next
+                ? '«' + name + '» теперь видна клиентам в каталоге.'
+                : '«' + name + '» скрыта из каталога — доступна только для записи по расписанию.'
+            );
             fetch(apiUrl('/trainer/arenas/' + aid + '/public'), {
               method: 'PATCH',
               headers: headersJson(),

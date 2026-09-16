@@ -734,6 +734,13 @@
     .arena-chip__star[aria-pressed="true"] {
       color: rgb(var(--accent-rgb));
     }
+    .arena-chips-note {
+      margin: 0 0 12px;
+      transition: color 0.15s ease;
+    }
+    .arena-chips-note--flash {
+      color: rgb(var(--accent-rgb));
+    }
     .arena-picker-search__input {
       width: 100%;
       box-sizing: border-box;
