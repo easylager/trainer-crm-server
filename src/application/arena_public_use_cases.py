@@ -604,12 +604,15 @@ async def list_public_ice_arenas(
 
 
 async def get_hub_ice_teaser(
-    session: AsyncSession, *, city_id: int | None
+    session: AsyncSession, *, city_id: int | None, near: tuple[float, float] | None = None
 ) -> dict[str, Any] | None:
     """Soonest future public_skate|open_ice slot in the session city, or None.
 
-    Same MK filter as Ice tab intent=skate (tier A). No geolocation — distance
-    stays unset. Hub bootstrap uses this so home load stays one round-trip.
+    Same MK filter as Ice tab intent=skate (tier A). Hub bootstrap uses this so
+    home load stays one round-trip (called there with ``near=None`` — the
+    honest-distance refinement below needs the visitor's coordinates, which
+    aren't available on that first synchronous call; see the dedicated
+    ``GET /client/hub/ice-teaser?near=`` route for the silent follow-up fetch).
 
     TASK-091. Два изменения против TASK-055:
       * без города клиента больше не отдаём None. Первый экран Главной обязан
@@ -618,6 +621,16 @@ async def get_hub_ice_teaser(
         ровно то же, что делает вкладка «Лёд» своим pickFallbackCity;
       * отдаём кадр арены и название города: карточка на Главной — тот же
         объект, что карточка на «Льду», а не строка-тизер.
+
+    ``near`` (lat, lon) only matters when ``city_id`` is None — a client with an
+    explicit city gets that city's soonest session with no distance framing,
+    unchanged. Without a city, this was always "closest upcoming session
+    anywhere in the country" with zero regard for how far that actually is
+    from the visitor (``distance_km`` used to be hardcoded ``None``) — honest
+    when a client from Serbia/Russia opens the hub and sees a Minsk card. When
+    ``near`` is given, we compute the real distance so the frontend can show
+    an honest "not in your city yet, here's the nearest" card instead of one
+    implying local relevance.
     """
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
@@ -638,6 +651,8 @@ SELECT
     p.district AS arena_district,
     a.city_id AS city_id,
     c.name AS city_name,
+    a.latitude AS arena_latitude,
+    a.longitude AS arena_longitude,
     nxt.kind,
     nxt.starts_at_utc,
     nxt.local_date,
@@ -676,6 +691,12 @@ LIMIT 1
         if isinstance(variants, Mapping):
             thumb = variants.get("thumb") or variants.get("card")
             card = variants.get("card") or variants.get("hero") or thumb
+    distance_km: float | None = None
+    if city_id is None and near is not None:
+        alat, alon = row["arena_latitude"], row["arena_longitude"]
+        if alat is not None and alon is not None:
+            nlat, nlon = near
+            distance_km = haversine_km(nlat, nlon, float(alat), float(alon))
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
@@ -691,7 +712,11 @@ LIMIT 1
         "currency_code": row["currency_code"],
         "thumb": thumb,
         "card": card,
-        "distance_km": None,
+        "distance_km": distance_km,
+        # True when the caller passed no client city_id at all (country-wide fallback,
+        # not a real match) — the frontend uses this to decide whether it's worth asking
+        # for geolocation to refine an honest distance (see GET /client/hub/ice-teaser).
+        "is_country_fallback": city_id is None,
     }
 
 

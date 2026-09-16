@@ -114,7 +114,7 @@
         var kicker = document.getElementById('hubIceKicker');
         if (kicker) {
           if (!html) kicker.textContent = 'Лёд города';
-          else kicker.textContent = view && view.city ? 'На льду · ' + view.city : 'На льду';
+          else kicker.textContent = (view && view.kicker) || 'На льду';
         }
         var head = zone.querySelector('.hub-sec-head');
         if (head) head.hidden = !html;
@@ -1499,12 +1499,61 @@
        * This is a decision engine, not a dashboard.
        * It answers: "what is the most important thing for the client right now?"
        */
+      var HUB_GEO_REFINED_FLAG = 'glide_hub_geo_refined_v1';
+
+      /**
+       * The hub's ice_teaser is a country-wide "closest upcoming session, however far"
+       * fallback for a client with no city (get_hub_ice_teaser, `is_country_fallback`).
+       * On first paint distance is unknown (no coordinates yet), so it just shows that
+       * fallback plainly. Once geolocation resolves, re-ask for the same teaser with
+       * `near=` so it can render the honest "not in your city yet" card when it's actually
+       * far — same 150km bar as the catalog's own auto-detect (CatalogGeoModel).
+       *
+       * Uses its own decline/attempted flag (HUB_GEO_REFINED_FLAG), separate from the
+       * catalog's `glide_geo_declined_v1`: this call never sets a city (there's nothing to
+       * persist, just a distance to compute), so it must not suppress — or be suppressed
+       * by — the catalog's own auto-detect, which does set one.
+       */
+      function attemptHubGeoRefine() {
+        var G = window.CatalogGeoModel;
+        if (!G) return;
+        var already = G.readDeclinedFlag(window.localStorage, HUB_GEO_REFINED_FLAG);
+        var go = G.shouldAutoGeolocate({
+          cityId: null,
+          hasExplicitQueryCityId: false,
+          hasCollectiveContext: false,
+          hasDeepLinkTrainer: false,
+          hasPrimaryTrainer: false,
+          geolocationSupported: !!(window.navigator && window.navigator.geolocation),
+          previouslyDeclined: already,
+        });
+        if (!go) return;
+        window.navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            G.writeDeclinedFlag(window.localStorage, HUB_GEO_REFINED_FLAG);
+            var near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+            fetch('/api/webapp/client/hub/ice-teaser?near=' + encodeURIComponent(near), { cache: 'no-store' })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                renderIceTeaser(data && data.ice_teaser);
+              })
+              .catch(function () { /* keep the plain fallback card already on screen */ });
+          },
+          function () {
+            G.writeDeclinedFlag(window.localStorage, HUB_GEO_REFINED_FLAG);
+          },
+          { timeout: 6000, maximumAge: 60000 }
+        );
+      }
+
       function applyHubState(bookingDays, requestItems, hubMeta) {
         if (window.ClientShell && typeof window.ClientShell.writeBookingsWarmCache === 'function') {
           window.ClientShell.writeBookingsWarmCache({ days: bookingDays || [] });
         }
         var cs = (hubMeta && hubMeta.client_session) || {};
-        renderIceTeaser(hubMeta && hubMeta.ice_teaser);
+        var iceTeaser = hubMeta && hubMeta.ice_teaser;
+        renderIceTeaser(iceTeaser);
+        if (iceTeaser && iceTeaser.is_country_fallback) attemptHubGeoRefine();
         // Support both legacy (selected_trainer_id) and new edge-based fields
         var primaryTrainerId = cs.primary_trainer_id != null ? cs.primary_trainer_id
           : (cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null);

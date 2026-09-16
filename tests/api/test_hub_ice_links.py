@@ -241,3 +241,71 @@ async def test_hub_ice_teaser_skips_in_progress_slot(
     assert teaser is not None
     assert teaser["arena_id"] == arena_id
     assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+
+
+@pytest.mark.asyncio
+async def test_hub_ice_teaser_near_computes_honest_distance_for_cityless_client(
+    app_use_test_db, db_session
+) -> None:
+    """A client with no city gets the country-wide fallback teaser; with ``near`` given,
+    that teaser now carries a real distance instead of the always-null placeholder — the
+    frontend needs this to decide "your area" vs "not yet in your city, here's the nearest".
+    """
+    city_id = await _insert_city(db_session, name="Минск-Гео")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-Гео", latitude=53.9, longitude=27.56)
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    await db_session.flush()
+
+    # Belgrade coordinates — genuinely far from Minsk.
+    far = await get_hub_ice_teaser(db_session, city_id=None, near=(44.7866, 20.4489))
+    assert far is not None
+    assert far["distance_km"] is not None
+    assert far["distance_km"] > 1000
+
+    # A point a few km from the arena's own coordinates.
+    near = await get_hub_ice_teaser(db_session, city_id=None, near=(53.91, 27.57))
+    assert near is not None
+    assert near["distance_km"] is not None
+    assert near["distance_km"] < 5
+
+    # Without near, unchanged: distance stays null (regression guard).
+    no_near = await get_hub_ice_teaser(db_session, city_id=None)
+    assert no_near is not None
+    assert no_near["distance_km"] is None
+
+    # A client WITH a city ignores near entirely — this only refines the cityless case.
+    with_city = await get_hub_ice_teaser(db_session, city_id=city_id, near=(44.7866, 20.4489))
+    assert with_city is not None
+    assert with_city["distance_km"] is None
+
+
+@pytest.mark.asyncio
+async def test_hub_ice_teaser_refine_endpoint(app_use_test_db, db_session) -> None:
+    """GET /client/hub/ice-teaser?near= — the silent follow-up call once geolocation resolves."""
+    city_id = await _insert_city(db_session, name="Минск-Рефайн")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-Рефайн", latitude=53.9, longitude=27.56)
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            far_resp = await client.get(
+                "/api/webapp/client/hub/ice-teaser",
+                params={"near": "44.7866,20.4489"},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            malformed_resp = await client.get(
+                "/api/webapp/client/hub/ice-teaser",
+                params={"near": "not-a-coordinate"},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert far_resp.status_code == 200, far_resp.text
+    far_teaser = far_resp.json()["ice_teaser"]
+    assert far_teaser is not None
+    assert far_teaser["distance_km"] > 1000
+    # Malformed near must never 400/500 the hub refinement — best-effort only.
+    assert malformed_resp.status_code == 200, malformed_resp.text
+    assert malformed_resp.json()["ice_teaser"] is not None

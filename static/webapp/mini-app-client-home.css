@@ -2326,6 +2326,20 @@ a.hub-ice-card {
   line-height: 1;
 }
 
+/* Honest "not in your city yet" variant — no session time/day to show (it isn't the
+ * client's session), so the row drops the 78px time column entirely. */
+.hub-ice-card--far .hub-ice-card__row {
+  grid-template-columns: 1fr auto;
+}
+
+.hub-ice-card__cta {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--app-cta-fill);
+}
+
 /* AC-003: поиск — строка, а не CTA на 15% высоты экрана. */
 .hub-search {
   display: flex;

@@ -201,6 +201,28 @@
     return clean ? clean.charAt(0).toUpperCase() : '?';
   }
 
+  /**
+   * Same "is this actually near you" bar as CatalogGeoModel.MAX_MATCH_DISTANCE_KM
+   * (static/webapp/catalog-geo-model.js) — kept as a separate constant (not a shared
+   * import) since this file has no build step and stays a plain <script>, but the two
+   * should move together if the threshold ever changes.
+   */
+  var FAR_DISTANCE_THRESHOLD_KM = 150;
+
+  function formatFarCard(payload) {
+    var name = String(payload.arena_name || '').trim();
+    var city = String(payload.city_name || '').trim();
+    return {
+      hidden: false,
+      isFar: true,
+      href: 'ice',
+      kicker: 'Скоро и у вас',
+      title: 'Пока нет тренеров в вашем городе',
+      cityLine: city ? 'Ближе всего — «' + name + '», ' + city : 'Ближе всего — «' + name + '»',
+      cta: 'Смотреть каталог',
+    };
+  }
+
   function formatIceCard(payload, now) {
     if (!payload || typeof payload !== 'object') return hiddenCard();
     var href = arenaHref(payload);
@@ -208,13 +230,20 @@
     if (!href || !time) return hiddenCard();
     now = now instanceof Date ? now : new Date();
     if (slotHasStarted(payload, now)) return hiddenCard();
+    var dist = payload.distance_km;
+    if (dist != null && !isNaN(Number(dist)) && Number(dist) > FAR_DISTANCE_THRESHOLD_KM) {
+      return formatFarCard(payload);
+    }
     var facts = [kindLabel(payload.kind)];
     var price = formatPrice(payload.price_adult_minor, payload.currency_code);
     if (price) facts.push(price);
     var name = String(payload.arena_name || '').trim();
+    var city = String(payload.city_name || '').trim();
     return {
       hidden: false,
+      isFar: false,
       href: href,
+      kicker: city ? 'На льду · ' + city : 'На льду',
       photo: payload.card || payload.thumb || '',
       initial: initialOf(name),
       day: dayLabel(payload, now),
@@ -222,12 +251,38 @@
       name: name,
       where: String(payload.arena_district || '').trim(),
       facts: facts.join(' · '),
-      city: String(payload.city_name || '').trim(),
+      city: city,
     };
+  }
+
+  function renderFarCardHtml(view) {
+    return (
+      '<a class="hub-ice-card hub-ice-card--far" href="' +
+      escapeHtml(view.href) +
+      '">' +
+      '<span class="hub-ice-card__photo hub-ice-card__photo--empty">' +
+      '<span class="hub-ice-card__initial" aria-hidden="true">📍</span>' +
+      '</span>' +
+      '<span class="hub-ice-card__row">' +
+      '<span class="hub-ice-card__what">' +
+      '<span class="hub-ice-card__name">' +
+      escapeHtml(view.title) +
+      '</span>' +
+      '<span class="hub-ice-card__facts">' +
+      escapeHtml(view.cityLine) +
+      '</span>' +
+      '<span class="hub-ice-card__cta">' +
+      escapeHtml(view.cta) +
+      '</span>' +
+      '</span>' +
+      '<span class="hub-ice-card__chev" aria-hidden="true">→</span>' +
+      '</a>'
+    );
   }
 
   function renderIceCardHtml(view) {
     if (!view || view.hidden) return '';
+    if (view.isFar) return renderFarCardHtml(view);
     var photo = view.photo
       ? '<span class="hub-ice-card__photo" style="background-image:url(\'' +
         escapeHtml(view.photo).replace(/'/g, '%27') +
@@ -269,5 +324,6 @@
     formatIceCard: formatIceCard,
     renderIceCardHtml: renderIceCardHtml,
     arenaHref: arenaHref,
+    FAR_DISTANCE_THRESHOLD_KM: FAR_DISTANCE_THRESHOLD_KM,
   };
 });

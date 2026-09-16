@@ -79,17 +79,24 @@
     return '/api/public/ice/arenas?intent=coach&near=' + encodeURIComponent(near) + '&limit=1';
   }
 
-  function readDeclinedFlag(storage) {
+  /**
+   * @param {Storage} storage
+   * @param {string} [key] — defaults to the catalog's own decline flag. Callers with an
+   *   independent geolocation attempt (e.g. the hub's ice-teaser distance refine, which
+   *   never sets a city and so must not be gated by — or gate — the catalog's flag) should
+   *   pass their own key so the two don't cross-suppress each other.
+   */
+  function readDeclinedFlag(storage, key) {
     try {
-      return !!(storage && storage.getItem(DECLINED_STORAGE_KEY));
+      return !!(storage && storage.getItem(key || DECLINED_STORAGE_KEY));
     } catch (e) {
       return false;
     }
   }
 
-  function writeDeclinedFlag(storage) {
+  function writeDeclinedFlag(storage, key) {
     try {
-      if (storage) storage.setItem(DECLINED_STORAGE_KEY, '1');
+      if (storage) storage.setItem(key || DECLINED_STORAGE_KEY, '1');
     } catch (e) {
       /* storage unavailable (e.g. private mode) — worst case we ask again next open */
     }

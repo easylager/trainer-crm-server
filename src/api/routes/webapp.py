@@ -218,7 +218,7 @@ from src.application.arena_profile import (
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
 )
-from src.application.arena_public_use_cases import get_hub_ice_teaser
+from src.application.arena_public_use_cases import get_hub_ice_teaser, parse_near
 from src.application.arena_media import (
     ArenaMediaLimitError,
     InvalidArenaMediaOrderError,
@@ -2854,6 +2854,43 @@ async def get_client_hub_bootstrap(
             },
         },
     }
+
+
+@router.get("/client/hub/ice-teaser")
+async def get_client_hub_ice_teaser_refined(
+    near: str | None = Query(None, description="lat,lon — client geolocation, best-effort"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Silent follow-up to the hub bootstrap's ice_teaser once geolocation resolves.
+
+    The bootstrap call is synchronous on hub load and has no coordinates yet — this endpoint
+    lets the frontend re-ask a moment later, once ``navigator.geolocation`` (if the client
+    allows it) returns a position, so a client with no city can get an honest distance
+    instead of the bootstrap's country-wide "closest upcoming session, however far" card
+    (see get_hub_ice_teaser docstring). A client who already has a city ignores ``near``
+    entirely and gets the same teaser bootstrap would have given — this only refines the
+    cityless case.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+    near_pt = None
+    if near:
+        try:
+            near_pt = parse_near(near)
+        except Exception:
+            near_pt = None
+    sess_row = await read_client_bot_session(telegram_id, session)
+    city_id = (sess_row or {}).get("city_id")
+    ice_teaser = None
+    try:
+        ice_teaser = await get_hub_ice_teaser(
+            session,
+            city_id=int(city_id) if city_id is not None else None,
+            near=near_pt,
+        )
+    except Exception:
+        logger.exception("client hub ice teaser refine failed")
+    return {"ice_teaser": ice_teaser}
 
 
 @router.get("/client/share-trainer/{trainer_id}")
