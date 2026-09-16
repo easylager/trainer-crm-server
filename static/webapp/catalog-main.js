@@ -3966,6 +3966,74 @@
         persistCatalogFilters(trainerId);
       }
 
+      /**
+       * Cold-open city auto-detect (catalog-geo-model.js). With no city context anywhere,
+       * the trainer list query omits city_id and returns an unfiltered, rating-sorted list
+       * across ALL cities — which today reads as "Minsk" to a visitor elsewhere simply
+       * because that's where most of the trainer base already is. Silent and non-blocking:
+       * the catalog has already rendered with that unfiltered list by the time this resolves
+       * (geolocation can take seconds or prompt for permission); this only refreshes it in
+       * the background if a real location comes back. Never touches state.cityId if
+       * something else (a manual pick, another tab) has already set it in the meantime.
+       */
+      function attemptCatalogAutoGeoDetect(ctx) {
+        var G = window.CatalogGeoModel;
+        if (!G) return;
+        var declined = G.readDeclinedFlag(window.localStorage);
+        var go = G.shouldAutoGeolocate({
+          cityId: state.cityId,
+          hasExplicitQueryCityId: !!(ctx && ctx.hasExplicitQueryCityId),
+          hasCollectiveContext: !!(ctx && ctx.hasCollectiveContext),
+          hasDeepLinkTrainer: !!(ctx && ctx.hasDeepLinkTrainer),
+          hasPrimaryTrainer: !!(ctx && ctx.hasPrimaryTrainer),
+          geolocationSupported: !!(window.navigator && window.navigator.geolocation),
+          previouslyDeclined: declined,
+        });
+        if (!go) return;
+
+        window.navigator.geolocation.getCurrentPosition(
+          function(pos) {
+            var url = G.buildNearUrl(pos.coords.latitude, pos.coords.longitude);
+            fetch(url, { cache: 'no-store' })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                var detectedCityId = G.pickCityFromNearResponse(data);
+                if (!detectedCityId || state.cityId) {
+                  G.writeDeclinedFlag(window.localStorage);
+                  return;
+                }
+                return getJson('/cities').then(function(cd) {
+                  var match = (cd.items || []).filter(function(c) {
+                    return Number(c.id) === detectedCityId;
+                  })[0];
+                  applyAutoDetectedCity(detectedCityId, match ? match.name : '');
+                });
+              })
+              .catch(function() {
+                G.writeDeclinedFlag(window.localStorage);
+              });
+          },
+          function() {
+            G.writeDeclinedFlag(window.localStorage);
+          },
+          { timeout: 6000, maximumAge: 60000 }
+        );
+      }
+
+      function applyAutoDetectedCity(cityId, cityName) {
+        if (state.cityId) return; // context changed while geolocation/network was in flight
+        state.cityId = cityId;
+        state.cityName = cityName || '';
+        invalidateCatalogServicesCache();
+        invalidateCatalogArenasCache();
+        clearCatalogSessionStorageCache();
+        loadCatalogScenariosFromApi(cityId);
+        persistCatalogFilters();
+        renderSummary();
+        syncScenarioChipSelection();
+        loadTrainers({ silent: true });
+      }
+
       /** Drop service/scenario chip when the service has no trainers in the new city. */
       function clearServiceIfInvalidForCity(cityId) {
         if (!state.serviceId && !state.catalogScenarioStub) return Promise.resolve();
@@ -7310,6 +7378,12 @@
             });
             return;
           }
+          attemptCatalogAutoGeoDetect({
+            hasExplicitQueryCityId: !!qp.get('city_id'),
+            hasCollectiveContext: !!state.collectiveBrand,
+            hasDeepLinkTrainer: deepTrainerFromUrl != null,
+            hasPrimaryTrainer: primaryTid != null,
+          });
           showInitialScreen();
           });
         })
