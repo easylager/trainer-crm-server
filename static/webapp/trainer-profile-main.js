@@ -5216,20 +5216,9 @@
       }
 
       var arenaChipsNoteTimer = null;
+      var arenaRowOpenId = null;
 
-      /* Standing legend for the ★ / «в карточке» chip controls — must stay visible without a
-         hover, since this is a touch-only mini-app and a `title` tooltip never fires there. */
-      function arenaChipsLegendText(count) {
-        var pub = '«в карточке» — площадку увидят клиенты в каталоге. «только слоты» — она только '
-          + 'для вашего расписания, в каталоге не показывается (но записаться на неё всё ещё можно).';
-        if (count > 1) {
-          return '★ — основная площадка: на неё попадёт клиент, если в каталоге выберет «Любая '
-            + 'арена». ' + pub;
-        }
-        return pub;
-      }
-
-      function renderArenaChipsNote(count) {
+      function hideArenaChipsNote() {
         var note = document.getElementById('arenaChipsNote');
         if (!note) return;
         if (arenaChipsNoteTimer) {
@@ -5237,18 +5226,13 @@
           arenaChipsNoteTimer = null;
         }
         note.classList.remove('arena-chips-note--flash');
-        if (!count) {
-          note.hidden = true;
-          note.textContent = '';
-          return;
-        }
-        note.hidden = false;
-        note.textContent = arenaChipsLegendText(count);
+        note.hidden = true;
+        note.textContent = '';
       }
 
-      /* Brief confirmation after a tap (e.g. "«ТЦ Замок» — основная площадка"), then reverts to
-         the standing legend — the immediate feedback a touch UI needs since there is no hover
-         state to preview what a control does before committing to the tap. */
+      /* Brief confirmation after toggling visibility (e.g. "«ТЦ Замок» скрыта из каталога"),
+         then hides itself — the row panel's own description already explains the switch at
+         rest, this is just closure that the tap actually took effect. */
       function flashArenaChipsNote(text) {
         var note = document.getElementById('arenaChipsNote');
         if (!note) return;
@@ -5256,11 +5240,41 @@
         note.hidden = false;
         note.textContent = text;
         note.classList.add('arena-chips-note--flash');
-        var count = canonicalArenaIds().length;
         arenaChipsNoteTimer = setTimeout(function() {
           arenaChipsNoteTimer = null;
-          renderArenaChipsNote(count);
+          hideArenaChipsNote();
         }, 3000);
+      }
+
+      /* Slots are creatable on any arena regardless of this — it only fills in the arena field
+         when a slot is added without picking one explicitly (precise-time / legacy rows), and
+         labels arena-less slots created before arenas existed. Not a "primary/active" status,
+         so it lives as one sentence with its own control, not a badge on every row. */
+      function renderArenaDefaultLine(ids) {
+        var host = document.getElementById('arenaDefaultLine');
+        if (!host) return;
+        if (!state.trainer || ids.length < 2) {
+          host.innerHTML = '';
+          return;
+        }
+        var cur = state.trainer.primary_arena_id != null ? Number(state.trainer.primary_arena_id) : null;
+        if (cur == null || ids.indexOf(cur) < 0) cur = ids[0];
+        var opts = ids.map(function(id) {
+          var a = findArenaById(id);
+          var name = (a && a.name) ? a.name : ('Арена #' + id);
+          return '<option value="' + id + '"' + (id === cur ? ' selected' : '') + '>' + escapeArenaHtml(name) + '</option>';
+        }).join('');
+        host.innerHTML =
+          '<p class="hint arena-default-line">Если при создании слота не выбрать площадку — подставится '
+          + '<select id="arenaDefaultSelect" aria-label="Площадка по умолчанию">' + opts + '</select>'
+          + '<span class="arena-default-line__foot">В расписании и в «Точном времени» площадку можно '
+          + 'выбрать любую — эта просто стоит заранее.</span></p>';
+        var sel = document.getElementById('arenaDefaultSelect');
+        if (sel) {
+          sel.addEventListener('change', function() {
+            setPrimaryArena(Number(sel.value));
+          });
+        }
       }
 
       function updateArenaChips() {
@@ -5270,52 +5284,53 @@
         if (!ids.length) {
           chips.innerHTML = '';
           chips.hidden = true;
-          renderArenaChipsNote(0);
+          hideArenaChipsNote();
+          renderArenaDefaultLine(ids);
           return;
         }
         chips.hidden = false;
-        var primary = state.trainer && state.trainer.primary_arena_id != null
-          ? Number(state.trainer.primary_arena_id)
-          : null;
         var html = '';
         ids.forEach(function(id) {
           var a = findArenaById(id);
           var name = (a && a.name) ? a.name : ('Арена #' + id);
-          var isPrimary = primary === id;
-          html += '<div class="arena-chip' + (isPrimary ? ' arena-chip--primary' : '') + '">';
-          html += '<span class="arena-chip__name">' + escapeArenaHtml(name) + '</span>';
-          if (ids.length > 1) {
-            html += '<button type="button" class="arena-chip__star" data-arena-star="' + id + '"'
-              + ' aria-pressed="' + (isPrimary ? 'true' : 'false') + '"'
-              + ' aria-label="' + (isPrimary ? 'Основная площадка' : 'Сделать основной') + '">★</button>';
+          var pub = arenaIsPublic(id);
+          var isOpen = arenaRowOpenId === id;
+          html += '<div class="arena-row' + (pub ? '' : ' arena-row--hidden') + (isOpen ? ' arena-row--open' : '') + '">';
+          html += '<div class="arena-row__top" data-arena-toggle="' + id + '">';
+          html += '<span class="arena-row__name">' + escapeArenaHtml(name) + '</span>';
+          html += '<span class="arena-row__chev" aria-hidden="true">▾</span>';
+          html += '<button type="button" class="arena-row__remove" data-arena-remove="' + id + '" aria-label="Убрать площадку">×</button>';
+          html += '</div>';
+          if (!pub) {
+            html += '<span class="arena-row__tag">Скрыта от клиентов на странице арены</span>';
           }
-          var shown = arenaIsPublic(id);
-          html += '<button type="button" class="arena-chip__public" data-arena-public="' + id + '"'
-            + ' aria-pressed="' + (shown ? 'true' : 'false') + '"'
-            + ' title="' + (shown ? 'Показывать в карточке каталога' : 'Только для расписания, скрыта из каталога') + '">'
-            + (shown ? 'в карточке' : 'только слоты') + '</button>';
-          html += '<button type="button" class="arena-chip__remove" data-arena-remove="' + id + '" aria-label="Убрать">×</button>';
+          html += '<div class="arena-row__panel">';
+          html += '<div class="arena-opt">';
+          html += '<div class="arena-opt__txt">';
+          html += '<span class="arena-opt__t">Показывать меня на странице арены</span>';
+          html += '<span class="arena-opt__d">Клиент открывает «Лёд» → ' + escapeArenaHtml(name)
+            + ' и видит вас в блоке «Тренеры на этой арене».</span>';
+          html += '</div>';
+          html += '<button type="button" class="arena-sw" role="switch" data-arena-public="' + id + '"'
+            + ' aria-checked="' + (pub ? 'true' : 'false') + '" aria-label="Показывать на странице арены"></button>';
+          html += '</div>';
+          html += '</div>';
           html += '</div>';
         });
         chips.innerHTML = html;
-        /* Don't stomp an active flash confirmation — updateArenaChips() re-runs mid-flight on
-           every server round-trip (success or revert-on-failure), which would otherwise cut the
-           3s confirmation short before the trainer can read it. Its own timeout still fires and
-           reverts to the legend on schedule regardless of how many re-renders happen meanwhile. */
-        if (!arenaChipsNoteTimer) renderArenaChipsNote(ids.length);
-        chips.querySelectorAll('[data-arena-star]').forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            var aid = Number(btn.getAttribute('data-arena-star'));
-            setPrimaryArena(aid);
-            var a = findArenaById(aid);
-            var name = (a && a.name) ? a.name : ('Арена #' + aid);
-            flashArenaChipsNote(
-              '«' + name + '» — основная площадка: на неё попадёт клиент, если в каталоге выберет «Любая арена».'
-            );
+        renderArenaDefaultLine(ids);
+
+        chips.querySelectorAll('[data-arena-toggle]').forEach(function(el) {
+          el.addEventListener('click', function(e) {
+            if (e.target.closest('[data-arena-remove]')) return;
+            var id = Number(el.getAttribute('data-arena-toggle'));
+            arenaRowOpenId = (arenaRowOpenId === id) ? null : id;
+            updateArenaChips();
           });
         });
         chips.querySelectorAll('[data-arena-public]').forEach(function(btn) {
-          btn.addEventListener('click', function() {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
             var aid = Number(btn.getAttribute('data-arena-public'));
             if (!aid) return;
             var next = !arenaIsPublic(aid);
@@ -5325,8 +5340,8 @@
             var name = (a && a.name) ? a.name : ('Арена #' + aid);
             flashArenaChipsNote(
               next
-                ? '«' + name + '» теперь видна клиентам в каталоге.'
-                : '«' + name + '» скрыта из каталога — доступна только для записи по расписанию.'
+                ? '«' + name + '» теперь видна клиентам на странице арены.'
+                : '«' + name + '» скрыта — клиенты её на странице арены не увидят.'
             );
             fetch(apiUrl('/trainer/arenas/' + aid + '/public'), {
               method: 'PATCH',
@@ -5353,8 +5368,11 @@
           });
         });
         chips.querySelectorAll('[data-arena-remove]').forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            toggleCanonicalArena(btn.getAttribute('data-arena-remove'), false);
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var id = Number(btn.getAttribute('data-arena-remove'));
+            if (arenaRowOpenId === id) arenaRowOpenId = null;
+            toggleCanonicalArena(id, false);
           });
         });
       }
@@ -5939,6 +5957,8 @@
               chips.hidden = true;
             }
             if (results) results.innerHTML = '';
+            hideArenaChipsNote();
+            renderArenaDefaultLine([]);
           }
           if (!state.arenaCreateOpen) renderArenaAddEntryPoint(hasCity);
           return;
