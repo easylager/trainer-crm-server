@@ -18,7 +18,7 @@ def format_admin_arena_pending_caption(arena: dict[str, Any]) -> str:
     coords_str = (
         f"{coords[0]:.5f}, {coords[1]:.5f}" if coords[0] is not None and coords[1] is not None else "не определены"
     )
-    trainer_name = (arena.get("trainer_name") or "").strip()
+    trainer_name = html.escape((arena.get("trainer_name") or "").strip())
     trainer_tg = arena.get("trainer_telegram_id")
     trainer_line = trainer_name or (f"id={arena.get('trainer_id')}" if arena.get("trainer_id") else "—")
     if trainer_tg:

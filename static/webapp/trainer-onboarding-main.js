@@ -381,7 +381,6 @@
 
   function arenaMetaLabel(arena) {
     var bits = [];
-    if (arena.is_confirmed === false) bits.push('на проверке');
     if (arena.address) bits.push(arena.address);
     else if (arena.city_name) bits.push(arena.city_name);
     var off = arenaOffset(arena);
@@ -453,6 +452,13 @@
       var nameEl = document.createElement('span');
       nameEl.className = 'ob-arena-option__name';
       nameEl.textContent = a.name;
+      if (a.is_confirmed === false) {
+        nameEl.appendChild(document.createTextNode(' '));
+        var badge = document.createElement('span');
+        badge.className = 'ob-arena-unconfirmed-badge';
+        badge.textContent = 'на проверке';
+        nameEl.appendChild(badge);
+      }
       b.appendChild(nameEl);
       var meta = arenaMetaLabel(a);
       if (meta) {
@@ -581,6 +587,7 @@
       label.textContent = arena ? arena.name : ('Площадка #' + aid);
       b.appendChild(label);
       var meta = arena ? arenaMetaLabel(arena) : '';
+      if (arena && arena.is_confirmed === false) meta = meta ? 'на проверке · ' + meta : 'на проверке';
       if (meta) {
         var metaEl = document.createElement('span');
         metaEl.className = 'ob-arena-tab__meta';

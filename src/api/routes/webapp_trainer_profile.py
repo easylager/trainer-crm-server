@@ -225,6 +225,9 @@ async def post_trainer_arena_setup_for_webapp(
     or retried request could otherwise create two real (unconfirmed) arenas. Same 24h cache
     mechanism as ``POST /client/booking``; only a *successful* create is cached — a
     ``duplicate_warning`` is not, so a resubmit after the trainer edits the name still re-checks.
+    This narrows the double-submit window (same-tab double-tap, single-device retry) but is not
+    a true lock — two genuinely concurrent requests with the same key can both miss the cache
+    and both write. Closing that fully would need a DB-level constraint or advisory lock.
     """
     trainer_id = await _linked_trainer_id(session, principal)
     mode = (body.mode or "").strip().lower()

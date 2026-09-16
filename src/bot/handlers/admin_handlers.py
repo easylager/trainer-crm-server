@@ -2372,14 +2372,21 @@ async def cmd_pending_arenas(message: Message) -> None:
     if not _is_admin(user_id):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
+    # A fresh listing means the admin is starting over — drop any dangling "awaiting coords"
+    # state from an earlier approve tap so a later free-text message can't get misattributed
+    # to whichever arena that state was still pointing at.
+    _admin_awaiting_arena_coords.pop(user_id, None)
     async with async_session_factory() as session:
         pending = await list_arenas_pending_moderation(session)
     if not pending:
         await message.answer("Нет арен, ожидающих подтверждения.")
         return
     for arena in pending:
-        caption = _format_admin_arena_pending_caption(arena)
-        await message.answer(caption, reply_markup=_arena_pending_keyboard(arena["id"]))
+        try:
+            caption = _format_admin_arena_pending_caption(arena)
+            await message.answer(caption, reply_markup=_arena_pending_keyboard(arena["id"]))
+        except Exception:  # noqa: BLE001
+            logger.exception("pending_arenas: failed to render arena_id=%s", arena.get("id"))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_ARENA_APPROVE_PREFIX))
@@ -2407,6 +2414,11 @@ async def on_arena_approve(callback: CallbackQuery) -> None:
         needs_coords = arena.get("latitude") is None or arena.get("longitude") is None
         ok = False if needs_coords else await approve_arena(session, arena_id, user_id)
     if needs_coords:
+        # At most one "awaiting free text" flow per admin — otherwise the next message could
+        # get consumed by the wrong one (e.g. sent as trainer moderation feedback, read back
+        # as arena coordinates, or vice versa).
+        _admin_awaiting_feedback.pop(user_id, None)
+        _admin_awaiting_support_reply.pop(user_id, None)
         _admin_awaiting_arena_coords[user_id] = arena_id
         await callback.answer("Сначала укажите координаты", show_alert=True)
         await callback.message.answer(
@@ -2474,8 +2486,8 @@ async def on_admin_message(message: Message) -> None:
         if coords is None:
             _admin_awaiting_arena_coords[user_id] = arena_coords_id
             await message.answer(
-                "Не понял координаты. Формат: «широта, долгота», например: 53.9006, 27.5590"
-                " (или /cancel)."
+                f"Не удалось распознать координаты для арены #{arena_coords_id}."
+                " Формат: «широта, долгота», например: 53.9006, 27.5590 (или /cancel)."
             )
             return
         lat, lon = coords

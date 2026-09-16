@@ -256,6 +256,20 @@
       color: var(--app-muted);
     }
     .ob-arena-option[aria-pressed="true"] .ob-arena-option__meta { color: inherit; opacity: .85; }
+    .ob-arena-unconfirmed-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.4;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, #c0392b 14%, transparent);
+      color: #c0392b;
+      vertical-align: middle;
+    }
+    .ob-arena-option[aria-pressed="true"] .ob-arena-unconfirmed-badge {
+      background: color-mix(in srgb, #fff 82%, transparent);
+    }
     .ob-arena-empty {
       font-size: 14px;
       color: var(--app-muted);
@@ -652,7 +666,7 @@
       </div>
 
       <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
-        <p class="ob-step-hint" id="obArenaCreateLead">Не нашли площадку? Добавьте её — появится в расписании сразу, без ухода в профиль, а команда проверит её чуть позже.</p>
+        <p class="ob-step-hint" id="obArenaCreateLead">Не нашли площадку? Добавьте её здесь же — появится в расписании сразу, а команда проверит её чуть позже.</p>
         <label for="obArenaCreateName">Название</label>
         <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
         <label for="obArenaCreateAddress">Адрес</label>
