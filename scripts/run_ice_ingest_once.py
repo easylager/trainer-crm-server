@@ -52,6 +52,10 @@ MINSK_MK_PARSER_KEYS = frozenset(
         "ledby_html_v1",
         "diamond_html_v1",
         "minskarena_speed_oval_v1",
+        # RU pilot (Moscow / St. Petersburg) — see data/parsers/{msk,spb}-*.md
+        "ldsokolniki_html_v1",
+        "ledovyydvorets_html_v1",
+        "yubileyny_afisha_html_v1",
     }
 )
 

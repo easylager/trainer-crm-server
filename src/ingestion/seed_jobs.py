@@ -195,6 +195,9 @@ def _parse_spec(path: Path) -> _SpecDraft | None:
     for match in _HEADER.finditer(text):
         headers[match.group(1)] = match.group(2).strip()
     parser_key = headers.get("parser_key")
+    if parser_key is not None and parser_key.strip().lower() in _SCALAR_NULL:
+        # e.g. `- parser_key: null` — spec is research-only, no adapter built yet.
+        parser_key = None
     arena_raw = headers.get("arena_id")
     if not parser_key or not arena_raw:
         return None
@@ -219,10 +222,24 @@ def _parse_spec(path: Path) -> _SpecDraft | None:
     )
 
 
-def load_minsk_parser_specs(parsers_dir: Path | None = None) -> list[_SpecDraft]:
+_SPEC_GLOBS = ("minsk-*.md", "msk-*.md", "spb-*.md")
+
+
+def load_ice_parser_specs(parsers_dir: Path | None = None) -> list[_SpecDraft]:
+    """Parse every ``<prefix>-*.md`` parser spec into a draft job seed.
+
+    ``minsk-*`` covers the 8 true-Minsk arenas (the other 17 regional BY
+    rinks are seeded separately via ``scripts/seed_regional_ice_parser_jobs.py``
+    + ``seed_config_regional_batch_*.py``, not through this glob). ``msk-*``
+    and ``spb-*`` cover the RU pilot arenas (Moscow / St. Petersburg) — same
+    spec shape (headers + a fenced job.config JSON block), same seeding path.
+    """
     directory = parsers_dir or DEFAULT_PARSERS_DIR
+    paths: set[Path] = set()
+    for pattern in _SPEC_GLOBS:
+        paths.update(directory.glob(pattern))
     drafts: list[_SpecDraft] = []
-    for path in sorted(directory.glob("minsk-*.md")):
+    for path in sorted(paths):
         draft = _parse_spec(path)
         if draft is not None:
             drafts.append(draft)
@@ -260,7 +277,7 @@ def build_minsk_job_seeds(
     fixtures = fixtures_dir or DEFAULT_FIXTURES_DIR
     registry = {int(item["arena_id"]): item for item in load_minsk_parser_registry(registry_path) if "arena_id" in item}
     seeds: list[JobSeed] = []
-    for spec in load_minsk_parser_specs(parsers_dir):
+    for spec in load_ice_parser_specs(parsers_dir):
         entry = registry.get(spec.arena_id)
         if entry is not None:
             target = str(entry.get("target") or "")

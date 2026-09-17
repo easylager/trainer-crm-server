@@ -59,6 +59,12 @@ def default_registry() -> ParserRegistry:
         ShklovArenaParser,
         SoligorskSzkParser,
     )
+    from src.ingestion.adapters_ru_pilot import (
+        LedovyyDvoretsHtmlParser,
+        SokolnikiHtmlParser,
+        VtbArenaQticketsParser,
+        YubileynyAfishaParser,
+    )
 
     registry = ParserRegistry()
     for parser in (
@@ -85,6 +91,10 @@ def default_registry() -> ParserRegistry:
         SoligorskSzkParser(),
         ShklovArenaParser(),
         GomelLdsParser(),
+        SokolnikiHtmlParser(),
+        LedovyyDvoretsHtmlParser(),
+        YubileynyAfishaParser(),
+        VtbArenaQticketsParser(),
     ):
         registry.register(parser)
     return registry
@@ -123,6 +133,12 @@ from src.ingestion.adapters_regional_batch_d import (  # noqa: E402
     ShklovArenaParser,
     SoligorskSzkParser,
 )
+from src.ingestion.adapters_ru_pilot import (  # noqa: E402
+    LedovyyDvoretsHtmlParser,
+    SokolnikiHtmlParser,
+    VtbArenaQticketsParser,
+    YubileynyAfishaParser,
+)
 
 __all__ = [
     "BaranovichiLdsParser",
@@ -137,6 +153,7 @@ __all__ = [
     "IceParser",
     "KobrinLdsParser",
     "LedByHtmlParser",
+    "LedovyyDvoretsHtmlParser",
     "LidaLdsParser",
     "MinskArenaSaleframeParser",
     "MinskSpeedOvalParser",
@@ -147,8 +164,11 @@ __all__ = [
     "ParserRegistry",
     "PinskVolnaParser",
     "ShklovArenaParser",
+    "SokolnikiHtmlParser",
     "SoligorskSzkParser",
     "VitebskDsParser",
+    "VtbArenaQticketsParser",
+    "YubileynyAfishaParser",
     "ZamokHtmlParser",
     "default_registry",
 ]
