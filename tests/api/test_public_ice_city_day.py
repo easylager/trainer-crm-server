@@ -28,30 +28,43 @@ from tests.api.test_public_arenas import _insert_arena, _insert_city
 from src.application.ice_session_use_cases import create_ice_session
 
 
-def _minsk_today() -> date:
+def _minsk_now() -> datetime:
     """City day pages use Europe/Minsk; CI runners are often UTC — date.today() drifts."""
-    return datetime.now(ZoneInfo("Europe/Minsk")).date()
+    return datetime.now(ZoneInfo("Europe/Minsk"))
+
+
+def _minsk_today() -> date:
+    return _minsk_now().date()
 
 
 async def _add_today_session(
     db_session,
     arena_id: int,
     *,
-    starts_at_local: str = "23:30",
+    starts_at_local: str | None = None,
     price_adult_minor: int | None = 850,
-) -> int:
+) -> tuple[int, str]:
     """
-    Сеанс на сегодня (по Минску), поздним временем.
+    Сеанс на сегодня (по Минску), заведомо позже текущего момента.
 
-    23:30 не украшение: выборка отбрасывает сеансы с ``starts_at_utc <= now``
-    (PDEC-005), и тест, поставленный на утро, разваливался бы каждый раз после
-    старта слота.
+    Раньше время было зашито как ``23:30``: выборка отбрасывает сеансы с
+    ``starts_at_utc <= now`` (PDEC-005), и тест на утро разваливался бы каждый
+    раз после старта слота. Но фиксированное «поздно вечером» само разваливается
+    в те же полчаса перед полуночью, когда тест реально выполняется около 23:30 —
+    сеанс уже в прошлом на момент запроса. Берём «сейчас + 30 минут», а не
+    константу: остаётся «сегодня» почти всегда (не разваливает предположение
+    теста про «this arena has something upcoming today»), и никогда не в прошлом
+    относительно момента вставки. Ближе получаса до полуночи по Минску — сеанс
+    физически перескочит на завтра; это заведомо отдельный (более узкий и честный)
+    сценарий «сегодня уже пусто», не наша забота здесь.
     """
+    when = _minsk_now() + timedelta(minutes=30)
+    resolved_local = starts_at_local or f"{when.hour:02d}:{when.minute:02d}"
     created = await create_ice_session(
         db_session,
         arena_id,
-        local_date=_minsk_today(),
-        starts_at_local=starts_at_local,
+        local_date=when.date(),
+        starts_at_local=resolved_local,
         duration_minutes=45,
         kind="public_skate",
         price_adult_minor=price_adult_minor,
@@ -59,7 +72,7 @@ async def _add_today_session(
         price_rental_minor=None,
     )
     await db_session.flush()
-    return int(created["id"])
+    return int(created["id"]), resolved_local
 
 
 def _client() -> AsyncClient:
@@ -81,7 +94,7 @@ async def test_public_page_opens_without_auth_and_carries_og_tags(
     name = f"Огтест{uuid.uuid4().hex[:6]}"
     cid = await _insert_city(db_session, name=name)
     arena = await _insert_arena(db_session, cid, name="Ледовый дворец «Проба»")
-    await _add_today_session(db_session, arena)
+    _session_id, starts_at_local = await _add_today_session(db_session, arena)
 
     slug = city_slug(name)
     async with _client() as client:
@@ -96,7 +109,7 @@ async def test_public_page_opens_without_auth_and_carries_og_tags(
     assert 'name="twitter:card"' in html
     # Расписание — в первом же ответе, а не подгружается скриптом.
     assert "Ледовый дворец «Проба»" in html or "Ледовый дворец" in html
-    assert "23:30" in html
+    assert starts_at_local in html
     assert "8.50 BYN" in html
     # Ни одного незаменённого плейсхолдера шаблона.
     assert "__" not in html.split("<style>")[0]
@@ -274,7 +287,9 @@ async def test_no_invented_data_when_price_is_unknown(app_use_test_db, db_sessio
     name = f"Безцен{uuid.uuid4().hex[:6]}"
     cid = await _insert_city(db_session, name=name)
     arena = await _insert_arena(db_session, cid, name="Каток без цен")
-    await _add_today_session(db_session, arena, price_adult_minor=None)
+    _session_id, starts_at_local = await _add_today_session(
+        db_session, arena, price_adult_minor=None
+    )
 
     async with _client() as client:
         page = await client.get(f"/ice/{city_slug(name)}/today")
@@ -282,7 +297,7 @@ async def test_no_invented_data_when_price_is_unknown(app_use_test_db, db_sessio
 
     assert page.status_code == 200
     assert "0 BYN" not in page.text
-    assert "23:30" in page.text
+    assert starts_at_local in page.text
     body = share.json()
     # Сводка честно молчит о ценах, но не молчит о сеансах.
     assert "BYN" not in body["summary"]
