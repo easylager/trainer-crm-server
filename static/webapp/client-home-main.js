@@ -83,6 +83,66 @@
         window.location.href = withInit(webappBasePath() + pathWithQuery);
       }
 
+      /**
+       * A client who followed a trainer's referral link but never finished the
+       * registration form (phone/name) used to land here silently, with the
+       * trainer never notified. Show a full-screen gate back to the form instead
+       * of the normal hub — the referral link always means this trainer, so
+       * there is no "wrong trainer" case to let the client skip past.
+       *
+       * Defensive by construction, not by an escape hatch: any error building
+       * this (missing fields, DOM issues) is swallowed and treated as "no gate"
+       * so a bug here can never trap a real client — see also the server-side
+       * fail-open in `_pending_referral_payload`.
+       */
+      function renderPendingReferralGate(pendingReferral) {
+        try {
+          if (!pendingReferral || !pendingReferral.trainer_id) return false;
+          if (document.getElementById('pendingReferralGate')) return true;
+
+          var overlay = document.createElement('div');
+          overlay.id = 'pendingReferralGate';
+          overlay.style.cssText =
+            'position:fixed;inset:0;z-index:9999;background:var(--glide-bg,#F1F3F2);' +
+            'display:flex;align-items:center;justify-content:center;padding:24px;';
+
+          var card = document.createElement('div');
+          card.style.cssText =
+            'max-width:360px;width:100%;background:var(--glide-surface,#fff);' +
+            'border-radius:20px;padding:28px 22px;text-align:center;' +
+            'box-shadow:var(--glide-shadow-card,0 10px 28px -18px rgba(16,40,40,.35));';
+          var name = esc(pendingReferral.trainer_name || 'тренер');
+          card.innerHTML =
+            '<div style="font-size:34px;line-height:1;margin-bottom:14px;">👋</div>' +
+            '<div style="font-weight:700;font-size:17px;color:var(--glide-text,#101617);margin-bottom:8px;">' +
+            'Вас пригласил тренер ' + name + '</div>' +
+            '<div style="font-size:14px;color:var(--glide-hint,#5E6B6B);margin-bottom:20px;">' +
+            'Заполните короткий профиль — тренер увидит, что вы перешли по ссылке, и вы сможете записаться.' +
+            '</div>' +
+            '<button type="button" id="pendingReferralContinueBtn" style="width:100%;padding:13px;border:none;' +
+            'border-radius:14px;background:var(--glide-brand,#45B9BB);color:var(--glide-on-fill,#04262A);' +
+            'font-weight:600;font-size:15px;">Продолжить регистрацию</button>';
+          overlay.appendChild(card);
+          document.body.appendChild(overlay);
+
+          fetch(apiUrl('/client/register-event'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ event: 'hub_gate_shown', trainer_id: pendingReferral.trainer_id }),
+          }).catch(function () {});
+
+          var btn = document.getElementById('pendingReferralContinueBtn');
+          if (btn) {
+            btn.addEventListener('click', function () {
+              navigateTo('client-register?trainer_id=' + encodeURIComponent(pendingReferral.trainer_id));
+            });
+          }
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
       function esc(s) {
         if (s == null) return '';
         return String(s)
@@ -1703,6 +1763,9 @@
           })
           .then(jsonOrThrow)
           .then(function(hub) {
+            if (renderPendingReferralGate(hub.pending_referral)) {
+              return;
+            }
             var days = (hub.bookings || {}).days || [];
             var reqs = (hub.requests || {}).items || [];
             renderStreakRibbon(hub.activity || {});
@@ -1719,6 +1782,9 @@
               fetch(apiUrl('/client/session'), { headers: headersJson() }).then(jsonOrThrow).catch(function() { return {}; }),
             ]).then(function(results) {
               var sess = results[2] || {};
+              if (renderPendingReferralGate(sess.pending_referral)) {
+                return;
+              }
               renderStreakRibbon(null);
               return applyHubState(
                 results[0].days || [],

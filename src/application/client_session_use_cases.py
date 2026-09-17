@@ -160,3 +160,41 @@ async def clear_pending_request_id(telegram_id: int, session: AsyncSession) -> N
     payload.pop("pending_request_id", None)
     await repo.upsert(telegram_id, payload=payload if payload else None)
     await session.commit()
+
+
+async def set_pending_referral(telegram_id: int, trainer_id: int, session: AsyncSession) -> None:
+    """
+    Store trainer_id from a welcome_ref invite that needs the registration form
+    (missing phone/name). Read by the client hub to gate access until the client
+    completes registration (phone match resolves dedup).
+    """
+    repo = ClientSessionRepository(session)
+    row = await repo.get(telegram_id)
+    if not row:
+        await repo.upsert(telegram_id, state="idle", payload={"pending_referral_trainer_id": trainer_id})
+    else:
+        payload = dict(row.get("payload") or {})
+        payload["pending_referral_trainer_id"] = trainer_id
+        await repo.upsert(telegram_id, payload=payload)
+    await session.commit()
+
+
+async def get_pending_referral(telegram_id: int, session: AsyncSession) -> int | None:
+    """trainer_id of an unresolved welcome_ref invite, or None."""
+    row = await ClientSessionRepository(session).get(telegram_id)
+    if not row:
+        return None
+    tid = (row.get("payload") or {}).get("pending_referral_trainer_id")
+    return int(tid) if tid is not None else None
+
+
+async def clear_pending_referral(telegram_id: int, session: AsyncSession) -> None:
+    """Clear pending referral once resolved (registered, or bound through any other invite path)."""
+    repo = ClientSessionRepository(session)
+    row = await repo.get(telegram_id)
+    if not row:
+        return
+    payload = dict(row.get("payload") or {})
+    payload.pop("pending_referral_trainer_id", None)
+    await repo.upsert(telegram_id, payload=payload if payload else None)
+    await session.commit()
