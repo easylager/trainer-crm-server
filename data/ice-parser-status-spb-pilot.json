@@ -1,0 +1,69 @@
+{
+  "generated_at": "2026-09-17T13:30:00+03:00",
+  "scope": "St. Petersburg pilot — 5 arenas probed for TASK-121 (arena_id 112, 109, 105, 97, 106). Timezone Europe/Moscow, currency RUB. Not merged into data/ice-parser-status.json (that file is BY-only scope).",
+  "legend": {
+    "spec_ready": "Спека + фикстура + expected.json (слоты)",
+    "spec_blocked": "Спека есть, прогон без обхода сетевой блокировки этой sandbox = blocked",
+    "reverse_ok": "Стратегия ясна, спека ещё не написана",
+    "reverse_stale": "Источник найден, снимок протух",
+    "skip": "Нет публично извлекаемой регулярной сетки массового катания / площадка закрыта",
+    "not_probed": "В проде есть, reverse не делали"
+  },
+  "arenas": [
+    {
+      "arena_id": 112,
+      "city": "Санкт-Петербург",
+      "name": "СКА Арена",
+      "status": "skip",
+      "strategy": "Нет текущей публичной сетки МК",
+      "detail": "Предзагруженная фикстура — детальная страница одного промо-события «10-14 августа» с мёртвой билетной ссылкой (дата 2024-12-27), без времени и цены. Живая проверка 2026-09-17: категорийные листинги /afisha/massovye-kataniya/ и /afisha/childs/ рендерятся, но контейнер карточек событий пуст на обеих. МК на этой арене — редкие одноразовые промо-окна, не регулярный сервис.",
+      "source": "https://skaarena.ru/afisha/massovye-kataniya/",
+      "spec": "data/parsers/spb-ska-arena.md",
+      "blocker": "Нет опубликованных событий на момент снимка; нет времени/цены даже в историческом событии."
+    },
+    {
+      "arena_id": 109,
+      "city": "Санкт-Петербург",
+      "name": "Mega Ice (ТРК «Лето»)",
+      "status": "skip",
+      "strategy": "Площадка закрыта навсегда",
+      "detail": "Afisha.ru листинг прямым текстом: «Закрыто навсегда». Независимая статья (peterburg.guide) подтверждает закрытие. Оба ранее известных сайта площадки (obiz.ru, go2sport.ru клуб-страница) не резолвятся/недоступны. Не путать с mega-ice.ru — это Москва, ТЦ Авиапарк.",
+      "source": "https://www.afisha.ru/spb/sportbuilding/katok-mega-ice-34246/",
+      "spec": "data/parsers/spb-mega-ice.md",
+      "blocker": "Бизнес закрыт, не сетевая/техническая проблема."
+    },
+    {
+      "arena_id": 105,
+      "city": "Санкт-Петербург",
+      "name": "Ледовый дворец (пр. Пятилеток 1)",
+      "status": "spec_ready",
+      "strategy": "HTML одна страница, per-date текстовые блоки",
+      "detail": "newarena.spb.ru/rink/: абзацы «24 августа:16:15-17:15; ...» на дату, до «каток не работает» на паузу. Цена зависит от времени старта (до/после 17:30: 600/400 vs 700/450 RUB, прокат 450 фикс). 102 слота в expected.json (снимок 24 авг-8 сен, уже в прошлом на дату снимка — drop_past на публикации, не на extract).",
+      "source": "https://newarena.spb.ru/rink/",
+      "spec": "data/parsers/spb-ledovyy-dvorets.md",
+      "blocker": "Прямой доступ к newarena.spb.ru из этой sandbox зависает на TLS ClientHello (обойдено через r.jina.ai reader-proxy — фикстура markdown, не raw HTML DOM). Продовый воркер должен проверить прямой egress."
+    },
+    {
+      "arena_id": 97,
+      "city": "Санкт-Петербург",
+      "name": "СК «Юбилейный»",
+      "status": "spec_ready",
+      "strategy": "HTML афиша, event-driven (не сетка)",
+      "detail": "yubi.ru/afisha/katok/: карточки «Часовая спортивная докатка» → event-страницы с Дата/Время/Арена/Цена/возраст. 3 текущих события на снимке (19-20 сен), все 800 RUB, 0+, без проката. Цена на event-странице расходится со сводной /price/ (600) и подвалом листинга (700) — канон = цена с event-страницы, не унифицировать молча.",
+      "source": "https://www.yubi.ru/afisha/katok/",
+      "spec": "data/parsers/spb-yubileyny.md",
+      "blocker": "Тот же сетевой блок sandbox, что у newarena.spb.ru — обойдено через reader-proxy. Каденс событийный (не еженедельная сетка) — job должен перечитывать листинг часто."
+    },
+    {
+      "arena_id": 106,
+      "city": "Санкт-Петербург",
+      "name": "Хоккейный город СКА (Российский пр. 6)",
+      "status": "skip",
+      "strategy": "Нет публично извлекаемой цены/сетки для рядового посетителя",
+      "detail": "/schedule/ — календарь аренды залов (юрлица/группы), не билеты на сеанс. Билетный виджет tickets.ska.ru/rink анонсирован в новостях, но отдаёт HTTP 403 на любой автоматический доступ (прямой и через прокси). Информационные страницы («Час хоккея», «массовые катания») — только описания и телефон, ни одной цифры цены или времени.",
+      "source": "https://city.ska.ru/schedule/",
+      "spec": "data/parsers/spb-hockey-city.md",
+      "blocker": "tickets.ska.ru/rink возвращает 403 боту/прокси; возможно откроется реальному браузеру — не подтверждено. Плюс тот же сетевой блок sandbox на city.ska.ru."
+    }
+  ]
+}
