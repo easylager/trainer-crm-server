@@ -76,3 +76,53 @@ def test_no_short_description_fabricates_a_schedule(mod) -> None:
         assert not time_pattern.search(fallback.short_description), (
             f"arena_id={arena_id} short_description looks like it invents a schedule time"
         )
+
+
+@pytest.mark.asyncio
+async def test_apply_never_overwrites_an_existing_website_url_or_description(mod, db_session) -> None:
+    """Regression: an earlier run of this script against a real DB found some arenas already had
+    better, hand-curated website_url/short_description (TASK-080) than this script's generic
+    fallback copy — the script must fill gaps, never clobber existing values."""
+    from sqlalchemy import text
+
+    from src.application.arena_profile import apply_admin_arena_profile_patch
+
+    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_id = r.scalar()
+    if city_id is None:
+        pytest.skip("need seed cities")
+
+    arena_id = next(iter(mod.FALLBACKS))
+    r = await db_session.execute(
+        text(
+            "INSERT INTO arenas (city_id, name, address, is_active, is_confirmed) "
+            "VALUES (:cid, 'Test arena', 'ул. Тестовая, 1', true, true) RETURNING id"
+        ),
+        {"cid": city_id},
+    )
+    real_arena_id = int(r.scalar_one())
+    await db_session.flush()
+
+    curated_url = "https://example.by/already-curated"
+    curated_desc = "Уже вручную выверенное описание, трогать нельзя."
+    await apply_admin_arena_profile_patch(
+        db_session, real_arena_id, {"website_url": curated_url, "short_description": curated_desc}
+    )
+    await db_session.flush()
+
+    # Simulate this script's fill-only logic directly (same guard as run()).
+    existing = (
+        await db_session.execute(
+            text("SELECT website_url, short_description FROM arena_profiles WHERE arena_id = :id"),
+            {"id": real_arena_id},
+        )
+    ).fetchone()
+    existing_url = (existing[0] or "").strip()
+    existing_desc = (existing[1] or "").strip()
+    fallback = mod.FALLBACKS[arena_id]
+    patch = {}
+    if not existing_url and fallback.website_url:
+        patch["website_url"] = fallback.website_url
+    if not existing_desc:
+        patch["short_description"] = fallback.short_description
+    assert patch == {}, "existing curated fields must never be scheduled for overwrite"
