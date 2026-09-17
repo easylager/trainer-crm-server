@@ -1,0 +1,54 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 97,
+  "parser_key": "yubileyny_afisha_html_v1",
+  "timezone": "Europe/Moscow",
+  "currency_code": "RUB",
+  "captured_at": "2026-09-17T13:10:00+03:00",
+  "source_files": [
+    "katok-listing.md",
+    "price.md",
+    "event-11207.md",
+    "event-11208.md",
+    "event-11206.md"
+  ],
+  "horizon_note": "Снимок 2026-09-17: /afisha/katok/ публикует только 3 будущих события (19-20 сен), каждое — своя страница ?event=<id> со своей ценой. Каденс явно событийный, не сеточный — новые события появляются на этой же странице по мере публикации кассой.",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "RUB",
+      "session_label": "Часовая спортивная докатка — Малая арена",
+      "age_note": "0+, без возрастных ограничений",
+      "local_date": "2026-09-19",
+      "starts_at_local": "18:45",
+      "ends_at_local": "19:45",
+      "price_adult_minor": 80000,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "RUB",
+      "session_label": "Часовая спортивная докатка — Малая арена",
+      "age_note": "0+, без возрастных ограничений",
+      "local_date": "2026-09-20",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 80000,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "RUB",
+      "session_label": "Часовая спортивная докатка — Малая арена",
+      "age_note": "0+, без возрастных ограничений",
+      "local_date": "2026-09-20",
+      "starts_at_local": "18:15",
+      "ends_at_local": "19:15",
+      "price_adult_minor": 80000,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    }
+  ]
+}
