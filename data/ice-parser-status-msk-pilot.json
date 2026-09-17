@@ -1,0 +1,69 @@
+{
+  "generated_at": "2026-09-17T16:00:00+03:00",
+  "scope": "Moscow pilot: 5 arenas selected for a source-probe before deciding whether to widen Ice Discovery beyond Belarus.",
+  "legend": {
+    "spec_ready": "Спека + фикстура + expected.json (слоты)",
+    "spec_blocked": "Спека есть, извлечение слотов упирается в подтверждённый технический барьер (auth/API-ключ, недоступный egress)",
+    "reverse_ok": "Стратегия ясна, спека ещё не написана",
+    "reverse_stale": "Источник найден, снимок протух",
+    "skip": "Проверено вживую: нет публичного индивидуального МК-продукта на этот арена_id (B2B-аренда льда, только по телефону, или площадка вообще не для этого)",
+    "not_probed": "В проде есть, reverse не делали"
+  },
+  "arenas": [
+    {
+      "arena_id": 58,
+      "city": "Москва",
+      "name": "Ледовый дворец «Сокольники»",
+      "status": "spec_ready",
+      "strategy": "HTML статический блок",
+      "detail": "ld-sokolniki.ru/massovye-kataniya/ — Bitrix/Intec, .schedule-list. Горизонт короткий (1 дата/2 сеанса на снимке), обновляется вручную. Цены 600 руб., прокат 300 руб. плоско.",
+      "source": "https://ld-sokolniki.ru/massovye-kataniya/",
+      "spec": "data/parsers/msk-sokolniki.md",
+      "blocker": null
+    },
+    {
+      "arena_id": 69,
+      "city": "Москва",
+      "name": "ЦСКА Арена",
+      "status": "skip",
+      "strategy": "Нет публичного МК",
+      "detail": "Официальный сайт icearenamsk.ru — только афиша (хоккей/концерты/шоу) и B2B-аренда льда почасово для организаций (/ice-rental/, блоки 3 часа, не индивидуальные сеансы). cska-hockey.ru/tickets тоже только хоккейные матчи. Отдельного продукта «массовое катание» с ценой/расписанием для физлиц не найдено ни на одном официальном источнике.",
+      "source": "https://icearenamsk.ru/",
+      "spec": null,
+      "blocker": "Венью для соревнований/шоу + B2B аренда льда, не публичный каток."
+    },
+    {
+      "arena_id": 52,
+      "city": "Москва",
+      "name": "Дворец спорта «Мегаспорт» им. А.В. Тарасова",
+      "status": "skip",
+      "strategy": "Официальный сайт без сетки; бэкенд бронирования недоступен с текущего egress",
+      "detail": "Официальный оператор — ГБУ «СК «Мегаспорт», сайт megasport.mossport.ru (не megasportarena.com/mos-megasport.com — те сторонние перепродавцы билетов). На megasport.mossport.ru нет прямой сетки/цен МК — раздел «Услуги» роутит бронирование на sport.mos.ru/services/{id} (городская система «Мой спорт»). sport.mos.ru не отвечает с текущего egress (таймаут/Socket closed, многократно). Третьи стороны (kassir.ru, katok.su, kartasporta.ru, mos-megasport.com, megasportarena.com) тоже не отвечают с этого egress — их закэшированные в поиске цифры (сб 19:00-22:00, вс 13:00-22:00, ~150/70-80 руб.) не подтверждены живым фетчем и не использованы как данные (запрет придумывать/доверять непроверенному кэшу).",
+      "source": "https://megasport.mossport.ru/",
+      "spec": null,
+      "blocker": "sport.mos.ru и все проверенные сторонние тикет-сайты недоступны с текущего сетевого egress; невозможно независимо подтвердить сетку сеансов."
+    },
+    {
+      "arena_id": 53,
+      "city": "Москва",
+      "name": "ВТБ Арена",
+      "status": "spec_blocked",
+      "strategy": "Qtickets виджет, REST требует auth",
+      "detail": "Реальная услуга «Катание на крытой ледовой площадке» в здании «Академия спорта Динамо» (та же территория ВТБ Арена Парк). akademiya-dynamo.ru отдаёт цены статически (взр 600 / дет 400 [7-17 лет, студенты] / льготный 200 руб., прокат 300 руб.), но сетку дат/времени сеансов рисует Qtickets SPA (event_id=136634) после запроса к REST API. GET qtickets.ru/api/rest/v1/shows/136634 и .../events/136634 → 403 «Wrong authorization» без ключа. Каденс по тексту сайта — еженедельно по пятницам.",
+      "source": "https://akademiya-dynamo.ru/services/katanie-na-krytoy-ledovoy-ploshchadke/",
+      "spec": "data/parsers/msk-vtbarena.md",
+      "blocker": "Нужен API-ключ Qtickets (organizer token) для REST v1; без него сетка сеансов недостижима."
+    },
+    {
+      "arena_id": 45,
+      "city": "Москва",
+      "name": "Академия льда",
+      "status": "skip",
+      "strategy": "Только почасовая B2B-аренда льда онлайн; МК — по телефону",
+      "detail": "iceacadem.ru/raspisanie — публичная HTML-таблица, но это «Свободное время большого льда» (почасовая аренда всей арены командам/группам, от 15 000 руб./час), не индивидуальный входной билет. iceacadem.ru/uslugi прямо говорит: «массовые катания» доступны, но расписание и цены — «уточнить по телефону»; ни на одной странице (uslugi, raspisanie, uslugi/ledovye-areny) нет цены за вход или сетки МК-сеансов.",
+      "source": "https://iceacadem.ru/uslugi",
+      "spec": null,
+      "blocker": "Индивидуальный вход на МК — только по телефону, публичного онлайн-расписания/цен нет."
+    }
+  ]
+}

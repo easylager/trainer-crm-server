@@ -1,0 +1,38 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 58,
+  "parser_key": "ldsokolniki_html_v1",
+  "timezone": "Europe/Moscow",
+  "currency_code": "RUB",
+  "captured_at": "2026-09-17T15:00:00+03:00",
+  "source_files": [
+    "massovye-kataniya.html"
+  ],
+  "horizon_note": "static HTML .schedule-list block, admin-posted — only 1 date / 2 sessions on this snapshot",
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "RUB",
+      "session_label": "МК",
+      "age_note": null,
+      "local_date": "2026-09-20",
+      "starts_at_local": "19:15",
+      "ends_at_local": "20:15",
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": 30000
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "RUB",
+      "session_label": "МК",
+      "age_note": null,
+      "local_date": "2026-09-20",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:30",
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": 30000
+    }
+  ]
+}

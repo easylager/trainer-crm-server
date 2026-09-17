@@ -1,0 +1,16 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 53,
+  "parser_key": "vtbarena_qtickets_v1",
+  "timezone": "Europe/Moscow",
+  "currency_code": "RUB",
+  "captured_at": "2026-09-17T15:30:00+03:00",
+  "requires_auth": true,
+  "blocked_without_qtickets_api_key": true,
+  "source_files": [
+    "katanie-na-krytoy-ledovoy-ploshchadke.html",
+    "qtickets-event-136634.html"
+  ],
+  "notes": "Static akademiya-dynamo.ru page has confirmed prices (600/400/200 RUB + rental) but no session dates/times. qtickets.ru/event/136634 page loads (200) but renders the calendar client-side after an authenticated REST call; qtickets.ru/api/rest/v1/shows/136634 and /events/136634 return 403 Wrong authorization without an API key. Do not invent a session grid. sessions=[] is the terminal golden for V1.",
+  "sessions": []
+}
