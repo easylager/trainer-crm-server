@@ -594,9 +594,8 @@
 
   function applyArenaPayload(data) {
     var incoming = (data && data.items) || [];
-    state.items = M.filterSkateLens(incoming, state.intent);
+    state.items = incoming.slice();
     state.total = data && data.total != null ? data.total : incoming.length;
-    if (state.items.length < incoming.length) state.total = state.items.length;
     state.cursor = data && data.next_cursor;
   }
 
