@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -218,7 +218,9 @@ from src.application.arena_profile import (
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
 )
-from src.application.arena_public_use_cases import get_hub_ice_teaser
+from src.application.arena_public_use_cases import get_hub_ice_teaser, parse_near
+from src.api.middleware.http_limits import client_ip_from_request
+from src.shared.ip_geo import is_ip_in_served_market
 from src.application.arena_media import (
     ArenaMediaLimitError,
     InvalidArenaMediaOrderError,
@@ -1949,6 +1951,7 @@ async def post_client_booking(
 
 @router.get("/client/session")
 async def get_client_session_state(
+    request: Request,
     for_trainer_id: int | None = Query(None, description="When set, suggested_service_id_for_trainer uses this trainer."),
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
@@ -2048,8 +2051,16 @@ async def get_client_session_state(
         )
         last_created_sid = lc_sid
         last_created_vid = lc_vid
+    # IP-country first, GPS only as a refinement (src/shared/ip_geo.py): a client with no
+    # city at all yet (not even inferred from a trainer profile above) who is confidently
+    # outside every served market shouldn't be asked for geolocation permission just so the
+    # cold-open auto-detect (catalog-geo-model.js) can learn the same thing more slowly.
+    ip_country_served = None
+    if city_id is None:
+        ip_country_served = is_ip_in_served_market(client_ip_from_request(request))
     payload = {
         "city_id": city_id,
+        "ip_country_served": ip_country_served,
         "city_name": city_name,
         "service_id": service_id,
         "service_name": service_name,
@@ -2656,6 +2667,7 @@ async def get_client_activity_stats(
 
 @router.get("/client/hub/bootstrap")
 async def get_client_hub_bootstrap(
+    request: Request,
     x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -2834,8 +2846,17 @@ async def get_client_hub_bootstrap(
         city_id = (sess_row or {}).get("city_id")
         # TASK-091 AC-005: у нового клиента города ещё нет, но первый экран всё
         # равно обязан показать лёд. Без city_id берём ближайший сеанс по стране.
+        resolved_city_id = int(city_id) if city_id is not None else None
+        # IP-country first, GPS only as a refinement (see src/shared/ip_geo.py): if we
+        # already know from the visitor's IP that they're outside every served market,
+        # show the honest "not in your city" card immediately — no reason to also ask
+        # the browser for geolocation permission just to learn the same thing slower.
+        force_far = False
+        if resolved_city_id is None:
+            served = is_ip_in_served_market(client_ip_from_request(request))
+            force_far = served is False
         ice_teaser = await get_hub_ice_teaser(
-            session, city_id=int(city_id) if city_id is not None else None
+            session, city_id=resolved_city_id, force_far=force_far
         )
     except Exception:
         logger.exception("client hub ice teaser failed")
@@ -2854,6 +2875,43 @@ async def get_client_hub_bootstrap(
             },
         },
     }
+
+
+@router.get("/client/hub/ice-teaser")
+async def get_client_hub_ice_teaser_refined(
+    near: str | None = Query(None, description="lat,lon — client geolocation, best-effort"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Silent follow-up to the hub bootstrap's ice_teaser once geolocation resolves.
+
+    The bootstrap call is synchronous on hub load and has no coordinates yet — this endpoint
+    lets the frontend re-ask a moment later, once ``navigator.geolocation`` (if the client
+    allows it) returns a position, so a client with no city can get an honest distance
+    instead of the bootstrap's country-wide "closest upcoming session, however far" card
+    (see get_hub_ice_teaser docstring). A client who already has a city ignores ``near``
+    entirely and gets the same teaser bootstrap would have given — this only refines the
+    cityless case.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+    near_pt = None
+    if near:
+        try:
+            near_pt = parse_near(near)
+        except Exception:
+            near_pt = None
+    sess_row = await read_client_bot_session(telegram_id, session)
+    city_id = (sess_row or {}).get("city_id")
+    ice_teaser = None
+    try:
+        ice_teaser = await get_hub_ice_teaser(
+            session,
+            city_id=int(city_id) if city_id is not None else None,
+            near=near_pt,
+        )
+    except Exception:
+        logger.exception("client hub ice teaser refine failed")
+    return {"ice_teaser": ice_teaser}
 
 
 @router.get("/client/share-trainer/{trainer_id}")

@@ -7383,6 +7383,7 @@
             hasCollectiveContext: !!state.collectiveBrand,
             hasDeepLinkTrainer: deepTrainerFromUrl != null,
             hasPrimaryTrainer: primaryTid != null,
+            ipSaysUnserved: !!(session && session.ip_country_served === false),
           });
           showInitialScreen();
           });

@@ -70,12 +70,15 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
     assert "Работает на аренах" in catalog_js.text or "Работает на аренах" in chips_js.text
 
 
-async def _bootstrap(telegram_id: int):
+async def _bootstrap(telegram_id: int, *, forwarded_for: str | None = None):
+    headers = {"X-Telegram-Init-Data": "mock"}
+    if forwarded_for:
+        headers["X-Forwarded-For"] = forwarded_for
     with patch_client_init_auth(telegram_id):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             return await client.get(
                 "/api/webapp/client/hub/bootstrap",
-                headers={"X-Telegram-Init-Data": "mock"},
+                headers=headers,
             )
 
 
@@ -241,3 +244,149 @@ async def test_hub_ice_teaser_skips_in_progress_slot(
     assert teaser is not None
     assert teaser["arena_id"] == arena_id
     assert str(teaser["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
+
+
+@pytest.mark.asyncio
+async def test_hub_ice_teaser_near_computes_honest_distance_for_cityless_client(
+    app_use_test_db, db_session
+) -> None:
+    """A client with no city gets the country-wide fallback teaser; with ``near`` given,
+    that teaser now carries a real distance instead of the always-null placeholder — the
+    frontend needs this to decide "your area" vs "not yet in your city, here's the nearest".
+    """
+    city_id = await _insert_city(db_session, name="Минск-Гео")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-Гео", latitude=53.9, longitude=27.56)
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    await db_session.flush()
+
+    # Belgrade coordinates — genuinely far from Minsk.
+    far = await get_hub_ice_teaser(db_session, city_id=None, near=(44.7866, 20.4489))
+    assert far is not None
+    assert far["distance_km"] is not None
+    assert far["distance_km"] > 1000
+
+    # A point a few km from the arena's own coordinates.
+    near = await get_hub_ice_teaser(db_session, city_id=None, near=(53.91, 27.57))
+    assert near is not None
+    assert near["distance_km"] is not None
+    assert near["distance_km"] < 5
+
+    # Without near, unchanged: distance stays null (regression guard).
+    no_near = await get_hub_ice_teaser(db_session, city_id=None)
+    assert no_near is not None
+    assert no_near["distance_km"] is None
+
+    # A client WITH a city ignores near entirely — this only refines the cityless case.
+    with_city = await get_hub_ice_teaser(db_session, city_id=city_id, near=(44.7866, 20.4489))
+    assert with_city is not None
+    assert with_city["distance_km"] is None
+
+
+@pytest.mark.asyncio
+async def test_hub_ice_teaser_refine_endpoint(app_use_test_db, db_session) -> None:
+    """GET /client/hub/ice-teaser?near= — the silent follow-up call once geolocation resolves."""
+    city_id = await _insert_city(db_session, name="Минск-Рефайн")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-Рефайн", latitude=53.9, longitude=27.56)
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            far_resp = await client.get(
+                "/api/webapp/client/hub/ice-teaser",
+                params={"near": "44.7866,20.4489"},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            malformed_resp = await client.get(
+                "/api/webapp/client/hub/ice-teaser",
+                params={"near": "not-a-coordinate"},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert far_resp.status_code == 200, far_resp.text
+    far_teaser = far_resp.json()["ice_teaser"]
+    assert far_teaser is not None
+    assert far_teaser["distance_km"] > 1000
+    # Malformed near must never 400/500 the hub refinement — best-effort only.
+    assert malformed_resp.status_code == 200, malformed_resp.text
+    assert malformed_resp.json()["ice_teaser"] is not None
+
+
+# Real, stable delegated ranges (not test/documentation ranges, which resolve to nothing).
+_US_IP = "8.8.8.8"
+_BELARUS_IP = "178.124.170.1"
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_confirms_far_from_ip_with_no_geolocation_needed(
+    app_use_test_db, db_session
+) -> None:
+    """IP-country (src/shared/ip_geo.py) first: a cityless client whose IP resolves outside
+    every served market gets far_confirmed=True immediately, with zero GPS coordinates
+    involved — the frontend must never even ask for geolocation permission in this case."""
+    city_id = await _insert_city(db_session, name="Минск-ИП")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-ИП")
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    resp = await _bootstrap(ctg, forwarded_for=_US_IP)
+    assert resp.status_code == 200, resp.text
+    teaser = resp.json()["ice_teaser"]
+    assert teaser is not None
+    assert teaser["is_country_fallback"] is True
+    assert teaser["far_confirmed"] is True
+    assert teaser["distance_km"] is None  # confirmed via IP, not haversine
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_does_not_force_far_for_a_served_country_ip(
+    app_use_test_db, db_session
+) -> None:
+    """A cityless client whose IP resolves to a served market (BY/RU/RS) still gets the
+    plain country-wide fallback — GPS remains worth asking for to refine within-country."""
+    city_id = await _insert_city(db_session, name="Минск-ИП-2")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-ИП-2")
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    resp = await _bootstrap(ctg, forwarded_for=_BELARUS_IP)
+    assert resp.status_code == 200, resp.text
+    teaser = resp.json()["ice_teaser"]
+    assert teaser is not None
+    assert teaser["far_confirmed"] is False
+
+
+@pytest.mark.asyncio
+async def test_client_session_reports_ip_country_served_only_when_cityless(
+    app_use_test_db, db_session
+) -> None:
+    """GET /client/session exposes ip_country_served for the catalog's own auto-detect guard
+    (catalog-geo-model.js shouldAutoGeolocate) — but only bothers with the lookup when the
+    client has no city at all (an established client's IP is irrelevant noise)."""
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            unserved = await client.get(
+                "/api/webapp/client/session",
+                headers={"X-Telegram-Init-Data": "mock", "X-Forwarded-For": _US_IP},
+            )
+            served = await client.get(
+                "/api/webapp/client/session",
+                headers={"X-Telegram-Init-Data": "mock", "X-Forwarded-For": _BELARUS_IP},
+            )
+    assert unserved.status_code == 200, unserved.text
+    assert unserved.json()["ip_country_served"] is False
+    assert served.status_code == 200, served.text
+    assert served.json()["ip_country_served"] is True

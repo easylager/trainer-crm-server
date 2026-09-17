@@ -170,6 +170,114 @@ describe('formatIceCard hides started slots (PDEC-005, UTC+3)', () => {
   });
 });
 
+describe('formatIceCard far-city honesty (no served city nearby)', () => {
+  it('switches to the honest "not in your city yet" card beyond the distance threshold', () => {
+    const { formatIceCard, FAR_DISTANCE_THRESHOLD_KM } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        arena_name: 'Минск-Арена',
+        city_name: 'Минск',
+        distance_km: FAR_DISTANCE_THRESHOLD_KM + 1,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.hidden, false);
+    assert.equal(view.isFar, true);
+    assert.equal(view.href, 'ice');
+    assert.equal(view.title, 'Пока нет тренеров в вашем городе');
+    assert.match(view.cityLine, /Минск-Арена/);
+    assert.match(view.cityLine, /Минск/);
+    // Must not leak the normal card's fields — client-home-main.js should never
+    // accidentally render "15:00 · Сегодня" for a session nowhere near the client.
+    assert.equal(view.time, undefined);
+    assert.equal(view.day, undefined);
+  });
+
+  it('keeps the normal card exactly at the threshold (boundary is inclusive of "near")', () => {
+    const { formatIceCard, FAR_DISTANCE_THRESHOLD_KM } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: FAR_DISTANCE_THRESHOLD_KM,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, false);
+    assert.equal(view.time, '15:00');
+  });
+
+  it('treats a null/missing distance_km as "near" — regression guard for the existing bootstrap path', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: null,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, false);
+  });
+
+  it('renders the far card with an honest CTA, not the arena time/day markup', () => {
+    const { formatIceCard, renderIceCardHtml, FAR_DISTANCE_THRESHOLD_KM } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        arena_name: 'Минск-Арена',
+        city_name: 'Минск',
+        distance_km: FAR_DISTANCE_THRESHOLD_KM + 500,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    const html = renderIceCardHtml(view);
+    assert.match(html, /hub-ice-card--far/);
+    assert.match(html, /Пока нет тренеров в вашем городе/);
+    assert.match(html, /Минск-Арена/);
+    assert.match(html, /Смотреть каталог/);
+    assert.match(html, /href="ice"/);
+    assert.doesNotMatch(html, /hub-ice-card__time/);
+  });
+
+  it('shows the far card via far_confirmed alone, with no distance_km at all (IP-only signal)', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: null,
+        far_confirmed: true,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, true);
+  });
+
+  it('a served/near distance is not overridden when far_confirmed is explicitly false', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: 2.4,
+        far_confirmed: false,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, false);
+  });
+});
+
 describe('formatIceTeaser hides started slots (PDEC-005)', () => {
   it('hides when starts_at_utc is already in the past', () => {
     const { formatIceTeaser } = loadModel();
