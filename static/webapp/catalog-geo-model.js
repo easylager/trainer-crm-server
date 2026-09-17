@@ -35,6 +35,11 @@
    * @param {boolean} ctx.hasPrimaryTrainer — a primary trainer was resolved from saved edges.
    * @param {boolean} ctx.geolocationSupported — `!!navigator.geolocation` at call site.
    * @param {boolean} ctx.previouslyDeclined — decline flag already set (see declineFlag* below).
+   * @param {boolean} [ctx.ipSaysUnserved] — server-side IP→country lookup (src/shared/ip_geo.py,
+   *   surfaced as `ip_country_served: false` on GET /client/session) already confirmed this
+   *   visitor is outside every served market. IP-country is the fast, zero-permission first
+   *   signal; GPS is only ever a refinement — when IP already answered the question, don't
+   *   also interrupt with a permission prompt to learn the same thing more slowly.
    * @returns {boolean} true only for a genuinely cold, contextless open.
    */
   function shouldAutoGeolocate(ctx) {
@@ -46,6 +51,7 @@
     if (ctx.hasPrimaryTrainer) return false;
     if (!ctx.geolocationSupported) return false;
     if (ctx.previouslyDeclined) return false;
+    if (ctx.ipSaysUnserved) return false;
     return true;
   }
 

@@ -1553,7 +1553,12 @@
         var cs = (hubMeta && hubMeta.client_session) || {};
         var iceTeaser = hubMeta && hubMeta.ice_teaser;
         renderIceTeaser(iceTeaser);
-        if (iceTeaser && iceTeaser.is_country_fallback) attemptHubGeoRefine();
+        // far_confirmed means IP-country (src/shared/ip_geo.py) already told us this visitor
+        // is outside every served market — the honest card is already showing, GPS would
+        // only ask for a permission we don't need.
+        if (iceTeaser && iceTeaser.is_country_fallback && !iceTeaser.far_confirmed) {
+          attemptHubGeoRefine();
+        }
         // Support both legacy (selected_trainer_id) and new edge-based fields
         var primaryTrainerId = cs.primary_trainer_id != null ? cs.primary_trainer_id
           : (cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null);

@@ -604,7 +604,11 @@ async def list_public_ice_arenas(
 
 
 async def get_hub_ice_teaser(
-    session: AsyncSession, *, city_id: int | None, near: tuple[float, float] | None = None
+    session: AsyncSession,
+    *,
+    city_id: int | None,
+    near: tuple[float, float] | None = None,
+    force_far: bool = False,
 ) -> dict[str, Any] | None:
     """Soonest future public_skate|open_ice slot in the session city, or None.
 
@@ -631,6 +635,11 @@ async def get_hub_ice_teaser(
     ``near`` is given, we compute the real distance so the frontend can show
     an honest "not in your city yet, here's the nearest" card instead of one
     implying local relevance.
+
+    ``force_far``: set by the caller when IP-country lookup (src/shared/ip_geo.py) already
+    confidently placed the visitor outside every served market — skips the GPS-distance
+    question entirely and marks the result ``far_confirmed`` so the frontend never has to ask
+    for geolocation permission just to learn what IP already told us for free.
     """
     now = datetime.now(timezone.utc)
     params: dict[str, Any] = {
@@ -717,6 +726,10 @@ LIMIT 1
         # not a real match) — the frontend uses this to decide whether it's worth asking
         # for geolocation to refine an honest distance (see GET /client/hub/ice-teaser).
         "is_country_fallback": city_id is None,
+        # True only when the caller already confirmed (via IP) this visitor is outside every
+        # served market — frontend must treat this exactly like a distance beyond the 150km
+        # bar, without needing (or asking for) real coordinates.
+        "far_confirmed": bool(force_far),
     }
 
 

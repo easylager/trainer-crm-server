@@ -71,6 +71,17 @@ describe('shouldAutoGeolocate', () => {
     const M = loadModel();
     assert.equal(M.shouldAutoGeolocate(baseCtx({ previouslyDeclined: true })), false);
   });
+
+  it('does not fire when server-side IP lookup already confirmed the visitor is unserved', () => {
+    const M = loadModel();
+    assert.equal(M.shouldAutoGeolocate(baseCtx({ ipSaysUnserved: true })), false);
+  });
+
+  it('still fires when IP lookup was inconclusive (ip_country_served: null) or served', () => {
+    const M = loadModel();
+    assert.equal(M.shouldAutoGeolocate(baseCtx({ ipSaysUnserved: false })), true);
+    assert.equal(M.shouldAutoGeolocate(baseCtx({ ipSaysUnserved: undefined })), true);
+  });
 });
 
 describe('pickCityFromNearResponse', () => {

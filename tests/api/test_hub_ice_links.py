@@ -70,12 +70,15 @@ async def test_hub_and_catalog_assets_include_ice_links(app_use_test_db) -> None
     assert "Работает на аренах" in catalog_js.text or "Работает на аренах" in chips_js.text
 
 
-async def _bootstrap(telegram_id: int):
+async def _bootstrap(telegram_id: int, *, forwarded_for: str | None = None):
+    headers = {"X-Telegram-Init-Data": "mock"}
+    if forwarded_for:
+        headers["X-Forwarded-For"] = forwarded_for
     with patch_client_init_auth(telegram_id):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             return await client.get(
                 "/api/webapp/client/hub/bootstrap",
-                headers={"X-Telegram-Init-Data": "mock"},
+                headers=headers,
             )
 
 
@@ -309,3 +312,81 @@ async def test_hub_ice_teaser_refine_endpoint(app_use_test_db, db_session) -> No
     # Malformed near must never 400/500 the hub refinement — best-effort only.
     assert malformed_resp.status_code == 200, malformed_resp.text
     assert malformed_resp.json()["ice_teaser"] is not None
+
+
+# Real, stable delegated ranges (not test/documentation ranges, which resolve to nothing).
+_US_IP = "8.8.8.8"
+_BELARUS_IP = "178.124.170.1"
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_confirms_far_from_ip_with_no_geolocation_needed(
+    app_use_test_db, db_session
+) -> None:
+    """IP-country (src/shared/ip_geo.py) first: a cityless client whose IP resolves outside
+    every served market gets far_confirmed=True immediately, with zero GPS coordinates
+    involved — the frontend must never even ask for geolocation permission in this case."""
+    city_id = await _insert_city(db_session, name="Минск-ИП")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-ИП")
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    resp = await _bootstrap(ctg, forwarded_for=_US_IP)
+    assert resp.status_code == 200, resp.text
+    teaser = resp.json()["ice_teaser"]
+    assert teaser is not None
+    assert teaser["is_country_fallback"] is True
+    assert teaser["far_confirmed"] is True
+    assert teaser["distance_km"] is None  # confirmed via IP, not haversine
+
+
+@pytest.mark.asyncio
+async def test_hub_bootstrap_does_not_force_far_for_a_served_country_ip(
+    app_use_test_db, db_session
+) -> None:
+    """A cityless client whose IP resolves to a served market (BY/RU/RS) still gets the
+    plain country-wide fallback — GPS remains worth asking for to refine within-country."""
+    city_id = await _insert_city(db_session, name="Минск-ИП-2")
+    arena_id = await _insert_arena(db_session, city_id, name="Минск-Арена-ИП-2")
+    await _add_future_session(db_session, arena_id, days_ahead=1, starts_at_local="12:00")
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    resp = await _bootstrap(ctg, forwarded_for=_BELARUS_IP)
+    assert resp.status_code == 200, resp.text
+    teaser = resp.json()["ice_teaser"]
+    assert teaser is not None
+    assert teaser["far_confirmed"] is False
+
+
+@pytest.mark.asyncio
+async def test_client_session_reports_ip_country_served_only_when_cityless(
+    app_use_test_db, db_session
+) -> None:
+    """GET /client/session exposes ip_country_served for the catalog's own auto-detect guard
+    (catalog-geo-model.js shouldAutoGeolocate) — but only bothers with the lookup when the
+    client has no city at all (an established client's IP is irrelevant noise)."""
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            unserved = await client.get(
+                "/api/webapp/client/session",
+                headers={"X-Telegram-Init-Data": "mock", "X-Forwarded-For": _US_IP},
+            )
+            served = await client.get(
+                "/api/webapp/client/session",
+                headers={"X-Telegram-Init-Data": "mock", "X-Forwarded-For": _BELARUS_IP},
+            )
+    assert unserved.status_code == 200, unserved.text
+    assert unserved.json()["ip_country_served"] is False
+    assert served.status_code == 200, served.text
+    assert served.json()["ip_country_served"] is True

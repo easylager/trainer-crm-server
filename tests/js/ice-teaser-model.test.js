@@ -246,6 +246,36 @@ describe('formatIceCard far-city honesty (no served city nearby)', () => {
     assert.match(html, /href="ice"/);
     assert.doesNotMatch(html, /hub-ice-card__time/);
   });
+
+  it('shows the far card via far_confirmed alone, with no distance_km at all (IP-only signal)', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: null,
+        far_confirmed: true,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, true);
+  });
+
+  it('a served/near distance is not overridden when far_confirmed is explicitly false', () => {
+    const { formatIceCard } = loadModel();
+    const view = formatIceCard(
+      sampleTeaser({
+        starts_at_utc: '2026-09-09T12:00:00+00:00',
+        local_date: '2026-09-09',
+        starts_at_local: '15:00',
+        distance_km: 2.4,
+        far_confirmed: false,
+      }),
+      new Date('2026-09-09T10:10:00Z')
+    );
+    assert.equal(view.isFar, false);
+  });
 });
 
 describe('formatIceTeaser hides started slots (PDEC-005)', () => {

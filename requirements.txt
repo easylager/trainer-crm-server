@@ -28,6 +28,7 @@ sentry-sdk[fastapi]>=2.19.0
 # Utils
 python-dotenv>=1.0.0
 python-multipart>=0.0.22
+geoip2fast>=1.2.2  # in-process IP→country, no network call/signup — src/shared/ip_geo.py
 
 # Dev & tests
 pytest>=7.4.0

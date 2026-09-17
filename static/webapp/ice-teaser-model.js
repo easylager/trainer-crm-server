@@ -231,7 +231,10 @@
     now = now instanceof Date ? now : new Date();
     if (slotHasStarted(payload, now)) return hiddenCard();
     var dist = payload.distance_km;
-    if (dist != null && !isNaN(Number(dist)) && Number(dist) > FAR_DISTANCE_THRESHOLD_KM) {
+    var distanceSaysFar = dist != null && !isNaN(Number(dist)) && Number(dist) > FAR_DISTANCE_THRESHOLD_KM;
+    // far_confirmed: IP-country (src/shared/ip_geo.py) already placed this visitor outside
+    // every served market, with no GPS distance computed at all — treat it identically.
+    if (distanceSaysFar || payload.far_confirmed) {
       return formatFarCard(payload);
     }
     var facts = [kindLabel(payload.kind)];
