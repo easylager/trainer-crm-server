@@ -29,6 +29,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters import (
         ChizhovkaHtmlParser,
         DiamondHtmlParser,
+        JunostHtmlParser,
         LedByHtmlParser,
         MinskArenaSaleframeParser,
         MinskSpeedOvalParser,
@@ -74,6 +75,7 @@ def default_registry() -> ParserRegistry:
         ChizhovkaHtmlParser(),
         LedByHtmlParser(),
         DiamondHtmlParser(),
+        JunostHtmlParser(),
         BrestLdsParser(),
         BaranovichiLdsParser(),
         KobrinLdsParser(),
@@ -103,6 +105,7 @@ def default_registry() -> ParserRegistry:
 from src.ingestion.adapters import (  # noqa: E402
     ChizhovkaHtmlParser,
     DiamondHtmlParser,
+    JunostHtmlParser,
     LedByHtmlParser,
     MinskArenaSaleframeParser,
     MinskSpeedOvalParser,
@@ -151,6 +154,7 @@ __all__ = [
     "GrodnoNemanParser",
     "GrodnoTrinitiParser",
     "IceParser",
+    "JunostHtmlParser",
     "KobrinLdsParser",
     "LedByHtmlParser",
     "LedovyyDvoretsHtmlParser",
