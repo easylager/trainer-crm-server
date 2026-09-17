@@ -503,6 +503,47 @@ def _ledby_prices(html: str) -> dict[int, dict[str, Any]]:
     return book
 
 
+_JUNOST_BLOCK_MARKER = "403 Forbidden"
+
+
+def is_junost_blocked_snapshot(html: str) -> bool:
+    """True for the known blocked shapes of junost.by (see ``.ai/parsers/minsk-junost.md``):
+    the literal nginx 403 body served to non-BY egress, or a BY-egress Globalping probe
+    that comes back truncated (~10 KB) before it ever reaches the schedule grid — missing
+    a closing ``</html>``. Defensive default: anything that is not a demonstrably complete
+    page is treated as blocked. Never fabricate a schedule from a partial fetch.
+    """
+    if _JUNOST_BLOCK_MARKER in html:
+        return True
+    if "</html>" not in html.lower():
+        return True
+    return False
+
+
+class JunostHtmlParser(IceParser):
+    """junost.by (Каток ХК «Юность», arena_id=8) 403s non-BY egress, and even a
+    BY-egress Globalping probe comes back truncated before the schedule grid — see
+    ``.ai/parsers/minsk-junost.md``. No BY-egress fetch has ever reached the real
+    weekend grid, so this adapter cannot parse real sessions yet: it only recognizes
+    the known blocked shapes (:func:`is_junost_blocked_snapshot`) and always returns
+    an empty extraction. It never reads the junost.hockey.by price mirror — that page
+    is a prices hint for a human, explicitly not a schedule fallback (spec §"зеркало").
+    Wire real grid parsing in once a genuine full-page BY-egress sample exists.
+    """
+
+    parser_key = "junost_origin_html_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="junost-origin.html", url_keys=("url",))
+        blocked = is_junost_blocked_snapshot(html)
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot={"origin": html, "blocked_without_by_egress": blocked},
+            slots=[],
+        )
+
+
 def _parse_diamond_columns(html: str) -> list[tuple[str, list[str]]]:
     """Regex extract of the 7-column MK grid (id irqsbii62).
 
