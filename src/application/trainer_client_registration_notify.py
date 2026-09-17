@@ -98,10 +98,24 @@ async def notify_trainer_client_registered_from_invite(
     settings = Settings()
     token = _trainer_bot_token(settings)
     if not token:
+        logger.warning(
+            "Skipping trainer client-registration notification: trainer bot token missing/invalid "
+            "trainer_id=%s client_id=%s event=%s",
+            trainer_id,
+            client_id,
+            event,
+        )
         return
 
     trainer_tid = await get_trainer_telegram_id(session, trainer_id)
     if not trainer_tid:
+        logger.warning(
+            "Skipping trainer client-registration notification: trainer has no telegram_id "
+            "(never started trainer bot) trainer_id=%s client_id=%s event=%s",
+            trainer_id,
+            client_id,
+            event,
+        )
         return
 
     label = html.escape(await _client_display_label(session, client_id))
@@ -119,6 +133,12 @@ async def notify_trainer_client_registered_from_invite(
             chat_id=int(trainer_tid),
             text=text,
             reply_markup=_trainer_client_profile_markup(client_id),
+        )
+        logger.info(
+            "Sent trainer client-registration notification trainer_id=%s client_id=%s event=%s",
+            trainer_id,
+            client_id,
+            event,
         )
     except Exception:
         logger.exception(

@@ -187,7 +187,9 @@ from src.application.client_cert_order_use_cases import (
     submit_certificate_product_order_request,
 )
 from src.application.client_session_use_cases import (
+    clear_pending_referral,
     get_or_create_session as get_client_session,
+    get_pending_referral,
     get_session as read_client_bot_session,
     save_catalog_filters,
     set_arena,
@@ -2081,6 +2083,7 @@ async def get_client_session_state(
         "needs_profile_name": needs_profile_name,
         "client_first_name": cfn or None,
         "client_last_name": cln or None,
+        "pending_referral": await _pending_referral_payload(telegram_id, session),
     }
     return JSONResponse(
         content=payload,
@@ -2251,9 +2254,11 @@ async def get_client_requests(
     acting_client_id = await resolve_acting_client_id(
         session, telegram_id, _parse_profile_id_header(x_profile_id)
     )
-    return await _client_requests_list_payload(
+    payload = await _client_requests_list_payload(
         session, telegram_id, acting_client_id=acting_client_id
     )
+    payload["pending_referral"] = await _pending_referral_payload(telegram_id, session)
+    return payload
 
 
 # --- Client pass products (buy) and my passes ---
@@ -2490,6 +2495,7 @@ async def get_client_bookings(
     payload["trainer_options"] = await _client_booking_trainer_options_payload(
         session, telegram_id, acting_client_id=acting_client_id
     )
+    payload["pending_referral"] = await _pending_referral_payload(telegram_id, session)
     return payload
 
 
@@ -2663,6 +2669,27 @@ async def get_client_activity_stats(
     telegram_id = client_catalog_telegram_key(principal)
     client_id = await resolve_acting_client_id(session, telegram_id, _parse_profile_id_header(x_profile_id))
     return await get_client_activity_snapshot(session, client_id=client_id)
+
+
+async def _pending_referral_payload(
+    telegram_id: int, session: AsyncSession
+) -> dict[str, Any] | None:
+    """
+    Trainer from an unresolved welcome_ref invite (client never finished the registration
+    form). Read by the client hub to gate access back to the form instead of silently
+    showing the generic hub as if nothing happened. Fail-open: a bug here must never lock
+    a real client out of their own hub, so any error is swallowed as "no pending referral".
+    """
+    try:
+        trainer_id = await get_pending_referral(telegram_id, session)
+        if trainer_id is None:
+            return None
+        hints = await trainer_display_hints_by_ids(session, [trainer_id])
+        name = (hints.get(trainer_id) or {}).get("trainer_display_name") or "тренер"
+        return {"trainer_id": trainer_id, "trainer_name": name}
+    except Exception:
+        logger.exception("pending referral lookup failed telegram_id=%s", telegram_id)
+        return None
 
 
 @router.get("/client/hub/bootstrap")
@@ -2867,6 +2894,7 @@ async def get_client_hub_bootstrap(
         "activity": activity,
         "passes": passes,
         "ice_teaser": ice_teaser,
+        "pending_referral": await _pending_referral_payload(telegram_id, session),
         "platform": {
             "vertical_key": "ice",
             "ui": {
@@ -5842,6 +5870,7 @@ async def post_client_self_register(
     )
     await uc_set_primary_trainer(int(client_id), telegram_id, int(body.trainer_id), session)
     await session.commit()
+    await clear_pending_referral(telegram_id, session)
 
     notify_event = None
     if roster_link_created:
@@ -5872,6 +5901,14 @@ async def post_client_self_register(
     else:
         status = "already_registered"
 
+    logger.info(
+        "client self-register done status=%s telegram_id=%s client_id=%s trainer_id=%s notify_event=%s",
+        status,
+        telegram_id,
+        client_id,
+        body.trainer_id,
+        notify_event,
+    )
     return {"status": status, "client_id": client_id}
 
 
@@ -5891,6 +5928,36 @@ async def get_client_register_trainer_info(
         raise HTTPException(status_code=404, detail="Тренер не найден.")
     name = hint.get("trainer_display_name") or "Тренер"
     return {"id": trainer_id, "name": name}
+
+
+class ClientRegisterEventBody(BaseModel):
+    """Lightweight client-side telemetry from the self-registration Mini App."""
+
+    event: str
+    trainer_id: int | None = None
+    detail: str | None = None
+
+
+@router.post("/client/register-event")
+async def post_client_register_event(
+    body: ClientRegisterEventBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """
+    Best-effort telemetry beacon from client-register-main.js. This is the only visibility
+    into drop-off between opening the registration form and a successful
+    POST /client/self-register — client-side validation failures and the phone-widget
+    script failing to load never reach the server otherwise.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+    logger.info(
+        "client register-event event=%s telegram_id=%s trainer_id=%s detail=%s",
+        (body.event or "unknown")[:64],
+        telegram_id,
+        body.trainer_id,
+        (body.detail or "")[:200],
+    )
+    return {"ok": True}
 
 
 @router.get("/trainer/welcome-link/pass")

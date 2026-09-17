@@ -66,6 +66,7 @@ from src.application.client_session_use_cases import (
     get_session,
     set_arena,
     set_city,
+    set_pending_referral,
     set_pending_request_id,
     set_selected_trainer,
     set_service,
@@ -964,6 +965,7 @@ async def cmd_start(message: Message) -> None:
                 db_session, telegram_id
             )
         base = (Settings().webapp_base_url or "").rstrip("/")
+        base_is_https = base.lower().startswith("https://")
         async with async_session_factory() as db_session:
             trainer = await get_trainer(db_session, trainer_id_ref)
             await record_profile_view_commit(
@@ -971,8 +973,35 @@ async def cmd_start(message: Message) -> None:
                 trainer_id=int(trainer_id_ref),
                 source=DEMAND_SOURCE_CLIENT_APP,
             )
-        if needs_registration and base.lower().startswith("https://"):
-            # Missing phone or display name: route to self-registration form in Mini App
+        logger.info(
+            "welcome_ref start telegram_id=%s trainer_id=%s needs_registration=%s base_is_https=%s",
+            telegram_id,
+            trainer_id_ref,
+            needs_registration,
+            base_is_https,
+        )
+        if needs_registration and not base_is_https:
+            # Mini App requires HTTPS; without it we can't open the registration form at all.
+            # Do NOT fall through to immediate linking with a blank profile (that used to
+            # silently create a duplicate-prone client row) — persist the referral and ask
+            # the client to retry once the Mini App is reachable.
+            logger.warning(
+                "welcome_ref cannot open registration form (WEBAPP_BASE_URL not https) "
+                "telegram_id=%s trainer_id=%s",
+                telegram_id,
+                trainer_id_ref,
+            )
+            async with async_session_factory() as db_session:
+                await set_pending_referral(telegram_id, trainer_id_ref, db_session)
+            await message.answer(msg.CLIENT_UNIVERSAL_INVITE_RETRY_LATER)
+            return
+        if needs_registration:
+            # Missing phone or display name: route to self-registration form in Mini App.
+            # Persist the referral first so the client hub can gate access back to this
+            # form even if they never tap the button below (e.g. it fails to open) and
+            # instead land on the hub via the bot's persistent menu button.
+            async with async_session_factory() as db_session:
+                await set_pending_referral(telegram_id, trainer_id_ref, db_session)
             name = html.escape(_trainer_name(trainer) if trainer else "тренер")
             register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}"
             keyboard = InlineKeyboardMarkup(
@@ -1001,7 +1030,7 @@ async def cmd_start(message: Message) -> None:
             await _bind_client_invite_trainer_context(
                 telegram_id, trainer_id_ref, db_session, client_id=client_id
             )
-        if base.lower().startswith("https://"):
+        if base_is_https:
             home_url = f"{base}/webapp/client-home"
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[

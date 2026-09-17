@@ -35,6 +35,56 @@
     return '/api/webapp' + path + (raw ? '?init_data=' + encodeURIComponent(raw) : '');
   }
 
+  /**
+   * Best-effort telemetry beacon. This form's client-side validation runs
+   * BEFORE any network call — a bad phone, an empty name, or a missing
+   * trainer_id all `return` without ever hitting the server, so without this
+   * beacon a drop-off here is completely invisible server-side.
+   */
+  function sendRegisterEvent(event, detail) {
+    try {
+      fetch(apiUrl('/client/register-event'), {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          event: event,
+          trainer_id: trainerId || null,
+          detail: detail != null ? String(detail).slice(0, 200) : null,
+        }),
+      }).catch(function () {
+        /* best-effort */
+      });
+    } catch (e) {
+      /* never block the form on telemetry */
+    }
+  }
+
+  /**
+   * mini-app-phone-field.js is same-origin, not a CDN — a plain object literal
+   * and function declarations are the only top-level code in it, so it cannot
+   * throw once it starts running. The only way window.CrmPhoneField ends up
+   * missing is the <script> tag itself failing to load (a transient network
+   * blip on this one asset). Retry it once before telling the client anything.
+   */
+  function retryLoadCrmPhoneField(callback) {
+    var s = document.createElement('script');
+    s.src = 'mini-app-phone-field.js?retry=' + Date.now();
+    s.onload = function () {
+      try {
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document);
+      } catch (e) {
+        /* never block Continue if mask wiring throws */
+      }
+      sendRegisterEvent('phone_field_retry', window.CrmPhoneField ? 'ok' : 'still_missing');
+      callback(!!window.CrmPhoneField);
+    };
+    s.onerror = function () {
+      sendRegisterEvent('phone_field_retry', 'script_error');
+      callback(false);
+    };
+    document.head.appendChild(s);
+  }
+
   /** Telegram/WebView occasionally drops ?trainer_id=; persist after first successful open. */
   var TRAINER_REG_KEY = 'trainer_crm_client_register_tid';
 
@@ -104,7 +154,8 @@
       var v = CrmPhoneField.validate(phoneInput);
       return v.ok ? null : v.error || 'Укажите номер телефона.';
     }
-    return 'Укажите номер телефона.';
+    /* Not the user's fault — the phone-mask widget failed to load. Say so, don't blame their input. */
+    return 'Не удалось загрузить форму. Обновите мини-приложение и попробуйте снова.';
   }
 
   function phoneE164FromField() {
@@ -291,6 +342,7 @@
         showGlobalError(
           'В ссылке нет параметра тренера. Закройте мини-приложение и откройте снова через кнопку в сообщении от бота.'
         );
+        sendRegisterEvent('validation_failed', 'missing_trainer_id');
         return;
       }
 
@@ -299,6 +351,10 @@
       if (phoneErr) {
         showFieldError(phoneError, phoneErr);
         if (phoneInput) phoneInput.focus();
+        sendRegisterEvent(
+          'validation_failed',
+          'phone: ' + phoneErr + (window.CrmPhoneField ? '' : ' (CrmPhoneField missing)')
+        );
         return;
       }
       var fullPhone = phoneE164FromField();
@@ -307,11 +363,13 @@
       if (!firstName) {
         showFieldError(firstNameError, 'Укажите имя.');
         if (firstNameInput) firstNameInput.focus();
+        sendRegisterEvent('validation_failed', 'missing_first_name');
         return;
       }
 
       var lastName = lastNameInput ? String(lastNameInput.value || '').trim() : '';
 
+      sendRegisterEvent('submit_attempted');
       setLoading(true);
 
       var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
@@ -342,6 +400,7 @@
               res.data && res.data.detail
                 ? String(res.data.detail)
                 : 'Ошибка при сохранении. Попробуйте ещё раз.';
+            sendRegisterEvent('submit_error', res.status + ': ' + detail);
             if (res.status === 409) showFieldError(phoneError, detail);
             else if (res.status === 422) {
               var ed = res.data && res.data.detail;
@@ -356,6 +415,7 @@
             return;
           }
           var st = res.data && res.data.status ? String(res.data.status) : '';
+          sendRegisterEvent('submit_success', st);
           var hubHint =
             'Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.';
           if (st === 'already_registered' || st === 'linked') {
@@ -372,6 +432,7 @@
         })
         .catch(function (err) {
           var name = err && err.name ? String(err.name) : '';
+          sendRegisterEvent('submit_network_error', name || 'unknown');
           showGlobalError(
             name === 'AbortError'
               ? 'Превышено время ожидания. Попробуйте ещё раз.'
@@ -453,6 +514,15 @@
     tg.BackButton.show();
     tg.BackButton.onClick(function () {
       tg.close();
+    });
+  }
+
+  if (window.CrmPhoneField) {
+    sendRegisterEvent('form_opened');
+  } else {
+    sendRegisterEvent('form_opened', 'CrmPhoneField script missing on load');
+    retryLoadCrmPhoneField(function () {
+      /* validatePhoneField() re-checks window.CrmPhoneField on every call, no extra wiring needed */
     });
   }
 

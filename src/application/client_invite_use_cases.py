@@ -1,6 +1,8 @@
 """Client invite flows (welcome_ref / share_ref / pass): catalog bind + CRM roster."""
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import (
@@ -8,7 +10,10 @@ from src.application.booking_use_cases import (
     link_trainer_client_roster,
     resolve_welcome_session_city_service,
 )
-from src.application.client_session_use_cases import save_catalog_filters
+from src.application.client_session_use_cases import (
+    clear_pending_referral,
+    save_catalog_filters,
+)
 from src.application.client_trainer_edge_use_cases import set_primary_trainer
 from src.application.client_use_cases import (
     get_client_id_by_telegram_id,
@@ -19,6 +24,8 @@ from src.application.client_use_cases import (
 from src.application.trainer_client_registration_notify import (
     notify_trainer_client_registered_from_invite,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def client_invite_needs_registration_form(
@@ -74,6 +81,17 @@ async def bind_client_invite_trainer_context(
     )
     if resolved_client_id is not None:
         await set_primary_trainer(int(resolved_client_id), telegram_id, int(trainer_id), session)
+        # Resolve any stale pending_ref (e.g. an earlier trainer's form the client
+        # never finished) — this bind is a real, resolved trainer relationship now.
+        await clear_pending_referral(telegram_id, session)
+
+    logger.info(
+        "client invite bind telegram_id=%s trainer_id=%s client_id=%s roster_created=%s",
+        telegram_id,
+        trainer_id,
+        resolved_client_id,
+        roster_created,
+    )
 
     if roster_created and resolved_client_id is not None:
         await notify_trainer_client_registered_from_invite(
@@ -81,6 +99,12 @@ async def bind_client_invite_trainer_context(
             trainer_id=int(trainer_id),
             client_id=int(resolved_client_id),
             event="new_client",
+        )
+    elif resolved_client_id is not None:
+        logger.info(
+            "client invite bind skipped notify (already on roster) trainer_id=%s client_id=%s",
+            trainer_id,
+            resolved_client_id,
         )
 
     return city_id, service_id
