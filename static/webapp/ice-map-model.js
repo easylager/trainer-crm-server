@@ -188,11 +188,31 @@
     return lat != null && lon != null && isFinite(Number(lat)) && isFinite(Number(lon));
   }
 
+  /*
+   * City-wide bounds come from /api/public/ice/cities (min/max lat/lon over ALL
+   * geocoded arenas in the city, independent of session status) — same shape the
+   * backend returns: { min_lat, max_lat, min_lon, max_lon }. Anything else (missing
+   * keys, non-finite, inverted) is treated as "no city bounds available".
+   */
+  function normalizeCityBounds(raw) {
+    if (!raw) return null;
+    var minLat = Number(raw.min_lat);
+    var maxLat = Number(raw.max_lat);
+    var minLon = Number(raw.min_lon);
+    var maxLon = Number(raw.max_lon);
+    if (![minLat, maxLat, minLon, maxLon].every(isFinite)) return null;
+    if (minLat > maxLat || minLon > maxLon) return null;
+    return { minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon };
+  }
+
   function cityCameraFromItems(items, opts) {
     opts = opts || {};
     var pad = Number(opts.padDeg);
     if (!isFinite(pad) || pad <= 0) pad = 0.08;
-    // Floor ≈ Minsk (~24×27 km). Rink hull of 3–5 pins is smaller and zooms the city away.
+    // Floor ≈ Minsk (~24×27 km). Only kicks in when neither the pin hull nor the
+    // city-wide bounds below produce anything bigger — e.g. a brand new city with
+    // zero (or one) geocoded arenas. For Moscow/SPb the city-wide bounds already
+    // dwarf this floor, so it stops winning there — see TASK city-wide-camera-bounds.
     var minLatSpan = 0.22;
     var minLonSpan = 0.42;
     var onMap = splitMapAndList(items).onMap;
@@ -200,10 +220,12 @@
     if (!fallback || !isFinite(Number(fallback[0])) || !isFinite(Number(fallback[1]))) {
       fallback = null;
     }
+    var cityBounds = normalizeCityBounds(opts.cityBounds);
     var minLat;
     var maxLat;
     var minLon;
     var maxLon;
+    var haveBox = false;
     if (onMap.length) {
       var lats = onMap.map(function (it) {
         return Number(it.latitude);
@@ -215,13 +237,38 @@
       maxLat = Math.max.apply(null, lats) + pad;
       minLon = Math.min.apply(null, lons) - pad;
       maxLon = Math.max.apply(null, lons) + pad;
-    } else if (fallback) {
-      minLat = Number(fallback[0]) - minLatSpan / 2;
-      maxLat = Number(fallback[0]) + minLatSpan / 2;
-      minLon = Number(fallback[1]) - minLonSpan / 2;
-      maxLon = Number(fallback[1]) + minLonSpan / 2;
-    } else {
-      return null;
+      haveBox = true;
+    }
+    if (cityBounds) {
+      // City-wide bounds are the camera's FRAMING only — what pins actually render
+      // stays exactly the intent-filtered `onMap` list above. Padded the same way,
+      // then unioned with the (possibly empty) pin hull so pins are never clipped.
+      var cMinLat = cityBounds.minLat - pad;
+      var cMaxLat = cityBounds.maxLat + pad;
+      var cMinLon = cityBounds.minLon - pad;
+      var cMaxLon = cityBounds.maxLon + pad;
+      if (haveBox) {
+        minLat = Math.min(minLat, cMinLat);
+        maxLat = Math.max(maxLat, cMaxLat);
+        minLon = Math.min(minLon, cMinLon);
+        maxLon = Math.max(maxLon, cMaxLon);
+      } else {
+        minLat = cMinLat;
+        maxLat = cMaxLat;
+        minLon = cMinLon;
+        maxLon = cMaxLon;
+        haveBox = true;
+      }
+    }
+    if (!haveBox) {
+      if (fallback) {
+        minLat = Number(fallback[0]) - minLatSpan / 2;
+        maxLat = Number(fallback[0]) + minLatSpan / 2;
+        minLon = Number(fallback[1]) - minLonSpan / 2;
+        maxLon = Number(fallback[1]) + minLonSpan / 2;
+      } else {
+        return null;
+      }
     }
     if (maxLat - minLat < minLatSpan) {
       var midLat = (minLat + maxLat) / 2;
@@ -477,6 +524,7 @@
     shortArenaName: shortArenaName,
     pinView: pinView,
     boundsToBbox: boundsToBbox,
+    normalizeCityBounds: normalizeCityBounds,
     cityCameraFromItems: cityCameraFromItems,
     bboxExceedsCity: bboxExceedsCity,
     planBboxFetch: planBboxFetch,

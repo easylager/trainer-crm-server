@@ -767,3 +767,64 @@ async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, d
     )
     assert int(counted.scalar_one()) == 1
 
+
+@pytest.mark.asyncio
+async def test_ice_cities_bounds_span_all_geocoded_arenas_regardless_of_sessions(
+    app_use_test_db, db_session
+) -> None:
+    """Camera bounds must come from ALL geocoded arenas in the city, not just the
+    ones with a live schedule — the Moscow/SPb "one live pin in a huge metro" bug.
+    """
+    cid = await _insert_city(db_session, name=f"IceBounds-{uuid.uuid4().hex[:6]}")
+    # Spread across a wide metro area — think Moscow ↔ Zhukovsky/Sergiev Posad.
+    near = await _insert_arena(
+        db_session, cid, name="Каток в центре", latitude=55.75, longitude=37.62
+    )
+    far_ne = await _insert_arena(
+        db_session, cid, name="Каток на северо-востоке", latitude=56.30, longitude=38.90
+    )
+    far_sw = await _insert_arena(
+        db_session, cid, name="Каток на юго-западе", latitude=55.05, longitude=36.60
+    )
+    # Only ONE of the three has a live session — the pin list would be tiny,
+    # but the bounds must still span all three geocoded arenas.
+    await _add_future_session(db_session, near)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/ice/cities")
+    assert resp.status_code == 200, resp.text
+    by_id = {int(it["id"]): it for it in resp.json()["items"]}
+    assert cid in by_id
+    city = by_id[cid]
+    assert city["map_rink_count"] == 3
+    bounds = city["bounds"]
+    assert bounds is not None
+    assert bounds["min_lat"] == pytest.approx(55.05, abs=1e-6)
+    assert bounds["max_lat"] == pytest.approx(56.30, abs=1e-6)
+    assert bounds["min_lon"] == pytest.approx(36.60, abs=1e-6)
+    assert bounds["max_lon"] == pytest.approx(38.90, abs=1e-6)
+    del far_ne, far_sw
+
+
+@pytest.mark.asyncio
+async def test_ice_cities_bounds_null_when_no_geocoded_arenas(
+    app_use_test_db, db_session
+) -> None:
+    """A trainer-only city with zero geocoded arenas must not fabricate a box."""
+    coach_cid = await _insert_city(db_session, name=f"IceBoundsNone-{uuid.uuid4().hex[:6]}")
+    tr = await db_session.execute(
+        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+    )
+    tid = int(tr.scalar_one())
+    await db_session.execute(
+        text("INSERT INTO trainer_cities (trainer_id, city_id, is_primary) VALUES (:t, :c, true)"),
+        {"t": tid, "c": coach_cid},
+    )
+    await db_session.flush()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/ice/cities")
+    assert resp.status_code == 200, resp.text
+    by_id = {int(it["id"]): it for it in resp.json()["items"]}
+    assert coach_cid in by_id
+    assert by_id[coach_cid]["map_rink_count"] == 0
+    assert by_id[coach_cid]["bounds"] is None
+
