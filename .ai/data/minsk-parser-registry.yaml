@@ -132,16 +132,16 @@
 - arena_id: 8
   name: "Каток хк "Юность""
   target: mass_skating
-  parser_status: partial
-  schedule_status: partial
+  parser_status: blocked
+  schedule_status: blocked
   prices_status: ok
-  extractor: junost_weekend_grid_v1
-  sessions_extracted: 8
+  extractor: junost_origin_html_v1
+  sessions_extracted: 0
   price_catalog_items: 3
   blockers:
     - "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/: geo_ip_nginx (X-Forwarded-For BY IPs did not help; needs BY egress IP or browser snapshot)"
   next_actions:
-    - "Confirm weekend grid from BY IP against junost.by origin"
+    - "TASK-118: adapter junost_origin_html_v1 written and registered; job seeded is_enabled=false (requires_by_egress=true) — same terminal V1 state as ledlife. Confirm weekend grid from real BY egress against junost.by origin once TASK-083's BY VPS lands, then flip is_enabled=true."
   sources:
     - url: https://junost.hockey.by/clubs/skating/
       role: prices

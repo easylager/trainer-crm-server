@@ -29,6 +29,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters import (
         ChizhovkaHtmlParser,
         DiamondHtmlParser,
+        JunostHtmlParser,
         LedByHtmlParser,
         MinskArenaSaleframeParser,
         ZamokHtmlParser,
@@ -41,6 +42,7 @@ def default_registry() -> ParserRegistry:
         ChizhovkaHtmlParser(),
         LedByHtmlParser(),
         DiamondHtmlParser(),
+        JunostHtmlParser(),
     ):
         registry.register(parser)
     return registry
@@ -49,6 +51,7 @@ def default_registry() -> ParserRegistry:
 from src.ingestion.adapters import (  # noqa: E402
     ChizhovkaHtmlParser,
     DiamondHtmlParser,
+    JunostHtmlParser,
     LedByHtmlParser,
     MinskArenaSaleframeParser,
     ZamokHtmlParser,
@@ -58,6 +61,7 @@ __all__ = [
     "ChizhovkaHtmlParser",
     "DiamondHtmlParser",
     "IceParser",
+    "JunostHtmlParser",
     "LedByHtmlParser",
     "MinskArenaSaleframeParser",
     "ParserRegistry",
