@@ -155,6 +155,8 @@ async def run(*, apply: bool, i_know_this_is_prod: bool) -> None:
     engine = create_async_engine(async_url)
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+    filled = 0
+    already_filled = 0
     async with Session() as session:
         for arena_id, fallback in sorted(FALLBACKS.items()):
             row = (
@@ -173,23 +175,30 @@ async def run(*, apply: bool, i_know_this_is_prod: bool) -> None:
                     {"id": arena_id},
                 )
             ).fetchone()
-            before = f"website_url={existing[0]!r}" if existing else "(no profile row yet)"
+            existing_url = (existing[0] or "").strip() if existing else ""
+            existing_desc = (existing[1] or "").strip() if existing else ""
+
+            patch: dict[str, str] = {}
+            if not existing_url and fallback.website_url:
+                patch["website_url"] = fallback.website_url
+            if not existing_desc:
+                patch["short_description"] = fallback.short_description
+
+            before = f"website_url={existing_url or None!r} short_description={'set' if existing_desc else None}"
+            if not patch:
+                already_filled += 1
+                print(f"  [already-filled] arena_id={arena_id} {name!r} — {before} — nothing to add, skipping")
+                continue
+            filled += 1
             flag = "apply" if apply else "dry-run"
-            print(f"  [{flag}] arena_id={arena_id} {name!r} active={is_active} — before: {before}")
+            print(f"  [{flag}] arena_id={arena_id} {name!r} active={is_active} — before: {before} — filling: {sorted(patch)}")
             if apply:
-                await apply_admin_arena_profile_patch(
-                    session,
-                    arena_id,
-                    {
-                        "website_url": fallback.website_url,
-                        "short_description": fallback.short_description,
-                    },
-                )
+                await apply_admin_arena_profile_patch(session, arena_id, patch)
         if apply:
             await session.commit()
-            print(f"\nApplied fallback vitrine copy to {len(FALLBACKS)} arenas.")
+            print(f"\nApplied fallback vitrine copy to {filled} arenas ({already_filled} already had both fields — left untouched).")
         else:
-            print(f"\nDry-run only — {len(FALLBACKS)} arenas would be updated. Pass --apply to write.")
+            print(f"\nDry-run only — {filled} arenas would gain a field, {already_filled} already fully filled (untouched). Pass --apply to write.")
 
     print(
         f"\nExcluded on purpose (see module docstring): "
