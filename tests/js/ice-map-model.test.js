@@ -253,6 +253,72 @@ describe('city camera (selected city, not the world)', () => {
     assert.ok(moscow.center[0] > 55.5 && moscow.center[0] < 56);
     assert.ok(moscow.center[1] > 37 && moscow.center[1] < 38);
   });
+
+  it('frames the whole city from cityBounds when only 1-2 pins have a live session (Moscow bug)', () => {
+    const { cityCameraFromItems } = loadModel();
+    // Real-shape repro: one live pin near the center, but the city (Moscow metro,
+    // Zhukovsky/Sergiev Posad/etc.) spans ~150km — far bigger than the Minsk floor.
+    const cam = cityCameraFromItems(
+      [rink({ id: 1, latitude: 55.75, longitude: 37.62 })],
+      { cityBounds: { min_lat: 55.05, max_lat: 56.30, min_lon: 36.60, max_lon: 38.90 } }
+    );
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(minLat <= 55.05 && maxLat >= 56.30, 'restrict must cover the city-wide bounds, not just the pin');
+    assert.ok(minLon <= 36.60 && maxLon >= 38.90);
+    assert.ok(maxLat - minLat > 1, 'city-wide span dwarfs the Minsk floor');
+    assert.ok(maxLon - minLon > 2);
+    // Center follows the wide box, not the single live pin.
+    assert.ok(Math.abs(cam.center[0] - 55.675) < 0.2);
+  });
+
+  it('never clips a live pin that (implausibly) sits outside the reported cityBounds', () => {
+    const { cityCameraFromItems } = loadModel();
+    const cam = cityCameraFromItems(
+      [rink({ id: 1, latitude: 60.0, longitude: 40.0 })],
+      { cityBounds: { min_lat: 55.05, max_lat: 56.30, min_lon: 36.60, max_lon: 38.90 } }
+    );
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(maxLat >= 60.0 - 1e-9, 'pin hull is unioned with cityBounds, never shrunk below it');
+    assert.ok(maxLon >= 40.0 - 1e-9);
+  });
+
+  it('uses cityBounds alone (still padded) when there are zero live pins', () => {
+    const { cityCameraFromItems } = loadModel();
+    const cam = cityCameraFromItems(
+      [],
+      { cityBounds: { min_lat: 55.05, max_lat: 56.30, min_lon: 36.60, max_lon: 38.90 } }
+    );
+    assert.ok(cam);
+    const [[minLat, minLon], [maxLat, maxLon]] = cam.restrict;
+    assert.ok(minLat <= 55.05 && maxLat >= 56.30);
+    assert.ok(minLon <= 36.60 && maxLon >= 38.90);
+  });
+
+  it('leaves Minsk pixel-identical when cityBounds ≈ the live-pin hull already', () => {
+    const { cityCameraFromItems } = loadModel();
+    const items = [
+      rink({ id: 1, latitude: 53.859, longitude: 27.627 }),
+      rink({ id: 2, latitude: 53.908, longitude: 27.55 }),
+      rink({ id: 3, latitude: 53.938, longitude: 27.49 }),
+    ];
+    const without = cityCameraFromItems(items);
+    const withBounds = cityCameraFromItems(items, {
+      cityBounds: { min_lat: 53.859, max_lat: 53.938, min_lon: 27.49, max_lon: 27.627 },
+    });
+    assert.deepEqual(withBounds.restrict, without.restrict);
+    assert.deepEqual(withBounds.center, without.center);
+    assert.equal(withBounds.minZoom, without.minZoom);
+    assert.equal(withBounds.maxZoom, without.maxZoom);
+  });
+
+  it('falls back to the Minsk floor when cityBounds is malformed/missing (brand new city)', () => {
+    const { cityCameraFromItems } = loadModel();
+    const bogus = cityCameraFromItems([rink({ latitude: 55.19, longitude: 30.2 })], {
+      cityBounds: { min_lat: 'nope', max_lat: null, min_lon: undefined, max_lon: 1 },
+    });
+    const clean = cityCameraFromItems([rink({ latitude: 55.19, longitude: 30.2 })]);
+    assert.deepEqual(bogus.restrict, clean.restrict);
+  });
 });
 
 describe('рядом со мной (AC-003 + EDGE-001/002)', () => {

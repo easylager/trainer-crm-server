@@ -158,6 +158,27 @@
       return opts.getCityId ? opts.getCityId() : null;
     }
 
+    /*
+     * City-wide camera framing (independent of the intent-filtered pin list):
+     * getCityBounds() is the min/max lat/lon over ALL geocoded arenas in the city
+     * (from /api/public/ice/cities, same object the picker already fetches — no
+     * second network call). getCityCenter() (avg lat/lon, same endpoint) is only
+     * the last-resort fallback when even that is unavailable (brand new city).
+     * What renders as pins stays exactly the onMap-filtered list — this only
+     * decides how far the map is allowed to pan/zoom.
+     */
+    function getCityBounds() {
+      return opts.getCityBounds ? opts.getCityBounds() : null;
+    }
+
+    function getFallbackCenter() {
+      return opts.getCityCenter ? opts.getCityCenter() : null;
+    }
+
+    function cameraOpts() {
+      return { cityBounds: getCityBounds(), fallbackCenter: getFallbackCenter() };
+    }
+
     function listUrl(extra) {
       return opts.listUrl(extra);
     }
@@ -328,7 +349,7 @@
 
     function applyCityCamera() {
       if (!map) return;
-      var cam = MM.cityCameraFromItems(listItems);
+      var cam = MM.cityCameraFromItems(listItems, cameraOpts());
       if (!cam) return;
       ignoreBounds = true;
       bboxState = null;
@@ -373,7 +394,7 @@
     function createMap() {
       if (map || !canvas) return;
       buildLayouts();
-      var cam = MM.cityCameraFromItems(listItems);
+      var cam = MM.cityCameraFromItems(listItems, cameraOpts());
       if (!cam) return;
       map = new ymaps.Map(
         canvas,

@@ -513,7 +513,43 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
-                       ) AS longitude
+                       ) AS longitude,
+                       (
+                           SELECT MIN(a.latitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS min_latitude,
+                       (
+                           SELECT MAX(a.latitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS max_latitude,
+                       (
+                           SELECT MIN(a.longitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS min_longitude,
+                       (
+                           SELECT MAX(a.longitude)
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS max_longitude
                 FROM cities c
                 WHERE c.is_active AND c.country = ANY(:ice_countries)
                 ORDER BY c.sort_order, c.id
@@ -536,6 +572,18 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
             continue
         lat = row["latitude"]
         lon = row["longitude"]
+        min_lat = row["min_latitude"]
+        max_lat = row["max_latitude"]
+        min_lon = row["min_longitude"]
+        max_lon = row["max_longitude"]
+        bounds = None
+        if map_rink_count > 0 and None not in (min_lat, max_lat, min_lon, max_lon):
+            bounds = {
+                "min_lat": float(min_lat),
+                "max_lat": float(max_lat),
+                "min_lon": float(min_lon),
+                "max_lon": float(max_lon),
+            }
         items.append(
             {
                 "id": int(row["id"]),
@@ -547,6 +595,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "map_rink_count": map_rink_count,
                 "latitude": float(lat) if lat is not None else None,
                 "longitude": float(lon) if lon is not None else None,
+                "bounds": bounds,
             }
         )
     return items

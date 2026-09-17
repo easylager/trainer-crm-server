@@ -223,6 +223,15 @@
           if (city.latitude == null || city.longitude == null) return null;
           return [Number(city.latitude), Number(city.longitude)];
         },
+        // TASK city-wide-camera-bounds: min/max lat/lon over ALL geocoded arenas in
+        // the city (not just the ones with a live session) — reused from the same
+        // /api/public/ice/cities payload the city picker already fetched into
+        // state.cities. Fixes the map locking Moscow/SPb to a tiny box around
+        // whatever 1-2 arenas happen to have a schedule right now.
+        getCityBounds: function () {
+          var city = cityFromState(state.cityId) || {};
+          return city.bounds || null;
+        },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
           if (href) shellNav(href);
