@@ -578,6 +578,38 @@ async def test_bbox_skips_ru_arenas_in_ice_discovery(
 
 
 @pytest.mark.asyncio
+async def test_ice_discovery_countries_env_widens_scope(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """ICE_DISCOVERY_COUNTRIES=BY,RU (local/staging override) shows both — the BY-only
+    default from test_bbox_skips_ru_arenas_in_ice_discovery is unaffected when unset."""
+    monkeypatch.setenv("ICE_DISCOVERY_COUNTRIES", "BY,RU")
+    by_city = await _insert_city(db_session, name=f"IceBY-{uuid.uuid4().hex[:6]}", country="BY")
+    ru_city = await _insert_city(db_session, name=f"IceRU-{uuid.uuid4().hex[:6]}", country="RU")
+    by_arena = await _insert_arena(
+        db_session, by_city, name="Минский каток", latitude=53.90, longitude=27.56
+    )
+    ru_arena = await _insert_arena(
+        db_session, ru_city, name="Московский каток", latitude=55.75, longitude=37.62
+    )
+    await _add_future_session(db_session, by_arena, price_adult_minor=850)
+    await _add_future_session(db_session, ru_arena, price_adult_minor=60000)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/api/public/ice/arenas",
+            params={"bbox": "50.0,20.0,60.0,40.0", "intent": "skate", "limit": 20},
+        )
+        cities = await client.get("/api/public/ice/cities")
+    assert resp.status_code == 200, resp.text
+    ids = {it["id"] for it in resp.json()["items"]}
+    assert by_arena in ids
+    assert ru_arena in ids
+    city_ids = {int(it["id"]) for it in cities.json()["items"]}
+    assert by_city in city_ids
+    assert ru_city in city_ids
+
+
+@pytest.mark.asyncio
 async def test_tier_outranks_distance_and_nearby_c_stays_visible(
     app_use_test_db, db_session
 ) -> None:
