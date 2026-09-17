@@ -16,12 +16,13 @@
 {
   "schedule_url": "https://ld-sokolniki.ru/massovye-kataniya/",
   "timezone": "Europe/Moscow",
+  "currency_code": "RUB",
   "kind": "public_skate",
   "session_name": "МК",
   "session_name_meaning": "массовые катания",
   "rental_price_flat_minor": 30000,
   "child_price_available": false,
-  "prices_already_minor": false,
+  "prices_already_minor": true,
   "requires_by_egress": false,
   "requires_auth": false
 }
@@ -62,3 +63,4 @@
 - Раздельной детской цены на сайте нет вообще (проверено меню и саму страницу) — это не баг парсера, а особенность источника.
 - Горизонт публикации короткий и, похоже, обновляется вручную администратором зала — если `schedule-list` неделями не меняется, это ожидаемо, а не сигнал поломки парсера.
 - Отдельной страницы цен нет — прокат зашит текстом на той же странице расписания.
+- Черновик job.config выше финализирован при реализации адаптера (`SokolnikiHtmlParser`): добавлен явный `currency_code: RUB` (в черновике отсутствовал — без него `IceSessionNormalizer` тихо подставил бы `BYN`) и `prices_already_minor` изменён с `false` на `true` — адаптер сам конвертирует цену со страницы в минорные единицы через `parse_price_to_minor` (как остальные HTML-адаптеры этого репозитория), а `rental_price_flat_minor: 30000` уже записан в минорных единицах.

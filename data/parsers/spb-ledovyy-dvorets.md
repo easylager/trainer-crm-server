@@ -27,6 +27,7 @@
   "child_price_from_cutoff_minor": 45000,
   "rental_skates_minor": 45000,
   "rental_inventory_minor": 45000,
+  "prices_already_minor": true,
   "closed_marker_substrings": ["каток не работает"],
   "requires_by_egress": false
 }
@@ -70,3 +71,4 @@
 - Каденс weekly: сетка публикуется блоками по 1-2 недели вперёд, в конце — явное «каток не работает» на паузу техобслуживания/мероприятий. Перезапускать extract после 20 сен, когда должна появиться новая сетка.
 - Не путать с «Ледовый дворец» на стороннем портале `ice-palace.com` — другой домен, не подтверждён как официальный источник, не использован.
 - Aggregator `vse-katki.ru` (см. `spb-yubileyny.md` — там же расшифрован его AES/PBKDF2-протокол) **не содержит** этой арены в decrypted cluster payload на снимке — не fallback.
+- Черновик job.config выше финализирован при реализации адаптера (`LedovyyDvoretsHtmlParser`): добавлен `prices_already_minor: true` (в черновике поле отсутствовало — без него `IceSessionNormalizer` умножил бы уже-минорные `*_minor` константы на 100 ещё раз). Извлечение проверено 102/102 против `expected.json`, несмотря на деградированный markdown-снимок — текст страницы регулярный.
