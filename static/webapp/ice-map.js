@@ -174,13 +174,6 @@
       return '';
     }
 
-    function applyIntentFilter(items) {
-      if (global.IceTabModel && typeof global.IceTabModel.filterSkateLens === 'function') {
-        return global.IceTabModel.filterSkateLens(items || [], getIntent());
-      }
-      return items || [];
-    }
-
     /*
      * TASK-103: лоадер живёт ровно между «начали грузить» и «на сцене что-то есть».
      * Гасится здесь и в renderEmpty, потому что это два единственных исхода запуска:
@@ -320,7 +313,7 @@
       if (!url) return;
       bboxState = plan;
       fetchJson(url).then(function (data) {
-        mapItems = applyIntentFilter((data && data.items) || []);
+        mapItems = (data && data.items) || [];
         syncObjects();
         defaultSheet();
       });
@@ -532,7 +525,7 @@
           var cityId = getCityId();
           if (cityId != null) extra.cityId = cityId;
           fetchJson(listUrl(extra)).then(function (data) {
-            var items = applyIntentFilter((data && data.items) || []);
+            var items = (data && data.items) || [];
             if (typeof opts.onNearList === 'function') opts.onNearList({ items: items, total: items.length });
             listItems = items.length ? items : listItems;
             var mapped = MM.splitMapAndList(items).onMap;

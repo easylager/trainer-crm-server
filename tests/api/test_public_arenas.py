@@ -274,19 +274,23 @@ async def test_tier_is_computed_on_read_without_data_tier_column(
     row = next(it for it in after.json()["items"] if it["id"] == arena_id)
     assert row["tier"] == "B"
     assert skate_after.status_code == 200, skate_after.text
-    assert all(it["id"] != arena_id for it in skate_after.json()["items"])
+    skate_row = next(it for it in skate_after.json()["items"] if it["id"] == arena_id)
+    assert skate_row["tier"] == "B"
 
 
 @pytest.mark.asyncio
-async def test_skate_intent_lists_only_arenas_with_future_public_ice(
+async def test_skate_intent_lists_every_arena_tier_a_first(
     app_use_test_db, db_session
 ) -> None:
-    """Owner rule (overrides AC-003): intent=skate requires a future public_skate|open_ice slot."""
+    """Owner rule reversed 2026-09-17: intent=skate shows every arena, not just ones with a
+    future public_skate|open_ice slot — Tier A (live slot) ranks above B (profile only) above
+    C (bare). Coach/group intents were already tier-agnostic; this brings skate in line."""
     cid = await _insert_city(db_session, name=f"IceIntent-{uuid.uuid4().hex[:6]}")
     skate = await _insert_arena(db_session, cid, name="Лёд с сеансом", phone="+375 17 1")
     profile_only = await _insert_arena(
         db_session, cid, name="Лёд без сеанса", phone="+375 17 2", website_url="https://x.example"
     )
+    bare = await _insert_arena(db_session, cid, name="Лёд без данных")
     await _add_future_session(db_session, skate)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         skate_list = await client.get(
@@ -298,13 +302,19 @@ async def test_skate_intent_lists_only_arenas_with_future_public_ice(
         group_list = await client.get(
             "/api/public/ice/arenas", params={"city_id": cid, "intent": "group"}
         )
-    skate_ids = {it["id"] for it in skate_list.json()["items"]}
+    skate_items = skate_list.json()["items"]
+    skate_ids = [it["id"] for it in skate_items]
     coach_ids = {it["id"] for it in coach_list.json()["items"]}
     group_ids = {it["id"] for it in group_list.json()["items"]}
-    assert skate_ids == {skate}
+    assert skate_ids == [skate, profile_only, bare]
+    by_id = {it["id"]: it for it in skate_items}
+    assert by_id[skate]["tier"] == "A"
+    assert by_id[profile_only]["tier"] == "B"
+    assert by_id[bare]["tier"] == "C"
+    assert by_id[profile_only]["live"]["kind"] == "unknown"
     assert profile_only in coach_ids
     assert profile_only in group_ids
-    skate_row = skate_list.json()["items"][0]
+    skate_row = skate_items[0]
     assert skate_row["live"]["kind"] == "session"
     assert skate_row["live"]["currency_code"]
     coach_row = next(it for it in coach_list.json()["items"] if it["id"] == skate)
@@ -345,7 +355,11 @@ async def test_expired_sessions_are_not_current_in_list_or_feed(
         feed_expired = await client.get(f"/api/public/arenas/{expired_valid}/sessions")
         feed_past = await client.get(f"/api/public/arenas/{past_end}/sessions")
         feed_live = await client.get(f"/api/public/arenas/{live}/sessions")
-    assert {it["id"] for it in listed.json()["items"]} == {live}
+    by_id = {it["id"]: it for it in listed.json()["items"]}
+    assert set(by_id) == {expired_valid, past_end, live}
+    assert by_id[live]["live"]["kind"] == "session"
+    assert by_id[expired_valid]["live"]["kind"] != "session"
+    assert by_id[past_end]["live"]["kind"] != "session"
 
     def _session_ids(payload: dict) -> set[int]:
         ids: set[int] = set()
@@ -406,11 +420,13 @@ async def test_started_session_is_not_current_on_ice_list_or_feed(
         feed_live = await client.get(f"/api/public/arenas/{only_live}/sessions")
     assert listed.status_code == 200, listed.text
     items = listed.json()["items"]
-    assert {it["id"] for it in items} == {mixed}
-    live = items[0]["live"]
+    by_id = {it["id"]: it for it in items}
+    assert set(by_id) == {mixed, only_live}
+    live = by_id[mixed]["live"]
     assert live["kind"] == "session"
     assert str(live["starts_at_local"])[:5] == upcoming.strftime("%H:%M")
     assert started.strftime("%H:%M") not in str(live.get("text") or "")
+    assert by_id[only_live]["live"]["kind"] != "session"
 
     mixed_times = _session_hhmm_from_feed(feed_mixed.json())
     assert upcoming.strftime("%H:%M") in mixed_times

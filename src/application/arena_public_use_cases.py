@@ -444,8 +444,6 @@ async def _load_ice_arena_rows(
             "AND a.longitude BETWEEN :min_lon AND :max_lon"
         )
         params.update(min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon)
-    if intent == INTENT_SKATE:
-        where.append("COALESCE(sa.future_count, 0) > 0")
     sql = _LIST_SQL
     if where:
         sql = sql + " AND " + " AND ".join(where)
