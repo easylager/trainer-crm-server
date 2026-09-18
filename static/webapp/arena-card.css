@@ -490,26 +490,6 @@ body.client-shell-tabs-hidden .arena-tickets-cta {
   margin: 0;
 }
 
-.arena-owner {
-  border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
-  padding: 12px;
-  background: var(--app-surface-row-bot);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.arena-owner b {
-  font-size: var(--app-text-body);
-}
-
-.arena-owner p {
-  margin: 0;
-  font-size: var(--app-text-caption);
-  color: var(--glide-hint);
-}
-
 .arena-closed {
   border: 1px solid var(--glide-line);
   border-left: 3px solid var(--app-cta-fill);
