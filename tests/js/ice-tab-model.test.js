@@ -123,6 +123,14 @@ describe('formatMeta / live tone (AC-003)', () => {
     assert.equal(formatMeta({ district: 'Центр' }), 'Центр');
   });
 
+  it('prefers the street address over district when both are present', () => {
+    const { formatMeta } = loadModel();
+    assert.equal(
+      formatMeta({ district: 'Центр', address: 'пр. Добролюбова, 18', distance_km: 1.2 }),
+      'пр. Добролюбова, 18 · 1,2 км'
+    );
+  });
+
   it('uses API tier for live tone, never computes A/B/C on the client', () => {
     const { liveTone } = loadModel();
     assert.equal(liveTone({ tier: 'A', live: { kind: 'session' } }), 'a');
