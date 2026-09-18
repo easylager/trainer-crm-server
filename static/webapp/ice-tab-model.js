@@ -418,7 +418,8 @@
   function formatMeta(item) {
     item = item || {};
     var parts = [];
-    if (item.district) parts.push(String(item.district));
+    var place = item.address ? String(item.address) : item.district ? String(item.district) : '';
+    if (place) parts.push(place);
     var dist = formatDistanceKm(item.distance_km);
     if (dist) parts.push(dist);
     if (item.closes_at) parts.push('до ' + item.closes_at);
