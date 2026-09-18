@@ -537,21 +537,6 @@
     return html;
   }
 
-  function renderOwner() {
-    var pending = M.iceSectionMode({
-      tier: state.card.tier,
-      hasSessions: hasAnySessions(),
-    }) === 'pending';
-    if (!pending) return '';
-    return (
-      '<div class="arena-sec"><div class="arena-owner">' +
-      '<b>Знаете расписание этого катка?</b>' +
-      '<p>Подскажите время и цены — проверим и опубликуем со ссылкой на источник.</p>' +
-      '<button type="button" class="arena-btn" data-action="claim-schedule">Дополнить карточку</button>' +
-      '</div></div>'
-    );
-  }
-
   function paint() {
     if (!root || !state.card) return;
     var title = document.getElementById('headerTitle');
@@ -563,8 +548,7 @@
       renderTrainers() +
       renderGroups() +
       renderPractice() +
-      renderFreshness() +
-      renderOwner();
+      renderFreshness();
     setTicketsCta();
   }
 
@@ -588,27 +572,20 @@
     { id: 'other', label: 'Другое' },
   ];
 
-  function openModal(kind) {
+  function openModal() {
     var modal = document.getElementById('arenaModal');
     var title = document.getElementById('arenaModalTitle');
     var lead = document.getElementById('arenaModalLead');
     var field = document.getElementById('arenaModalField');
     var value = document.getElementById('arenaModalValue');
     if (!modal) return;
-    modal.dataset.kind = kind;
-    if (kind === 'claim-schedule') {
-      title.textContent = 'Дополнить карточку';
-      lead.textContent = 'Время и цены массового катания — проверим по источнику.';
-      field.innerHTML = '<option value="schedule">Расписание МК</option>';
-      value.placeholder = 'например 18:00–19:00, взр. 12';
-    } else {
-      title.textContent = 'Сообщить об ошибке';
-      lead.textContent = 'Укажите поле и верное значение — не письмо в поддержку.';
-      field.innerHTML = REPORT_FIELDS.map(function (f) {
-        return '<option value="' + f.id + '">' + esc(f.label) + '</option>';
-      }).join('');
-      value.placeholder = 'как должно быть';
-    }
+    modal.dataset.kind = 'report';
+    title.textContent = 'Сообщить об ошибке';
+    lead.textContent = 'Укажите поле и верное значение — не письмо в поддержку.';
+    field.innerHTML = REPORT_FIELDS.map(function (f) {
+      return '<option value="' + f.id + '">' + esc(f.label) + '</option>';
+    }).join('');
+    value.placeholder = 'как должно быть';
     value.value = '';
     modal.hidden = false;
   }
@@ -709,8 +686,7 @@
       paint();
       return;
     }
-    if (action === 'report') openModal('report');
-    if (action === 'claim-schedule') openModal('claim-schedule');
+    if (action === 'report') openModal();
   }
 
   function fetchJson(url) {
