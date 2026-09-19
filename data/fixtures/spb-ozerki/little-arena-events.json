@@ -1,0 +1,447 @@
+{
+ "kind": "calendar#events",
+ "etag": "\"p327r19udhrs9c0o\"",
+ "summary": "Массовое катание Малая арена",
+ "description": "",
+ "updated": "2026-09-18T12:19:32.334Z",
+ "timeZone": "Europe/Moscow",
+ "accessRole": "reader",
+ "defaultReminders": [],
+ "items": [
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467935911966\"",
+   "id": "7tq84a69s5k04c42ms1g2r3k9v",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=N3RxODRhNjlzNWswNGM0Mm1zMWcycjNrOXYgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:19:27.000Z",
+   "updated": "2026-09-18T12:19:27.955Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T10:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T11:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "7tq84a69s5k04c42ms1g2r3k9v@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467944669214\"",
+   "id": "4bm2snomhs17p05ce4hl4jcl2p",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=NGJtMnNub21oczE3cDA1Y2U0aGw0amNsMnAgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:19:13.000Z",
+   "updated": "2026-09-18T12:19:32.334Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T11:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T12:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "4bm2snomhs17p05ce4hl4jcl2p@google.com",
+   "sequence": 2,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467662161790\"",
+   "id": "62r4lkgcs54686l4pcu57edn10",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=NjJyNGxrZ2NzNTQ2ODZsNHBjdTU3ZWRuMTAgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:10.000Z",
+   "updated": "2026-09-18T12:17:11.080Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T12:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T13:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "62r4lkgcs54686l4pcu57edn10@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467673885694\"",
+   "id": "5tcduqabk66mkr5uek24l2obav",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=NXRjZHVxYWJrNjZta3I1dWVrMjRsMm9iYXYgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:15.000Z",
+   "updated": "2026-09-18T12:17:16.942Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T13:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T14:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "5tcduqabk66mkr5uek24l2obav@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467683118142\"",
+   "id": "29n4a3p0oilgptb0ua3nb2ts9r",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MjluNGEzcDBvaWxncHRiMHVhM25iMnRzOXIgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:21.000Z",
+   "updated": "2026-09-18T12:17:21.559Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T15:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T16:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "29n4a3p0oilgptb0ua3nb2ts9r@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467723634238\"",
+   "id": "3jb84j7h8lqt3b0hoh055en2d7",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=M2piODRqN2g4bHF0M2IwaG9oMDU1ZW4yZDcgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:39.000Z",
+   "updated": "2026-09-18T12:17:41.817Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T16:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T17:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "3jb84j7h8lqt3b0hoh055en2d7@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467697448766\"",
+   "id": "1c61umu3t622avlh4i1hmneaeg",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MWM2MXVtdTN0NjIyYXZsaDRpMWhtbmVhZWcgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:28.000Z",
+   "updated": "2026-09-18T12:17:28.724Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T17:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T18:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "1c61umu3t622avlh4i1hmneaeg@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467748373534\"",
+   "id": "1lm9n7187h5qpla004g7arl0j5",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MWxtOW43MTg3aDVxcGxhMDA0ZzdhcmwwajUgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:17:50.000Z",
+   "updated": "2026-09-18T12:17:54.186Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-19T19:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-19T20:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "1lm9n7187h5qpla004g7arl0j5@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467895771102\"",
+   "id": "1q3ngqinsn0mp38veku5me4pl8",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MXEzbmdxaW5zbjBtcDM4dmVrdTVtZTRwbDggcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:19:07.000Z",
+   "updated": "2026-09-18T12:19:07.885Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T10:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T11:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "1q3ngqinsn0mp38veku5me4pl8@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467875627870\"",
+   "id": "1nhu2030nt6n3uvbbqf0s34m9g",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MW5odTIwMzBudDZuM3V2YmJxZjBzMzRtOWcgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:57.000Z",
+   "updated": "2026-09-18T12:18:57.813Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T12:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T13:00:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "1nhu2030nt6n3uvbbqf0s34m9g@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467863127038\"",
+   "id": "10fb3c3tq87gihflgnabn0g3ro",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MTBmYjNjM3RxODdnaWhmbGduYWJuMGczcm8gcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:48.000Z",
+   "updated": "2026-09-18T12:18:51.563Z",
+   "summary": "Час хоккея",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T13:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T14:15:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "10fb3c3tq87gihflgnabn0g3ro@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467783227326\"",
+   "id": "0v4po8e6rsotf3o2qc0pc0uk2h",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MHY0cG84ZTZyc290ZjNvMnFjMHBjMHVrMmggcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:11.000Z",
+   "updated": "2026-09-18T12:18:11.613Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T14:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T15:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "0v4po8e6rsotf3o2qc0pc0uk2h@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467795619742\"",
+   "id": "2eu9v3he212bj13sdcag350iru",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=MmV1OXYzaGUyMTJiajEzc2RjYWczNTBpcnUgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:16.000Z",
+   "updated": "2026-09-18T12:18:17.809Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T15:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T16:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "2eu9v3he212bj13sdcag350iru@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467824196350\"",
+   "id": "73cts8vgcdk243ndtu8msumcmn",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=NzNjdHM4dmdjZGsyNDNuZHR1OG1zdW1jbW4gcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:31.000Z",
+   "updated": "2026-09-18T12:18:32.098Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T18:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T19:30:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "73cts8vgcdk243ndtu8msumcmn@google.com",
+   "sequence": 0,
+   "eventType": "default"
+  },
+  {
+   "kind": "calendar#event",
+   "etag": "\"3579467832954430\"",
+   "id": "76j8vg3keqt7knfn4699biatsq",
+   "status": "confirmed",
+   "htmlLink": "https://www.google.com/calendar/event?eid=NzZqOHZnM2tlcXQ3a25mbjQ2OTliaWF0c3EgcGo0dmEwNmduY2Ixdmd2NzY4NjRoYnNoMDhAZw",
+   "created": "2026-09-18T12:18:35.000Z",
+   "updated": "2026-09-18T12:18:36.477Z",
+   "summary": "Свободное катание",
+   "creator": {
+    "email": "mail@katok-ozerki.ru"
+   },
+   "organizer": {
+    "email": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+    "displayName": "Массовое катание Малая арена",
+    "self": true
+   },
+   "start": {
+    "dateTime": "2026-09-20T19:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "end": {
+    "dateTime": "2026-09-20T20:45:00+03:00",
+    "timeZone": "Europe/Moscow"
+   },
+   "iCalUID": "76j8vg3keqt7knfn4699biatsq@google.com",
+   "sequence": 1,
+   "eventType": "default"
+  }
+ ]
+}

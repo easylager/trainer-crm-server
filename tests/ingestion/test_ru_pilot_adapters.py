@@ -21,8 +21,11 @@ import pytest
 
 from src.ingestion.adapters_ru_pilot import (
     BalticArenaHtmlParser,
+    GrandCanyonIceJsonParser,
     IceburgArenaJsonParser,
     LedovyyDvoretsHtmlParser,
+    MagnitArenaHtmlParser,
+    OzerkiCalendarParser,
     SokolnikiHtmlParser,
     VtbArenaQticketsParser,
     YubileynyAfishaParser,
@@ -92,6 +95,53 @@ _ICEBURG_ARENA_CONFIG = {
     "requires_by_egress": False,
 }
 
+_GRAND_CANYON_ICE_CONFIG = {
+    "url": "https://cp.grand-ice.ru/api/schedules",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
+_OZERKI_CONFIG = {
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "google_api_key": "AIzaSyB6QYcTzKpA8kiRcjl47XJ_tEYbY2mcUVg",
+    "horizon_days": 7,
+    "rinks": [
+        {
+            "code": "big",
+            "label": "Большая арена",
+            "calendar_id": "jgl24dlkvmobfa4eh6ob5qomks@group.calendar.google.com",
+            "fixture_file": "big-arena-events.json",
+            "price_adult_minor": 50000,
+        },
+        {
+            "code": "little",
+            "label": "Малая арена",
+            "calendar_id": "pj4va06gncb1vgv76864hbsh08@group.calendar.google.com",
+            "fixture_file": "little-arena-events.json",
+            "price_adult_minor": 40000,
+        },
+    ],
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
+_MAGNIT_ARENA_CONFIG = {
+    "url": "http://magnit-arena.ru/",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "run_year": 2026,
+    "base_price_adult_minor": 60000,
+    "rental_price_flat_minor": 30000,
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
 _VTBARENA_CONFIG = {
     "prices_url": "https://akademiya-dynamo.ru/services/katanie-na-krytoy-ledovoy-ploshchadke/",
     "timezone": "Europe/Moscow",
@@ -143,6 +193,24 @@ def _iceburg_arena_job() -> ParserJob:
     cfg = dict(_ICEBURG_ARENA_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "spb-iceburg-arena")
     return _job(arena_id=193, parser_key="iceburgarena_yclients_v1", config=cfg, job_id=207)
+
+
+def _grand_canyon_ice_job() -> ParserJob:
+    cfg = dict(_GRAND_CANYON_ICE_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-grand-canyon-ice")
+    return _job(arena_id=99, parser_key="grandice_json_v1", config=cfg, job_id=208)
+
+
+def _ozerki_job() -> ParserJob:
+    cfg = dict(_OZERKI_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-ozerki")
+    return _job(arena_id=101, parser_key="ozerki_gcal_v1", config=cfg, job_id=209)
+
+
+def _magnit_arena_job() -> ParserJob:
+    cfg = dict(_MAGNIT_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-magnit-arena")
+    return _job(arena_id=187, parser_key="magnitarena_html_v1", config=cfg, job_id=210)
 
 
 def _vtbarena_job() -> ParserJob:
@@ -366,6 +434,122 @@ async def test_iceburg_arena_price_converted_from_whole_units() -> None:
         assert slot.price_adult == 90000
 
 
+@pytest.mark.asyncio
+async def test_grand_canyon_ice_filters_to_free_skate_only() -> None:
+    """AC (spec item 2): the raw feed mixes in 'Секция'/'Мероприятие' entries with no
+    price and an explicit 'no free skate' note — only schedule_type.name == 'Свободное
+    катание' may become a public ice_sessions row."""
+    job = _grand_canyon_ice_job()
+    expected = _load_expected("spb-grand-canyon-ice")
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await GrandCanyonIceJsonParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 39
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_child_minor is None
+        assert slot.price_rental_minor is None
+
+
+@pytest.mark.asyncio
+async def test_grand_canyon_ice_price_shared_across_date(tmp_path: Path) -> None:
+    """AC (spec item 3): price is a single flat figure per date, applied to every
+    schedule_time row for that date — not scraped per slot."""
+    job = _grand_canyon_ice_job()
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await GrandCanyonIceJsonParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    same_day = [slot for slot in slots if slot.local_date == date(2026, 9, 20)]
+    assert len(same_day) == 9
+    assert {slot.price_adult_minor for slot in same_day} == {75000}
+
+
+@pytest.mark.asyncio
+async def test_ozerki_filters_to_free_skate_only_across_both_rinks() -> None:
+    """AC (spec item 3): each calendar mixes in unlabeled busy-marker events (rental
+    bookings) and, on the Малая арена calendar, 'Час хоккея' events — only
+    summary.strip() == 'Свободное катание' may become a public ice_sessions row."""
+    job = _ozerki_job()
+    expected = _load_expected("spb-ozerki")
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await OzerkiCalendarParser().extract(job)
+    assert extraction.slots
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 27
+    by_source = {slot.source_id: slot for slot in slots}
+    for gold in expected["sessions"]:
+        slot = by_source[gold["source_id"]]
+        assert slot.local_date == date.fromisoformat(gold["local_date"])
+        assert slot.starts_at_local == time.fromisoformat(gold["starts_at_local"])
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_child_minor is None
+        assert slot.price_rental_minor is None
+        assert slot.session_label == gold["session_label"]
+
+
+@pytest.mark.asyncio
+async def test_ozerki_rink_price_differs_by_calendar() -> None:
+    """AC (spec item 4): price is a flat per-rink constant from job.config, not read
+    from the calendar — Большая арена (500 р) and Малая арена (400 р) differ."""
+    job = _ozerki_job()
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await OzerkiCalendarParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    by_label: dict[str, set[int]] = {}
+    for slot in slots:
+        by_label.setdefault(slot.session_label, set()).add(slot.price_adult_minor)
+    assert by_label["Большая арена"] == {50000}
+    assert by_label["Малая арена"] == {40000}
+
+
+@pytest.mark.asyncio
+async def test_magnit_arena_excludes_hockey_hour_rink() -> None:
+    """AC (spec item 2): 'Ледовая Арена 2' is 'Час хоккея' (a different product) —
+    only 'Ледовая Арена 1' ('массовое катание') may become a public ice_sessions row."""
+    job = _magnit_arena_job()
+    expected = _load_expected("spb-magnit-arena")
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await MagnitArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 62
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_child_minor is None
+        assert slot.price_rental_minor == gold["price_rental_minor"] == 30000
+
+
+@pytest.mark.asyncio
+async def test_magnit_arena_promo_slot_overrides_base_price() -> None:
+    """AC (spec item 4): a slot individually marked '/ NNN р.*' inline overrides the
+    flat base_price_adult_minor for that one slot only."""
+    job = _magnit_arena_job()
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await MagnitArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    promo = next(slot for slot in slots if slot.local_date == date(2026, 9, 14) and slot.starts_at_local == time(9, 45))
+    base = next(slot for slot in slots if slot.local_date == date(2026, 9, 14) and slot.starts_at_local == time(6, 45))
+    assert promo.price_adult_minor == 15000
+    assert base.price_adult_minor == 60000
+
+
 def test_ru_pilot_parsers_registered() -> None:
     registry = default_registry()
     assert registry.get("ldsokolniki_html_v1") is not None
@@ -374,3 +558,6 @@ def test_ru_pilot_parsers_registered() -> None:
     assert registry.get("vtbarena_qtickets_v1") is not None
     assert registry.get("balticarena_html_v1") is not None
     assert registry.get("iceburgarena_yclients_v1") is not None
+    assert registry.get("grandice_json_v1") is not None
+    assert registry.get("ozerki_gcal_v1") is not None
+    assert registry.get("magnitarena_html_v1") is not None

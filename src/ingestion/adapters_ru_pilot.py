@@ -24,7 +24,10 @@ BYN/Europe/Minsk defaults ``IceSessionNormalizer`` uses for BY arenas.
 """
 from __future__ import annotations
 
+import html as html_lib
+import json
 import re
+import urllib.parse
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -419,6 +422,224 @@ class IceburgArenaJsonParser(IceParser):
                 )
             )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=raw, slots=slots)
+
+
+# --- spb-grand-canyon-ice ---------------------------------------------------
+
+_GRANDICE_FREE_SKATE_TYPE = "Свободное катание"
+
+
+class GrandCanyonIceJsonParser(IceParser):
+    """ЛД «Гранд Каньон Айс», СПб (spb-grand-canyon-ice.md, arena_id=99).
+
+    A genuine public JSON API, no auth: ``GET https://cp.grand-ice.ru/api/schedules``
+    returns every published schedule entry — mixing ``"Свободное катание"``
+    with ``"Секция"``/``"Мероприятие"`` entries that carry no price and an
+    explicit ``"Свободного катания нет"`` note in ``schedule_time[].notes`` —
+    filtered here to ``schedule_type.name == "Свободное катание"`` only, same
+    rule as every other RU-pilot adapter never turning a non-public-skate
+    activity into a catalog session. One entry per date; ``price`` is a
+    single flat decimal-string figure for that whole date (e.g. ``"750.00"``,
+    whole rubles not minor units) applied to every nested ``schedule_time``
+    row for that date — there's no per-slot price in the source.
+
+    The endpoint takes no query params and just returns whatever the admin
+    has currently published (a rolling few weeks, mixing already-past and
+    future dates in the 2026-09-19 snapshot) — ``IceSessionNormalizer``'s own
+    ``ends_at_utc <= now`` filter naturally drops the past ones, so no date
+    filtering is needed in ``extract()`` itself.
+    """
+
+    parser_key = "grandice_json_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        raw = await load_source_json(job, filename="schedules.json", url_keys=("url",))
+        schedules = (raw.get("data") or {}).get("schedules") or []
+        slots: list[ExtractedSlot] = []
+        for entry in schedules:
+            schedule_type = (entry.get("schedule_type") or {}).get("name")
+            if schedule_type != _GRANDICE_FREE_SKATE_TYPE:
+                continue
+            local_date = str(entry.get("date") or "")
+            if not local_date:
+                continue
+            price = parse_price_to_minor(entry.get("price"), already_minor=False)
+            for row in entry.get("schedule_time") or []:
+                start = str(row.get("time_start") or "")[:5]
+                end = str(row.get("time_end") or "")[:5]
+                if not start or not end:
+                    continue
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=start,
+                        ends_at_local=end,
+                        kind_raw="public_skate",
+                        price_adult=price,
+                        price_child=None,
+                        price_rental=None,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=raw, slots=slots)
+
+
+# --- spb-ozerki ---------------------------------------------------------
+
+_OZERKI_FREE_SKATE = "Свободное катание"
+
+
+class OzerkiCalendarParser(IceParser):
+    """Ледовая арена «Озерки», СПб (spb-ozerki.md, arena_id=101).
+
+    Two independent ice rinks (Большая/Малая арена), each with its own public
+    Google Calendar — API key and calendar id are both shipped in the site's
+    own page JS (a FullCalendar ``googleCalendarApiKey``/``googleCalendarId``
+    config), not secret. Each rink's calendar is actually two merged event
+    sources in the widget: a default, unlabeled one (the site's own hourly
+    *rental* booking form marking busy/occupied time — no ``summary``) and a
+    second, explicitly-colored one carrying the real public schedule with
+    ``summary`` set to either ``"Свободное катание"`` or ``"Час хоккея"``.
+    Only ``summary.strip() == "Свободное катание"`` becomes a slot — same
+    "public skate only" rule as every other RU-pilot adapter (see
+    ``IceburgArenaJsonParser``); ``"Час хоккея"`` is a different product.
+
+    Prices aren't in the calendar at all — they're flat, one per rink, read
+    from ``job.config["rinks"][i]["price_adult_minor"]`` (the page's own
+    static prose price paragraph, 500 ₽ / 400 ₽ at capture time).
+
+    Known limitation: ``IceSessionNormalizer`` dedupes slots by
+    ``(local_date, starts_at_local)`` only, not per-rink — if both rinks ever
+    publish a "Свободное катание" session at the exact same clock time on the
+    same date, one would silently be dropped in favor of the other. Not
+    observed in the 2026-09-19 snapshot (see spec's Verification section)
+    but not structurally impossible; flagged rather than silently risked.
+    """
+
+    parser_key = "ozerki_gcal_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        rinks = job.config.get("rinks") or []
+        fixture_dir = job.config.get("fixture_dir")
+        api_key = job.config.get("google_api_key")
+        horizon_days = int(job.config.get("horizon_days") or 7)
+        tz = ZoneInfo(str(job.config.get("timezone") or "Europe/Moscow"))
+        today = datetime.now(tz).date()
+        time_min = datetime.combine(today, datetime.min.time(), tzinfo=tz).isoformat()
+        time_max = datetime.combine(today + timedelta(days=horizon_days), datetime.min.time(), tzinfo=tz).isoformat()
+
+        slots: list[ExtractedSlot] = []
+        raw_by_rink: dict[str, Any] = {}
+        for rink in rinks:
+            code = str(rink.get("code") or rink.get("label") or "")
+            if fixture_dir:
+                path = Path(str(fixture_dir)) / str(rink["fixture_file"])
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                calendar_id = urllib.parse.quote(str(rink["calendar_id"]), safe="")
+                url = (
+                    f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+                    f"?key={api_key}&timeMin={time_min}&timeMax={time_max}"
+                    f"&singleEvents=true&orderBy=startTime&maxResults=250"
+                )
+                raw = await fetch_http_json(url)
+            raw_by_rink[code] = raw
+            price = rink.get("price_adult_minor")
+            label = rink.get("label")
+            for item in raw.get("items") or []:
+                summary = str(item.get("summary") or "").strip()
+                if summary != _OZERKI_FREE_SKATE:
+                    continue
+                start = (item.get("start") or {}).get("dateTime")
+                end = (item.get("end") or {}).get("dateTime")
+                if not start or not end:
+                    continue
+                event_id = item.get("id")
+                slots.append(
+                    ExtractedSlot(
+                        local_date=start[:10],
+                        starts_at_local=start[11:16],
+                        ends_at_local=end[11:16],
+                        kind_raw="public_skate",
+                        price_adult=price,
+                        price_child=None,
+                        price_rental=None,
+                        session_label=label,
+                        source_id=f"{code}:{event_id}" if event_id else None,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=raw_by_rink, slots=slots)
+
+
+# --- spb-magnit-arena ---------------------------------------------------
+
+_MAGNIT_SLOT = re.compile(r"(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})(?:\s*/\s*(\d+)\s*р)?")
+_MAGNIT_DAY_TITLE = re.compile(r'\d+">(\d{1,2})\.(\d{1,2})')
+_MAGNIT_DESCR = re.compile(r'li_descr__\d+"[^>]*>(.*?)</div>\s*</div>\s*</div>\s*</div>', re.S)
+
+
+class MagnitArenaHtmlParser(IceParser):
+    """Ледовая арена «Магнит», СПб, Магнитогорская ул. 51В
+    (spb-magnit-arena.md, arena_id=187).
+
+    Static Tilda accordion — the ``hidden`` attribute on the content div only
+    hides it visually, the data is present in the raw HTML with no JS fetch
+    needed. The site publishes TWO ice-rink weekly schedules on one page:
+    "Ледовая Арена 1" is genuinely "массовое катание"; "Ледовая Арена 2" is
+    "Час хоккея" (hockey-hour) — a different product, confirmed by its own
+    per-day price line ("Час хоккея - 600 р. за сеанс") — never scraped here,
+    same "public skate only" rule as ``IceburgArenaJsonParser``.
+
+    Within Arena 1's day blocks, nearly every listed time is a flat
+    ``base_price_adult_minor`` session (600 ₽ at capture time) except a
+    subset individually marked inline ``/ NNN р.*`` (a 150 ₽ off-peak promo)
+    — that marked price, when present, overrides the flat base. Rental is a
+    flat per-session price printed as prose elsewhere on the page
+    (``rental_price_flat_minor`` in job.config), same convention as
+    ``SokolnikiHtmlParser``.
+
+    No year is printed on the page (only ``DD.MM``) — ``run_year`` in
+    job.config, same convention as ``LedovyyDvoretsHtmlParser``/
+    ``BalticArenaHtmlParser``.
+    """
+
+    parser_key = "magnitarena_html_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        page_html = await load_source_text(job, filename="index.html", url_keys=("url",))
+        year = int(job.config.get("run_year") or date.today().year)
+        base_price = job.config.get("base_price_adult_minor")
+        rental = job.config.get("rental_price_flat_minor")
+
+        start_idx = page_html.find("Ледовая Арена 1")
+        end_idx = page_html.find("Ледовая Арена 2", start_idx) if start_idx != -1 else -1
+        chunk = page_html[start_idx:end_idx] if start_idx != -1 and end_idx != -1 else ""
+
+        slots: list[ExtractedSlot] = []
+        for day_block in chunk.split("li_title__")[1:]:
+            title_match = _MAGNIT_DAY_TITLE.match(day_block)
+            if not title_match:
+                continue
+            day, month = title_match.groups()
+            local_date = date(year, int(month), int(day)).isoformat()
+            descr_match = _MAGNIT_DESCR.search(day_block)
+            if not descr_match:
+                continue
+            text = html_lib.unescape(re.sub(r"<[^>]+>", "", descr_match.group(1)))
+            for slot_match in _MAGNIT_SLOT.finditer(text):
+                start, end, discount = slot_match.groups()
+                price = int(discount) * 100 if discount else base_price
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=start,
+                        ends_at_local=end,
+                        kind_raw="public_skate",
+                        price_adult=price,
+                        price_child=None,
+                        price_rental=rental,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=page_html, slots=slots)
 
 
 # --- msk-vtbarena (spec_blocked) -------------------------------------------
