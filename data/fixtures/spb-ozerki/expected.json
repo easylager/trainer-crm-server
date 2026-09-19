@@ -1,0 +1,220 @@
+{
+  "sessions": [
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:29qjvofc2epifcdl977jau0hd4"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:5e9umeiphq2ofsbfu7b27nb83b"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "11:15",
+      "ends_at_local": "12:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:6s6u8f6ut8b94ibeg6kg63ku1e"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "12:30",
+      "ends_at_local": "13:30",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:62r4lkgcs54686l4pcu57edn10"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "13:45",
+      "ends_at_local": "14:45",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:5tcduqabk66mkr5uek24l2obav"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "15:00",
+      "ends_at_local": "16:00",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:29n4a3p0oilgptb0ua3nb2ts9r"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "17:30",
+      "ends_at_local": "18:30",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:1c61umu3t622avlh4i1hmneaeg"
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "19:15",
+      "ends_at_local": "20:15",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:1lm9n7187h5qpla004g7arl0j5"
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "14:30",
+      "ends_at_local": "15:30",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:0v4po8e6rsotf3o2qc0pc0uk2h"
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "15:45",
+      "ends_at_local": "16:45",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:2eu9v3he212bj13sdcag350iru"
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "18:30",
+      "ends_at_local": "19:30",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:73cts8vgcdk243ndtu8msumcmn"
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "19:45",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 40000,
+      "session_label": "Малая арена",
+      "source_id": "little:76j8vg3keqt7knfn4699biatsq"
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:2l5e6s8p4uqma7koqrjqvj59ef_20260921T060000Z"
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "14:45",
+      "ends_at_local": "15:45",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:7nv54tesr67k4f4kgchc7e2cjv_20260921T114500Z"
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:06vptlcu0n42vtb224od5jjdu9_20260922T060000Z"
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:1q0bfdtou929gn107kta5emjrd_20260922T071500Z"
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:4ij9fgof4dmmf1jf7t7pheeh6d_20260922T083000Z"
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:7is198hr37868ushjnqvmh9cut_20260922T110000Z"
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:0c7fs9q7otab7s1vfbtunc3kfu_20260923T060000Z"
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:5gjrktpin1mj5s912r1jih7m3t_20260923T071500Z"
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:7ohavv4hi41safstfb2j4g4s35_20260923T083000Z"
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:2qgj8v1p9m99baq24qe7b3vtiv_20260924T060000Z"
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:1kr06d9d5km73438tsjgkeuel1_20260924T071500Z"
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:7o9nr69km210lor6mitp7lfdvj_20260924T083000Z"
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:2cfdjgqivdpksrtu8det2km482_20260925T060000Z"
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:5u1p6uut7m34mnkuj93dsbuir4_20260925T071500Z"
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "price_adult_minor": 50000,
+      "session_label": "Большая арена",
+      "source_id": "big:1i2gae3gqgulivks2gv3v01qbk_20260925T083000Z"
+    }
+  ]
+}
