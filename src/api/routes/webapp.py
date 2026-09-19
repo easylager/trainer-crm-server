@@ -2027,7 +2027,11 @@ async def get_client_session_state(
     book_ctx_nm: str | None = None
     if for_trainer_id is not None:
         hint_ids: list[int | None] = []
-        edge = await get_trainer_edge(telegram_id, int(for_trainer_id), session)
+        edge = (
+            await get_trainer_edge(client_row_id, int(for_trainer_id), session)
+            if client_row_id is not None
+            else None
+        )
         if edge:
             hint_ids.append(edge.get("saved_catalog_service_id"))
             hint_ids.append(edge.get("last_booking_service_id"))
