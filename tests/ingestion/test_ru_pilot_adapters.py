@@ -21,6 +21,7 @@ import pytest
 
 from src.ingestion.adapters_ru_pilot import (
     BalticArenaHtmlParser,
+    IceburgArenaJsonParser,
     LedovyyDvoretsHtmlParser,
     SokolnikiHtmlParser,
     VtbArenaQticketsParser,
@@ -82,6 +83,15 @@ _BALTIC_ARENA_CONFIG = {
     "requires_by_egress": False,
 }
 
+_ICEBURG_ARENA_CONFIG = {
+    "url": "https://api.yclients.ru/api/v1/activity/1662558/search?from=2026-09-14&weekly_schedule=1&page=1&count=50",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
 _VTBARENA_CONFIG = {
     "prices_url": "https://akademiya-dynamo.ru/services/katanie-na-krytoy-ledovoy-ploshchadke/",
     "timezone": "Europe/Moscow",
@@ -127,6 +137,12 @@ def _baltic_arena_job() -> ParserJob:
     cfg = dict(_BALTIC_ARENA_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "spb-baltic-arena")
     return _job(arena_id=192, parser_key="balticarena_html_v1", config=cfg, job_id=206)
+
+
+def _iceburg_arena_job() -> ParserJob:
+    cfg = dict(_ICEBURG_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-iceburg-arena")
+    return _job(arena_id=193, parser_key="iceburgarena_yclients_v1", config=cfg, job_id=207)
 
 
 def _vtbarena_job() -> ParserJob:
@@ -313,6 +329,43 @@ async def test_baltic_arena_duration_price_band() -> None:
     assert seventy_five.price_adult_minor == 85000
 
 
+@pytest.mark.asyncio
+async def test_iceburg_arena_filters_to_mass_skating_only() -> None:
+    """AC (spec item 3): the raw feed mixes in private bookings (figure-skating hours,
+    hockey hours, group fitness) — only service.title == 'Массовое катание' may become
+    a public ice_sessions row."""
+    job = _iceburg_arena_job()
+    expected = _load_expected("spb-iceburg-arena")
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await IceburgArenaJsonParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 7
+    by_source = {slot.source_id: slot for slot in slots}
+    for gold in expected["sessions"]:
+        slot = by_source[gold["source_id"]]
+        assert slot.local_date == date.fromisoformat(gold["local_date"])
+        assert slot.starts_at_local == time.fromisoformat(gold["starts_at_local"])
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.price_adult_minor == gold["price_adult_minor"] == 90000
+        assert slot.price_child_minor is None
+        assert slot.price_rental_minor is None
+
+
+@pytest.mark.asyncio
+async def test_iceburg_arena_price_converted_from_whole_units() -> None:
+    """AC (spec item 4): the API's price_min/price_max are whole rubles (900), not minor
+    units — must be multiplied by 100, unlike the HTML adapters' pre-minor job.config."""
+    job = _iceburg_arena_job()
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await IceburgArenaJsonParser().extract(job)
+    assert extraction.slots
+    for slot in extraction.slots:
+        assert slot.price_adult == 90000
+
+
 def test_ru_pilot_parsers_registered() -> None:
     registry = default_registry()
     assert registry.get("ldsokolniki_html_v1") is not None
@@ -320,3 +373,4 @@ def test_ru_pilot_parsers_registered() -> None:
     assert registry.get("yubileyny_afisha_html_v1") is not None
     assert registry.get("vtbarena_qtickets_v1") is not None
     assert registry.get("balticarena_html_v1") is not None
+    assert registry.get("iceburgarena_yclients_v1") is not None
