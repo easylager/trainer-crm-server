@@ -284,6 +284,54 @@ async def test_client_session_get_and_post_roundtrip(app_use_test_db, db_session
 
 
 @pytest.mark.asyncio
+async def test_client_session_for_trainer_id_survives_telegram_id_above_int32(
+    app_use_test_db, db_session
+) -> None:
+    """
+    GET /client/session?for_trainer_id looks up the client-trainer edge by the internal
+    clients.id (an INTEGER column) — passing telegram_id there instead overflows asyncpg's
+    int4 encoder for any Telegram account above 2**31-1, which is now common. Also asserts
+    the edge hint (saved_catalog_service_id) actually resolves once looked up by the right id.
+    """
+    sid, cid, aid = await _require_seed_ids(db_session)
+    ctg = 5_000_000_000 + (uuid.uuid4().int % 2_000_000_000)  # above int32 range
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={
+                "profile": {"first_name": "Эдж", "last_name": "Тест", "age": 28, "city_id": cid},
+                "service_ids": [sid],
+            },
+        )
+        trainer_id = create_resp.json()["id"]
+
+    await get_or_create_client(db_session, ctg)
+    await db_session.commit()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            bootstrap = await client.get(
+                "/api/webapp/client/session", headers={"X-Telegram-Init-Data": "mock"}
+            )
+            assert bootstrap.status_code == 200
+
+            saved = await client.post(
+                "/api/webapp/client/trainer-edges/save",
+                json={"trainer_id": trainer_id, "catalog_service_id": sid},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert saved.status_code == 200, saved.text
+
+            resp = await client.get(
+                f"/api/webapp/client/session?for_trainer_id={trainer_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body.get("booking_context_service_id") == sid
+
+
+@pytest.mark.asyncio
 async def test_init_data_query_param_same_as_header_for_session(app_use_test_db, db_session) -> None:
     await _require_seed_ids(db_session)
     ctg = _fresh_client_telegram_id()
