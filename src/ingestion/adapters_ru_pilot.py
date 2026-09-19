@@ -488,6 +488,29 @@ class GrandCanyonIceJsonParser(IceParser):
 _OZERKI_FREE_SKATE = "Свободное катание"
 
 
+def _ozerki_events_url(*, calendar_id: str, api_key: str, time_min: str, time_max: str) -> str:
+    """Build the Google Calendar `events.list` URL with every query param properly
+    percent-encoded — critically, ``urllib.parse.urlencode`` (not raw f-string
+    interpolation) for ``timeMin``/``timeMax``, whose ISO-8601 values contain a literal
+    ``+03:00`` UTC offset. A bare ``+`` in a query string means a space per
+    ``application/x-www-form-urlencoded``, not itself — Google's API took that literal
+    space as a malformed timestamp and returned a flat 400 `Bad Request` with no field-
+    level detail, confirmed live in production (arena_id=101, 2026-09-19) before this fix.
+    """
+    query = urllib.parse.urlencode(
+        {
+            "key": api_key,
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "maxResults": "250",
+        }
+    )
+    calendar_path = urllib.parse.quote(calendar_id, safe="")
+    return f"https://www.googleapis.com/calendar/v3/calendars/{calendar_path}/events?{query}"
+
+
 class OzerkiCalendarParser(IceParser):
     """Ледовая арена «Озерки», СПб (spb-ozerki.md, arena_id=101).
 
@@ -535,11 +558,11 @@ class OzerkiCalendarParser(IceParser):
                 path = Path(str(fixture_dir)) / str(rink["fixture_file"])
                 raw = json.loads(path.read_text(encoding="utf-8"))
             else:
-                calendar_id = urllib.parse.quote(str(rink["calendar_id"]), safe="")
-                url = (
-                    f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
-                    f"?key={api_key}&timeMin={time_min}&timeMax={time_max}"
-                    f"&singleEvents=true&orderBy=startTime&maxResults=250"
+                url = _ozerki_events_url(
+                    calendar_id=str(rink["calendar_id"]),
+                    api_key=str(api_key),
+                    time_min=time_min,
+                    time_max=time_max,
                 )
                 raw = await fetch_http_json(url)
             raw_by_rink[code] = raw
