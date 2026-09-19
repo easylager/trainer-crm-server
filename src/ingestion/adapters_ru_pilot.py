@@ -642,6 +642,189 @@ class MagnitArenaHtmlParser(IceParser):
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=page_html, slots=slots)
 
 
+# --- spb-shans-arena ---------------------------------------------------
+
+_SHANS_DAY = re.compile(
+    r'<h3>([^<]+)<br>\s*(\d{2})\.(\d{2})\.(\d{4})</h3>(.*?)(?=<div class="scheduletableitem|\Z)', re.S
+)
+_SHANS_ITEM = re.compile(
+    r'<div class="schitem\s+(\w+)">.*?<p>\s*(\d{2}:\d{2})\s*</p>.*?<p>\s*(\d{2}:\d{2})\s*</p>', re.S
+)
+_SHANS_MASS_KIND = "mass"
+
+
+class ShansArenaHtmlParser(IceParser):
+    """Ледовый комплекс «Шанс Арена», СПб (spb-shans-arena.md, arena_id=100).
+
+    Static server-rendered HTML — a 14-day rolling schedule (``h3`` per day,
+    full ``DD.MM.YYYY``) with each session tagged by an explicit CSS class:
+    ``schitem mass`` (массовое катание), ``schitem hockey`` (час хоккея),
+    ``schitem figure`` (час фигурного катания). **Filtered to ``mass`` only**
+    — same "public skate only" rule as every other RU-pilot adapter. Unlike
+    every other adapter here, the type discrimination is a real CSS class,
+    not fragile text matching.
+
+    Real source quirk: the first week's time cells print
+    ``<p>start</p> - <p>end</p>`` (a literal dash between the two
+    ``<p>`` tags); the second week omits the dash entirely
+    (``<p>start</p><p>end</p>``, and ``schitemtime`` also loses its trailing
+    class-name space) — the item regex uses two independent non-greedy
+    ``.*?`` gaps rather than requiring the dash, so it matches both weeks.
+    Not caught until a raw grep of "31 mass items on page" vs "15 matched"
+    exposed the silent under-count — a reminder to verify counts, not just
+    that a regex compiles.
+
+    Price isn't printed inline on the schedule page — flat
+    ``price_adult_minor``/``price_child_minor`` (900 ₽ each, identical) and
+    ``price_rental_minor`` (600 ₽) come from job.config, read off the site's
+    separate ``/services/ledovaya-arena/massovoe-katanie/`` price page.
+    """
+
+    parser_key = "shansarena_html_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="index.html", url_keys=("url",))
+        adult = job.config.get("price_adult_minor")
+        child = job.config.get("price_child_minor")
+        rental = job.config.get("price_rental_minor")
+        slots: list[ExtractedSlot] = []
+        for _weekday, day, month, year, chunk in _SHANS_DAY.findall(html):
+            local_date = date(int(year), int(month), int(day)).isoformat()
+            for kind, start, end in _SHANS_ITEM.findall(chunk):
+                if kind != _SHANS_MASS_KIND:
+                    continue
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=start,
+                        ends_at_local=end,
+                        kind_raw="public_skate",
+                        price_adult=adult,
+                        price_child=child,
+                        price_rental=rental,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+
+# --- spb-parnas-arena ----------------------------------------------------
+
+_PARNAS_DAY = re.compile(rf"([А-Яа-я]+),?\s*(\d{{1,2}})\s+({_MONTH_ALT})\n([^\n]*)")
+_PARNAS_SLOT = re.compile(r"(\d{1,2})[.:](\d{2})\s*-\s*(\d{1,2})[.:](\d{2})(?:\((\d+)\s*р)?")
+
+
+class ParnasArenaTextParser(IceParser):
+    """Центр ледовых видов спорта «Парнас», СПб (spb-parnas-arena.md, arena_id=174).
+
+    The homepage's own "Массовые катания" tab widget is broken — its
+    ``aria-controls`` points at a ``rec850565068`` element id that doesn't
+    exist anywhere in the DOM (confirmed via `page.evaluate`, not a
+    hidden/lazy-load timing issue — waited and re-checked). The real content
+    lives on a separate dedicated page, ``/massovie-kataniya``, which is also
+    behind DDoS-Guard's bot challenge (plain `curl`/`aiohttp` get a 403 body
+    inside a 200-wrapped response) — this fixture is a reader-proxy plain-text
+    capture (`page.evaluate(() => document.body.innerText)` via a real
+    browser), same convention as `LedovyyDvoretsHtmlParser`/
+    `YubileynyAfishaParser`, not raw HTML with CSS selectors.
+
+    Only ONE week is published at a time (no rolling horizon like
+    `ShansArenaHtmlParser`) — ``run_year`` in job.config, same convention as
+    `BalticArenaHtmlParser`. One real data quirk: the Saturday slot uses a
+    dot separator for its start time (``20.30-22:30``) while every other slot
+    uses a colon — the time regex accepts either. That same Saturday slot is
+    inline-priced ``(900 р.дискотека на льду)`` — a themed "ice disco" event,
+    still public and still "Массовые катания" per the page's own section
+    heading, so it's kept, at its own price overriding the flat
+    ``base_price_adult_minor``. That inline 900 ₽ **disagrees with** the
+    page's separate "ЛЕДОВАЯ ДИСКОТЕКА" price-list entry (800 ₽) — the
+    inline, date-specific figure is trusted over the generic price-list one,
+    same precedence rule as `IceburgArenaJsonParser`'s docstring on stale
+    summary numbers; flagged here rather than silently picking one.
+    """
+
+    parser_key = "parnasarena_text_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        text = await load_source_text(job, filename="schedule.md", url_keys=("url",))
+        year = int(job.config.get("run_year") or date.today().year)
+        base_price = job.config.get("base_price_adult_minor")
+        rental = job.config.get("rental_price_flat_minor")
+        slots: list[ExtractedSlot] = []
+        for _weekday, day, month_name, line in _PARNAS_DAY.findall(text):
+            local_date = date(year, _MONTHS_RU[month_name], int(day)).isoformat()
+            for sh, sm, eh, em, discount in _PARNAS_SLOT.findall(line):
+                price = int(discount) * 100 if discount else base_price
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_date,
+                        starts_at_local=f"{int(sh):02d}:{sm}",
+                        ends_at_local=f"{int(eh):02d}:{em}",
+                        kind_raw="public_skate",
+                        price_adult=price,
+                        price_child=None,
+                        price_rental=rental,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=text, slots=slots)
+
+
+# --- spb-bugry-arena -------------------------------------------------------
+
+_BUGRY_ROW = re.compile(
+    r"<tr>\s*<td>\s*[А-Я]{2}\s*\((\d{2})\.(\d{2})\)\s*</td>\s*<td>\s*([^<]*)</td>\s*<td>\s*([^<]*)</td>\s*</tr>",
+    re.S,
+)
+_BUGRY_TIME = re.compile(r"(\d{2})-(\d{2})")
+
+
+class BugryArenaHtmlParser(IceParser):
+    """Ледовая арена «Бугры», СПб (spb-bugry-arena.md, arena_id=111).
+
+    Plain static HTML table, no JS widget: one row per date, two columns
+    (Большая/Малая арена), each holding a semicolon-separated list of
+    **start times only** — ``HH-MM`` (dash, not colon — a real source quirk)
+    — no end time and no duration printed anywhere on the page. Every slot
+    uses ``IceSessionNormalizer``'s own ``default_duration_minutes`` fallback
+    (``ends_at_local`` left unset here) rather than a guessed literal end
+    time; 45 minutes in job.config, a typical St. Petersburg rink session
+    length, not confirmed against the source — flagged, not asserted as fact
+    (see spec's Known limitation).
+
+    Both rinks are parsed structurally (not hardcoded to "Большая only") even
+    though "Малая" is empty in every row of the 2026-09-19 snapshot — if the
+    operator ever publishes Малая sessions, this adapter picks them up
+    without a code change. Price is flat per rink from job.config (same
+    convention as `OzerkiCalendarParser`); both currently read 600 ₽, but the
+    config keeps them independent since rental price already differs (500 ₽
+    Большая vs 400 ₽ Малая on the page's own price table).
+    """
+
+    parser_key = "bugryarena_html_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        html = await load_source_text(job, filename="index.html", url_keys=("url",))
+        rinks = job.config.get("rinks") or {}
+        year = int(job.config.get("run_year") or date.today().year)
+        slots: list[ExtractedSlot] = []
+        for day, month, big_cell, small_cell in _BUGRY_ROW.findall(html):
+            local_date = date(year, int(month), int(day)).isoformat()
+            for code, cell in (("big", big_cell), ("small", small_cell)):
+                rink_cfg = rinks.get(code) or {}
+                for hh, mm in _BUGRY_TIME.findall(cell):
+                    slots.append(
+                        ExtractedSlot(
+                            local_date=local_date,
+                            starts_at_local=f"{hh}:{mm}",
+                            kind_raw="public_skate",
+                            price_adult=rink_cfg.get("price_adult_minor"),
+                            price_child=None,
+                            price_rental=rink_cfg.get("price_rental_minor"),
+                            session_label=rink_cfg.get("label"),
+                        )
+                    )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+
 # --- msk-vtbarena (spec_blocked) -------------------------------------------
 
 

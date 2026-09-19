@@ -21,11 +21,14 @@ import pytest
 
 from src.ingestion.adapters_ru_pilot import (
     BalticArenaHtmlParser,
+    BugryArenaHtmlParser,
     GrandCanyonIceJsonParser,
     IceburgArenaJsonParser,
     LedovyyDvoretsHtmlParser,
     MagnitArenaHtmlParser,
     OzerkiCalendarParser,
+    ParnasArenaTextParser,
+    ShansArenaHtmlParser,
     SokolnikiHtmlParser,
     VtbArenaQticketsParser,
     YubileynyAfishaParser,
@@ -142,6 +145,45 @@ _MAGNIT_ARENA_CONFIG = {
     "requires_by_egress": False,
 }
 
+_SHANS_ARENA_CONFIG = {
+    "url": "https://shans-arena.ru/",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "price_adult_minor": 90000,
+    "price_child_minor": 90000,
+    "price_rental_minor": 60000,
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
+_PARNAS_ARENA_CONFIG = {
+    "url": "https://parnas-arena.ru/massovie-kataniya",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "run_year": 2026,
+    "base_price_adult_minor": 70000,
+    "rental_price_flat_minor": 50000,
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
+_BUGRY_ARENA_CONFIG = {
+    "url": "https://spb-katok.ru/",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "run_year": 2026,
+    "default_duration_minutes": 45,
+    "rinks": {
+        "big": {"label": "Большая арена", "price_adult_minor": 60000, "price_rental_minor": 50000},
+        "small": {"label": "Малая арена", "price_adult_minor": 60000, "price_rental_minor": 40000},
+    },
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
 _VTBARENA_CONFIG = {
     "prices_url": "https://akademiya-dynamo.ru/services/katanie-na-krytoy-ledovoy-ploshchadke/",
     "timezone": "Europe/Moscow",
@@ -211,6 +253,24 @@ def _magnit_arena_job() -> ParserJob:
     cfg = dict(_MAGNIT_ARENA_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "spb-magnit-arena")
     return _job(arena_id=187, parser_key="magnitarena_html_v1", config=cfg, job_id=210)
+
+
+def _shans_arena_job() -> ParserJob:
+    cfg = dict(_SHANS_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-shans-arena")
+    return _job(arena_id=100, parser_key="shansarena_html_v1", config=cfg, job_id=211)
+
+
+def _parnas_arena_job() -> ParserJob:
+    cfg = dict(_PARNAS_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-parnas-arena")
+    return _job(arena_id=174, parser_key="parnasarena_text_v1", config=cfg, job_id=212)
+
+
+def _bugry_arena_job() -> ParserJob:
+    cfg = dict(_BUGRY_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-bugry-arena")
+    return _job(arena_id=111, parser_key="bugryarena_html_v1", config=cfg, job_id=213)
 
 
 def _vtbarena_job() -> ParserJob:
@@ -550,6 +610,118 @@ async def test_magnit_arena_promo_slot_overrides_base_price() -> None:
     assert base.price_adult_minor == 60000
 
 
+@pytest.mark.asyncio
+async def test_shans_arena_filters_to_mass_class_only() -> None:
+    """AC (spec item 2): the raw feed mixes 'schitem hockey'/'schitem figure' blocks
+    into the same day chunk as 'schitem mass' — only the mass CSS class may become
+    a public ice_sessions row."""
+    job = _shans_arena_job()
+    expected = _load_expected("spb-shans-arena")
+    now = datetime(2026, 9, 18, 20, 0, tzinfo=timezone.utc)
+    extraction = await ShansArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 23
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"] == 90000
+        assert slot.price_child_minor == gold["price_child_minor"] == 90000
+        assert slot.price_rental_minor == gold["price_rental_minor"] == 60000
+
+
+@pytest.mark.asyncio
+async def test_shans_arena_handles_both_dash_and_no_dash_time_format() -> None:
+    """AC (spec item 3): week 1's time cells print a literal dash between the two
+    <p> tags; week 2 omits it entirely — both must parse to the same slot shape."""
+    job = _shans_arena_job()
+    now = datetime(2026, 9, 18, 20, 0, tzinfo=timezone.utc)
+    extraction = await ShansArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    with_dash = next(slot for slot in slots if slot.local_date == date(2026, 9, 19) and slot.starts_at_local == time(13, 45))
+    without_dash = next(slot for slot in slots if slot.local_date == date(2026, 9, 21) and slot.starts_at_local == time(9, 15))
+    assert with_dash.ends_at_local.strftime("%H:%M") == "14:45"
+    assert without_dash.ends_at_local.strftime("%H:%M") == "10:15"
+
+
+@pytest.mark.asyncio
+async def test_parnas_arena_disco_slot_overrides_flat_price() -> None:
+    """AC (spec item 4): the Saturday 'ice disco' slot is individually inline-priced
+    (900 р) and overrides the flat base_price_adult_minor (700 р) for that slot only
+    — and that inline figure is trusted over the page's separate, disagreeing
+    'ЛЕДОВАЯ ДИСКОТЕКА: 800 р' price-list entry."""
+    job = _parnas_arena_job()
+    expected = _load_expected("spb-parnas-arena")
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await ParnasArenaTextParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 10
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_rental_minor == gold["price_rental_minor"] == 50000
+    disco = by_key[(date(2026, 9, 19), time(20, 30))]
+    assert disco.price_adult_minor == 90000
+
+
+@pytest.mark.asyncio
+async def test_parnas_arena_dot_separator_time_accepted() -> None:
+    """AC (spec item 3): the Saturday slot's start time uses a dot separator
+    ('20.30') instead of the colon every other slot uses ('HH:MM')."""
+    job = _parnas_arena_job()
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await ParnasArenaTextParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    dot_slot = next(slot for slot in slots if slot.local_date == date(2026, 9, 19))
+    assert dot_slot.starts_at_local == time(20, 30)
+
+
+@pytest.mark.asyncio
+async def test_bugry_arena_both_rinks_parsed_structurally() -> None:
+    """AC (spec item 2): both Большая/Малая columns are parsed the same way — Малая
+    happens to be empty in this snapshot, but the parser doesn't hardcode 'big only'."""
+    job = _bugry_arena_job()
+    expected = _load_expected("spb-bugry-arena")
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await BugryArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 47
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"] == 60000
+        assert slot.price_rental_minor == gold["price_rental_minor"] == 50000
+        assert slot.session_label == gold["session_label"] == "Большая арена"
+
+
+@pytest.mark.asyncio
+async def test_bugry_arena_default_duration_applied_no_printed_end_time() -> None:
+    """AC (spec item 2): the source prints only start times ('HH-MM', dash not colon)
+    — end time comes entirely from job.config default_duration_minutes."""
+    job = _bugry_arena_job()
+    now = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    extraction = await BugryArenaHtmlParser().extract(job)
+    assert all(slot.ends_at_local is None for slot in extraction.slots)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    slot = next(slot for slot in slots if slot.local_date == date(2026, 9, 14) and slot.starts_at_local == time(9, 0))
+    assert slot.ends_at_local.strftime("%H:%M") == "09:45"
+
+
 def test_ru_pilot_parsers_registered() -> None:
     registry = default_registry()
     assert registry.get("ldsokolniki_html_v1") is not None
@@ -561,3 +733,6 @@ def test_ru_pilot_parsers_registered() -> None:
     assert registry.get("grandice_json_v1") is not None
     assert registry.get("ozerki_gcal_v1") is not None
     assert registry.get("magnitarena_html_v1") is not None
+    assert registry.get("shansarena_html_v1") is not None
+    assert registry.get("parnasarena_text_v1") is not None
+    assert registry.get("bugryarena_html_v1") is not None
