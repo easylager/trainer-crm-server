@@ -12,16 +12,17 @@ from src.ingestion.types import ParserJob
 _USER_AGENT = "trainer-crm-ice-ingest/1.0"
 
 
-async def fetch_http_text(url: str) -> str:
+async def fetch_http_text(url: str, *, headers: dict[str, str] | None = None) -> str:
     timeout = aiohttp.ClientTimeout(total=20)
+    request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers={"User-Agent": _USER_AGENT}) as response:
+        async with session.get(url, headers=request_headers) as response:
             response.raise_for_status()
             return await response.text()
 
 
-async def fetch_http_json(url: str) -> Any:
-    return json.loads(await fetch_http_text(url))
+async def fetch_http_json(url: str, *, headers: dict[str, str] | None = None) -> Any:
+    return json.loads(await fetch_http_text(url, headers=headers))
 
 
 async def load_source_text(job: ParserJob, *, filename: str, url_keys: tuple[str, ...] = ("url",)) -> str:

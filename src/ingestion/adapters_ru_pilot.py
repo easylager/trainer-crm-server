@@ -25,13 +25,14 @@ BYN/Europe/Minsk defaults ``IceSessionNormalizer`` uses for BY arenas.
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.source_io import fetch_http_text, load_source_text
+from src.ingestion.source_io import fetch_http_json, fetch_http_text, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _MONTHS_RU = {
@@ -336,6 +337,88 @@ def _tilda_hidden_div(text: str, class_name: str) -> str:
     start = text.find(">", idx) + 1
     end = text.find("</div>", start)
     return text[start:end] if end != -1 else text[start:]
+
+
+# --- spb-iceburg-arena -------------------------------------------------------
+
+_MK_SERVICE_TITLE = "Массовое катание"
+
+
+class IceburgArenaJsonParser(IceParser):
+    """Айсбург Арена, СПб, Парашютная ул. 11 (spb-iceburg-arena.md, arena_id=193).
+
+    Unlike every other RU-pilot adapter, this one is a genuine public JSON API,
+    not HTML scraping: yclients' `client.booking` widget calls
+    ``GET https://api.yclients.ru/api/v1/activity/{company_id}/search
+    ?from=YYYY-MM-DD&weekly_schedule=1&page=1&count=50`` with a fixed,
+    non-company-specific ``Authorization: Bearer`` app token (confirmed working
+    from a plain curl with no cookies/session — this is the widget's public
+    client token, not a per-company secret). ``count=50`` covers a full
+    7-day window from ``from``.
+
+    The endpoint returns every bookable activity at the venue (private hour
+    rentals, figure-skating hours, group fitness, ...), not just public
+    skating — filtered here to ``service.title == "Массовое катание"`` only,
+    matching the project convention that private/training bookings never
+    become ``ice_sessions`` rows (see ``test_minsk_adapters.py`` AC-003 for
+    the same rule on the BY side). ``Ночное катание`` (night skating) looks
+    like it might also be public-facing but wasn't in scope for this pass —
+    flagged as a follow-up, not guessed into ``public_skate``.
+
+    Price is in whole currency units in the API (``price_min``/``price_max``
+    on the nested `service`, `900` not `90000`) — multiplied by 100 here,
+    unlike the HTML adapters which read already-minor job.config constants.
+    No child or rental price is exposed by this endpoint for mass skating.
+
+    Unlike every other adapter's ``url``, this one takes a ``?from=YYYY-MM-DD``
+    query param that must advance every run — a static job.config URL would
+    fetch the same stale week forever. ``extract()`` builds the URL itself
+    from ``company_id`` + "today" in Europe/Moscow (the venue's own
+    timezone, not server-local) at fetch time; ``job.config["url"]`` is only
+    a fallback base for local/manual runs and is never dated.
+    """
+
+    parser_key = "iceburgarena_yclients_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        if job.config.get("fixture_dir"):
+            raw = await load_source_json(job, filename="activity-search.json", url_keys=("url",))
+        else:
+            company_id = job.config.get("company_id")
+            today = datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
+            url = (
+                f"https://api.yclients.ru/api/v1/activity/{company_id}/search"
+                f"?from={today}&weekly_schedule=1&page=1&count=50"
+            )
+            raw = await fetch_http_json(
+                url, headers={"Authorization": f"Bearer {job.config.get('bearer_token')}"}
+            )
+        activities = raw.get("data") or []
+        slots: list[ExtractedSlot] = []
+        for item in activities:
+            service = item.get("service") or {}
+            if service.get("title") != _MK_SERVICE_TITLE:
+                continue
+            date_str = str(item.get("date") or "")
+            if not date_str:
+                continue
+            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            length_seconds = int(item.get("length") or 0)
+            end_dt = dt + timedelta(seconds=length_seconds)
+            price = service.get("price_min")
+            slots.append(
+                ExtractedSlot(
+                    local_date=dt.date().isoformat(),
+                    starts_at_local=dt.strftime("%H:%M"),
+                    ends_at_local=end_dt.strftime("%H:%M"),
+                    kind_raw="public_skate",
+                    price_adult=parse_price_to_minor(price, already_minor=False) if price is not None else None,
+                    price_child=None,
+                    price_rental=None,
+                    source_id=str(item.get("id")) if item.get("id") is not None else None,
+                )
+            )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=raw, slots=slots)
 
 
 # --- msk-vtbarena (spec_blocked) -------------------------------------------

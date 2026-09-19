@@ -62,6 +62,7 @@ def default_registry() -> ParserRegistry:
     )
     from src.ingestion.adapters_ru_pilot import (
         BalticArenaHtmlParser,
+        IceburgArenaJsonParser,
         LedovyyDvoretsHtmlParser,
         SokolnikiHtmlParser,
         VtbArenaQticketsParser,
@@ -99,6 +100,7 @@ def default_registry() -> ParserRegistry:
         YubileynyAfishaParser(),
         VtbArenaQticketsParser(),
         BalticArenaHtmlParser(),
+        IceburgArenaJsonParser(),
     ):
         registry.register(parser)
     return registry
