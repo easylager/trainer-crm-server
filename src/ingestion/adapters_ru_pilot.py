@@ -250,6 +250,94 @@ class YubileynyAfishaParser(IceParser):
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=snapshot, slots=slots)
 
 
+# --- spb-baltic-arena -------------------------------------------------------
+
+_BALTIC_TIME = re.compile(r"(\d{1,2}):(\d{2})[-:](\d{1,2}):(\d{2})")
+_BALTIC_DURATION_PRICE_MINOR = {60: 70000, 75: 85000}
+
+
+class BalticArenaHtmlParser(IceParser):
+    """Балтик Арена, СПб, Василеостровский намыв (spb-baltic-arena.md, arena_id=192).
+
+    Tilda ``t431`` table widget: the visible table is JS-rendered from two
+    hidden ``display:none`` divs shipped in the raw HTML — ``t431__data-part1``
+    (weekday names, then a semicolon-separated ``DD.MM`` date row) and
+    ``t431__data-part2`` (one line per time-slot row, semicolon-separated,
+    positionally aligned with the date row; a day with no session that row
+    is an empty field, and trailing empty days are simply omitted from the
+    line rather than kept as trailing semicolons). Verified against the
+    live-rendered ``<table>`` via a real browser — position-to-day mapping
+    is exact, including that trailing-omission behavior.
+
+    No year printed (only ``DD.MM``) — ``run_year`` in job.config, same
+    convention as ``LedovyyDvoretsHtmlParser``. Price is derived from session
+    duration via the page's own legend (60 мин → 700 ₽, 75 мин → 850 ₽ at
+    the time of the research snapshot) rather than printed per-slot; both
+    figures live in job.config so a price change doesn't need a code
+    deploy. One observed typo in the source (``22:15:23:15`` — colon instead
+    of dash before the end time) — ``_BALTIC_TIME`` accepts either separator.
+    No child or rental price is published for mass skating specifically
+    (the 6 000–8 000 ₽ figures on the page are private hockey-hour ice
+    rental, a different product) — both stay ``None``.
+    """
+
+    parser_key = "balticarena_html_v1"
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        text = await load_source_text(job, filename="mass-skating.html", url_keys=("url",))
+        year = int(job.config.get("run_year") or date.today().year)
+        duration_prices = {
+            int(k): int(v)
+            for k, v in (job.config.get("duration_price_minor") or _BALTIC_DURATION_PRICE_MINOR).items()
+        }
+
+        part1 = _tilda_hidden_div(text, "t431__data-part1")
+        part2 = _tilda_hidden_div(text, "t431__data-part2")
+        date_line = part1.splitlines()[1] if len(part1.splitlines()) > 1 else ""
+        day_tokens = [tok.strip() for tok in date_line.split(";") if tok.strip()]
+        local_dates: list[str] = []
+        for tok in day_tokens:
+            day_str, month_str = tok.split(".")
+            local_dates.append(date(year, int(month_str), int(day_str)).isoformat())
+
+        slots: list[ExtractedSlot] = []
+        for line in part2.splitlines():
+            cells = line.split(";")
+            for i, cell in enumerate(cells):
+                cell = cell.strip()
+                if not cell or i >= len(local_dates):
+                    continue
+                match = _BALTIC_TIME.match(cell)
+                if not match:
+                    continue
+                sh, sm, eh, em = match.groups()
+                start = f"{int(sh):02d}:{sm}"
+                end = f"{int(eh):02d}:{em}"
+                duration = (int(eh) * 60 + int(em)) - (int(sh) * 60 + int(sm))
+                slots.append(
+                    ExtractedSlot(
+                        local_date=local_dates[i],
+                        starts_at_local=start,
+                        ends_at_local=end,
+                        kind_raw="public_skate",
+                        price_adult=duration_prices.get(duration),
+                        price_child=None,
+                        price_rental=None,
+                    )
+                )
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=text, slots=slots)
+
+
+def _tilda_hidden_div(text: str, class_name: str) -> str:
+    marker = f'class="{class_name}"'
+    idx = text.find(marker)
+    if idx == -1:
+        return ""
+    start = text.find(">", idx) + 1
+    end = text.find("</div>", start)
+    return text[start:end] if end != -1 else text[start:]
+
+
 # --- msk-vtbarena (spec_blocked) -------------------------------------------
 
 

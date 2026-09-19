@@ -61,6 +61,7 @@ def default_registry() -> ParserRegistry:
         SoligorskSzkParser,
     )
     from src.ingestion.adapters_ru_pilot import (
+        BalticArenaHtmlParser,
         LedovyyDvoretsHtmlParser,
         SokolnikiHtmlParser,
         VtbArenaQticketsParser,
@@ -97,6 +98,7 @@ def default_registry() -> ParserRegistry:
         LedovyyDvoretsHtmlParser(),
         YubileynyAfishaParser(),
         VtbArenaQticketsParser(),
+        BalticArenaHtmlParser(),
     ):
         registry.register(parser)
     return registry

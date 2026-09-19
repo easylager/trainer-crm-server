@@ -1,0 +1,154 @@
+{
+  "sessions": [
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "11:45",
+      "ends_at_local": "12:45",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "18:30",
+      "ends_at_local": "19:45",
+      "price_adult_minor": 85000
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:30",
+      "price_adult_minor": 85000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-19",
+      "starts_at_local": "22:45",
+      "ends_at_local": "23:45",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-20",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-23",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:15",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "22:30",
+      "ends_at_local": "23:30",
+      "price_adult_minor": 70000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "22:15",
+      "ends_at_local": "23:15",
+      "price_adult_minor": 70000
+    }
+  ]
+}

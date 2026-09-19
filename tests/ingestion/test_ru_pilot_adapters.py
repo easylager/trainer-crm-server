@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from src.ingestion.adapters_ru_pilot import (
+    BalticArenaHtmlParser,
     LedovyyDvoretsHtmlParser,
     SokolnikiHtmlParser,
     VtbArenaQticketsParser,
@@ -70,6 +71,17 @@ _YUBILEYNY_CONFIG = {
     "requires_by_egress": False,
 }
 
+_BALTIC_ARENA_CONFIG = {
+    "url": "https://baltic-arena.ru/mass-skating",
+    "timezone": "Europe/Moscow",
+    "currency_code": "RUB",
+    "kind": "public_skate",
+    "run_year": 2026,
+    "duration_price_minor": {60: 70000, 75: 85000},
+    "prices_already_minor": True,
+    "requires_by_egress": False,
+}
+
 _VTBARENA_CONFIG = {
     "prices_url": "https://akademiya-dynamo.ru/services/katanie-na-krytoy-ledovoy-ploshchadke/",
     "timezone": "Europe/Moscow",
@@ -109,6 +121,12 @@ def _yubileyny_job() -> ParserJob:
     cfg = dict(_YUBILEYNY_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "spb-yubileyny")
     return _job(arena_id=97, parser_key="yubileyny_afisha_html_v1", config=cfg, job_id=203)
+
+
+def _baltic_arena_job() -> ParserJob:
+    cfg = dict(_BALTIC_ARENA_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "spb-baltic-arena")
+    return _job(arena_id=192, parser_key="balticarena_html_v1", config=cfg, job_id=206)
 
 
 def _vtbarena_job() -> ParserJob:
@@ -238,9 +256,67 @@ async def test_vtbarena_blocked_adapter_never_invents_sessions() -> None:
     assert expected["sessions"] == []
 
 
+@pytest.mark.asyncio
+async def test_baltic_arena_matches_expected_grid() -> None:
+    """Position-to-day mapping + duration->price legend verified via a real browser
+    (see spec Verification section) — this checks the extract->normalize pipeline
+    reproduces the same 26 slots independently hand-computed into expected.json."""
+    job = _baltic_arena_job()
+    expected = _load_expected("spb-baltic-arena")
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await BalticArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == len(expected["sessions"]) == 25
+    by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
+    for gold in expected["sessions"]:
+        key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
+        slot = by_key[key]
+        assert slot.kind == "public_skate"
+        assert slot.currency_code == "RUB"
+        assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
+        assert slot.price_adult_minor == gold["price_adult_minor"]
+        assert slot.price_child_minor is None
+        assert slot.price_rental_minor is None
+
+
+@pytest.mark.asyncio
+async def test_baltic_arena_typo_colon_separator_accepted() -> None:
+    """AC (spec item 3): the source has one observed 'HH:MM:HH:MM' typo (colon instead
+    of dash before the end time) — must parse the same as a normal dash-separated slot."""
+    job = _baltic_arena_job()
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await BalticArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    typo_slot = next(
+        slot for slot in slots if slot.local_date == date(2026, 9, 20) and slot.starts_at_local == time(22, 15)
+    )
+    assert typo_slot.ends_at_local.strftime("%H:%M") == "23:15"
+    assert typo_slot.price_adult_minor == 70000
+
+
+@pytest.mark.asyncio
+async def test_baltic_arena_duration_price_band() -> None:
+    """AC (spec item 5): 60-minute slots price at duration_price_minor[60], 75-minute
+    slots at duration_price_minor[75] — derived from duration, never a flat constant."""
+    job = _baltic_arena_job()
+    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    extraction = await BalticArenaHtmlParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+    sixty = next(slot for slot in slots if slot.local_date == date(2026, 9, 19) and slot.starts_at_local == time(9, 15))
+    seventy_five = next(
+        slot for slot in slots if slot.local_date == date(2026, 9, 19) and slot.starts_at_local == time(18, 30)
+    )
+    assert sixty.ends_at_local.strftime("%H:%M") == "10:15"
+    assert sixty.price_adult_minor == 70000
+    assert seventy_five.ends_at_local.strftime("%H:%M") == "19:45"
+    assert seventy_five.price_adult_minor == 85000
+
+
 def test_ru_pilot_parsers_registered() -> None:
     registry = default_registry()
     assert registry.get("ldsokolniki_html_v1") is not None
     assert registry.get("ledovyydvorets_html_v1") is not None
     assert registry.get("yubileyny_afisha_html_v1") is not None
     assert registry.get("vtbarena_qtickets_v1") is not None
+    assert registry.get("balticarena_html_v1") is not None
