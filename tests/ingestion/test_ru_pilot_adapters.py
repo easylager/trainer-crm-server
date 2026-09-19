@@ -32,6 +32,7 @@ from src.ingestion.adapters_ru_pilot import (
     SokolnikiHtmlParser,
     VtbArenaQticketsParser,
     YubileynyAfishaParser,
+    _ozerki_events_url,
 )
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.parsers import default_registry
@@ -556,6 +557,26 @@ async def test_ozerki_filters_to_free_skate_only_across_both_rinks() -> None:
         assert slot.price_child_minor is None
         assert slot.price_rental_minor is None
         assert slot.session_label == gold["session_label"]
+
+
+def test_ozerki_events_url_percent_encodes_offset_plus() -> None:
+    """Regression (found live in prod, arena_id=101, 2026-09-19): a bare '+' in
+    timeMin/timeMax's '+03:00' offset means a literal space in a query string unless
+    percent-encoded — Google's Calendar API returned a flat 400 Bad Request for the
+    un-encoded URL a first version of this parser sent."""
+    url = _ozerki_events_url(
+        calendar_id="jgl24dlkvmobfa4eh6ob5qomks@group.calendar.google.com",
+        api_key="AIzaSyB6QYcTzKpA8kiRcjl47XJ_tEYbY2mcUVg",
+        time_min="2026-09-19T00:00:00+03:00",
+        time_max="2026-09-26T00:00:00+03:00",
+    )
+    assert "+" not in url
+    assert "timeMin=2026-09-19T00%3A00%3A00%2B03%3A00" in url
+    assert "timeMax=2026-09-26T00%3A00%3A00%2B03%3A00" in url
+    assert url.startswith(
+        "https://www.googleapis.com/calendar/v3/calendars/"
+        "jgl24dlkvmobfa4eh6ob5qomks%40group.calendar.google.com/events?"
+    )
 
 
 @pytest.mark.asyncio
