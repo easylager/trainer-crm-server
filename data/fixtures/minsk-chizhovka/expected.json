@@ -15,7 +15,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-08-31",
       "starts_at_local": "14:15",
@@ -27,7 +27,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-08-31",
       "starts_at_local": "19:00",
@@ -39,7 +39,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-01",
       "starts_at_local": "10:30",
@@ -51,7 +51,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-01",
       "starts_at_local": "19:00",
@@ -63,7 +63,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-02",
       "starts_at_local": "12:00",
@@ -75,7 +75,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-03",
       "starts_at_local": "10:30",
@@ -87,7 +87,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-04",
       "starts_at_local": "10:30",
@@ -99,7 +99,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-05",
       "starts_at_local": "16:30",
@@ -111,7 +111,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-06",
       "starts_at_local": "11:30",
@@ -123,7 +123,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-06",
       "starts_at_local": "17:30",
@@ -135,7 +135,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-06",
       "starts_at_local": "19:00",
@@ -147,7 +147,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-07",
       "starts_at_local": "10:30",
@@ -159,7 +159,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-07",
       "starts_at_local": "17:30",
@@ -171,7 +171,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-08",
       "starts_at_local": "10:30",
@@ -183,7 +183,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-08",
       "starts_at_local": "12:00",
@@ -195,7 +195,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-08",
       "starts_at_local": "19:00",
@@ -207,7 +207,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-09",
       "starts_at_local": "10:30",
@@ -219,7 +219,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-09",
       "starts_at_local": "12:00",
@@ -231,7 +231,7 @@
     {
       "kind": "public_skate",
       "currency_code": "BYN",
-      "session_label": "МА",
+      "session_label": "Малая арена",
       "age_note": "детский до 16 лет",
       "local_date": "2026-09-09",
       "starts_at_local": "19:15",

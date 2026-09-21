@@ -38,6 +38,7 @@ _DAY_DATE = re.compile(
 )
 _LED_TIME = re.compile(r"(\d{1,2}:\d{2})\s*\((\d+)\s*час", re.IGNORECASE)
 _CHIZ_CELL = re.compile(r"(\d{1,2})[.:](\d{2})\s*(МА|БА)", re.IGNORECASE)
+_CHIZ_RINK_LABELS = {"МА": "Малая арена", "БА": "Большая арена"}
 _CHIZ_HEADER = re.compile(
     r"(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)",
     re.IGNORECASE,
@@ -393,7 +394,7 @@ class ChizhovkaHtmlParser(IceParser):
                                 price_adult=adult,
                                 price_child=child,
                                 price_rental=rental,
-                                session_label=label,
+                                session_label=_CHIZ_RINK_LABELS.get(label, label),
                                 age_note="детский до 16 лет",
                             )
                         )

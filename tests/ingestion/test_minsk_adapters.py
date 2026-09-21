@@ -252,7 +252,7 @@ async def test_zamok_and_chizhovka_html_adapters_match_expected() -> None:
     assert hit.price_adult_minor == 1000
     assert hit.price_child_minor == 700
     assert hit.price_rental_minor == 500
-    assert hit.session_label == "МА"
+    assert hit.session_label == "Малая арена"
 
 
 @pytest.mark.asyncio
