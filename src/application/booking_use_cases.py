@@ -1463,12 +1463,17 @@ async def fetch_reminder_session_cards_map(
     return out
 
 
-async def generate_reminders_for_booking(session: AsyncSession, booking_id: int) -> None:
+async def generate_reminders_for_booking(
+    session: AsyncSession, booking_id: int, *, do_commit: bool = True
+) -> None:
     """
     Rebuild same-day pending reminders for this client's calendar date (merged when several bookings).
 
     Sandbox bookings are silently skipped — a demo client must never receive automated reminders,
     even if a caller forgets the ``is_sandbox`` branch.
+
+    ``do_commit=False``: caller owns the transaction (e.g. client-merge, which must stay atomic
+    with the FK repoint it follows) and will commit/roll back itself.
     """
     r = await session.execute(
         text(
@@ -1493,7 +1498,7 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     if not tids:
         return
     slot_d = row[2]
-    await resync_pending_reminders_for_client_day(session, client_row_id, slot_d, do_commit=True)
+    await resync_pending_reminders_for_client_day(session, client_row_id, slot_d, do_commit=do_commit)
 
 
 def _trainer_booked_notification_row_to_dict(row) -> dict:

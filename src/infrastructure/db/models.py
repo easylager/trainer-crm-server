@@ -644,6 +644,30 @@ class ClientTrainerEdge(Base):
     context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
+class ClientMerge(Base):
+    """
+    Audit trail for ``merge_clients_use_cases.merge_clients``: duplicate client
+    ``from_client_id`` absorbed into ``to_client_id`` (e.g. trainer mistyped a client's
+    phone, client later self-registered with the correct one under a fresh row).
+
+    ``from_client_id`` is not an FK — that row no longer exists in ``clients`` once the
+    merge it records has run. ``snapshot`` holds both rows' pre-merge state and per-table
+    moved-row counts, so an incident can be reconstructed without re-querying live data.
+    """
+    __tablename__ = "client_merges"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    from_client_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    to_client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    merged_by_trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    snapshot: Mapped[dict] = mapped_column(JSONB(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # --- Client bot session (one row per telegram_id); city_id for future cities table ---
 CLIENT_STATE_IDLE = "idle"
 CLIENT_STATE_TRAINER_SELECTED = "trainer_selected"

@@ -219,6 +219,251 @@ async def _repoint_client_fks_for_merge(session: AsyncSession, from_cid: int, to
         p,
     )
 
+    # client_family_access_members: unique on member_telegram_id alone (not per-primary), so a
+    # plain repoint of primary_client_id can never collide with an existing row on the "to" side.
+    await session.execute(
+        text("UPDATE client_family_access_members SET primary_client_id = :tc WHERE primary_client_id = :fc"),
+        p,
+    )
+
+    # client_profile_links: unique (account_telegram_id, profile_client_id) — same guardian account
+    # could already have a link to the survivor profile.
+    await session.execute(
+        text("""
+            DELETE FROM client_profile_links AS l1
+            WHERE l1.profile_client_id = :fc
+              AND EXISTS (
+                SELECT 1 FROM client_profile_links AS l2
+                WHERE l2.profile_client_id = :tc AND l2.account_telegram_id = l1.account_telegram_id
+              )
+        """),
+        p,
+    )
+    await session.execute(
+        text("UPDATE client_profile_links SET profile_client_id = :tc WHERE profile_client_id = :fc"),
+        p,
+    )
+
+    # client_trainer_edges: unique (client_id, trainer_id) — dedupe, then repoint. telegram_id is
+    # NOT NULL and denotes the acting account for pushes; re-point it to the survivor's own
+    # telegram_id so a merged edge doesn't keep addressing whichever account the stub used to have.
+    await session.execute(
+        text("""
+            DELETE FROM client_trainer_edges AS e1
+            WHERE e1.client_id = :fc
+              AND EXISTS (
+                SELECT 1 FROM client_trainer_edges AS e2
+                WHERE e2.client_id = :tc AND e2.trainer_id = e1.trainer_id
+              )
+        """),
+        p,
+    )
+    await session.execute(
+        text("""
+            UPDATE client_trainer_edges
+            SET client_id = :tc,
+                telegram_id = COALESCE((SELECT telegram_id FROM clients WHERE id = :tc), telegram_id)
+            WHERE client_id = :fc
+        """),
+        p,
+    )
+
+    # client_session_milestone_notifications: unique (client_id, milestone_target) — a milestone
+    # already sent from one duplicate must not fire again after merge.
+    await session.execute(
+        text("""
+            DELETE FROM client_session_milestone_notifications AS m1
+            WHERE m1.client_id = :fc
+              AND EXISTS (
+                SELECT 1 FROM client_session_milestone_notifications AS m2
+                WHERE m2.client_id = :tc AND m2.milestone_target = m1.milestone_target
+              )
+        """),
+        p,
+    )
+    await session.execute(
+        text("UPDATE client_session_milestone_notifications SET client_id = :tc WHERE client_id = :fc"),
+        p,
+    )
+
+    # collective_pass_instances: no unique constraint — a client may legitimately hold several
+    # (renewed) passes for the same collective.
+    await session.execute(
+        text("UPDATE collective_pass_instances SET client_id = :tc WHERE client_id = :fc"),
+        p,
+    )
+
+    # collective_session_bookings: no DB constraint, but an active booking for the same session on
+    # both duplicates would double-book one physical seat once merged — dedupe like `bookings`.
+    await session.execute(
+        text("""
+            DELETE FROM collective_session_bookings AS c1
+            WHERE c1.client_id = :fc
+              AND c1.status IN ('pending', 'confirmed')
+              AND EXISTS (
+                SELECT 1 FROM collective_session_bookings AS c2
+                WHERE c2.client_id = :tc AND c2.collective_session_id = c1.collective_session_id
+                  AND c2.status IN ('pending', 'confirmed')
+              )
+        """),
+        p,
+    )
+    await session.execute(
+        text("UPDATE collective_session_bookings SET client_id = :tc WHERE client_id = :fc"),
+        p,
+    )
+
+    # trainer_client_relay_sessions: no unique constraint — a trainer/client pair can have several
+    # relay threads over time (closed + reopened).
+    await session.execute(
+        text("UPDATE trainer_client_relay_sessions SET client_id = :tc WHERE client_id = :fc"),
+        p,
+    )
+
+
+# Every table `_repoint_client_fks_for_merge` moves rows out of, for the pre-merge audit snapshot.
+_MERGE_AUDIT_TABLES: tuple[tuple[str, str], ...] = (
+    ("trainer_client_roster", "client_id"),
+    ("trainer_client_notes", "client_id"),
+    ("trainer_client_tags", "client_id"),
+    ("trainer_client_entries", "client_id"),
+    ("training_group_members", "client_id"),
+    ("training_group_join_requests", "client_id"),
+    ("group_attendance_prompts", "client_id"),
+    ("bookings", "client_id"),
+    ("client_requests", "client_id"),
+    ("pass_instances", "client_id"),
+    ("certificate_instances", "client_id"),
+    ("certificate_instances", "activated_client_id"),
+    ("recurring_client_slots", "client_id"),
+    ("client_slot_wait_requests", "client_id"),
+    ("client_inactive_notifications", "client_id"),
+    ("booking_problem_reports", "client_id"),
+    ("booking_client_no_show", "client_id"),
+    ("welcome_link_tokens", "client_id"),
+    ("client_family_access_members", "primary_client_id"),
+    ("client_profile_links", "profile_client_id"),
+    ("client_trainer_edges", "client_id"),
+    ("client_session_milestone_notifications", "client_id"),
+    ("collective_pass_instances", "client_id"),
+    ("collective_session_bookings", "client_id"),
+    ("trainer_client_relay_sessions", "client_id"),
+)
+
+
+async def _fetch_client_row_for_merge(session: AsyncSession, client_id: int) -> dict | None:
+    r = await session.execute(
+        text(
+            """
+            SELECT id, telegram_id, vk_user_id, telegram_username,
+                   first_name, last_name, middle_name, phone, phone_normalized, created_at
+            FROM clients WHERE id = :cid
+            """
+        ),
+        {"cid": client_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "telegram_id": row[1],
+        "vk_user_id": row[2],
+        "telegram_username": row[3],
+        "first_name": row[4],
+        "last_name": row[5],
+        "middle_name": row[6],
+        "phone": row[7],
+        "phone_normalized": row[8],
+        "created_at": row[9].isoformat() if row[9] else None,
+    }
+
+
+async def merge_clients(
+    session: AsyncSession,
+    from_cid: int,
+    to_cid: int,
+    *,
+    merged_by_trainer_id: int | None = None,
+    do_commit: bool = True,
+) -> dict:
+    """
+    Merge duplicate client ``from_cid`` into ``to_cid``: move every FK reference
+    (``_repoint_client_fks_for_merge``), regenerate reminders for bookings that moved
+    (they were generated, if at all, against the wrong/missing Telegram chat), backfill
+    empty name fields on the survivor, record an audit snapshot, then delete the stub.
+
+    ``to_cid`` survives — callers should pass the account with the live Telegram/VK
+    identity as ``to_cid`` so the client keeps using the account they actually have open.
+    """
+    import json
+
+    from src.application.booking_use_cases import generate_reminders_for_booking
+
+    if from_cid == to_cid:
+        raise ValueError("merge_clients: from_cid and to_cid must differ")
+
+    from_row = await _fetch_client_row_for_merge(session, from_cid)
+    to_row = await _fetch_client_row_for_merge(session, to_cid)
+    if from_row is None or to_row is None:
+        raise ValueError(f"merge_clients: client not found (from={from_cid}, to={to_cid})")
+
+    moved_counts: dict[str, int] = {}
+    for table, column in _MERGE_AUDIT_TABLES:
+        r = await session.execute(
+            text(f"SELECT COUNT(*) FROM {table} WHERE {column} = :fc"), {"fc": from_cid}
+        )
+        n = r.scalar_one()
+        if n:
+            moved_counts[f"{table}.{column}"] = n
+
+    r = await session.execute(
+        text("SELECT id FROM bookings WHERE client_id = :fc"), {"fc": from_cid}
+    )
+    moving_booking_ids = [int(row[0]) for row in r.fetchall()]
+
+    await _repoint_client_fks_for_merge(session, from_cid, to_cid)
+
+    await session.execute(
+        text(
+            """
+            UPDATE clients
+            SET first_name = COALESCE(NULLIF(TRIM(first_name), ''), :fn),
+                last_name = COALESCE(NULLIF(TRIM(last_name), ''), :ln),
+                middle_name = COALESCE(NULLIF(TRIM(middle_name), ''), :mn),
+                updated_at = now()
+            WHERE id = :tc
+            """
+        ),
+        {
+            "fn": from_row["first_name"],
+            "ln": from_row["last_name"],
+            "mn": from_row["middle_name"],
+            "tc": to_cid,
+        },
+    )
+
+    for bid in moving_booking_ids:
+        await generate_reminders_for_booking(session, bid, do_commit=False)
+
+    snapshot = {"from_client": from_row, "to_client": to_row, "moved_counts": moved_counts}
+    await session.execute(
+        text(
+            """
+            INSERT INTO client_merges (from_client_id, to_client_id, merged_by_trainer_id, snapshot)
+            VALUES (:fc, :tc, :tid, CAST(:snap AS JSONB))
+            """
+        ),
+        {"fc": from_cid, "tc": to_cid, "tid": merged_by_trainer_id, "snap": json.dumps(snapshot)},
+    )
+
+    await session.execute(text("DELETE FROM clients WHERE id = :fc"), {"fc": from_cid})
+
+    if do_commit:
+        await session.commit()
+
+    return snapshot
+
 
 async def _absorb_telegram_stub_into_phone_client_if_needed(
     session: AsyncSession,
