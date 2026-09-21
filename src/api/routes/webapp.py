@@ -5415,6 +5415,7 @@ class CertificateIssueBody(BaseModel):
     recipient_name: str = ""
     recipient_email: str | None = None
     recipient_phone: str | None = None
+    client_id: int | None = None
 
 
 @router.post("/trainer/certificate-issue")
@@ -5441,6 +5442,7 @@ async def post_trainer_certificate_issue(
             recipient_name=body.recipient_name or "—",
             recipient_email=body.recipient_email,
             recipient_phone=body.recipient_phone,
+            requester_client_id=body.client_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
