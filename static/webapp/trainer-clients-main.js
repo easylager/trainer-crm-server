@@ -3320,6 +3320,175 @@
         }
       }
 
+      /** «запись/записи/записей» for the merge-preview count. */
+      function ruPluralBookingsWord(n) {
+        var n10 = n % 10, n100 = n % 100;
+        if (n100 >= 11 && n100 <= 14) return 'записей';
+        if (n10 === 1) return 'запись';
+        if (n10 >= 2 && n10 <= 4) return 'записи';
+        return 'записей';
+      }
+
+      /**
+       * Trainer corrects a client's phone. A 409 means the number already belongs to another
+       * client: mergeable → confirm modal wired to merge_clients (Шаг 0); not mergeable → that
+       * other client belongs outside this trainer's reach, so just a blocked message.
+       */
+      function wireTrainerClientPhoneEditor(clientId) {
+        var toggle = document.getElementById('tcPhoneEditToggle');
+        var panel = document.getElementById('tcPhonePanel');
+        var cancel = document.getElementById('tcPhoneCancel');
+        var save = document.getElementById('tcPhoneSave');
+        if (!toggle || !panel || !save) return;
+        function closePanel() {
+          panel.hidden = true;
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+        function openPanel() {
+          panel.hidden = false;
+          toggle.setAttribute('aria-expanded', 'true');
+          var inp = document.getElementById('tcPhoneInput');
+          if (inp) inp.focus();
+        }
+        toggle.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          if (panel.hidden) openPanel();
+          else closePanel();
+        });
+        if (cancel) {
+          cancel.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            var row = state.allClients.find(function(x) { return x.id === clientId; });
+            var inp = document.getElementById('tcPhoneInput');
+            if (inp && row) inp.value = row.phone || '';
+            closePanel();
+          });
+        }
+
+        function extractErrorMessage(body, fallback) {
+          if (typeof body === 'string') return body;
+          if (body && typeof body.detail === 'string') return body.detail;
+          if (body && body.detail && typeof body.detail.detail === 'string') return body.detail.detail;
+          return fallback;
+        }
+
+        function afterAccountChange(survivorClient, mergedAwayId) {
+          if (mergedAwayId != null && mergedAwayId !== survivorClient.id) {
+            state.allClients = state.allClients.filter(function(c) { return c.id !== mergedAwayId; });
+          }
+          mergeTrainerClientRowFromCard(survivorClient);
+          closePanel();
+          openClientDetail(survivorClient.id);
+        }
+
+        function doMerge(otherClientId, phoneVal) {
+          return fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/phone/merge'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ other_client_id: otherClientId, phone: phoneVal }),
+          }).then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error(extractErrorMessage(d, r.statusText || 'Ошибка'));
+              return d;
+            });
+          });
+        }
+
+        function showMergeModal(otherClientId, preview, phoneVal) {
+          var modal = document.getElementById('tcModalPhoneMerge');
+          var lead = document.getElementById('tcPhoneMergeLead');
+          var btnOk = document.getElementById('tcPhoneMergeConfirm');
+          var btnCancel = document.getElementById('tcPhoneMergeCancel');
+          if (!modal || !lead || !btnOk || !btnCancel) return;
+          var name = (preview && preview.display_name) || 'Клиент';
+          var hasTg = !!(preview && preview.has_telegram);
+          var upcoming = (preview && preview.upcoming_bookings) || 0;
+          var bits = ['Найден клиент «' + name + '»', hasTg ? 'уже привязан к Telegram' : 'ещё не в Telegram-боте'];
+          if (upcoming > 0) bits.push(upcoming + ' ' + ruPluralBookingsWord(upcoming) + ' на будущее');
+          lead.textContent =
+            bits.join(', ') +
+            '. Объединить его историю (записи, абонементы, напоминания) с этой карточкой? Дублирующая карточка будет удалена.';
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+          function closeM() {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            btnOk.disabled = false;
+          }
+          btnCancel.onclick = function(ev) {
+            ev.preventDefault();
+            closeM();
+          };
+          modal.onclick = function(ev) {
+            if (ev.target === modal) closeM();
+          };
+          btnOk.onclick = function(ev) {
+            ev.preventDefault();
+            btnOk.disabled = true;
+            doMerge(otherClientId, phoneVal)
+              .then(function(d) {
+                closeM();
+                var survivor = d.client;
+                var mergedAway = survivor.id === clientId ? otherClientId : clientId;
+                showTcToast('Аккаунты объединены');
+                afterAccountChange(survivor, mergedAway);
+              })
+              .catch(function(err) {
+                alert(err.message || 'Ошибка');
+              })
+              .finally(function() {
+                btnOk.disabled = false;
+              });
+          };
+        }
+
+        save.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          var inp = document.getElementById('tcPhoneInput');
+          var phoneVal = inp ? inp.value.trim() : '';
+          if (!phoneVal) {
+            alert('Укажите номер телефона.');
+            return;
+          }
+          save.disabled = true;
+          fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/phone'), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: phoneVal }),
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                return { ok: r.ok, status: r.status, body: d };
+              });
+            })
+            .then(function(res) {
+              if (res.ok) {
+                mergeTrainerClientRowFromCard(res.body.client);
+                closePanel();
+                showTcToast('Телефон сохранён');
+                openClientDetail(clientId);
+                return;
+              }
+              if (res.status === 409 && res.body && res.body.detail && res.body.detail.code === 'phone_in_use') {
+                var det = res.body.detail;
+                if (det.mergeable) {
+                  showMergeModal(det.other_client_id, det.preview, phoneVal);
+                } else {
+                  alert('Этот номер уже используется другим клиентом в системе. Обратитесь в поддержку, если это ошибка.');
+                }
+                return;
+              }
+              throw new Error(extractErrorMessage(res.body, 'Ошибка'));
+            })
+            .catch(function(err) {
+              alert(err.message || 'Ошибка');
+            })
+            .finally(function() {
+              save.disabled = false;
+            });
+        });
+      }
+
       function openClientDetail(id) {
         var client = state.allClients.find(function(c) {
           return c.id === id;
@@ -3453,7 +3622,27 @@
               '</summary></details></div>') +
           '<div class=\"tc-section-label\">Контакты и абонементы</div>' +
           '<div class=\"tc-rows\">' +
-            '<div class=\"tc-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value\">' + phoneDisplay + '</div></div>' +
+            '<div class=\"tc-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value tc-phone-row\">' + phoneDisplay +
+              (isSandbox ? '' :
+                '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcPhoneEditToggle\" aria-label=\"Изменить телефон\" title=\"Изменить телефон\" aria-expanded=\"false\">' +
+                ICO_PENCIL +
+                '</button>'
+              ) +
+            '</div></div>' +
+            (isSandbox ? '' :
+              '<div class=\"tc-identity-panel\" id=\"tcPhonePanel\" hidden>' +
+                '<div class=\"tc-identity-fields\">' +
+                  '<label class=\"tc-identity-field\"><span class=\"tc-identity-label\">Телефон</span>' +
+                  '<input type=\"tel\" class=\"tc-identity-input\" id=\"tcPhoneInput\" maxlength=\"20\" autocomplete=\"tel\" value=\"' +
+                  escapeHtml(phone === '—' ? '' : phone) +
+                  '\"></label>' +
+                '</div>' +
+                '<div class=\"tc-identity-actions\">' +
+                  '<button type=\"button\" class=\"bd-btn bd-btn--primary\" id=\"tcPhoneSave\">Сохранить</button>' +
+                  '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"tcPhoneCancel\">Отмена</button>' +
+                '</div>' +
+              '</div>'
+            ) +
             '<div class=\"tc-row\" id=\"clientPassesCertsBlock\">' +
               '<div class=\"detail-label\">Абонементы и сертификаты</div>' +
               '<div class=\"detail-value is-loading\" id=\"clientPassesCertsContent\">' + buildClientPassesSkeletonHtml() + '</div>' +
@@ -3543,6 +3732,7 @@
         }
         wireTrainerClientTelegramDms();
         wireTrainerClientIdentityEditor(id);
+        wireTrainerClientPhoneEditor(id);
         wireTrainerClientDetach(id);
         fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/card'))
           .then(function(r) {

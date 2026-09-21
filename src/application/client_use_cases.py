@@ -465,6 +465,145 @@ async def merge_clients(
     return snapshot
 
 
+async def patch_trainer_client_phone(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    phone: str,
+) -> dict:
+    """
+    Trainer edits an existing client's phone (previously not exposed at all — trainer typos here
+    are exactly how duplicate clients happen; see ``merge_clients``).
+
+    Returns ``{"result": "not_found"}``, ``{"result": "updated", "client": {...}}``, or, when the
+    normalized number already belongs to a different client, ``{"result": "conflict", ...}``:
+    ``mergeable`` is only true when this trainer also has access to that other client — a phone
+    collision with a client this trainer has no relationship to must never leak that client's
+    name/activity, so it comes back with ``preview: None``.
+    """
+    from src.application.booking_use_cases import get_trainer_client_for_card, trainer_has_access_to_client
+
+    if not await trainer_has_access_to_client(session, trainer_id, client_id):
+        return {"result": "not_found"}
+
+    phone_norm = normalize_phone(phone)
+    if not phone_norm:
+        raise ValueError("invalid_phone")
+
+    r = await session.execute(text("SELECT phone_normalized FROM clients WHERE id = :cid"), {"cid": client_id})
+    row = r.fetchone()
+    if row is None:
+        return {"result": "not_found"}
+    if row[0] == phone_norm:
+        client = await get_trainer_client_for_card(session, trainer_id, client_id)
+        return {"result": "updated", "client": client}
+
+    r = await session.execute(
+        text("SELECT id, telegram_id, first_name, last_name FROM clients WHERE phone_normalized = :pn AND id != :cid"),
+        {"pn": phone_norm, "cid": client_id},
+    )
+    other = r.fetchone()
+    if other is None:
+        await session.execute(
+            text("UPDATE clients SET phone = :ph, phone_normalized = :pn, updated_at = now() WHERE id = :cid"),
+            {"ph": phone, "pn": phone_norm, "cid": client_id},
+        )
+        await session.commit()
+        client = await get_trainer_client_for_card(session, trainer_id, client_id)
+        return {"result": "updated", "client": client}
+
+    other_id = int(other[0])
+    other_accessible = await trainer_has_access_to_client(session, trainer_id, other_id)
+    if not other_accessible:
+        return {"result": "conflict", "mergeable": False, "other_client_id": None, "preview": None}
+
+    # Approximate on purpose: this is a decision-support preview for the trainer's merge prompt,
+    # not a booking-facing count — exact slot-end/timezone precision isn't worth the import here.
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM bookings b JOIN slots s ON s.id = b.slot_id
+            WHERE b.client_id = :c AND b.status IN ('pending', 'confirmed') AND s.slot_date >= CURRENT_DATE
+            """
+        ),
+        {"c": other_id},
+    )
+    upcoming = int(r.scalar_one())
+    display_name = (f"{other[2] or ''} {other[3] or ''}").strip() or "Клиент"
+    return {
+        "result": "conflict",
+        "mergeable": True,
+        "other_client_id": other_id,
+        "preview": {
+            "display_name": display_name,
+            "has_telegram": other[1] is not None,
+            "upcoming_bookings": upcoming,
+        },
+    }
+
+
+async def merge_trainer_client_phone_conflict(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    other_client_id: int,
+    phone: str,
+) -> dict:
+    """
+    Confirm the merge prompt ``patch_trainer_client_phone`` returned on conflict.
+
+    Re-checks access and the phone match server-side rather than trusting whatever the client
+    still has cached from the earlier 409 — both could have changed in between. Survivor is
+    whichever side already has a Telegram identity (the account the client actually uses); if
+    both or neither do, the account the trainer was editing (``client_id``) survives.
+    """
+    from src.application.booking_use_cases import get_trainer_client_for_card, trainer_has_access_to_client
+
+    if client_id == other_client_id:
+        raise ValueError("same_client")
+    if not await trainer_has_access_to_client(session, trainer_id, client_id):
+        return {"result": "not_found"}
+    if not await trainer_has_access_to_client(session, trainer_id, other_client_id):
+        return {"result": "not_found"}
+
+    phone_norm = normalize_phone(phone)
+    if not phone_norm:
+        raise ValueError("invalid_phone")
+
+    r = await session.execute(
+        text("SELECT id, telegram_id, phone_normalized FROM clients WHERE id = ANY(:ids)"),
+        {"ids": [client_id, other_client_id]},
+    )
+    rows = {int(row[0]): row for row in r.fetchall()}
+    if client_id not in rows or other_client_id not in rows:
+        return {"result": "not_found"}
+    if (rows[other_client_id][2] or "") != phone_norm:
+        return {"result": "stale"}
+
+    editing_has_tg = rows[client_id][1] is not None
+    other_has_tg = rows[other_client_id][1] is not None
+    if other_has_tg and not editing_has_tg:
+        survivor, absorbed = other_client_id, client_id
+    else:
+        survivor, absorbed = client_id, other_client_id
+
+    await merge_clients(session, absorbed, survivor, merged_by_trainer_id=trainer_id, do_commit=False)
+
+    if survivor == client_id:
+        # The editing account didn't already carry the new number — the conflict came from the
+        # absorbed side, so it never got applied above.
+        await session.execute(
+            text("UPDATE clients SET phone = :ph, phone_normalized = :pn, updated_at = now() WHERE id = :cid"),
+            {"ph": phone, "pn": phone_norm, "cid": survivor},
+        )
+    await session.commit()
+
+    client = await get_trainer_client_for_card(session, trainer_id, survivor)
+    return {"result": "merged", "survivor_client_id": survivor, "client": client}
+
+
 async def _absorb_telegram_stub_into_phone_client_if_needed(
     session: AsyncSession,
     telegram_id: int,
