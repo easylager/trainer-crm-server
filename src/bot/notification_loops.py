@@ -997,8 +997,26 @@ async def _deliver_trainer_new_request_message(
             or "inline" in err_l
             or "url" in err_l
         ):
-            logger.warning(
-                "Request notifier: retry without keyboard (trainer_tid=%s): %s",
+            # A single tg://user deep-link Telegram can't resolve (BUTTON_USER_INVALID) used to take
+            # down the WHOLE keyboard, including the unrelated "Выдать абонемент/сертификат" CTA — the
+            # exact bug behind trainer reports of the pass-order push arriving with no buttons at all.
+            # Degrade in steps instead of dropping straight to plain text.
+            safe_kb = _strip_risky_url_buttons(kb)
+            if safe_kb is not None and safe_kb.inline_keyboard != kb.inline_keyboard:
+                logger.warning(
+                    "Request notifier: retry without risky url buttons (trainer_tid=%s): %s",
+                    tid,
+                    e,
+                )
+                try:
+                    await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=safe_kb)
+                    await _refresh_trainer_menu_after_push(trainer_bot, tid)
+                    return
+                except Exception as e2:
+                    e = e2
+                    err_l = str(e).lower()
+            logger.error(
+                "Request notifier: retry without ANY keyboard, CTA lost (trainer_tid=%s): %s",
                 tid,
                 e,
             )
@@ -1044,6 +1062,21 @@ async def process_request_notifications_batch(
         except Exception as e:
             await release_request_trainer_notification(session, request_id, trainer_id)
             logger.warning("Request notifier send to %s: %s", tid, e)
+
+
+def _strip_risky_url_buttons(kb: InlineKeyboardMarkup) -> InlineKeyboardMarkup | None:
+    """
+    Drop tg://user deep-link buttons — Telegram occasionally rejects them at send time with
+    "Bad Request: BUTTON_USER_INVALID" for peers it can't resolve, and that used to nuke the
+    entire keyboard on retry. Keep every other button (relay/issue/etc.) so an unresolvable
+    DM shortcut doesn't take the real CTA down with it. Returns None if nothing would remain.
+    """
+    safe_rows: list[list[InlineKeyboardButton]] = []
+    for row in kb.inline_keyboard:
+        safe_row = [b for b in row if not (b.url and b.url.startswith("tg://user"))]
+        if safe_row:
+            safe_rows.append(safe_row)
+    return InlineKeyboardMarkup(inline_keyboard=safe_rows) if safe_rows else None
 
 
 def _trainer_order_write_client_row(

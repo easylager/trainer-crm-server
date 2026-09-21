@@ -1767,6 +1767,10 @@
           if (req.client_id && req.pass_product_id) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnIssuePassFromRequest">Выдать абонемент</button>';
           }
+          actions.innerHTML +=
+            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
+          /* Wire onclick only after every innerHTML += above: each += reparses and replaces
+             all existing children, silently dropping handlers attached to earlier buttons. */
           wireWriteClientButton(document.getElementById('btnWriteClient'));
           var issueBtn = document.getElementById('btnIssuePassFromRequest');
           if (issueBtn) {
@@ -1778,8 +1782,6 @@
               window.location.href = u;
             };
           }
-          actions.innerHTML +=
-            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
         } else if (isCertOrder) {
           actions.classList.add('action-buttons--pass');
           actions.setAttribute('data-variant', 'cert');
@@ -1791,6 +1793,8 @@
           if (req.client_id && req.certificate_product_id) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnIssueCertFromRequest">Выдать сертификат</button>';
           }
+          actions.innerHTML +=
+            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
           wireWriteClientButton(document.getElementById('btnWriteClient'));
           var issueCertBtn = document.getElementById('btnIssueCertFromRequest');
           if (issueCertBtn) {
@@ -1815,8 +1819,6 @@
               window.location.href = u;
             };
           }
-          actions.innerHTML +=
-            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
         } else if (!req.has_responded) {
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--primary" id="btnRespond">Готов взять</button>';
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDecline">Отклонить</button>';

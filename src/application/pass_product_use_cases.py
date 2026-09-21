@@ -799,6 +799,39 @@ async def _trainer_may_issue_pass_to_client(
     return True, None
 
 
+async def _archive_fulfilled_pass_order_request(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    client_id: int,
+    pass_product_id: int,
+) -> None:
+    """
+    Close the client's open «хочу абонемент» request this issuance fulfills, if any.
+
+    Fires from ``issue_pass_to_client`` itself (not the request-detail CTA) so it also covers a
+    trainer issuing the pass a different way, bypassing the request card entirely. Matched strictly
+    on (trainer_id, client_id, pass_product_id) with status='new' so it never touches: requests to a
+    different trainer, requests for a different pass product from the same client (they may have more
+    than one open ask), or requests already archived/declined. Same UPDATE the client and trainer
+    request lists already filter on, so this closes the request on both sides at once.
+    """
+    from src.application.client_pass_order_use_cases import PASS_ORDER_LINE_PREFIX
+
+    needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
+    await session.execute(
+        text(
+            """
+            UPDATE client_requests
+            SET status = 'archived'
+            WHERE client_id = :cid AND trainer_id = :tid AND status = 'new'
+              AND POSITION(:needle IN COALESCE(comment, '')) = 1
+            """
+        ),
+        {"cid": int(client_id), "tid": int(trainer_id), "needle": needle},
+    )
+
+
 async def issue_pass_to_client(
     session: AsyncSession,
     trainer_id: int,
@@ -855,6 +888,9 @@ async def issue_pass_to_client(
     from src.application.trainer_feature_tracking import FEATURE_PASS_ISSUED, record_feature_first_use
 
     await record_feature_first_use(session, trainer_id, FEATURE_PASS_ISSUED)
+    await _archive_fulfilled_pass_order_request(
+        session, trainer_id=trainer_id, client_id=client_id, pass_product_id=pass_product_id
+    )
     await session.commit()
     issued_at = row[5]
 
