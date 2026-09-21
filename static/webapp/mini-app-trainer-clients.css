@@ -738,6 +738,20 @@
       flex: 1;
       min-width: 120px;
     }
+    .tc-phone-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tc-phone-row .tc-name-edit-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+    }
+    .tc-phone-row .tc-name-edit-icon {
+      width: 15px;
+      height: 15px;
+    }
     .tc-since {
       font-size: 14px;
       font-weight: 500;

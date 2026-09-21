@@ -14,9 +14,9 @@
   <script src="mini-app-phone-field.js?v=202608315"></script>
 <link rel="stylesheet" href="theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
-  <link rel="preload" href="trainer-clients-main.js?v=202608315" as="script" />
+  <link rel="preload" href="trainer-clients-main.js?v=202609221" as="script" />
   <link rel="preload" href="mini-app-trainer-shell.js?v=202609011" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202608315" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202609221" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202608315" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609091" />
   <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202608315" />
@@ -276,6 +276,17 @@
     </div>
   </div>
 
+  <div id="tcModalPhoneMerge" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcPhoneMergeTitle">
+      <h3 id="tcPhoneMergeTitle" class="book-modal-title">Такой номер уже есть</h3>
+      <p id="tcPhoneMergeLead" class="book-choice-lead"></p>
+      <div class="modal-actions tc-qb-actions">
+        <button type="button" class="btn-block btn-secondary" id="tcPhoneMergeCancel">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="tcPhoneMergeConfirm">Объединить аккаунты</button>
+      </div>
+    </div>
+  </div>
+
   <div id="tcModalRecurringFirstWeek" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
     <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcRecurringFirstWeekTitle">
       <h3 id="tcRecurringFirstWeekTitle" class="book-modal-title">С какой недели?</h3>
@@ -292,7 +303,7 @@
   <script src="trainer-client-relay-ui.js?v=202608315"></script>
   <script src="trainer-relay-helpers.js?v=202608315"></script>
   <script src="trainer-booking-context.js?v=202608315"></script>
-  <script defer src="trainer-clients-main.js?v=202608315"></script>
+  <script defer src="trainer-clients-main.js?v=202609221"></script>
   <script defer src="mini-app-trainer-home.js?v=202608315"></script>
   <script src="mini-app-trainer-shell.js?v=202609011"></script>
 </body>
