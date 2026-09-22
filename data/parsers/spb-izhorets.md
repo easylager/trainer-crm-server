@@ -2,7 +2,7 @@
 
 - arena_id: 185
 - parser_key: izhorets_html_v1
-- cadence: weekly
+- cadence: daily
 - requires_by_egress: false
 
 ## Sources
