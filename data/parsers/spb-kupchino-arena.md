@@ -1,7 +1,7 @@
 # Parser spec: Ледовая арена «Купчино»
 
 - arena_id: 110
-- parser_key: `kupchinoarena_html_v1`
+- parser_key: kupchinoarena_html_v1
 - cadence: daily
 - requires_by_egress: false
 
