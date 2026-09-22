@@ -1,0 +1,292 @@
+{
+  "sessions": [
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:30",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-21",
+      "starts_at_local": "21:45",
+      "ends_at_local": "22:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "19:00",
+      "ends_at_local": "20:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 87500,
+      "price_child_minor": 87500,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 87500,
+      "price_child_minor": 87500,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-22",
+      "starts_at_local": "21:45",
+      "ends_at_local": "22:45",
+      "session_label": "Большой лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "19:00",
+      "ends_at_local": "20:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 87500,
+      "price_child_minor": 87500,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 87500,
+      "price_child_minor": 87500,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-24",
+      "starts_at_local": "22:00",
+      "ends_at_local": "23:00",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:30",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "19:00",
+      "ends_at_local": "20:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 87500,
+      "price_child_minor": 87500,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:30",
+      "session_label": "Малый лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-25",
+      "starts_at_local": "21:45",
+      "ends_at_local": "22:45",
+      "session_label": "Большой лед",
+      "price_adult_minor": 70000,
+      "price_child_minor": 70000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "08:45",
+      "ends_at_local": "09:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:30",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "19:00",
+      "ends_at_local": "20:00",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "21:15",
+      "ends_at_local": "22:15",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "07:45",
+      "ends_at_local": "08:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "08:45",
+      "ends_at_local": "09:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "10:00",
+      "ends_at_local": "11:00",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "11:15",
+      "ends_at_local": "12:15",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "12:30",
+      "ends_at_local": "13:30",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "13:45",
+      "ends_at_local": "14:45",
+      "session_label": "Малый лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:15",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:45",
+      "session_label": "Большой лед",
+      "price_adult_minor": 100000,
+      "price_child_minor": 100000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "19:30",
+      "ends_at_local": "20:30",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "20:30",
+      "ends_at_local": "21:30",
+      "session_label": "Большой лед",
+      "price_adult_minor": 80000,
+      "price_child_minor": 80000,
+      "price_rental_minor": 60000
+    }
+  ]
+}
