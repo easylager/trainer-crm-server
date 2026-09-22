@@ -75,6 +75,7 @@ def default_registry() -> ParserRegistry:
         YubileynyAfishaParser,
     )
     from src.ingestion.adapters_spb_batch_b import KupchinoArenaHtmlParser
+    from src.ingestion.adapters_spb_batch_j import IzhoretsHtmlParser
 
     registry = ParserRegistry()
     for parser in (
@@ -115,6 +116,7 @@ def default_registry() -> ParserRegistry:
         ParnasArenaTextParser(),
         BugryArenaHtmlParser(),
         KupchinoArenaHtmlParser(),
+        IzhoretsHtmlParser(),
     ):
         registry.register(parser)
     return registry
