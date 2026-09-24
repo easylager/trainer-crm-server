@@ -68,6 +68,7 @@ from src.application.booking_use_cases import (
     active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
     cancel_booking_by_client,
+    client_ever_booked_primary_candidate,
     client_latest_booking_primary_candidate,
     client_upcoming_booking_primary_candidate,
     client_rebook_trainer_targets,
@@ -1757,6 +1758,8 @@ async def _client_booking_post_create_effects(
                 completed=False,
                 session=s,
                 booking_service_id=service_id,
+                mark_saved=True,
+                promote_primary=True,
             )
             await sync_session_catalog_after_client_booking(
                 telegram_id, trainer_id, service_id, s
@@ -2754,6 +2757,11 @@ async def get_client_hub_bootstrap(
             upcoming_tid, upcoming_svc = await client_upcoming_booking_primary_candidate(
                 s, telegram_id, acting_client_id=hub_session_client_id
             )
+            # Durable floor for «Мой тренер»: запись, чей слот тренер удалил или снял из
+            # расписания, выпадает из тиров выше — хаб не имеет права из-за этого забыть тренера.
+            ever_tid, ever_svc = await client_ever_booked_primary_candidate(
+                s, telegram_id, acting_client_id=hub_session_client_id
+            )
             rebook_raw = await client_rebook_trainer_targets(
                 s, telegram_id, limit=3, acting_client_id=hub_session_client_id
             )
@@ -2769,6 +2777,8 @@ async def get_client_hub_bootstrap(
                 booking_primary_trainer_id=bp_tid,
                 booking_primary_service_id=bp_svc,
                 explicit_primary_edge=explicit_primary,
+                ever_booked_trainer_id=ever_tid,
+                ever_booked_service_id=ever_svc,
             )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
             hint_ids = sorted(
@@ -2844,7 +2854,9 @@ async def get_client_hub_bootstrap(
                 "primary_history": primary_history,
                 "saved_trainer_ids": [e["trainer_id"] for e in saved_edges],
                 "saved_trainers": saved_preview,
-                "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
+                "has_past_sessions": (
+                    any(e.get("completed_count", 0) > 0 for e in edges) or ever_tid is not None
+                ),
                 "last_booking_trainer_id": book_tid,
                 "last_booking_service_id": book_svc,
                 "rebook_targets": rebook_targets,

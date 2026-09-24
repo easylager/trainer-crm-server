@@ -21,8 +21,13 @@ from src.application.client_trainer_primary_graph import (
     edge_json_with_trainer_hints,
     next_booking_per_trainer,
     serialize_trainer_edge_row,
+    synthetic_client_trainer_edge_placeholder,
 )
-from src.application.booking_use_cases import client_latest_booking_primary_candidate
+from src.application.booking_use_cases import (
+    client_ever_booked_primary_candidate,
+    client_ever_booked_trainer_ids,
+    client_latest_booking_primary_candidate,
+)
 from src.application.client_session_use_cases import get_session as read_client_bot_session
 from src.application.client_trainer_edge_use_cases import (
     get_all_edges as get_all_trainer_edges,
@@ -154,7 +159,14 @@ async def get_client_trainer_edges(
     catalog_tid = client_catalog_telegram_key(principal)
     client_id = await resolve_acting_client_id(session, catalog_tid, _parse_profile_id_header(x_profile_id))
     edges = await get_all_trainer_edges(client_id, session) if client_id is not None else []
-    booking_tid, booking_svc = await client_latest_booking_primary_candidate(session, catalog_tid)
+    # История записей читается тем же профилем, что и рёбра (X-Profile-Id): иначе «Мой тренер»
+    # ребёнка приезжал бы из записей родителя.
+    booking_tid, booking_svc = await client_latest_booking_primary_candidate(
+        session, catalog_tid, acting_client_id=client_id
+    )
+    ever_tid, ever_svc = await client_ever_booked_primary_candidate(
+        session, catalog_tid, acting_client_id=client_id
+    )
 
     sess_row = await read_client_bot_session(catalog_tid, session)
     session_trainer_id = int(sess_row["selected_trainer_id"]) if (sess_row or {}).get("selected_trainer_id") else None
@@ -166,19 +178,44 @@ async def get_client_trainer_edges(
         booking_primary_trainer_id=booking_tid,
         booking_primary_service_id=booking_svc,
         explicit_primary_edge=explicit_primary,
+        ever_booked_trainer_id=ever_tid,
+        ever_booked_service_id=ever_svc,
     )
     primary_tid = int(primary["trainer_id"]) if primary else None
 
-    hint_ids = sorted({int(e["trainer_id"]) for e in edges} | ({primary_tid} if primary_tid else set()))
+    # «Был у тренера» берём из истории записей, а не только из счётчика на ребре: записи,
+    # созданные тренером в CRM, ребро не создают вовсе, поэтому раньше у таких клиентов
+    # «Мои тренеры» оставались пустыми при десятке проведённых занятий.
+    ever_booked = await client_ever_booked_trainer_ids(
+        session, catalog_tid, acting_client_id=client_id
+    )
+    ever_booked_ids = [tid for tid, _svc in ever_booked]
+
+    hint_ids = sorted(
+        {int(e["trainer_id"]) for e in edges}
+        | ({primary_tid} if primary_tid else set())
+        | set(ever_booked_ids)
+    )
     hints = await trainer_display_hints_by_ids(session, hint_ids)
 
     bookings_payload = await client_bookings_days_payload(session, catalog_tid)
     saved = [e for e in edges if e.get("is_saved") and int(e["trainer_id"]) != primary_tid]
-    past = [
-        e for e in edges
+    saved_tids = {int(e["trainer_id"]) for e in saved}
+    edges_by_tid = {int(e["trainer_id"]): e for e in edges}
+    past_tids = [
+        tid for tid in ever_booked_ids
+        if tid != primary_tid and tid not in saved_tids
+    ]
+    past_tids += [
+        int(e["trainer_id"]) for e in edges
         if e.get("completed_count", 0) > 0
         and not e.get("is_saved")
         and int(e["trainer_id"]) != primary_tid
+        and int(e["trainer_id"]) not in past_tids
+    ]
+    past = [
+        edges_by_tid.get(tid) or synthetic_client_trainer_edge_placeholder(tid)
+        for tid in past_tids
     ]
     next_per_trainer = next_booking_per_trainer(bookings_payload.get("days") or [])
     return {

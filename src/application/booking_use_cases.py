@@ -4106,6 +4106,105 @@ async def client_upcoming_booking_primary_candidate(
     )
 
 
+# «Когда-либо записывался» — последний рубеж для хаба: сюда попадают и записи, чей слот
+# тренер потом удалил/отменил (INNER JOIN slots в тирах выше терял их вместе с тренером),
+# и снятые тренером из расписания (``trainer_removed``). ``declined`` не считается: заявку
+# тренер отклонил, записи не было.
+_SQL_EVER_BOOKED_STATUSES = (
+    "'pending', 'confirmed', 'completed', 'no_show', 'cancelled', "
+    "'payment_dispute', 'trainer_removed'"
+)
+_SQL_EVER_BOOKED_ORDER_TS = (
+    f"COALESCE({_SQL_SLOT_START_TS}, b.created_at)"
+)
+
+
+async def client_ever_booked_primary_candidate(
+    session: AsyncSession,
+    client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
+) -> tuple[int | None, int | None]:
+    """
+    Тренер (и service_id) последней записи клиента **по всей истории**, без требований к слоту.
+
+    Отличие от ``client_latest_booking_primary_candidate``: ``LEFT JOIN slots`` и никакого
+    фильтра по статусу слота, плюс ``trainer_removed``. Нужен как последний тир «Мой тренер»:
+    после первой записи хаб обязан показывать тренера, даже если слот уже удалён из расписания
+    (тогда INNER JOIN терял запись) или тренер убрал занятие из своего календаря.
+    """
+    cid = await _client_id_for_booking_history(session, client_telegram_id, acting_client_id)
+    if cid is None:
+        return None, None
+    r = await session.execute(
+        text(
+            f"""
+            SELECT b.trainer_id, b.service_id
+            FROM bookings b
+            LEFT JOIN slots s ON s.id = b.slot_id
+            WHERE b.client_id = :cid
+              AND b.status IN ({_SQL_EVER_BOOKED_STATUSES})
+            ORDER BY {_SQL_EVER_BOOKED_ORDER_TS} DESC NULLS LAST, b.id DESC
+            LIMIT 1
+            """
+        ),
+        {"cid": int(cid)},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None:
+        return None, None
+    sid_raw = row[1]
+    return int(row[0]), (int(sid_raw) if sid_raw is not None else None)
+
+
+EVER_BOOKED_TRAINERS_DEFAULT_LIMIT = 20
+
+
+async def client_ever_booked_trainer_ids(
+    session: AsyncSession,
+    client_telegram_id: int,
+    *,
+    acting_client_id: int | None = None,
+    limit: int = EVER_BOOKED_TRAINERS_DEFAULT_LIMIT,
+) -> list[tuple[int, int | None]]:
+    """
+    Все тренеры, к которым клиент когда-либо записывался: (trainer_id, service_id), свежие раньше.
+
+    Источник «Сохранённых»: связь не должна зависеть от того, успел ли кто-то создать строку
+    в ``client_trainer_edges`` (записи из CRM тренера её не создают вовсе).
+    """
+    cid = await _client_id_for_booking_history(session, client_telegram_id, acting_client_id)
+    if cid is None:
+        return []
+    lim = max(1, min(int(limit), 50))
+    r = await session.execute(
+        text(
+            f"""
+            SELECT sub.trainer_id, sub.service_id
+            FROM (
+                SELECT DISTINCT ON (b.trainer_id)
+                       b.trainer_id,
+                       b.service_id,
+                       {_SQL_EVER_BOOKED_ORDER_TS} AS order_ts
+                FROM bookings b
+                LEFT JOIN slots s ON s.id = b.slot_id
+                WHERE b.client_id = :cid
+                  AND b.status IN ({_SQL_EVER_BOOKED_STATUSES})
+                ORDER BY b.trainer_id, {_SQL_EVER_BOOKED_ORDER_TS} DESC NULLS LAST, b.id DESC
+            ) AS sub
+            ORDER BY sub.order_ts DESC NULLS LAST, sub.trainer_id
+            LIMIT :lim
+            """
+        ),
+        {"cid": int(cid), "lim": lim},
+    )
+    return [
+        (int(row[0]), int(row[1]) if row[1] is not None else None)
+        for row in r.fetchall()
+        if row[0] is not None
+    ]
+
+
 async def _client_id_for_booking_history(
     session: AsyncSession,
     client_telegram_id: int,
@@ -5673,6 +5772,26 @@ async def mark_trainer_session_wrapup_sent(session: AsyncSession, booking_id: in
     await session.commit()
 
 
+async def _refresh_client_trainer_edge_after_completion(
+    session: AsyncSession,
+    booking_id: int,
+) -> None:
+    """
+    Занятие состоялось — обновить счётчики связи клиент↔тренер («был на занятиях», история на хабе).
+
+    Вызывается **после** коммита самой записи и коммитит себя отдельно: статистика связи —
+    производный сигнал, её сбой не имеет права откатить уже проведённое занятие.
+    """
+    from src.application.client_trainer_edge_use_cases import refresh_completed_stats_for_booking
+
+    try:
+        await refresh_completed_stats_for_booking(session, int(booking_id))
+        await session.commit()
+    except Exception:
+        logger.exception("client-trainer edge completed stats refresh failed booking_id=%s", booking_id)
+        await session.rollback()
+
+
 async def mark_booking_completed_and_notify(
     session: AsyncSession,
     booking_id: int,
@@ -5718,6 +5837,7 @@ async def mark_booking_completed_and_notify(
         {"bid": booking_id},
     )
     await session.commit()
+    await _refresh_client_trainer_edge_after_completion(session, booking_id)
     return pass_redeemed
 
 
@@ -5779,6 +5899,7 @@ async def mark_booking_completed_by_trainer(
         {"bid": booking_id},
     )
     await session.commit()
+    await _refresh_client_trainer_edge_after_completion(session, booking_id)
     return {"success": True, "pass_redeemed": pass_redeemed}
 
 
