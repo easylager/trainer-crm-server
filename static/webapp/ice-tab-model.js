@@ -39,9 +39,50 @@
     }
     if (opts.near) params.push('near=' + encodeURIComponent(opts.near));
     if (opts.bbox) params.push('bbox=' + encodeURIComponent(opts.bbox));
+    /* Тип площадки — список ключей через запятую; пусто = все типы. */
+    var venue = venueTypeParam(opts.venueTypes);
+    if (venue) params.push('venue_type=' + encodeURIComponent(venue));
     if (opts.limit) params.push('limit=' + encodeURIComponent(String(opts.limit)));
     if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
     return '/api/public/ice/arenas?' + params.join('&');
+  }
+
+  /**
+   * Нормализовать выбор типов площадок в параметр запроса.
+   * Пустой массив и массив со всеми типами одинаково означают «без фильтра»:
+   * слать все ключи бессмысленно, а пустой venue_type сервер и так игнорирует.
+   */
+  function venueTypeParam(venueTypes) {
+    if (!venueTypes || !venueTypes.length) return '';
+    var clean = [];
+    for (var i = 0; i < venueTypes.length; i++) {
+      var key = String(venueTypes[i] || '').trim().toLowerCase();
+      if (key && clean.indexOf(key) < 0) clean.push(key);
+    }
+    return clean.join(',');
+  }
+
+  /**
+   * Чипы типов площадок из фасетов ответа. Фасеты считаются ДО фильтра, поэтому
+   * выбранный чип остаётся в списке — иначе из фильтра некуда было бы выйти.
+   */
+  function venueChipsView(facets, selected) {
+    facets = facets || [];
+    selected = selected || [];
+    if (facets.length < 2) return [];
+    var out = [{ key: '', label: 'Все', active: selected.length === 0 }];
+    for (var i = 0; i < facets.length; i++) {
+      var f = facets[i] || {};
+      var key = String(f.key || '');
+      if (!key) continue;
+      out.push({
+        key: key,
+        label: String(f.chip || key),
+        count: Number(f.count) || 0,
+        active: selected.indexOf(key) >= 0,
+      });
+    }
+    return out;
   }
 
   function mapShowsArenas(intent) {
@@ -353,9 +394,18 @@
     item = item || {};
     var p = item.profile || {};
     var parts = [];
+    /* Роль впереди места: «Спортивный психолог» отвечает на «кто это», а название
+       арены — только на «где». Для старых анкет без роли сервер подставляет «Тренер»,
+       но его не показываем: это подпись по умолчанию, а не факт о человеке. */
+    var role = String(p.specialist_role || '').trim();
+    if (role && role !== 'Тренер') parts.push(role);
+
     if (item.primary_arena_name) {
       parts.push(String(item.primary_arena_name));
-    } else if (item.arena_work_format === 'online') {
+    }
+    /* Онлайн — независимый флаг анкеты: он может стоять и рядом с залом,
+       а не только вместо площадки (см. trainer_profiles.online_enabled). */
+    if (p.online_enabled || item.arena_work_format === 'online') {
       parts.push('Онлайн');
     }
 
@@ -543,7 +593,10 @@
     } else if (isSession) {
       depth = 'Расписание и цены';
     } else {
-      depth = 'Открыть карточку катка';
+      /* Подпись склоняет сервер по venue_type: на зале это «карточку зала».
+         Хардкод «катка» здесь и был тем, что ломалось на первой же не-ледовой
+         площадке. Фолбэк — для ответов старого API без поля. */
+      depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
     return {
       href: arenaHref(item),
@@ -752,6 +805,8 @@
     INTENTS: INTENTS,
     buildListUrl: buildListUrl,
     buildMapListUrl: buildMapListUrl,
+    venueTypeParam: venueTypeParam,
+    venueChipsView: venueChipsView,
     mapShowsArenas: mapShowsArenas,
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,

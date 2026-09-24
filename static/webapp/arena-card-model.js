@@ -116,7 +116,11 @@
     }
     return {
       shortDescription: desc || null,
-      website: website ? { href: website, label: 'Сайт катка' } : null,
+      /* Подпись склоняет сервер по venue_type: «Сайт зала» для зала.
+         Фолбэк — для ответов старого API без поля. */
+      website: website
+        ? { href: website, label: String(card.venue_site_label || '').trim() || 'Сайт площадки' }
+        : null,
       socials: socials,
     };
   }

@@ -302,6 +302,11 @@
   }
 
   function renderIceSection() {
+    /* Секция про массовое катание существует только для льда. На зале она
+       обещала бы расписание сеансов, которых там не бывает в принципе —
+       это не «данных пока нет», а неверный вопрос к площадке. */
+    var venueType = String(state.card.venue_type || 'ice');
+    if (venueType !== 'ice') return '';
     var feed = M.iceFeedView({
       card: state.card,
       hasSessions: hasAnySessions(),
@@ -540,7 +545,7 @@
   function paint() {
     if (!root || !state.card) return;
     var title = document.getElementById('headerTitle');
-    if (title) title.textContent = state.card.name || 'Арена';
+    if (title) title.textContent = state.card.name || state.card.venue_noun || 'Площадка';
     root.innerHTML =
       renderHero() +
       renderAmenities() +

@@ -279,9 +279,16 @@ async def test_unchecking_a_day_clears_it(app_use_test_db, db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_week_is_rejected_with_a_human_reason(app_use_test_db, db_session) -> None:
+async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> None:
+    """Расписание необязательно: специалист заканчивает онбординг без единого окна.
+
+    Раньше пустая неделя возвращала 400 «Отметьте хотя бы одно время». Для тренера
+    по конькам это было разумно, для спортивного психолога или консультанта — стена:
+    часы он может быть ещё не готов называть, а рассказать о себе уже готов.
+    Услуги и профиль при этом сохраняются, слотов создаётся ноль.
+    """
     tg = _fresh_trainer_telegram_id()
-    await _bare_linked_trainer(db_session, tg)
+    trainer_id = await _bare_linked_trainer(db_session, tg)
     service_id = await _any_service_id(db_session)
 
     with patch_trainer_webapp_init(tg):
@@ -289,11 +296,37 @@ async def test_empty_week_is_rejected_with_a_human_reason(app_use_test_db, db_se
             resp = await client.post(
                 QUICK_SETUP_URL,
                 headers={"X-Telegram-Init-Data": "mock"},
-                json={"service_ids": [service_id], "days": [], "duration_minutes": 60},
+                json={
+                    "service_ids": [service_id],
+                    "days": [],
+                    "duration_minutes": 60,
+                    "specialist_role": "Спортивный психолог",
+                    "online_enabled": True,
+                },
             )
 
-    assert resp.status_code == 400
-    assert "ученику" in resp.json()["detail"]
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slots_created"] == 0
+
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT specialist_role, online_enabled FROM trainer_profiles "
+                "WHERE trainer_id = :t"
+            ),
+            {"t": trainer_id},
+        )
+    ).fetchone()
+    assert row[0] == "Спортивный психолог"
+    assert bool(row[1]) is True
+
+    linked = (
+        await db_session.execute(
+            text("SELECT COUNT(*) FROM trainer_services WHERE trainer_id = :t"),
+            {"t": trainer_id},
+        )
+    ).scalar()
+    assert int(linked) == 1
 
 
 @pytest.mark.asyncio

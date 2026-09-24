@@ -36,6 +36,14 @@ from src.application.trainer_use_cases import list_active_trainers_for_client
 from src.shared.currency import currency_for_country
 from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.venue_types import (
+    VENUE_TYPE_KEYS,
+    normalize_venue_type,
+    venue_card_cta,
+    venue_site_label,
+    venue_type_chip,
+    venue_type_noun,
+)
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
 INTENT_SKATE = "skate"
@@ -131,6 +139,42 @@ def parse_intent(raw: str | None) -> str:
     if value not in ICE_INTENTS:
         raise IcePublicQueryError("intent must be skate, coach or group")
     return value
+
+
+def parse_venue_type_filter(raw: str | None) -> set[str]:
+    """``"gym"`` или ``"ice,gym"`` → множество ключей; пусто → без фильтра.
+
+    В отличие от ``normalize_venue_type`` здесь неизвестный ключ — ошибка:
+    это параметр запроса, и молча отдать «все площадки» вместо запрошенных
+    значит показать клиенту каток там, где он просил зал.
+    """
+    value = (raw or "").strip().lower()
+    if not value:
+        return set()
+    keys = {part.strip() for part in value.split(",") if part.strip()}
+    unknown = keys - set(VENUE_TYPE_KEYS)
+    if unknown:
+        raise IcePublicQueryError(
+            "venue_type must be one of: " + ", ".join(VENUE_TYPE_KEYS)
+        )
+    return keys
+
+
+def _venue_type_facets(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Сколько площадок каждого типа есть в этой выдаче — чипы без пустышек.
+
+    Город, где одни катки, не должен показывать чип «Бассейн»: пустой фильтр
+    читается как поломка, а не как «таких тут нет».
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = normalize_venue_type(row.get("venue_type"))
+        counts[key] = counts.get(key, 0) + 1
+    return [
+        {"key": key, "chip": venue_type_chip(key), "count": counts[key]}
+        for key in VENUE_TYPE_KEYS
+        if counts.get(key)
+    ]
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -293,6 +337,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
             # на 390pt при DPR2 это мыло, поэтому список отдаёт ещё и card (800px).
             card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
+    venue_type = normalize_venue_type(item.get("venue_type"))
     return {
         "id": item["id"],
         "slug": item.get("slug"),
@@ -304,6 +349,11 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "longitude": item.get("longitude"),
         "on_map": item.get("latitude") is not None and item.get("longitude") is not None,
         "distance_km": item.get("distance_km"),
+        # Тип едет в списке, потому что от него зависят и бейдж, и CTA строки:
+        # «Открыть карточку катка» на зале — ровно то, что мы и чиним.
+        "venue_type": venue_type,
+        "venue_chip": venue_type_chip(venue_type),
+        "venue_cta": venue_card_cta(venue_type),
         "tier": item["tier"],
         "thumb": thumb,
         "card": card,
@@ -315,7 +365,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
 
 _LIST_SQL = f"""
 SELECT
-    a.id, a.city_id, a.name, a.address, a.latitude, a.longitude,
+    a.id, a.city_id, a.name, a.address, a.latitude, a.longitude, a.venue_type,
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
@@ -606,10 +656,12 @@ async def list_public_ice_arenas(
     bbox: str | None = None,
     near: str | None = None,
     intent: str | None = None,
+    venue_type: str | None = None,
     limit: int = DEFAULT_LIST_LIMIT,
     cursor: str | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
+    venue_filter = parse_venue_type_filter(venue_type)
     bbox_box = parse_bbox(bbox)
     near_pt = parse_near(near)
     if city_id is None and bbox_box is None and near_pt is None:
@@ -636,6 +688,11 @@ async def list_public_ice_arenas(
     else:
         for row in rows:
             row["distance_km"] = None
+    # Фасеты считаем до фильтра: чип «Зал» должен быть виден и тогда, когда
+    # сейчас выбран «Лёд», иначе из выбранного фильтра некуда выйти.
+    facets = _venue_type_facets(rows)
+    if venue_filter:
+        rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
     rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
@@ -646,6 +703,8 @@ async def list_public_ice_arenas(
         "items": items,
         "total": len(rows),
         "intent": intent_value,
+        "venue_type": sorted(venue_filter) if venue_filter else None,
+        "venue_type_facets": facets,
         "next_cursor": next_cursor,
     }
 
@@ -808,7 +867,8 @@ def _freshness_payload(
     row: Mapping[str, Any], *, observed_at: datetime | None, valid_until: datetime | None
 ) -> dict[str, Any]:
     website = str(row.get("website_url") or "").strip() or None
-    source_label = "сайт катка" if website else None
+    # «сайт катка» на зале — та же зашитая ледовость, что и в остальном копирайте.
+    source_label = venue_site_label(row.get("venue_type")).lower() if website else None
     return {
         "schedule_observed_at": _iso(observed_at),
         "schedule_valid_until": _iso(valid_until),
@@ -843,6 +903,10 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "city_id": row["city_id"],
         "city_name": row.get("city_name"),
         "name": row["name"],
+        "venue_type": normalize_venue_type(row.get("venue_type")),
+        "venue_noun": venue_type_noun(row.get("venue_type")),
+        "venue_chip": venue_type_chip(row.get("venue_type")),
+        "venue_site_label": venue_site_label(row.get("venue_type")),
         "district": row.get("district"),
         "address": row.get("address"),
         "latitude": row.get("latitude"),

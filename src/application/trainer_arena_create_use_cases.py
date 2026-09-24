@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.trainer_repository import TrainerRepository
+from src.shared.venue_types import normalize_venue_type
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,31 @@ _EARTH_RADIUS_M = 6371000.0
 
 ARENA_NAME_MAX_LEN = 128
 ARENA_ADDRESS_MAX_LEN = 512
+
+
+def _strip_wrapping_quotes(name: str) -> str:
+    """Снять кавычки, которыми тренер обрамил название целиком: «Lifestyle» → Lifestyle.
+
+    В карточке такое название выглядит как цитата (арена #201 приехала именно так),
+    а в поиске и дедупе кавычки создают второй вариант той же площадки. Внутренние
+    кавычки не трогаем: «Ледовый дворец "Юность"» — законное имя.
+    """
+    s = (name or "").strip()
+    pairs = (('"', '"'), ("«", "»"), ("“", "”"), ("'", "'"), ("„", "“"))
+    changed = True
+    while changed and len(s) >= 2:
+        changed = False
+        for left, right in pairs:
+            if s.startswith(left) and s.endswith(right) and len(s) > len(left) + len(right) - 1:
+                inner = s[len(left) : -len(right)].strip()
+                # Только если внутри не осталось своей пары — иначе это не обёртка.
+                # Пустой inner тоже снимаем: из одних кавычек имени нет, и пусть
+                # это упрётся в проверку «Укажите название», а не создаст арену «""».
+                if left not in inner and right not in inner:
+                    s = inner
+                    changed = True
+                    break
+    return s
 
 
 def _normalize_arena_name(name: str) -> str:
@@ -136,6 +162,7 @@ async def create_trainer_arena(
     address: str,
     confirm_duplicate: bool = False,
     city_id: int | None = None,
+    venue_type: str | None = None,
 ) -> dict[str, Any]:
     """
     Create a real, unconfirmed arena from the trainer profile screen (AC-002/AC-003).
@@ -145,11 +172,15 @@ async def create_trainer_arena(
     has not pressed Save yet (draft profile). In that case we persist ``profile.city_id``
     before creating the arena so list/create stay consistent.
 
+    ``venue_type`` (ice|gym|choreo|pool|outdoor|other) — тип площадки. Неизвестное
+    значение нормализуется в ``ice``, а не роняет создание: тренер уже заполнил форму,
+    и ронять её из-за ключа типа дороже, чем поправить тип на модерации.
+
     Returns ``{"status": "duplicate_warning", "duplicates": [...]}`` without writing
     when a likely duplicate is found and not overridden (AC-005), else
     ``{"status": "created", "arena_id": int, "trainer": {...}}``.
     """
-    nm = (name or "").strip()
+    nm = _strip_wrapping_quotes(name)
     if not nm:
         raise ValueError("Укажите название арены.")
     if len(nm) > ARENA_NAME_MAX_LEN:
@@ -196,9 +227,9 @@ async def create_trainer_arena(
     ins = await session.execute(
         text(
             """
-            INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active,
-                                 is_confirmed, created_by_trainer_id)
-            VALUES (:city_id, :name, :address, :lat, :lon, true, false, :trainer_id)
+            INSERT INTO arenas (city_id, name, address, latitude, longitude, venue_type,
+                                 is_active, is_confirmed, created_by_trainer_id)
+            VALUES (:city_id, :name, :address, :lat, :lon, :venue_type, true, false, :trainer_id)
             RETURNING id
             """
         ),
@@ -208,6 +239,7 @@ async def create_trainer_arena(
             "address": addr,
             "lat": lat,
             "lon": lon,
+            "venue_type": normalize_venue_type(venue_type),
             "trainer_id": trainer_id,
         },
     )

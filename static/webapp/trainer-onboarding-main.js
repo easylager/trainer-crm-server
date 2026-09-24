@@ -1,7 +1,9 @@
 /**
  * Первый запуск тренера — вся логика онбординга v2.
  *
- * Экран 1: что тренирую (чипсы) + сколько длится + где (город + площадки) + когда обычно
+ * Экран 1: кто я + услуги + длительность + где (город + площадки) + когда обычно.
+ * Роль, своя услуга и своя площадка добавляются одним паттерном: пунктирная
+ * кнопка «...нет в списке» → панель с полем и «Добавить»/«Отмена».
  * (сетка недели, предзаполненная, привязанная к реальной сетке выбранной площадки).
  * Экран 2: ссылка + одна кнопка «Отправить ученику».
  *
@@ -130,6 +132,20 @@
   var state = {
     services: [],
     selectedServices: [],
+    /* Кем себя называет специалист. Свободный текст с подсказками: к нам идут
+       не только тренеры по конькам, и угадать список ролей заранее нельзя.
+       null = ещё не спрашивали — чип не подсвечиваем, а не подставляем «Тренер». */
+    roleSuggestions: [],
+    specialistRole: null,
+    roleIsCustom: false,
+    /* Услуги, вписанные вручную на этом экране. Уходят отдельным полем: id у них
+       появится только на сервере, после дедупа. */
+    customServiceNames: [],
+    /* Независимо от площадки: у консультанта может быть и зал, и онлайн. */
+    onlineEnabled: false,
+    /* Типы площадок для формы создания (ice|gym|choreo|…). */
+    venueTypes: [],
+    newArenaVenueType: 'ice',
     cities: [],
     cityId: null,
     arenas: [],
@@ -159,6 +175,11 @@
        (double-tap, "создать всё равно" after a duplicate warning) so the server treats them
        as one logical submit; there is no DB uniqueness constraint on `arenas`. */
     arenaCreateIdemKey: null,
+    /* Причина последнего неудачного сохранения. Живёт в состоянии, а не только в
+       DOM: syncCta() в конце вызывает note(''), и ошибка, поставленная в catch,
+       затиралась следующей же строкой — экран молча возвращался в исходный вид,
+       и «Готово» выглядела так, будто ничего не произошло. */
+    submitError: null,
   };
 
   var el = {};
@@ -176,6 +197,11 @@
       'obArenaCreateLead',
       'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
       'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink', 'obDonePricesBtn',
+      'obRole', 'obRoleCustomWrap', 'obRoleCustom',
+      'obRoleAddBtn', 'obRoleAddSubmit', 'obRoleAddCancel', 'obRoleAddStatus',
+      'obServiceAddBtn', 'obServiceAddWrap', 'obServiceAddInput',
+      'obServiceAddSubmit', 'obServiceAddCancel', 'obServiceAddStatus',
+      'obOnlineEnabled', 'obArenaCreateType',
     ].forEach(function (id) { el[id] = byId(id); });
   }
 
@@ -212,6 +238,162 @@
   }
   function slotsWord(n) { return plural(n, 'окно', 'окна', 'окон'); }
 
+  /* ── Кто вы: роль специалиста ── */
+
+  /*
+   * Чипсы — подсказки, а не ограничение: жёсткий список ролей мы бы угадывали, и
+   * каждая смежная дисциплина стоила бы миграции. Подсказки при этом нужны — без
+   * них одно и то же пишут как «тренер», «Тренер по ОФП» и «фитнес-тренер».
+   *
+   * Добавление своей роли идёт тем же паттерном, что своя услуга и своя площадка:
+   * пунктирная кнопка «Меня нет в списке» → панель с полем и «Добавить»/«Отмена».
+   * Раньше здесь был чип «Своё» с голым полем — третий непохожий вариант одного
+   * и того же действия на одном экране.
+   */
+  function renderRole() {
+    if (!el.obRole) return;
+    el.obRole.innerHTML = '';
+    var suggestions = state.roleSuggestions || [];
+    suggestions.forEach(function (label) {
+      el.obRole.appendChild(roleChip(label, false));
+    });
+    /* Своя роль показывается таким же чипом — выбранным, с крестиком: тап
+       снимает не выбор, а саму формулировку, как у вписанной услуги. */
+    if (state.roleIsCustom && state.specialistRole) {
+      el.obRole.appendChild(roleChip(state.specialistRole, true));
+    }
+    if (el.obRoleAddBtn) el.obRoleAddBtn.hidden = state.roleIsCustom;
+  }
+
+  function roleChip(label, isCustom) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ob-chip';
+    b.textContent = isCustom ? label + ' ✕' : label;
+    var on = state.specialistRole === label;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (isCustom) b.title = 'Убрать «' + label + '»';
+    b.onclick = function () {
+      if (isCustom) {
+        state.roleIsCustom = false;
+        state.specialistRole = null;
+      } else {
+        state.roleIsCustom = false;
+        state.specialistRole = state.specialistRole === label ? null : label;
+      }
+      renderRole();
+      haptic('light');
+    };
+    return b;
+  }
+
+  function openRoleAdd() {
+    if (el.obRoleCustomWrap) el.obRoleCustomWrap.hidden = false;
+    if (el.obRoleAddBtn) el.obRoleAddBtn.hidden = true;
+    if (el.obRoleCustom) el.obRoleCustom.focus();
+  }
+
+  function closeRoleAdd() {
+    if (el.obRoleCustomWrap) el.obRoleCustomWrap.hidden = true;
+    if (el.obRoleCustom) el.obRoleCustom.value = '';
+    roleAddNote('');
+    renderRole();
+  }
+
+  function roleAddNote(text, isError) {
+    if (!el.obRoleAddStatus) return;
+    el.obRoleAddStatus.hidden = !text;
+    el.obRoleAddStatus.textContent = text || '';
+    el.obRoleAddStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function addCustomRole() {
+    var raw = (el.obRoleCustom && el.obRoleCustom.value ? el.obRoleCustom.value : '').trim();
+    if (!raw) {
+      roleAddNote('Напишите, кем вы себя называете.', true);
+      return;
+    }
+    if (raw.length > 64) {
+      roleAddNote('Не длиннее 64 символов.', true);
+      return;
+    }
+    /* Совпало с подсказкой — выбираем её, а не плодим второй чип с тем же смыслом. */
+    var match = (state.roleSuggestions || []).filter(function (r) {
+      return r.toLowerCase() === raw.toLowerCase();
+    })[0];
+    state.roleIsCustom = !match;
+    state.specialistRole = match || raw;
+    closeRoleAdd();
+    syncCta();
+    haptic('light');
+  }
+
+  /* Что уходит на сервер: выбранный чип либо вписанная роль. */
+  function currentRoleValue() {
+    return state.specialistRole || null;
+  }
+
+  /* ── Свои услуги ── */
+
+  function openServiceAdd() {
+    if (el.obServiceAddWrap) el.obServiceAddWrap.hidden = false;
+    if (el.obServiceAddBtn) el.obServiceAddBtn.hidden = true;
+    if (el.obServiceAddInput) el.obServiceAddInput.focus();
+  }
+
+  function closeServiceAdd() {
+    if (el.obServiceAddWrap) el.obServiceAddWrap.hidden = true;
+    if (el.obServiceAddBtn) el.obServiceAddBtn.hidden = false;
+    if (el.obServiceAddInput) el.obServiceAddInput.value = '';
+    serviceAddNote('');
+  }
+
+  function serviceAddNote(text, isError) {
+    if (!el.obServiceAddStatus) return;
+    el.obServiceAddStatus.hidden = !text;
+    el.obServiceAddStatus.textContent = text || '';
+    el.obServiceAddStatus.classList.toggle('is-error', !!isError);
+  }
+
+  /*
+   * Вписанная услуга кладётся в state и рисуется чипом сразу, до сохранения:
+   * id ей выдаст сервер при отправке формы (там же дедуп — «ОФП» и «офп»
+   * не должны стать двумя услугами). Поэтому здесь только имя.
+   */
+  function addCustomService() {
+    var raw = (el.obServiceAddInput && el.obServiceAddInput.value ? el.obServiceAddInput.value : '').trim();
+    if (!raw) {
+      serviceAddNote('Напишите название услуги.', true);
+      return;
+    }
+    if (raw.length > 128) {
+      serviceAddNote('Название — не длиннее 128 символов.', true);
+      return;
+    }
+    var key = raw.toLowerCase().replace(/ё/g, 'е').replace(/[^\wа-я\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+    var dupInList = state.services.some(function (svc) {
+      var n = String(svc.name || '').toLowerCase().replace(/ё/g, 'е')
+        .replace(/[^\wа-я\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+      return n === key;
+    });
+    var dupInCustom = state.customServiceNames.some(function (n) {
+      return n.toLowerCase().replace(/ё/g, 'е') === raw.toLowerCase().replace(/ё/g, 'е');
+    });
+    if (dupInList || dupInCustom) {
+      serviceAddNote('Такая услуга уже есть в списке — отметьте её чипом.', true);
+      return;
+    }
+    if (state.customServiceNames.length >= 5) {
+      serviceAddNote('Можно добавить не больше 5 своих услуг.', true);
+      return;
+    }
+    state.customServiceNames.push(raw);
+    closeServiceAdd();
+    renderServices();
+    syncCta();
+    haptic('light');
+  }
+
   /* ── Услуги ── */
   function renderServices() {
     if (!el.obServices) return;
@@ -230,6 +412,24 @@
         b.setAttribute('aria-pressed', state.selectedServices.indexOf(svc.id) >= 0 ? 'true' : 'false');
         haptic('light');
         syncCta();
+      };
+      el.obServices.appendChild(b);
+    });
+
+    /* Вписанные, но ещё не сохранённые услуги. Всегда выбраны — тренер только что
+       сам их назвал; тап снимает не выбор, а саму услугу, поэтому крестик. */
+    state.customServiceNames.forEach(function (name, idx) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ob-chip';
+      b.textContent = name + ' ✕';
+      b.title = 'Убрать «' + name + '»';
+      b.setAttribute('aria-pressed', 'true');
+      b.onclick = function () {
+        state.customServiceNames.splice(idx, 1);
+        renderServices();
+        syncCta();
+        haptic('light');
       };
       el.obServices.appendChild(b);
     });
@@ -694,6 +894,29 @@
     state.arenaCreateIdemKey = null;
   }
 
+  /*
+   * Тип площадки в форме создания. До этого поля не было вообще, и любая новая
+   * площадка молча становилась катком — так зал «Lifestyle» (#201) и попал
+   * в ледовый каталог со снежинкой и «карточкой катка».
+   */
+  function renderVenueTypePicker() {
+    if (!el.obArenaCreateType) return;
+    el.obArenaCreateType.innerHTML = '';
+    (state.venueTypes || []).forEach(function (vt) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ob-chip';
+      b.textContent = (vt.icon ? vt.icon + ' ' : '') + vt.noun;
+      b.setAttribute('aria-pressed', state.newArenaVenueType === vt.key ? 'true' : 'false');
+      b.onclick = function () {
+        state.newArenaVenueType = vt.key;
+        renderVenueTypePicker();
+        haptic('light');
+      };
+      el.obArenaCreateType.appendChild(b);
+    });
+  }
+
   function openArenaCreate(prefillName) {
     if (state.cityId == null) {
       note('Сначала выберите город.', true);
@@ -709,6 +932,10 @@
       el.obArenaCreateDup.innerHTML = '';
     }
     setArenaCreateStatus('');
+    /* Каждая новая форма начинается со льда: это по-прежнему подавляющее
+       большинство площадок, и лишний тап им платить не за что. */
+    state.newArenaVenueType = 'ice';
+    renderVenueTypePicker();
     if (el.obArenaCreateName && !el.obArenaCreateName.value) {
       try { el.obArenaCreateName.focus(); } catch (eF) {}
     } else if (el.obArenaCreateAddress) {
@@ -804,6 +1031,7 @@
         address: addr,
         confirm_duplicate: !!confirmDuplicate,
         city_id: state.cityId,
+        venue_type: state.newArenaVenueType || 'ice',
       }),
     })
       .then(function (r) {
@@ -1277,15 +1505,24 @@
       el.obCta.disabled = true;
       return;
     }
-    var ok = state.selectedServices.length > 0 && arenaStepValid() && totalSlots() > 0;
+    /* Вписанная своя услуга — такой же ответ на вопрос об услугах, как и
+       выбранный чип. Иначе специалист смежной дисциплины, которому наш список
+       не подошёл, упирался бы в заблокированную кнопку. */
+    var hasService = state.selectedServices.length > 0 || state.customServiceNames.length > 0;
+    /* Расписание НЕ обязательно. Консультант или психолог может быть ещё не готов
+       называть часы, а для него это и не главное — держать его на экране до первого
+       отмеченного окна значит не пускать в продукт того, кто уже всё про себя сказал.
+       Сервер пустую неделю принимает: пишет пустые шаблоны и ноль слотов. */
+    var ok = hasService && arenaStepValid();
     el.obCta.disabled = !ok;
-    if (!state.selectedServices.length) note('Выберите, что вы тренируете.');
+    if (!hasService) note('Отметьте или впишите хотя бы одну услугу.');
     else if (!arenaStepValid()) {
       note(state.cityId == null
         ? 'Выберите город или переключитесь на «Пока не указывать».'
         : 'Выберите площадку или переключитесь на «Пока не указывать».');
     }
-    else if (!totalSlots()) note('Отметьте хотя бы одно время.');
+    else if (state.submitError) note(state.submitError, true);
+    else if (!totalSlots()) note('Время можно не отмечать — расписание необязательно.');
     else note('');
   }
 
@@ -1376,10 +1613,10 @@
 
         var name = (data.first_name || '').trim();
         if (el.obTitle) {
-          /* Вернувшемуся тренеру не обещаем «настроим за две минуты» — он уже настроил.
-             Экран для него это правка расписания, и заголовок должен говорить именно это. */
+          /* Вернувшемуся не обещаем «настроим за две минуты» — он уже настроил.
+             Экран для него это правка профиля и расписания, а не первый запуск. */
           if (state.alreadyDone) {
-            el.obTitle.textContent = 'Ваше расписание';
+            el.obTitle.textContent = 'Ваши настройки';
           } else {
             el.obTitle.textContent = name
               ? (name + ', настроим за две минуты')
@@ -1392,9 +1629,24 @@
         }
         if (el.obCta && state.alreadyDone) el.obCta.textContent = 'Сохранить';
 
+        state.roleSuggestions = data.specialist_role_suggestions || [];
+        /* NULL от сервера = роль ещё не спрашивали. Тогда не подсвечиваем ни один
+           чип: подставленный «Тренер» выглядел бы как уже сделанный выбор. */
+        state.specialistRole = data.specialist_role || null;
+        /* Сохранённая роль вне подсказок — своя: показываем её чипом, панель
+           добавления при этом остаётся закрытой. */
+        state.roleIsCustom = !!(
+          state.specialistRole && state.roleSuggestions.indexOf(state.specialistRole) < 0
+        );
+        state.onlineEnabled = !!data.online_enabled;
+        state.venueTypes = data.venue_types || [];
+        if (el.obOnlineEnabled) el.obOnlineEnabled.checked = state.onlineEnabled;
+
         if (el.obLoading) el.obLoading.style.display = 'none';
         if (el.obSetup) el.obSetup.hidden = false;
         if (el.obFoot) el.obFoot.hidden = false;
+        renderRole();
+        renderVenueTypePicker();
         renderServices();
         renderArenaMode();
         renderArenaSingleList();
@@ -1417,8 +1669,9 @@
   function submit() {
     if (state.busy) return;
     state.busy = true;
+    state.submitError = null;
     syncCta();
-    note('Создаём расписание…');
+    note('Сохраняем…');
 
     /* Каждая закрашенная клетка идёт явным стартом — своя минута (час + смещение её
        площадки) и своя площадка на слот, а не общий час/арена на день. Только так один
@@ -1453,6 +1706,9 @@
       headers: apiHeaders(),
       body: JSON.stringify({
         service_ids: state.selectedServices,
+        custom_service_names: state.customServiceNames,
+        specialist_role: currentRoleValue(),
+        online_enabled: state.onlineEnabled,
         days: days,
         duration_minutes: state.durationMinutes,
         city_id: state.cityId,
@@ -1470,8 +1726,9 @@
       })
       .catch(function (err) {
         state.busy = false;
-        note((err && err.message) || 'Не удалось сохранить. Попробуйте ещё раз.', true);
+        state.submitError = (err && err.message) || 'Не удалось сохранить. Попробуйте ещё раз.';
         syncCta();
+        note(state.submitError, true);
       });
   }
 
@@ -1532,15 +1789,24 @@
     if (el.obDone) el.obDone.classList.add('is-on');
 
     var open = body.open_slots_ahead || 0;
+    /* Неделю можно было оставить пустой намеренно. Тогда обещать «окна появятся
+       со следующей недели» — неправда: они не появятся, пока их не отметят. */
+    var leftWeekEmpty = !open && totalSlots() === 0;
     if (el.obDoneTitle) {
-      el.obDoneTitle.textContent = open
-        ? (open + ' ' + slotsWord(open) + ' на две недели')
-        : 'Расписание сохранено';
+      if (open) el.obDoneTitle.textContent = open + ' ' + slotsWord(open) + ' на две недели';
+      else if (leftWeekEmpty) el.obDoneTitle.textContent = 'Профиль сохранён';
+      else el.obDoneTitle.textContent = 'Расписание сохранено';
     }
     if (el.obDoneLead) {
-      el.obDoneLead.textContent = open
-        ? 'Ученик увидит их и выберет сам — без переписки «когда вам удобно».'
-        : 'Ближайшие свободные окна появятся со следующей недели.';
+      if (open) {
+        el.obDoneLead.textContent =
+          'Ученик увидит их и выберет сам — без переписки «когда вам удобно».';
+      } else if (leftWeekEmpty) {
+        el.obDoneLead.textContent =
+          'Время занятий добавите позже в кабинете — ссылку ученику можно отправлять уже сейчас.';
+      } else {
+        el.obDoneLead.textContent = 'Ближайшие свободные окна появятся со следующей недели.';
+      }
     }
 
     var link = body.link;
@@ -1564,7 +1830,7 @@
         el.obCta.textContent = 'Открыть кабинет';
         el.obCta.disabled = false;
         el.obCta.onclick = goHub;
-        note('Ссылка для учеников появится чуть позже — расписание уже сохранено.');
+        note('Ссылка для учеников появится чуть позже — настройки уже сохранены.');
       }
     }
     if (el.obSkip) {
@@ -1668,6 +1934,35 @@
       el.obArenaCreateSubmit.onclick = function () { submitArenaCreate(false); };
     }
     if (el.obArenaCreateCancel) el.obArenaCreateCancel.onclick = closeArenaCreate;
+
+    if (el.obServiceAddBtn) el.obServiceAddBtn.onclick = openServiceAdd;
+    if (el.obServiceAddSubmit) el.obServiceAddSubmit.onclick = addCustomService;
+    if (el.obServiceAddCancel) el.obServiceAddCancel.onclick = closeServiceAdd;
+    if (el.obServiceAddInput) {
+      el.obServiceAddInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCustomService();
+        }
+      });
+    }
+    if (el.obRoleAddBtn) el.obRoleAddBtn.onclick = openRoleAdd;
+    if (el.obRoleAddSubmit) el.obRoleAddSubmit.onclick = addCustomRole;
+    if (el.obRoleAddCancel) el.obRoleAddCancel.onclick = closeRoleAdd;
+    if (el.obRoleCustom) {
+      el.obRoleCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCustomRole();
+        }
+      });
+    }
+    if (el.obOnlineEnabled) {
+      el.obOnlineEnabled.addEventListener('change', function () {
+        state.onlineEnabled = !!el.obOnlineEnabled.checked;
+        haptic('light');
+      });
+    }
   }
 
   cacheEls();

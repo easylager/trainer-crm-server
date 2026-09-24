@@ -205,6 +205,10 @@ class TrainerArenaSetupBody(BaseModel):
         ge=1,
         description="City for create mode when profile.city_id is unset or trainer changed city without Save.",
     )
+    venue_type: str | None = Field(
+        default=None,
+        description="ice|gym|choreo|pool|outdoor|other. Пусто/неизвестное → ice (см. src/shared/venue_types.py).",
+    )
 
 
 @router.post("/trainer/profile/arena-setup")
@@ -262,6 +266,7 @@ async def post_trainer_arena_setup_for_webapp(
                 address=body.address or "",
                 confirm_duplicate=body.confirm_duplicate,
                 city_id=body.city_id,
+                venue_type=body.venue_type,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -341,7 +346,10 @@ async def get_trainer_profile_page_bootstrap(
     trainer_id = await _linked_trainer_id(session, principal)
     cities, services, profile_payload = await asyncio.gather(
         list_cities(session),
-        list_services(session),
+        # Со своими услугами этого тренера: в клиентском фильтре их ещё нет
+        # (is_public=false до модерации), но в собственной анкете он обязан их
+        # видеть — иначе сохранение профиля молча сняло бы то, что он сам добавил.
+        list_services(session, owner_trainer_id=trainer_id),
         build_trainer_profile_webapp_payload(session, trainer_id),
     )
     return {

@@ -84,6 +84,42 @@ _SLOTS_BOOKINGS_LOCKED_RU = "Аккаунт деактивирован — ра�
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 
+async def _capabilities_for_trainer(
+    session: AsyncSession, trainer_id: int, studio_access_mode: str
+) -> dict[str, Any]:
+    """Возможности шелла с учётом рубильника студийной надстройки.
+
+    ``TRAINER_COLLECTIVE_ENABLED`` обязан гасить надстройку целиком. Раньше он гасил
+    только ``collective_payload`` в bootstrap хаба, а этот чеклист отдавал
+    ``capabilities`` всегда — и шелл брал ``show_center_grid`` отсюда запасным путём
+    (``organizationCapabilities()`` в mini-app-trainer-shell.js). В результате при
+    выключенной фиче у владельца студии всё равно появлялась вкладка «Центр»:
+    рубильник был, но мимо одной из двух дорог.
+
+    При выключенном флаге отдаём возможности одиночного тренера независимо от того,
+    состоит ли он в коллективе: членство в БД остаётся нетронутым и оживёт, как
+    только фичу включат.
+    """
+    from src.shared.config import Settings
+
+    if not bool(Settings().trainer_collective_enabled):
+        return organization_capabilities_to_dict(
+            resolve_solo_trainer_capabilities(studio_access_mode)
+        )
+    memberships = await list_active_collective_memberships(session, trainer_id)
+    if memberships:
+        m = memberships[0]
+        return capabilities_for_collective_membership(
+            organization_format=m.organization_format,
+            schedule_mode=m.schedule_mode,
+            role=m.role,
+            studio_access_mode=studio_access_mode,
+        )
+    return organization_capabilities_to_dict(
+        resolve_solo_trainer_capabilities(studio_access_mode)
+    )
+
+
 async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
     """Aggregated checklist flags; None if trainer row missing."""
     trainer = await get_trainer(session, trainer_id)
@@ -119,6 +155,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "moderation_feedback": moderation_feedback or None,
         "catalog_needs_revision": catalog_needs_revision,
         "weekly_template_count": 0,
+        "onboarding_completed": False,
         "slots_this_week_count": 0,
         "slots_next_week_count": 0,
         "available_slots_this_week_count": 0,
@@ -177,19 +214,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["slots_locked_reason"] = None
         out["bookings_locked_reason"] = None
         out["trainer_id"] = trainer_id
-        memberships = await list_active_collective_memberships(session, trainer_id)
-        if memberships:
-            m = memberships[0]
-            out["capabilities"] = capabilities_for_collective_membership(
-                organization_format=m.organization_format,
-                schedule_mode=m.schedule_mode,
-                role=m.role,
-                studio_access_mode=effective_studio_access_mode,
-            )
-        else:
-            out["capabilities"] = organization_capabilities_to_dict(
-                resolve_solo_trainer_capabilities(effective_studio_access_mode)
-            )
+        out["capabilities"] = await _capabilities_for_trainer(
+            session, trainer_id, effective_studio_access_mode
+        )
         return out
 
     # Onboarding v2: nothing here locks the trainer out any more. Schedule and bookings are open
@@ -209,6 +236,14 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     )
     tpl_row = r_tpl.fetchone()
     out["weekly_template_count"] = int(tpl_row[0]) if tpl_row and tpl_row[0] is not None else 0
+
+    # Пустая неделя сама по себе ничего не говорит: её могли не заполнить, а могли
+    # сознательно пропустить. Различает только эта отметка.
+    r_onb = await session.execute(
+        text("SELECT onboarding_completed_at FROM trainer_profiles WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    out["onboarding_completed"] = r_onb.scalar() is not None
 
     today = date.today()
     week_end = today + timedelta(days=(6 - today.weekday()))
@@ -549,18 +584,8 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         session, trainer_id
     )
 
-    memberships = await list_active_collective_memberships(session, trainer_id)
-    if memberships:
-        m = memberships[0]
-        out["capabilities"] = capabilities_for_collective_membership(
-            organization_format=m.organization_format,
-            schedule_mode=m.schedule_mode,
-            role=m.role,
-            studio_access_mode=effective_studio_access_mode,
-        )
-    else:
-        out["capabilities"] = organization_capabilities_to_dict(
-            resolve_solo_trainer_capabilities(effective_studio_access_mode)
-        )
+    out["capabilities"] = await _capabilities_for_trainer(
+        session, trainer_id, effective_studio_access_mode
+    )
 
     return out

@@ -316,3 +316,38 @@ def test_catalog_invite_cta_is_the_opt_in_itself() -> None:
     )
     assert step["cta"]["action"] == ACTION_ENABLE_CATALOG
     assert step["secondary"]["action"] == ACTION_DISMISS
+
+
+class TestScheduleIsOptional:
+    """Расписание перестало быть обязательным — хаб обязан это уважать.
+
+    Пустая неделя сама по себе ничего не значит: её могли не дойти заполнить,
+    а могли сознательно пропустить. Раньше хаб читал оба случая одинаково и
+    требовал расписание — в том числе у того, кому экран онбординга только что
+    сказал, что оно необязательно. Первое, что специалист видел в продукте,
+    спорило с тем, что мы ему пообещали минуту назад.
+    """
+
+    def test_untouched_onboarding_still_leads_to_setup(self):
+        """Кто ещё не настраивался — ведём в настройку, это по-прежнему первый шаг."""
+        card = resolve_trainer_next_step(_checklist(onboarding_completed=False))
+        assert card["key"] == STEP_SETUP_WEEK
+        assert card["cta"]["action"] == ACTION_OPEN_ONBOARDING
+
+    def test_finished_without_schedule_is_led_to_the_first_client(self):
+        """Прошёл онбординг и оставил неделю пустой — это выбор, а не недоделка."""
+        card = resolve_trainer_next_step(_checklist(onboarding_completed=True))
+        assert card["key"] == STEP_SHARE_LINK
+        assert card["cta"]["action"] == ACTION_SHARE_LINK
+
+    def test_schedule_stays_reachable_as_a_secondary_action(self):
+        """Не отняли, а перестали навязывать: вторая кнопка ведёт туда же."""
+        card = resolve_trainer_next_step(_checklist(onboarding_completed=True))
+        assert card["secondary"]["action"] == ACTION_OPEN_ONBOARDING
+
+    def test_card_does_not_demand_a_schedule_in_words(self):
+        """Копирайт тоже не должен требовать расписание — иначе смысл потерян."""
+        card = resolve_trainer_next_step(_checklist(onboarding_completed=True))
+        text = (card["title"] + " " + card["body"]).lower()
+        assert "настройте расписание" not in text
+        assert "расписание не нужно" in text

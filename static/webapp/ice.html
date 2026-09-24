@@ -3,31 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Лёд</title>
+  <title>Поиск</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609061"></script>
-  <link rel="stylesheet" href="theme.css?v=202609091" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609091" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
-  <script src="mini-app-telegram-chrome.js?v=202609071"></script>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609022" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202609022" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609022" />
-  <link rel="stylesheet" href="ice-tab.css?v=202609114" />
-  <script src="mini-app-empty-state.js?v=202609091"></script>
-  <script src="mini-app-client-shell.js?v=202609085"></script>
-  <script src="ice-tab-model.js?v=202609191"></script>
-  <script src="ice-map-model.js?v=202609171"></script>
+  <script src="client-mini-app-theme.js?v=202609246"></script>
+  <link rel="stylesheet" href="theme.css?v=202609246" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609246" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609246" />
+  <script src="mini-app-telegram-chrome.js?v=202609246"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609246" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202609246" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609246" />
+  <link rel="stylesheet" href="ice-tab.css?v=202609246" />
+  <script src="mini-app-empty-state.js?v=202609246"></script>
+  <script src="mini-app-client-shell.js?v=202609246"></script>
+  <script src="ice-tab-model.js?v=202609246"></script>
+  <script src="ice-map-model.js?v=202609246"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
 <body class="ar-pilot ar-pilot--ice" data-client-shell="tabs">
   <div class="header client-app-header">
-    <h1 class="header-title client-app-header__title" id="headerTitle">Лёд</h1>
+    <h1 class="header-title client-app-header__title" id="headerTitle">Поиск</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
@@ -36,10 +36,10 @@
 
   <div id="iceRoot" class="ice-tab">
     <div class="ice-sec ice-sec--hero">
-      <p class="ice-kicker">Где кататься</p>
+      <p class="ice-kicker">Где и с кем заниматься</p>
       <!-- TASK-090: masthead и город в одной строке — первый экран отдан карточкам. -->
       <div class="ice-hero-top">
-        <h1 class="ice-masthead">Лёд</h1>
+        <h1 class="ice-masthead">Поиск</h1>
         <button type="button" class="ice-citypill" id="iceCityChange">
           <span class="ice-citypill__name" id="iceCityName">Город</span>
         </button>
@@ -49,7 +49,7 @@
         <input
           type="search"
           id="iceSearchInput"
-          placeholder="Каток, тренер или город"
+          placeholder="Тренер, место или город"
           autocomplete="off"
           enterkeyhint="search"
           autocorrect="off"
@@ -62,6 +62,8 @@
         <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">Тренеры</button>
       </div>
       <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
+      <!-- Типы площадок: рисуются только по фасетам города, чтобы не было чипа, за которым пусто. -->
+      <div class="ice-chips ice-chips--venue" id="iceVenueChips" hidden role="group" aria-label="Тип площадки"></div>
       <!--
         TASK-103: карта вернулась, но переключатель сюда — нет.
         Сегмент «Список / Карта» стоял здесь и стоил ~46px над сгибом; это и было
@@ -140,8 +142,8 @@
     <span class="ice-viewswitch__label" id="iceViewSwitchLabel">Карта</span>
   </button>
 
-  <script src="ru-text.js?v=202609103"></script>
-  <script src="ice-map.js?v=202609171"></script>
-  <script src="ice-tab.js?v=202609171"></script>
+  <script src="ru-text.js?v=202609246"></script>
+  <script src="ice-map.js?v=202609246"></script>
+  <script src="ice-tab.js?v=202609246"></script>
 </body>
 </html>

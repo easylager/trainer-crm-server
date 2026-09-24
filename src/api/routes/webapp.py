@@ -35,6 +35,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.currency import resolve_trainer_currency, resolve_trainer_price_group
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
@@ -1986,7 +1987,9 @@ async def get_client_session_state(
                 city_name = c.get("name") or ""
                 break
     if service_id:
-        services = await list_services(session)
+        # Здесь не фильтр, а разрешение id в подпись: если клиент уже выбрал
+        # услугу, она должна называться своим именем независимо от is_public.
+        services = await list_services(session, include_non_public=True)
         for s in services:
             if s.get("id") == service_id:
                 service_name = s.get("name") or ""
@@ -2297,10 +2300,22 @@ async def get_client_pass_products(
         ]
         if pass_rates:
             default_single = max(pass_rates)
+    # Тарифные цены (детский/взрослый/…): по ним сравнивается абонемент своего тарифа.
+    r_var = await session.execute(
+        text(
+            "SELECT service_id, tier_kind, price_cents FROM trainer_service_price_variants "
+            "WHERE trainer_id = :tid AND price_cents IS NOT NULL AND tier_kind IS NOT NULL"
+        ),
+        {"tid": trainer_id},
+    )
+    price_by_service_tier = {
+        (row[0], str(row[1])): row[2] for row in r_var.fetchall()
+    }
     enrich_pass_items_with_catalog_reference_prices(
         items,
         price_by_service=price_by_service,
         default_single_reference=default_single,
+        price_by_service_tier=price_by_service_tier,
     )
     return {"items": items}
 
@@ -8475,16 +8490,36 @@ async def get_trainer_onboarding_quick_setup(
         DEFAULT_SESSION_DURATION_MINUTES,
         suggested_week,
     )
+    from src.shared.specialist_roles import SUGGESTED_ROLES
+    from src.shared.venue_types import (
+        normalize_venue_type,
+        venue_type_chip,
+        venue_type_options,
+    )
 
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     await ensure_trainer_welcome_trial(session, trainer_id)
 
+    # Свои услуги тренера видны только ему: is_public=false держит их вне общего
+    # фильтра каталога, но в его собственной анкете они обязаны быть — иначе он не
+    # увидит того, что сам же добавил, и добавит второй раз.
     r_svc = await session.execute(
-        text("SELECT id, name FROM services ORDER BY sort_order, name")
+        text(
+            """
+            SELECT id, name, is_public
+            FROM services
+            WHERE is_public OR created_by_trainer_id = :tid
+            ORDER BY sort_order, name
+            """
+        ),
+        {"tid": trainer_id},
     )
-    services = [{"id": int(row[0]), "name": row[1]} for row in r_svc.fetchall()]
+    services = [
+        {"id": int(row[0]), "name": row[1], "is_custom": not bool(row[2])}
+        for row in r_svc.fetchall()
+    ]
 
     r_mine = await session.execute(
         text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid"),
@@ -8546,7 +8581,7 @@ async def get_trainer_onboarding_quick_setup(
                    COALESCE(p.hour_start, 6) AS hour_start,
                    COALESCE(p.hour_end, 23) AS hour_end,
                    p.slot_duration_minutes,
-                   a.is_confirmed
+                   a.is_confirmed, a.venue_type
             FROM arenas a
             JOIN cities c ON c.id = a.city_id AND c.is_active = true
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
@@ -8568,6 +8603,8 @@ async def get_trainer_onboarding_quick_setup(
             "hour_end": int(row[8]),
             "fixed_duration_minutes": int(row[9]) if row[9] is not None else None,
             "is_confirmed": bool(row[10]),
+            "venue_type": normalize_venue_type(row[11]),
+            "venue_chip": venue_type_chip(row[11]),
         }
         for row in r_arenas.fetchall()
     ]
@@ -8620,6 +8657,12 @@ async def get_trainer_onboarding_quick_setup(
         # Initial UI mode when re-opening: derived from what is actually saved, never stored
         # separately — «несколько площадок» is exactly «more than one distinct arena in the week».
         "multi_arena": len(distinct_arenas_in_week) > 1,
+        # Кем себя называет специалист. NULL (ещё не спрашивали) отдаём как есть,
+        # чтобы экран мог не подсвечивать ни один чип вместо ложного «Тренер».
+        "specialist_role": profile.get("specialist_role"),
+        "specialist_role_suggestions": list(SUGGESTED_ROLES),
+        "online_enabled": bool(profile.get("online_enabled")),
+        "venue_types": venue_type_options(),
     }
 
 
@@ -8630,6 +8673,18 @@ class TrainerQuickSetupBody(BaseModel):
     days: list[dict[str, Any]] = Field(default_factory=list)
     duration_minutes: int = Field(default=60, ge=15, le=480)
     city_id: int | None = Field(default=None, ge=1)
+    specialist_role: str | None = Field(
+        default=None,
+        description="Кто этот специалист своими словами. Пусто — не меняем сохранённое.",
+    )
+    online_enabled: bool | None = Field(
+        default=None, description="Работает ли онлайн. Пусто — не меняем сохранённое."
+    )
+    custom_service_names: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_CUSTOM_SERVICES_PER_TRAINER,
+        description="Услуги, вписанные вручную, когда наш список не подошёл.",
+    )
 
 
 @router.post("/trainer/onboarding/quick-setup")
@@ -8647,10 +8702,19 @@ async def post_trainer_onboarding_quick_setup(
     write it performs is a per-day/per-week replace, so retrying this same request after a 400
     is always safe and self-heals whatever was left half-done.
     """
+    from src.application.trainer_custom_service_use_cases import (
+        CustomServiceError,
+        add_trainer_custom_service,
+    )
     from src.application.trainer_quick_setup_use_cases import (
         QuickSetupError,
         parse_quick_setup_days,
         run_trainer_quick_setup,
+    )
+    from src.infrastructure.repositories.trainer_repository import TrainerRepository
+    from src.shared.specialist_roles import (
+        InvalidSpecialistRoleError,
+        normalize_specialist_role,
     )
 
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
@@ -8660,12 +8724,45 @@ async def post_trainer_onboarding_quick_setup(
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
 
+    # Свои услуги создаём до основного сохранения: их id должны попасть в тот же
+    # набор service_ids, иначе тренер увидит «сохранено», а вписанная услуга
+    # останется неприкреплённой и пропадёт с экрана при следующем открытии.
+    custom_services: list[dict[str, Any]] = []
+    try:
+        for raw_name in body.custom_service_names:
+            custom_services.append(
+                await add_trainer_custom_service(session, trainer_id, raw_name)
+            )
+    except CustomServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    service_ids = [int(s) for s in body.service_ids]
+    service_ids.extend(int(cs["service_id"]) for cs in custom_services)
+
+    try:
+        if body.specialist_role is not None or body.online_enabled is not None:
+            role = (
+                normalize_specialist_role(body.specialist_role)
+                if body.specialist_role is not None
+                else None
+            )
+            repo = TrainerRepository(session)
+            await repo.ensure_trainer_profile_row(trainer_id)
+            await repo.update_profile(
+                trainer_id,
+                specialist_role=role,
+                online_enabled=body.online_enabled,
+            )
+            await session.commit()
+    except InvalidSpecialistRoleError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     try:
         days = parse_quick_setup_days(body.days)
         result = await run_trainer_quick_setup(
             session,
             trainer_id,
-            service_ids=[int(s) for s in body.service_ids],
+            service_ids=sorted(set(service_ids)),
             days=days,
             duration_minutes=int(body.duration_minutes),
             city_id=int(body.city_id) if body.city_id is not None else None,
@@ -8694,6 +8791,7 @@ async def post_trainer_onboarding_quick_setup(
         "open_slots_ahead": result.open_slots_ahead,
         "days_with_slots": result.days_with_slots,
         "duration_minutes": result.duration_minutes,
+        "custom_services": custom_services,
         "link": link,
         "share_text": share_text,
         "share_body": share_body,

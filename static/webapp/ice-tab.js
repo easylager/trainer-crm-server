@@ -15,6 +15,11 @@
     cityName: '',
     serviceId: null,
     services: [],
+    /* Выбранные типы площадок (ключи venue_type) и фасеты последнего ответа.
+       Фасеты живут в state, а не выводятся из items: сервер считает их ДО
+       фильтра, иначе выбранный чип исчез бы из собственного списка. */
+    venueTypes: [],
+    venueFacets: [],
     cities: [],
     items: [],
     skateCount: null,
@@ -200,6 +205,10 @@
           extra = extra || {};
           var opts = {
             intent: extra.intent || state.intent,
+            /* Карта тянет данные своим запросом (bbox/near), а не берёт их у списка,
+               поэтому фильтр надо прокидывать и сюда. Без этого чип «Зал» менял
+               список, а на карте по-прежнему висели все катки города. */
+            venueTypes: state.venueTypes,
             limit: extra.limit || 50,
           };
           if (extra.near) opts.near = extra.near;
@@ -606,6 +615,8 @@
     state.items = incoming.slice();
     state.total = data && data.total != null ? data.total : incoming.length;
     state.cursor = data && data.next_cursor;
+    state.venueFacets = (data && data.venue_type_facets) || [];
+    renderVenueChips();
   }
 
   function applyTrainerPayload(data) {
@@ -675,6 +686,7 @@
     var url = M.buildListUrl({
       cityId: state.cityId,
       intent: state.intent,
+      venueTypes: state.venueTypes,
       limit: 50,
     });
     return fetchJson(url)
@@ -725,6 +737,7 @@
     }
     state.services = [];
     renderServiceChips();
+    renderVenueChips();
     return loadArenas();
   }
 
@@ -754,6 +767,37 @@
         '</button>';
     });
     box.innerHTML = html;
+  }
+
+  /*
+   * Чипы типа площадки: «Все / Лёд / Зал / …». Видны только когда в городе
+   * реально больше одного типа — в чисто ледовом городе фильтр из одного
+   * варианта это шум, а не выбор (venueChipsView вернёт пустой список).
+   * Для чипа «Тренеры» скрыты: там в списке люди, а не площадки.
+   */
+  function renderVenueChips() {
+    var box = $('iceVenueChips');
+    if (!box) return;
+    var chips = state.intent === 'coach' ? [] : M.venueChipsView(state.venueFacets, state.venueTypes);
+    if (!chips.length) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = chips
+      .map(function (c) {
+        return (
+          '<button type="button" class="ice-chip" data-venue-type="' +
+          esc(c.key) +
+          '" aria-pressed="' +
+          (c.active ? 'true' : 'false') +
+          '">' +
+          esc(c.label) +
+          '</button>'
+        );
+      })
+      .join('');
   }
 
   function loadServices() {
@@ -1103,6 +1147,23 @@
         renderServiceChips();
         persist();
         loadTrainers();
+      });
+    }
+
+    var venueBox = $('iceVenueChips');
+    if (venueBox) {
+      venueBox.addEventListener('click', function (ev) {
+        var chip = ev.target.closest('[data-venue-type]');
+        if (!chip) return;
+        var key = chip.getAttribute('data-venue-type') || '';
+        /* Одиночный выбор, а не мультиселект: «Все» или один тип. Множественный
+           выбор здесь никому не нужен, а пустое пересечение выглядит как поломка. */
+        state.venueTypes = key ? [key] : [];
+        renderVenueChips();
+        /* Пины на карте строятся из своего запроса и не обновятся сами по факту
+           перерисовки списка — на активной карте её надо дёрнуть явно. */
+        if (mapCtl && mapViewActive()) mapCtl.refresh();
+        loadArenas();
       });
     }
 

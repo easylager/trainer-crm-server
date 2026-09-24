@@ -11,18 +11,27 @@
   <!-- telegram.org подключён async, поэтому ready() + раскрытие делает mini-app-full-height.js:
        он дожидается SDK, иначе на медленной сети вызовы уходили в никуда и приложение
        открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=202609044"></script>
+  <script src="mini-app-full-height.js?v=202609246"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
-  <link rel="stylesheet" href="theme.css?v=202609091" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609091" />
-  <script src="mini-app-telegram-chrome.js?v=202609016"></script>
+  <link rel="stylesheet" href="theme.css?v=202609246" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609246" />
+  <script src="mini-app-telegram-chrome.js?v=202609246"></script>
   <style>
     /*
-     * Первый запуск. Один экран, два вопроса, ноль ввода с клавиатуры.
+     * Первый запуск. Один экран, ответы пальцем, клавиатура — только когда наш
+     * список не подошёл.
      *
-     * Правило этой страницы: тренер отвечает пальцем, а не головой. Всё, что нельзя
-     * ответить не задумываясь, здесь не спрашивается — оно спрашивается позже,
-     * в момент, когда без ответа ломается действие с живым человеком.
+     * Правило этой страницы: специалист отвечает пальцем, а не головой. Всё, что
+     * нельзя ответить не задумываясь, здесь не спрашивается — оно спрашивается
+     * позже, когда без ответа ломается действие с живым человеком.
+     *
+     * Единственное исключение — «чего-то нет в списке»: роль, услуга и площадка.
+     * Там клавиатура неизбежна, поэтому все три оформлены одинаково (.ob-addcta
+     * + .ob-addbox): один паттерн вместо трёх непохожих на одном экране.
+     *
+     * Обязательны только услуги и (если начали выбирать) площадка. Расписание —
+     * нет: к платформе идут не только тренеры по конькам, и психолог или
+     * консультант может быть ещё не готов называть часы.
      */
     html, body { height: 100%; margin: 0; }
     body {
@@ -111,6 +120,16 @@
       font-weight: 650;
     }
     .ob-chip:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 2px; }
+    .ob-online { display: flex; align-items: center; gap: 10px; margin-top: 12px; cursor: pointer; }
+    .ob-online input { width: 18px; height: 18px; flex: 0 0 auto; }
+    .ob-optional {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--app-muted);
+      text-transform: lowercase;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
 
     /* ── Сетка недели ── */
     .ob-grid-wrap {
@@ -292,7 +311,9 @@
       margin-bottom: 6px;
     }
     .ob-city-select,
-    .ob-arena-create input {
+    .ob-arena-create input,
+    #obRoleCustom,
+    #obServiceAddInput {
       appearance: none;
       width: 100%;
       box-sizing: border-box;
@@ -307,18 +328,23 @@
       font-size: 15px;
     }
     .ob-city-select:focus-visible,
-    .ob-arena-create input:focus-visible {
+    .ob-arena-create input:focus-visible,
+    #obRoleCustom:focus-visible,
+    #obServiceAddInput:focus-visible {
       outline: 2px solid var(--app-cta-fill);
       outline-offset: 1px;
     }
-    .ob-arena-create[hidden] { display: none; }
-    .ob-arena-create {
+    .ob-arena-create[hidden],
+    .ob-addbox[hidden] { display: none; }
+    .ob-arena-create,
+    .ob-addbox {
       margin-top: 12px;
       padding: 12px;
       border-radius: 12px;
       border: 1px solid var(--app-chip-line);
       background: var(--app-surface-2, rgba(127,127,127,.08));
     }
+    .ob-addbox label,
     .ob-arena-create label {
       display: block;
       font-size: 13px;
@@ -326,7 +352,8 @@
       color: var(--app-muted);
       margin: 10px 0 6px;
     }
-    .ob-arena-create-actions {
+    .ob-arena-create-actions,
+    .ob-addbox__actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
@@ -342,7 +369,8 @@
       font-size: 13px;
       color: var(--app-muted);
     }
-    .ob-arena-create-cta {
+    .ob-arena-create-cta,
+    .ob-addcta {
       appearance: none;
       margin-top: 6px;
       padding: 10px 12px;
@@ -621,25 +649,56 @@
     <div class="ob-head">
       <p class="ob-eyebrow">Первый запуск</p>
       <h1 class="ob-title" id="obTitle">Настроим за две минуты</h1>
-      <p class="ob-lead">Дальше ученик сам выберет время по вашей ссылке — а расписание всегда можно поправить.</p>
+      <p class="ob-lead">Расскажите о себе — дальше ученик найдёт вас по ссылке. Поправить можно в любой момент.</p>
     </div>
 
+    <section class="ob-step" aria-labelledby="obRoleTitle">
+      <h2 class="ob-step-title" id="obRoleTitle">Кто вы?</h2>
+      <p class="ob-step-hint">Это увидит ученик в вашей карточке. Не нашли себя — впишите.</p>
+      <div class="ob-chips" id="obRole" role="group" aria-labelledby="obRoleTitle"></div>
+      <button type="button" class="ob-addcta" id="obRoleAddBtn">Меня нет в списке</button>
+      <div class="ob-addbox" id="obRoleCustomWrap" hidden>
+        <label for="obRoleCustom">Ваша роль</label>
+        <input id="obRoleCustom" type="text" maxlength="64" autocomplete="off"
+               placeholder="Спортивный психолог">
+        <div class="ob-addbox__actions">
+          <button type="button" class="ob-chip" id="obRoleAddSubmit">Добавить</button>
+          <button type="button" class="ob-chip" id="obRoleAddCancel">Отмена</button>
+        </div>
+        <p id="obRoleAddStatus" class="ob-arena-create-status" hidden></p>
+      </div>
+    </section>
+
     <section class="ob-step" aria-labelledby="obServicesTitle">
-      <h2 class="ob-step-title" id="obServicesTitle">Что вы тренируете?</h2>
-      <p class="ob-step-hint">Можно выбрать несколько.</p>
+      <h2 class="ob-step-title" id="obServicesTitle">Ваши услуги</h2>
+      <p class="ob-step-hint">Отметьте всё, что проводите. Можно несколько.</p>
       <div class="ob-chips" id="obServices" role="group" aria-labelledby="obServicesTitle"></div>
+      <!-- Свои услуги: наш список закрытый и весь про лёд, смежным дисциплинам
+           в нём себя не найти. Вписанное работает сразу, в общий фильтр каталога
+           попадает после модерации. -->
+      <button type="button" class="ob-addcta" id="obServiceAddBtn">Моей услуги нет в списке</button>
+      <div class="ob-addbox" id="obServiceAddWrap" hidden>
+        <label for="obServiceAddInput">Название услуги</label>
+        <input id="obServiceAddInput" type="text" maxlength="128" autocomplete="off"
+               placeholder="Спортивная психология">
+        <div class="ob-addbox__actions">
+          <button type="button" class="ob-chip" id="obServiceAddSubmit">Добавить</button>
+          <button type="button" class="ob-chip" id="obServiceAddCancel">Отмена</button>
+        </div>
+        <p id="obServiceAddStatus" class="ob-arena-create-status" hidden></p>
+      </div>
     </section>
 
     <section class="ob-step" aria-labelledby="obDurationTitle">
       <h2 class="ob-step-title" id="obDurationTitle">Сколько длится занятие?</h2>
-      <p class="ob-step-hint" id="obDurationHint">Столько будет длиться каждое окно в расписании.</p>
+      <p class="ob-step-hint" id="obDurationHint">Столько по умолчанию длится одна встреча. Потом можно менять.</p>
       <div class="ob-chips" id="obDuration" role="group" aria-labelledby="obDurationTitle"></div>
       <p class="ob-arena-locked-note" id="obDurationLockedNote" hidden></p>
     </section>
 
     <section class="ob-step" aria-labelledby="obArenaModeTitle">
-      <h2 class="ob-step-title" id="obArenaModeTitle">Где вы тренируете?</h2>
-      <p class="ob-step-hint">Можно пропустить — расписание всё равно заработает.</p>
+      <h2 class="ob-step-title" id="obArenaModeTitle">Где проходят занятия?</h2>
+      <p class="ob-step-hint">Можно пропустить и вернуться сюда позже.</p>
       <div class="ob-city" id="obCityWrap">
         <label class="ob-city-label" for="obCity">Город</label>
         <select id="obCity" class="ob-city-select">
@@ -654,6 +713,14 @@
       </div>
       <p class="ob-step-hint" id="obArenaNeedCity" hidden>Сначала выберите город — тогда появится поиск площадок.</p>
 
+      <!-- Онлайн независим от площадки: у консультанта может быть и зал, и онлайн.
+           Чип «Провожу онлайн» выше — это режим «физической площадки нет вообще»,
+           он остаётся для тех, у кого её правда нет. -->
+      <label class="ob-online">
+        <input type="checkbox" id="obOnlineEnabled">
+        <span>Также провожу занятия онлайн</span>
+      </label>
+
       <!-- Одна площадка: выбор одной из списка. -->
       <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>
         <input type="text" class="ob-arena-search" id="obArenaSingleSearch" placeholder="Название или адрес" autocomplete="off">
@@ -667,9 +734,11 @@
       </div>
 
       <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
-        <p class="ob-step-hint" id="obArenaCreateLead">Не нашли площадку? Добавьте её здесь же — появится в расписании сразу, а команда проверит её чуть позже.</p>
+        <p class="ob-step-hint" id="obArenaCreateLead">Добавьте — выбирать её сможете сразу, а мы проверим карточку позже.</p>
         <label for="obArenaCreateName">Название</label>
         <input id="obArenaCreateName" type="text" maxlength="128" autocomplete="off">
+        <label id="obArenaCreateTypeLabel">Что это за место</label>
+        <div class="ob-chips" id="obArenaCreateType" role="group" aria-labelledby="obArenaCreateTypeLabel"></div>
         <label for="obArenaCreateAddress">Адрес</label>
         <input id="obArenaCreateAddress" type="text" maxlength="512" autocomplete="street-address">
         <p id="obArenaCreateStatus" class="ob-arena-create-status" hidden></p>
@@ -682,8 +751,8 @@
     </section>
 
     <section class="ob-step" aria-labelledby="obWeekTitle">
-      <h2 class="ob-step-title" id="obWeekTitle">Когда обычно?</h2>
-      <p class="ob-step-hint" id="obWeekHint">Мы отметили типичное. Можно не всё сразу — потом подкорректируете :)</p>
+      <h2 class="ob-step-title" id="obWeekTitle">Когда обычно? <span class="ob-optional">необязательно</span></h2>
+      <p class="ob-step-hint" id="obWeekHint">Мы отметили типичное. Шаг необязательный — если время назвать пока не готовы, пропустите.</p>
       <div class="ob-arena-tabs" id="obArenaTabs" role="group" aria-label="Чем красить" hidden></div>
       <div class="ob-grid-wrap">
         <div class="ob-grid" id="obGrid" role="group" aria-labelledby="obWeekTitle"></div>
@@ -720,6 +789,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202609055"></script>
+<script src="trainer-onboarding-main.js?v=202609246"></script>
 </body>
 </html>

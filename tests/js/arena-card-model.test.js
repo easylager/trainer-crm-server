@@ -497,6 +497,7 @@ describe('practiceContacts', () => {
     const { practiceContacts } = loadModel();
     const filled = practiceContacts({
       website_url: 'https://chizhovka-arena.by/',
+      venue_site_label: 'Сайт катка',
       short_description: 'Крытый каток в Чижовке.',
       social_urls: {
         instagram: 'https://instagram.com/chizhovka',
@@ -511,6 +512,18 @@ describe('practiceContacts', () => {
       href: 'https://chizhovka-arena.by/',
       label: 'Сайт катка',
     });
+    // Подпись ссылки склоняет сервер по типу площадки: у зала это «Сайт зала».
+    // Модель её не выдумывает — только подставляет нейтральный фолбэк, если
+    // ответ пришёл от старого API без поля.
+    assert.deepEqual(
+      practiceContacts({ website_url: 'https://fitness-club.by/', venue_site_label: 'Сайт зала' })
+        .website,
+      { href: 'https://fitness-club.by/', label: 'Сайт зала' }
+    );
+    assert.equal(
+      practiceContacts({ website_url: 'https://example.by/' }).website.label,
+      'Сайт площадки'
+    );
     assert.deepEqual(
       filled.socials.map((s) => s.key),
       ['instagram', 'facebook', 'vk', 'telegram']

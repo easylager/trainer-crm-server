@@ -192,6 +192,9 @@ class Arena(Base):
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    #: ice|gym|choreo|pool|outdoor|other — см. src/shared/venue_types.py. Лёд здесь
+    #: частный случай, а не синоним арены; дефолт сохраняет поведение старых строк.
+    venue_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ice")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
@@ -428,6 +431,19 @@ class TrainerProfile(Base):
     birth_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
     city_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
     experience_years: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    #: Кто этот специалист своими словами: «Тренер», «Спортивный психолог», «Хореограф».
+    #: Свободный текст с подсказками, не enum — см. src/shared/specialist_roles.py.
+    #: NULL = анкета заполнялась до появления поля; читается как «Тренер».
+    specialist_role: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Работает ли онлайн. Независимо от trainers.arena_work_format='online': тот —
+    #: fallback «физической площадки нет вообще», здесь — «есть зал И есть онлайн».
+    online_enabled: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    #: Когда специалист закончил первичную настройку. Отличает «ещё не настраивал»
+    #: от «настроил и сознательно без расписания» — хаб по-разному ведёт себя в этих
+    #: двух случаях (src/application/trainer_next_step.py).
+    onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     contacts: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
@@ -555,6 +571,14 @@ class Service(Base):
     vertical_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     effort_profile: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     scenario_tags: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    #: Услуга, которую тренер вписал сам, когда наш список не подошёл. Живёт в той же
+    #: таблице (переиспользуем trainer_services, фильтры, абонементы), но с is_public=false.
+    created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    #: false — услуга видна только на карточке автора и в его расписании, но не в общем
+    #: фильтре каталога. Админ «поднимает» удачную формулировку в общий список, выставив true.
+    is_public: Mapped[bool] = mapped_column(nullable=False, server_default="true")
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary="trainer_services", back_populates="services", lazy="raise"

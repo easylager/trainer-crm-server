@@ -22,7 +22,7 @@ async def list_arenas_pending_moderation(session: AsyncSession) -> list[dict[str
             SELECT a.id, a.name, a.address, a.latitude, a.longitude,
                    c.name AS city_name,
                    t.id AS trainer_id, t.telegram_id AS trainer_telegram_id,
-                   tp.first_name, tp.last_name
+                   tp.first_name, tp.last_name, a.venue_type
             FROM arenas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN trainers t ON t.id = a.created_by_trainer_id
@@ -46,6 +46,7 @@ async def list_arenas_pending_moderation(session: AsyncSession) -> list[dict[str
                 "trainer_id": row[6],
                 "trainer_telegram_id": row[7],
                 "trainer_name": trainer_name,
+                "venue_type": row[10],
             }
         )
     return out
@@ -59,7 +60,7 @@ async def get_arena_pending_row(session: AsyncSession, arena_id: int) -> dict[st
             SELECT a.id, a.name, a.address, a.latitude, a.longitude,
                    c.name AS city_name,
                    t.id AS trainer_id, t.telegram_id AS trainer_telegram_id,
-                   tp.first_name, tp.last_name
+                   tp.first_name, tp.last_name, a.venue_type
             FROM arenas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN trainers t ON t.id = a.created_by_trainer_id
@@ -83,6 +84,7 @@ async def get_arena_pending_row(session: AsyncSession, arena_id: int) -> dict[st
         "trainer_id": row[6],
         "trainer_telegram_id": row[7],
         "trainer_name": trainer_name,
+        "venue_type": row[10],
     }
 
 

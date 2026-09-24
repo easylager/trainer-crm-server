@@ -319,8 +319,12 @@ def parse_quick_setup_days(raw: list[dict[str, Any]] | None) -> list[QuickSetupD
                 slots=slots,
             )
         )
-    if not out:
-        raise QuickSetupError("Отметьте хотя бы одно время — иначе ученику нечего выбрать.")
+    # Пустая неделя — законный ответ, а не ошибка ввода. К платформе идут не только
+    # тренеры по конькам: консультант или спортивный психолог может быть ещё не готов
+    # называть часы, и держать его на экране до первого отмеченного окна значит не
+    # пускать в продукт того, кто уже всё про себя рассказал. Ниже по стеку
+    # run_trainer_quick_setup это переваривает: пишет пустые шаблоны на все семь дней
+    # и создаёт ноль слотов. Услуги, роль и площадка при этом сохраняются.
     return out
 
 
@@ -566,6 +570,18 @@ async def run_trainer_quick_setup(
             minute_to_duration=minute_to_duration or None,
             only_capacity_one=True,
         )
+
+    # Онбординг пройден — даже если неделю оставили пустой. Без этой отметки хаб
+    # не отличит «настроил и решил обойтись без расписания» от «ещё не заходил»
+    # и будет требовать расписание у того, кому мы только что сказали, что оно
+    # необязательно.
+    await session.execute(
+        text(
+            "UPDATE trainer_profiles SET onboarding_completed_at = COALESCE(onboarding_completed_at, now()) "
+            "WHERE trainer_id = :tid"
+        ),
+        {"tid": trainer_id},
+    )
 
     base = today or date.today()
     week_start = base - timedelta(days=base.weekday())

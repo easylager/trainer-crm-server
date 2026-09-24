@@ -51,6 +51,7 @@ from src.shared.minsk_speed_oval import (
     NAME as SPEED_OVAL_NAME,
     SLUG as SPEED_OVAL_SLUG,
 )
+from src.shared.venue_types import normalize_venue_type
 from src.shared.ops_db_guard import (
     ProdDatabaseError,
     add_i_know_this_is_prod_argument,
@@ -64,6 +65,10 @@ TARGET_ARENA_IDS = (
     # Regional BY rinks: 25 arena_profiles seeded via scripts/seed_regional_arenas.py,
     # dossiers in data/arena-cards/<slug>.md.
     22, 23, 25, 24, 10, 11, 20, 28, 37, 40, 43, 18, 30, 31, 41, 27, 15, 16, 19, 42, 33, 26, 32, 38, 29,
+    # Первая не ледовая площадка: зал Lifestyle на Машерова, заведён тренером
+    # (venue_type=gym). Ice-сеансов у неё нет и не будет — фикстуры нет, загрузчик
+    # берёт только профиль и фото.
+    201,
 )
 DEFAULT_TZ = "Europe/Minsk"
 PHONE_MAX_LEN = 32
@@ -108,6 +113,9 @@ PHONE_RE = re.compile(r"\+375[\d\s().-]{7,}")
 HEADER_ARENA_ID_RE = re.compile(r"^-\s*arena_id:\s*(\d+)\s*$", re.M)
 HEADER_SLUG_RE = re.compile(r"^-\s*slug:\s*(\S+)\s*$", re.M)
 HEADER_VERIFIED_RE = re.compile(r"^-\s*verified_at:\s*(\S+)\s*$", re.M)
+# Тип площадки из шапки досье. Отсутствует — значит каток: все досье до появления
+# не ледовых площадок описывали именно катки, и молча так и остаётся.
+HEADER_VENUE_TYPE_RE = re.compile(r"^-\s*venue_type:\s*(\S+)\s*$", re.M)
 SOCIAL_SPECS = (
     ("instagram", re.compile(r"https?://(?:www\.)?instagram\.com/[^\s;]+", re.I)),
     ("facebook", re.compile(r"https?://(?:www\.|web\.)?facebook\.com/[^\s;]+", re.I)),
@@ -158,6 +166,7 @@ class ArenaCard:
     arena_id: int
     slug: str
     verified_at: date | None
+    venue_type: str
     district: str | None
     phone: str | None
     website_url: str | None
@@ -511,11 +520,14 @@ def parse_dossier(path: Path) -> ArenaCard:
         short_description=short_description,
         amenities=amenities,
     )
+    venue_type_match = HEADER_VENUE_TYPE_RE.search(md)
+    venue_type = normalize_venue_type(venue_type_match.group(1) if venue_type_match else None)
     return ArenaCard(
         path=path,
         arena_id=arena_id,
         slug=slug,
         verified_at=verified_at,
+        venue_type=venue_type,
         district=district,
         phone=phone,
         website_url=website_url,
@@ -846,6 +858,13 @@ async def apply_card(
         if card.slug == SPEED_OVAL_SLUG and target_id == SPEED_OVAL_ARENA_ID:
             await _sync_speed_oval_arena_row(session, target_id)
         await apply_admin_arena_profile_patch(session, target_id, profile_patch(card))
+        # Тип площадки живёт на arenas, а не на arena_profiles: он определяет, попадёт
+        # ли она в ледовый фильтр каталога и какой копирайт получит карточка. Досье —
+        # источник правды: тренер тип указывает на глаз, контент его подтверждает.
+        await session.execute(
+            text("UPDATE arenas SET venue_type = :vt WHERE id = :id"),
+            {"vt": card.venue_type, "id": target_id},
+        )
         if card.verified_at is not None:
             verified_ts = datetime(
                 card.verified_at.year,

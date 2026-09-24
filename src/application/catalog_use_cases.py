@@ -15,10 +15,24 @@ async def list_cities(session: AsyncSession) -> list[dict[str, Any]]:
 
 
 async def list_services(
-    session: AsyncSession, city_id: int | None = None
+    session: AsyncSession,
+    city_id: int | None = None,
+    *,
+    owner_trainer_id: int | None = None,
+    include_non_public: bool = False,
 ) -> list[dict[str, Any]]:
-    """Services for filters; optional city scopes list to services with trainers in city."""
-    return await CatalogRepository(session).list_services(city_id=city_id)
+    """Services for filters; optional city scopes list to services with trainers in city.
+
+    ``owner_trainer_id`` дополняет общий список собственными услугами этого тренера —
+    его анкета обязана их показывать, хотя в клиентском фильтре их ещё нет.
+    ``include_non_public`` снимает фильтр совсем: нужно там, где мы не фильтруем,
+    а разрешаем id в имя (иначе услуга просто пропадёт из подписи).
+    """
+    return await CatalogRepository(session).list_services(
+        city_id=city_id,
+        owner_trainer_id=owner_trainer_id,
+        include_non_public=include_non_public,
+    )
 
 
 async def list_arenas(

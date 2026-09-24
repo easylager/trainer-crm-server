@@ -16,6 +16,75 @@ function loadModel() {
   return require(modelPath);
 }
 
+describe('фильтр по типу площадки', () => {
+  it('без выбора venue_type в запрос не попадает', () => {
+    const { buildListUrl } = loadModel();
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'skate' }).includes('venue_type'));
+    assert.ok(!buildListUrl({ cityId: 3, intent: 'skate', venueTypes: [] }).includes('venue_type'));
+  });
+
+  it('выбранные типы едут списком через запятую', () => {
+    const { buildListUrl } = loadModel();
+    const url = buildListUrl({ cityId: 3, intent: 'skate', venueTypes: ['gym', 'choreo'] });
+    assert.match(url, /venue_type=gym%2Cchoreo/);
+  });
+
+  it('дубли и регистр не плодят мусор в параметре', () => {
+    const { buildListUrl } = loadModel();
+    const url = buildListUrl({ cityId: 3, intent: 'skate', venueTypes: ['GYM', ' gym ', ''] });
+    assert.match(url, /venue_type=gym(&|$)/);
+  });
+
+  it('карта фильтруется так же, как список', () => {
+    // Карта тянет данные своим запросом (bbox/near). Пока venue_type в него не
+    // попадал, чип «Зал» менял список, а на карте оставались все катки города.
+    const { buildMapListUrl } = loadModel();
+    const url = buildMapListUrl({
+      intent: 'skate',
+      bbox: '53.8,27.4,54.0,27.7',
+      venueTypes: ['gym'],
+    });
+    assert.match(url, /venue_type=gym/);
+    assert.match(url, /bbox=/);
+  });
+
+  it('город с одним типом площадок не показывает фильтр из одного варианта', () => {
+    // Выбор из одной кнопки — шум, а не выбор: в чисто ледовом городе
+    // чип «Лёд» не сообщает ничего, чего не сообщал бы сам список.
+    const { venueChipsView } = loadModel();
+    assert.deepEqual(venueChipsView([{ key: 'ice', chip: 'Лёд', count: 8 }], []), []);
+  });
+
+  it('смешанный город даёт «Все» плюс чип на каждый тип', () => {
+    const { venueChipsView } = loadModel();
+    const chips = venueChipsView(
+      [
+        { key: 'ice', chip: 'Лёд', count: 8 },
+        { key: 'gym', chip: 'Зал', count: 1 },
+      ],
+      []
+    );
+    assert.deepEqual(chips.map((c) => c.label), ['Все', 'Лёд', 'Зал']);
+    assert.equal(chips[0].active, true);
+  });
+
+  it('выбранный чип остаётся в списке — из фильтра должно быть куда выйти', () => {
+    // Фасеты сервер считает ДО фильтра именно поэтому: иначе «Зал» исчезал бы
+    // из собственного списка сразу после нажатия.
+    const { venueChipsView } = loadModel();
+    const chips = venueChipsView(
+      [
+        { key: 'ice', chip: 'Лёд', count: 8 },
+        { key: 'gym', chip: 'Зал', count: 1 },
+      ],
+      ['gym']
+    );
+    assert.equal(chips.find((c) => c.key === 'gym').active, true);
+    assert.equal(chips.find((c) => c.key === '').active, false);
+    assert.ok(chips.some((c) => c.key === 'ice'));
+  });
+});
+
 describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
   it('Покататься asks the API for intent=skate; does not invent tiers', () => {
     const { buildListUrl } = loadModel();
@@ -624,13 +693,46 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
   it('AC-006: каток без расписания отдаёт текст статуса, а не пустые слоты', () => {
     const { boardCardView } = loadModel();
     const v = boardCardView(
-      { id: 9, name: 'Юность', district: 'Центральный район', tier: 'B', live: { kind: 'unknown' } },
+      {
+        id: 9,
+        name: 'Юность',
+        district: 'Центральный район',
+        tier: 'B',
+        venue_cta: 'Открыть карточку катка',
+        live: { kind: 'unknown' },
+      },
       now
     );
     assert.equal(v.isSession, false);
     assert.equal(v.time, '');
     assert.ok(v.status.length > 0);
     assert.equal(v.depth, 'Открыть карточку катка');
+  });
+
+  it('зал не называется катком: подпись берётся из venue_cta сервера', () => {
+    // Регрессия площадки #201 «Lifestyle»: тренажёрный зал в списке предлагал
+    // «Открыть карточку катка». Склонение по типу считает сервер (venue_types.py),
+    // здесь только проверяем, что модель его не перетирает хардкодом.
+    const { boardCardView } = loadModel();
+    const v = boardCardView(
+      {
+        id: 201,
+        name: 'Lifestyle',
+        tier: 'C',
+        venue_type: 'gym',
+        venue_cta: 'Открыть карточку зала',
+        live: { kind: 'unknown' },
+      },
+      now
+    );
+    assert.equal(v.depth, 'Открыть карточку зала');
+    assert.ok(!v.depth.includes('катк'));
+  });
+
+  it('ответ старого API без venue_cta не показывает «катка» наугад', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView({ id: 9, name: 'Без типа', live: { kind: 'unknown' } }, now);
+    assert.equal(v.depth, 'Открыть карточку места');
   });
 
   it('AC-006: каток без кадра получает монограмму, а не пустой прямоугольник', () => {

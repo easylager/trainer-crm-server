@@ -39,11 +39,29 @@ class CatalogRepository:
         WHERE ts.service_id = s.id
     """
 
-    async def list_services(self, city_id: int | None = None) -> list[dict[str, Any]]:
+    async def list_services(
+        self,
+        city_id: int | None = None,
+        *,
+        owner_trainer_id: int | None = None,
+        include_non_public: bool = False,
+    ) -> list[dict[str, Any]]:
         """
         Services for catalog pickers with trainer_count (active, catalog-visible trainers).
         With city_id, all services are returned; trainer_count is scoped to that city (may be 0).
+
+        По умолчанию — только ``is_public``: услуги, которые тренер вписал сам, не должны
+        появляться в клиентском фильтре до модерации, иначе список фильтров растёт от
+        каждой опечатки. ``owner_trainer_id`` добавляет собственные услуги этого тренера —
+        его-то анкета их показывать обязана, иначе он не увидит, что сам же добавил.
         """
+        visible = "s.is_public"
+        params: dict[str, Any] = {}
+        if include_non_public:
+            visible = "true"
+        elif owner_trainer_id is not None:
+            visible = "(s.is_public OR s.created_by_trainer_id = :owner_tid)"
+            params["owner_tid"] = int(owner_trainer_id)
         # asyncpg cannot infer type for :city_id when it is NULL and reused in IS NULL checks — split queries.
         if city_id is None:
             r = await self._session.execute(
@@ -51,11 +69,14 @@ class CatalogRepository:
                     f"""
                     SELECT s.id, s.name, s.sort_order, s.client_summary,
                            s.slug, s.vertical_key, s.effort_profile, s.scenario_tags,
+                           s.is_public, s.created_by_trainer_id,
                            ({self._SERVICE_TRAINER_COUNT_SQL}) AS trainer_count
                     FROM services s
+                    WHERE {visible}
                     ORDER BY s.sort_order, s.id
                     """
-                )
+                ),
+                params,
             )
         else:
             count_in_city = (
@@ -68,12 +89,14 @@ class CatalogRepository:
                     f"""
                     SELECT s.id, s.name, s.sort_order, s.client_summary,
                            s.slug, s.vertical_key, s.effort_profile, s.scenario_tags,
+                           s.is_public, s.created_by_trainer_id,
                            {count_in_city} AS trainer_count
                     FROM services s
+                    WHERE {visible}
                     ORDER BY {count_in_city} DESC, s.sort_order, s.id
                     """
                 ),
-                {"city_id": city_id},
+                {**params, "city_id": city_id},
             )
         return [
             {
@@ -85,7 +108,9 @@ class CatalogRepository:
                 "vertical_key": row[5],
                 "effort_profile": row[6],
                 "scenario_tags": row[7],
-                "trainer_count": row[8],
+                "is_public": bool(row[8]),
+                "created_by_trainer_id": row[9],
+                "trainer_count": row[10],
             }
             for row in r.fetchall()
         ]
