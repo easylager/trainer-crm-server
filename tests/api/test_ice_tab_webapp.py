@@ -53,7 +53,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "ice-tab.js" in body
     assert "ice-map.js" in body
     assert "catalog-main.js" not in body
-    assert "Покататься" in body
+    assert "Где заниматься" in body
     assert "Тренеры" in body
     assert 'data-intent="group"' not in body
     assert "ice-masthead" in body
@@ -97,7 +97,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert ".ice-ypin__label" in css.text
     assert "color: inherit" not in css.text.split(".ice-ypin__label")[1].split("}")[0]
     assert ".ice-sec[hidden]" in css.text
-    # Покататься и Тренеры — разные DOM-хосты: иначе WebView на кадр
+    # «Где заниматься» и «Тренеры» — разные DOM-хосты: иначе WebView на кадр
     # перекрашивает табло катка в компактную строку тренера.
     assert 'id="iceListSkate"' in body
     assert 'id="iceListCoach"' in body

@@ -97,6 +97,7 @@
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
+| [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 
 ## ops — эксплуатация
 

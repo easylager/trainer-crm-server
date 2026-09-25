@@ -86,7 +86,7 @@ describe('фильтр по типу площадки', () => {
 });
 
 describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
-  it('Покататься asks the API for intent=skate; does not invent tiers', () => {
+  it('«Где заниматься» asks the API for intent=skate; does not invent tiers', () => {
     const { buildListUrl } = loadModel();
     const url = buildListUrl({ cityId: 3, intent: 'skate' });
     assert.match(url, /\/api\/public\/ice\/arenas/);
@@ -292,7 +292,7 @@ describe('formatEmptyList', () => {
   it('coach empty does not point at a hidden skate chip', () => {
     const { formatEmptyList } = loadModel();
     const noSkate = formatEmptyList('coach', { hasSkate: false });
-    assert.ok(!/Покататься/i.test(noSkate.title + noSkate.body));
+    assert.ok(!/Где заниматься/i.test(noSkate.title + noSkate.body));
     assert.notEqual(noSkate.action && noSkate.action.kind, 'intent:skate');
     const withSkate = formatEmptyList('coach', { hasSkate: true });
     assert.equal(withSkate.action.kind, 'intent:skate');
@@ -601,7 +601,7 @@ describe('skate chip visibility (2026-09-07 cities without a live rink)', () => 
     assert.equal(shouldShowSkateChip(3), true);
   });
 
-  it('falls back Покататься -> Тренеры when the city has no skate arenas', () => {
+  it('falls back «Где заниматься» -> Тренеры when the city has no skate arenas', () => {
     const { sanitizeIntent } = loadModel();
     assert.equal(sanitizeIntent('skate', { hasSkate: false }), 'coach');
     assert.equal(sanitizeIntent('skate', { hasSkate: true }), 'skate');
