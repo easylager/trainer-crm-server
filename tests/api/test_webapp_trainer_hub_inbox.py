@@ -84,6 +84,8 @@ async def test_hub_inbox_count_returns_badges(app_use_test_db, db_session) -> No
         "center",
         "more",
         "clients",
+        # Точка на вкладке «Каталог»: 1 = карточке нужно действие тренера (TASK-140).
+        "catalog",
         "menu",
         "menu_hints",
     }

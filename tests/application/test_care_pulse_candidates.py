@@ -38,8 +38,8 @@ async def _seed_trainer_with_tomorrow_session(
 ) -> int:
     r = await db_session.execute(
         text(
-            "INSERT INTO trainers (status, telegram_id, is_catalog_visible) "
-            "VALUES (:status, :tg, false) RETURNING id"
+            "INSERT INTO trainers (status, telegram_id, is_catalog_visible, catalog_state) "
+            "VALUES (:status, :tg, false, 'draft') RETURNING id"
         ),
         {"status": status, "tg": telegram_id},
     )

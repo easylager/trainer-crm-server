@@ -698,6 +698,12 @@ TRAINER_DIGEST_DROUGHT_OPEN_REQUESTS = (
 TRAINER_DIGEST_DROUGHT_CATALOG_HIDDEN = (
     "👁 На неделе пусто — и вас сейчас не видно в каталоге. Включить профиль обратно?"
 )
+# Same rung, different cause: the trainer did not choose this, so «включить обратно?» would be
+# the wrong question — it implies a decision they never made (TASK-140).
+TRAINER_DIGEST_DROUGHT_CATALOG_PAUSED = (
+    "👁 На неделе пусто — карточка приостановлена, в ней не хватает данных. "
+    "Заполнить и вернуться в каталог?"
+)
 TRAINER_DIGEST_DROUGHT_NO_SLOTS = (
     "📭 Клиенту сейчас не из чего выбрать: свободных окон нет на ближайшие "
     "<b>{horizon_days}</b> дней. Добавим несколько?"
@@ -2649,6 +2655,30 @@ TRAINER_MODERATION_PROFILE_REJECTED = (
     "❌ <b>Анкета не прошла модерацию</b>\n\n"
     "Профиль пока не отображается в каталоге.\n\n"
     "<b>Причина:</b> см. комментарий модератора в профиле или напишите в поддержку: /guide"
+)
+
+# --- Catalog card state (TASK-140) -------------------------------------------------------
+# Voice: one fact, one reason, one action, no guilt. These fire on transitions the trainer
+# did not ask for, so they must never read as a warning or a punishment.
+TRAINER_CATALOG_BTN_MINI_APP = "🗂 Каталог"
+TRAINER_CATALOG_PAUSED_PUSH = (
+    "🗂 <b>Карточка ушла из каталога</b>\n\n"
+    "{reason}\n\n"
+    "Это не связано с подпиской и не влияет на ваши записи — запись по вашей ссылке "
+    "работает как обычно. Заполните, и карточка вернётся сама, без повторной проверки."
+)
+TRAINER_CATALOG_RESTORED_PUSH = (
+    "🗂 <b>Карточка снова в каталоге</b>\n\n"
+    "Всё на месте — клиенты снова находят вас в общем списке."
+)
+TRAINER_CATALOG_RESTORED_PENDING_PUSH = (
+    "🗂 <b>Карточка отправлена на проверку</b>\n\n"
+    "Всё заполнено. Проверка нужна потому, что вы меняли имя или фото — обычно отвечаем "
+    "в течение рабочего дня."
+)
+TRAINER_CATALOG_REVISION_PUBLISHED_PUSH = (
+    "🗂 <b>Правки в карточке опубликованы</b>\n\n"
+    "Клиенты уже видят обновлённую карточку."
 )
 
 # Trainer schedule (by calendar week + template for quick apply)

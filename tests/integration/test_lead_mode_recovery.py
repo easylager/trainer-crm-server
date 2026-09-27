@@ -21,6 +21,7 @@ from src.application.lead_mode_recovery_use_cases import (
     compute_due_nudges,
     mark_nudge_sent,
 )
+from src.shared.catalog_visibility import CATALOG_STATE_HIDDEN, CATALOG_STATE_PUBLISHED
 from src.infrastructure.db.models import (
     RECOVERY_STEP_D0,
     RECOVERY_STEP_D3,
@@ -46,11 +47,17 @@ async def _create_trainer(
     r = await session.execute(
         text(
             """
-            INSERT INTO trainers (status, is_catalog_visible, telegram_id)
-            VALUES (:s, :v, :tg) RETURNING id
+            INSERT INTO trainers (status, is_catalog_visible, catalog_state, telegram_id)
+            VALUES (:s, :v, :cs, :tg) RETURNING id
             """
         ),
-        {"s": status, "v": is_catalog_visible, "tg": telegram_id},
+        {
+            "s": status,
+            "v": is_catalog_visible,
+            # TASK-140: catalog_state is the real column; the flag is a derived mirror.
+            "cs": CATALOG_STATE_PUBLISHED if is_catalog_visible else CATALOG_STATE_HIDDEN,
+            "tg": telegram_id,
+        },
     )
     (trainer_id,) = r.fetchone()
     await session.commit()
@@ -299,8 +306,8 @@ async def test_no_telegram_id_excluded(db_session: AsyncSession) -> None:
     r = await db_session.execute(
         text(
             """
-            INSERT INTO trainers (status, is_catalog_visible, telegram_id)
-            VALUES (:s, TRUE, NULL) RETURNING id
+            INSERT INTO trainers (status, is_catalog_visible, catalog_state, telegram_id)
+            VALUES (:s, TRUE, 'published', NULL) RETURNING id
             """
         ),
         {"s": TRAINER_STATUS_ACTIVE},

@@ -22,6 +22,7 @@ from src.application.trainer_profile_pending import (
     merge_pending_dict,
     merge_profile_pending_for_editor,
     split_active_trainer_profile_patch,
+    trainer_has_pending_text_revision,
 )
 from src.application.trainer_profile_completeness import (
     analyze_moderation_submission_readiness,
@@ -31,13 +32,38 @@ from src.application.trainer_profile_completeness import (
 )
 from src.infrastructure.db.models import (
     TRAINER_STATUS_ACTIVE,
+    TRAINER_STATUS_DEACTIVATED,
     TRAINER_STATUS_PENDING_CONTRACT,
     TRAINER_STATUS_PENDING_PAYMENT,
     TRAINER_STATUS_PENDING_PROFILE,
 )
 from src.infrastructure.repositories import TrainerRepository
+from src.application.trainer_catalog_state import (
+    CATALOG_ACTOR_SYSTEM,
+    CATALOG_ACTOR_TRAINER,
+    REASON_ACCOUNT_STATUS_CHANGED,
+    REASON_AUTO_RESTORED,
+    REASON_MISSING_FIELDS,
+    REASON_TRAINER_HIDDEN,
+    REASON_TRAINER_REQUESTED,
+    REASON_TRAINER_RESTORED,
+    REASON_TRAINER_SUBMITTED,
+    get_catalog_state,
+    missing_fields_reason_detail,
+    set_catalog_state,
+)
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.service_ui_accent import normalize_service_ui_accent
+from src.shared.catalog_visibility import (
+    CATALOG_STATE_DRAFT,
+    CATALOG_STATE_HIDDEN,
+    CATALOG_STATE_NEEDS_REVISION,
+    CATALOG_STATE_PAUSED,
+    CATALOG_STATE_PENDING_REVIEW,
+    CATALOG_STATE_PUBLISHED,
+    trainer_is_listed,
+    trainer_opted_into_catalog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,26 +202,66 @@ def _services_to_entries(
     return result
 
 
-async def _demote_status_if_profile_incomplete(session: AsyncSession, trainer_id: int) -> bool:
+async def reconcile_catalog_state_for_card(session: AsyncSession, trainer_id: int) -> bool:
     """
-    Demote to pending_profile if submission readiness (8 criteria) fails while status is
-    active / pending_contract / pending_payment. Returns True if status was demoted.
+    Keep the catalog card in step with the profile behind it. Returns True if state changed.
+
+    Replaces ``_demote_status_if_profile_incomplete`` (TASK-140). That function demoted the
+    **account** to ``pending_profile`` when submission readiness broke, wrote one
+    ``logger.info`` line and told nobody — so a trainer who cleared their stored phone dropped
+    out of the catalog, got ``{"ok": true}``, and could only find out by reopening the profile
+    screen. Worse, the way back required pressing Save on that same screen: nothing else
+    re-queued the card.
+
+    Now the account is left alone and only the card moves:
+
+    * card listed (or waiting for review) but no longer complete → ``paused``, with the
+      missing fields named in the event and in the push;
+    * card ``paused`` and complete again → back on its own. Straight to ``published`` when the
+      published content never changed, ``pending_review`` when name or photo did — the trainer
+      is told which of the two happened and why.
     """
-    repo = TrainerRepository(session)
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return False
-    st = (trainer.get("status") or "").strip()
-    submit_ok, _ = analyze_moderation_submission_readiness(trainer)
-    if not submit_ok and st in (
-        TRAINER_STATUS_ACTIVE,
-        TRAINER_STATUS_PENDING_CONTRACT,
-        TRAINER_STATUS_PENDING_PAYMENT,
-    ):
-        await repo.update_status(trainer_id, TRAINER_STATUS_PENDING_PROFILE)
-        await session.commit()
-        logger.info("Trainer %d demoted to pending_profile (profile incomplete)", trainer_id)
-        return True
+    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
+    submit_ok, missing = analyze_moderation_submission_readiness(trainer)
+
+    if not submit_ok and state in (CATALOG_STATE_PUBLISHED, CATALOG_STATE_PENDING_REVIEW):
+        return await set_catalog_state(
+            session,
+            trainer_id,
+            CATALOG_STATE_PAUSED,
+            reason=REASON_MISSING_FIELDS,
+            reason_detail=missing_fields_reason_detail(missing),
+            actor_type=CATALOG_ACTOR_SYSTEM,
+            actor_id="profile_reconcile",
+        )
+
+    if submit_ok and state == CATALOG_STATE_PAUSED:
+        needs_review = trainer_has_pending_text_revision(trainer) or bool(
+            trainer.get("photo_pending")
+        )
+        target = CATALOG_STATE_PENDING_REVIEW if needs_review else CATALOG_STATE_PUBLISHED
+        changed = await set_catalog_state(
+            session,
+            trainer_id,
+            target,
+            reason=REASON_AUTO_RESTORED,
+            actor_type=CATALOG_ACTOR_SYSTEM,
+            actor_id="profile_reconcile",
+        )
+        if changed and target == CATALOG_STATE_PENDING_REVIEW:
+            await TrainerRepository(session).mark_queued_for_moderation_review(trainer_id)
+            await session.commit()
+            try:
+                await notify_admins_trainer_queued_for_moderation(trainer_id)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "notify admins after catalog auto-restore failed trainer_id=%s", trainer_id
+                )
+        return changed
+
     return False
 
 
@@ -369,8 +435,11 @@ async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession
         return
     if is_ready_for_moderation_submission(trainer):
         return
-    st = (trainer.get("status") or "").strip()
-    if st != TRAINER_STATUS_PENDING_PROFILE:
+    # Keyed on the card, not the account (TASK-140). It used to require
+    # ``status == pending_profile``, which was the same thing back when an incomplete profile
+    # demoted the account — now the account stays put, so that check would let a stale stamp
+    # survive on an incomplete card forever.
+    if trainer_is_listed(trainer):
         return
     if trainer.get("moderation_submitted_at") is None:
         return
@@ -562,7 +631,7 @@ async def update_trainer_profile(
                 await notify_admins_trainer_queued_for_moderation(trainer_id)
             except Exception:  # noqa: BLE001
                 logger.exception("notify admins after active profile pending failed trainer_id=%s", trainer_id)
-        await _demote_status_if_profile_incomplete(session, trainer_id)
+        await reconcile_catalog_state_for_card(session, trainer_id)
         await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
         from src.application.referral_use_cases import maybe_grant_referral_onboarding_bonus
 
@@ -601,7 +670,7 @@ async def update_trainer_profile(
     if _pending_trainer_patch_has_real_change(trainer, updates, service_ids, services, arena_ids):
         await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
-    await _demote_status_if_profile_incomplete(session, trainer_id)
+    await reconcile_catalog_state_for_card(session, trainer_id)
     await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     from src.application.referral_use_cases import maybe_grant_referral_onboarding_bonus
 
@@ -622,38 +691,136 @@ async def list_trainers(
 async def update_trainer_status(session: AsyncSession, trainer_id: int, status: str) -> bool:
     """Set trainer status. Returns False if trainer not found.
     When status is set to active, creates trial subscription if trainer has not used trial yet.
+
+    Taking the account **out** of ``active`` takes the card with it (TASK-140). That is not the
+    coupling this task removed — an incomplete profile no longer touches the account, but an
+    admin deliberately un-approving one is a decision about the trainer, and a published card
+    would otherwise outlive the approval that put it there. Deactivation drops the card to
+    ``draft``; any pending status sends it back to the review queue, where its content is intact
+    and only the approval is missing.
     """
     repo = TrainerRepository(session)
+    previous = await get_catalog_state(session, trainer_id)
     if not await repo.update_status(trainer_id, status):
         return False
     await session.commit()
     if status == TRAINER_STATUS_ACTIVE:
         await create_trial_subscription(session, trainer_id)
+    elif previous is not None and previous["catalog_state"] == CATALOG_STATE_PUBLISHED:
+        target = (
+            CATALOG_STATE_DRAFT
+            if status == TRAINER_STATUS_DEACTIVATED
+            else CATALOG_STATE_PENDING_REVIEW
+        )
+        await set_catalog_state(
+            session,
+            trainer_id,
+            target,
+            reason=REASON_ACCOUNT_STATUS_CHANGED,
+            reason_detail=f"Статус аккаунта изменён на «{status}».",
+            actor_type=CATALOG_ACTOR_SYSTEM,
+            actor_id="status_change",
+            notify=False,
+        )
     return True
 
 
-async def set_trainer_catalog_visibility(session: AsyncSession, trainer_id: int, *, visible: bool) -> bool:
-    """Toggle public catalog listing; trainer may remain status=active."""
+async def set_trainer_catalog_visibility(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    visible: bool,
+    actor_type: str = CATALOG_ACTOR_TRAINER,
+    actor_id: str | int | None = None,
+) -> bool:
+    """
+    Boolean face of the catalog state machine, kept for the legacy profile toggle and the
+    admin REST endpoint. Returns False only when the trainer does not exist.
+
+    ``visible=False`` — ``published`` → ``hidden`` (return is one tap, no re-review); a card
+    still waiting for review, or sent back for edits, drops to ``draft``: the trainer withdrew
+    the request, so the queue stamp goes too, otherwise a later opt-in silently no-ops as
+    "already_submitted" instead of queuing afresh.
+
+    ``visible=True`` — ``hidden`` → ``published`` directly: the card was reviewed and its
+    published content has not changed, so asking a moderator again would be theatre. From any
+    other state it is a publication *request* and goes through ``try_submit_…``.
+
+    Every path lands in ``set_catalog_state``, so the admin REST route can no longer take a
+    trainer out of the catalog without a journal entry and a reason — the hole this task was
+    opened for (EDGE-004).
+    """
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return False
+    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
     repo = TrainerRepository(session)
-    if not await repo.set_is_catalog_visible(trainer_id, visible):
-        return False
-    if visible:
-        from src.application.trainer_feature_tracking import (
-            FEATURE_CATALOG_ENABLED,
-            record_feature_first_use,
-        )
 
-        await record_feature_first_use(session, trainer_id, FEATURE_CATALOG_ENABLED)
-    elif (trainer.get("status") or "").strip() == TRAINER_STATUS_PENDING_PROFILE:
-        # Opting out withdraws the queue stamp: admin's /pending already excludes opted-out
-        # trainers (list_trainer_ids_eligible_for_admin_moderation checks is_catalog_visible),
-        # but without this the stamp survives and a later opt-in silently no-ops as
-        # "already_submitted" instead of queuing + notifying admins as a fresh request.
-        await repo.clear_moderation_submitted_at(trainer_id)
-    await session.commit()
+    if not visible:
+        if state == CATALOG_STATE_PUBLISHED:
+            await set_catalog_state(
+                session,
+                trainer_id,
+                CATALOG_STATE_HIDDEN,
+                reason=REASON_TRAINER_HIDDEN,
+                actor_type=actor_type,
+                actor_id=actor_id,
+            )
+        elif state in (CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_NEEDS_REVISION):
+            await set_catalog_state(
+                session,
+                trainer_id,
+                CATALOG_STATE_DRAFT,
+                reason=REASON_TRAINER_HIDDEN,
+                actor_type=actor_type,
+                actor_id=actor_id,
+            )
+            await repo.clear_moderation_submitted_at(trainer_id)
+            await session.commit()
+        elif state == CATALOG_STATE_PAUSED:
+            await set_catalog_state(
+                session,
+                trainer_id,
+                CATALOG_STATE_DRAFT,
+                reason=REASON_TRAINER_HIDDEN,
+                actor_type=actor_type,
+                actor_id=actor_id,
+            )
+        return True
+
+    from src.application.trainer_feature_tracking import (
+        FEATURE_CATALOG_ENABLED,
+        record_feature_first_use,
+    )
+
+    await record_feature_first_use(session, trainer_id, FEATURE_CATALOG_ENABLED)
+
+    if state == CATALOG_STATE_HIDDEN:
+        await set_catalog_state(
+            session,
+            trainer_id,
+            CATALOG_STATE_PUBLISHED,
+            reason=REASON_TRAINER_RESTORED,
+            actor_type=actor_type,
+            actor_id=actor_id,
+        )
+        return True
+
+    result = await try_submit_trainer_for_moderation_review(
+        session, trainer_id, requested_by_trainer=True
+    )
+    if not result.get("ok"):
+        # Card not ready for a moderator, but the trainer did ask. Remember that on the draft —
+        # otherwise the wish is lost and the hub has no idea whom it should be helping finish.
+        await set_catalog_state(
+            session,
+            trainer_id,
+            CATALOG_STATE_DRAFT,
+            reason=REASON_TRAINER_REQUESTED,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            notify=False,
+        )
     return True
 
 
@@ -675,6 +842,7 @@ async def try_submit_trainer_for_moderation_review(
     *,
     audit_actor_type: str = ACTOR_API,
     audit_actor_id: str | int = "api",
+    requested_by_trainer: bool = False,
 ) -> dict[str, Any]:
     """
     Queue trainer for admin profile moderation (submission tier: 8 criteria, same as Mini App / REST).
@@ -691,13 +859,38 @@ async def try_submit_trainer_for_moderation_review(
     # Publication is the trainer's decision, and filling in a profile is not that decision.
     # Without this gate the Mini App auto-submitted on every save, so a trainer who completed
     # their card to look good to their own students was queued for the public catalog and
-    # published on approval — never having been asked. See migration 0182_catalog_opt_in.
-    if not bool(trainer.get("is_catalog_visible", False)):
+    # published on approval — never having been asked (migration 0182_catalog_opt_in).
+    #
+    # ``requested_by_trainer`` is that decision arriving explicitly: the catalog screen's
+    # «Отправить на проверку». Everything else (a profile save, the legacy REST route) may only
+    # re-submit a card the trainer had already asked for — any state other than ``draft``.
+    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
+    if not requested_by_trainer and not trainer_opted_into_catalog(trainer):
         return {
             "ok": True,
             "noop": True,
             "reason": "catalog_opt_out",
             "trainer_status": (trainer.get("status") or "").strip(),
+            "catalog_state": state,
+        }
+    if state == CATALOG_STATE_PUBLISHED:
+        return {
+            "ok": True,
+            "noop": True,
+            "reason": "already_published",
+            "trainer_status": (trainer.get("status") or "").strip(),
+            "catalog_state": state,
+        }
+    if state == CATALOG_STATE_PENDING_REVIEW and trainer.get("moderation_submitted_at") is not None:
+        # In review *and* the queue stamp still stands — admins have been pinged about this exact
+        # card. A real profile change clears the stamp (``clear_moderation_submitted_at``), and
+        # then a resubmit must ping them again: the card they were asked to look at has changed.
+        return {
+            "ok": True,
+            "noop": True,
+            "reason": "already_submitted",
+            "trainer_status": (trainer.get("status") or "").strip(),
+            "catalog_state": state,
         }
     complete, missing = analyze_moderation_submission_readiness(trainer)
     if not complete:
@@ -707,26 +900,21 @@ async def try_submit_trainer_for_moderation_review(
             "missing_labels_ru": missing_labels_ru(missing),
         }
     st = (trainer.get("status") or "").strip()
-    if st == TRAINER_STATUS_ACTIVE:
-        # Revisions are auto-queued on PATCH; manual submit is a no-op if nothing pending.
-        pending = trainer.get("profile_pending")
-        if not isinstance(pending, dict) or not pending:
-            return {"ok": True, "noop": True, "reason": "no_pending_text_revision", "trainer_status": st}
-        return {"ok": True, "noop": True, "reason": "active_revision_auto_queued", "trainer_status": st}
-
-    if st != TRAINER_STATUS_PENDING_PROFILE:
-        return {"ok": True, "noop": True, "reason": "wrong_status", "trainer_status": st}
-
-    fb = trainer.get("moderation_feedback")
-    fb_empty = fb is None or (isinstance(fb, str) and not str(fb).strip())
-    sub_at = trainer.get("moderation_submitted_at")
-    if fb_empty and sub_at is not None:
-        return {"ok": True, "noop": True, "reason": "already_submitted", "trainer_status": st}
 
     repo = TrainerRepository(session)
     if not await repo.mark_queued_for_moderation_review(trainer_id):
         return {"ok": False, "error": "not_found"}
     await session.commit()
+    # The card, not the account, is what enters the queue. ``status`` stays where it is —
+    # an approval will move it to ``active`` the first time and leave it there afterwards.
+    await set_catalog_state(
+        session,
+        trainer_id,
+        CATALOG_STATE_PENDING_REVIEW,
+        reason=REASON_TRAINER_SUBMITTED,
+        actor_type=CATALOG_ACTOR_TRAINER if requested_by_trainer else CATALOG_ACTOR_SYSTEM,
+        actor_id=audit_actor_id,
+    )
     audit_log(
         "trainer.submitted_for_moderation",
         audit_actor_type,
@@ -737,7 +925,12 @@ async def try_submit_trainer_for_moderation_review(
         await notify_admins_trainer_queued_for_moderation(trainer_id)
     except Exception:  # noqa: BLE001
         logger.exception("notify admins after moderation submit failed trainer_id=%s", trainer_id)
-    return {"ok": True, "submitted": True}
+    return {
+        "ok": True,
+        "submitted": True,
+        "trainer_status": st,
+        "catalog_state": CATALOG_STATE_PENDING_REVIEW,
+    }
 
 
 async def get_trainer_moderation_readiness(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
@@ -819,9 +1012,7 @@ async def list_public_trainer_reviews(
     Public reviews for catalog (no client ids). None if trainer not visible in catalog (same rules as GET /trainers/{id}).
     """
     trainer = await get_trainer(session, trainer_id)
-    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
-        return None
-    if not bool(trainer.get("is_catalog_visible", False)):
+    if not trainer_is_listed(trainer):
         return None
     return await TrainerRepository(session).list_public_ratings_for_trainer(
         trainer_id, limit=limit, offset=offset
@@ -1005,7 +1196,7 @@ async def delete_trainer_education(
         return False
     await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
-    await _demote_status_if_profile_incomplete(session, trainer_id)
+    await reconcile_catalog_state_for_card(session, trainer_id)
     await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return True
 

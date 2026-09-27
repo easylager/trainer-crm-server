@@ -33,6 +33,7 @@ from src.application.training_group_use_cases import (
     list_open_training_groups_catalog,
 )
 from src.application.trainer_use_cases import list_active_trainers_for_client
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.currency import currency_for_country
 from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -359,17 +360,20 @@ LEFT JOIN (
     GROUP BY s.arena_id
 ) sa ON sa.arena_id = a.id
 LEFT JOIN (
+    -- ta.is_public matters: the catalog's arena filter requires it (list_active_with_details),
+    -- so counting hidden links here promised trainers the filter would never show (TASK-140).
     SELECT ta.arena_id, COUNT(DISTINCT t.id)::int AS trainer_count
     FROM trainer_arenas ta
     JOIN trainers t ON t.id = ta.trainer_id
-      AND t.status = 'active' AND t.is_catalog_visible = true
+      AND {CATALOG_LISTED_SQL}
+    WHERE ta.is_public = true
     GROUP BY ta.arena_id
 ) tc ON tc.arena_id = a.id
 LEFT JOIN (
     SELECT COALESCE(s.arena_id, t.primary_arena_id) AS arena_id, COUNT(*)::int AS free_slots
     FROM slots s
     JOIN trainers t ON t.id = s.trainer_id
-      AND t.status = 'active' AND t.is_catalog_visible = true
+      AND {CATALOG_LISTED_SQL}
     WHERE s.status = 'available'
       AND s.slot_date >= CURRENT_DATE AND s.slot_date <= CURRENT_DATE + 13
       AND ((s.slot_date + s.start_time) AT TIME ZONE :slot_tz) > :now
@@ -379,7 +383,7 @@ LEFT JOIN (
     SELECT tg.arena_id, COUNT(*)::int AS open_groups
     FROM training_groups tg
     JOIN trainers t ON t.id = tg.trainer_id
-      AND t.status = 'active' AND t.is_catalog_visible = true
+      AND {CATALOG_LISTED_SQL}
     WHERE tg.status = :tg_st AND tg.catalog_visible = true
       AND (
         SELECT COUNT(*)::int FROM training_group_members m
@@ -478,8 +482,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                        (
                            SELECT COUNT(*)::int
                            FROM trainers t
-                           WHERE t.status = 'active'
-                             AND t.is_catalog_visible = true
+                           WHERE {CATALOG_LISTED_SQL}
                              AND EXISTS (
                                  SELECT 1 FROM trainer_cities tc
                                  WHERE tc.trainer_id = t.id AND tc.city_id = c.id
@@ -1049,11 +1052,11 @@ async def search_public_ice(
     )
     trainers = await session.execute(
         text(
-            """
+            f"""
             SELECT t.id, p.first_name, p.last_name, p.city_id
             FROM trainers t
             JOIN trainer_profiles p ON p.trainer_id = t.id
-            WHERE t.status = 'active' AND t.is_catalog_visible = true
+            WHERE {CATALOG_LISTED_SQL}
               AND (
                 to_tsvector('simple', coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, ''))
                   @@ plainto_tsquery('simple', :q)
@@ -1114,7 +1117,7 @@ async def search_public_ice(
     }
 
 
-_ICE_CITIES_SQL = """
+_ICE_CITIES_SQL = f"""
 SELECT
   c.id,
   c.name,
@@ -1137,12 +1140,12 @@ LEFT JOIN (
   SELECT tc.city_id, tc.trainer_id
   FROM trainer_cities tc
   JOIN trainers t ON t.id = tc.trainer_id
-    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+    AND {CATALOG_LISTED_SQL}
   UNION
   SELECT p.city_id, p.trainer_id
   FROM trainer_profiles p
   JOIN trainers t ON t.id = p.trainer_id
-    AND t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true
+    AND {CATALOG_LISTED_SQL}
   WHERE p.city_id IS NOT NULL
 ) coach ON coach.city_id = c.id
 WHERE c.is_active

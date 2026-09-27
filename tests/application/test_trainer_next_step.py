@@ -8,8 +8,7 @@
 from src.application.trainer_next_step import (
     ACTION_DISMISS,
     ACTION_OPEN_ONBOARDING,
-    ACTION_ENABLE_CATALOG,
-    ACTION_OPEN_CATALOG_PROFILE,
+    ACTION_OPEN_CATALOG,
     ACTION_SHARE_LINK,
     CATALOG_INVITE_MIN_BOOKINGS,
     STEP_CATALOG_INVITE,
@@ -83,7 +82,10 @@ def test_hub_does_not_nag_arena_or_profile_after_first_booking() -> None:
             real_bookings_count=1,
         )
     )
-    assert after is None
+    # С TASK-140 порог приглашения — одна реальная запись, так что здесь хаб уже предлагает
+    # каталог. Смысл теста прежний: про площадку и профиль он не пилит.
+    assert after is not None
+    assert after["key"] == STEP_CATALOG_INVITE
 
 
 def test_mobile_work_format_counts_as_an_answered_arena() -> None:
@@ -96,11 +98,11 @@ def test_mobile_work_format_counts_as_an_answered_arena() -> None:
             arena_work_format="mobile",
         )
     )
-    assert step is None
+    assert step is None or step["key"] != STEP_SET_ARENA
 
 
 def test_first_booking_hides_the_share_card() -> None:
-    """Первая запись — и блок про ссылку пропадает. Без запасной карточки."""
+    """Первая запись — и блок про ссылку пропадает."""
     step = resolve_trainer_next_step(
         _checklist(
             weekly_template_count=5,
@@ -110,10 +112,10 @@ def test_first_booking_hides_the_share_card() -> None:
             arena_count=1,
         )
     )
-    assert step is None
+    assert step is None or step["key"] != STEP_SHARE_LINK
 
 
-def test_first_booking_without_arena_still_gets_no_hub_card() -> None:
+def test_first_booking_without_arena_does_not_bring_back_the_arena_card() -> None:
     step = resolve_trainer_next_step(
         _checklist(
             weekly_template_count=5,
@@ -123,7 +125,7 @@ def test_first_booking_without_arena_still_gets_no_hub_card() -> None:
             arena_count=0,
         )
     )
-    assert step is None
+    assert step is None or step["key"] != STEP_SET_ARENA
 
 
 def test_catalog_is_offered_only_after_a_real_stream_of_bookings() -> None:
@@ -194,7 +196,7 @@ def test_catalog_same_card_and_carousel_when_opted_in_with_phone_gap() -> None:
     )
     assert step is not None
     assert step["key"] == STEP_CATALOG_INVITE
-    assert step["cta"]["action"] == ACTION_OPEN_CATALOG_PROFILE
+    assert step["cta"]["action"] == ACTION_OPEN_CATALOG
     assert step["cta"]["label"] == "Продолжить"
     assert "телефон" in step["body"]
     assert "фамилия" not in step["body"]
@@ -263,7 +265,7 @@ def test_fully_booked_week_is_not_mistaken_for_an_empty_one() -> None:
             arena_count=1,
         )
     )
-    assert step is None
+    assert step is None or step["key"] not in (STEP_REFRESH_WEEK, STEP_SETUP_WEEK)
 
 
 def test_catalog_invite_names_the_fields_the_profile_will_actually_ask_for() -> None:
@@ -314,5 +316,5 @@ def test_catalog_invite_cta_is_the_opt_in_itself() -> None:
             catalog_missing_fields=["phone"],
         )
     )
-    assert step["cta"]["action"] == ACTION_ENABLE_CATALOG
+    assert step["cta"]["action"] == ACTION_OPEN_CATALOG
     assert step["secondary"]["action"] == ACTION_DISMISS

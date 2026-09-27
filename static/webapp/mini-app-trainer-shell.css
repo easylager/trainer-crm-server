@@ -168,6 +168,17 @@ body.trainer-shell-body .trainer-mini-nav:empty {
   display: none !important;
 }
 
+/* Каталог — одна карточка, поэтому точка без числа (TASK-140): «1» рядом с иконкой читается
+   как счётчик чего-то, а тут состояние — «нужно ваше действие». */
+.trainer-tab-bar__badge--dot {
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  top: 0;
+  right: -2px;
+}
+
 .trainer-tab-bar__icon-wrap svg {
   transition: transform 0.18s ease;
 }

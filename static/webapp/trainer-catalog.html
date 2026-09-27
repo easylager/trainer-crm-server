@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Каталог</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202609281"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609281"></script>
+  <script src="mini-app-confirm.js?v=202609281"></script>
+  <link rel="stylesheet" href="theme.css?v=202609281" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609281" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609281" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202609281" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202609281" />
+  <link rel="stylesheet" href="mini-app-trainer-catalog.css?v=202609281" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202609281" as="script" />
+  <link rel="preload" href="trainer-catalog-main.js?v=202609281" as="script" />
+  <script src="ru-text.js?v=202609281"></script>
+</head>
+<body class="ar-pilot ar-pilot--trainer-catalog">
+  <main class="tc-page" id="tcPage">
+    <div class="tc-state tc-state--loading" id="tcLoading">
+      <p class="tc-state__title">Загрузка</p>
+      <div class="tc-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+
+    <section class="tc-root" id="tcRoot" hidden>
+      <!-- Состояние: одна фраза, одна причина, одно действие. -->
+      <header class="tc-status" id="tcStatus">
+        <p class="tc-status__line">
+          <span class="tc-status__dot" id="tcStatusDot" aria-hidden="true"></span>
+          <span class="tc-status__headline" id="tcHeadline"></span>
+        </p>
+        <p class="tc-status__meta" id="tcStatusMeta" hidden></p>
+        <p class="tc-status__detail" id="tcStatusDetail" hidden></p>
+        <p class="tc-status__body" id="tcStatusBody"></p>
+      </header>
+
+      <p class="tc-studio-note" id="tcStudioNote" hidden></p>
+
+      <!-- Пустое состояние: что это такое и что даёт. Показываем только в draft. -->
+      <section class="tc-pitch" id="tcPitch" hidden>
+        <p class="tc-pitch__lead">Если разместить карточку:</p>
+        <ul class="tc-pitch__list">
+          <li>вас находят без ссылки</li>
+          <li>приходят заявки от новых учеников</li>
+          <li>карточка видна в городе и на страницах арен, где вы ведёте</li>
+        </ul>
+        <p class="tc-pitch__note">Карточку один раз проверяет модератор — обычно за рабочий день.</p>
+      </section>
+
+      <!-- Превью: «так вас видит клиент». Снимает страх «опубликуется что-то кривое». -->
+      <section class="tc-preview" id="tcPreviewSection">
+        <p class="tc-section-label" id="tcPreviewLabel">Так вас видят в списке</p>
+        <article class="tc-card" id="tcPreviewCard"></article>
+        <p class="tc-preview__revision-label" id="tcRevisionLabel" hidden>После проверки станет</p>
+        <article class="tc-card tc-card--next" id="tcRevisionCard" hidden></article>
+        <button type="button" class="tc-link-btn" id="tcCancelRevision" hidden>Отменить правки</button>
+      </section>
+
+      <!-- Готовность: обязательное и необязательное разведены. -->
+      <section class="tc-readiness" id="tcReadiness" hidden>
+        <p class="tc-section-label" id="tcReadinessLabel"></p>
+        <ul class="tc-checklist" id="tcMissingList"></ul>
+        <p class="tc-section-label tc-section-label--soft" id="tcOptionalLabel" hidden>Можно усилить — необязательно</p>
+        <ul class="tc-checklist tc-checklist--soft" id="tcOptionalList" hidden></ul>
+      </section>
+
+      <!-- Мягкие предупреждения: мешают находиться, но не снимают с публикации. -->
+      <section class="tc-warnings" id="tcWarnings" hidden></section>
+
+      <!-- Метрики — те, что уже считаются в статистике. -->
+      <section class="tc-metrics" id="tcMetrics" hidden>
+        <p class="tc-section-label">Как вас ищут, 7 дней</p>
+        <div class="tc-metrics__grid" id="tcMetricsGrid"></div>
+      </section>
+
+      <div class="tc-actions" id="tcActions"></div>
+
+      <p class="tc-subscription-note" id="tcSubscriptionNote"></p>
+
+      <!-- История: ответ на «как следить, что я в каталоге». -->
+      <section class="tc-history" id="tcHistorySection" hidden>
+        <button type="button" class="tc-history__toggle" id="tcHistoryToggle" aria-expanded="false">
+          История изменений
+        </button>
+        <ol class="tc-history__list" id="tcHistoryList" hidden></ol>
+      </section>
+    </section>
+
+    <div class="tc-state tc-state--error" id="tcError" hidden>
+      <p class="tc-state__title">Не удалось загрузить раздел</p>
+      <button type="button" class="tc-btn tc-btn--soft" id="tcRetry">Повторить</button>
+    </div>
+  </main>
+
+  <script src="mini-app-trainer-gate.js?v=202609281"></script>
+  <script defer src="trainer-catalog-main.js?v=202609281"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202609281"></script>
+</body>
+</html>

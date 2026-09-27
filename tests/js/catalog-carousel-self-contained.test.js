@@ -16,15 +16,24 @@ function read(name) {
 }
 
 describe('catalog carousel — одна самодостаточная карусель', () => {
-  it('хаб не открывает task=vitrine для каталога', () => {
+  it('хаб ведёт в раздел «Каталог», а карусель запускает он', () => {
+    /* TASK-140: хаб больше не открывает карусель сам. Все его ветки каталога ведут во вкладку
+       «Каталог» — она знает состояние карточки и запускает визард с return, чтобы вернуть
+       тренера к предпросмотру. Раньше хаб угадывал, какой флоу нужен, по двум флагам. */
     const js = read('trainer-home-main.js');
     assert.equal(
       (js.match(/task=vitrine/g) || []).length,
       0,
-      'profile_catalog / open_profile должны вести в catalog'
+      'витрина как отдельный флоу не вернулась'
     );
-    assert.match(js, /openHubCatalogProfileGaps/);
-    assert.match(js, /task=catalog/);
+    assert.equal(
+      (js.match(/openHubCatalogProfileGaps/g) || []).length,
+      0,
+      'хаб не открывает карусель напрямую — это делает раздел «Каталог»'
+    );
+    assert.match(js, /navigateTo\('trainer-catalog'\)/);
+    const section = read('trainer-catalog-main.js');
+    assert.match(section, /task=catalog&return=trainer-catalog/);
   });
 
   it('vitrine — алиас catalog; рельс без education/about', () => {

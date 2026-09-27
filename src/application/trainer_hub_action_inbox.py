@@ -522,7 +522,7 @@ def build_trainer_hub_inbox_badges(
     center_inbox_pending: int = 0,
     show_center_inbox: bool = False,
 ) -> dict[str, Any]:
-    """Tab bar badge counts — schedule / center / more / clients + per-menu breakdown."""
+    """Tab bar badge counts — schedule / center / more / clients / catalog + per-menu breakdown."""
     menu = build_trainer_hub_inbox_menu_badges(
         onboarding=onboarding,
         requests_count=requests_count,
@@ -534,11 +534,17 @@ def build_trainer_hub_inbox_badges(
     center = max(0, int(center_inbox_pending)) if show_center_inbox else 0
     if onboarding:
         clients = _non_negative_int(onboarding.get("open_loop_clients_no_telegram_count"))
+    # Catalog dot: only when the card waits on the trainer (TASK-140). Not while it is under
+    # review — there the wait is ours, and a dot would ask them to do something that does not
+    # exist. Rendered as a dot, not a number: «сколько» is meaningless for one card.
+    catalog_state = (onboarding or {}).get("catalog_state") or ""
+    catalog = 1 if str(catalog_state).strip() in ("paused", "needs_revision") else 0
     return {
         "schedule": schedule,
         "center": center,
         "more": more,
         "clients": clients if clients > 0 else 0,
+        "catalog": catalog,
         "menu": menu,
         "menu_hints": build_trainer_hub_inbox_menu_hints(menu=menu),
     }

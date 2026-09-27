@@ -5,7 +5,7 @@ Trainer lifecycle: derived state (no extra DB columns) used as the single source
 Two-level gate model:
 
     Level 1 — LifecycleStage (this module)
-        Coarse state derived from (Trainer.status, active subscription?, is_catalog_visible).
+        Coarse state derived from (Trainer.status, active subscription?, catalog card published?).
         Answers: ONBOARDING / ACTIVE / LEAD_MODE / CHURNED.
         Decides: can the trainer do *anything* operational at all?
 
@@ -29,6 +29,7 @@ from typing import Final
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_TRIAL,
@@ -173,10 +174,10 @@ async def resolve_lifecycle_snapshot(
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 t.status,
-                t.is_catalog_visible,
+                ({CATALOG_LISTED_SQL}) AS is_listed,
                 EXISTS(
                     SELECT 1
                     FROM trainer_subscriptions ts
@@ -213,6 +214,8 @@ async def resolve_lifecycle_snapshot(
         )
 
     trainer_status: str = row[0]
+    # Field name kept: it is part of the snapshot's public shape (``to_dict``). The source
+    # is now the catalog card state (TASK-140) — "listed", which is what the stage cares about.
     is_catalog_visible: bool = bool(row[1])
     has_active_sub: bool = bool(row[2])
     last_expires_at: datetime | None = row[3]

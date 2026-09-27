@@ -23,7 +23,8 @@ Two aggregators and one scheduler helper:
 
 Drought ladder order (first match wins; case 7 = silence):
   1. Open catalog requests > 0
-  2. Catalog hidden (``status = 'active'`` and ``is_catalog_visible = false`` — opted out, not «never asked»)
+  2. Catalog hidden (``catalog_state = 'hidden'`` — the trainer took the card down) or paused
+     (``catalog_state = 'paused'`` — the system did, and the message says why)
   3. No available slots in next 14 days
   4. Dormant clients (≥ 1 completed > 21 days ago, no future bookings)
   5. Profile incomplete (``full_profile_complete = false``)
@@ -44,6 +45,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.demand_signals_use_cases import get_signals_lifetime_totals
+from src.shared.catalog_visibility import (
+    CATALOG_STATE_DRAFT,
+    CATALOG_STATE_HIDDEN,
+    CATALOG_STATE_PAUSED,
+)
 from src.infrastructure.db.models import (
     DEMAND_EVENT_CATALOG_FAVORITE,
     DEMAND_EVENT_CONTACT_CLICK,
@@ -481,23 +487,32 @@ async def _weekly_drought_block(
         }
 
     r_t = await session.execute(
-        text("SELECT is_catalog_visible, status FROM trainers WHERE id = :tid"),
+        text("SELECT catalog_state FROM trainers WHERE id = :tid"),
         {"tid": trainer_id},
     )
     t_row = r_t.fetchone()
-    is_catalog_visible = bool(t_row[0]) if t_row else True
-    # «Включим обратно?» only makes sense for someone who was in the catalog. Since
-    # 0182_catalog_opt_in, a not-yet-approved trainer is hidden because they never asked to be
-    # listed — nudging them weekly about a catalog they did not opt into is exactly the kind of
-    # pressure onboarding v2 removed.
-    is_catalog_eligible = normalize_trainer_status_value(t_row[1]) == TRAINER_STATUS_ACTIVE if t_row else False
+    catalog_state = str(t_row[0]).strip() if t_row and t_row[0] is not None else CATALOG_STATE_DRAFT
 
-    if is_catalog_eligible and not is_catalog_visible:
+    # Two sentences, because these are two different situations (TASK-140). One branch used to
+    # cover both, so «включить профиль обратно?» went to a trainer whose card the system had
+    # paused for a missing phone — as if they had chosen to take it down.
+    #
+    # ``draft`` stays silent either way: someone who never asked for the catalog is not nudged
+    # about it weekly. That is the pressure onboarding v2 removed.
+    if catalog_state == CATALOG_STATE_HIDDEN:
         return {
             "triggered": True,
             "consecutive_skip_days": skip_days,
             "case": 2,
             "case_key": "catalog_hidden",
+            "data": {},
+        }
+    if catalog_state == CATALOG_STATE_PAUSED:
+        return {
+            "triggered": True,
+            "consecutive_skip_days": skip_days,
+            "case": 2,
+            "case_key": "catalog_paused",
             "data": {},
         }
 

@@ -1545,7 +1545,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                         )
                     )                                                           AS has_template,
                     COUNT(DISTINCT t.id) FILTER (
-                        WHERE t.is_catalog_visible = true AND EXISTS (
+                        WHERE t.catalog_state = 'published' AND EXISTS (
                             SELECT 1 FROM trainer_profiles tp
                             WHERE tp.trainer_id = t.id
                         )
@@ -1638,7 +1638,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                     FROM trainer_demand_events
                     WHERE trainer_id = t.id
                 ) de ON true
-                WHERE t.is_catalog_visible = true AND t.status = 'active'
+                WHERE t.catalog_state = 'published' AND t.status = 'active'
                 """
             )
         )
@@ -1789,7 +1789,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                     SELECT
                         t.id,
                         {_shared_invite}                                            AS invited_client,
-                        t.is_catalog_visible AND EXISTS (
+                        t.catalog_state = 'published' AND EXISTS (
                             SELECT 1 FROM trainer_profiles tp WHERE tp.trainer_id = t.id
                         )                                                           AS catalog_live,
                         EXISTS (

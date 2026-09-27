@@ -49,7 +49,7 @@ async def _drop_subscriptions(db_session, trainer_id: int) -> None:
 
 async def _set_catalog_visibility(db_session, trainer_id: int, visible: bool) -> None:
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = :v WHERE id = :tid"),
+        text("UPDATE trainers SET is_catalog_visible = :v, catalog_state = CASE WHEN :v THEN 'published' ELSE 'hidden' END WHERE id = :tid"),
         {"v": visible, "tid": trainer_id},
     )
     await db_session.commit()

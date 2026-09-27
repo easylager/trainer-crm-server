@@ -158,6 +158,8 @@
         profileFocusedTask: null,
         /** Where to go after the overlay: `onboarding` (Done screen) or `hub`. */
         profileFocusedReturn: 'hub',
+        /* 'trainer-catalog' — карусель открыта из раздела «Каталог» (TASK-140). */
+        profileFocusedReturnPath: null,
         /** `?need=full_name,phone` с хаба — запасной список gaps до готовности moderation_readiness. */
         catalogNeedFields: null,
       };
@@ -602,9 +604,19 @@
         return map[k] || (k || '—');
       }
 
-      /** Тренер попросился в каталог? Пока нет — «незаполненность» не дефект, а его выбор. */
+      /**
+       * Тренер попросился в каталог? Пока нет — «незаполненность» не дефект, а его выбор.
+       *
+       * С TASK-140 это состояние карточки, а не булев флаг: `draft` без пометки = не просился.
+       * `is_catalog_visible` остался как «карточка опубликована» и здесь недостаточен — тренер
+       * на проверке или с приостановленной карточкой уже просился.
+       */
       function trainerWantsCatalogListing() {
-        return !!(state.trainer && state.trainer.is_catalog_visible === true);
+        var t = state.trainer;
+        if (!t) return false;
+        var cs = String(t.catalog_state || 'draft').trim();
+        if (cs !== 'draft') return true;
+        return String(t.catalog_state_reason || '').trim() === 'trainer_requested';
       }
 
       /** Статус в шапке: для черновика учитываем полноту и факт отправки на модерацию. */
@@ -1668,9 +1680,10 @@
        * каталога): если тренер попросился в каталог, статус черновик, анкета полная и ещё не в
        * очереди — отправляем в админ-бот.
        *
-       * Ключевое условие — is_catalog_visible. Заполненная анкета сама по себе не значит
-       * «опубликуйте меня»: тренер может доводить карточку для своих же учеников. Раньше этого
-       * условия не было, и полнота профиля молча превращалась в публикацию.
+       * Ключевое условие — тренер уже просился в каталог (состояние карточки ≠ чистый `draft`).
+       * Заполненная анкета сама по себе не значит «опубликуйте меня»: тренер может доводить
+       * карточку для своих же учеников. Раньше этого условия не было, и полнота профиля молча
+       * превращалась в публикацию.
        *
        * @param {{ force?: boolean }} [opts] force=true — не доверять клиентскому
        *   moderation_readiness.complete (после карусели состояние может быть stale); сервер сам
@@ -1681,7 +1694,7 @@
         var t = state.trainer;
         var d = state.moderation_readiness || {};
         var st = (t && t.status) ? String(t.status).trim() : '';
-        if (!t || t.is_catalog_visible !== true) return Promise.resolve({ kind: 'opt_out' });
+        if (!t || !trainerWantsCatalogListing()) return Promise.resolve({ kind: 'opt_out' });
         if (st !== 'pending_profile') return Promise.resolve({ kind: 'wrong_status' });
         if (d.already_submitted_for_moderation) return Promise.resolve({ kind: 'already' });
         if (!opts.force && !d.complete) return Promise.resolve({ kind: 'incomplete_client' });
@@ -2608,6 +2621,9 @@
           stepLabel: 'Каталог',
           nextSave: 'Сохранить',
           nextDone: 'Готово',
+          /* Из раздела «Каталог» последний шаг ведёт к предпросмотру, а не «готово»: публикацию
+             тренер подтверждает сам, увидев карточку глазами клиента (TASK-140). */
+          nextDoneReturningToCatalog: 'К предпросмотру',
         },
         vitrine: {
           rail: ['anketa_main', 'phone', 'photo'],
@@ -2769,6 +2785,11 @@
       }
 
       function focusedTaskReturnUrl() {
+        /* Пришли из раздела «Каталог» — возвращаемся туда: следующий шаг (предпросмотр и
+           «Отправить на проверку») живёт там, и уводить тренера на хаб посреди флоу нельзя. */
+        if (state.profileFocusedReturnPath === 'trainer-catalog') {
+          return webappPageUrl('trainer-catalog');
+        }
         if (state.profileFocusedReturn === 'onboarding') {
           return webappPageUrl('trainer-onboarding?done=1');
         }
@@ -2785,8 +2806,13 @@
         opts = opts || {};
         var wantSubmit = opts.submit === true;
         var dest = focusedTaskReturnUrl();
+        var backToCatalogSection = state.profileFocusedReturnPath === 'trainer-catalog';
+        /* Публикация — отдельное подтверждение на экране «Каталог» после предпросмотра, а не
+           побочный эффект сохранения последнего поля (TASK-140). Поэтому, когда карусель
+           открыта оттуда, здесь на проверку ничего не уходит. */
         var catalogish =
-          state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine';
+          !backToCatalogSection &&
+          (state.profileFocusedTask === 'catalog' || state.profileFocusedTask === 'vitrine');
         state.profileBlockTourActive = false;
         state.profileFocusedTask = null;
         state.profileFocusedReturn = 'hub';
@@ -3091,10 +3117,16 @@
           var fspec = PROFILE_FOCUSED_TASKS[state.profileFocusedTask];
           var frail = profileBlockTourEnsureRail();
           var isLastF = profileBlockTourRailIndex(profileBlockTourEffectiveStepKey()) === frail.length - 1;
+          /* Возврат в раздел «Каталог» — последняя кнопка обещает предпросмотр, а не финал:
+             там тренер увидит карточку и сам подтвердит публикацию (TASK-140). */
+          var doneLabel =
+            (state.profileFocusedReturnPath === 'trainer-catalog' &&
+              fspec.nextDoneReturningToCatalog) ||
+            fspec.nextDone;
           if (profileBlockTourNeedsSave()) {
             label = isLastF ? fspec.nextSave : 'Сохранить и дальше';
           } else {
-            label = isLastF ? fspec.nextDone : 'Далее';
+            label = isLastF ? doneLabel : 'Далее';
           }
         } else if (state.profileBlockTourActive) {
           /* На последнем шаге кнопка обещает финал, а не ещё один экран. */
@@ -3163,7 +3195,6 @@
             state.trainer = o.data.trainer;
             state.scheduleSettings = o.data.schedule_settings || null;
             renderScheduleSettingsPanel();
-            renderModeration();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -3434,6 +3465,8 @@
           task = sp.get('task');
           from = sp.get('from');
           needRaw = sp.get('need');
+          /* Раздел «Каталог» открывает эту же карусель и ждёт тренера назад (TASK-140). */
+          var returnTo = sp.get('return');
           if (task && PROFILE_FOCUSED_TASKS[task]) {
             if (needRaw) {
               state.catalogNeedFields = String(needRaw)
@@ -3443,9 +3476,12 @@
             } else {
               state.catalogNeedFields = null;
             }
+            state.profileFocusedReturnPath =
+              returnTo === 'trainer-catalog' ? 'trainer-catalog' : null;
             sp.delete('task');
             sp.delete('from');
             sp.delete('need');
+            sp.delete('return');
             var qsF = sp.toString();
             var pathF = window.location.pathname + (qsF ? '?' + qsF : '') + (window.location.hash || '');
             history.replaceState(null, '', pathF);
@@ -3704,7 +3740,6 @@
         setv('min_hours_before_booking', p.min_hours_before_booking);
         var gce = document.getElementById('group_classes_enabled');
         if (gce) gce.checked = !!p.group_classes_enabled;
-        renderCatalogVisibility();
         var citySel = document.getElementById('city_id');
         if (citySel) citySel.value = p.city_id != null ? String(p.city_id) : '';
         var eduSel = document.getElementById('education');
@@ -3775,189 +3810,6 @@
           renderArenas();
           renderHeroSummary();
         });
-      }
-
-      /**
-       * Catalog listing toggle — shown in every status (separate PATCH, not part of the profile snapshot).
-       *
-       * Раньше блок появлялся только у active. Пока тренер шёл к активации, сказать «в каталог
-       * не хочу» было негде, а анкета уходила на модерацию сама — публикация случалась без
-       * согласия. Теперь переключатель и есть согласие: пока он выключен, на проверку ничего
-       * не отправляется (см. maybeAutoSubmitForModeration и try_submit_trainer_for_moderation_review).
-       */
-      function renderCatalogVisibility() {
-        var t = state.trainer || {};
-        var d = state.moderation_readiness || {};
-        var st = (t.status || '').trim();
-        var shellTitle = document.getElementById('catalogVisibilityShell');
-        var card = document.getElementById('catalogVisibilityCard');
-        var cb = document.getElementById('is_catalog_visible');
-        if (!shellTitle || !card || !cb) return;
-        shellTitle.hidden = false;
-        card.hidden = false;
-        var want = t.is_catalog_visible === true;
-        cb.checked = want;
-        cb.disabled = st === 'deactivated';
-
-        var titleEl = card.querySelector('.settings-group-toggle__title');
-        var hintEl = card.querySelector('.settings-group-toggle__hint');
-        if (titleEl) titleEl.textContent = 'Показывать в каталоге';
-        if (!hintEl) return;
-        if (st === 'deactivated') {
-          hintEl.textContent = 'Аккаунт выключен. Восстановление — через поддержку.';
-        } else if (st === 'active') {
-          hintEl.textContent = want
-            ? 'Клиенты находят вас в общем списке. Выключите — останется запись по вашей ссылке.'
-            : 'Вас нет в общем списке. Запись по вашей ссылке работает как обычно.';
-        } else if (want) {
-          /* Тумблер включён не значит «уже в каталоге» — уточняем реальный этап тем же
-             состоянием, что показывает подробный блок ниже, чтобы «включено» и «не вижу себя
-             в каталоге» не выглядели противоречием. */
-          var fbNow = t.moderation_feedback;
-          if (fbNow != null && String(fbNow).trim()) {
-            hintEl.textContent = 'Модератор попросил доработать карточку — подробности ниже.';
-          } else if (d.already_submitted_for_moderation) {
-            hintEl.textContent = 'Заявка на проверке у модератора — обычно отвечаем в течение рабочего дня.';
-          } else {
-            hintEl.textContent =
-              'Готовим карточку к проверке. Как только всё будет заполнено, отправим её модератору.';
-          }
-        } else {
-          hintEl.textContent =
-            'Пока только по вашей ссылке — это нормально. Включите, когда захотите, чтобы вас находили новые ученики.';
-        }
-      }
-
-      function renderModeratorFeedbackBanner() {
-        var banner = document.getElementById('moderatorFeedbackBanner');
-        var txt = document.getElementById('moderatorFeedbackText');
-        if (!banner || !txt) return;
-        var fb = state.trainer && state.trainer.moderation_feedback;
-        var s = (fb != null && String(fb).trim()) ? String(fb).trim() : '';
-        if (s) {
-          txt.textContent = s;
-          banner.hidden = false;
-        } else {
-          txt.textContent = '';
-          banner.hidden = true;
-        }
-      }
-
-      function renderModeration() {
-        var d = state.moderation_readiness || {};
-        var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
-        var missList = document.getElementById('modMissingList');
-        missList.innerHTML = '';
-        var pill = document.getElementById('modStatusPill');
-        if (st) {
-          pill.style.display = 'inline-block';
-          pill.textContent = heroStatusLabelRu(st, d);
-          pill.classList.remove('ok', 'warn', 'pending');
-          pill.classList.add(pillClassForTrainerStatus(st, d));
-        } else { pill.style.display = 'none'; }
-        var hint = document.getElementById('modHint');
-        var missTitle = document.getElementById('modMissingTitle');
-
-        function appendGapListItems(labels) {
-          (labels || []).forEach(function(label) {
-            var li = document.createElement('li');
-            li.textContent = label;
-            missList.appendChild(li);
-          });
-        }
-
-        if (st === 'active') {
-          var vis = state.trainer && state.trainer.is_catalog_visible !== false;
-          var baseHint = vis
-            ? 'Профиль одобрен. Вы в каталоге — клиенты могут вас найти и записаться.'
-            : 'Профиль одобрен, но скрыт из публичного каталога. Запись по прямой ссылке и для текущих клиентов сохраняется — включите показ в разделе «Настройки», если нужен поиск в каталоге.';
-          var activeGapLabels = [];
-          if (d.full_profile_complete === false) {
-            var flA = d.full_profile_missing_labels_ru;
-            if (Array.isArray(flA) && flA.length) activeGapLabels = flA.slice();
-          }
-          if (activeGapLabels.length) {
-            missTitle.style.display = 'block';
-            missTitle.textContent = 'Можно усилить карточку в каталоге:';
-            hint.textContent =
-              baseHint +
-              ' Ниже — конкретные поля; правки во вкладке «Анкета». Это необязательно для работы.';
-            appendGapListItems(activeGapLabels);
-          } else {
-            missTitle.style.display = 'none';
-            hint.textContent =
-              d.full_profile_complete === false
-                ? baseHint +
-                  ' Для полноты карточки в каталоге остались поля — откройте вкладку «Анкета».'
-                : baseHint;
-          }
-        } else if (st === 'deactivated') {
-          missTitle.style.display = 'none';
-          hint.textContent = 'Каталог недоступен. Восстановление — через поддержку.';
-        } else if (st === 'pending_contract') {
-          missTitle.style.display = 'none';
-          hint.textContent = 'Следующий шаг — договор с менеджером.';
-        } else if (st === 'pending_payment') {
-          missTitle.style.display = 'none';
-          hint.textContent = 'Следующий шаг — оплата подписки.';
-        } else if (st === 'pending_profile' && !(state.trainer && state.trainer.is_catalog_visible === true)) {
-          /* Тренер не просился в каталог — значит на проверку ничего не уходит, и говорить
-             «осталось заполнить» нечестно: заполнять не нужно, продукт и так работает. */
-          missTitle.style.display = 'none';
-          hint.textContent =
-            'Вы работаете по своей ссылке — этого достаточно, и профиль можно не доводить. ' +
-            'Захотите, чтобы вас находили новые ученики, — включите «Показывать в каталоге» ' +
-            'в разделе «Настройки», и мы подскажем, что нужно для карточки.';
-        } else if (st === 'pending_profile') {
-          var fbRaw = state.trainer && state.trainer.moderation_feedback;
-          var fbTrim = (fbRaw != null && String(fbRaw).trim()) ? String(fbRaw).trim() : '';
-          var fullGapLabels = [];
-          if (d.full_profile_complete === false) {
-            var fl = d.full_profile_missing_labels_ru;
-            if (Array.isArray(fl) && fl.length) fullGapLabels = fl.slice();
-          }
-          if (fbTrim) {
-            missTitle.style.display = 'none';
-            hint.textContent = 'Модератор оставил комментарий — см. жёлтый блок выше. Внесите правки и снова сохраните анкету.';
-          } else if (d.already_submitted_for_moderation) {
-            hint.textContent = 'Ожидается проверка в админ-боте.';
-            if (fullGapLabels.length) {
-              missTitle.style.display = 'block';
-              missTitle.textContent =
-                'По желанию до полной карточки в каталоге (можно дополнить, пока идёт проверка):';
-              appendGapListItems(fullGapLabels);
-            } else if (d.full_profile_complete === false) {
-              missTitle.style.display = 'none';
-              hint.textContent =
-                'Ожидается проверка в админ-боте. Для полноты карточки в каталоге остались необязательные поля — откройте вкладку «Анкета» и пролистайте блоки профиля.';
-            } else {
-              missTitle.style.display = 'none';
-            }
-          } else if (d.complete) {
-            if (fullGapLabels.length) {
-              missTitle.style.display = 'block';
-              missTitle.textContent =
-                'Для более полной карточки в каталоге (необязательно до первой отправки на проверку):';
-              hint.textContent =
-                'Обязательные пункты для проверки закрыты. Список ниже — что ещё можно усилить; поля во вкладке «Анкета» или отправьте анкету как есть.';
-              appendGapListItems(fullGapLabels);
-            } else {
-              missTitle.style.display = 'none';
-              hint.textContent =
-                d.full_profile_complete === false
-                  ? 'Обязательные пункты для проверки закрыты. Для полноты карточки в каталоге остались необязательные поля — откройте вкладку «Анкета».'
-                  : 'Все пункты профиля для проверки и для каталога заполнены.';
-            }
-          } else {
-            missTitle.style.display = 'block';
-            missTitle.textContent = 'Осталось заполнить:';
-            hint.textContent = '';
-            appendGapListItems(d.missing_labels_ru || []);
-          }
-        } else {
-          missTitle.style.display = 'none';
-          hint.textContent = trainerStatusLabelRu(st) + '.';
-        }
       }
 
       /** Склонение к «год» (1 год, 2 года, 5 лет, 11 лет) — как в catalog.html */
@@ -5584,7 +5436,6 @@
         var cid = state.trainer && state.trainer.profile ? state.trainer.profile.city_id : null;
         loadArenasForCity(cid).then(function() {
           renderArenas();
-          renderModeration();
           syncProfileBlockTourBar();
           if (state.profileBlockTourActive && profileBlockTourEffectiveStepKey() === 'arenas') {
             var missingRaw =
@@ -6127,8 +5978,6 @@
             state.moderation_readiness = data.moderation_readiness;
             state.education_entries = data.education_entries || [];
             renderEducationEntries();
-            renderModeration();
-            renderModeratorFeedbackBanner();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -6181,8 +6030,6 @@
             state.moderation_readiness = o.data.moderation_readiness;
             state.education_entries = o.data.education_entries || [];
             renderEducationEntries();
-            renderModeration();
-            renderModeratorFeedbackBanner();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
               setDirty();
@@ -6783,66 +6630,6 @@
             });
         });
       })();
-      (function wireCatalogVisibilityToggle() {
-        var cb = document.getElementById('is_catalog_visible');
-        if (!cb) return;
-        var busy = false;
-        cb.addEventListener('change', function() {
-          if (busy) return;
-          var want = !!cb.checked;
-          busy = true;
-          cb.disabled = true;
-          fetch(apiUrl('/trainer/catalog-visibility'), {
-            method: 'PATCH',
-            headers: headersJson(),
-            body: JSON.stringify({ is_catalog_visible: want }),
-          })
-            .then(parseJsonResponse)
-            .then(function(o) {
-              busy = false;
-              cb.disabled = false;
-              if (!o.ok) {
-                cb.checked = !want;
-                haptic('error');
-                var msg =
-                  o.data && o.data.detail
-                    ? String(o.data.detail)
-                    : 'Не удалось обновить настройку каталога.';
-                alert(msg);
-                return;
-              }
-              if (state.trainer) state.trainer.is_catalog_visible = want;
-              haptic('success');
-              renderCatalogVisibility();
-              renderModeration();
-              var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
-              var body;
-              if (st === 'active') {
-                body = want
-                  ? 'Профиль снова виден в каталоге клиентов'
-                  : 'Профиль скрыт из каталога клиентов';
-              } else {
-                var ready = !!(state.moderation_readiness && state.moderation_readiness.complete);
-                body = want
-                  ? (ready
-                      ? 'Отправляем карточку на проверку — обычно отвечаем в течение рабочего дня'
-                      : 'Готовим карточку к проверке — заполните анкету, и мы отправим её модератору')
-                  : 'Хорошо, в каталог не отправляем. Запись по вашей ссылке работает';
-              }
-              showSaveToast('Каталог', body, 'success');
-              // Включение тумблера — и есть просьба о публикации: если анкета уже полная,
-              // отправляем сразу, чтобы «хочу в каталог» не требовало второго действия.
-              if (want) maybeAutoSubmitForModeration();
-            })
-            .catch(function() {
-              busy = false;
-              cb.disabled = false;
-              cb.checked = !want;
-              haptic('error');
-              alert('Ошибка сети. Попробуйте снова.');
-            });
-        });
-      })();
             
       function markFieldValid(id) {
         var el = document.getElementById(id);
@@ -7069,6 +6856,16 @@
       if (window.CrmPhoneField) {
         CrmPhoneField.initAll(document);
       }
+
+      /* Вкладка «Публикация» больше не дублирует состояние каталога — она ведёт в раздел,
+         где это состояние живёт (TASK-140). */
+      (function wireOpenCatalogSection() {
+        var btn = document.getElementById('btnOpenCatalogSection');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+          window.location.href = webappPageUrl('trainer-catalog');
+        });
+      })();
 
       initBirthDateInput();
       loadInitial();

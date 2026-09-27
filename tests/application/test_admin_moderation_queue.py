@@ -34,11 +34,13 @@ async def test_pending_moderation_count_excludes_incomplete_pending_profile(
 @pytest.mark.asyncio
 async def test_pending_moderation_excludes_opted_out_complete_profile(db_session: AsyncSession) -> None:
     """
-    A pending_profile trainer with a complete-enough profile but is_catalog_visible=false must
+    A pending_profile trainer with a complete-enough profile who never asked for the catalog must
     not show up in /pending — "publication is the trainer's decision" (see
     try_submit_trainer_for_moderation_review) applies to the admin listing too, not just the
     submit endpoint. Without this, opting out doesn't pull a trainer out of the queue and an
     admin could approve someone who withdrew.
+
+    Since TASK-140 "asked" is the card state, not a boolean: a bare ``draft`` means never asked.
     """
     r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
     sid = r.scalar()
@@ -67,14 +69,14 @@ async def test_pending_moderation_excludes_opted_out_complete_profile(db_session
     )
     await db_session.commit()
 
-    # is_catalog_visible defaults to false — never opted in.
+    # catalog_state defaults to 'draft' with no reason — never opted in.
     ids_before = await list_trainer_ids_eligible_for_admin_moderation(db_session)
     assert tid not in ids_before
 
     await db_session.execute(
         text(
-            "UPDATE trainers SET is_catalog_visible = true, moderation_submitted_at = now() "
-            "WHERE id = :tid"
+            "UPDATE trainers SET catalog_state = 'pending_review', "
+            "moderation_submitted_at = now() WHERE id = :tid"
         ),
         {"tid": tid},
     )
@@ -84,7 +86,13 @@ async def test_pending_moderation_excludes_opted_out_complete_profile(db_session
 
     # Opts back out before the admin gets to it — must drop out of the queue again.
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = false WHERE id = :tid"), {"tid": tid}
+        # Withdrawing the request drops the card back to a bare draft (no trainer_requested
+        # marker) — which is what makes it disappear from the queue again.
+        text(
+            "UPDATE trainers SET catalog_state = 'draft', catalog_state_reason = NULL "
+            "WHERE id = :tid"
+        ),
+        {"tid": tid},
     )
     await db_session.commit()
     ids_opted_out = await list_trainer_ids_eligible_for_admin_moderation(db_session)

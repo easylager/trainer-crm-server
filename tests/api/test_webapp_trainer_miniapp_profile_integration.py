@@ -1149,9 +1149,12 @@ async def test_submit_for_moderation_incomplete_returns_422_with_missing_fields(
         trainer_id = create_resp.json()["id"]
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
-        # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
-        # asked to be listed — publication is no longer a side effect of a complete profile.
-        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
+        # Asked to be listed, card not complete yet: since TASK-140 that is a draft carrying the
+        # trainer_requested marker, not a published card.
+        text(
+            "UPDATE trainers SET telegram_id = :tg, catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :id"
+        ),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1218,7 +1221,12 @@ async def test_submit_for_moderation_success_when_profile_complete(
     await db_session.execute(
         # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
         # asked to be listed — publication is no longer a side effect of a complete profile.
-        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
+        text(
+            # Asked to be listed, not yet reviewed: since TASK-140 that is a draft with the
+            # trainer_requested marker — a published card would have nothing left to submit.
+            "UPDATE trainers SET telegram_id = :tg, catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :id"
+        ),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1295,7 +1303,12 @@ async def test_submit_for_moderation_succeeds_with_submission_tier_only_profile(
     await db_session.execute(
         # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
         # asked to be listed — publication is no longer a side effect of a complete profile.
-        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
+        text(
+            # Asked to be listed, not yet reviewed: since TASK-140 that is a draft with the
+            # trainer_requested marker — a published card would have nothing left to submit.
+            "UPDATE trainers SET telegram_id = :tg, catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :id"
+        ),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -1370,7 +1383,12 @@ async def test_moderation_readiness_embedded_reflects_submit_state(
     await db_session.execute(
         # Since 0182_catalog_opt_in, submitting for moderation requires the trainer to have
         # asked to be listed — publication is no longer a side effect of a complete profile.
-        text("UPDATE trainers SET telegram_id = :tg, is_catalog_visible = true WHERE id = :id"),
+        text(
+            # Asked to be listed, not yet reviewed: since TASK-140 that is a draft with the
+            # trainer_requested marker — a published card would have nothing left to submit.
+            "UPDATE trainers SET telegram_id = :tg, catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :id"
+        ),
         {"tg": tg, "id": trainer_id},
     )
     await db_session.commit()
@@ -2207,10 +2225,13 @@ async def test_enabling_catalog_queues_a_complete_profile_for_review(
             )
     assert resp.status_code == 200, resp.text
 
+    # The card is queued, not published: a moderator has not seen it yet. Before TASK-140 the
+    # boolean flag went true here, which is exactly the conflation of «попросил» and «в каталоге»
+    # that this task removed.
     r2 = await db_session.execute(
-        text("SELECT is_catalog_visible, moderation_submitted_at FROM trainers WHERE id = :id"),
+        text("SELECT catalog_state, moderation_submitted_at FROM trainers WHERE id = :id"),
         {"id": trainer_id},
     )
     row = r2.fetchone()
-    assert row[0] is True
+    assert row[0] == "pending_review"
     assert row[1] is not None

@@ -15,17 +15,23 @@ from __future__ import annotations
 from typing import Any
 
 # Сколько реальных занятий должно пройти по личной ссылке, прежде чем предлагать каталог.
-# Смысл порога: каталог — награда за работающую практику, а не задание на старте. Пока у
-# тренера нет своего потока, обещание «вас найдут новые ученики» продукт выполнить не может.
-CATALOG_INVITE_MIN_BOOKINGS = 5
+# Был 5: каталог — награда за работающую практику, а не задание на старте, и пока у тренера нет
+# своего потока, обещание «вас найдут новые ученики» продукт выполнить не может.
+#
+# С TASK-140 порог 1 — сразу после онбординга. Логика «не давить» держалась на том, что хинт был
+# единственной дверью в каталог; теперь дверь — постоянная вкладка бара, и приглашение перестало
+# быть давлением: оно рассказывает про раздел, который тренер и так видит.
+CATALOG_INVITE_MIN_BOOKINGS = 1
 
 # Действия, которые понимает хаб. Держим список коротким намеренно.
 ACTION_OPEN_ONBOARDING = "open_onboarding"
 ACTION_SHARE_LINK = "share_link"
 ACTION_OPEN_PROFILE = "open_profile"
-ACTION_ENABLE_CATALOG = "enable_catalog"
-# Opt-in уже дан — открыть ту же карусель catalog (без второго «флоу»).
-ACTION_OPEN_CATALOG_PROFILE = "open_catalog_profile"
+# Одно действие на все ветки каталога (TASK-140): раздел «Каталог» сам знает, что показать —
+# пустое состояние, пробелы, комментарий модератора или причину приостановки. Раньше их было два
+# (ACTION_ENABLE_CATALOG включал тумблер, ACTION_OPEN_CATALOG_PROFILE открывал карусель), и хаб
+# должен был угадывать, в каком состоянии карточка.
+ACTION_OPEN_CATALOG = "open_catalog"
 ACTION_DISMISS = "dismiss"
 
 # Короткие имена полей для карточки. Ключи = submission missing_fields.
@@ -161,7 +167,7 @@ def resolve_trainer_next_step(
                 if feedback
                 else "Откройте анкету, чтобы увидеть комментарий, исправьте и сохраните."
             ),
-            "cta": {"label": "Исправить анкету", "action": ACTION_OPEN_CATALOG_PROFILE},
+            "cta": {"label": "Открыть «Каталог»", "action": ACTION_OPEN_CATALOG},
             "secondary": None,
         }
 
@@ -189,7 +195,7 @@ def resolve_trainer_next_step(
                     f"{real_bookings} {word} по вашей ссылке. "
                     f"Для карточки в каталоге не хватает: {catalog_need}."
                 ),
-                "cta": {"label": "Продолжить", "action": ACTION_OPEN_CATALOG_PROFILE},
+                "cta": {"label": "Продолжить", "action": ACTION_OPEN_CATALOG},
                 "secondary": None,
             }
         if not catalog_opted_in:
@@ -205,7 +211,7 @@ def resolve_trainer_next_step(
                     f"{real_bookings} {word} по вашей ссылке. "
                     f"Хотите, чтобы вас находили новые ученики? {tail}"
                 ),
-                "cta": {"label": "Хочу в каталог", "action": ACTION_ENABLE_CATALOG},
+                "cta": {"label": "Хочу в каталог", "action": ACTION_OPEN_CATALOG},
                 "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
             }
 

@@ -1,0 +1,432 @@
+/*
+ * Раздел «Каталог» (TASK-140).
+ *
+ * Один экран, одна вертикаль, без табов: состояние → превью → что осталось → предупреждения →
+ * метрики → действия → история. Порядок повторяет порядок вопросов тренера, а не структуру API.
+ *
+ * Токены берём из mini-app-trainer-theme.css — своей палитры раздел не вводит.
+ */
+
+.tc-page {
+  padding: 12px 14px calc(16px + var(--trainer-tab-bar-height, 64px));
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tc-root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── Состояние ──────────────────────────────────────────────────────────── */
+
+.tc-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-status__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.tc-status__headline {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--tg-text, #101114);
+}
+
+.tc-status__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--tg-hint, #9aa0a6);
+}
+
+/* Цвет несёт смысл, но не единственный носитель: рядом всегда текст состояния. */
+.tc-status__dot--published { background: #2e9e5b; }
+.tc-status__dot--pending_review { background: #e9a23b; }
+.tc-status__dot--paused { background: #e9a23b; }
+.tc-status__dot--needs_revision { background: #e5533d; }
+.tc-status__dot--hidden,
+.tc-status__dot--draft { background: var(--tg-hint, #9aa0a6); }
+
+.tc-status__meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* Причина приостановки — главный текст экрана в этом состоянии, поэтому заметнее meta. */
+.tc-status__detail {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tg-text, #101114);
+}
+
+.tc-status__body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--tg-hint, #6b7177);
+}
+
+.tc-studio-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg, #f1f3f2);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* ─── Пустое состояние ───────────────────────────────────────────────────── */
+
+.tc-pitch {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--tg-secondary-bg, #f1f3f2);
+}
+
+.tc-pitch__lead {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tc-pitch__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.tc-pitch__note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* ─── Превью карточки ────────────────────────────────────────────────────── */
+
+.tc-section-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tg-hint, #6b7177);
+}
+
+.tc-section-label--soft {
+  margin-top: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tc-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--tg-bg, #fff);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Вторая версия — та же карточка, но явно «ещё не у клиента». */
+.tc-card--next {
+  margin-top: 6px;
+  border: 1px dashed var(--tg-hint, #c2c8cc);
+  box-shadow: none;
+  background: transparent;
+}
+
+.tc-card__photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--tg-secondary-bg, #f1f3f2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tc-card__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tc-card__photo-empty {
+  font-size: 11px;
+  color: var(--tg-hint, #9aa0a6);
+}
+
+.tc-card__body { min-width: 0; }
+
+.tc-card__name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.tc-card__meta {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--tg-text, #101114);
+}
+
+.tc-card__meta--muted { color: var(--tg-hint, #6b7177); }
+
+.tc-preview__revision-label {
+  margin: 12px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* ─── Готовность ─────────────────────────────────────────────────────────── */
+
+.tc-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-checklist__item {
+  font-size: 14px;
+  padding-left: 20px;
+  position: relative;
+}
+
+.tc-checklist__item::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.tc-checklist__item--todo { color: var(--tg-text, #101114); }
+.tc-checklist__item--soft { color: var(--tg-hint, #6b7177); }
+
+/* ─── Предупреждения ─────────────────────────────────────────────────────── */
+
+.tc-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tc-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(233, 162, 59, 0.12);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tc-warning__icon { flex: 0 0 auto; }
+.tc-warning__text { flex: 1 1 180px; min-width: 0; }
+.tc-warning__action { flex: 0 0 auto; }
+
+/* ─── Метрики ────────────────────────────────────────────────────────────── */
+
+.tc-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tc-metric {
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg, #f1f3f2);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tc-metric__val {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tc-metric__lbl {
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* ─── Действия ───────────────────────────────────────────────────────────── */
+
+.tc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tc-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.tc-btn--primary {
+  background: var(--tg-button, #2e7d5b);
+  color: var(--tg-button-text, #fff);
+}
+
+.tc-btn--soft {
+  background: var(--tg-secondary-bg, #f1f3f2);
+  color: var(--tg-text, #101114);
+}
+
+.tc-link-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--tg-link, #2e7d5b);
+  cursor: pointer;
+  text-align: left;
+  min-height: 36px;
+}
+
+/* Деструктивное и редкое не должно конкурировать по весу с «Изменить». */
+.tc-link-btn--danger {
+  color: #c2402f;
+  align-self: flex-start;
+}
+
+.tc-actions__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--tg-hint, #6b7177);
+}
+
+.tc-subscription-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tg-hint, #6b7177);
+}
+
+/* ─── История ────────────────────────────────────────────────────────────── */
+
+.tc-history__toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tg-link, #2e7d5b);
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.tc-history__list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tc-history__item {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  padding-left: 12px;
+  border-left: 2px solid var(--tg-secondary-bg, #e6e9e8);
+}
+
+.tc-history__when { color: var(--tg-hint, #6b7177); font-size: 12px; }
+.tc-history__what { font-weight: 600; }
+.tc-history__why { color: var(--tg-hint, #6b7177); line-height: 1.4; }
+
+/* ─── Состояния экрана ───────────────────────────────────────────────────── */
+
+.tc-state {
+  padding: 28px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.tc-state__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tg-hint, #6b7177);
+}
+
+.tc-loading-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.tc-loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tg-hint, #9aa0a6);
+  animation: tc-blink 1.2s infinite ease-in-out;
+}
+
+.tc-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.tc-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes tc-blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-loading-dots span { animation: none; opacity: 0.6; }
+}

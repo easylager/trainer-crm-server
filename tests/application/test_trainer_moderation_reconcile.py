@@ -76,8 +76,10 @@ async def test_moderation_submitted_at_cleared_but_feedback_kept_when_profile_be
 
     row2 = await get_trainer(db_session, tid)
     assert row2 is not None
-    assert row2["status"] == "pending_profile"
-    # Queue stamp drops (draft no longer looks "submitted")...
+    # The account is NOT demoted any more (TASK-140): an incomplete card is the card's problem.
+    # Before, this said pending_profile — and the trainer was never told why.
+    assert row2["status"] == "active"
+    # Queue stamp drops (an incomplete card no longer looks "submitted")...
     assert row2.get("moderation_submitted_at") is None
     # ...but the moderator's own comment is not this function's to erase.
     assert (row2.get("moderation_feedback") or "").strip() == "Исправьте описание"

@@ -49,7 +49,13 @@ async def test_submit_moderation_notifies_once_until_profile_changes(db_session,
     # Since 0182_catalog_opt_in the queue is entered only on the trainer's own request; a
     # complete profile alone must never publish them (see test below).
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": tid}
+        text(
+            # «Попросил в каталог», not «в каталоге»: since TASK-140 that is a draft carrying
+            # the trainer_requested marker. The card is published only after a moderator.
+            "UPDATE trainers SET catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :tid"
+        ),
+        {"tid": tid},
     )
     await db_session.commit()
 
@@ -64,7 +70,7 @@ async def test_submit_moderation_notifies_once_until_profile_changes(db_session,
     )
 
     first = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert first == {"ok": True, "submitted": True}
+    assert first["ok"] is True and first.get("submitted") is True
     assert notified == [tid]
 
     second = await try_submit_trainer_for_moderation_review(db_session, tid)
@@ -75,7 +81,7 @@ async def test_submit_moderation_notifies_once_until_profile_changes(db_session,
 
     await update_trainer_profile(db_session, tid, profile={"description": "z" * 30})
     third = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert third == {"ok": True, "submitted": True}
+    assert third["ok"] is True and third.get("submitted") is True
     assert notified == [tid, tid]
 
 
@@ -125,7 +131,13 @@ async def test_resending_unchanged_profile_field_does_not_reset_submission(
         {"tid": tid, "fk": "trainers/1/test.jpg"},
     )
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": tid}
+        text(
+            # «Попросил в каталог», not «в каталоге»: since TASK-140 that is a draft carrying
+            # the trainer_requested marker. The card is published only after a moderator.
+            "UPDATE trainers SET catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :tid"
+        ),
+        {"tid": tid},
     )
     await db_session.commit()
 
@@ -140,7 +152,7 @@ async def test_resending_unchanged_profile_field_does_not_reset_submission(
     )
 
     first = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert first == {"ok": True, "submitted": True}
+    assert first["ok"] is True and first.get("submitted") is True
     assert notified == [tid]
 
     # Re-save the same first_name value — a later carousel step re-saving the whole form.
@@ -228,13 +240,17 @@ async def test_submit_moderation_refuses_until_trainer_asks_for_catalog(db_sessi
 
     # Turning the switch on is the request — the same call then queues normally.
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": tid}
+        text(
+            # «Попросил в каталог», not «в каталоге»: since TASK-140 that is a draft carrying
+            # the trainer_requested marker. The card is published only after a moderator.
+            "UPDATE trainers SET catalog_state = 'draft', "
+            "catalog_state_reason = 'trainer_requested' WHERE id = :tid"
+        ),
+        {"tid": tid},
     )
     await db_session.commit()
-    assert await try_submit_trainer_for_moderation_review(db_session, tid) == {
-        "ok": True,
-        "submitted": True,
-    }
+    queued = await try_submit_trainer_for_moderation_review(db_session, tid)
+    assert queued["ok"] is True and queued.get("submitted") is True
     assert notified == [tid]
 
 
@@ -369,7 +385,10 @@ async def test_onboarding_checklist_does_not_clear_moderator_feedback(db_session
     )
     await db_session.execute(
         text(
-            "UPDATE trainers SET is_catalog_visible = true, moderation_submitted_at = now(), "
+            # Moderator asked for changes: since TASK-140 that is the card's own state, and the
+            # free-text comment rides along as the reason detail.
+            "UPDATE trainers SET catalog_state = 'needs_revision', "
+            "catalog_state_reason = 'moderator_revision', moderation_submitted_at = now(), "
             "moderation_feedback = 'Добавьте фото получше' WHERE id = :tid"
         ),
         {"tid": tid},
@@ -451,20 +470,24 @@ async def test_opt_out_then_opt_in_resubmits_instead_of_silent_noop(db_session, 
         fake_notify,
     )
 
+    # Since TASK-140 turning the switch on submits by itself: the toggle, the catalog screen and
+    # the legacy REST route all reach the state machine through the same call, so the separate
+    # try_submit that used to follow would now be the second request for one decision.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=True) is True
-    first = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert first == {"ok": True, "submitted": True}
     assert notified == [tid]
+    r_state = await db_session.execute(
+        text("SELECT catalog_state FROM trainers WHERE id = :tid"), {"tid": tid}
+    )
+    assert r_state.scalar() == "pending_review"
 
-    # Opts out before admin gets to it.
+    # Opts out before admin gets to it: the request is withdrawn, stamp and all.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=False) is True
     r_after_out = await db_session.execute(
-        text("SELECT moderation_submitted_at FROM trainers WHERE id = :tid"), {"tid": tid}
+        text("SELECT moderation_submitted_at, catalog_state FROM trainers WHERE id = :tid"),
+        {"tid": tid},
     )
-    assert r_after_out.scalar() is None
+    assert tuple(r_after_out.fetchone()) == (None, "draft")
 
-    # Opts back in — must be a genuine fresh request, not a silent "already_submitted" noop.
+    # Opts back in — a genuine fresh request, not a silent "already_submitted" noop.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=True) is True
-    second = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert second == {"ok": True, "submitted": True}
     assert notified == [tid, tid]

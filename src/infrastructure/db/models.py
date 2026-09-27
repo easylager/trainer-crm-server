@@ -32,7 +32,9 @@ class Base(DeclarativeBase):
     pass
 
 
-# Lifecycle: only "active" trainers are shown to clients (e.g. in catalog/channel).
+# Lifecycle of the ACCOUNT. Public catalog membership is CATALOG_STATE_PUBLISHED
+# (see below) — `status` no longer answers "is this trainer listed?" and an
+# incomplete card no longer demotes the account (TASK-140, migration 0206).
 TRAINER_STATUS_PENDING_PROFILE = "pending_profile"
 TRAINER_STATUS_PENDING_CONTRACT = "pending_contract"
 TRAINER_STATUS_PENDING_PAYMENT = "pending_payment"
@@ -46,6 +48,30 @@ TRAINER_STATUSES = (
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
 )
+
+# Public catalog card state — the single source of truth for "is this trainer listed?".
+# Defined in ``src.shared.catalog_visibility`` so application code and these models agree
+# without either importing the other; re-exported here because most callers already import
+# trainer constants from this module. Only
+# ``src.application.trainer_catalog_state.set_catalog_state`` writes the column, and every
+# write emits a ``trainer_catalog_events`` row — a card cannot leave the catalog without a
+# reason and an author (TASK-140).
+from src.shared.catalog_visibility import (  # noqa: E402  (re-export, kept next to statuses)
+    CATALOG_ACTOR_API,
+    CATALOG_ACTOR_MODERATOR,
+    CATALOG_ACTOR_STUDIO,
+    CATALOG_ACTOR_SYSTEM,
+    CATALOG_ACTOR_TRAINER,
+    CATALOG_ACTOR_TYPES,
+    CATALOG_STATE_DRAFT,
+    CATALOG_STATE_HIDDEN,
+    CATALOG_STATE_NEEDS_REVISION,
+    CATALOG_STATE_PAUSED,
+    CATALOG_STATE_PENDING_REVIEW,
+    CATALOG_STATE_PUBLISHED,
+    CATALOG_STATES,
+)
+
 
 TRAINER_EDUCATION_TYPE_FORMAL = "formal_education"
 TRAINER_EDUCATION_TYPE_COURSE = "course_or_certificate"
@@ -101,10 +127,22 @@ class Trainer(Base):
     arena_request_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
     referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
-    # Public client catalog (/api/public/trainers): the trainer's own opt-in. Defaults to false —
-    # filling in a profile is not the same intent as asking to be listed publicly, and listings
-    # additionally require status = 'active'. See migration 0182_catalog_opt_in.
+    # DEPRECATED (TASK-140): derived mirror of ``catalog_state == 'published'``, kept one
+    # release so admin tooling and analytics that still read it keep working. Written only by
+    # ``set_catalog_state`` — never set it directly. Read ``catalog_state`` instead.
     is_catalog_visible: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
+    # Public catalog card state (migration 0206). The only gate the public catalog reads;
+    # changed exclusively through ``src.application.trainer_catalog_state.set_catalog_state``,
+    # which writes a ``trainer_catalog_events`` row in the same transaction.
+    catalog_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=CATALOG_STATE_DRAFT, server_default=CATALOG_STATE_DRAFT
+    )
+    # Machine code for the current state (missing_phone, moderator_revision, …). The human
+    # sentence shown to the trainer lives on the event, not here.
+    catalog_state_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    catalog_state_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # First time trainer copied a client-facing invite or booking link in Mini App (growth funnel).
     client_invite_link_first_copied_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -518,6 +556,33 @@ class TrainerEducationModerationEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TrainerCatalogEvent(Base):
+    """
+    Every change of ``trainers.catalog_state`` — the reason a trainer can never leave the
+    public catalog silently (TASK-140, migration 0206).
+
+    Written only from ``src.application.trainer_catalog_state.set_catalog_state``, in the same
+    transaction as the column update. ``reason`` is the machine code the UI and tests match on;
+    ``reason_detail`` is the sentence shown to the trainer (moderator comment, list of fields
+    that went missing). ``from_state`` is NULL only for a trainer's first event.
+    """
+    __tablename__ = "trainer_catalog_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    from_state: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    to_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason_detail: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class TrainerPhoto(Base):
     """Metadata only. Actual files live in S3 (S3_ENDPOINT + S3_BUCKET); file_key = object key in bucket."""
     __tablename__ = "trainer_photos"
@@ -642,6 +707,30 @@ class ClientTrainerEdge(Base):
     # --- contextual primary scope (future-proof, unused in initial UI) ---
     context_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class ClientMerge(Base):
+    """
+    Audit trail for ``merge_clients_use_cases.merge_clients``: duplicate client
+    ``from_client_id`` absorbed into ``to_client_id`` (e.g. trainer mistyped a client's
+    phone, client later self-registered with the correct one under a fresh row).
+
+    ``from_client_id`` is not an FK — that row no longer exists in ``clients`` once the
+    merge it records has run. ``snapshot`` holds both rows' pre-merge state and per-table
+    moved-row counts, so an incident can be reconstructed without re-querying live data.
+    """
+    __tablename__ = "client_merges"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    from_client_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    to_client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    merged_by_trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
+    )
+    snapshot: Mapped[dict] = mapped_column(JSONB(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Client bot session (one row per telegram_id); city_id for future cities table ---

@@ -1973,7 +1973,7 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
-          openHubCatalogProfileGaps();
+          navigateTo('trainer-catalog');
           return;
         }
         if (cand.action === 'trainer_referral') {
@@ -2842,74 +2842,22 @@
           return;
         }
         if (action === 'open_profile') {
-          openHubCatalogProfileGaps();
+          navigateTo('trainer-catalog');
           return;
         }
         if (action === 'share_link') {
           shareTrainerInviteLink();
           return;
         }
-        if (action === 'enable_catalog') {
-          enableHubCatalogListing();
-          return;
-        }
-        if (action === 'open_catalog_profile') {
-          openHubCatalogProfileGaps();
+        /* Одна дверь на все ветки каталога — сам раздел знает, что показать (TASK-140). */
+        if (action === 'open_catalog') {
+          navigateTo('trainer-catalog');
           return;
         }
         if (action === 'dismiss') {
           persistHubNextStepDismissed(step.key);
           renderHubNextStep(null);
         }
-      }
-
-      function hubCatalogNeedQuery() {
-        var missing =
-          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
-        if (!missing.length) return '';
-        return '&need=' + encodeURIComponent(missing.join(','));
-      }
-
-      /** Opt-in уже есть — только карусель по тем же gaps, что в тексте карточки. */
-      function openHubCatalogProfileGaps() {
-        navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-      }
-
-      /**
-       * «Хочу в каталог» — включаем показ и открываем профиль.
-       *
-       * Включение тумблера и есть просьба о публикации: PATCH /trainer/catalog-visibility сам
-       * вызывает try_submit_trainer_for_moderation_review на сервере, когда анкета уже полная —
-       * отдельный запрос отсюда не нужен (и раньше об этом ошибочно говорилось как про «heal на
-       * хабе»: чтения статуса теперь ничего не отправляют, только эта explicit-ручка). Профиль
-       * открываем следом по task=catalog — рельс из реальных submission-пробелов
-       * (имя/телефон/фото…), а не только витрина «о себе». `need=` дублирует
-       * catalog_missing_fields с карточки, чтобы карусель не открыла витрину, если
-       * moderation_readiness ещё не подгрузился.
-       */
-      function enableHubCatalogListing() {
-        var missing =
-          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
-        fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
-          method: 'PATCH',
-          headers: headersJson(),
-          body: JSON.stringify({ is_catalog_visible: true }),
-        })
-          .then(function () {
-            if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            if (missing.length) {
-              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-            } else {
-              navigateTo('trainer-home');
-            }
-          })
-          .catch(function () {
-            if (missing.length) {
-              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-            } else {
-              navigateTo('trainer-home');
-            }
-          });
       }
 
       /**
