@@ -308,7 +308,8 @@ async def test_moderator_revision_round_trip_from_any_account_status(
         tid,
         tg,
         state=CATALOG_STATE_NEEDS_REVISION,
-        actions=["submit"],
+        # «Исправить в анкете» первым: правки живут там, а экран каталога их не содержит.
+        actions=["edit", "submit"],
         public=False,
         journal_actor="moderator",
     )

@@ -76,9 +76,12 @@ STATE_HEADLINE_RU: dict[str, str] = {
 }
 
 STATE_BODY_RU: dict[str, str] = {
+    # Draft-фраза — единственное место, где мы объясняем ценность каталога, и объяснять
+    # надо трафик, а не устройство раздела. «Список тренеров» описывал таблицу; тренера
+    # интересует, откуда в ней берутся люди.
     CATALOG_STATE_DRAFT: (
-        "Каталог — список тренеров, который смотрят новые ученики. Сейчас к вам приходят "
-        "только по вашей ссылке, и это нормально."
+        "Каталог — витрина сервиса: новых учеников на неё приводим мы. Сейчас к вам "
+        "попадают только те, кому вы сами дали ссылку."
     ),
     CATALOG_STATE_PENDING_REVIEW: (
         "Обычно отвечаем в течение рабочего дня — пуш придёт сразу."
@@ -177,7 +180,11 @@ def _state_actions(
         if not queue_stamp_held and submit_ready:
             return ["resubmit", "withdraw"]
         return ["withdraw"]
-    # draft / needs_revision: publishing is the one deliberate act, and only when ready.
+    if state == CATALOG_STATE_NEEDS_REVISION:
+        # Правки — это работа в анкете, а экран каталога её не содержит. Без явной двери
+        # тренер читал комментарий модератора и закрывал раздел, чтобы искать анкету руками.
+        return ["edit", "submit"] if submit_ready else ["fill"]
+    # draft: publishing is the one deliberate act, and only when ready.
     return ["submit"] if submit_ready else ["fill"]
 
 
