@@ -53,7 +53,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "ice-tab.js" in body
     assert "ice-map.js" in body
     assert "catalog-main.js" not in body
-    assert "Покататься" in body
+    assert "Где заниматься" in body
     assert "Тренеры" in body
     assert 'data-intent="group"' not in body
     assert "ice-masthead" in body
@@ -63,7 +63,11 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "iceViewSeg" not in body
     assert "iceViewSwitch" in body
     assert "iceMapSec" in body
-    assert "Каток, тренер или город" in body
+    # Плейсхолдер перестал обещать только лёд: вкладка держит площадки любого типа
+    # (зал, хореография) и тренеров, а не один каток.
+    assert "Тренер, место или город" in body
+    # Фильтр по типу площадки; чипы рисуются по фасетам города (venue_type_facets).
+    assert "iceVenueChips" in body
     assert js.status_code == 200
     # Флаг MAP_ENABLED снят намеренно: он гасил случай «экран открылся картой без
     # выхода», а TASK-103 делает этот случай невозможным — список всегда стартовый вид.
@@ -93,7 +97,7 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert ".ice-ypin__label" in css.text
     assert "color: inherit" not in css.text.split(".ice-ypin__label")[1].split("}")[0]
     assert ".ice-sec[hidden]" in css.text
-    # Покататься и Тренеры — разные DOM-хосты: иначе WebView на кадр
+    # «Где заниматься» и «Тренеры» — разные DOM-хосты: иначе WebView на кадр
     # перекрашивает табло катка в компактную строку тренера.
     assert 'id="iceListSkate"' in body
     assert 'id="iceListCoach"' in body
@@ -103,9 +107,15 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
 
 
 def test_shell_second_tab_is_ice() -> None:
-    """AC-001: tab bar label Лёд opens ice; four tabs unchanged otherwise."""
+    """Вторая вкладка — «Поиск» и ведёт на ice; остальные три не тронуты.
+
+    Называлась «Лёд», пока держала только катки. Сейчас в ней три интента —
+    площадки (любого типа), тренеры и группы, — и ледовое имя прятало бы
+    и залы, и половину содержимого: людей.
+    """
     shell = (REPO_ROOT / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
-    assert "label: 'Лёд'" in shell
+    assert "label: 'Поиск'" in shell
+    assert "label: 'Лёд'" not in shell
     assert "path: 'ice'" in shell
     assert "label: 'Главная'" in shell
     assert "label: 'Записи'" in shell

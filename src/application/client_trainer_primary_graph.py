@@ -7,9 +7,15 @@ Lives in application layer so routes and use cases can import without loading ``
 Primary trainer resolution (strict product contract):
   1. Latest booking by slot start (trainer-edges / hub SQL candidate).
   2. Else explicit ``is_primary`` edge (invite link, user pin in «Мои тренеры»).
-  3. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
-  4. Else client_sessions.selected_trainer_id (last catalog browse context).
-  5. Else no primary.
+  3. Else latest booking of the whole history, slot or no slot (``ever_booked``).
+  4. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
+  5. Else client_sessions.selected_trainer_id (last catalog browse context).
+  6. Else no primary.
+
+Tier 3 exists because tiers 1–2 are not durable: the SQL candidate INNER JOINs ``slots`` and
+skips ``trainer_removed``, so a trainer editing their schedule could erase «Мой тренер» from the
+client hub — the client was then offered the whole catalog again. Product rule: after the first
+booking with a trainer the hub always shows that trainer.
 
 Synthetic edge rows fill gaps when booking/session trainer_id has no client_trainer_edges row yet.
 """
@@ -110,6 +116,24 @@ def _saved_recency_sort_key(edge: dict) -> tuple[float, float, int]:
     return (ts(sa), ts(ca), tid)
 
 
+def _booking_tier_edge_row(
+    edges: list[dict],
+    trainer_id: int,
+    service_id: int | None,
+) -> dict:
+    """Edge row for a booking-derived tier, with the booking's service pinned on it."""
+    svc: int | None
+    try:
+        svc = int(service_id) if service_id is not None else None
+    except (TypeError, ValueError):
+        svc = None
+    row = edge_row_for_primary_trainer(edges, int(trainer_id), last_booking_service_id=svc)
+    if svc is not None:
+        row = dict(row)
+        row["last_booking_service_id"] = svc
+    return row
+
+
 def resolve_primary_trainer_strict(
     edges: list[dict],
     *,
@@ -117,35 +141,34 @@ def resolve_primary_trainer_strict(
     booking_primary_service_id: int | None,
     session_trainer_id: int | None,
     explicit_primary_edge: dict | None = None,
+    ever_booked_trainer_id: int | None = None,
+    ever_booked_service_id: int | None = None,
 ) -> tuple[dict | None, str | None]:
     """
     Strict tier order for «основной тренер» across mini-app + dependent APIs.
 
     booking_primary_* comes from SQL over bookings/slots (caller-supplied).
     explicit_primary_edge: row with is_primary=true (invite link / user pin) — beats past bookings.
+    ever_booked_*: last booking of the entire history regardless of slot/`trainer_removed`
+    (``client_ever_booked_primary_candidate``) — durable floor, a real visit outweighs a bookmark
+    or a catalog browse.
     """
     if booking_primary_trainer_id is not None:
-        tid = int(booking_primary_trainer_id)
-        sid = booking_primary_service_id
-        svc: int | None
-        try:
-            svc = int(sid) if sid is not None else None
-        except (TypeError, ValueError):
-            svc = None
-        row = edge_row_for_primary_trainer(
-            edges,
-            tid,
-            last_booking_service_id=svc,
+        return (
+            _booking_tier_edge_row(edges, int(booking_primary_trainer_id), booking_primary_service_id),
+            "booking",
         )
-        if svc is not None:
-            row = dict(row)
-            row["last_booking_service_id"] = svc
-        return row, "booking"
 
     if explicit_primary_edge is not None:
         tid = int(explicit_primary_edge.get("trainer_id") or 0)
         if tid > 0:
             return edge_row_for_primary_trainer(edges, tid), "primary"
+
+    if ever_booked_trainer_id is not None:
+        return (
+            _booking_tier_edge_row(edges, int(ever_booked_trainer_id), ever_booked_service_id),
+            "ever_booked",
+        )
 
     saved_edges = [e for e in edges if e.get("is_saved")]
     if saved_edges:
@@ -167,12 +190,15 @@ def compute_primary_edge_meta(
     booking_primary_trainer_id: int | None = None,
     booking_primary_service_id: int | None = None,
     explicit_primary_edge: dict | None = None,
+    ever_booked_trainer_id: int | None = None,
+    ever_booked_service_id: int | None = None,
 ) -> tuple[dict | None, str | None]:
     """
-    Returns (edge, source) where source is ``booking`` | ``saved`` | ``session`` | None.
+    Returns (edge, source): ``booking`` | ``primary`` | ``ever_booked`` | ``saved`` | ``session`` | None.
 
-    Booking tier uses authoritative rows from ``client_latest_booking_primary_candidate`` —
-    never ``last_booking_at`` on edges (avoids drift vs CRM bookings).
+    Booking tiers use authoritative rows from ``client_latest_booking_primary_candidate`` /
+    ``client_ever_booked_primary_candidate`` — never ``last_booking_at`` on edges (avoids drift
+    vs CRM bookings).
     """
     return resolve_primary_trainer_strict(
         edges,
@@ -180,6 +206,8 @@ def compute_primary_edge_meta(
         booking_primary_service_id=booking_primary_service_id,
         session_trainer_id=session_trainer_id,
         explicit_primary_edge=explicit_primary_edge,
+        ever_booked_trainer_id=ever_booked_trainer_id,
+        ever_booked_service_id=ever_booked_service_id,
     )
 
 
@@ -190,6 +218,8 @@ def compute_primary_edge(
     booking_primary_trainer_id: int | None = None,
     booking_primary_service_id: int | None = None,
     explicit_primary_edge: dict | None = None,
+    ever_booked_trainer_id: int | None = None,
+    ever_booked_service_id: int | None = None,
 ) -> dict | None:
     """Derive primary trainer edge dict under strict tier rules."""
     edge, _ = compute_primary_edge_meta(
@@ -198,6 +228,8 @@ def compute_primary_edge(
         booking_primary_trainer_id=booking_primary_trainer_id,
         booking_primary_service_id=booking_primary_service_id,
         explicit_primary_edge=explicit_primary_edge,
+        ever_booked_trainer_id=ever_booked_trainer_id,
+        ever_booked_service_id=ever_booked_service_id,
     )
     return edge
 
@@ -210,7 +242,7 @@ def resolve_primary_catalog_service_id(
     """
     Pick catalog ``service_id`` using the same tier that selected ``primary_edge``.
 
-    - booking → ``last_booking_service_id`` on edge (including synthetic booking-primary rows)
+    - booking / ever_booked → ``last_booking_service_id`` on edge (incl. synthetic booking rows)
     - saved → ``saved_catalog_service_id``
     - session → current ``client_sessions.selected_service_id`` while viewing that trainer
     """
@@ -222,7 +254,7 @@ def resolve_primary_catalog_service_id(
             return int(sid)
         except (TypeError, ValueError):
             return None
-    if primary_source == "booking":
+    if primary_source in ("booking", "ever_booked"):
         raw = primary_edge.get("last_booking_service_id")
     elif primary_source == "saved":
         raw = primary_edge.get("saved_catalog_service_id")

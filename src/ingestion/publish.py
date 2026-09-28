@@ -43,25 +43,29 @@ class SqlAlchemyIceSessionPublisher:
             return 0
         dates = [draft.local_date for draft in drafts]
         lo, hi = min(dates), max(dates)
-        await self._session.execute(
-            text(
-                """
-                DELETE FROM ice_sessions
-                WHERE arena_id = :arena_id
-                  AND kind IN ('public_skate', 'open_ice')
-                  AND local_date BETWEEN :lo AND :hi
-                  AND (source_id IS NULL OR source_id NOT LIKE 'etalon_%')
-                  AND (source_id IS NULL OR source_id <> 'admin')
-                """
-            ),
-            {
-                "arena_id": run.arena_id,
-                "lo": lo,
-                "hi": hi,
-            },
-        )
-        for draft in drafts:
-            await self._insert(draft, scrape_run_id=run_id)
+        # Savepoint: one bad draft (e.g. a still-oversized field) must roll back
+        # only this job's DELETE+INSERTs, not the whole scheduler-tick session —
+        # otherwise every other due job in the same tick loses its work too.
+        async with self._session.begin_nested():
+            await self._session.execute(
+                text(
+                    """
+                    DELETE FROM ice_sessions
+                    WHERE arena_id = :arena_id
+                      AND kind IN ('public_skate', 'open_ice')
+                      AND local_date BETWEEN :lo AND :hi
+                      AND (source_id IS NULL OR source_id NOT LIKE 'etalon_%')
+                      AND (source_id IS NULL OR source_id <> 'admin')
+                    """
+                ),
+                {
+                    "arena_id": run.arena_id,
+                    "lo": lo,
+                    "hi": hi,
+                },
+            )
+            for draft in drafts:
+                await self._insert(draft, scrape_run_id=run_id)
         return len(drafts)
 
     async def _insert(self, draft: CanonicalSlotDraft, *, scrape_run_id: int | None) -> None:

@@ -9,6 +9,8 @@ from __future__ import annotations
 import html
 from typing import Any
 
+from src.shared.venue_types import venue_type_icon, venue_type_noun
+
 
 def format_admin_arena_pending_caption(arena: dict[str, Any]) -> str:
     name_esc = html.escape((arena.get("name") or "—").strip())
@@ -29,9 +31,14 @@ def format_admin_arena_pending_caption(arena: dict[str, Any]) -> str:
         if coords_missing
         else ""
     )
+    venue_noun = venue_type_noun(arena.get("venue_type"))
+    venue_icon = venue_type_icon(arena.get("venue_type"))
+    # Тип — сразу после названия: он решает, «каток» это или «зал», а значит
+    # какое фото и описание админ пойдёт заполнять и в какой фильтр она попадёт.
     return (
-        f"<b>Новая арена #{arena['id']}</b>\n"
+        f"<b>Новая площадка #{arena['id']}</b>\n"
         f"Название: {name_esc}\n"
+        f"Тип: {venue_icon} {html.escape(venue_noun)}\n"
         f"Город: {city_esc}\n"
         f"Адрес: {address_esc}\n"
         f"Координаты: {coords_str}\n"

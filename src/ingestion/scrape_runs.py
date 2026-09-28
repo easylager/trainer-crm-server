@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import replace
 from typing import Any, Protocol
 
 from sqlalchemy import text
@@ -29,6 +30,9 @@ class IceScrapeRunRequired(ValueError):
 class IceScrapeRunRecorder(Protocol):
     async def record(self, run: ScrapeRunRecord) -> int | None:
         """Persist or log a parser attempt. Must not write ice_sessions."""
+
+    async def mark_publish_error(self, run_id: int, *, error_code: str, error_message: str) -> None:
+        """Flip an already-recorded ok run to error after publish() raised."""
 
 
 def assert_can_replace_ice_sessions(run: ScrapeRunRecord | None, *, run_id: int | None) -> None:
@@ -59,6 +63,15 @@ class InMemoryScrapeRunRecorder:
         self.runs.append(run)
         return len(self.runs)
 
+    async def mark_publish_error(self, run_id: int, *, error_code: str, error_message: str) -> None:
+        idx = run_id - 1
+        self.runs[idx] = replace(
+            self.runs[idx],
+            status=RUN_STATUS_ERROR,
+            error_code=error_code,
+            error_message=error_message,
+        )
+
 
 class LoggingScrapeRunRecorder:
     """Fallback when no DB session is available. Does not persist."""
@@ -74,6 +87,9 @@ class LoggingScrapeRunRecorder:
             run.slots_dropped,
             run.error_message,
         )
+
+    async def mark_publish_error(self, run_id: int, *, error_code: str, error_message: str) -> None:
+        logger.info("ice_scrape_run stub publish error run_id=%s error=%s", run_id, error_message)
 
 
 class SqlAlchemyScrapeRunRecorder:
@@ -116,6 +132,23 @@ class SqlAlchemyScrapeRunRecorder:
         run_id = int(result.scalar_one())
         await self._retain_future_slots(run)
         return run_id
+
+    async def mark_publish_error(self, run_id: int, *, error_code: str, error_message: str) -> None:
+        await self._session.execute(
+            text(
+                """
+                UPDATE ice_scrape_runs
+                SET status = :status, error_code = :error_code, error_summary = :error_summary
+                WHERE id = :run_id
+                """
+            ),
+            {
+                "status": RUN_STATUS_ERROR,
+                "error_code": error_code,
+                "error_summary": error_message,
+                "run_id": run_id,
+            },
+        )
 
     async def _retain_future_slots(self, run: ScrapeRunRecord) -> None:
         """empty/error/blocked must not DELETE future ice_sessions (TASK-072 / design §6.1)."""

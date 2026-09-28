@@ -66,11 +66,20 @@ async def get_public_ice_arenas(
     bbox: str | None = Query(None, description="min_lat,min_lon,max_lat,max_lon"),
     near: str | None = Query(None, description="lat,lon"),
     intent: str = Query("skate", description="skate | coach | group"),
+    venue_type: str | None = Query(
+        None,
+        description="ice|gym|choreo|pool|outdoor|other, можно через запятую. Пусто — все типы.",
+    ),
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     cursor: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot."""
+    """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
+
+    ``venue_type`` фильтрует площадки по типу (лёд/зал/хореография/…). Ответ всегда
+    несёт ``venue_type_facets`` — типы, реально представленные в городе, чтобы
+    клиент не рисовал чип, за которым пусто.
+    """
     response.headers["Cache-Control"] = "no-store"
     try:
         return await list_public_ice_arenas(
@@ -79,6 +88,7 @@ async def get_public_ice_arenas(
             bbox=bbox,
             near=near,
             intent=intent,
+            venue_type=venue_type,
             limit=limit,
             cursor=cursor,
         )

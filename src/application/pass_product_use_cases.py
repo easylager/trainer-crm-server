@@ -349,30 +349,78 @@ async def _replace_pass_product_tiers(
         )
 
 
+def _single_reference_for_pass(
+    item: dict,
+    *,
+    price_by_service: dict[int, int],
+    price_by_service_tier: dict[tuple[int, str], int],
+    default_single_reference: int | None,
+) -> int | None:
+    """Цена одного занятия, с которой честно сравнивать этот абонемент.
+
+    Детский абонемент обязан сравниваться с детской разовой ценой, а не с базовой.
+    Тарифы живут в ``trainer_service_price_variants`` (``tier_kind``), а сам
+    абонемент несёт свои ``tier_kinds`` — до этого сравнение шло по плоской
+    ``trainer_services.price_cents``, одинаковой для детей и взрослых. Из-за этого
+    «Детский 4 занятия» по 45 показывал экономию 10 BYN против взрослых 55, хотя
+    относительно детской разовой цены она совсем другая.
+
+    Абонемент на несколько тарифов сразу (или без тарифов) сравниваем с базовой
+    ценой услуги: единственной «своей» разовой цены у него нет.
+    """
+    sids = item.get("service_ids") or []
+    tiers = [t for t in (item.get("tier_kinds") or []) if t]
+
+    if len(tiers) == 1 and sids:
+        tier = str(tiers[0])
+        tier_priced = [
+            price_by_service_tier[(s, tier)]
+            for s in sids
+            if (s, tier) in price_by_service_tier
+        ]
+        if tier_priced:
+            return min(tier_priced)
+
+    if sids:
+        priced = [price_by_service[s] for s in sids if s in price_by_service]
+        if priced:
+            return min(priced)
+    return default_single_reference
+
+
 def enrich_pass_items_with_catalog_reference_prices(
     items: list[dict],
     *,
     price_by_service: dict[int, int],
     default_single_reference: int | None,
+    price_by_service_tier: dict[tuple[int, str], int] | None = None,
 ) -> None:
     """Mutates items with price_per_session_cents, pass_price_per_session_cents, savings_* (catalog UX)."""
+    by_tier = price_by_service_tier or {}
     for p in items:
-        sids = p.get("service_ids") or []
-        if sids:
-            priced = [price_by_service[s] for s in sids if s in price_by_service]
-            single = min(priced) if priced else default_single_reference
-        else:
-            single = default_single_reference
+        single = _single_reference_for_pass(
+            p,
+            price_by_service=price_by_service,
+            price_by_service_tier=by_tier,
+            default_single_reference=default_single_reference,
+        )
         p["price_per_session_cents"] = single
         if p.get("sessions_total") and p.get("price_cents"):
             p["pass_price_per_session_cents"] = int(p["price_cents"]) // int(p["sessions_total"])
         else:
             p["pass_price_per_session_cents"] = None
         if single is not None and p.get("sessions_total") and p.get("price_cents"):
-            pass_per_session = int(p["price_cents"]) // int(p["sessions_total"])
-            savings = int(single) - pass_per_session
-            p["savings_per_session_cents"] = max(0, savings)
-            p["savings_total_cents"] = max(0, savings) * int(p["sessions_total"])
+            sessions = int(p["sessions_total"])
+            # Цена за занятие округляется вниз — она только для показа. Итоговую
+            # выгоду считаем от настоящих сумм, а не умножением округлённой:
+            # 375 BYN за 8 занятий против 55 давали «65.04 BYN с абонемента»
+            # вместо ровных 65 — копейки из ниоткуда в обещании про деньги.
+            p["savings_per_session_cents"] = max(
+                0, int(single) - int(p["price_cents"]) // sessions
+            )
+            p["savings_total_cents"] = max(
+                0, int(single) * sessions - int(p["price_cents"])
+            )
         else:
             p["savings_per_session_cents"] = None
             p["savings_total_cents"] = None
@@ -799,6 +847,39 @@ async def _trainer_may_issue_pass_to_client(
     return True, None
 
 
+async def _archive_fulfilled_pass_order_request(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    client_id: int,
+    pass_product_id: int,
+) -> None:
+    """
+    Close the client's open «хочу абонемент» request this issuance fulfills, if any.
+
+    Fires from ``issue_pass_to_client`` itself (not the request-detail CTA) so it also covers a
+    trainer issuing the pass a different way, bypassing the request card entirely. Matched strictly
+    on (trainer_id, client_id, pass_product_id) with status='new' so it never touches: requests to a
+    different trainer, requests for a different pass product from the same client (they may have more
+    than one open ask), or requests already archived/declined. Same UPDATE the client and trainer
+    request lists already filter on, so this closes the request on both sides at once.
+    """
+    from src.application.client_pass_order_use_cases import PASS_ORDER_LINE_PREFIX
+
+    needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
+    await session.execute(
+        text(
+            """
+            UPDATE client_requests
+            SET status = 'archived'
+            WHERE client_id = :cid AND trainer_id = :tid AND status = 'new'
+              AND POSITION(:needle IN COALESCE(comment, '')) = 1
+            """
+        ),
+        {"cid": int(client_id), "tid": int(trainer_id), "needle": needle},
+    )
+
+
 async def issue_pass_to_client(
     session: AsyncSession,
     trainer_id: int,
@@ -855,6 +936,9 @@ async def issue_pass_to_client(
     from src.application.trainer_feature_tracking import FEATURE_PASS_ISSUED, record_feature_first_use
 
     await record_feature_first_use(session, trainer_id, FEATURE_PASS_ISSUED)
+    await _archive_fulfilled_pass_order_request(
+        session, trainer_id=trainer_id, client_id=client_id, pass_product_id=pass_product_id
+    )
     await session.commit()
     issued_at = row[5]
 

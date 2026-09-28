@@ -89,3 +89,6 @@ docs/cv-max-vasilenko-*
 
 uv.lock
 
+
+# Локальное хранилище фото (LOCAL_STORAGE_PATH), когда S3_BUCKET пуст — не в репозиторий.
+uploads/

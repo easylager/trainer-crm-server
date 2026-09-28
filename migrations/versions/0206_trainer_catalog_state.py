@@ -22,7 +22,10 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0206_trainer_catalog_state"
-down_revision = "0205_client_merges_audit"
+# Перевешено при мерже master: там параллельно приехала 0206_venue_types_and_specialists,
+# тоже дочерняя к 0205. Две головы alembic не разрешает, а merge-ревизия ради линейной
+# пары избыточна — ставим каталог следом. Миграции независимы: разные таблицы.
+down_revision = "0206_venue_types_and_specialists"
 branch_labels = None
 depends_on = None
 

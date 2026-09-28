@@ -1,0 +1,28 @@
+{
+  "sessions": [
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "20:00",
+      "ends_at_local": "21:00",
+      "price_adult_minor": null,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "13:00",
+      "ends_at_local": "14:00",
+      "price_adult_minor": null,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    },
+    {
+      "local_date": "2026-09-27",
+      "starts_at_local": "14:15",
+      "ends_at_local": "15:15",
+      "price_adult_minor": null,
+      "price_child_minor": null,
+      "price_rental_minor": null
+    }
+  ]
+}

@@ -67,10 +67,22 @@ async def _enrich_pass_products_pricing(session: AsyncSession, trainer_id: int, 
         ]
         if pass_rates:
             default_single = max(pass_rates)
+    # Тарифные цены (детский/взрослый/…): по ним сравнивается абонемент своего тарифа.
+    r_var = await session.execute(
+        text(
+            "SELECT service_id, tier_kind, price_cents FROM trainer_service_price_variants "
+            "WHERE trainer_id = :tid AND price_cents IS NOT NULL AND tier_kind IS NOT NULL"
+        ),
+        {"tid": trainer_id},
+    )
+    price_by_service_tier = {
+        (row[0], str(row[1])): row[2] for row in r_var.fetchall()
+    }
     enrich_pass_items_with_catalog_reference_prices(
         items,
         price_by_service=price_by_service,
         default_single_reference=default_single,
+        price_by_service_tier=price_by_service_tier,
     )
 
 

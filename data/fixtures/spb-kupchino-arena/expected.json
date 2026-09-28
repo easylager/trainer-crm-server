@@ -1,0 +1,18 @@
+{
+  "sessions": [
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:15",
+      "price_adult_minor": 50000,
+      "price_rental_minor": 50000
+    },
+    {
+      "local_date": "2026-09-26",
+      "starts_at_local": "19:45",
+      "ends_at_local": "20:45",
+      "price_adult_minor": 50000,
+      "price_rental_minor": 50000
+    }
+  ]
+}

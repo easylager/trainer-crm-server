@@ -13,7 +13,9 @@
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
-    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7l14 10M19 7L5 17"/></svg>',
+    /* Лупа, а не снежинка: вкладка держит и площадки (лёд, залы, хореография),
+       и тренеров, и группы. Снежинка обещала только лёд. */
+    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
@@ -170,7 +172,7 @@
 
     var tabs = [
       { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
-      { id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.catalog },
+      { id: 'catalog', label: 'Поиск', path: 'ice', icon: TAB_ICONS.catalog },
       { id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings },
       { id: 'more', label: 'Ещё', path: null, icon: TAB_ICONS.more },
     ];

@@ -62,7 +62,23 @@ class IceIngestScheduler:
                 and drafts
                 and run_id is not None
             ):
-                await self._publisher.publish(record, drafts, run_id=run_id)
+                try:
+                    await self._publisher.publish(record, drafts, run_id=run_id)
+                except Exception as exc:  # noqa: BLE001 — one job's publish must not sink the tick
+                    logger.exception(
+                        "publish failed for job %s (arena %s); leaving ice_sessions untouched",
+                        job.id,
+                        job.arena_id,
+                    )
+                    record = replace(
+                        record,
+                        status=RUN_STATUS_ERROR,
+                        error_code="publish_error",
+                        error_message=str(exc),
+                    )
+                    await self._recorder.mark_publish_error(
+                        run_id, error_code="publish_error", error_message=str(exc)
+                    )
             outcomes.append(record)
             await self._store.mark_attempted(
                 job.id,

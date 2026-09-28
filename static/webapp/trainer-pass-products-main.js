@@ -1448,6 +1448,9 @@
         var body = { certificate_product_id: productId, recipient_name: recipientName };
         if (recipientEmail) body.recipient_email = recipientEmail;
         if (state.certIssuePurchasedByName) body.purchased_by_name = state.certIssuePurchasedByName;
+        /* Attributes this purchase to a CRM client — server uses it to close a matching open
+           «хочу сертификат» request for this exact product, if the client had one. */
+        if (state.certIssueSelectedClientId) body.client_id = state.certIssueSelectedClientId;
 
         var btn = document.getElementById('btnSubmitCertIssue');
         var btnText = btn.textContent;

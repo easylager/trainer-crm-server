@@ -1,6 +1,7 @@
 """Transform Extraction → CanonicalSlotDraft. Shared across every arena adapter."""
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
@@ -22,6 +23,39 @@ from src.ingestion.types import (
 
 _AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)")
 _KOPECK = re.compile(r"коп", re.IGNORECASE)
+
+# Adapter-supplied text comes from third-party sites/APIs whose length we
+# don't control (event titles, calendar ids, age notes...) — every field
+# that lands in a fixed-width ice_sessions column needs a cap here so an
+# oversized value degrades gracefully instead of crashing the publish
+# INSERT (StringDataRightTruncationError; see TASK-111 incident).
+_SOURCE_ID_MAX_LEN = 160  # ice_sessions.source_id, migration 0204
+_SESSION_LABEL_MAX_LEN = 128  # ice_sessions.session_label
+_AGE_NOTE_MAX_LEN = 128  # ice_sessions.age_note
+_EXTERNAL_URL_MAX_LEN = 512  # ice_sessions.external_url
+
+
+def _safe_source_id(value: str | None) -> str | None:
+    """Identity field: hash on overflow so dedup/lookup stays stable."""
+    if value is None or len(value) <= _SOURCE_ID_MAX_LEN:
+        return value
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    keep = _SOURCE_ID_MAX_LEN - len(digest) - 1
+    return f"{value[:keep]}:{digest}"
+
+
+def _clip_text(value: str | None, max_len: int) -> str | None:
+    """Display field: truncate on overflow, meaning matters more than exactness."""
+    if value is None or len(value) <= max_len:
+        return value
+    return value[: max_len - 1] + "…"
+
+
+def _safe_external_url(value: str | None) -> str | None:
+    """A truncated URL is a broken link, not a shortened one — drop it instead."""
+    if value is None or len(value) <= _EXTERNAL_URL_MAX_LEN:
+        return value
+    return None
 
 
 def parse_price_to_minor(value: Any, *, already_minor: bool) -> int | None:
@@ -171,10 +205,10 @@ class IceSessionNormalizer:
                     status=STATUS_ACTIVE,
                     observed_at=observed,
                     valid_until=parts.ends_at_utc,
-                    session_label=bucket["session_label"],
-                    age_note=bucket["age_note"],
-                    external_url=bucket["external_url"],
-                    source_id=bucket["source_id"],
+                    session_label=_clip_text(bucket["session_label"], _SESSION_LABEL_MAX_LEN),
+                    age_note=_clip_text(bucket["age_note"], _AGE_NOTE_MAX_LEN),
+                    external_url=_safe_external_url(bucket["external_url"]),
+                    source_id=_safe_source_id(bucket["source_id"]),
                     parser_job_id=job.id,
                     scrape_run_id=None,
                 )

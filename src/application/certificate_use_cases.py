@@ -199,6 +199,39 @@ def _generate_certificate_code() -> str:
     return f"CERT-{suffix}"
 
 
+async def _archive_fulfilled_cert_order_request(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    client_id: int,
+    certificate_product_id: int,
+) -> None:
+    """
+    Close the client's open «хочу сертификат» request this issuance fulfills, if any.
+
+    Mirrors ``_archive_fulfilled_pass_order_request`` in pass_product_use_cases.py. ``client_id``
+    here is the purchaser/requester tagged on the issuance (trainer's "selected client" in the
+    issue-certificate screen), not necessarily the gift recipient — certificates can go to someone
+    with no CRM account at all, so this only fires when the trainer explicitly attributed the
+    purchase to a known client. Matched strictly on (trainer_id, client_id, certificate_product_id)
+    with status='new' so it never touches unrelated or already-closed requests.
+    """
+    from src.application.client_cert_order_use_cases import CERT_ORDER_LINE_PREFIX
+
+    needle = f"{CERT_ORDER_LINE_PREFIX}{int(certificate_product_id)}"
+    await session.execute(
+        text(
+            """
+            UPDATE client_requests
+            SET status = 'archived'
+            WHERE client_id = :cid AND trainer_id = :tid AND status = 'new'
+              AND POSITION(:needle IN COALESCE(comment, '')) = 1
+            """
+        ),
+        {"cid": int(client_id), "tid": int(trainer_id), "needle": needle},
+    )
+
+
 async def issue_certificate(
     session: AsyncSession,
     trainer_id: int,
@@ -208,12 +241,15 @@ async def issue_certificate(
     recipient_name: str,
     recipient_email: str | None = None,
     recipient_phone: str | None = None,
+    requester_client_id: int | None = None,
 ) -> dict:
     """
     Issue a certificate: create instance with unique code. Product must belong to trainer and be active.
     amount_cents from product (0 if product is "any amount"). Returns instance with code for trainer to send.
     recipient_email: optional; when set, caller can send link by email.
     recipient_phone: optional; stored for welcome-link onboarding (prefill client profile when they open link).
+    requester_client_id: CRM client this purchase is attributed to, if any (see
+    ``_archive_fulfilled_cert_order_request``) — not the gift recipient.
     """
     product = await get_certificate_product(session, certificate_product_id, trainer_id)
     if not product:
@@ -266,6 +302,13 @@ async def issue_certificate(
             )
 
             await record_feature_first_use(session, trainer_id, FEATURE_CERTIFICATE_ISSUED)
+            if requester_client_id is not None:
+                await _archive_fulfilled_cert_order_request(
+                    session,
+                    trainer_id=trainer_id,
+                    client_id=requester_client_id,
+                    certificate_product_id=certificate_product_id,
+                )
             await session.commit()
             return {
                 "id": row[0],

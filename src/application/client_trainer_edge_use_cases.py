@@ -221,11 +221,20 @@ async def record_booking_edge(
     booked_at: datetime | None = None,
     session: AsyncSession | None = None,
     booking_service_id: int | None = None,
+    *,
+    mark_saved: bool = False,
+    promote_primary: bool = False,
 ) -> None:
     """
     Update edge counters when booking is created (completed=False) or completed (completed=True).
     Caller must pass an open session; commit is the caller's responsibility
     so this can be composed in larger transactions.
+
+    ``mark_saved`` / ``promote_primary`` закрепляют связь, а не только счётчики: записался к
+    тренеру — тренер становится основным и остаётся в «Сохранённых». Без этого «Мой тренер» на
+    хабе жил только как вычисление по живым записям и исчезал вместе с ними (удалённый слот,
+    снятое тренером занятие). Push «вас добавили в избранное» здесь сознательно не отправляется:
+    это следствие записи, а не лайк в каталоге (см. ``save_trainer``).
     """
     if session is None:
         return
@@ -238,6 +247,41 @@ async def record_booking_edge(
         booked_at=booked_at,
         booking_service_id=booking_service_id,
     )
+    if mark_saved:
+        edge = await repo.get(client_id, trainer_id)
+        if not (edge and edge.get("is_saved")):
+            await repo.set_saved(
+                client_id,
+                telegram_id,
+                trainer_id,
+                saved=True,
+                catalog_service_id=booking_service_id,
+            )
+    if promote_primary:
+        await repo.set_primary(client_id, telegram_id, trainer_id)
+
+
+async def refresh_completed_stats_for_booking(
+    session: AsyncSession,
+    booking_id: int,
+) -> None:
+    """
+    Пересчитать ``completed_count`` / ``last_completed_at`` ребра после перехода записи в
+    ``completed``. Пересчёт из ``bookings`` (а не +1) — идемпотентно при повторном вызове.
+
+    Только UPDATE существующей строки: ребро не создаётся, потому что ``client_trainer_edges``
+    требует ``telegram_id`` с FK на ``client_sessions`` — у офлайн-клиента из CRM тренера его нет.
+    Commit — за вызывающим.
+    """
+    r = await session.execute(
+        text("SELECT client_id, trainer_id FROM bookings WHERE id = :bid"),
+        {"bid": int(booking_id)},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None or row[1] is None:
+        return
+    repo = ClientTrainerEdgeRepository(session)
+    await repo.recompute_completed_booking_stats_for_global_edge(int(row[0]), int(row[1]))
 
 
 # ── read ───────────────────────────────────────────────────────────────────────
