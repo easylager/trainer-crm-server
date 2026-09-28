@@ -120,7 +120,7 @@ async def send_certificate_pdf_email(
         )
         logger.info("Certificate PDF email sent to %s", to_email)
         return True
-    except asyncio.TimeoutError:
+    except TimeoutError:  # asyncio.TimeoutError — его же алиас начиная с Python 3.11
         logger.warning(
             "Certificate PDF email to %s exceeded %.0fs — оставляем очереди повторной отправки",
             to_email,
