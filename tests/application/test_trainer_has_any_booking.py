@@ -14,7 +14,7 @@ from datetime import date, time, timedelta
 from sqlalchemy import text
 
 from src.application.trainer_hub_action_inbox import build_trainer_hub_action_inbox
-from src.application.trainer_next_step import STEP_SHARE_LINK, resolve_trainer_next_step
+from src.application.trainer_hub_action_inbox import _build_hub_rhythm_inbox_candidates
 from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_service_id
@@ -156,12 +156,12 @@ async def test_has_real_booking_survives_cancel_after_milestone_claimed(db_sessi
     assert checklist["has_real_booking"] is True
 
 
-async def test_share_link_card_still_shown_with_only_sandbox_or_cancelled_booking(
+async def test_share_link_hint_still_shown_with_only_sandbox_or_cancelled_booking(
     db_session,
 ) -> None:
     """AC-003: end-to-end through the real checklist — a trainer with a working weekly
-    schedule but only a sandbox demo / instantly-voided booking still gets STEP_SHARE_LINK,
-    not silence, because ``has_real_booking`` correctly reads False for both."""
+    schedule but only a sandbox demo / instantly-voided booking still gets the
+    ``share_link`` hint, not silence, because ``has_real_booking`` reads False for both."""
     tid = await _seed_trainer(db_session)
     await db_session.execute(
         text(
@@ -186,9 +186,8 @@ async def test_share_link_card_still_shown_with_only_sandbox_or_cancelled_bookin
     assert checklist is not None
     assert checklist["has_real_booking"] is False
 
-    step = resolve_trainer_next_step(checklist)
-    assert step is not None
-    assert step["key"] == STEP_SHARE_LINK
+    hints = {x["id"] for x in _build_hub_rhythm_inbox_candidates(checklist)}
+    assert "share_link" in hints
 
 
 async def test_referral_growth_not_nudged_for_sandbox_only_booking(db_session) -> None:

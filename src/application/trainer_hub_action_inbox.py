@@ -90,6 +90,17 @@ def _plural_ru(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
+_FEEDBACK_PREVIEW_MAX_CHARS = 140
+
+
+def _feedback_preview(text_value: str) -> str:
+    """Комментарий модератора в одну строку инбокса — целиком он живёт в анкете."""
+    t = text_value.strip()
+    if len(t) <= _FEEDBACK_PREVIEW_MAX_CHARS:
+        return t
+    return t[:_FEEDBACK_PREVIEW_MAX_CHARS].rstrip() + "…"
+
+
 def _non_negative_int(v: Any) -> int:
     if v is None or v == "":
         return 0
@@ -122,13 +133,13 @@ def _should_nudge_catalog_in_hub(d: dict[str, Any]) -> bool:
     Не ``hidden`` и не ``paused``: там тренер либо снял карточку сам, либо уже знает причину из
     раздела и из пуша — подсказывать ему «разместите карточку» значило бы спорить с его же
     решением. Не ``pending_review``: он уже попросился, ждать — это не задача. Не
-    ``needs_revision``: там нужны правки, и об этом говорит отдельная карточка next_step.
+    ``needs_revision``: там нужны правки, и об этом говорит строка ``catalog_needs_revision``.
 
     Порога по записям больше нет. Он держался на том, что приглашение было единственной дверью
     в каталог и потому давило; дверь теперь — постоянная вкладка бара, и строка в инбоксе просто
     называет раздел, который тренер и так видит. Расписание при этом обязано существовать: до
-    него главный экран занят карточкой «Настройте расписание», и два «сделайте это первым» —
-    ровно тот шум, ради отказа от которого чеклист когда-то и свернули в одну карточку.
+    него инбокс занят строкой «Настройте профиль», и два «сделайте это первым» — ровно тот шум,
+    ради отказа от которого чеклист когда-то и свернули в одну подсказку.
 
     ``catalog_invite_dismissed`` — ответ тренера «закрыть», навсегда и на всех устройствах
     (``trainer_profiles.catalog_invite_dismissed_at``).
@@ -243,8 +254,19 @@ def _build_hub_rhythm_inbox_candidates(
     # у всех работающих тренеров будет False неделями. Старая проверка на его основе
     # молча гасила весь блок ритм-подсказок (пустые слоты, «без записи», шаблон, рефералы)
     # для любого немодерированного тренера — регрессия, найденная вручную после переезда
-    # на trainer_next_step.py. См. те же сигналы, что и STEP_SETUP_WEEK там.
-    has_schedule = int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
+    # на trainer_next_step.py. См. те же сигналы, что и в блоке онбординга ниже.
+    has_week = int(d.get("weekly_template_count") or 0) > 0
+    has_slots = bool(d.get("has_future_slots"))
+    has_schedule = has_week or has_slots
+
+    # Онбординг-подсказки (профиль, первая ссылка, пустое расписание, правки модератора) раньше
+    # жили отдельной карточкой «следующий шаг» на главном экране. Карточку убрали: хаб и так
+    # показывает инбокс с подсказками сверху, и второй блок про то же самое читался как дубль.
+    # Гейты остались прежними: деактивированному аккаунту подсказывать нечего, а тренеру центра
+    # расписание ведёт администратор.
+    guidance_allowed = bool(d.get("schedule_unlocked", True)) and (
+        d.get("studio_access_mode") != "admin_only"
+    )
 
     # Первая строка инбокса, пока тренера нет в каталоге. Три ветки копирайта здесь схлопнуты в
     # одну: они описывали старую модель («доведите профиль до проверки», «после активации
@@ -266,7 +288,74 @@ def _build_hub_rhythm_inbox_candidates(
             )
         )
 
+    # Правки по карточке каталога — не приглашение, а работа: тренер уже сам попросился
+    # в каталог, и без правок карточка там не появится. Расписание для этого не нужно,
+    # поэтому строка стоит до гейта.
+    if guidance_allowed and bool(d.get("catalog_needs_revision")):
+        feedback = str(d.get("moderation_feedback") or "").strip()
+        out.append(
+            _inbox_item(
+                item_id="catalog_needs_revision",
+                kind="rhythm",
+                priority=106,
+                urgent=True,
+                title=(
+                    f"Модератор попросил поправить карточку: «{_feedback_preview(feedback)}» — "
+                    "исправьте в анкете и сохраните, заявка уйдёт на повторную проверку."
+                    if feedback
+                    else "Модератор попросил поправить карточку — комментарий в анкете; "
+                    "исправьте и сохраните, заявка уйдёт на повторную проверку."
+                ),
+                primary_label="Открыть «Каталог»",
+                primary_action="profile_catalog",
+                dismissible=False,
+            )
+        )
+
     if not has_schedule:
+        # Расписания нет — и дальше всё зависит от того, ПОЧЕМУ его нет.
+        if not guidance_allowed:
+            return out
+        if d.get("onboarding_completed"):
+            # Неделя пустая после пройденного онбординга — это выбор, а не недоделка.
+            # К платформе идут не только тренеры по конькам: спортивный психолог или
+            # консультант работает по заявкам, и часы ему называть незачем. Ведём
+            # к первому ученику — заявку он примет и без свободных окон.
+            out.append(
+                _inbox_item(
+                    item_id="share_link",
+                    kind="rhythm",
+                    priority=110,
+                    title=(
+                        "Позовите первого ученика — он напишет вам сам, "
+                        "расписание для этого не нужно."
+                    ),
+                    primary_label="Отправить ссылку",
+                    primary_action="share_link",
+                    secondary_label="Добавить расписание",
+                    secondary_action="onboarding",
+                    dismissible=True,
+                )
+            )
+            return out
+        # Онбординг ещё не проходили — вот здесь настройка действительно первый шаг.
+        # «Без анкеты» не пишем: отрицание всё равно называет анкету и подсказывает,
+        # что где-то она есть. Говорим про длительность и результат.
+        out.append(
+            _inbox_item(
+                item_id="setup_profile",
+                kind="rhythm",
+                priority=120,
+                urgent=True,
+                title=(
+                    "Настройте профиль: две минуты — кто вы, что проводите и где. "
+                    "Расписание по желанию."
+                ),
+                primary_label="Начать",
+                primary_action="onboarding",
+                dismissible=False,
+            )
+        )
         return out
 
     # Реферальная программа — это «пригласите коллегу», отдельная от next_step тема «пригласите
@@ -274,6 +363,23 @@ def _build_hub_rhythm_inbox_candidates(
     # секунды после первого экрана — до того, как тренер вообще получил свою первую запись.
     # Приглашать коллег имеет смысл только после того, как тренер сам увидел, что продукт
     # работает, а не сразу после того, как расписание создано.
+    # Расписание есть, но никто ни разу не записывался. Одна задача, один глагол.
+    if guidance_allowed and not _onboarding_booking_step_done(d):
+        out.append(
+            _inbox_item(
+                item_id="share_link",
+                kind="rhythm",
+                priority=86,
+                title=(
+                    "Отправьте ссылку одному ученику — тому, кто и так собирался к вам "
+                    "на этой неделе. Он выберет время сам, вам придёт уведомление."
+                ),
+                primary_label="Отправить ученику",
+                primary_action="share_link",
+                dismissible=True,
+            )
+        )
+
     if _onboarding_booking_step_done(d):
         out.append(
             _inbox_item(
@@ -391,8 +497,30 @@ def _build_hub_rhythm_inbox_candidates(
             )
         )
 
+    # Шаблон есть, а впереди пусто: слоты кончились и новых не сгенерировалось. Отправлять
+    # ссылку в этом состоянии — значит показать ученику пустой экран, поэтому строка срочная и
+    # не закрывается. Дневные подсказки про слоты ниже в этот момент молчат: они сказали бы
+    # ровно то же самое, только по дням недели.
+    if guidance_allowed and not has_slots:
+        out.append(
+            _inbox_item(
+                item_id="no_future_slots",
+                kind="rhythm",
+                priority=102,
+                urgent=True,
+                title=(
+                    "Свободных окон не осталось: ученик откроет ссылку и не увидит времени. "
+                    "Откройте расписание на ближайшие недели."
+                ),
+                primary_label="Обновить расписание",
+                primary_action="schedule",
+                dismissible=False,
+            )
+        )
+
     if (
-        not slot_deferred
+        has_slots
+        and not slot_deferred
         and avail_this == 0
         and book_this < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD
         and _rhythm_show_slots_this_week_hint()
@@ -411,7 +539,7 @@ def _build_hub_rhythm_inbox_candidates(
         )
 
     next_week_gap = slots_next == 0 or (avail_next == 0 and book_next < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD)
-    if not slot_deferred and next_week_gap and _rhythm_show_slots_next_week_hint():
+    if has_slots and not slot_deferred and next_week_gap and _rhythm_show_slots_next_week_hint():
         out.append(
             _inbox_item(
                 item_id="slots_next_week",

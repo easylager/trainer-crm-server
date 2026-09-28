@@ -478,7 +478,7 @@ class TrainerProfile(Base):
     online_enabled: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     #: Когда специалист закончил первичную настройку. Отличает «ещё не настраивал»
     #: от «настроил и сознательно без расписания» — хаб по-разному ведёт себя в этих
-    #: двух случаях (src/application/trainer_next_step.py).
+    #: двух случаях (src/application/trainer_hub_action_inbox.py).
     onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

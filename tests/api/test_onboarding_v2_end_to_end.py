@@ -22,6 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
+from src.application.trainer_hub_action_inbox import _build_hub_rhythm_inbox_candidates
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from tests.conftest import belarus_test_phone
 from tests.db_catalog_helpers import require_seed_service_id
@@ -146,8 +147,11 @@ async def test_unmoderated_trainer_can_be_booked_but_is_not_in_the_catalog(
                 headers={"X-Telegram-Init-Data": "mock"},
             )
     assert checklist.status_code == 200, checklist.text
-    assert (checklist.json().get("next_step") or {}).get("key") is None, (
-        "после первой записи хаб не выносит отдельную карточку про профиль/площадку"
+    hint_ids = {
+        x["id"] for x in _build_hub_rhythm_inbox_candidates(checklist.json())
+    }
+    assert not hint_ids & {"setup_profile", "share_link"}, (
+        "после первой записи хаб не подсказывает ни профиль, ни ссылку"
     )
 
     # 4. И при этом тренера нет в публичном каталоге — модерацию он не проходил.
@@ -204,7 +208,8 @@ async def test_the_first_screen_never_demands_a_profile(app_use_test_db, db_sess
     data = checklist.json()
     assert data["schedule_unlocked"] is True
     assert data["slots_locked_reason"] is None
-    assert (data.get("next_step") or {}).get("key") == "share_link", (
+    hint_ids = {x["id"] for x in _build_hub_rhythm_inbox_candidates(data)}
+    assert "share_link" in hint_ids, (
         "следующий шаг после расписания — отдать ссылку ученику, а не заполнять анкету"
     )
 

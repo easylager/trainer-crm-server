@@ -49,6 +49,8 @@ def _onboarding_slots_rhythm_fixture() -> dict:
         "has_completed_booking": True,
         "has_crm_subscription_access": True,
         "weekly_template_count": 1,
+        # Слоты впереди есть (иначе говорит строка no_future_slots) — просто все заняты.
+        "has_future_slots": True,
         "available_slots_this_week_count": 0,
         "available_slots_next_week_count": 0,
         "slots_this_week_count": 0,
@@ -377,8 +379,14 @@ def test_rhythm_hints_visible_for_unmoderated_trainer_with_a_real_schedule() -> 
     assert "referral_growth" in ids, "рефералка не должна требовать статуса в каталоге"
 
 
-def test_rhythm_hints_stay_silent_before_the_first_schedule() -> None:
-    """До первого расписания (первый экран онбординга) ритм-блоку нечего показывать."""
+def test_only_the_setup_hint_speaks_before_the_first_schedule() -> None:
+    """
+    До первого расписания инбокс говорит ровно одно — «настройте профиль».
+
+    Раньше здесь было пусто, а первый шаг занимал отдельную карточку «следующий шаг» на
+    главном экране. Карточку убрали (она дублировала подсказки сверху), и единственность
+    первого шага стала инвариантом самого инбокса: ритм-подсказки по-прежнему молчат.
+    """
     onboarding = {
         "is_active": False,
         "is_catalog_visible": True,
@@ -389,7 +397,90 @@ def test_rhythm_hints_stay_silent_before_the_first_schedule() -> None:
         "has_crm_subscription_access": True,
     }
     payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    assert [x["id"] for x in payload["items"]] == ["setup_profile"]
+
+
+def test_setup_hint_is_silent_for_a_studio_trainer_without_own_schedule() -> None:
+    """Расписание тренера центра ведёт администратор — «настройте профиль» ему не адресовано."""
+    onboarding = {
+        "is_active": False,
+        "profile_complete": False,
+        "has_any_booking": False,
+        "weekly_template_count": 0,
+        "has_future_slots": False,
+        "has_crm_subscription_access": True,
+        "studio_access_mode": "admin_only",
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
     assert payload["items"] == []
+
+
+def test_share_link_hint_replaces_the_setup_hint_once_onboarding_is_done() -> None:
+    """
+    Онбординг пройден, а неделя пустая — это выбор, а не недоделка: психолог или
+    консультант работает по заявкам. Ведём к первому ученику, расписание — вторым действием.
+    """
+    onboarding = {
+        "is_active": False,
+        "profile_complete": True,
+        "onboarding_completed": True,
+        "has_any_booking": False,
+        "has_real_booking": False,
+        "weekly_template_count": 0,
+        "has_future_slots": False,
+        "has_crm_subscription_access": True,
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    assert [x["id"] for x in payload["items"]] == ["share_link"]
+    assert payload["items"][0]["secondary_action"] == "onboarding"
+
+
+def test_no_future_slots_hint_outranks_the_weekday_slot_nudges() -> None:
+    """Шаблон есть, окон впереди нет: одна срочная строка вместо дневных подсказок про слоты."""
+    onboarding = {
+        "is_active": True,
+        "profile_complete": True,
+        "onboarding_completed": True,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": False,
+        "has_future_available_slots": False,
+        "slots_this_week_count": 0,
+        "slots_next_week_count": 0,
+        "available_slots_this_week_count": 0,
+        "available_slots_next_week_count": 0,
+        "bookings_this_week_count": 0,
+        "bookings_next_week_count": 0,
+        "has_crm_subscription_access": True,
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    ids = [x["id"] for x in payload["items"]]
+    assert "no_future_slots" in ids
+    assert "slots_this_week" not in ids
+    assert "slots_next_week" not in ids
+
+
+def test_catalog_revision_hint_names_the_moderator_comment() -> None:
+    """Правки модератора — работа, а не приглашение: строка не закрывается и цитирует комментарий."""
+    onboarding = {
+        "is_active": False,
+        "profile_complete": True,
+        "onboarding_completed": True,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "catalog_state": "needs_revision",
+        "catalog_needs_revision": True,
+        "moderation_feedback": "Уточните цены",
+        "has_crm_subscription_access": True,
+    }
+    payload = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    row = next(x for x in payload["items"] if x["id"] == "catalog_needs_revision")
+    assert "Уточните цены" in row["title"]
+    assert row["dismissible"] is False
+    assert row["primary_action"] == "profile_catalog"
 
 
 def test_referral_growth_waits_for_a_first_booking() -> None:
