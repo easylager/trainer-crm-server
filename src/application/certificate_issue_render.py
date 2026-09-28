@@ -106,86 +106,67 @@ def _normalize_bot(bot_raw: str) -> str:
     return b
 
 
-def _instructions_block_html(bot_display: Optional[str]) -> str:
-    """Same structure and wording as ``docs/certificate-html-constructor.html`` (buildInstructions)."""
-    bd = _normalize_bot(bot_display or "")
+def _instructions_block_html(bot_display: Optional[str], *, has_qr: bool = True) -> str:
+    """
+    Короткая инструкция вместо прежних десяти шагов.
 
-    intro = (
-        "После активации номинал сертификата закрепляется за вашим аккаунтом в боте: вы сможете записываться к тренеру "
-        "и тратить баланс по правилам услуги. Сохраните этот PDF — по коду можно восстановить доступ, "
-        "если потеряется переписка."
+    Раньше здесь жили две нумерованные простыни (6 шагов активации + 4 шага использования),
+    блок «Возможности сервиса» и два абзаца мелким курсивом. Половина текста повторяла
+    подпись под QR, четыре шага из шести начинались со слов «Если зашли без QR», а страница
+    при этом переполнялась — сертификат печатался без кода. Осталось три шага активации и
+    три факта о том, как сертификат тратится: всё, что получателю нужно знать в руках.
+
+    Формулировки проверены по коду, а не по памяти:
+    * QR (``/start cert_<CODE>``) активирует сертификат сам и сразу предлагает записаться —
+      ``client_handlers._parse_cert_start``;
+    * ручной путь идёт через кнопку бота «Абонементы и сертификаты» (так она и называется —
+      ``messages.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES``), а не через «Обзор»;
+    * баланс списывается, когда занятие отмечено проведённым —
+      ``booking_use_cases.redeem_certificate_balance_for_booking``;
+    * повторный ввод кода идемпотентен для того же аккаунта, но чужому он уже не откроется —
+      ``certificate_use_cases.activate_certificate_by_code``.
+    """
+    bd = _normalize_bot(bot_display or "")
+    open_bot = (
+        f"откройте в Telegram бота {bd}" if bd else "откройте бота по ссылке из письма"
     )
 
-    steps_act: list[str] = [
-        "Отсканируйте QR на этой карточке и в чате с ботом нажмите «Запустить» / Start — активация выполнится "
-        "автоматически (см. жёлтую подсказку выше).",
-        "Откройте Telegram на телефон или Telegram Desktop.",
-        (
-            f"Если зашли без QR: найдите бота {bd} в поиске Telegram и нажмите «Запустить»."
-            if bd
-            else "Если зашли без QR: откройте бота из письма или по сохранённой ссылке и нажмите «Запустить»."
-        ),
-        "Если зашли без QR: в меню бота откройте мини-приложение («Обзор» / главное меню), "
-        "затем экран с абонементами и подарочными сертификатами.",
-        "Если зашли без QR: введите в поле код из тёмной полоски внизу этой карточки — без пробелов, точно как напечатано.",
-        "Дождитесь сообщения об успешной активации. Код не принимается — проверьте раскладку; "
-        "иначе обратитесь к тренеру, который выдал сертификат.",
-    ]
+    # Без QR первый шаг про сканирование — ложь на бумаге: ссылки на карточке просто нет.
+    steps_act: list[str] = []
+    if has_qr:
+        steps_act.append(
+            "Отсканируйте QR выше и нажмите «Запустить» — сертификат активируется сразу."
+        )
+    manual = (
+        open_bot + ", зайдите в «Абонементы и сертификаты» и введите код — "
+        "без пробелов, точно как напечатано."
+    )
+    steps_act.append(
+        "Без QR: " + manual if has_qr else manual[:1].upper() + manual[1:]
+    )
+    steps_act.append("Бот подтвердит активацию и покажет тренера — можно выбирать время.")
 
-    steps_use = [
-        "Откройте каталог или расписание тренера в мини-приложении (из того же бота). После активации к аккаунту "
-        "привязаны тренер и город — занятия могут быть уже отфильтрованы.",
-        "Выберите удобное время и отправьте запись на занятие. Правила отмены и удержания занятия задаёт тренер "
-        "в системе — прочитайте условия перед подтверждением.",
-        "Баланс по сертификату списывается, когда тренер отмечает занятие как проведённое в CRM. При отмене записи "
-        "учитывайте сроки: поздняя отмена может привести к списанию по правилам тренера.",
-        "Остаток баланса и активные записи смотрите в мини-приложении в разделах абонемента и «Мои записи».",
+    facts_use = [
+        "Записывайтесь к тренеру в мини-приложении: время, отмены и правила — там же.",
+        "Сумма списывается после проведённого занятия. Остаток всегда виден в «Абонементах и сертификатах».",
+        "Сертификат закрепляется за вашим аккаунтом Telegram — код нужен один раз.",
     ]
 
     ol_act = "".join(f"<li>{_esc(t)}</li>" for t in steps_act)
-    ol_use = "".join(f"<li>{_esc(t)}</li>" for t in steps_use)
+    ul_use = "".join(f"<li>{_esc(t)}</li>" for t in facts_use)
 
-    cap_html = (
-        '<div class="capabilities">'
-        "<strong>Возможности сервиса</strong> "
-        + _esc(
-            "онлайн-запись к тренеру; управление своими записями; учёт подарочного баланса и абонементов; "
-            "напоминания в Telegram; вход через бота без отдельного пароля (в рамках аккаунта Telegram). "
-            "Набор функций зависит от версии платформы и настроек вашего тренера."
-        )
-        + "</div>"
-    )
-
-    footer_note = _esc(
-        "Не передавайте код посторонним — по нему можно активировать сертификат. "
-        "Не получается активировать — напишите тренеру или в поддержку бота."
-    )
-
-    callout = (
-        '<div class="cert-callout">'
-        "<strong>Через QR — без ввода кода</strong> "
-        + _esc(
-            "Отсканируйте квадратный код ниже: откроется чат с ботом → нажмите «Запустить» или "
-        )
-        + "<i>Start</i>. "
-        + _esc(
-            "Активация произойдёт автоматически (код из полоски внизу уже «вшит» в ссылку QR). Вручную вводить код "
-            "нужно только если вы открыли бота другим способом, без сканирования."
-        )
-        + "</div>"
+    fineprint = _esc(
+        "Код — как деньги: он сработает у того, кто введёт его первым. "
+        "Не активируется — напишите тренеру, который выдал сертификат."
     )
 
     return (
         '<div class="instructions">'
-        f'<p class="note">{_esc(intro)}</p>'
-        "<h3>Как активировать сертификат</h3>"
-        f"{callout}"
+        "<h3>Как активировать</h3>"
         f"<ol>{ol_act}</ol>"
-        "<h3>Как пользоваться после активации</h3>"
-        f"<ol>{ol_use}</ol>"
-        "<h3>Что можно делать в сервисе</h3>"
-        f"{cap_html}"
-        f'<p class="note">{footer_note}</p>'
+        "<h3>Как пользоваться</h3>"
+        f"<ul>{ul_use}</ul>"
+        f'<p class="fineprint">{fineprint}</p>'
         "</div>"
     )
 
@@ -196,7 +177,7 @@ def _amount_row_html(amount_cents: int) -> str:
         return f'<div class="amount-row"><span>{_esc(plain)}</span></div>'
     return (
         f'<div class="amount-row"><span>{_esc(plain)}</span>'
-        f'<span class="curr">BYN</span></div>'
+        f'<span class="curr">&#160;BYN</span></div>'
     )
 
 
@@ -252,17 +233,19 @@ def build_certificate_issue_html(
         if m:
             bot_for_steps = _normalize_bot(m.group(1) or "")
 
-    qr_png = _qr_png_pdf_safe((activation_url or "").strip(), px=72)
+    qr_png = _qr_png_pdf_safe((activation_url or "").strip(), px=80)
     if qr_png:
         b64 = base64.b64encode(qr_png).decode("ascii")
         # Explicit HTML dimensions: Story uses intrinsic image size if these are missing (full-page QR spam).
         qr_inner = (
-            f'<img alt="QR" width="72" height="72" '
-            f'style="display:block;width:10mm;height:10mm;max-width:10mm;max-height:10mm;" '
+            f'<img alt="QR" width="80" height="80" '
+            f'style="width:80px;height:80px;max-width:80px;max-height:80px;" '
             f'src="data:image/png;base64,{b64}" />'
+            '<div class="qr-caption"><b>Наведите камеру</b> — '
+            "бот активирует сертификат сам.</div>"
         )
     else:
-        qr_inner = '<div class="qr-fallback">QR недоступен — откройте ссылку из письма.</div>'
+        qr_inner = ""
 
     html = tpl
     html = html.replace("__BRAND__", _esc((brand_display or "").strip() or "GLIDE"))
@@ -271,7 +254,10 @@ def build_certificate_issue_html(
     html = html.replace("__AMOUNT_ROW__", _amount_row_html(amount_cents))
     html = html.replace("__PRODUCT__", _esc((product_name or "").strip()))
     html = html.replace("__META__", _meta_html(trainer_name, expires_at))
-    html = html.replace("__INSTRUCTIONS_BLOCK__", _instructions_block_html(bot_for_steps or None))
+    html = html.replace(
+        "__INSTRUCTIONS_BLOCK__",
+        _instructions_block_html(bot_for_steps or None, has_qr=bool(qr_png)),
+    )
     html = html.replace("__QR_INNER__", qr_inner)
     html = html.replace("__CODE__", _esc(((code or "").strip() or "—").replace("\n", " ")))
     html = html.replace(
