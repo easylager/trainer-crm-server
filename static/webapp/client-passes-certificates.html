@@ -522,15 +522,37 @@
     .pass-order-modal-root[hidden] {
       display: none !important;
     }
+    /*
+     * Оверлей обязан прокручиваться сам, а лист — помещаться в то, что осталось от экрана.
+     *
+     * Было: `inset: 0` + `align-items: center` и ни одного `overflow`. Пока клавиатура закрыта,
+     * лист влезает и всё выглядит правильно. Клавиатура открывается — видимая высота падает
+     * почти вдвое, лист выше неё, а центрирование срезает его с обоих концов: кнопки «Отмена»
+     * и «Отправить тренеру» уезжают под клавиатуру, и добраться до них нечем — прокручивать
+     * нечего, overflow не объявлен.
+     *
+     * Правило то же, что у общего `.modal-overlay` (mini-app-components.css): прижать к верху,
+     * разрешить прокрутку оверлея. `100dvh` вместо `inset: 0` — потому что position:fixed на
+     * iOS меряется от layout viewport, который под клавиатуру не сжимается, а dvh сжимается.
+     */
     .pass-order-modal-root:not([hidden]) {
       position: fixed;
       inset: 0;
+      height: 100dvh;
       z-index: 10000;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
       box-sizing: border-box;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    /* Пока лист ниже экрана, он остаётся по центру — как было. Как только выше, прижимается
+       к верху и доезжает прокруткой: `auto` по обеим осям даёт ровно это поведение. */
+    .pass-order-modal-root:not([hidden]) > .pass-order-modal-sheet {
+      margin: auto;
     }
     .pass-order-modal-backdrop {
       position: absolute;
@@ -546,6 +568,8 @@
       z-index: 1;
       width: 100%;
       max-width: 400px;
+      /* Лист не тянется за пределы оверлея: иначе прокрутка оверлея ничего не даст. */
+      flex: 0 0 auto;
       padding: 22px 20px 18px;
       border-radius: 20px;
       background: var(--tg-theme-bg-color);

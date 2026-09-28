@@ -211,6 +211,16 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     smtp_from_email: str | None = None
+    # Сколько ждать SMTP, прежде чем считать отправку несостоявшейся. Без ограничения
+    # ``smtplib.SMTP`` висит на недоступном хосте бесконечно, и вместе с ним — HTTP-запрос,
+    # который его ждёт: тренер смотрел на «Отправляем…», пока не закрывал приложение.
+    # Письмо при этом не теряется — неудачная отправка уходит в certificate_email_outbox,
+    # который разбирает ретрай-цикл раз в 2 минуты.
+    smtp_timeout_sec: float = 15.0
+    # Общий бюджет на inline-отправку в обработчике запроса. Сокетный таймаут закрывает
+    # только отдельные операции; этот — весь разговор (connect → starttls → login → sendmail),
+    # поэтому именно он гарантирует, что ответ вернётся.
+    smtp_inline_deadline_sec: float = 20.0
 
     # Sentry (https://sentry.io). When DSN is unset, SDK is not initialized.
     sentry_dsn: str | None = None
