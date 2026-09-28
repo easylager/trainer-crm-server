@@ -368,6 +368,7 @@
     submit: 'Отправить на проверку',
     // Тот же эндпоинт, другая правда: карточка уже в очереди, но модератор видел прошлую версию.
     resubmit: 'Отправить обновлённую карточку',
+    edit: 'Исправить в анкете',
     fill: 'Разместить карточку',
     hide: 'Снять с публикации',
     restore: 'Вернуть в каталог',
@@ -377,12 +378,17 @@
   function renderActions(p) {
     var node = el('tcActions');
     node.innerHTML = '';
-    (p.actions || []).forEach(function (action) {
+    var actions = p.actions || [];
+    actions.forEach(function (action) {
       var btn = document.createElement('button');
       btn.type = 'button';
       // Снятие — редкое и деструктивное: текстовой ссылкой, не кнопкой в вес «Изменить».
       var quiet = action === 'hide' || action === 'withdraw';
-      btn.className = quiet ? 'tc-link-btn tc-link-btn--danger' : 'btn-primary';
+      /* В needs_revision первичное действие — правка: отправлять нечего, пока не исправлено.
+         «Отправить снова» остаётся рядом, но тише — иначе две одинаковые кнопки снова
+         превращают понятный шаг в выбор. */
+      var soft = action === 'submit' && actions.indexOf('edit') !== -1;
+      btn.className = quiet ? 'tc-link-btn tc-link-btn--danger' : soft ? 'btn-soft' : 'btn-primary';
       btn.textContent = ACTION_LABELS[action] || action;
       btn.addEventListener('click', function () { runAction(action); });
       node.appendChild(btn);
@@ -430,6 +436,10 @@
     if (state.busy) return;
     if (action === 'fill') {
       openProfile();
+      return;
+    }
+    if (action === 'edit') {
+      openProfileForm();
       return;
     }
     if (action === 'hide') {
