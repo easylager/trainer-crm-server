@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.legacy_api_gate import require_legacy_trainers_api
+from src.shared.catalog_visibility import CATALOG_ACTOR_API
 from src.shared.audit import ACTOR_API, audit_log
 from src.api.schemas import (
     TRAINER_EDUCATION_OPTIONS,
@@ -226,7 +227,13 @@ async def patch_catalog_visibility(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, bool]:
     """Show or hide trainer in public client catalog (/api/public/trainers). Auth at gateway; trainers use webapp PATCH."""
-    ok = await set_trainer_catalog_visibility(session, trainer_id, visible=body.is_catalog_visible)
+    ok = await set_trainer_catalog_visibility(
+        session,
+        trainer_id,
+        visible=body.is_catalog_visible,
+        actor_type=CATALOG_ACTOR_API,
+        actor_id="legacy_rest",
+    )
     if not ok:
         raise _NOT_FOUND
     audit_log(

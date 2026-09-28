@@ -35,6 +35,7 @@ from src.application.lifecycle_use_cases import (
     LifecycleStage,
     resolve_lifecycle_snapshot,
 )
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.infrastructure.db.models import (
     RECOVERY_STEP_KEYS,
     RECOVERY_STEPS_ORDERED,
@@ -100,7 +101,7 @@ async def _list_lead_mode_candidates(session: AsyncSession) -> list[dict[str, An
     # invariant centralized.
     result = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 t.id,
                 t.telegram_id,
@@ -111,7 +112,7 @@ async def _list_lead_mode_candidates(session: AsyncSession) -> list[dict[str, An
                 ) AS last_expires_at
             FROM trainers t
             WHERE t.status = :status_active
-              AND t.is_catalog_visible = TRUE
+              AND {CATALOG_LISTED_SQL}
               AND t.telegram_id IS NOT NULL
               AND NOT EXISTS (
                     SELECT 1

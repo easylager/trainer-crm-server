@@ -475,6 +475,10 @@ def _format_drought_line(drought: dict[str, Any]) -> str | None:
             count=count, word=_requests_word(count)
         )
     if case == 2:
+        # Same rung of the ladder, two different situations: the trainer took the card down, or
+        # the system paused it and owes them a reason (TASK-140).
+        if drought.get("case_key") == "catalog_paused":
+            return msg.TRAINER_DIGEST_DROUGHT_CATALOG_PAUSED
         return msg.TRAINER_DIGEST_DROUGHT_CATALOG_HIDDEN
     if case == 3:
         return msg.TRAINER_DIGEST_DROUGHT_NO_SLOTS.format(

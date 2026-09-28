@@ -386,9 +386,9 @@ async def test_webapp_trainer_catalog_visibility_patch_allowed_before_activation
 
     # A fresh row defaults to «не в каталоге» — publication is never implicit.
     r = await db_session.execute(
-        text("SELECT is_catalog_visible FROM trainers WHERE id = :id"), {"id": trainer_id}
+        text("SELECT catalog_state FROM trainers WHERE id = :id"), {"id": trainer_id}
     )
-    assert r.scalar() is False
+    assert r.scalar() == "draft"
 
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(
@@ -405,10 +405,14 @@ async def test_webapp_trainer_catalog_visibility_patch_allowed_before_activation
                 json={"is_catalog_visible": True},
             )
     assert resp.status_code == 200, resp.text
+    # The profile here is bare (no phone, city, services or arenas), so the card cannot go to a
+    # moderator — but the request is remembered on the draft, which is what lets the hub help
+    # finish it. The old boolean flag went true and claimed more than was true (TASK-140).
     r = await db_session.execute(
-        text("SELECT is_catalog_visible FROM trainers WHERE id = :id"), {"id": trainer_id}
+        text("SELECT catalog_state, catalog_state_reason FROM trainers WHERE id = :id"),
+        {"id": trainer_id},
     )
-    assert r.scalar() is True
+    assert tuple(r.fetchone()) == ("draft", "trainer_requested")
 
 
 @pytest.mark.asyncio
@@ -818,10 +822,14 @@ def test_profile_focused_catalog_task_contract() -> None:
     assert "containerId: 'profileNavContacts'" in js
     assert 'id="profileNavPhoto"' in html
     assert 'id="profileNavContacts"' in html
-    assert "task=catalog" in js_home
-    assert "openHubCatalogProfileGaps" in js_home
+    # С TASK-140 хаб больше не открывает карусель сам: все ветки каталога ведут в раздел
+    # «Каталог», а карусель запускает он — с return, чтобы вернуть тренера к предпросмотру.
+    assert "trainer-catalog" in js_home
+    assert "openHubCatalogProfileGaps" not in js_home
     assert "task=vitrine" not in js_home
-    assert "from=hub" in js_home
+    assert "task=catalog&return=trainer-catalog" in (
+        _PROFILE_WEBAPP / "trainer-catalog-main.js"
+    ).read_text(encoding="utf-8")
     assert "navigateTo('trainer-profile')" not in js_home
     assert "navigateToWithHash('trainer-profile'" not in js_home
     assert ".profile-block-tour-bar" not in css

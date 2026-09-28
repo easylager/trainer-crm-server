@@ -44,7 +44,7 @@ async def _two_arenas(session) -> tuple[int, int, int]:
 async def _seed_online_trainer_two_arenas(session, *, primary: int, secondary: int, city_id: int):
     service_id = await require_seed_service_id(session)
     r = await session.execute(
-        text("INSERT INTO trainers (status, primary_arena_id, is_catalog_visible) VALUES ('active', :a, true) RETURNING id"),
+        text("INSERT INTO trainers (status, primary_arena_id, is_catalog_visible, catalog_state) VALUES ('active', :a, true, 'published') RETURNING id"),
         {"a": primary},
     )
     trainer_id = int(r.scalar_one())

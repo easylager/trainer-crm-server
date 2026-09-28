@@ -1,0 +1,606 @@
+/*
+ * Раздел «Каталог» (TASK-140).
+ *
+ * Одна вертикаль без табов: состояние → превью → что осталось → предупреждения → метрики →
+ * действия → история. Порядок повторяет порядок вопросов тренера, а не структуру API.
+ *
+ * Палитра — только токены GLIDE (`theme.css`): `--glide-*` для поверхностей и текста,
+ * `--app-ok/attention/danger-*` для семантики состояний. Ни одного своего hex: раздел обязан
+ * переключаться вместе с темой, а не выглядеть «почти как приложение».
+ *
+ * Ритм и примитивы (`.section-title`, карточка, кнопки) повторяют экран «Профиль» —
+ * значение в значение, чтобы переход между разделами не читался как переход между продуктами.
+ */
+
+/*
+ * Author-стили с `display` бьют браузерный `[hidden] { display: none }`, поэтому без этой
+ * строки экран показывал «Загрузка», контент и «Не удалось загрузить» одновременно.
+ */
+.tc-page [hidden] {
+  display: none !important;
+}
+
+.tc-page {
+  /* Отступ под бар даёт `body.trainer-shell-body` (--trainer-shell-tab-inset). Пока страница
+     резервировала его ещё и здесь, над баром висело ~160px пустоты. */
+  padding: 16px 14px 20px;
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--glide-text);
+}
+
+.tc-root {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ─── Заголовок состояния ────────────────────────────────────────────────── */
+
+.tc-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tc-status__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.tc-status__headline {
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--glide-text);
+}
+
+.tc-status__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--glide-hint);
+}
+
+/* Цвет дублирует смысл, но не несёт его один: рядом всегда фраза состояния. */
+.tc-status__dot--published {
+  background: var(--app-ok);
+  box-shadow: 0 0 0 4px var(--app-ok-wash);
+}
+.tc-status__dot--pending_review,
+.tc-status__dot--paused {
+  background: var(--app-attention);
+  box-shadow: 0 0 0 4px var(--app-attention-wash);
+}
+.tc-status__dot--needs_revision {
+  background: var(--app-danger);
+  box-shadow: 0 0 0 4px var(--app-danger-wash);
+}
+
+.tc-status__meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+/* Причина приостановки — главный текст экрана в этом состоянии. */
+.tc-status__detail {
+  margin: 4px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--app-attention-wash);
+  border-left: 3px solid var(--app-attention);
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--glide-text);
+}
+
+.tc-status__body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--glide-hint);
+}
+
+.tc-studio-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--glide-surface);
+  border: 1px solid var(--glide-line);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+/* ─── Пустое состояние ───────────────────────────────────────────────────── */
+
+/* ─── «Зачем это нужно» — раскрытие, а не стена ──────────────────────────── */
+
+.tc-why__toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tc-why__toggle::after {
+  content: '▾';
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.tc-why__toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.tc-why__body {
+  margin-top: 6px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--glide-shadow-card);
+}
+
+.tc-why__lead {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--glide-text);
+}
+
+.tc-why__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--glide-text);
+}
+
+.tc-why__list li {
+  position: relative;
+  padding-left: 24px;
+}
+
+.tc-why__list li::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--glide-brand);
+}
+
+.tc-why__note {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--glide-line);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.tc-why__note + .tc-why__note {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 8px;
+}
+
+/* ─── Заголовки секций — как в «Профиле», значение в значение ────────────── */
+
+.tc-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+}
+
+.tc-section-label::before {
+  content: '';
+  flex: 0 0 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--glide-brand);
+}
+
+.tc-section-label--soft {
+  margin-top: 18px;
+}
+
+/* ─── Превью карточки ────────────────────────────────────────────────────── */
+
+.tc-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--glide-shadow-card);
+}
+
+/* Вторая версия — та же карточка, но явно «ещё не у клиента». */
+.tc-card--next {
+  margin-top: 8px;
+  border-style: dashed;
+  border-color: var(--glide-line-strong);
+  background: var(--glide-surface);
+  box-shadow: none;
+}
+
+.tc-card__photo {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--glide-surface);
+  border: 1px solid var(--glide-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tc-card__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tc-card__photo-empty {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--glide-hint);
+}
+
+.tc-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tc-card__name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--glide-text);
+}
+
+.tc-card__meta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--glide-hint);
+}
+
+.tc-card__meta--price {
+  color: var(--glide-ink-teal);
+  font-weight: 600;
+}
+
+.tc-preview__revision-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+}
+
+
+/* ─── Готовность ─────────────────────────────────────────────────────────── */
+
+.tc-readiness {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  box-shadow: var(--glide-shadow-card);
+}
+
+.tc-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tc-checklist__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.tc-checklist__item::before {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Обязательное — с «чего не хватает», необязательное — приглушённым плюсом. */
+.tc-checklist__item--todo {
+  color: var(--glide-text);
+}
+.tc-checklist__item--todo::before {
+  content: '○';
+  color: var(--app-attention);
+}
+
+.tc-checklist__item--done {
+  color: var(--glide-hint);
+}
+.tc-checklist__item--done::before {
+  content: '✓';
+  color: var(--app-ok);
+}
+
+.tc-checklist__item--soft {
+  color: var(--glide-hint);
+}
+.tc-checklist__item--soft::before {
+  content: '+';
+  color: var(--glide-hint);
+}
+
+/* ─── Предупреждения ─────────────────────────────────────────────────────── */
+
+.tc-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tc-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--app-attention-wash);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--glide-text);
+}
+
+.tc-warning__icon {
+  flex: 0 0 auto;
+  color: var(--app-attention-ink);
+}
+
+.tc-warning__text {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.tc-warning__action {
+  flex: 0 0 auto;
+  padding: 0;
+  min-height: 0;
+}
+
+/* ─── Метрики ────────────────────────────────────────────────────────────── */
+
+.tc-metrics__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tc-metric {
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tc-metric__val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--glide-text);
+}
+
+.tc-metric__lbl {
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--glide-hint);
+}
+
+/* ─── Действия ───────────────────────────────────────────────────────────── */
+
+.tc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tc-actions .btn-primary,
+.tc-actions .btn-soft {
+  width: 100%;
+  min-height: 52px;
+}
+
+.tc-link-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--glide-ink-teal);
+  cursor: pointer;
+  text-align: left;
+  min-height: 40px;
+}
+
+/* Деструктивное и редкое не конкурирует по весу с «Изменить карточку». */
+.tc-link-btn--danger {
+  color: var(--app-danger-ink);
+  align-self: center;
+  font-weight: 500;
+}
+
+.tc-actions__note {
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.tc-subscription-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--glide-surface);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--glide-hint);
+}
+
+/* ─── История ────────────────────────────────────────────────────────────── */
+
+.tc-history__toggle {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tc-history__toggle::after {
+  content: '▾';
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.tc-history__toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.tc-history__list {
+  margin: 6px 0 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tc-history__item {
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+  padding-left: 14px;
+  border-left: 2px solid var(--glide-line);
+}
+
+.tc-history__when {
+  color: var(--glide-hint);
+  font-size: 12px;
+}
+
+.tc-history__what {
+  font-weight: 600;
+  color: var(--glide-text);
+}
+
+.tc-history__why {
+  color: var(--glide-hint);
+  line-height: 1.45;
+}
+
+/* ─── Служебные состояния экрана ─────────────────────────────────────────── */
+
+.tc-state {
+  padding: 48px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+
+.tc-state__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--glide-hint);
+}
+
+.tc-loading-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.tc-loading-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--glide-brand);
+  animation: tc-blink 1.2s infinite ease-in-out;
+}
+
+.tc-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.tc-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes tc-blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-loading-dots span { animation: none; opacity: 0.6; }
+}

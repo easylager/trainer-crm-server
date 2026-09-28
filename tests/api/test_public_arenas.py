@@ -729,7 +729,10 @@ async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, d
     coach_cid = await _insert_city(db_session, name=f"IceCoach-{uuid.uuid4().hex[:6]}")
     await _insert_arena(db_session, rink_cid, name="Каток на карте", latitude=55.75, longitude=37.62)
     tr = await db_session.execute(
-        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+        text(
+            "INSERT INTO trainers (status, is_catalog_visible, catalog_state) "
+            "VALUES ('active', true, 'published') RETURNING id"
+        )
     )
     tid = int(tr.scalar_one())
     await db_session.execute(
@@ -812,7 +815,10 @@ async def test_ice_cities_bounds_null_when_no_geocoded_arenas(
     """A trainer-only city with zero geocoded arenas must not fabricate a box."""
     coach_cid = await _insert_city(db_session, name=f"IceBoundsNone-{uuid.uuid4().hex[:6]}")
     tr = await db_session.execute(
-        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+        text(
+            "INSERT INTO trainers (status, is_catalog_visible, catalog_state) "
+            "VALUES ('active', true, 'published') RETURNING id"
+        )
     )
     tid = int(tr.scalar_one())
     await db_session.execute(

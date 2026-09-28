@@ -16,6 +16,11 @@ PUBLIC_CATALOG_TRAINER_DROP_KEYS = frozenset(
         "profile_pending",
         "photo_pending",
         "is_catalog_visible",
+        # Catalog card state is an internal workflow detail: a client browsing the catalog has
+        # no business knowing a card was paused for a missing phone (TASK-140).
+        "catalog_state",
+        "catalog_state_reason",
+        "catalog_state_changed_at",
     }
 )
 

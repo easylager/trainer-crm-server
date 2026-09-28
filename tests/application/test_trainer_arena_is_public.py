@@ -75,8 +75,8 @@ async def _insert_catalog_trainer(session, *, city_id: int, service_id: int) -> 
     r = await session.execute(
         text(
             """
-            INSERT INTO trainers (status, is_catalog_visible)
-            VALUES ('active', true)
+            INSERT INTO trainers (status, is_catalog_visible, catalog_state)
+            VALUES ('active', true, 'published')
             RETURNING id
             """
         )

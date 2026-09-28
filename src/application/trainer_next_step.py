@@ -14,53 +14,20 @@ from __future__ import annotations
 
 from typing import Any
 
-# Сколько реальных занятий должно пройти по личной ссылке, прежде чем предлагать каталог.
-# Смысл порога: каталог — награда за работающую практику, а не задание на старте. Пока у
-# тренера нет своего потока, обещание «вас найдут новые ученики» продукт выполнить не может.
-CATALOG_INVITE_MIN_BOOKINGS = 5
-
 # Действия, которые понимает хаб. Держим список коротким намеренно.
 ACTION_OPEN_ONBOARDING = "open_onboarding"
 ACTION_SHARE_LINK = "share_link"
 ACTION_OPEN_PROFILE = "open_profile"
-ACTION_ENABLE_CATALOG = "enable_catalog"
-# Opt-in уже дан — открыть ту же карусель catalog (без второго «флоу»).
-ACTION_OPEN_CATALOG_PROFILE = "open_catalog_profile"
-ACTION_DISMISS = "dismiss"
-
-# Короткие имена полей для карточки. Ключи = submission missing_fields.
-# Фамилия для каталога необязательна → full_name в тексте = «имя».
-_CATALOG_CARD_FIELD_WORDS: dict[str, str] = {
-    "full_name": "имя",
-    "phone": "телефон",
-    "photo": "фото",
-    "city": "город",
-    "arenas": "площадка",
-    "services": "услуга",
-    "session_duration_minutes": "длительность занятия",
-    "min_hours_before_booking": "окно записи",
-}
-
-
-def _catalog_card_requirements(missing_fields: list[str] | None) -> str:
-    """«телефон, город и площадка» — то, чего действительно не хватает, или '' когда всё есть."""
-    words = [
-        _CATALOG_CARD_FIELD_WORDS[k]
-        for k in (missing_fields or [])
-        if k in _CATALOG_CARD_FIELD_WORDS
-    ]
-    if not words:
-        return ""
-    if len(words) == 1:
-        return words[0]
-    return ", ".join(words[:-1]) + " и " + words[-1]
-
+# Одно действие на все ветки каталога (TASK-140): раздел «Каталог» сам знает, что показать —
+# пустое состояние, пробелы, комментарий модератора или причину приостановки. Раньше их было два
+# (ACTION_ENABLE_CATALOG включал тумблер, ACTION_OPEN_CATALOG_PROFILE открывал карусель), и хаб
+# должен был угадывать, в каком состоянии карточка.
+ACTION_OPEN_CATALOG = "open_catalog"
 
 STEP_SETUP_WEEK = "setup_week"
 STEP_REFRESH_WEEK = "refresh_week"
 STEP_SHARE_LINK = "share_link"
 STEP_SET_ARENA = "set_arena"
-STEP_CATALOG_INVITE = "catalog_invite"
 STEP_CATALOG_NEEDS_REVISION = "catalog_needs_revision"
 
 _FEEDBACK_PREVIEW_MAX_CHARS = 140
@@ -73,19 +40,7 @@ def _feedback_preview(text: str) -> str:
     return t[:_FEEDBACK_PREVIEW_MAX_CHARS].rstrip() + "…"
 
 
-def _plural(n: int, one: str, few: str, many: str) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return one
-    if 2 <= n % 10 <= 4 and not (10 <= n % 100 < 20):
-        return few
-    return many
-
-
-def resolve_trainer_next_step(
-    checklist: dict[str, Any] | None,
-    *,
-    catalog_invite_dismissed: bool = False,
-) -> dict[str, Any] | None:
+def resolve_trainer_next_step(checklist: dict[str, Any] | None) -> dict[str, Any] | None:
     """
     Единственная карточка для хаба, или ``None``, когда подсказывать нечего.
 
@@ -104,11 +59,7 @@ def resolve_trainer_next_step(
     # has_real_booking (not has_any_booking): a sandbox demo or an instantly-voided booking
     # must not hide the «отправьте ссылку ученику» card — see TASK-027.
     has_booking = bool(checklist.get("has_real_booking"))
-    real_bookings = int(checklist.get("real_bookings_count") or 0)
-    catalog_opted_in = bool(checklist.get("is_catalog_visible"))
-    catalog_missing = list(checklist.get("catalog_missing_fields") or [])
     onboarding_done = bool(checklist.get("onboarding_completed"))
-    catalog_need = _catalog_card_requirements(catalog_missing)
 
     # 1. Расписания нет. Дальше всё зависит от того, ПОЧЕМУ его нет.
     if not has_week and not has_slots:
@@ -170,9 +121,9 @@ def resolve_trainer_next_step(
             "secondary": None,
         }
 
-    # 4. Модератор попросил правки по карточке каталога. Это действие, а не рост-приглашение:
-    #    показываем сразу, независимо от порога записей и от «Не сейчас» на первичном приглашении —
-    #    тренер уже сам попросился в каталог, ждать 5 занятий тут бессмысленно.
+    # 4. Модератор попросил правки по карточке каталога. Это единственная карточка про каталог,
+    #    которая здесь осталась, и она не приглашение, а работа: тренер уже сам попросился в
+    #    каталог, и без правок карточка там не появится.
     if bool(checklist.get("catalog_needs_revision")):
         feedback = checklist.get("moderation_feedback") or ""
         return {
@@ -184,7 +135,7 @@ def resolve_trainer_next_step(
                 if feedback
                 else "Откройте анкету, чтобы увидеть комментарий, исправьте и сохраните."
             ),
-            "cta": {"label": "Исправить анкету", "action": ACTION_OPEN_CATALOG_PROFILE},
+            "cta": {"label": "Открыть «Каталог»", "action": ACTION_OPEN_CATALOG},
             "secondary": None,
         }
 
@@ -195,42 +146,11 @@ def resolve_trainer_next_step(
     # После первой записи карточку «отправьте ссылку» больше не держим.
     # Повторять ссылку — дело хинтов, не отдельного блока на хабе.
 
-    # 5. Одна карточка каталога → одна карусель ``task=catalog`` (телефон + имя в рельсе).
-    #    Не opted-in: согласие + карусель. Уже opted-in, но дыры: та же карусель без второго флоу.
-    if (
-        real_bookings >= CATALOG_INVITE_MIN_BOOKINGS
-        and not bool(checklist.get("is_active"))
-        and not (catalog_opted_in and not catalog_need)
-        and not (catalog_invite_dismissed and not catalog_opted_in)
-    ):
-        word = _plural(real_bookings, "занятие", "занятия", "занятий")
-        if catalog_opted_in and catalog_need:
-            return {
-                "key": STEP_CATALOG_INVITE,
-                "title": "Вас уже записывают",
-                "body": (
-                    f"{real_bookings} {word} по вашей ссылке. "
-                    f"Для карточки в каталоге не хватает: {catalog_need}."
-                ),
-                "cta": {"label": "Продолжить", "action": ACTION_OPEN_CATALOG_PROFILE},
-                "secondary": None,
-            }
-        if not catalog_opted_in:
-            tail = (
-                f"Для карточки не хватает: {catalog_need}."
-                if catalog_need
-                else "Карточка уже готова."
-            )
-            return {
-                "key": STEP_CATALOG_INVITE,
-                "title": "Вас уже записывают",
-                "body": (
-                    f"{real_bookings} {word} по вашей ссылке. "
-                    f"Хотите, чтобы вас находили новые ученики? {tail}"
-                ),
-                "cta": {"label": "Хочу в каталог", "action": ACTION_ENABLE_CATALOG},
-                "secondary": {"label": "Не сейчас", "action": ACTION_DISMISS},
-            }
+    # Приглашения в каталог здесь больше нет. Карточка «Вас уже записывают» продавала раздел,
+    # который тренер и так видит постоянной вкладкой бара, занимала главный экран целиком и
+    # закрывалась только через «Не сейчас» — то есть вела себя как реклама, а не как следующий
+    # шаг. Приглашение переехало в action inbox отдельной строкой (``catalog_publication``),
+    # где оно живёт наравне с остальными подсказками и закрывается насовсем.
 
     # Подсказывать нечего — и это нормальное состояние работающего кабинета.
     return None

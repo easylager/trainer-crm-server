@@ -22,7 +22,8 @@ only tried the sandbox demo or had a booking voided before it ever happened.
 ``schedule_unlocked`` is True for every linked, non-deactivated trainer (onboarding v2:
 moderation gates the catalog, not the trainer's own tools).
 ``arena_count`` / ``real_bookings_count`` / ``arena_work_format`` feed the single «next step» card.
-``is_catalog_visible`` = trainer row flag (hub rhythm: catalog publication hint when false while active).
+``catalog_state`` = the catalog card's own state (TASK-140); ``is_catalog_visible`` is kept as the
+«карточка опубликована» shorthand the hub JS still reads.
 ``catalog_invite_dismissed`` = trainer answered «Не сейчас» to the hub catalog invite (persisted, not per-device).
 ``catalog_missing_fields`` / ``catalog_missing_labels_ru`` = submission-tier gaps, so the catalog invite
 names the same fields the profile will ask for instead of promising a shorter list.
@@ -66,6 +67,12 @@ from src.application.organization_capabilities import (
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.trainer_client_invite_tracking import sql_trainer_has_real_booking
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
+from src.shared.catalog_visibility import (
+    CATALOG_STATE_DRAFT,
+    CATALOG_STATE_NEEDS_REVISION,
+    trainer_is_listed,
+    trainer_opted_into_catalog,
+)
 from src.infrastructure.db.models import (
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
@@ -140,14 +147,22 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     # Опубликоваться попросили (тумблер on), заявка в pending_profile, и модератор оставил
     # комментарий — это действие, а не фоновое ожидание: хаб должен показать его отдельно
     # от «хотите в каталог» и не зависеть от порога записей/показа «Не сейчас».
-    catalog_needs_revision = bool(
-        trainer.get("is_catalog_visible") and st == TRAINER_STATUS_PENDING_PROFILE and moderation_feedback
+    catalog_state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
+    catalog_needs_revision = catalog_state == CATALOG_STATE_NEEDS_REVISION or bool(
+        trainer_opted_into_catalog(trainer)
+        and st == TRAINER_STATUS_PENDING_PROFILE
+        and moderation_feedback
     )
 
     out: dict[str, Any] = {
         "trainer_status": st,
         "is_active": is_active,
-        "is_catalog_visible": bool(trainer.get("is_catalog_visible", False)),
+        # Legacy key, still read by hub JS: now means "card is published".
+        "is_catalog_visible": trainer_is_listed(trainer),
+        # The real thing — the six-state catalog card (TASK-140).
+        "catalog_state": catalog_state,
+        "catalog_state_reason": trainer.get("catalog_state_reason"),
+        "catalog_opted_in": trainer_opted_into_catalog(trainer),
         "profile_complete": profile_complete,
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,

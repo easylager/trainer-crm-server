@@ -4,7 +4,6 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from src.application.trainer_feature_moments import ITEM_RECURRING_CLIENT
-from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
 from src.application.trainer_hub_action_inbox import (
     HUB_RHYTHM_GROWTH_MAX,
     _cap_hub_inbox_rhythm_items,
@@ -229,15 +228,17 @@ def test_feature_moment_card_absent_in_lead_mode() -> None:
     assert ITEM_RECURRING_CLIENT not in {it["id"] for it in inbox["items"]}
 
 
-def test_early_practice_gets_no_catalog_hub_nudge() -> None:
+def test_no_catalog_nudge_before_there_is_a_schedule() -> None:
+    """До расписания главный экран занят карточкой «Настройте расписание» — второго «сначала» нет."""
     onboarding = {
+        "catalog_state": "draft",
         "is_active": False,
         "profile_complete": False,
-        "has_any_booking": True,
-        "real_bookings_count": 1,
-        "is_catalog_visible": True,
-        "weekly_template_count": 1,
-        "has_future_slots": True,
+        "has_any_booking": False,
+        "real_bookings_count": 0,
+        "is_catalog_visible": False,
+        "weekly_template_count": 0,
+        "has_future_slots": False,
     }
     assert not _should_nudge_catalog_in_hub(onboarding)
     inbox = build_trainer_hub_action_inbox(
@@ -261,10 +262,12 @@ def test_inbox_badges_schedule_and_clients() -> None:
         "profile_complete": False,
         "has_any_booking": True,
         "has_real_booking": True,
-        # Каталог теперь по заявке: подсказка про профиль появляется только при живом потоке
-        # записей. Раньше её триггерил сам факт «активен, но не в каталоге» — то есть тренер,
-        # который сам выключил показ, получал бейдж «доделай профиль».
-        "real_bookings_count": CATALOG_INVITE_MIN_BOOKINGS,
+        # Подсказка про каталог завязана на состояние карточки, а не на поток записей и не на
+        # «активен, но не в каталоге»: тренер, который сам снял карточку, бейдж не получает.
+        "catalog_state": "draft",
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "real_bookings_count": 1,
         "is_catalog_visible": False,
         "open_loop_clients_no_telegram_count": 3,
     }
@@ -423,7 +426,8 @@ def test_catalog_hub_nudge_respects_not_now() -> None:
         "profile_complete": False,
         "has_any_booking": True,
         "has_real_booking": True,
-        "real_bookings_count": CATALOG_INVITE_MIN_BOOKINGS + 3,
+        "catalog_state": "draft",
+        "real_bookings_count": 4,
         "is_catalog_visible": False,
         "weekly_template_count": 1,
         "has_future_slots": True,
@@ -437,9 +441,11 @@ def test_active_trainer_who_hid_catalog_is_not_nudged() -> None:
     Выключенный показ в каталоге — решение тренера, а не незакрытая задача.
 
     Раньше эта комбинация (active + is_catalog_visible=false) сама по себе поднимала подсказку
-    «включите показ», сколько бы раз тренер её ни закрывал.
+    «включите показ», сколько бы раз тренер её ни закрывал. Теперь состояние называется своим
+    именем: ``hidden`` — это его решение, а не незаполненная карточка.
     """
     onboarding = {
+        "catalog_state": "hidden",
         "is_active": True,
         "profile_complete": True,
         "has_any_booking": True,
@@ -530,3 +536,44 @@ def test_snooze_cannot_hide_an_always_urgent_hint_even_if_passed() -> None:
     )
     ids = [x["id"] for x in payload["items"]]
     assert "open_loop_no_next" in ids
+
+
+def test_draft_card_gets_the_first_row_in_the_inbox() -> None:
+    """
+    Приглашение в каталог переехало сюда из карточки «следующий шаг»: одна строка наравне с
+    остальными, а не экран целиком, и закрывается насовсем.
+    """
+    onboarding = {
+        "catalog_state": "draft",
+        "is_active": False,
+        "profile_complete": False,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "real_bookings_count": 2,
+        "is_catalog_visible": False,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+        "has_crm_subscription_access": True,
+    }
+    inbox = build_trainer_hub_action_inbox(onboarding=onboarding, schedule_unlocked=True)
+    items = inbox["items"]
+    assert items[0]["id"] == "catalog_publication", [x["id"] for x in items]
+    row = items[0]
+    assert row["dismissible"] is True
+    assert row["primary_action"] == "profile_catalog"
+    # Список пробелов знает сам раздел — вторая версия правды здесь не нужна.
+    assert "не хватает" not in (row["title"] + row["subtitle"])
+
+
+def test_states_other_than_draft_never_ask_to_publish() -> None:
+    base = {
+        "is_active": False,
+        "profile_complete": True,
+        "has_any_booking": True,
+        "has_real_booking": True,
+        "real_bookings_count": 4,
+        "weekly_template_count": 3,
+        "has_future_slots": True,
+    }
+    for state in ("pending_review", "published", "hidden", "paused", "needs_revision"):
+        assert not _should_nudge_catalog_in_hub({**base, "catalog_state": state}), state

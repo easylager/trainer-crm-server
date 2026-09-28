@@ -8,6 +8,11 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL, catalog_listed_sql
+
+# Groups join trainers under two aliases in this module; keep both spellings on hand.
+CATALOG_LISTED_SQL_TR = catalog_listed_sql("tr")
+
 from src.shared.ttl_cache import invalidate_slots_for_trainer
 
 # Group lifecycle
@@ -1389,13 +1394,13 @@ async def list_open_training_groups_public(session: AsyncSession, trainer_id: in
     """Catalog: recruiting + visible + has free seats (by seated count)."""
     r = await session.execute(
         text(
-            """
+            f"""
             SELECT tg.id, tg.name, tg.service_id, s.name, tg.arena_id, a.name,
                    tg.max_members, tg.catalog_pitch,
                    (SELECT COUNT(*)::int FROM training_group_members m
                     WHERE m.training_group_id = tg.id AND m.status IN ('active', 'trial')) AS seated
             FROM training_groups tg
-            JOIN trainers tr ON tr.id = tg.trainer_id AND tr.status = 'active' AND tr.is_catalog_visible = true
+            JOIN trainers tr ON tr.id = tg.trainer_id AND {CATALOG_LISTED_SQL_TR}
             JOIN services s ON s.id = tg.service_id
             LEFT JOIN arenas a ON a.id = tg.arena_id
             WHERE tg.trainer_id = :tid AND tg.status = :st AND tg.catalog_visible = true
@@ -1544,7 +1549,7 @@ async def list_open_training_groups_catalog(
 
     base_from = f"""
       FROM training_groups tg
-      JOIN trainers t ON t.id = tg.trainer_id AND t.status = 'active' AND t.is_catalog_visible = true
+      JOIN trainers t ON t.id = tg.trainer_id AND {CATALOG_LISTED_SQL}
       JOIN trainer_profiles p ON p.trainer_id = t.id
       JOIN services srv ON srv.id = tg.service_id
       LEFT JOIN arenas ar ON ar.id = tg.arena_id
@@ -1665,7 +1670,7 @@ async def batch_open_groups_count_for_trainers(
             f"""
             SELECT tg.trainer_id, COUNT(*)::int
             FROM training_groups tg
-            JOIN trainers t ON t.id = tg.trainer_id AND t.status = 'active' AND t.is_catalog_visible = true
+            JOIN trainers t ON t.id = tg.trainer_id AND {CATALOG_LISTED_SQL}
             WHERE tg.trainer_id IN ({placeholders})
               AND tg.status = :st AND tg.catalog_visible = true
               AND (

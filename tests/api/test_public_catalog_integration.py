@@ -105,7 +105,7 @@ async def _create_active_trainer_via_api(
     # Since 0182_catalog_opt_in the catalog is opt-in: `active` alone no longer publishes a card.
     # Written in SQL, not through the API — the suite shares one per-IP rate-limit window.
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": tid}
+        text("UPDATE trainers SET is_catalog_visible = true, catalog_state = 'published' WHERE id = :tid"), {"tid": tid}
     )
     await db_session.commit()
     return tid
@@ -498,7 +498,7 @@ async def test_public_catalog_respects_is_catalog_visible(
         await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
 
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = false WHERE id = :tid"),
+        text("UPDATE trainers SET is_catalog_visible = false, catalog_state = 'hidden' WHERE id = :tid"),
         {"tid": tid},
     )
     await db_session.commit()

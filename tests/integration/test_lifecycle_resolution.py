@@ -31,6 +31,7 @@ from src.infrastructure.db.models import (
     TRAINER_STATUS_DEACTIVATED,
     TRAINER_STATUS_PENDING_PROFILE,
 )
+from src.shared.catalog_visibility import CATALOG_STATE_HIDDEN, CATALOG_STATE_PUBLISHED
 
 
 async def _create_trainer(
@@ -39,11 +40,23 @@ async def _create_trainer(
     status: str = TRAINER_STATUS_ACTIVE,
     is_catalog_visible: bool = True,
 ) -> int:
+    """
+    ``is_catalog_visible`` here means "the card is published".
+
+    Since TASK-140 the real column is ``catalog_state``; ``is_catalog_visible`` survives only as
+    a derived mirror. Both are written so the row is self-consistent, which is what
+    ``set_catalog_state`` guarantees in production.
+    """
     r = await session.execute(
         text(
-            "INSERT INTO trainers (status, is_catalog_visible) VALUES (:s, :v) RETURNING id"
+            "INSERT INTO trainers (status, is_catalog_visible, catalog_state) "
+            "VALUES (:s, :v, :cs) RETURNING id"
         ),
-        {"s": status, "v": is_catalog_visible},
+        {
+            "s": status,
+            "v": is_catalog_visible,
+            "cs": CATALOG_STATE_PUBLISHED if is_catalog_visible else CATALOG_STATE_HIDDEN,
+        },
     )
     (trainer_id,) = r.fetchone()
     await session.commit()

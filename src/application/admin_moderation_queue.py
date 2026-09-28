@@ -10,6 +10,7 @@ from src.application.trainer_profile_pending import (
 )
 from src.application.trainer_use_cases import get_trainer
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+from src.shared.catalog_visibility import trainer_opted_into_catalog
 from src.infrastructure.repositories import TrainerRepository
 
 
@@ -32,10 +33,10 @@ async def list_trainer_ids_eligible_for_admin_moderation(session: AsyncSession) 
                 eligible_ids.append(int(tid))
         elif (
             st == TRAINER_STATUS_PENDING_PROFILE
-            and bool(full.get("is_catalog_visible"))
+            and trainer_opted_into_catalog(full)
             and is_ready_for_moderation_submission(full)
         ):
-            # is_catalog_visible gate: a trainer who opted out (or never opted in) must not
+            # opt-in gate: a trainer who opted out (or never opted in) must not
             # show up for admin approval just because their fields happen to be complete —
             # same "publication is the trainer's decision" rule as the submit endpoint
             # (try_submit_trainer_for_moderation_review), applied to the /pending listing too.

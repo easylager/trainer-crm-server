@@ -17,6 +17,7 @@ from src.shared.price_tier_kind import (
     sql_order_case_tier_kind,
 )
 from src.shared.notification_hours import NOTIFICATION_TZ
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL, CATALOG_STATE_DRAFT
 from src.shared.specialist_roles import specialist_role_display
 from src.shared.trainer_status import normalize_trainer_status_value
 
@@ -420,7 +421,8 @@ class TrainerRepository:
                 "profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible, "
                 "push_notification_start_hour, push_notification_end_hour, "
                 "digest_enabled, digest_send_time, telegram_username, "
-                "arena_work_format, arena_request_text, arena_request_at "
+                "arena_work_format, arena_request_text, arena_request_at, "
+                "catalog_state, catalog_state_reason, catalog_state_changed_at "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -477,6 +479,19 @@ class TrainerRepository:
             ),
             "arena_request_text": row[17] if len(row) > 17 else None,
             "arena_request_at": row[18].isoformat() if len(row) > 18 and row[18] is not None and hasattr(row[18], "isoformat") else (str(row[18]) if len(row) > 18 and row[18] is not None else None),
+            # Catalog card state (TASK-140). Fail closed for the same reason as the legacy
+            # flag above: an unreadable state must not publish a card nobody asked for.
+            "catalog_state": (
+                str(row[19]).strip()
+                if len(row) > 19 and row[19] is not None and str(row[19]).strip()
+                else CATALOG_STATE_DRAFT
+            ),
+            "catalog_state_reason": row[20] if len(row) > 20 else None,
+            "catalog_state_changed_at": (
+                row[21].isoformat()
+                if len(row) > 21 and row[21] is not None and hasattr(row[21], "isoformat")
+                else None
+            ),
         }
         rp = await self._session.execute(
             text(
@@ -1211,14 +1226,6 @@ class TrainerRepository:
         )
         return r.rowcount > 0
 
-    async def set_is_catalog_visible(self, trainer_id: int, visible: bool) -> bool:
-        """Show or hide trainer in /api/public catalog while status may stay active."""
-        r = await self._session.execute(
-            text("UPDATE trainers SET is_catalog_visible = :vis WHERE id = :id"),
-            {"id": trainer_id, "vis": visible},
-        )
-        return r.rowcount > 0
-
     async def set_moderation_feedback(self, trainer_id: int, feedback: str | None) -> bool:
         """Set or clear moderation_feedback (e.g. for 'needs edit'). Returns True if trainer exists."""
         r = await self._session.execute(
@@ -1337,9 +1344,9 @@ class TrainerRepository:
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
         """
-        # Активные тренеры с видимой карточкой — в списке каталога даже без текущей подписки
+        # Опубликованная карточка — в списке каталога даже без текущей подписки
         # (самозапись и слоты по-прежнему зависят от тарифа в карточке / API).
-        where = " WHERE t.status = 'active' AND t.is_catalog_visible = true"
+        where = f" WHERE {CATALOG_LISTED_SQL}"
         params: dict[str, Any] = {"lim": limit, "off": offset}
         if trainer_ids is not None:
             if not trainer_ids:

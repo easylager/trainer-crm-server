@@ -9,18 +9,18 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-trainer-theme.js?v=202609246"></script>
-  <script src="mini-app-telegram-chrome.js?v=202609246"></script>
-  <script src="mini-app-phone-field.js?v=202609246"></script>
-  <link rel="stylesheet" href="theme.css?v=202609246" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609246" />
-  <script src="mini-app-confirm.js?v=202609246"></script>
+  <script src="mini-app-trainer-theme.js?v=202609287"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609287"></script>
+  <script src="mini-app-phone-field.js?v=202609287"></script>
+  <link rel="stylesheet" href="theme.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
+  <script src="mini-app-confirm.js?v=202609287"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-  <link rel="preload" href="trainer-profile-main.js?v=202609246" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609246" />
-  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202609246" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609246" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609246" />
+  <link rel="preload" href="trainer-profile-main.js?v=202609287" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
 </head>
 <body class="ar-pilot ar-pilot--trainer-profile">
   <div class="header">
@@ -68,14 +68,9 @@
       </div>
     </div>
 
-    <div id="moderatorFeedbackBanner" class="card mod-feedback-banner" hidden role="alert">
-      <div class="mod-feedback-title">Комментарий модератора</div>
-      <p id="moderatorFeedbackText" class="mod-feedback-body"></p>
-    </div>
-
     <div class="filters" id="profileFilters">
       <button type="button" class="filter-btn active" data-tab="form">Анкета</button>
-      <button type="button" class="filter-btn" data-tab="moderation">Статус</button>
+      <button type="button" class="filter-btn" data-tab="moderation">Публикация</button>
       <button type="button" class="filter-btn" data-tab="settings">Настройки</button>
     </div>
     <p id="profileTabExplainer" class="profile-tab-explainer" role="note"></p>
@@ -254,14 +249,13 @@
     </div>
 
     <div id="tab-moderation" class="tab-pane">
-      <div class="section-title" id="moderation">Статус профиля</div>
+      <div class="section-title" id="moderation">Публикация в каталоге</div>
       <div class="card">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
-          <div id="modStatusPill" class="status-pill" style="display:none;"></div>
-        </div>
-        <p class="hint" id="modHint" style="margin-bottom: 0;"></p>
-        <div id="modMissingTitle" style="display:none; font-weight:600; margin: 16px 0 10px; font-size: 14px;">Осталось заполнить:</div>
-        <ul class="missing-list" id="modMissingList"></ul>
+        <p class="hint" style="margin: 0 0 14px;">
+          Состояние карточки, что осталось заполнить, история и кнопки «разместить» / «снять» —
+          в разделе «Каталог». Здесь только ваши данные: анкета, услуги и настройки работы.
+        </p>
+        <button type="button" class="btn btn-primary" id="btnOpenCatalogSection">Открыть «Каталог»</button>
       </div>
     </div>
 
@@ -419,20 +413,6 @@
         </div>
       </div>
 
-      <div id="catalogVisibilityShell" class="section-title" style="margin-top: 22px;" hidden>Каталог клиентов</div>
-      <div id="catalogVisibilityCard" class="card" hidden>
-        <div class="settings-group-toggle">
-          <input type="checkbox" id="is_catalog_visible" class="settings-group-toggle__input" />
-          <label for="is_catalog_visible" class="settings-group-toggle__label">
-            <span class="settings-group-toggle__copy">
-              <span class="settings-group-toggle__title">Показывать в каталоге</span>
-              <span class="settings-group-toggle__hint">Скрытый профиль не ищется в каталоге клиентов, но остаётся активным</span>
-            </span>
-            <span class="settings-group-toggle__switch" aria-hidden="true"></span>
-          </label>
-        </div>
-      </div>
-
       <div class="section-title">Сетка расписания</div>
       <div id="scheduleGridArenaLockShell" class="card schedule-grid-arena-only" hidden>
         <p class="schedule-grid-arena-only__title">Сетку задаёт ваша основная арена</p>
@@ -522,7 +502,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202609246"></script>
-  <script defer src="mini-app-trainer-home.js?v=202609246"></script>
+  <script defer src="trainer-profile-main.js?v=202609287"></script>
+  <script defer src="mini-app-trainer-home.js?v=202609287"></script>
 </body>
 </html>

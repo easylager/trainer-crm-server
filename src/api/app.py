@@ -28,6 +28,7 @@ from src.api.routes import (
 )
 from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
+from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
 from src.application.landing_manifest import inject_landing_html
@@ -460,6 +461,47 @@ def webapp_trainer_profile_page():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-catalog")
+def webapp_trainer_catalog_page():
+    """Trainer «Каталог» section: publication state, preview, history (TASK-140)."""
+    path = _WEBAPP_DIR / "trainer-catalog.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-catalog.html")
+def webapp_trainer_catalog_html_alias():
+    """Bookmark/typo alias: canonical URL has no .html."""
+    return RedirectResponse(url="/webapp/trainer-catalog", status_code=302)
+
+
+@app.get("/webapp/trainer-catalog-main.js")
+def webapp_trainer_catalog_main_js(request: Request):
+    """Trainer catalog section logic. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-catalog-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-catalog.css")
+def webapp_trainer_catalog_css(request: Request):
+    """Trainer catalog section styles. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-catalog.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/trainer-faq")
@@ -1638,6 +1680,7 @@ app.include_router(public_ice_page_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)
+webapp_router.include_router(webapp_trainer_catalog_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
 app.include_router(webhooks_router)

@@ -1303,19 +1303,17 @@
         );
       }
 
-      /** Catalog hub hints only after 5+ real bookings, and never once the trainer has answered. */
-      var HUB_CATALOG_NUDGE_MIN_BOOKINGS = 5;
-
       /* Зеркало _should_nudge_catalog_in_hub из trainer_hub_action_inbox.py — держать в паре.
-         Ветка «активен, но каталог выключен» убрана: это его решение, а не незакрытая задача.
-         «Не сейчас» теперь тоже учитываем — ответ хранится на сервере. */
+         Ровно одно состояние карточки: draft. hidden/paused — решение тренера или причина,
+         которую он уже знает; pending_review — он уже попросился; needs_revision — там правки,
+         и про них говорит карточка next_step. Порога по записям нет: каталог теперь постоянная
+         вкладка бара, а не то, что надо продать. Расписание обязано быть — иначе хаб предлагает
+         два «сделайте это первым» разом. */
       function shouldShowHubCatalogPublicationHint(d) {
-        if (!d || !onboardingBookingStepDone(d)) return false;
+        if (!d) return false;
         if (d.catalog_invite_dismissed) return false;
-        var catVis = !!d.is_catalog_visible;
-        var inPublicCatalog = !!d.is_active && !!d.profile_complete && catVis;
-        if (inPublicCatalog) return false;
-        return parseNonNegativeInt(d.real_bookings_count) >= HUB_CATALOG_NUDGE_MIN_BOOKINGS;
+        if (String(d.catalog_state || '').trim() !== 'draft') return false;
+        return !!(parseNonNegativeInt(d.weekly_template_count) > 0 || d.has_future_slots);
       }
 
       function hubCatalogOnboardingSkipKey() {
@@ -1538,42 +1536,20 @@
 
         var active = !!d.is_active;
 
-        /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock.
-         * Пока полоса онбординга видна, путь в каталог ведёт её третий шаг — хинт был бы дублем
-         * того же действия, к тому же закрываемым навсегда. */
-        /* Карточка «следующий шаг» — единственный источник «что делать дальше».
-           Пока она на экране, ритм-подсказка про каталог не дублирует её. */
+        /* Первая строка, пока тренера нет в каталоге. Фолбэк для случая, когда bootstrap не
+           прислал action_inbox; текст держать в паре с trainer_hub_action_inbox.py. */
         if (
           shouldShowHubCatalogPublicationHint(d) &&
-          !d.next_step &&
           !hasSkippedCatalogOnboarding() &&
           !isRhythmHintDismissed('catalog_publication')
         ) {
-          var catVis = !!d.is_catalog_visible;
-          var inPublicCatalog = !!d.is_active && !!d.profile_complete && catVis;
-          if (!inPublicCatalog) {
-            var body = '';
-            var ctaLab = 'Профиль';
-            if (!d.is_active && !d.profile_complete) {
-              body =
-                'Чтобы вас находили в общем каталоге, доведите профиль до проверки: так мы подтверждаем карточку перед публикацией.';
-            } else if (!d.is_active && d.profile_complete) {
-              body =
-                'Профиль отправлен на проверку. После активации аккаунта вас смогут найти в каталоге — это следующий шаг к новым клиентам из списка.';
-            } else if (d.is_active && !d.profile_complete) {
-              body =
-                'Для показа в каталоге закройте критерии профиля — в разделе статуса видно, что ещё важно для публикации.';
-            }
-            if (body) {
-              out.push({
-                id: 'catalog_publication',
-                priority: 108,
-                text: body,
-                ctaLabel: ctaLab,
-                action: 'profile_catalog',
-              });
-            }
-          }
+          out.push({
+            id: 'catalog_publication',
+            priority: 108,
+            text: 'Вас пока нет в каталоге. Карточку смотрят новые ученики — сейчас к вам приходят только по вашей ссылке.',
+            ctaLabel: 'Разместить карточку',
+            action: 'profile_catalog',
+          });
         }
 
         /* Онбординг v2: тот же баг, что был на сервере (см. trainer_hub_action_inbox.py) —
@@ -1973,7 +1949,7 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
-          openHubCatalogProfileGaps();
+          navigateTo('trainer-catalog');
           return;
         }
         if (cand.action === 'trainer_referral') {
@@ -2331,11 +2307,19 @@
             headers: headersJson(),
             body: JSON.stringify({ hint_id: hintId }),
           }).catch(function () {});
+        } else if (hintId === 'catalog_publication') {
+          /* «Закрыть» здесь значит закрыть, а не отложить на 10 дней в этом браузере: ответ
+             ложится в trainer_profiles.catalog_invite_dismissed_at и переживает другое
+             устройство и очистку кэша. Локальный флаг ставим оптимистично, чтобы строка ушла
+             в тот же кадр, не дожидаясь ответа. */
+          if (hubOnboardingData) hubOnboardingData.catalog_invite_dismissed = true;
+          setRhythmDismissUntilMs(hintId, Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
+          persistHubNextStepDismissed('catalog_publication');
         } else {
           var days;
           if (hintId === 'share_link' || hintId === 'open_loop_free_next_growth') {
             days = HUB_RHYTHM_DISMISS_DAYS_GROWTH;
-          } else if (hintId === 'catalog_publication' || hintId === 'subscription_lapsed') {
+          } else if (hintId === 'subscription_lapsed') {
             days = HUB_RHYTHM_DISMISS_DAYS_LONG;
           } else {
             days = HUB_RHYTHM_DISMISS_DAYS_SHORT;
@@ -2440,7 +2424,7 @@
           case 'open_loop_no_next':
             return 'Клиенты без следующей записи';
           case 'catalog_publication':
-            return 'Профиль не в каталоге';
+            return 'Вас пока нет в каталоге';
           case 'referral_growth':
             return 'Пригласите коллег в каталог';
           case 'share_link':
@@ -2501,8 +2485,10 @@
           .map(function(item, ix) {
             var mod = item.urgent ? ' hub-action-inbox__item--urgent' : '';
             if (isCompact && hiddenCount > 0) mod += ' hub-action-inbox__item--expandable';
+            /* Крестик виден и в свёрнутом виде: иначе «закрыть подсказку» требует сначала
+               догадаться развернуть блок, и закрываемая строка ведёт себя как незакрываемая. */
             var dismissBtn =
-              !isCompact && item.dismissible
+              item.dismissible
                 ? '<button type="button" class="hub-action-inbox__btn hub-action-inbox__btn--dismiss" data-inbox-dismiss="' +
                   escapeHtml(item.id) +
                   '" aria-label="Скрыть">×</button>'
@@ -2842,74 +2828,22 @@
           return;
         }
         if (action === 'open_profile') {
-          openHubCatalogProfileGaps();
+          navigateTo('trainer-catalog');
           return;
         }
         if (action === 'share_link') {
           shareTrainerInviteLink();
           return;
         }
-        if (action === 'enable_catalog') {
-          enableHubCatalogListing();
-          return;
-        }
-        if (action === 'open_catalog_profile') {
-          openHubCatalogProfileGaps();
+        /* Одна дверь на все ветки каталога — сам раздел знает, что показать (TASK-140). */
+        if (action === 'open_catalog') {
+          navigateTo('trainer-catalog');
           return;
         }
         if (action === 'dismiss') {
           persistHubNextStepDismissed(step.key);
           renderHubNextStep(null);
         }
-      }
-
-      function hubCatalogNeedQuery() {
-        var missing =
-          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
-        if (!missing.length) return '';
-        return '&need=' + encodeURIComponent(missing.join(','));
-      }
-
-      /** Opt-in уже есть — только карусель по тем же gaps, что в тексте карточки. */
-      function openHubCatalogProfileGaps() {
-        navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-      }
-
-      /**
-       * «Хочу в каталог» — включаем показ и открываем профиль.
-       *
-       * Включение тумблера и есть просьба о публикации: PATCH /trainer/catalog-visibility сам
-       * вызывает try_submit_trainer_for_moderation_review на сервере, когда анкета уже полная —
-       * отдельный запрос отсюда не нужен (и раньше об этом ошибочно говорилось как про «heal на
-       * хабе»: чтения статуса теперь ничего не отправляют, только эта explicit-ручка). Профиль
-       * открываем следом по task=catalog — рельс из реальных submission-пробелов
-       * (имя/телефон/фото…), а не только витрина «о себе». `need=` дублирует
-       * catalog_missing_fields с карточки, чтобы карусель не открыла витрину, если
-       * moderation_readiness ещё не подгрузился.
-       */
-      function enableHubCatalogListing() {
-        var missing =
-          (hubOnboardingData && hubOnboardingData.catalog_missing_fields) || [];
-        fetch(apiUrlWithQuery('/trainer/catalog-visibility'), {
-          method: 'PATCH',
-          headers: headersJson(),
-          body: JSON.stringify({ is_catalog_visible: true }),
-        })
-          .then(function () {
-            if (hubOnboardingData) hubOnboardingData.is_catalog_visible = true;
-            if (missing.length) {
-              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-            } else {
-              navigateTo('trainer-home');
-            }
-          })
-          .catch(function () {
-            if (missing.length) {
-              navigateTo('trainer-profile?task=catalog&from=hub' + hubCatalogNeedQuery());
-            } else {
-              navigateTo('trainer-home');
-            }
-          });
       }
 
       /**

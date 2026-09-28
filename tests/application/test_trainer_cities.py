@@ -104,7 +104,7 @@ async def _insert_catalog_trainer(
     session, *, city_id: int | None, service_id: int, first_name: str = "Multi"
 ) -> int:
     r = await session.execute(
-        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+        text("INSERT INTO trainers (status, is_catalog_visible, catalog_state) VALUES ('active', true, 'published') RETURNING id")
     )
     trainer_id = int(r.scalar_one())
     await session.execute(
@@ -153,7 +153,7 @@ async def _profile_city_catalog_ids(session, city_id: int) -> set[int]:
             FROM trainers t
             JOIN trainer_profiles p ON p.trainer_id = t.id
             WHERE t.status = 'active'
-              AND t.is_catalog_visible = true
+              AND t.catalog_state = 'published'
               AND p.city_id = :city_id
             """
         ),

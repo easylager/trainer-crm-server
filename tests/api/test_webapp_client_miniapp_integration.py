@@ -209,7 +209,7 @@ async def _create_trainer_online_with_slot(
     # Since 0182_catalog_opt_in the catalog is opt-in: `active` alone no longer publishes a card.
     # Written in SQL, not through the API — the suite shares one per-IP rate-limit window.
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"), {"tid": trainer_id}
+        text("UPDATE trainers SET is_catalog_visible = true, catalog_state = 'published' WHERE id = :tid"), {"tid": trainer_id}
     )
     await db_session.commit()
 

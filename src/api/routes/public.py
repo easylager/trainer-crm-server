@@ -44,6 +44,7 @@ from src.application.trainer_use_cases import (
 from src.infrastructure import s3
 from src.infrastructure.db.models import DEMAND_SOURCE_CATALOG, DEMAND_SOURCE_DIRECT_LINK
 from src.shared.config import Settings
+from src.shared.catalog_visibility import trainer_is_listed
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.rate_limit import RateLimiter
@@ -173,13 +174,8 @@ router = APIRouter(prefix="/api/public", tags=["public"])
 
 
 def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
-    """Active trainer row may be hidden from client browse until is_catalog_visible is true."""
-    if not trainer:
-        return False
-    if (trainer.get("status") or "").strip().lower() != "active":
-        return False
-    # Fail closed: opt-in since 0182_catalog_opt_in — a missing flag must not expose a card.
-    return bool(trainer.get("is_catalog_visible", False))
+    """One question, one answer: is this trainer's card published? (TASK-140)"""
+    return trainer_is_listed(trainer)
 
 
 # Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients.
@@ -455,7 +451,7 @@ async def list_active_trainers(
     single-id alias and is honored when arena_ids is empty.
 
     Each trainer includes `can_book` flag: True if clients can self-book (tier >= online).
-    Trainers appear when status=active, is_catalog_visible=true, and subscription rules apply.
+    Trainers appear when catalog_state='published'. Subscription affects self-booking, not listing.
     """
     # Parse filter parameters
     days_filter = None
@@ -656,7 +652,7 @@ async def get_one_active_trainer(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
-    Single trainer for catalog: status=active and is_catalog_visible=true (subscription still applies to list).
+    Single trainer for catalog: catalog_state='published' (subscription affects self-booking, not listing).
 
     Returns `can_book` flag: True if clients can self-book (tier >= online).
     Without online tier, trainer is visible but clients must contact directly.

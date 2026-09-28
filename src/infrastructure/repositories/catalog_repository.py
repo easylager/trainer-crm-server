@@ -6,10 +6,12 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL
+
 # Same eligibility as GET /public/trainers (city + service + arena), without slot/time filters.
-_CATALOG_TRAINER_WHERE = (
-    "t.status = 'active' AND COALESCE(t.is_catalog_visible, true) = true"
-)
+# This one used to read COALESCE(is_catalog_visible, true) — a missing flag counted as visible
+# here and as hidden everywhere else. One shared expression removes that class of drift.
+_CATALOG_TRAINER_WHERE = CATALOG_LISTED_SQL
 
 
 class CatalogRepository:

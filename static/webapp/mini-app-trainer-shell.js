@@ -45,6 +45,7 @@
     clients: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 21v-6h4v6"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h2M7 17h2"/></svg>',
   };
 
   var CENTER_TAB_PATH = 'trainer-collective?tab=brand';
@@ -81,7 +82,8 @@
       path: 'trainer-profile',
       label: 'Профиль',
       icon: MORE_ICONS.profile,
-      hint: 'Анкета, услуги и модерация',
+      /* Модерация и публикация переехали во вкладку «Каталог» (TASK-140). */
+      hint: 'Анкета, услуги и настройки',
     },
     {
       path: 'trainer-pass-products',
@@ -258,6 +260,9 @@
     if (key === 'trainer-home') return 'home';
     if (key === 'schedule-editor') return 'schedule';
     if (key === 'trainer-clients') return 'clients';
+    /* Вкладку в бар добавили (TASK-140), а сюда — нет: на собственном экране «Каталог» бар
+       не подсвечивал ни одной вкладки, и раздел выглядел как чужая страница. */
+    if (key === 'trainer-catalog') return 'catalog';
     if (key === 'trainer-collective' && showCenterGridTab()) return 'center';
     for (var i = 0; i < MORE_ROUTE_KEYS.length; i++) {
       if (key === MORE_ROUTE_KEYS[i]) return 'more';
@@ -633,6 +638,11 @@
       { id: 'home',     label: 'Главная',    path: 'trainer-home',     icon: TAB_ICONS.home },
       { id: 'schedule', label: 'Расписание', path: 'schedule-editor',  icon: TAB_ICONS.schedule },
       { id: 'clients',  label: 'Клиенты',    path: 'trainer-clients',  icon: TAB_ICONS.clients },
+      /* Каталог — постоянная вкладка с первого дня (TASK-140). Раньше публикация жила тумблером
+         в «Настройках» профиля: самое публичное решение тренера было спрятано глубже всего, и
+         узнать о каталоге можно было только из хинта, который легко смахнуть. Место — четвёртое,
+         перед «Ещё»: мышечную память первых трёх вкладок не сдвигаем. */
+      { id: 'catalog',  label: 'Каталог',     path: 'trainer-catalog',  icon: TAB_ICONS.catalog },
       { id: 'more',     label: 'Ещё',        path: null,               icon: TAB_ICONS.more },
     ];
 
@@ -1072,8 +1082,12 @@
       else if (id === 'center') n = parseInt(String(badges.center || 0), 10) || 0;
       else if (id === 'more') n = parseInt(String(badges.more || 0), 10) || 0;
       else if (id === 'clients') n = parseInt(String(badges.clients || 0), 10) || 0;
+      else if (id === 'catalog') n = parseInt(String(badges.catalog || 0), 10) || 0;
+      /* Каталог — одна карточка: «сколько» бессмысленно, поэтому точка, а не число. */
+      var asDot = id === 'catalog';
+      badgeEl.classList.toggle('trainer-tab-bar__badge--dot', asDot);
       if (n > 0) {
-        badgeEl.textContent = n > 9 ? '9+' : String(n);
+        badgeEl.textContent = asDot ? '' : n > 9 ? '9+' : String(n);
         badgeEl.removeAttribute('hidden');
         badgeEl.setAttribute('aria-hidden', 'false');
       } else {
@@ -1086,7 +1100,7 @@
   }
 
   function setInboxBadges(badges) {
-    badges = badges || { schedule: 0, center: 0, more: 0, clients: 0 };
+    badges = badges || { schedule: 0, center: 0, more: 0, clients: 0, catalog: 0 };
     var menu = badges.menu && typeof badges.menu === 'object' ? badges.menu : {};
     state.inboxBadges = {
       schedule: parseInt(String(badges.schedule || 0), 10) || 0,
@@ -1094,6 +1108,8 @@
       /* Server sends actionable-only count for tab «Ещё» (requests, not catalog hints). */
       more: parseInt(String(badges.more != null ? badges.more : 0), 10) || 0,
       clients: parseInt(String(badges.clients || 0), 10) || 0,
+      /* 1 = карточке нужно действие тренера (paused / needs_revision), см. TASK-140. */
+      catalog: parseInt(String(badges.catalog || 0), 10) || 0,
     };
     state.menuBadges = menu;
     state.menuBadgeHints =

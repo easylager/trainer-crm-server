@@ -27,8 +27,8 @@ async def _seed_trainer(db_session) -> tuple[int, int, int, int]:
     service_id = await require_seed_service_id(db_session)
     r = await db_session.execute(
         text(
-            "INSERT INTO trainers (status, is_catalog_visible) "
-            "VALUES ('active', true) RETURNING id"
+            "INSERT INTO trainers (status, is_catalog_visible, catalog_state) "
+            "VALUES ('active', true, 'published') RETURNING id"
         )
     )
     (trainer_id,) = r.fetchone()
@@ -282,7 +282,7 @@ async def test_weekly_drought_ladder_case_catalog_hidden(db_session) -> None:
     trainer_id, *_ = await _seed_trainer(db_session)
     # Force catalog hidden → drought case 2.
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = false WHERE id = :tid"),
+        text("UPDATE trainers SET is_catalog_visible = false, catalog_state = 'hidden' WHERE id = :tid"),
         {"tid": trainer_id},
     )
     await db_session.commit()
@@ -347,8 +347,8 @@ async def _seed_bare_trainer(
     r = await db_session.execute(
         text(
             """
-            INSERT INTO trainers (status, telegram_id, digest_enabled, is_catalog_visible)
-            VALUES (:status, :tg, :digest_enabled, false)
+            INSERT INTO trainers (status, telegram_id, digest_enabled, is_catalog_visible, catalog_state)
+            VALUES (:status, :tg, :digest_enabled, false, 'draft')
             RETURNING id
             """
         ),

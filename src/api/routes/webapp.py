@@ -8827,9 +8827,7 @@ async def webapp_trainer_onboarding_checklist(
         raise HTTPException(status_code=404, detail="Trainer not found")
     from src.application.trainer_next_step import resolve_trainer_next_step
 
-    data["next_step"] = resolve_trainer_next_step(
-        data, catalog_invite_dismissed=bool(data.get("catalog_invite_dismissed"))
-    )
+    data["next_step"] = resolve_trainer_next_step(data)
     from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 
     data["active_hint_snoozes"] = list((await get_active_snoozes(session, trainer_id)).keys())
@@ -8847,19 +8845,20 @@ async def webapp_trainer_dismiss_next_step(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Remember «Не сейчас» on the hub catalog invite.
+    Remember «закрыть» on the hub catalog invite — permanently, and on every device.
 
     The answer used to live in ``localStorage`` only, so it was forgotten on another device or
-    after a cache clear and the trainer was asked again. Only the catalog invite is dismissible —
-    the other next-step cards describe work that is actually blocking, and hiding them would
-    leave the trainer with a schedule nobody can book.
-    """
-    from src.application.trainer_next_step import STEP_CATALOG_INVITE
+    after a cache clear and the trainer was asked again. This is the one nudge that may be
+    switched off for good: everything else the hub shows is work that is actually blocking.
 
+    The invite itself moved from the next-step card (``catalog_invite``) to an action-inbox row
+    (``catalog_publication``); both ids are accepted so a client served from cache before the
+    move still lands on the same column instead of a silent 422.
+    """
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
-    if body.key != STEP_CATALOG_INVITE:
+    if body.key not in ("catalog_publication", "catalog_invite"):
         raise HTTPException(status_code=422, detail="This step cannot be dismissed")
     await session.execute(
         text(

@@ -41,7 +41,7 @@ async def test_patch_arena_public_hides_from_catalog_filter(
         {"tid": trainer_id, "aid": arena_a},
     )
     await db_session.execute(
-        text("UPDATE trainers SET is_catalog_visible = true WHERE id = :tid"),
+        text("UPDATE trainers SET is_catalog_visible = true, catalog_state = 'published' WHERE id = :tid"),
         {"tid": trainer_id},
     )
     await db_session.commit()

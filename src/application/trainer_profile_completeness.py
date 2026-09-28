@@ -5,7 +5,9 @@ Two tiers (same aggregate shape as get_trainer() / TrainerRepository.get_by_id):
 
 **A — Submission readiness (queue / submit-for-moderation):** checks all full-profile rules
 except optional-for-submit fields: description, education, experience_years, **and last name**
-(first name is enough for the public catalog queue).
+(first name is enough for the public catalog queue). «Arenas» is also read the TTV way here —
+online / mobile work format counts — so that working without a fixed venue is not the same as
+being barred from the catalog.
 
 **B — Full profile (catalog trust / dossier):** strict «about the trainer» bar:
 full name (first + last), phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
@@ -62,6 +64,10 @@ MISSING_FIELD_LABELS_RU: dict[str, str] = {
     "min_hours_before_booking": "за сколько часов до занятия клиент может записаться (8:00–22:00, Минск)",
     "services": "хотя бы одна услуга",
     "arenas": "хотя бы одна арена",
+    # Не входит ни в один tier: цена не блокирует публикацию. Ключ живёт здесь, чтобы экран
+    # «Каталог» мог назвать её в «можно усилить» — иначе тренер узнаёт про цены только из
+    # строки «цена не указана» в карточке модератора, куда он не попадает.
+    "prices": "цены на услуги",
 }
 
 
@@ -200,6 +206,17 @@ def analyze_moderation_submission_readiness(trainer: dict[str, Any]) -> tuple[bo
     """
     Submission tier (catalog queue): full checks minus bio/education/experience, and
     **фамилия необязательна** — достаточно имени (full dossier still wants both names).
+
+    «Хотя бы одна арена» here means the same thing the TTV gate means by it: a real arena **or**
+    ``arena_work_format`` = online / mobile. Insisting on a row in ``arena_ids`` made the catalog
+    unreachable for a trainer who works online or travels to the client — and worse than
+    unreachable, it dead-ended: the catalog carousel builds its rail from these keys, so the
+    arena step kept re-arming itself with «Сначала заполните: этот шаг нужен для каталога» and
+    the trainer had no way forward. Such a card is still listed by city (``trainer_cities``
+    carries the profile city, not only arena cities); what it loses is the arena filter, and
+    that is already a soft warning on the catalog screen, not a reason to bar the queue.
+
+    The full dossier tier keeps the strict rule: it is the trust bar moderators read, not a gate.
     """
     _, full_missing = analyze_moderation_profile_completeness(trainer)
     submit_missing = [k for k in full_missing if k not in SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS]
@@ -207,6 +224,8 @@ def analyze_moderation_submission_readiness(trainer: dict[str, Any]) -> tuple[bo
     fn = (profile.get("first_name") or "").strip()
     if fn and "full_name" in submit_missing:
         submit_missing = [k for k in submit_missing if k != "full_name"]
+    if "arenas" in submit_missing and tt_minimal_arenas_satisfied(trainer):
+        submit_missing = [k for k in submit_missing if k != "arenas"]
     return len(submit_missing) == 0, submit_missing
 
 
