@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 # Telegram Bot API: photo caption max length
 TELEGRAM_PHOTO_CAPTION_MAX = 1024
 
+# Работа без постоянной площадки — не пустая анкета, а её формат. Ключи = trainers.arena_work_format.
+ARENA_WORK_FORMAT_LABELS_RU: dict[str, str] = {
+    "online": "онлайн, занятия без площадки",
+    "mobile": "выезд к клиенту",
+    "pending_request": "площадка заявлена текстом, ждёт добавления",
+}
+
 
 async def fetch_city_name(session: AsyncSession, city_id: int | None) -> str | None:
     """Resolve city label for moderation card; None if missing or unknown id."""
@@ -125,13 +132,23 @@ def format_admin_trainer_moderation_caption(
             else:
                 parts.append(f"• {sname} — цена не указана")
 
+    # Формат работы обязан быть в карточке: без него тренер «Онлайн» приезжает к модератору с
+    # пустой строкой «Площадки — не указаны» и читается как недозаполненная анкета, хотя
+    # заполнять ему там нечего. Для submission tier online/mobile засчитываются вместо арены
+    # (trainer_profile_completeness.analyze_moderation_submission_readiness).
     arenas = trainer.get("arena_names") or []
+    work_format = (trainer.get("arena_work_format") or "").strip()
+    format_line = ARENA_WORK_FORMAT_LABELS_RU.get(work_format)
     parts.append("")
     parts.append("<b>Площадки</b>")
-    if not arenas:
-        parts.append("— не указаны")
-    else:
+    if arenas:
         parts.append(html.escape(", ".join(a.strip() for a in arenas if a)) or "—")
+        if format_line:
+            parts.append(html.escape(format_line))
+    elif format_line:
+        parts.append(f"— {html.escape(format_line)}")
+    else:
+        parts.append("— не указаны")
 
     parts.append(format_admin_education_block(profile, education_items))
     return "\n".join(parts)

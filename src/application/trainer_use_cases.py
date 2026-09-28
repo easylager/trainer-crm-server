@@ -39,11 +39,13 @@ from src.infrastructure.db.models import (
 )
 from src.infrastructure.repositories import TrainerRepository
 from src.application.trainer_catalog_state import (
+    CATALOG_ACTOR_MODERATOR,
     CATALOG_ACTOR_SYSTEM,
     CATALOG_ACTOR_TRAINER,
     REASON_ACCOUNT_STATUS_CHANGED,
     REASON_AUTO_RESTORED,
     REASON_MISSING_FIELDS,
+    REASON_MODERATOR_REVISION,
     REASON_TRAINER_HIDDEN,
     REASON_TRAINER_REQUESTED,
     REASON_TRAINER_RESTORED,
@@ -836,6 +838,68 @@ async def set_trainer_moderation_feedback(
     return True
 
 
+async def apply_moderator_revision_request(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    feedback: str | None,
+    moderator_id: str | int,
+) -> str | None:
+    """
+    «Нужны правки» от модератора. Возвращает состояние карточки после перехода (или ``None``,
+    если тренера нет).
+
+    Ветка выбирается по состоянию КАРТОЧКИ, а не по статусу аккаунта. В админ-боте здесь стояло
+    ``status == active``, и это было верно ровно пока ``active`` значило «опубликован в
+    каталоге». С TASK-140 ``status = active`` — липкая веха «когда-то прошёл модерацию», и
+    карточка того же тренера спокойно живёт в ``pending_review``: первая публикация после
+    активации, повторная заявка после снятия. Такой тренер попадал в ветку «отозвать правки у
+    опубликованной карточки» — комментарий записывался, а ``catalog_state`` навсегда оставался
+    ``pending_review``. Раздел «Каталог» показывал «На проверке», кнопки «отправить снова» не
+    появлялось, и тренер застревал: экран врал о состоянии его собственной карточки.
+
+    * карточка ``published`` — снимаем только правку, публикацию не трогаем. Клиенты продолжают
+      видеть прежние значения: опечатка в имени не должна выбивать из выдачи на сутки.
+    * иначе — карточка уходит в ``needs_revision``, состояние с причиной и автором, из которого
+      экран каталога предлагает «Отправить на проверку».
+
+    Статус аккаунта откатываем только тому, кто ещё ни разу не был активирован: на ``active``
+    висят аналитика и триал, и правки по витрине их не отменяют.
+    """
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        return None
+    detail = (feedback or "").strip() or None
+
+    if trainer_is_listed(trainer):
+        await discard_active_trainer_text_revision_with_feedback(session, trainer_id, feedback)
+        return CATALOG_STATE_PUBLISHED
+
+    await set_trainer_moderation_feedback(session, trainer_id, feedback)
+    if (trainer.get("status") or "").strip() != TRAINER_STATUS_ACTIVE:
+        await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
+    state = (trainer.get("catalog_state") or CATALOG_STATE_DRAFT).strip()
+    # `needs_revision` имеет смысл ровно из очереди. Условие было «тренер вообще просился в
+    # каталог», а под него подходят и `hidden`, и `paused` — оба перехода машина запрещает, так
+    # что модератор ронял обработчик, а не оставлял комментарий. Да и по смыслу это неверно:
+    # `hidden` — решение тренера снять карточку, и перебивать его «нужны правки» нельзя, а у
+    # `paused` уже есть своя причина, которую «нужны правки» затёрли бы. В обоих случаях
+    # комментарий сохраняется, состояние остаётся своим.
+    if state == CATALOG_STATE_PENDING_REVIEW:
+        await set_catalog_state(
+            session,
+            trainer_id,
+            CATALOG_STATE_NEEDS_REVISION,
+            reason=REASON_MODERATOR_REVISION,
+            reason_detail=detail,
+            actor_type=CATALOG_ACTOR_MODERATOR,
+            actor_id=moderator_id,
+            notify=False,
+        )
+        return CATALOG_STATE_NEEDS_REVISION
+    return state
+
+
 async def try_submit_trainer_for_moderation_review(
     session: AsyncSession,
     trainer_id: int,
@@ -904,6 +968,12 @@ async def try_submit_trainer_for_moderation_review(
     repo = TrainerRepository(session)
     if not await repo.mark_queued_for_moderation_review(trainer_id):
         return {"ok": False, "error": "not_found"}
+    # Комментарий модератора снимается вместе с отправкой: он уже отработан, а
+    # ``catalog_needs_revision`` в чеклисте хаба читает и его тоже — оставленный, он держал
+    # карточку «Модератор попросил поправить» на главном экране после того, как правки внесены
+    # и заявка уже снова в очереди.
+    if (trainer.get("moderation_feedback") or "").strip():
+        await repo.set_moderation_feedback(trainer_id, None)
     await session.commit()
     # The card, not the account, is what enters the queue. ``status`` stays where it is —
     # an approval will move it to ``active`` the first time and leave it there afterwards.

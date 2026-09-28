@@ -93,6 +93,7 @@ from src.application.trainer_profile_pending import (
 from src.application.trainer_use_cases import (
     apply_photo_pending_to_published,
     apply_trainer_profile_pending_to_published,
+    apply_moderator_revision_request,
     discard_active_trainer_text_revision_with_feedback,
     get_trainer,
     list_trainer_education,
@@ -118,7 +119,10 @@ from sqlalchemy import text
 from src.infrastructure.db import async_session_factory
 from src.infrastructure.repositories import TrainerRepository
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_DEACTIVATED, TRAINER_STATUS_PENDING_PROFILE
-from src.application.trainer_catalog_notify import notify_catalog_revision_published
+from src.application.trainer_catalog_notify import (
+    notify_catalog_approved_again,
+    notify_catalog_revision_published,
+)
 from src.application.trainer_catalog_state import (
     CATALOG_ACTOR_MODERATOR,
     CATALOG_STATE_DRAFT,
@@ -2319,12 +2323,25 @@ async def on_approve(callback: CallbackQuery) -> None:
         audit_log("trainer.approved", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_APPROVED)
-        if notify_primary_catalog_approval:
-            await _notify_trainer_moderation_approved(trainer)
-        elif card_was_published and had_revision:
-            # Re-approval used to be silent on purpose. But the trainer could not tell whether
-            # their new photo had reached clients — the card had been showing the old one the
-            # whole time (TASK-140).
+        # Что сказать тренеру, решает переход КАРТОЧКИ, а не статус аккаунта.
+        #
+        # Здесь ветвились по «первая активация аккаунта → поздравляем, иначе молчим». Пока
+        # `active` значило «в каталоге», это совпадало. С TASK-140 `active` — липкая веха
+        # «когда-то прошёл модерацию», и у давно активного тренера, чью карточку сняли на
+        # правки и потом вернули, не срабатывала ни одна ветка: `notify_primary…` False,
+        # `card_was_published` тоже False. Карточка публиковалась, тренеру не приходило ничего.
+        if not card_was_published:
+            # Карточки в каталоге не было — теперь есть. Первую публикацию празднуем, все
+            # последующие возвраты сообщаем сухо: «поздравляем» второй раз звучит издёвкой.
+            if notify_primary_catalog_approval:
+                await _notify_trainer_moderation_approved(trainer)
+            else:
+                async with async_session_factory() as s_notify:
+                    await notify_catalog_approved_again(s_notify, trainer_id)
+        elif had_revision:
+            # Карточка всё это время висела опубликованной, менялась только правка. Раньше это
+            # было молчанием намеренно — и тренер не мог понять, доехало ли новое фото до
+            # клиентов (TASK-140).
             async with async_session_factory() as s_notify:
                 await notify_catalog_revision_published(s_notify, trainer_id)
     else:
@@ -2616,48 +2633,22 @@ async def on_admin_message(message: Message) -> None:
     rejected_education = 0
     trainer: dict | None = None
     async with async_session_factory() as session:
-        t0 = await get_trainer(session, trainer_id)
-        st = (t0.get("status") or "").strip() if t0 else ""
-        if st == TRAINER_STATUS_ACTIVE:
-            await discard_active_trainer_text_revision_with_feedback(session, trainer_id, text or None)
-            trainer = await get_trainer(session, trainer_id)
-            try:
-                rejected_education = await moderate_trainer_education_for_profile(
-                    session,
-                    trainer_id,
-                    decision="rejected",
-                    admin_id=user_id,
-                    reason=text or "",
-                )
-            except ValueError:
-                rejected_education = 0
-        else:
-            await set_trainer_moderation_feedback(session, trainer_id, text or None)
-            await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
-            # The card goes to needs_revision — a state with a reason and an author, instead of
-            # a bare account demotion the trainer had to discover for themselves (TASK-140).
-            if trainer_opted_into_catalog(t0):
-                await set_catalog_state(
-                    session,
-                    trainer_id,
-                    CATALOG_STATE_NEEDS_REVISION,
-                    reason=REASON_MODERATOR_REVISION,
-                    reason_detail=(text or "").strip() or None,
-                    actor_type=CATALOG_ACTOR_MODERATOR,
-                    actor_id=user_id,
-                    notify=False,
-                )
-            trainer = await get_trainer(session, trainer_id)
-            try:
-                rejected_education = await moderate_trainer_education_for_profile(
-                    session,
-                    trainer_id,
-                    decision="rejected",
-                    admin_id=user_id,
-                    reason=text or "",
-                )
-            except ValueError:
-                rejected_education = 0
+        # Правило «что делать с карточкой» живёт в use case: оно продуктовое, а не про Telegram,
+        # и его сломанная версия (ветка по статусу аккаунта) стоила тренеру застрявшего экрана.
+        await apply_moderator_revision_request(
+            session, trainer_id, feedback=text or None, moderator_id=user_id
+        )
+        trainer = await get_trainer(session, trainer_id)
+        try:
+            rejected_education = await moderate_trainer_education_for_profile(
+                session,
+                trainer_id,
+                decision="rejected",
+                admin_id=user_id,
+                reason=text or "",
+            )
+        except ValueError:
+            rejected_education = 0
     audit_log("trainer.needs_edit", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
     await message.answer(msg.ADMIN_NEEDS_EDIT_DONE)
     feedback_stripped = (text or "").strip()

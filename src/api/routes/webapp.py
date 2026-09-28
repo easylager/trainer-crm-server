@@ -152,6 +152,8 @@ from src.application.client_use_cases import (
     attach_telegram_id_to_client,
     get_client_by_phone,
     get_client_id_by_telegram_id,
+    merge_trainer_client_phone_conflict,
+    patch_trainer_client_phone,
     reset_orphan_client_miniapp_trainer_pointers,
     trainer_id_belongs_to_telegram,
     get_client_phone_for_webapp,
@@ -5415,6 +5417,7 @@ class CertificateIssueBody(BaseModel):
     recipient_name: str = ""
     recipient_email: str | None = None
     recipient_phone: str | None = None
+    client_id: int | None = None
 
 
 @router.post("/trainer/certificate-issue")
@@ -5441,6 +5444,7 @@ async def post_trainer_certificate_issue(
             recipient_name=body.recipient_name or "—",
             recipient_email=body.recipient_email,
             recipient_phone=body.recipient_phone,
+            requester_client_id=body.client_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -6930,6 +6934,29 @@ class TrainerClientIdentityPatchBody(BaseModel):
     middle_name: str | None = Field(default=None, max_length=64)
 
 
+class TrainerClientPhonePatchBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _phone_belarus_by(cls, v: object) -> str:
+        return coerce_required_phone(v)
+
+
+class TrainerClientPhoneMergeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    other_client_id: int
+    phone: str
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _phone_belarus_by(cls, v: object) -> str:
+        return coerce_required_phone(v)
+
+
 @router.get("/trainer/clients/{client_id:int}/card")
 async def get_trainer_client_card(
     client_id: int,
@@ -7278,6 +7305,71 @@ async def patch_trainer_client_identity(
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
     return await _trainer_miniapp_client_card_enriched_payload(session, client)
+
+
+@router.patch("/trainer/clients/{client_id:int}/phone")
+async def patch_trainer_client_phone_route(
+    client_id: int,
+    body: TrainerClientPhonePatchBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Trainer corrects a client's phone (e.g. a typo made on manual add).
+
+    409 when the number already belongs to another client: ``mergeable`` tells the UI whether to
+    offer an "merge accounts" prompt (only when this trainer also has access to that other
+    client) or just a blocked message (the number is used by someone outside this trainer's
+    reach — never exposed further).
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    try:
+        outcome = await patch_trainer_client_phone(session, trainer_id, client_id, phone=body.phone)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректный номер телефона")
+    if outcome["result"] == "not_found":
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    if outcome["result"] == "conflict":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "phone_in_use",
+                "mergeable": outcome["mergeable"],
+                "other_client_id": outcome["other_client_id"],
+                "preview": outcome["preview"],
+            },
+        )
+    return await _trainer_miniapp_client_card_enriched_payload(session, outcome["client"])
+
+
+@router.post("/trainer/clients/{client_id:int}/phone/merge")
+async def post_trainer_client_phone_merge_route(
+    client_id: int,
+    body: TrainerClientPhoneMergeBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Confirm the merge prompt from the 409 ``phone_in_use`` response above."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    try:
+        outcome = await merge_trainer_client_phone_conflict(
+            session,
+            trainer_id,
+            client_id,
+            other_client_id=body.other_client_id,
+            phone=body.phone,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректные данные")
+    if outcome["result"] == "not_found":
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    if outcome["result"] == "stale":
+        raise HTTPException(status_code=409, detail="Данные устарели — обновите страницу и повторите")
+    return await _trainer_miniapp_client_card_enriched_payload(session, outcome["client"])
 
 
 @router.post("/trainer/clients/{client_id:int}/detach")
@@ -8715,9 +8807,7 @@ async def webapp_trainer_onboarding_checklist(
         raise HTTPException(status_code=404, detail="Trainer not found")
     from src.application.trainer_next_step import resolve_trainer_next_step
 
-    data["next_step"] = resolve_trainer_next_step(
-        data, catalog_invite_dismissed=bool(data.get("catalog_invite_dismissed"))
-    )
+    data["next_step"] = resolve_trainer_next_step(data)
     from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 
     data["active_hint_snoozes"] = list((await get_active_snoozes(session, trainer_id)).keys())
@@ -8735,19 +8825,20 @@ async def webapp_trainer_dismiss_next_step(
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Remember «Не сейчас» on the hub catalog invite.
+    Remember «закрыть» on the hub catalog invite — permanently, and on every device.
 
     The answer used to live in ``localStorage`` only, so it was forgotten on another device or
-    after a cache clear and the trainer was asked again. Only the catalog invite is dismissible —
-    the other next-step cards describe work that is actually blocking, and hiding them would
-    leave the trainer with a schedule nobody can book.
-    """
-    from src.application.trainer_next_step import STEP_CATALOG_INVITE
+    after a cache clear and the trainer was asked again. This is the one nudge that may be
+    switched off for good: everything else the hub shows is work that is actually blocking.
 
+    The invite itself moved from the next-step card (``catalog_invite``) to an action-inbox row
+    (``catalog_publication``); both ids are accepted so a client served from cache before the
+    move still lands on the same column instead of a silent 422.
+    """
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
-    if body.key != STEP_CATALOG_INVITE:
+    if body.key not in ("catalog_publication", "catalog_invite"):
         raise HTTPException(status_code=422, detail="This step cannot be dismissed")
     await session.execute(
         text(

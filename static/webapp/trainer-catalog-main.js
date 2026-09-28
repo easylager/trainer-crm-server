@@ -18,6 +18,16 @@
   if (tg) {
     tg.ready();
     tg.expand();
+    /* Тот же bootstrap темы, что у остальных тренерских экранов: без него раздел живёт на
+       дефолтных цветах Telegram и на тёмной теме читается как серое на чёрном. */
+    if (typeof window.__applyTrainerMiniAppTheme === 'function') window.__applyTrainerMiniAppTheme();
+    if (tg.onEvent) {
+      tg.onEvent('themeChanged', function () {
+        if (typeof window.__applyTrainerMiniAppTheme === 'function') {
+          window.__applyTrainerMiniAppTheme();
+        }
+      });
+    }
     try {
       var darkUi = tg.colorScheme === 'dark';
       var bgHex = darkUi ? '#0B0C0E' : '#F1F3F2';
@@ -77,12 +87,6 @@
     );
   }
 
-  function money(cents) {
-    if (cents == null) return null;
-    var v = cents / 100;
-    return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)) + ' BYN';
-  }
-
   function photoUrl(fileKey) {
     if (!fileKey) return null;
     return '/api/public/photos/' + encodeURIComponent(fileKey);
@@ -90,47 +94,70 @@
 
   /* ─── Рендер ────────────────────────────────────────────────────────────── */
 
+  /**
+   * Карточка ровно как в клиентском списке (`catalog-main.js`): фото, имя, строка «рейтинг ·
+   * стаж», строка «свободные слоты · услуга с ценой · площадки». Города здесь нет — он фильтр,
+   * а не факт карточки.
+   *
+   * Пустые факты не рисуем вовсе: клиент не видит ни «оценок пока нет», ни «стаж не указан» —
+   * пустая строка ничего не сообщает, но выглядит как заполненная.
+   */
   function renderCard(node, person) {
     if (!node) return;
-    var bits = [];
-    if (person.city_name) bits.push(esc(person.city_name));
-    if (person.public_arena_count) {
-      bits.push(esc(String(person.public_arena_count)) + ' ' + arenaWord(person.public_arena_count));
+    var metaTop = [];
+    if (person.rating_count > 0 && person.rating_avg != null) {
+      metaTop.push(Number(person.rating_avg).toFixed(1) + ' ★ (' + person.rating_count + ')');
     }
-    var price = money(person.price_from_cents);
-    var rating =
-      person.rating_count > 0
-        ? '★ ' + Number(person.rating_avg).toFixed(1) + ' (' + person.rating_count + ')'
-        : 'оценок пока нет';
+    if (person.experience_years != null) {
+      metaTop.push(experienceWord(person.experience_years));
+    }
+
+    var metaBottom = [];
+    if (typeof person.free_slots_14d === 'number') {
+      metaBottom.push('Свободных слотов: ' + person.free_slots_14d);
+    }
+    if (person.service_line) metaBottom.push(person.service_line);
+    if (person.arena_names && person.arena_names.length) {
+      metaBottom.push(person.arena_names.join(', '));
+    } else if (person.arena_work_format === 'online') {
+      metaBottom.push('Онлайн');
+    }
+
     var img = photoUrl(person.photo_file_key);
     var name = [person.first_name, person.last_name].filter(Boolean).join(' ') || 'Без имени';
     node.innerHTML =
       '<div class="tc-card__photo">' +
       (img
-        ? '<img src="' + esc(img) + '" alt="" loading="lazy" />'
-        : '<span class="tc-card__photo-empty" aria-hidden="true">фото</span>') +
+        ? '<img src="' + esc(img) + '" alt="" loading="lazy" ' +
+          'onerror="this.remove();this.parentNode.innerHTML=\'<span class=&quot;tc-card__photo-empty&quot; aria-hidden=&quot;true&quot;>👤</span>\'" />'
+        : '<span class="tc-card__photo-empty" aria-hidden="true">👤</span>') +
       '</div>' +
       '<div class="tc-card__body">' +
       '<p class="tc-card__name">' + esc(name) + '</p>' +
-      (bits.length ? '<p class="tc-card__meta">' + bits.join(' · ') + '</p>' : '') +
-      '<p class="tc-card__meta tc-card__meta--muted">' +
-      (price ? 'от ' + esc(price) + ' · ' : '') +
-      esc(rating) +
-      '</p>' +
+      (metaTop.length ? '<p class="tc-card__meta">' + esc(metaTop.join(' · ')) + '</p>' : '') +
+      (metaBottom.length ? '<p class="tc-card__meta">' + esc(metaBottom.join(' · ')) + '</p>' : '') +
       '</div>';
   }
 
-  function arenaWord(n) {
+  function experienceWord(years) {
+    var n = Number(years);
+    if (!isFinite(n) || n < 0) return '';
     var mod10 = n % 10;
     var mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return 'площадка';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'площадки';
-    return 'площадок';
+    var word = 'лет';
+    if (mod10 === 1 && mod100 !== 11) word = 'год';
+    else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) word = 'года';
+    return 'опыт ' + n + ' ' + word;
   }
 
   function renderStatus(p) {
+    var isDraft = p.state === 'draft';
     el('tcHeadline').textContent = p.headline || '';
-    el('tcStatusBody').textContent = p.body || '';
+    /* В draft объяснение «что такое каталог» уезжает под «Зачем это нужно»: до кнопки тренер
+       читал 160 слов, из которых ни одно не отвечало на вопрос «что мне сейчас нажать».
+       В остальных состояниях эта фраза и есть ответ на «почему я не в каталоге» — она видна. */
+    el('tcStatusBody').textContent = isDraft ? '' : (p.body || '');
+    show(el('tcStatusBody'), !isDraft && !!p.body);
     var dot = el('tcStatusDot');
     dot.className = 'tc-status__dot tc-status__dot--' + (p.state || 'draft');
 
@@ -146,7 +173,8 @@
       show(meta, false);
     }
 
-    // Причина показывается дословно: в paused это единственное, что объясняет исчезновение.
+    /* Причина показывается дословно: в paused это единственное, что объясняет исчезновение.
+       Что показывать, решает сервер — фразу служебного события он сюда не отдаёт. */
     var detail = el('tcStatusDetail');
     if (p.state_detail && p.state !== 'published') {
       detail.textContent = p.state_detail;
@@ -154,8 +182,6 @@
     } else {
       show(detail, false);
     }
-
-    show(el('tcPitch'), p.state === 'draft');
 
     var studio = el('tcStudioNote');
     if (p.managed_by_studio) {
@@ -165,7 +191,17 @@
     } else {
       show(studio, false);
     }
-    el('tcSubscriptionNote').textContent = p.subscription_note || '';
+
+    show(el('tcWhySection'), isDraft);
+    el('tcWhyLead').textContent = p.body || '';
+    el('tcWhySubscription').textContent = p.subscription_note || '';
+
+    /* «Подписка не влияет» — ответ на страх «пропал, потому что не заплатил». Он возникает,
+       когда карточка уже исчезла, а не когда её ещё нет: в draft фраза уезжает под раскрытие. */
+    var subNote = el('tcSubscriptionNote');
+    var subRelevant = p.state === 'paused' || p.state === 'hidden';
+    subNote.textContent = subRelevant ? (p.subscription_note || '') : '';
+    show(subNote, subRelevant && !!p.subscription_note);
   }
 
   function renderPreview(p) {
@@ -186,6 +222,11 @@
       show(el('tcRevisionCard'), false);
       show(el('tcCancelRevision'), false);
     }
+    /* Кнопки «Открыть как клиент» здесь нет и быть не может: клиентский Mini App проверяет
+       initData токеном КЛИЕНТСКОГО бота, а это приложение живёт в тренерском — любой переход
+       на `catalog` отдавал 401 и экран «Что-то пошло не так». Публичной веб-страницы тренера в
+       продукте тоже нет. На вопрос «как меня видят» отвечает превью выше: оно собрано из тех же
+       фактов, что и карточка клиентского списка. */
   }
 
   function mergeForCard(preview, version) {
@@ -204,8 +245,12 @@
     var required = r.missing_labels_ru || [];
     var optional = r.optional_missing_labels_ru || [];
     var section = el('tcReadiness');
-    if (!required.length && !optional.length) {
+    /* В опубликованном состоянии блок готовности не нужен: проверять нечего, а «можно усилить»
+       там дублировало бы подпись под «Изменить карточку». Он для пути ДО публикации. */
+    var relevant = required.length > 0 || p.state === 'draft' || p.state === 'pending_review';
+    if (!relevant || (!required.length && !optional.length)) {
       show(section, false);
+      show(el('tcOpenProfile'), false);
       return;
     }
     show(section, true);
@@ -213,7 +258,7 @@
     var list = el('tcMissingList');
     list.innerHTML = '';
     if (required.length) {
-      label.textContent = 'Для проверки осталось заполнить';
+      label.textContent = 'Осталось заполнить';
       required.forEach(function (text) {
         var li = document.createElement('li');
         li.className = 'tc-checklist__item tc-checklist__item--todo';
@@ -222,18 +267,30 @@
       });
     } else {
       label.textContent = 'Готово к проверке';
+      var li = document.createElement('li');
+      li.className = 'tc-checklist__item tc-checklist__item--done';
+      li.textContent = 'Все обязательные пункты закрыты';
+      list.appendChild(li);
     }
-    // Необязательное отдельным блоком: иначе непонятно, что блокирует публикацию, а что нет.
-    show(el('tcOptionalLabel'), optional.length > 0);
+    /* «Можно усилить» — совет, а не препятствие, и рядом со списком блокеров он читается как
+       второй такой же список. Показываем его только когда блокеров не осталось: тогда это
+       единственное, что ещё можно сделать, и совет попадает в момент, когда его услышат. */
+    var showOptional = optional.length > 0 && required.length === 0;
+    show(el('tcOptionalLabel'), showOptional);
     var optList = el('tcOptionalList');
     optList.innerHTML = '';
-    optional.forEach(function (text) {
-      var li = document.createElement('li');
-      li.className = 'tc-checklist__item tc-checklist__item--soft';
-      li.textContent = text;
-      optList.appendChild(li);
-    });
-    show(optList, optional.length > 0);
+    if (showOptional) {
+      optional.forEach(function (text) {
+        var li = document.createElement('li');
+        li.className = 'tc-checklist__item tc-checklist__item--soft';
+        li.textContent = text;
+        optList.appendChild(li);
+      });
+    }
+    show(optList, showOptional);
+    /* Ссылка в анкету рядом с любым списком полей: и с блокерами (там карусель), и с «усилить».
+       Без неё экран называл поля, но не говорил, где они. */
+    show(el('tcOpenProfile'), !!p.can_act && (showOptional || required.length > 0));
   }
 
   function renderWarnings(p) {
@@ -252,7 +309,10 @@
         a.type = 'button';
         a.className = 'tc-link-btn tc-warning__action';
         a.textContent = w.action === 'arenas' ? 'Открыть площадки' : 'Дополнить';
-        a.addEventListener('click', function () { openProfile(w.action === 'arenas' ? 'arenas' : ''); });
+        /* Скрытая площадка и незаполненное необязательное поле — это правка существующей
+           анкеты, а не submission-пробел. Карусель `task=catalog` собралась бы пустой и
+           вышвырнула тренера обратно сюда. */
+        a.addEventListener('click', openProfileForm);
         row.appendChild(a);
       }
       node.appendChild(row);
@@ -291,15 +351,12 @@
       var li = document.createElement('li');
       li.className = 'tc-history__item';
       var when = formatDateTime(e.created_at);
-      var who = e.actor_type === 'trainer' ? 'вами'
-        : e.actor_type === 'moderator' ? 'модератором'
-        : e.actor_type === 'studio' ? 'студией'
-        : e.actor_type === 'system' ? 'автоматически'
-        : '';
+      /* Автора отдельным суффиксом больше не дописываем: «На проверке · вами» читалось так,
+         будто тренер проверяет сам себя. Строка журнала — это событие, и кто его совершил,
+         сказано в самой фразе (event_headline_ru на сервере). */
       li.innerHTML =
         '<span class="tc-history__when">' + esc(when) + '</span>' +
-        '<span class="tc-history__what">' + esc(e.headline || e.to_state) +
-        (who ? ' · ' + esc(who) : '') + '</span>' +
+        '<span class="tc-history__what">' + esc(e.headline || e.to_state) + '</span>' +
         (e.reason_detail ? '<span class="tc-history__why">' + esc(e.reason_detail) + '</span>' : '');
       list.appendChild(li);
     });
@@ -309,6 +366,8 @@
 
   var ACTION_LABELS = {
     submit: 'Отправить на проверку',
+    // Тот же эндпоинт, другая правда: карточка уже в очереди, но модератор видел прошлую версию.
+    resubmit: 'Отправить обновлённую карточку',
     fill: 'Разместить карточку',
     hide: 'Снять с публикации',
     restore: 'Вернуть в каталог',
@@ -323,7 +382,7 @@
       btn.type = 'button';
       // Снятие — редкое и деструктивное: текстовой ссылкой, не кнопкой в вес «Изменить».
       var quiet = action === 'hide' || action === 'withdraw';
-      btn.className = quiet ? 'tc-link-btn tc-link-btn--danger' : 'tc-btn tc-btn--primary';
+      btn.className = quiet ? 'tc-link-btn tc-link-btn--danger' : 'btn-primary';
       btn.textContent = ACTION_LABELS[action] || action;
       btn.addEventListener('click', function () { runAction(action); });
       node.appendChild(btn);
@@ -331,9 +390,10 @@
     if (p.can_act && p.state === 'published') {
       var edit = document.createElement('button');
       edit.type = 'button';
-      edit.className = 'tc-btn tc-btn--soft';
+      edit.className = 'btn-soft';
       edit.textContent = 'Изменить карточку';
-      edit.addEventListener('click', function () { openProfile(''); });
+      // «Изменить карточку» — правка опубликованной анкеты, пробелов там по определению нет.
+      edit.addEventListener('click', openProfileForm);
       node.insertBefore(edit, node.firstChild);
       var note = document.createElement('p');
       note.className = 'tc-actions__note';
@@ -344,17 +404,32 @@
   }
 
   /** «Разместить» = карусель профиля с возвратом сюда; её рельс собирается из missing_fields. */
-  function openProfile(anchor) {
+  function webappUrl(page) {
     var base = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
-    var url = base + 'trainer-profile?task=catalog&return=trainer-catalog';
-    if (anchor) url += '&focus=' + encodeURIComponent(anchor);
-    window.location.href = url;
+    return base + page;
+  }
+
+  /** Карусель `task=catalog`: рельс собирается из submission-пробелов, с возвратом сюда. */
+  function openProfile() {
+    window.location.href = webappUrl('trainer-profile') + '?task=catalog&return=trainer-catalog';
+  }
+
+  /**
+   * Обычная анкета, без карусели.
+   *
+   * «Можно усилить» — это описание, образование и опыт, и ни одно из них не входит в
+   * submission-рельс. Вести туда `task=catalog` означало открыть карусель с пустым списком
+   * шагов: она мгновенно упиралась в «Базовый профиль готов» и возвращала тренера обратно в
+   * «Каталог». Кнопка выглядела рабочей и не делала ничего.
+   */
+  function openProfileForm() {
+    window.location.href = webappUrl('trainer-profile');
   }
 
   function runAction(action) {
     if (state.busy) return;
     if (action === 'fill') {
-      openProfile('');
+      openProfile();
       return;
     }
     if (action === 'hide') {
@@ -363,7 +438,7 @@
       });
       return;
     }
-    if (action === 'submit') post('submit');
+    if (action === 'submit' || action === 'resubmit') post('submit');
     else if (action === 'restore') post('restore');
     else if (action === 'withdraw') post('withdraw');
   }
@@ -399,7 +474,7 @@
         // 422 = карточка не готова. Не ошибка, а следующий шаг: ведём в карусель.
         if (res.status === 422) {
           apply(Object.assign({}, state.payload || {}, {}));
-          openProfile('');
+          openProfile();
           return;
         }
         toast((res.data && res.data.detail) || 'Не удалось выполнить действие');
@@ -447,6 +522,15 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    var why = el('tcWhyToggle');
+    if (why) {
+      why.addEventListener('click', function () {
+        var body = el('tcWhyBody');
+        var open = body.hasAttribute('hidden');
+        show(body, open);
+        why.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    }
     var toggle = el('tcHistoryToggle');
     if (toggle) {
       toggle.addEventListener('click', function () {
@@ -460,6 +544,8 @@
     if (retry) retry.addEventListener('click', load);
     var cancel = el('tcCancelRevision');
     if (cancel) cancel.addEventListener('click', function () { post('cancel-revision'); });
+    var openProfileBtn = el('tcOpenProfile');
+    if (openProfileBtn) openProfileBtn.addEventListener('click', openProfileForm);
     load();
   });
 

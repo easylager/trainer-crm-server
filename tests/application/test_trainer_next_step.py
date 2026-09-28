@@ -2,16 +2,17 @@
 Хаб показывает ровно одну подсказку — и правильную.
 
 Это тесты продуктового контракта онбординга v2, а не форматирования: порядок срочности,
-момент каталога, порог каталога и — важнее всего — то, что работающий кабинет
-молчит.
+и — важнее всего — то, что работающий кабинет молчит.
+
+Приглашения в каталог здесь больше нет: оно переехало строкой в action inbox
+(``catalog_publication``, см. ``trainer_hub_action_inbox.py``), потому что продавало раздел,
+который тренер и так видит вкладкой бара, а занимало главный экран целиком.
 """
 from src.application.trainer_next_step import (
-    ACTION_DISMISS,
     ACTION_OPEN_ONBOARDING,
     ACTION_OPEN_CATALOG,
     ACTION_SHARE_LINK,
-    CATALOG_INVITE_MIN_BOOKINGS,
-    STEP_CATALOG_INVITE,
+    STEP_CATALOG_NEEDS_REVISION,
     STEP_SET_ARENA,
     STEP_REFRESH_WEEK,
     STEP_SETUP_WEEK,
@@ -82,10 +83,8 @@ def test_hub_does_not_nag_arena_or_profile_after_first_booking() -> None:
             real_bookings_count=1,
         )
     )
-    # С TASK-140 порог приглашения — одна реальная запись, так что здесь хаб уже предлагает
-    # каталог. Смысл теста прежний: про площадку и профиль он не пилит.
-    assert after is not None
-    assert after["key"] == STEP_CATALOG_INVITE
+    # Ни площадка, ни профиль, ни каталог: после первой записи карточке нечего сказать.
+    assert after is None
 
 
 def test_mobile_work_format_counts_as_an_answered_arena() -> None:
@@ -128,43 +127,6 @@ def test_first_booking_without_arena_does_not_bring_back_the_arena_card() -> Non
     assert step is None or step["key"] != STEP_SET_ARENA
 
 
-def test_catalog_is_offered_only_after_a_real_stream_of_bookings() -> None:
-    just_below = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS - 1,
-            arena_count=1,
-        )
-    )
-    assert just_below is None
-
-    at_threshold = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            arena_count=1,
-        )
-    )
-    assert at_threshold["key"] == STEP_CATALOG_INVITE
-    assert str(CATALOG_INVITE_MIN_BOOKINGS) in at_threshold["body"]
-    assert at_threshold["secondary"]["action"] == ACTION_DISMISS
-
-
-def test_catalog_invite_respects_not_now() -> None:
-    args = dict(
-        weekly_template_count=5,
-        has_future_slots=True,
-        has_any_booking=True,
-        real_bookings_count=9,
-        arena_count=1,
-    )
-    assert resolve_trainer_next_step(_checklist(**args), catalog_invite_dismissed=True) is None
-
-
 def test_working_practice_gets_no_card_at_all() -> None:
     """Пустое состояние — норма. Продукт не обязан всё время что-то предлагать."""
     step = resolve_trainer_next_step(
@@ -181,65 +143,10 @@ def test_working_practice_gets_no_card_at_all() -> None:
     assert step is None
 
 
-def test_catalog_same_card_and_carousel_when_opted_in_with_phone_gap() -> None:
-    """Одна карточка catalog_invite → та же карусель; фамилия не в списке пробелов."""
-    step = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            is_active=False,
-            is_catalog_visible=True,
-            catalog_missing_fields=["phone"],
-        )
-    )
-    assert step is not None
-    assert step["key"] == STEP_CATALOG_INVITE
-    assert step["cta"]["action"] == ACTION_OPEN_CATALOG
-    assert step["cta"]["label"] == "Продолжить"
-    assert "телефон" in step["body"]
-    assert "фамилия" not in step["body"]
-
-
-def test_catalog_invite_gone_after_opt_in_when_profile_ready() -> None:
-    """Opt-in + пустые catalog_missing — ждать модерацию / heal, без повторного приглашения."""
-    step = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            is_active=False,
-            is_catalog_visible=True,
-            catalog_missing_fields=[],
-        )
-    )
-    assert step is None
-
-
 def test_deactivated_and_studio_trainers_are_left_alone() -> None:
     assert resolve_trainer_next_step(_checklist(schedule_unlocked=False)) is None
     assert resolve_trainer_next_step(_checklist(studio_access_mode="admin_only")) is None
     assert resolve_trainer_next_step(None) is None
-
-
-def test_plural_agreement_in_the_catalog_invite() -> None:
-    def body_for(n: int) -> str:
-        return resolve_trainer_next_step(
-            _checklist(
-                weekly_template_count=1,
-                has_future_slots=True,
-                has_any_booking=True,
-                real_bookings_count=n,
-                arena_count=1,
-            )
-        )["body"]
-
-    assert "21 занятие" in body_for(21)
-    assert "22 занятия" in body_for(22)
-    assert "25 занятий" in body_for(25)
-    assert "11 занятий" in body_for(11)
 
 
 def test_expired_schedule_is_caught_before_sharing_an_empty_link() -> None:
@@ -268,53 +175,39 @@ def test_fully_booked_week_is_not_mistaken_for_an_empty_one() -> None:
     assert step is None or step["key"] not in (STEP_REFRESH_WEEK, STEP_SETUP_WEEK)
 
 
-def test_catalog_invite_names_the_fields_the_profile_will_actually_ask_for() -> None:
+def test_the_catalog_invite_is_gone_from_the_hub_card_for_good() -> None:
     """
-    Карточка обещала «фото и пара слов о себе», а submission tier требует восемь пунктов —
-    тренер жал кнопку и попадал на список, которого не ждал. Теперь список один и тот же.
+    «Вас уже записывают» занимало главный экран целиком, чтобы продать раздел, до которого
+    теперь один тап по вкладке бара. Ни одна комбинация фактов не должна возвращать его назад.
     """
+    for real_bookings in (1, 5, 20):
+        for opted_in in (False, True):
+            step = resolve_trainer_next_step(
+                _checklist(
+                    weekly_template_count=5,
+                    has_future_slots=True,
+                    has_any_booking=True,
+                    real_bookings_count=real_bookings,
+                    is_catalog_visible=opted_in,
+                    catalog_missing_fields=["phone", "city"],
+                    arena_count=1,
+                )
+            )
+            assert step is None, f"вернулось приглашение: {step}"
+
+
+def test_moderator_feedback_is_still_a_card_because_it_is_work_not_an_invitation() -> None:
+    """Единственная карточка про каталог, которая осталась: без правок карточка не опубликуется."""
     step = resolve_trainer_next_step(
         _checklist(
             weekly_template_count=5,
             has_future_slots=True,
             has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            catalog_missing_fields=["phone", "city", "arenas"],
+            real_bookings_count=3,
+            catalog_needs_revision=True,
+            moderation_feedback="Фото не по правилам",
         )
     )
-    assert step["key"] == STEP_CATALOG_INVITE
-    assert "не хватает: телефон, город и площадка." in step["body"]
-    assert "пара слов о себе" not in step["body"]
-
-
-def test_catalog_invite_says_the_card_is_ready_when_nothing_is_missing() -> None:
-    step = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            catalog_missing_fields=[],
-        )
-    )
-    assert "Карточка уже готова." in step["body"]
-    assert "не хватает" not in step["body"]
-
-
-def test_catalog_invite_cta_is_the_opt_in_itself() -> None:
-    """
-    Кнопка включает показ в каталоге, а не просто открывает профиль: согласие на публикацию
-    живёт в «Настройках», и раньше «Заполнить профиль» вело на экран, который отправлял
-    тренера искать тумблер где-то ещё.
-    """
-    step = resolve_trainer_next_step(
-        _checklist(
-            weekly_template_count=5,
-            has_future_slots=True,
-            has_any_booking=True,
-            real_bookings_count=CATALOG_INVITE_MIN_BOOKINGS,
-            catalog_missing_fields=["phone"],
-        )
-    )
+    assert step["key"] == STEP_CATALOG_NEEDS_REVISION
     assert step["cta"]["action"] == ACTION_OPEN_CATALOG
-    assert step["secondary"]["action"] == ACTION_DISMISS
+    assert step["secondary"] is None

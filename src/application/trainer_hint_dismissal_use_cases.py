@@ -2,7 +2,7 @@
 TASK-029: server-side «Не сейчас» for hub rhythm hints.
 
 Only a fixed allowlist of non-urgent hint ids may be snoozed here — the catalog invite
-(``STEP_CATALOG_INVITE`` / ``catalog_publication``) already has its own mechanism
+(``catalog_publication``) already has its own mechanism
 (``trainer_profiles.catalog_invite_dismissed_at``, ``POST /trainer/onboarding/next-step/dismiss``)
 and is deliberately not touched (DEC-003 in TASK-029). Urgent hints (``open_loop_no_next``,
 ``slots_this_week`` — work that blocks a real client waiting on the trainer) are excluded on

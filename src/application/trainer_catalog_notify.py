@@ -45,7 +45,11 @@ from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["notify_catalog_state_change", "notify_catalog_revision_published"]
+__all__ = [
+    "notify_catalog_approved_again",
+    "notify_catalog_revision_published",
+    "notify_catalog_state_change",
+]
 
 
 def _catalog_keyboard() -> InlineKeyboardMarkup | None:
@@ -130,6 +134,18 @@ async def notify_catalog_state_change(
         return await _send(session, trainer_id, msg.TRAINER_CATALOG_RESTORED_PENDING_PUSH)
 
     return False
+
+
+async def notify_catalog_approved_again(session: AsyncSession, trainer_id: int) -> bool:
+    """
+    Карточка вернулась в каталог после правок (``needs_revision`` → ``published``).
+
+    Решение о пуше принималось по статусу аккаунта: «первая активация → поздравляем, иначе
+    молчим». С TASK-140 ``status = active`` — липкая веха, поэтому у давно активного тренера,
+    чью карточку модератор снял на правки и потом вернул, не срабатывала ни одна ветка: карточка
+    публиковалась, а тренеру не приходило ничего.
+    """
+    return await _send(session, trainer_id, msg.TRAINER_CATALOG_APPROVED_AGAIN_PUSH)
 
 
 async def notify_catalog_revision_published(session: AsyncSession, trainer_id: int) -> bool:

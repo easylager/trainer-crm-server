@@ -2119,11 +2119,15 @@ async def test_catalog_invite_not_now_is_remembered_server_side(
     db_session,
 ) -> None:
     """
-    «Не сейчас» на приглашении в каталог должно пережить смену устройства.
+    «Закрыть» на приглашении в каталог должно пережить смену устройства.
 
     Раньше ответ лежал только в localStorage: тренер отказывался на телефоне и снова видел
     то же приглашение на планшете или после очистки кэша. Отказ — это ответ, и он хранится
     там же, где вычисляется вопрос.
+
+    Приглашение переехало из карточки next_step (``catalog_invite``) в строку инбокса
+    (``catalog_publication``), поэтому оба ключа ведут в одну колонку: клиент, отданный из
+    кэша до переезда, обязан закрывать подсказку, а не получать 422.
     """
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         create_resp = await client.post(
@@ -2147,6 +2151,11 @@ async def test_catalog_invite_not_now_is_remembered_server_side(
             dismissed = await client.post(
                 "/api/webapp/trainer/onboarding/next-step/dismiss",
                 headers={"X-Telegram-Init-Data": "mock"},
+                json={"key": "catalog_publication"},
+            )
+            legacy_key = await client.post(
+                "/api/webapp/trainer/onboarding/next-step/dismiss",
+                headers={"X-Telegram-Init-Data": "mock"},
                 json={"key": "catalog_invite"},
             )
             after = await client.get(
@@ -2162,6 +2171,7 @@ async def test_catalog_invite_not_now_is_remembered_server_side(
     assert before.status_code == 200
     assert before.json().get("catalog_invite_dismissed") is False
     assert dismissed.status_code == 200, dismissed.text
+    assert legacy_key.status_code == 200, legacy_key.text
     assert after.json().get("catalog_invite_dismissed") is True
     # Остальные карточки описывают работу, которая реально блокирует записи — их не прячем.
     assert wrong_key.status_code == 422

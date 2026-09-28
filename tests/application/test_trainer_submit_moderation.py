@@ -3,6 +3,7 @@ import pytest
 from sqlalchemy import text
 
 from src.application.trainer_use_cases import (
+    apply_moderator_revision_request,
     create_trainer,
     set_trainer_catalog_visibility,
     try_submit_trainer_for_moderation_review,
@@ -491,3 +492,153 @@ async def test_opt_out_then_opt_in_resubmits_instead_of_silent_noop(db_session, 
     # Opts back in — a genuine fresh request, not a silent "already_submitted" noop.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=True) is True
     assert notified == [tid, tid]
+
+
+async def _card_ready_trainer(db_session, *, status: str, catalog_state: str) -> int:
+    """Тренер, чья карточка проходит submission-планку, в заданном состоянии."""
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = r.scalar()
+    r2 = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r2.scalar()
+    r3 = await db_session.execute(text("SELECT id FROM arenas ORDER BY id LIMIT 1"))
+    aid = r3.scalar()
+    if sid is None or cid is None or aid is None:
+        pytest.skip("need seed services, cities, and arenas")
+    tid = await create_trainer(
+        db_session,
+        profile={
+            "first_name": "Пётр",
+            "last_name": "Застрявший",
+            "age": 33,
+            "phone": "+375291234000",
+            "description": "z" * 30,
+            "city_id": cid,
+            "education": "higher",
+            "experience_years": 6,
+            "session_duration_minutes": 60,
+            "min_hours_before_booking": 3,
+        },
+        service_ids=[sid],
+        arena_ids=[aid],
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_photos (trainer_id, file_key, sort_order) VALUES (:t, :fk, 0)"),
+        {"t": tid, "fk": f"trainers/{tid}/a.jpg"},
+    )
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET status = :st, catalog_state = :cs, "
+            "moderation_submitted_at = now() WHERE id = :t"
+        ),
+        {"st": status, "cs": catalog_state, "t": tid},
+    )
+    await db_session.commit()
+    return tid
+
+
+@pytest.mark.asyncio
+async def test_active_account_with_a_card_in_review_is_not_left_stuck(db_session) -> None:
+    """
+    Тренер активирован когда-то раньше, карточка сейчас на проверке. «Нужны правки» ветвились по
+    статусу аккаунта, поэтому комментарий записывался, а catalog_state навсегда оставался
+    pending_review: раздел «Каталог» показывал «На проверке», кнопки «отправить снова» не было.
+    """
+    tid = await _card_ready_trainer(
+        db_session, status="active", catalog_state="pending_review"
+    )
+
+    state = await apply_moderator_revision_request(
+        db_session, tid, feedback="Нужно цены написать", moderator_id=42
+    )
+    assert state == "needs_revision"
+
+    row = (
+        await db_session.execute(
+            text("SELECT catalog_state, status, moderation_feedback FROM trainers WHERE id = :t"),
+            {"t": tid},
+        )
+    ).fetchone()
+    assert row[0] == "needs_revision"
+    # Активацию не откатываем: на ней висят аналитика и триал.
+    assert row[1] == "active"
+    assert row[2] == "Нужно цены написать"
+
+    ev = (
+        await db_session.execute(
+            text(
+                "SELECT to_state, reason, actor_type FROM trainer_catalog_events "
+                "WHERE trainer_id = :t ORDER BY id DESC LIMIT 1"
+            ),
+            {"t": tid},
+        )
+    ).fetchone()
+    assert ev[0] == "needs_revision"
+    assert ev[2] == "moderator"
+
+
+@pytest.mark.asyncio
+async def test_revision_on_a_published_card_does_not_unpublish_it(db_session) -> None:
+    """Опечатка в имени не должна выбивать тренера из выдачи на сутки — снимаем только правку."""
+    tid = await _card_ready_trainer(db_session, status="active", catalog_state="published")
+    await db_session.execute(
+        text("UPDATE trainers SET profile_pending = '{\"first_name\": \"Новое\"}'::jsonb WHERE id = :t"),
+        {"t": tid},
+    )
+    await db_session.commit()
+
+    state = await apply_moderator_revision_request(
+        db_session, tid, feedback="Имя не по правилам", moderator_id=42
+    )
+    assert state == "published"
+
+    row = (
+        await db_session.execute(
+            text("SELECT catalog_state, profile_pending FROM trainers WHERE id = :t"), {"t": tid}
+        )
+    ).fetchone()
+    assert row[0] == "published"
+    assert row[1] is None
+
+
+@pytest.mark.asyncio
+async def test_resubmitting_clears_the_comment_that_was_already_acted_on(
+    db_session, monkeypatch
+) -> None:
+    """
+    Оставленный комментарий держал карточку «Модератор попросил поправить» на главном экране
+    уже после того, как правки внесены и заявка снова в очереди: catalog_needs_revision в
+    чеклисте читает и moderation_feedback тоже.
+    """
+    from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
+
+    tid = await _card_ready_trainer(
+        db_session, status="active", catalog_state="needs_revision"
+    )
+    await db_session.execute(
+        text(
+            "UPDATE trainers SET moderation_feedback = 'Нужно цены написать', "
+            "moderation_submitted_at = NULL WHERE id = :t"
+        ),
+        {"t": tid},
+    )
+    await db_session.commit()
+
+    before = await get_trainer_onboarding_checklist(db_session, tid)
+    assert before["catalog_needs_revision"] is True
+
+    async def fake_notify(trainer_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "src.application.trainer_use_cases.notify_admins_trainer_queued_for_moderation",
+        fake_notify,
+    )
+    result = await try_submit_trainer_for_moderation_review(
+        db_session, tid, requested_by_trainer=True
+    )
+    assert result.get("submitted") is True
+
+    after = await get_trainer_onboarding_checklist(db_session, tid)
+    assert after["catalog_state"] == "pending_review"
+    assert after["moderation_feedback"] in (None, "")
+    assert after["catalog_needs_revision"] is False

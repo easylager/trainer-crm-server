@@ -117,24 +117,27 @@ def _onboarding_booking_step_done(d: dict[str, Any]) -> bool:
 
 def _should_nudge_catalog_in_hub(d: dict[str, Any]) -> bool:
     """
-    Catalog hints only once a real booking stream exists — never right after the first booking
-    (the push nudges cover that), and never for a trainer who already answered.
+    «Вас ещё нет в каталоге» — ровно одно состояние карточки: ``draft``.
 
-    Two branches used to reach further and both were wrong once the catalog became opt-in:
-    «moderated trainer hid the listing» nagged someone who deliberately switched it off, and
-    nothing here looked at «Не сейчас» at all — that answer only lived in the browser.
+    Не ``hidden`` и не ``paused``: там тренер либо снял карточку сам, либо уже знает причину из
+    раздела и из пуша — подсказывать ему «разместите карточку» значило бы спорить с его же
+    решением. Не ``pending_review``: он уже попросился, ждать — это не задача. Не
+    ``needs_revision``: там нужны правки, и об этом говорит отдельная карточка next_step.
+
+    Порога по записям больше нет. Он держался на том, что приглашение было единственной дверью
+    в каталог и потому давило; дверь теперь — постоянная вкладка бара, и строка в инбоксе просто
+    называет раздел, который тренер и так видит. Расписание при этом обязано существовать: до
+    него главный экран занят карточкой «Настройте расписание», и два «сделайте это первым» —
+    ровно тот шум, ради отказа от которого чеклист когда-то и свернули в одну карточку.
+
+    ``catalog_invite_dismissed`` — ответ тренера «закрыть», навсегда и на всех устройствах
+    (``trainer_profiles.catalog_invite_dismissed_at``).
     """
-    from src.application.trainer_next_step import CATALOG_INVITE_MIN_BOOKINGS
-
-    if not _onboarding_booking_step_done(d):
-        return False
     if d.get("catalog_invite_dismissed"):
         return False
-    cat_vis = bool(d.get("is_catalog_visible"))
-    in_public = bool(d.get("is_active")) and bool(d.get("profile_complete")) and cat_vis
-    if in_public:
+    if (d.get("catalog_state") or "").strip() != "draft":
         return False
-    return int(d.get("real_bookings_count") or 0) >= CATALOG_INVITE_MIN_BOOKINGS
+    return int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
 
 
 async def fetch_hub_pending_booking_ids(
@@ -235,7 +238,6 @@ def _build_hub_rhythm_inbox_candidates(
     """
     out: list[dict[str, Any]] = []
     d = onboarding
-    active = bool(d.get("is_active"))
     # Онбординг v2: «активен» здесь означает «есть с чем работать» (собрано расписание),
     # а не «прошёл модерацию каталога» — is_active стал чисто витринным флагом и почти
     # у всех работающих тренеров будет False неделями. Старая проверка на его основе
@@ -244,38 +246,25 @@ def _build_hub_rhythm_inbox_candidates(
     # на trainer_next_step.py. См. те же сигналы, что и STEP_SETUP_WEEK там.
     has_schedule = int(d.get("weekly_template_count") or 0) > 0 or bool(d.get("has_future_slots"))
 
+    # Первая строка инбокса, пока тренера нет в каталоге. Три ветки копирайта здесь схлопнуты в
+    # одну: они описывали старую модель («доведите профиль до проверки», «после активации
+    # аккаунта») и к состоянию карточки отношения уже не имели. Что именно осталось заполнить,
+    # знает сам раздел — дублировать список здесь значит держать вторую версию правды.
     if _should_nudge_catalog_in_hub(d):
-        cat_vis = bool(d.get("is_catalog_visible"))
-        in_public = active and bool(d.get("profile_complete")) and cat_vis
-        if not in_public:
-            body = ""
-            if not active and not d.get("profile_complete"):
-                body = (
-                    "Чтобы вас находили в общем каталоге, доведите профиль до проверки: "
-                    "так мы подтверждаем карточку перед публикацией."
-                )
-            elif not active and d.get("profile_complete"):
-                body = (
-                    "Профиль отправлен на проверку. После активации аккаунта вас смогут найти "
-                    "в каталоге — это следующий шаг к новым клиентам из списка."
-                )
-            elif active and not d.get("profile_complete"):
-                body = (
-                    "Для показа в каталоге закройте критерии профиля — в разделе статуса видно, "
-                    "что ещё важно для публикации."
-                )
-            if body:
-                out.append(
-                    _inbox_item(
-                        item_id="catalog_publication",
-                        kind="rhythm",
-                        priority=108,
-                        title=body,
-                        primary_label="Профиль",
-                        primary_action="profile_catalog",
-                        dismissible=True,
-                    )
-                )
+        out.append(
+            _inbox_item(
+                item_id="catalog_publication",
+                kind="rhythm",
+                priority=108,
+                title="Вас пока нет в каталоге",
+                subtitle=(
+                    "Карточку смотрят новые ученики — сейчас к вам приходят только по вашей ссылке."
+                ),
+                primary_label="Разместить карточку",
+                primary_action="profile_catalog",
+                dismissible=True,
+            )
+        )
 
     if not has_schedule:
         return out

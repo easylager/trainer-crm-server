@@ -18,6 +18,7 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.trainer_catalog_state import (
     CATALOG_ACTOR_MODERATOR,
+    REASON_BACKFILL_0206,
     REASON_MODERATOR_APPROVED,
     REASON_TRAINER_SUBMITTED,
     set_catalog_state,
@@ -119,8 +120,14 @@ async def test_published_screen_carries_preview_and_history(app_use_test_db, db_
     assert body["actions"] == ["hide"]
     preview = body["preview"]
     assert preview["first_name"] == "Карточка"
-    assert preview["city_name"]
     assert preview["photo_file_key"]
+    # Набор фактов — ровно тот, что рисует клиентский список (catalog-main.js): услуга с ценой,
+    # площадки, свободные слоты. Города там нет — он фильтр, а не факт карточки, и превью с ним
+    # показывало тренеру карточку, которой в каталоге не существует.
+    assert "city_name" not in preview
+    assert preview["service_line"]
+    assert preview["arena_names"]
+    assert isinstance(preview["free_slots_14d"], int)
     # History is what makes «следить, что я в каталоге» possible at all.
     assert [e["to_state"] for e in body["events"]][:2] == [
         CATALOG_STATE_PUBLISHED,
@@ -251,3 +258,155 @@ def _async_value(value):
         return value
 
     return _inner()
+
+
+@pytest.mark.asyncio
+async def test_migration_backfill_never_becomes_the_reason_the_trainer_reads(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Every trainer who existed before migration 0206 carries one backfill event whose
+    ``reason_detail`` is engineering shorthand. Read back as the current explanation it opened
+    the screen with a line that reads like a crash report, so the payload must not carry it.
+    """
+    tid, tg = await _complete_trainer(db_session)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_catalog_events (
+                trainer_id, from_state, to_state, reason, reason_detail, actor_type, actor_id
+            ) VALUES (:t, NULL, 'draft', :reason, :detail, 'system', 'migration')
+            """
+        ),
+        {
+            "t": tid,
+            "reason": REASON_BACKFILL_0206,
+            "detail": "Состояние восстановлено из status + is_catalog_visible при переходе на явную модель.",
+        },
+    )
+    await db_session.commit()
+
+    body = await _get(tg)
+    assert body["state_detail"] is None
+    assert "is_catalog_visible" not in json.dumps(body, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_online_trainer_reaches_the_catalog_without_a_fixed_arena(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Working online is not the same as being barred from the catalog. The submission tier used to
+    demand a row in ``arena_ids``, which also dead-ended the profile carousel: it builds its rail
+    from these keys, so the arena step re-armed itself forever with «Сначала заполните».
+    """
+    tid, tg = await _complete_trainer(db_session)
+    await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": tid})
+    await db_session.execute(
+        text("UPDATE trainers SET arena_work_format = 'online' WHERE id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+
+    body = await _get(tg)
+    assert body["readiness"]["submit_ready"] is True
+    assert "arenas" not in body["readiness"]["missing_fields"]
+    assert "submit" in body["actions"]
+
+    status, _ = await _post(tg, "submit")
+    assert status == 200
+
+
+@pytest.mark.asyncio
+async def test_a_trainer_with_no_arena_and_no_format_still_has_to_pick_one(
+    app_use_test_db, db_session
+) -> None:
+    """The relaxation is about the online/mobile format, not about dropping the check."""
+    tid, tg = await _complete_trainer(db_session)
+    await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": tid})
+    await db_session.commit()
+
+    body = await _get(tg)
+    assert body["readiness"]["submit_ready"] is False
+    assert "arenas" in body["readiness"]["missing_fields"]
+
+
+@pytest.mark.asyncio
+async def test_prices_are_named_as_something_worth_adding(app_use_test_db, db_session) -> None:
+    """
+    Цены не блокируют публикацию, поэтому их не было ни в одном tier — и тренер узнавал про
+    них только из строки «цена не указана» в карточке модератора, которую он не видит.
+    """
+    tid, tg = await _complete_trainer(db_session)
+    body = await _get(tg)
+    assert "цены на услуги" in body["readiness"]["optional_missing_labels_ru"]
+
+    await db_session.execute(
+        text("UPDATE trainer_services SET price_cents = 5000 WHERE trainer_id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+    body2 = await _get(tg)
+    assert "цены на услуги" not in body2["readiness"]["optional_missing_labels_ru"]
+
+
+@pytest.mark.asyncio
+async def test_history_says_what_happened_not_who_checked_whom(app_use_test_db, db_session) -> None:
+    """
+    Строка собиралась как «<состояние> · <автор>», и «На проверке · вами» читалось так, будто
+    тренер проверяет сам себя. Событие называется глаголом и само говорит, кто его совершил.
+    """
+    _, tg = await _complete_trainer(db_session)
+    status, _ = await _post(tg, "submit")
+    assert status == 200
+
+    body = await _get(tg)
+    headlines = [e["headline"] for e in body["events"]]
+    assert headlines[0] == "Вы отправили карточку на проверку"
+    for h in headlines:
+        assert "·" not in h
+        assert "вами" not in h
+
+
+@pytest.mark.asyncio
+async def test_editing_a_card_in_review_leaves_a_way_to_re_ping_the_moderator(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Реальная правка снимает отметку в очереди (``clear_moderation_submitted_at``), и модератор
+    держит ссылку на версию, которой уже нет. На экране при этом была одна кнопка «Отменить
+    заявку»: позвать на проверку заново тренеру было нечем, и ждать он мог бесконечно.
+    """
+    tid, tg = await _complete_trainer(db_session)
+    status, _ = await _post(tg, "submit")
+    assert status == 200
+
+    in_queue = await _get(tg)
+    assert in_queue["state"] == CATALOG_STATE_PENDING_REVIEW
+    assert in_queue["actions"] == ["withdraw"]
+    assert "изменили карточку" not in in_queue["body"]
+
+    # Тренер правит карточку — отметка в очереди слетает.
+    await db_session.execute(
+        text("UPDATE trainers SET moderation_submitted_at = NULL WHERE id = :t"), {"t": tid}
+    )
+    await db_session.commit()
+
+    edited = await _get(tg)
+    assert edited["state"] == CATALOG_STATE_PENDING_REVIEW
+    assert edited["actions"] == ["resubmit", "withdraw"]
+    assert "модератор ещё не видел новую версию" in edited["body"].lower()
+
+    status2, _ = await _post(tg, "submit")
+    assert status2 == 200
+    again = await _get(tg)
+    assert again["actions"] == ["withdraw"]
+
+
+@pytest.mark.asyncio
+async def test_a_card_in_review_that_was_not_touched_offers_only_withdrawal(
+    app_use_test_db, db_session
+) -> None:
+    """Пока модератор смотрит ровно ту версию, что ему отправили, второй кнопки быть не должно."""
+    _, tg = await _complete_trainer(db_session)
+    await _post(tg, "submit")
+    body = await _get(tg)
+    assert body["actions"] == ["withdraw"]

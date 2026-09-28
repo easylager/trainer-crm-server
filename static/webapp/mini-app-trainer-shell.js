@@ -260,6 +260,9 @@
     if (key === 'trainer-home') return 'home';
     if (key === 'schedule-editor') return 'schedule';
     if (key === 'trainer-clients') return 'clients';
+    /* Вкладку в бар добавили (TASK-140), а сюда — нет: на собственном экране «Каталог» бар
+       не подсвечивал ни одной вкладки, и раздел выглядел как чужая страница. */
+    if (key === 'trainer-catalog') return 'catalog';
     if (key === 'trainer-collective' && showCenterGridTab()) return 'center';
     for (var i = 0; i < MORE_ROUTE_KEYS.length; i++) {
       if (key === MORE_ROUTE_KEYS[i]) return 'more';

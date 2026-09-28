@@ -64,6 +64,7 @@ __all__ = [
     "REASON_ACCOUNT_DEACTIVATED",
     "REASON_ACCOUNT_STATUS_CHANGED",
     "REASON_API_VISIBILITY_PATCH",
+    "REASON_BACKFILL_0206",
     "REASON_AUTO_RESTORED",
     "REASON_MISSING_FIELDS",
     "REASON_MODERATOR_APPROVED",
@@ -99,6 +100,10 @@ REASON_ACCOUNT_STATUS_CHANGED = "account_status_changed"
 REASON_API_VISIBILITY_PATCH = "api_visibility_patch"
 REASON_STUDIO_PUBLISHED = "studio_published"
 REASON_STUDIO_HIDDEN = "studio_hidden"
+# Written once by migration 0206, never by this module. Its ``reason_detail`` is a note to us
+# («восстановлено из status + is_catalog_visible»), not a sentence for the trainer — the screen
+# must not read it back as the explanation of the current state.
+REASON_BACKFILL_0206 = "backfill_0206"
 
 
 class CatalogStateError(Exception):
@@ -116,8 +121,13 @@ class CatalogStateTransitionError(CatalogStateError):
 # a transition to the current state is a no-op rather than an error.
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     CATALOG_STATE_DRAFT: frozenset({CATALOG_STATE_PENDING_REVIEW}),
+    # `pending_review → paused` — анкета сломалась, пока карточка стояла в очереди. Ребра тут не
+    # было, хотя ``reconcile_catalog_state_for_card`` именно этот переход и делает: тренер,
+    # который стёр телефон, ожидая модератора, получал CatalogStateTransitionError прямо из
+    # сохранения профиля. Состояние правильное — одобрять карточку с дырой нельзя, — а дорога
+    # назад уже существует (`paused → pending_review`).
     CATALOG_STATE_PENDING_REVIEW: frozenset(
-        {CATALOG_STATE_PUBLISHED, CATALOG_STATE_NEEDS_REVISION}
+        {CATALOG_STATE_PUBLISHED, CATALOG_STATE_NEEDS_REVISION, CATALOG_STATE_PAUSED}
     ),
     # A moderator asking an *active* trainer for edits does not unpublish the card — it only
     # discards the pending revision. So `published → needs_revision` is intentionally absent.
