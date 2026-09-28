@@ -341,21 +341,6 @@
       aria-label="Сейчас важно"
     ></section>
 
-    <!-- Onboarding action card — greeting above is enough; this is the single focal surface -->
-    <!--
-      Онбординг v2: одна карточка «следующий шаг» вместо чеклиста из трёх пунктов.
-      Что показать — решает сервер (src/application/trainer_next_step.py), здесь только отрисовка.
-      Карточки нет — значит подсказывать нечего, и это нормальное состояние.
-    -->
-    <section id="hubNextStep" class="hub-next-step" hidden aria-labelledby="hubNextStepTitle">
-      <h2 class="hub-next-step__title" id="hubNextStepTitle"></h2>
-      <p class="hub-next-step__body" id="hubNextStepBody"></p>
-      <div class="hub-next-step__actions">
-        <button type="button" class="btn-block btn-primary hub-next-step__cta" id="hubNextStepCta"></button>
-        <button type="button" class="hub-next-step__secondary" id="hubNextStepSecondary" hidden></button>
-      </div>
-    </section>
-
     <!--
       Lead Mode banner: visible only when lifecycle.is_lead_mode === true.
       Loss framing on real numbers (signals_recap), recovery CTA opens trainer-subscription.

@@ -191,7 +191,9 @@ async def test_onboarding_checklist_pre_moderation_trainer_is_open_for_work(
     assert data.get("schedule_unlocked") is True, "модерация гейтит каталог, а не работу тренера"
     assert data.get("fill_slots_invite_candidates_count") == 0
     assert data.get("has_crm_subscription_access") is False
-    assert (data.get("next_step") or {}).get("key") == "setup_week"
+    from src.application.trainer_hub_action_inbox import _build_hub_rhythm_inbox_candidates
+
+    assert [x["id"] for x in _build_hub_rhythm_inbox_candidates(data)] == ["setup_profile"]
 
 
 @pytest.mark.asyncio

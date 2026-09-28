@@ -3870,22 +3870,14 @@ async def get_trainer_hub_bootstrap(
         if onboarding_checklist is not None:
             onboarding_checklist["active_hint_snoozes"] = list(active_hint_snoozes.keys())
 
-    # Onboarding v2: one card, resolved server-side, so the copy and the ordering live in one
-    # tested place instead of branching in the hub's JS.
-    # Exposed twice on purpose: at the top level for readability, and inside the checklist because
-    # the hub renders from whichever of the two sources answered first (bootstrap or the standalone
-    # checklist GET). Keeping them in sync here is cheaper than teaching the client about both.
-    from src.application.trainer_next_step import resolve_trainer_next_step
-
-    next_step = resolve_trainer_next_step(onboarding_checklist)
-    if onboarding_checklist is not None:
-        onboarding_checklist["next_step"] = next_step
-
+    # Карточки «следующий шаг» здесь больше нет: её четыре состояния (профиль, первая ссылка,
+    # пустое расписание, правки модератора) стали обычными строками инбокса подсказок — см.
+    # trainer_hub_action_inbox.py. Второй блок на главном экране говорил то же самое, что и
+    # подсказки сверху, только громче.
     return {
         "access": access,
         "profile": profile,
         "onboarding_checklist": onboarding_checklist,
-        "next_step": next_step,
         "requests_summary": requests_summary,
         "revenue_mtd": revenue_mtd,
         "bookings": bookings,
@@ -8825,9 +8817,6 @@ async def webapp_trainer_onboarding_checklist(
     data = await get_trainer_onboarding_checklist(session, trainer_id)
     if not data:
         raise HTTPException(status_code=404, detail="Trainer not found")
-    from src.application.trainer_next_step import resolve_trainer_next_step
-
-    data["next_step"] = resolve_trainer_next_step(data)
     from src.application.trainer_hint_dismissal_use_cases import get_active_snoozes
 
     data["active_hint_snoozes"] = list((await get_active_snoozes(session, trainer_id)).keys())

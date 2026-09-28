@@ -371,6 +371,7 @@
        * Everything else still uses the localStorage fallback below.
        */
       var HUB_SERVER_DISMISSIBLE_HINT_IDS = [
+        'share_link',
         'referral_growth',
         'open_loop_free_next',
         'slots_next_week',
@@ -384,7 +385,13 @@
         'feature_moment_certificates',
       ];
       /** DEC-002/DEC-004: urgent hints are never dismissible, on client or server. */
-      var HUB_URGENT_NON_DISMISSIBLE_HINT_IDS = ['open_loop_no_next', 'slots_this_week'];
+      var HUB_URGENT_NON_DISMISSIBLE_HINT_IDS = [
+        'open_loop_no_next',
+        'slots_this_week',
+        'setup_profile',
+        'no_future_slots',
+        'catalog_needs_revision',
+      ];
       /** Max growth/education rhythm rows; urgent rhythm + operational never capped. */
       var HUB_RHYTHM_GROWTH_MAX = 2;
       var HUB_RHYTHM_URGENT_MIN_PRIORITY = 90;
@@ -588,18 +595,40 @@
       }
 
       /**
-       * Только самый первый шаг — «настройте расписание». Пока он не сделан, у тренера
-       * действительно нет ничего, что стоило бы показать рядом: ни слотов, ни записей,
-       * ни цифр. Хаб в этот момент схлопывается до одной карточки.
+       * Только самый первый шаг — «настройте профиль»: онбординг ещё не проходили и
+       * расписания нет. Пока он не сделан, у тренера действительно нет ничего, что стоило бы
+       * показать рядом: ни слотов, ни записей, ни цифр, — и хаб схлопывается до подсказки.
        *
-       * Все остальные карточки («отправьте ссылку», «где встречаетесь», «в каталог»)
+       * Все остальные подсказки («отправьте ссылку», «свободных окон нет», «в каталог»)
        * живут в хабе неделями — прятать за ними расписание и записи было бы враньём
        * про состояние практики. Поэтому предикат узкий, а не «онбординг активен».
+       *
+       * Зеркало ветки setup_profile из trainer_hub_action_inbox.py — держать в паре.
        */
       function hubOnboardingStripVisible() {
         var d = hubOnboardingData;
-        var step = d && d.next_step;
-        return !!(step && step.key === 'setup_week');
+        if (!d) return false;
+        if (d.schedule_unlocked === false) return false;
+        if (d.studio_access_mode === 'admin_only') return false;
+        if (d.onboarding_completed) return false;
+        return !(parseNonNegativeInt(d.weekly_template_count) > 0 || d.has_future_slots);
+      }
+
+      /**
+       * Те же факты, что раньше собирала карточка «следующий шаг»: профиль не настроен,
+       * впереди нет окон, ни одной настоящей записи, модератор ждёт правок. Карточки больше
+       * нет — темы переехали строками в инбокс подсказок, — но Day Canvas по-прежнему обязан
+       * молчать, пока инбокс говорит ровно об этом другими словами.
+       */
+      function hubGuidanceHintActive() {
+        var d = hubOnboardingData;
+        if (!d) return false;
+        if (d.schedule_unlocked === false) return false;
+        if (d.studio_access_mode === 'admin_only') return false;
+        if (d.catalog_needs_revision) return true;
+        if (!(parseNonNegativeInt(d.weekly_template_count) > 0 || d.has_future_slots)) return true;
+        if (!d.has_future_slots) return true;
+        return !d.has_real_booking;
       }
 
       /** Greeting is the welcome; «Первые шаги» below is the action — no second hero. */
@@ -627,18 +656,18 @@
       /**
        * True when hub should show the intentional empty-day canvas (not onboarding, no upcoming list).
        *
-       * Молчит, пока на экране есть карточка «следующий шаг» (см. hubNextStep / trainer_next_step.py).
-       * Раньше здесь молча дублировалась ровно та же тема — заголовок «Сегодня свободно» и текст
-       * «отправьте клиентам ссылку, и они запишутся сами» показывались ПОД карточкой, которая
+       * Молчит, пока об этом же говорит подсказка в инбоксе (см. hubGuidanceHintActive).
+       * Иначе здесь молча дублируется ровно та же тема — заголовок «Сегодня свободно» и текст
+       * «отправьте клиентам ссылку, и они запишутся сами» показывались бы ПОД строкой, которая
        * говорит о том же самом другими словами, плюс отдельная кнопка «Ссылка на запись» в плитках
-       * ниже. Одна и та же мысль трижды на одном экране — не забота, а шум. NextStep — единственный
-       * источник «что делать дальше», пока он есть; когда его нет (практика уже идёт своим ходом,
-       * просто сегодня тихий день), Day Canvas возвращается к своей настоящей роли.
+       * ниже. Одна и та же мысль трижды на одном экране — не забота, а шум. Инбокс — единственный
+       * источник «что делать дальше», пока ему есть что сказать; когда сказать нечего (практика
+       * идёт своим ходом, просто сегодня тихий день), Day Canvas возвращается к своей роли.
        */
       function shouldShowHubDayCanvas() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
-        if (hubOnboardingData && hubOnboardingData.next_step) return false;
+        if (hubGuidanceHintActive()) return false;
         if (hubLastUpcomingListCount > 0) return false;
         if (hubHasUpcomingSessions()) return false;
         if (hubLastBookingsDays === null) return false;
@@ -1306,7 +1335,7 @@
       /* Зеркало _should_nudge_catalog_in_hub из trainer_hub_action_inbox.py — держать в паре.
          Ровно одно состояние карточки: draft. hidden/paused — решение тренера или причина,
          которую он уже знает; pending_review — он уже попросился; needs_revision — там правки,
-         и про них говорит карточка next_step. Порога по записям нет: каталог теперь постоянная
+         и про них говорит строка catalog_needs_revision. Порога по записям нет: каталог постоянная
          вкладка бара, а не то, что надо продать. Расписание обязано быть — иначе хаб предлагает
          два «сделайте это первым» разом. */
       function shouldShowHubCatalogPublicationHint(d) {
@@ -1557,8 +1586,70 @@
            action_inbox (partial_errors / очень ранний рендер). is_active теперь значит
            «в каталоге», а не «может работать», и держится False неделями у рабочего
            тренера. Гейт — по наличию расписания, как и на сервере. */
-        var hasSchedule = !!(d.weekly_template_count > 0 || d.has_future_slots);
-        if (!hasSchedule) return out;
+        var hasSchedule = !!(parseNonNegativeInt(d.weekly_template_count) > 0 || d.has_future_slots);
+        /* Онбординг-подсказки не показываем деактивированному аккаунту и тренеру центра,
+           которому расписание ведёт администратор — те же гейты, что на сервере. */
+        var guidanceAllowed =
+          d.schedule_unlocked !== false && d.studio_access_mode !== 'admin_only';
+
+        /* Правки по карточке каталога — работа, а не приглашение: тренер уже попросился
+           в каталог, и без правок карточка там не появится. Расписание для этого не нужно. */
+        if (guidanceAllowed && d.catalog_needs_revision) {
+          var revisionFeedback = String(d.moderation_feedback || '').trim();
+          out.push({
+            id: 'catalog_needs_revision',
+            priority: 106,
+            text: revisionFeedback
+              ? 'Модератор попросил поправить карточку: «' +
+                (revisionFeedback.length > 140
+                  ? revisionFeedback.slice(0, 140).replace(/\s+$/, '') + '…'
+                  : revisionFeedback) +
+                '» — исправьте в анкете и сохраните, заявка уйдёт на повторную проверку.'
+              : 'Модератор попросил поправить карточку — комментарий в анкете; исправьте и сохраните, заявка уйдёт на повторную проверку.',
+            ctaLabel: 'Открыть «Каталог»',
+            action: 'profile_catalog',
+          });
+        }
+
+        if (!hasSchedule) {
+          if (!guidanceAllowed) return out;
+          if (d.onboarding_completed) {
+            if (isRhythmHintDismissed('share_link')) return out;
+            /* Пустая неделя после пройденного онбординга — выбор, а не недоделка:
+               психолог или консультант работает по заявкам, часы ему называть незачем. */
+            out.push({
+              id: 'share_link',
+              priority: 110,
+              text: 'Позовите первого ученика — он напишет вам сам, расписание для этого не нужно.',
+              ctaLabel: 'Отправить ссылку',
+              action: 'share_link',
+              cta2Label: 'Добавить расписание',
+              cta2Action: 'onboarding',
+            });
+            return out;
+          }
+          out.push({
+            id: 'setup_profile',
+            priority: 120,
+            text: 'Настройте профиль: две минуты — кто вы, что проводите и где. Расписание по желанию.',
+            ctaLabel: 'Начать',
+            action: 'onboarding',
+          });
+          return out;
+        }
+
+        /* Расписание есть, но ни одной настоящей записи — одна задача, один глагол. */
+        if (guidanceAllowed && !d.has_real_booking && !isRhythmHintDismissed('share_link')) {
+          out.push({
+            id: 'share_link',
+            priority: 86,
+            text:
+              'Отправьте ссылку одному ученику — тому, кто и так собирался к вам на этой неделе. ' +
+              'Он выберет время сам, вам придёт уведомление.',
+            ctaLabel: 'Отправить ученику',
+            action: 'share_link',
+          });
+        }
 
         /* Growth loop: referral accrual (cap shown on referral page) — show even in Lead Mode. */
         if (!isRhythmHintDismissed('referral_growth')) {
@@ -1780,7 +1871,22 @@
           });
         }
 
+        /* Шаблон есть, а впереди пусто: ученик откроет ссылку и не увидит времени.
+           Дневные подсказки про слоты ниже в этот момент молчат — сказали бы то же самое. */
+        if (guidanceAllowed && !d.has_future_slots) {
+          out.push({
+            id: 'no_future_slots',
+            priority: 102,
+            text:
+              'Свободных окон не осталось: ученик откроет ссылку и не увидит времени. ' +
+              'Откройте расписание на ближайшие недели.',
+            ctaLabel: 'Обновить расписание',
+            action: 'schedule',
+          });
+        }
+
         if (
+          d.has_future_slots &&
           !slotRhythmDeferredForTemplateOnboarding &&
           availThis === 0 &&
           bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD &&
@@ -1797,7 +1903,12 @@
 
         var nextWeekGap =
           slotsNext === 0 || (availNext === 0 && bookNext < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD);
-        if (!slotRhythmDeferredForTemplateOnboarding && nextWeekGap && hubRhythmShowSlotsNextWeekHint()) {
+        if (
+          d.has_future_slots &&
+          !slotRhythmDeferredForTemplateOnboarding &&
+          nextWeekGap &&
+          hubRhythmShowSlotsNextWeekHint()
+        ) {
           out.push({
             id: 'slots_next_week',
             priority: 90,
@@ -1806,15 +1917,6 @@
             action: 'schedule',
           });
         }
-
-        /*
-         * «Поделитесь ссылкой» здесь больше не дублируется. До онбординга v2 это был один
-         * из growth-хинтов в общем списке (id share_link, priority 72), делящий место
-         * с рефералкой и remind-хинтами. Теперь у этого сообщения есть выделенная карточка
-         * «следующий шаг» (см. trainer_next_step.py, STEP_SHARE_LINK) —
-         * она уже единственная и недвусмысленная. Показать то же самое ещё и в общем списке
-         * значило бы дважды сказать одно и то же на одном экране, только тише второй раз.
-         */
 
         /* Weekly template: do not gate on _last_shown — that hid the candidate for 10d after any render and left only slot hints. */
         /* Weekly template = onboarding before «maintenance» slot nudges — higher priority than slots_this/next. */
@@ -1898,6 +2000,10 @@
           ensureTrainerSectionsAccess(function() {
             navigateTo('schedule-editor?tab=template');
           });
+          return;
+        }
+        if (cand.action === 'onboarding') {
+          navigateTo('trainer-onboarding');
           return;
         }
         if (cand.action === 'share_link') {
@@ -2314,7 +2420,7 @@
              в тот же кадр, не дожидаясь ответа. */
           if (hubOnboardingData) hubOnboardingData.catalog_invite_dismissed = true;
           setRhythmDismissUntilMs(hintId, Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
-          persistHubNextStepDismissed('catalog_publication');
+          persistHubCatalogInviteDismissed('catalog_publication');
         } else {
           var days;
           if (hintId === 'share_link' || hintId === 'open_loop_free_next_growth') {
@@ -2425,10 +2531,16 @@
             return 'Клиенты без следующей записи';
           case 'catalog_publication':
             return 'Вас пока нет в каталоге';
+          case 'catalog_needs_revision':
+            return 'Поправьте карточку каталога';
+          case 'setup_profile':
+            return 'Настройте профиль';
+          case 'no_future_slots':
+            return 'Свободных окон не осталось';
           case 'referral_growth':
             return 'Пригласите коллег в каталог';
           case 'share_link':
-            return 'Поделитесь ссылкой на запись';
+            return 'Отправьте ссылку ученику';
           default:
             break;
         }
@@ -2457,7 +2569,9 @@
         var host = document.getElementById('hubActionInbox');
         if (!host) return;
 
-        if (hubOnboardingStripVisible() || !getInitData()) {
+        /* Первый запуск больше не прячет инбокс: «Настройте профиль» теперь его же строка,
+           и раньше здесь скрывалось единственное, что тренеру было что показать. */
+        if (!getInitData()) {
           host.setAttribute('hidden', '');
           host.innerHTML = '';
           syncHubInboxShellBadges();
@@ -2476,6 +2590,12 @@
           host.innerHTML = '';
           syncHubInboxShellBadges();
           return;
+        }
+
+        /* Ссылку греем заранее: openTelegramLink после fetch теряет user-gesture, и кнопка
+           «Отправить ученику» выглядит мёртвой. Раньше это делала карточка «следующий шаг». */
+        if (items.some(function(it) { return it.primary_action === 'share_link' || (it.candidate && it.candidate.action === 'share_link'); })) {
+          prefetchHubInviteShare();
         }
 
         var isCompact = !hubActionInboxExpanded;
@@ -2750,8 +2870,6 @@
           if (tsCh) trainerAccessSnapshot.trainer_status = tsCh;
         }
 
-        renderHubNextStep(data && data.next_step);
-
         if (window.TrainerShell && typeof window.TrainerShell.syncOnboarding === 'function') {
           window.TrainerShell.syncOnboarding(data);
         }
@@ -2765,85 +2883,15 @@
       }
 
       /**
-       * «Не сейчас» уходит на сервер (POST .../next-step/dismiss): раньше ответ жил только в
+       * «Закрыть» приглашение в каталог уходит на сервер (POST .../next-step/dismiss —
+       * исторический путь, ключ ``catalog_publication``): раньше ответ жил только в
        * localStorage, и тренер, отказавшийся на телефоне, снова видел приглашение на планшете
-       * или после очистки кэша. Сервер уже не присылает next_step, если ответ записан, —
+       * или после очистки кэша. Сервер уже не присылает строку, если ответ записан, —
        * локальная проверка при рендере не нужна.
        */
-      function persistHubNextStepDismissed(key) {
+      function persistHubCatalogInviteDismissed(key) {
         return postJsonTrainer('/trainer/onboarding/next-step/dismiss', { key: key })
           .catch(function () { /* сеть отвалилась — переспросим в следующий раз */ });
-      }
-
-      /** TASK-028: показ карточки трекается один раз на смену её `key`, не на каждый ре-рендер. */
-      var hubNextStepLastTrackedKey = null;
-
-      /** Одна карточка, одно действие. Нет карточки — секция скрыта целиком. */
-      function renderHubNextStep(step) {
-        var host = document.getElementById('hubNextStep');
-        if (!host) return;
-        if (!step) {
-          host.setAttribute('hidden', 'hidden');
-          hubNextStepLastTrackedKey = null;
-          return;
-        }
-        if (step.key && step.key !== hubNextStepLastTrackedKey) {
-          hubNextStepLastTrackedKey = step.key;
-          trackHubGuidanceEvent('next_step_shown', step.key);
-        }
-        var titleEl = document.getElementById('hubNextStepTitle');
-        var bodyEl = document.getElementById('hubNextStepBody');
-        var ctaEl = document.getElementById('hubNextStepCta');
-        var secEl = document.getElementById('hubNextStepSecondary');
-
-        host.setAttribute('data-step', step.key || '');
-        if (titleEl) titleEl.textContent = step.title || '';
-        if (bodyEl) bodyEl.textContent = step.body || '';
-
-        if (ctaEl && step.cta) {
-          ctaEl.textContent = step.cta.label || '';
-          ctaEl.onclick = function () { runHubNextStepAction(step, step.cta.action); };
-          if (step.cta.action === 'share_link') prefetchHubInviteShare();
-        }
-        if (secEl) {
-          if (step.secondary) {
-            secEl.textContent = step.secondary.label || '';
-            secEl.removeAttribute('hidden');
-            secEl.onclick = function () { runHubNextStepAction(step, step.secondary.action); };
-          } else {
-            secEl.setAttribute('hidden', 'hidden');
-            secEl.onclick = null;
-          }
-        }
-        host.removeAttribute('hidden');
-      }
-
-      function runHubNextStepAction(step, action) {
-        trackHubGuidanceEvent(
-          action === 'dismiss' ? 'next_step_dismissed' : 'next_step_clicked',
-          step && step.key
-        );
-        if (action === 'open_onboarding') {
-          navigateTo('trainer-onboarding');
-          return;
-        }
-        if (action === 'open_profile') {
-          navigateTo('trainer-catalog');
-          return;
-        }
-        if (action === 'share_link') {
-          shareTrainerInviteLink();
-          return;
-        }
-        /* Одна дверь на все ветки каталога — сам раздел знает, что показать (TASK-140). */
-        if (action === 'open_catalog') {
-          navigateTo('trainer-catalog');
-          return;
-        }
-        if (action === 'dismiss') {
-          persistHubNextStepDismissed(step.key);
-          renderHubNextStep(null);
-        }
       }
 
       /**
@@ -2982,9 +3030,7 @@
       }
 
       function loadOnboardingChecklist() {
-        var card = document.getElementById('hubNextStep');
         if (!getInitData()) {
-          if (card) card.setAttribute('hidden', 'hidden');
           /* Do not set hubRhythmHintsReady or hide rhythm skeleton: on iOS initData often arrives
            * late; marking ready here blocks showHubRhythmHintsSkeleton() when bootstrap runs. */
           syncHubWeekRhythmPanel();
@@ -3011,9 +3057,9 @@
       }
 
       function wireOnboardingHub() {
-        /* Онбординг v2: кнопки карточки «следующий шаг» привязываются в renderHubNextStep,
-           потому что их количество и действия зависят от шага. Здесь остались только
-           элементы хаба, живущие рядом с онбордингом. */
+        /* Онбординг-подсказки живут строками инбокса и привязываются там же
+           (renderHubActionInbox). Здесь остались только элементы хаба,
+           живущие рядом с онбордингом. */
         var faq = document.getElementById('onboardingFaqBtn');
         if (faq) {
           faq.onclick = function() {
@@ -3175,12 +3221,12 @@
         if (!onb) return null;
 
         /*
-         * Онбординг v2: пока на экране есть карточка «следующий шаг», подсказка молчит.
-         * Раньше здесь жил второй набор советов («закройте шаг Профиль по блокам»,
-         * «отправьте анкету на модерацию»), который говорил тренеру другое, чем чеклист
-         * сверху. Два источника «что делать дальше» — это не забота, а шум.
+         * Пока об этом говорит подсказка инбокса, эта полоса молчит. Раньше здесь жил
+         * второй набор советов («закройте шаг Профиль по блокам», «отправьте анкету на
+         * модерацию»), который говорил тренеру другое, чем подсказки сверху.
+         * Два источника «что делать дальше» — это не забота, а шум.
          */
-        if (onb.next_step) return null;
+        if (hubGuidanceHintActive()) return null;
 
         var availThis = parseNonNegativeInt(onb.available_slots_this_week_count);
         var bookThis = parseNonNegativeInt(onb.bookings_this_week_count);
@@ -8120,9 +8166,8 @@
         if (hubBookFabWired) return;
         hubBookFabWired = true;
         fab.onclick = function() {
-          var d = hubOnboardingData || null;
           /* Расписания ещё нет — ведём на первый экран настройки, а не в анкету. */
-          if (d && d.next_step && d.next_step.key === 'setup_week') {
+          if (hubOnboardingStripVisible()) {
             navigateTo('trainer-onboarding');
             return;
           }

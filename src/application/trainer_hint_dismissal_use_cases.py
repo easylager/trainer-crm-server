@@ -4,9 +4,9 @@ TASK-029: server-side «Не сейчас» for hub rhythm hints.
 Only a fixed allowlist of non-urgent hint ids may be snoozed here — the catalog invite
 (``catalog_publication``) already has its own mechanism
 (``trainer_profiles.catalog_invite_dismissed_at``, ``POST /trainer/onboarding/next-step/dismiss``)
-and is deliberately not touched (DEC-003 in TASK-029). Urgent hints (``open_loop_no_next``,
-``slots_this_week`` — work that blocks a real client waiting on the trainer) are excluded on
-principle (DEC-002/DEC-004): hiding them would let a trainer bury a real problem, not just
+and is deliberately not touched (DEC-003 in TASK-029). Urgent hints (``open_loop_no_next``, ``slots_this_week``,
+``setup_profile``, ``no_future_slots``, ``catalog_needs_revision`` — work that blocks a real
+client waiting on the trainer) are excluded on principle (DEC-002/DEC-004): hiding them would let a trainer bury a real problem, not just
 mute noise.
 
 The snooze duration is a server decision, not a client one — the client never sends a
@@ -26,6 +26,9 @@ from src.infrastructure.db.models import TrainerHintDismissal
 # hint_id -> snooze days. Matches the "growth" (3d) / "long" (10d) split from the old
 # client-only dismissHubInboxRhythmItem — same product intent, now server-owned.
 DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS: dict[str, int] = {
+    # «Отправьте ссылку ученику» — бывшая карточка «следующий шаг»; на хабе живёт
+    # обычной строкой инбокса, и «не сейчас» для неё такое же, как для других growth-подсказок.
+    "share_link": 3,
     "referral_growth": 3,
     "open_loop_free_next": 3,
     "slots_next_week": 3,
@@ -46,7 +49,18 @@ DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS: dict[str, int] = {
 DISMISSIBLE_HINT_IDS: frozenset[str] = frozenset(DISMISSIBLE_HINT_DEFAULT_SNOOZE_DAYS)
 
 # Always urgent — never dismissible, on either client or server (DEC-002/DEC-004).
-NON_DISMISSIBLE_URGENT_HINT_IDS: frozenset[str] = frozenset({"open_loop_no_next", "slots_this_week"})
+NON_DISMISSIBLE_URGENT_HINT_IDS: frozenset[str] = frozenset(
+    {
+        "open_loop_no_next",
+        "slots_this_week",
+        # Бывшие состояния карточки «следующий шаг»: незаполненный профиль, пустое расписание
+        # впереди и правки модератора. Всё это — работа, которая блокирует реального ученика
+        # или саму публикацию карточки, а не фоновый совет, который можно приглушить.
+        "setup_profile",
+        "no_future_slots",
+        "catalog_needs_revision",
+    }
+)
 
 
 async def dismiss_rhythm_hint(session: AsyncSession, trainer_id: int, hint_id: str) -> None:
