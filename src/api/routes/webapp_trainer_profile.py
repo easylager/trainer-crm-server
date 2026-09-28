@@ -460,7 +460,19 @@ async def patch_trainer_profile_for_webapp(
         )
         if claimed.fetchone() is not None:
             await session.commit()
-            await notify_admins_trainer_intro_completed(trainer_id, trainer)
+            # Город админ читает названием, а не id: уведомление должно отвечать на вопрос
+            # «кто пришёл и откуда», не отправляя в админку за расшифровкой.
+            city_id = (trainer.get("profile") or {}).get("city_id")
+            city_name = None
+            if city_id is not None:
+                r_city = await session.execute(
+                    text("SELECT name FROM cities WHERE id = :cid"), {"cid": int(city_id)}
+                )
+                row_city = r_city.fetchone()
+                city_name = str(row_city[0]) if row_city else None
+            await notify_admins_trainer_intro_completed(
+                trainer_id, trainer, city_name=city_name
+            )
 
     return {"ok": True}
 
