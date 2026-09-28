@@ -14,6 +14,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from src.shared.config import Settings
+from src.shared.specialist_roles import specialist_role_display
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +71,34 @@ async def notify_admins_trainer_first_login(trainer_id: int, trainer: dict) -> N
     await _send_to_admins(text, event="trainer first login", trainer_id=trainer_id)
 
 
-async def notify_admins_trainer_intro_completed(trainer_id: int, trainer: dict) -> None:
-    """Notify admins when a trainer fills in the intro block (name, phone, city)."""
+async def notify_admins_trainer_intro_completed(
+    trainer_id: int,
+    trainer: dict,
+    *,
+    city_name: str | None = None,
+) -> None:
+    """
+    Notify admins when a trainer fills in the intro block (name, phone, city).
+
+    Показываем сами значения, а не факт «заполнил»: администратор читает это уведомление,
+    чтобы понять, кто пришёл и можно ли с ним связаться, — без содержимого ему всё равно
+    приходится открывать карточку в админке, и уведомление превращается в счётчик.
+    """
+    profile = trainer.get("profile") or {}
     full_name = html.escape(_trainer_display_name(trainer))
     username = (trainer.get("telegram_username") or "").strip()
     username_str = f"@{html.escape(username)}" if username else "без username"
+    phone = (profile.get("phone") or "").strip()
+    phone_str = html.escape(phone) if phone else "не указан"
+    city_str = html.escape((city_name or "").strip()) or "не указан"
+    role = specialist_role_display(profile.get("specialist_role"))
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     text = (
         f"✅ <b>Тренер заполнил блок «Знакомство»</b>\n\n"
-        f"👤 {full_name}\n"
+        f"👤 {full_name} · {html.escape(role)}\n"
+        f"☎️ {phone_str}\n"
+        f"🏙 {city_str}\n"
         f"📱 {username_str}\n"
         f"🆔 Trainer ID: {trainer_id}\n"
         f"⏰ {now}"
