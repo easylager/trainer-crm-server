@@ -1196,24 +1196,15 @@
         });
       }
 
-      document.getElementById('certAnyAmount').onchange = function() {
-        document.getElementById('certAmountGroup').style.display = document.getElementById('certAnyAmount').checked ? 'none' : 'block';
-      };
-
       function formatCertAmountPlain(c) {
-        if (c.amount_cents == null) return 'Любая сумма';
         return (c.amount_cents / 100) + ' BYN';
       }
 
-      function formatCertAmountHtml(c) {
-        if (c.amount_cents == null) return escapeHtml('Любая сумма');
-        return escapeHtml(String(c.amount_cents / 100)) + ' BYN';
-      }
       function certProductAmountLine(c) {
         var amount = formatCertAmountPlain(c);
         var name = (c.name || '').trim();
         if (!name) return amount;
-        if (name.indexOf('BYN') !== -1 || name.indexOf('Любая сумма') !== -1) return '';
+        if (name.indexOf('BYN') !== -1) return '';
         return amount;
       }
 
@@ -1223,7 +1214,7 @@
         var hintEl = document.getElementById('certsHint');
         if (hintEl) hintEl.style.display = state.certItems.length > 0 ? 'block' : 'none';
         if (state.certItems.length === 0) {
-          wrap.innerHTML = '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">🎁</div><p class="pp-state-title">Пока нет сертификатов</p><p class="pp-state-text">Номинал на сумму или «любая сумма» — клиенты увидят это в вашей карточке.</p></div>';
+          wrap.innerHTML = '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">🎁</div><p class="pp-state-title">Пока нет сертификатов</p><p class="pp-state-text">Задайте номинал на сумму — клиенты увидят это в вашей карточке.</p></div>';
           return;
         }
         var html = '';
@@ -1274,9 +1265,6 @@
         var descEl = document.getElementById('certDescription');
         if (titleEl) titleEl.value = cert ? (cert.name || '') : '';
         if (descEl) descEl.value = cert ? (cert.description || '') : '';
-        var anyAmount = cert ? cert.amount_cents == null : false;
-        document.getElementById('certAnyAmount').checked = anyAmount;
-        document.getElementById('certAmountGroup').style.display = anyAmount ? 'none' : 'block';
         document.getElementById('certAmountByn').value = cert && cert.amount_cents != null ? String(Math.round(cert.amount_cents / 100)) : '';
         document.getElementById('certActive').checked = cert ? cert.is_active : true;
         document.getElementById('certActiveGroup').style.display = cert ? 'block' : 'none';
@@ -1398,6 +1386,8 @@
         document.getElementById('certIssueResult').style.display = 'none';
         document.getElementById('certIssueEmailSent').style.display = 'none';
         document.getElementById('certIssueDownloadLink').style.display = 'none';
+        document.getElementById('certIssueGenStatus').style.display = 'none';
+        document.getElementById('btnRetryCertGen').style.display = 'none';
         applyCertIssuePrefillFromState();
         showScreen('screenCertIssue');
       }
@@ -1438,13 +1428,74 @@
         showScreen('screenList');
         setTab('certs');
       };
+      /**
+       * TASK-142/AC-002: certificate PDF/S3/email are generated in the background —
+       * poll GET /trainer/certificates/{id}/status until file_status leaves 'pending'.
+       */
+      var CERT_GEN_POLL_MS = 1500;
+      function pollCertFileStatus(certId, recipientEmail) {
+        var genStatusEl = document.getElementById('certIssueGenStatus');
+        var retryBtn = document.getElementById('btnRetryCertGen');
+        var downloadLink = document.getElementById('certIssueDownloadLink');
+        var emailSentEl = document.getElementById('certIssueEmailSent');
+        genStatusEl.style.display = 'block';
+        genStatusEl.textContent = 'Готовим сертификат…';
+        genStatusEl.style.color = 'var(--tg-theme-hint-color, #666)';
+        retryBtn.style.display = 'none';
+        downloadLink.style.display = 'none';
+
+        function tick() {
+          fetch(apiUrl('/trainer/certificates/' + certId + '/status') + initDataParam(), { headers: headers() })
+            .then(function(r) { return r.json(); })
+            .then(function(s) {
+              if (s.file_status === 'ready') {
+                genStatusEl.style.display = 'none';
+                downloadLink.href = apiUrl('/trainer/certificates/' + certId + '/file') + initDataParam();
+                downloadLink.style.display = 'inline';
+                if (recipientEmail) {
+                  emailSentEl.style.display = 'block';
+                  emailSentEl.textContent = 'Сертификат готов и отправляется на ' + recipientEmail + ' — если письмо не дойдёт, отправим ещё раз автоматически.';
+                  emailSentEl.style.color = 'var(--tg-theme-hint-color, #666)';
+                }
+              } else if (s.file_status === 'failed') {
+                genStatusEl.style.display = 'block';
+                genStatusEl.textContent = 'Не удалось подготовить файл сертификата. Код уже выдан и действителен — можно повторить.';
+                genStatusEl.style.color = 'var(--tg-theme-destructive-text-color, #e53935)';
+                retryBtn.style.display = 'inline-block';
+              } else {
+                setTimeout(tick, CERT_GEN_POLL_MS);
+              }
+            })
+            .catch(function() { setTimeout(tick, CERT_GEN_POLL_MS); });
+        }
+        tick();
+      }
+      document.getElementById('btnRetryCertGen').onclick = function() {
+        var certId = state.lastIssuedCertId;
+        if (!certId) return;
+        var retryBtn = document.getElementById('btnRetryCertGen');
+        retryBtn.disabled = true;
+        fetch(apiUrl('/trainer/certificates/' + certId + '/retry-generation'), {
+          method: 'POST',
+          headers: headers()
+        })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            retryBtn.disabled = false;
+            if (o.ok) {
+              pollCertFileStatus(certId, state.lastIssuedRecipientEmail);
+            } else {
+              alert(o.data.detail || 'Не удалось повторить');
+            }
+          })
+          .catch(function() { retryBtn.disabled = false; alert('Ошибка сети'); });
+      };
       document.getElementById('btnSubmitCertIssue').onclick = function() {
         if (state.certIssueSubmitting) return;
         var productId = parseInt(document.getElementById('issueProductSelect').value, 10);
         var recipientName = (document.getElementById('issueRecipientName').value || '').trim();
         var recipientEmail = (document.getElementById('issueRecipientEmail').value || '').trim() || null;
         if (!productId) { alert('Выберите сертификат (номинал)'); return; }
-        if (!recipientName) { alert('Укажите имя получателя — оно будет указано в сертификате'); return; }
         var body = { certificate_product_id: productId, recipient_name: recipientName };
         if (recipientEmail) body.recipient_email = recipientEmail;
         if (state.certIssuePurchasedByName) body.purchased_by_name = state.certIssuePurchasedByName;
@@ -1472,29 +1523,13 @@
               document.getElementById('certIssueCode').textContent = o.data.code;
               document.getElementById('certIssueResult').style.display = 'block';
               state.lastIssuedCode = o.data.code;
-              var downloadLink = document.getElementById('certIssueDownloadLink');
-              if (o.data.id && o.data.file_url) {
-                downloadLink.href = apiUrl('/trainer/certificates/' + o.data.id + '/file') + initDataParam();
-                downloadLink.style.display = 'inline';
-              } else {
-                downloadLink.style.display = 'none';
-              }
-              var emailSentEl = document.getElementById('certIssueEmailSent');
-              if (recipientEmail) {
-                emailSentEl.style.display = 'block';
-                if (o.data.email_sent) {
-                  emailSentEl.textContent = 'Сертификат отправлен на ' + recipientEmail;
-                  emailSentEl.style.color = '';
-                } else if (o.data.email_pending) {
-                  emailSentEl.textContent = 'Письмо будет отправлено в ближайшее время (при сбое — повторная отправка по очереди).';
-                  emailSentEl.style.color = 'var(--tg-theme-hint-color, #666)';
-                } else {
-                  emailSentEl.textContent = 'Письмо не удалось отправить на ' + recipientEmail + '. Проверьте настройки SMTP в .env и логи сервера.';
-                  emailSentEl.style.color = 'var(--tg-theme-destructive-text-color, #e53935)';
-                }
-              } else {
-                emailSentEl.style.display = 'none';
-              }
+              state.lastIssuedCertId = o.data.id;
+              state.lastIssuedRecipientEmail = recipientEmail;
+              document.getElementById('certIssueDownloadLink').style.display = 'none';
+              document.getElementById('certIssueEmailSent').style.display = 'none';
+              /* PDF/S3/email happen in the background now (TASK-142/AC-002) — the
+                 POST above only created the row. Poll until file_status leaves 'pending'. */
+              pollCertFileStatus(o.data.id, recipientEmail);
               state.issuedLoaded = false;
               state.issuedPage = 0;
             } else {
@@ -1584,23 +1619,18 @@
         loadCertList();
       };
       /** Display name for catalog (no separate title field on this screen — was reading missing #certName and crashed). */
-      function buildCertProductName(anyAmount, amountCents) {
-        if (anyAmount) return 'Подарочный сертификат';
+      function buildCertProductName(amountCents) {
         var byn = amountCents != null ? Math.round(amountCents / 100) : 0;
         return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
       }
       document.getElementById('btnSaveCertForm').onclick = function() {
         if (state.savingCertProduct) return;
-        var anyAmount = document.getElementById('certAnyAmount').checked;
-        var amountCents = null;
-        if (!anyAmount) {
-          var byn = parseInt(document.getElementById('certAmountByn').value, 10);
-          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
-          amountCents = byn * 100;
-        }
+        var byn = parseInt(document.getElementById('certAmountByn').value, 10);
+        if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
+        var amountCents = byn * 100;
         var titleRaw = (document.getElementById('certTitle').value || '').trim();
         var descRaw = (document.getElementById('certDescription').value || '').trim();
-        var name = titleRaw || buildCertProductName(anyAmount, amountCents);
+        var name = titleRaw || buildCertProductName(amountCents);
         var description = descRaw || null;
         var expiresDaysInput = document.getElementById('certExpiresDays');
         var expiresInDays = null;

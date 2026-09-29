@@ -21,6 +21,7 @@ from src.bot.notification_loops import (
     run_booking_party_notifier_loop,
     run_cancel_notifier_loop,
     run_certificate_email_outbox_loop,
+    run_certificate_file_generation_loop,
     run_completed_feedback_loop,
     run_daily_morning_digest_loop,
     run_group_attendance_prompt_loop,
@@ -118,6 +119,7 @@ async def main() -> None:
     # Background jobs (no bot)
     other_tasks = [
         asyncio.create_task(run_certificate_email_outbox_loop(), name="certificate_email_outbox"),
+        asyncio.create_task(run_certificate_file_generation_loop(), name="certificate_file_generation"),
         asyncio.create_task(run_recurring_materialization_loop(), name="recurring_materialization"),
         asyncio.create_task(run_ice_ingest_scheduler_loop(), name="ice_ingest_scheduler"),
         asyncio.create_task(run_ice_scrape_ttl_loop(), name="ice_scrape_ttl"),

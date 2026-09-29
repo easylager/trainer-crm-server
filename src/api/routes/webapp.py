@@ -304,8 +304,8 @@ from src.application.certificate_use_cases import (
     delete_certificate_product,
     get_certificate_product,
     get_certificate_file_key,
+    get_certificate_file_status,
     get_idempotency_response,
-    insert_certificate_email_outbox,
     issue_certificate,
     list_certificate_instances_for_trainer_client,
     list_certificate_products,
@@ -313,8 +313,8 @@ from src.application.certificate_use_cases import (
     list_trainer_certificate_instances,
     redeem_certificate,
     activate_certificate_by_code,
+    retry_certificate_file_generation,
     set_idempotency_response,
-    update_certificate_email_sent_at,
     update_certificate_product,
 )
 from src.application.subscription_invoice_admin_notify import notify_admins_new_catalog_subscription_invoice
@@ -2406,7 +2406,7 @@ async def post_client_pass_order_request(
 class ClientCertOrderRequestBody(BaseModel):
     certificate_product_id: int = Field(..., ge=1)
     recipient_email: str = Field(..., min_length=3, max_length=320)
-    recipient_name: str = Field(..., min_length=1, max_length=200)
+    recipient_name: str = Field("", max_length=200)  # optional (TASK-142/AC-004)
     nominal_byn: float | None = Field(
         None,
         gt=0,
@@ -2492,7 +2492,6 @@ async def post_client_cert_order_request(
         ),
         "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
         "invalid_email": (422, "Укажите корректный email."),
-        "recipient_name_required": (422, "Укажите имя получателя."),
         "nominal_required": (422, "Укажите сумму сертификата (номинал, " + BYR_SIGN + ")."),
         "nominal_invalid": (422, "Некорректная сумма. Укажите разумный номинал, " + BYR_SIGN + "."),
     }
@@ -5246,7 +5245,7 @@ async def get_trainer_certificate_products(
 class CertificateProductCreateBody(BaseModel):
     name: str | None = None  # optional display title; server picks default from amount if omitted
     description: str | None = None
-    amount_cents: int | None = None  # None = "любая сумма"
+    amount_cents: int = Field(..., gt=0)  # required — "любая сумма" removed (TASK-142/AC-001)
     expires_in_days: int | None = None
     sort_order: int = 0
 
@@ -5257,26 +5256,29 @@ async def post_trainer_certificate_product(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """Create certificate product. amount_cents=null means 'any amount'. Auth: trainer initData."""
+    """Create certificate product with a fixed positive amount. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    product_id = await create_certificate_product(
-        session,
-        trainer_id,
-        name=body.name,
-        description=body.description,
-        amount_cents=body.amount_cents,
-        sort_order=body.sort_order,
-        expires_in_days=body.expires_in_days,
-    )
+    try:
+        product_id = await create_certificate_product(
+            session,
+            trainer_id,
+            name=body.name,
+            description=body.description,
+            amount_cents=body.amount_cents,
+            sort_order=body.sort_order,
+            expires_in_days=body.expires_in_days,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"success": True, "id": product_id}
 
 
 class CertificateProductPatchBody(BaseModel):
     name: str | None = None
     description: str | None = None  # null or "" clears; omit = do not change
-    amount_cents: int | None = None  # None = "любая сумма"; omit = do not change
+    amount_cents: int | None = None  # omit = do not change; must be a positive int if sent
     expires_in_days: int | None = None
     is_active: bool | None = None
     sort_order: int | None = None
@@ -5302,17 +5304,20 @@ async def patch_trainer_certificate_product(
     expires_in_days = payload.get("expires_in_days") if "expires_in_days" in payload else None
     is_active = payload.get("is_active") if "is_active" in payload else None
     sort_order = payload.get("sort_order") if "sort_order" in payload else None
-    ok = await update_certificate_product(
-        session,
-        product_id,
-        trainer_id,
-        name=name,
-        description=description,
-        amount_cents=amount_cents,
-        expires_in_days=expires_in_days,
-        is_active=is_active,
-        sort_order=sort_order,
-    )
+    try:
+        ok = await update_certificate_product(
+            session,
+            product_id,
+            trainer_id,
+            name=name,
+            description=description,
+            amount_cents=amount_cents,
+            expires_in_days=expires_in_days,
+            is_active=is_active,
+            sort_order=sort_order,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if not ok:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"success": True}
@@ -5444,7 +5449,13 @@ async def post_trainer_certificate_issue(
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Issue a certificate: create instance, generate PDF, save file_url; optionally send PDF to recipient_email. Idempotent by Idempotency-Key. Auth: trainer initData."""
+    """
+    Issue a certificate: create instance and return immediately (TASK-142/AC-002).
+    PDF render, S3 upload, and email are done in the background by
+    run_certificate_file_generation_loop — the caller polls
+    GET /trainer/certificates/{id}/status for file_status pending -> ready|failed.
+    Idempotent by Idempotency-Key. Auth: trainer initData.
+    """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
@@ -5466,92 +5477,43 @@ async def post_trainer_certificate_issue(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Generate PDF, upload, set file_url; then optionally send email. On failure return instance without file_url.
-    try:
-        from src.application.certificate_pdf import build_certificate_pdf
-        from src.application.trainer_use_cases import get_trainer
-        from src.infrastructure.s3 import upload_certificate_file
-        from src.application.certificate_use_cases import get_certificate_product, update_certificate_file_url
-        from src.shared.email_sender import send_certificate_pdf_email
-
-        trainer = await get_trainer(session, trainer_id)
-        profile = (trainer or {}).get("profile") or {}
-        first = profile.get("first_name") or ""
-        last = profile.get("last_name") or ""
-        trainer_name = (first + " " + last).strip() or "Тренер"
-        product = await get_certificate_product(session, body.certificate_product_id, trainer_id)
-        product_name = (product or {}).get("name") or "Сертификат"
-        issued_at = instance.get("issued_at")
-        expires_at = instance.get("expires_at")
-        if isinstance(issued_at, str):
-            from datetime import datetime
-            try:
-                issued_at = datetime.fromisoformat(issued_at.replace("Z", "+00:00")).date() if issued_at else None
-            except Exception:
-                issued_at = None
-        if isinstance(expires_at, str):
-            from datetime import datetime
-            try:
-                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00")).date() if expires_at else None
-            except Exception:
-                expires_at = None
-
-        _s = Settings()
-        _code = (instance.get("code") or "").strip()
-        _un = (_s.client_bot_username or "").strip().lstrip("@")
-        _activation = f"https://t.me/{_un}?start=cert_{_code}" if _un and _code else None
-
-        from src.application.collective_use_cases import resolve_certificate_brand_for_trainer
-
-        cert_brand = await resolve_certificate_brand_for_trainer(session, trainer_id)
-
-        pdf_bytes = build_certificate_pdf(
-            trainer_name=trainer_name,
-            product_name=product_name,
-            amount_cents=instance.get("amount_cents") or 0,
-            code=instance.get("code") or "",
-            recipient_name=instance.get("recipient_name") or "—",
-            purchased_by_name=instance.get("purchased_by_name"),
-            issued_at=issued_at,
-            expires_at=expires_at,
-            activation_url=_activation,
-            client_bot_display_name=f"@{_un}" if _un else None,
-            brand_display=str(cert_brand.get("display_name") or ""),
-            brand_tagline=str(cert_brand.get("tagline") or ""),
-            brand_powered_by=cert_brand.get("powered_by"),
-        )
-        file_key = upload_certificate_file(pdf_bytes, trainer_id, instance["id"])
-        await update_certificate_file_url(session, instance["id"], trainer_id, file_key)
-        instance["file_url"] = file_key
-
-        recipient_email = (body.recipient_email or "").strip() or None
-        instance["email_pending"] = False
-        if recipient_email:
-            sent = await send_certificate_pdf_email(
-                recipient_email,
-                pdf_bytes,
-                trainer_name=trainer_name,
-                code=instance.get("code") or "",
-            )
-            instance["email_sent"] = sent
-            if sent:
-                await update_certificate_email_sent_at(session, instance["id"])
-            else:
-                logger.warning("Certificate email not sent to %s (instance id=%s), adding to outbox", recipient_email, instance.get("id"))
-                inserted = await insert_certificate_email_outbox(session, instance["id"], recipient_email)
-                instance["email_pending"] = inserted
-        else:
-            instance["email_sent"] = False
-    except Exception as e:
-        logger.exception("Certificate PDF/upload failed for instance %s: %s", instance.get("id"), e)
-        instance["file_url"] = None
-        instance["email_sent"] = False
-        instance["email_pending"] = False
-
-    instance.setdefault("email_pending", False)
+    instance["file_status"] = "pending"
+    instance["file_url"] = None
     if idempotency_key:
         await set_idempotency_response(session, idempotency_key, instance)
     return instance
+
+
+@router.get("/trainer/certificates/{certificate_id:int}/status")
+async def get_trainer_certificate_status(
+    certificate_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Poll target for the issue screen (TASK-142/AC-002): {file_status, file_url, file_error}."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    status = await get_certificate_file_status(session, certificate_id, trainer_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+    return status
+
+
+@router.post("/trainer/certificates/{certificate_id:int}/retry-generation")
+async def post_trainer_certificate_retry_generation(
+    certificate_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """«Повторить» (TASK-142/Q-003/EDGE-002): requeue a failed background generation."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    ok = await retry_certificate_file_generation(session, certificate_id, trainer_id)
+    if not ok:
+        raise HTTPException(status_code=409, detail="Certificate is not in a failed state")
+    return {"success": True, "file_status": "pending"}
 
 
 @router.get("/trainer/certificates/{certificate_id:int}/file")

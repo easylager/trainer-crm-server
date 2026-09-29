@@ -9,13 +9,13 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609287"></script>
-  <link rel="stylesheet" href="theme.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
-  <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <script src="client-profile-switcher.js?v=202609287"></script>
+  <script src="client-mini-app-theme.js?v=202609290"></script>
+  <link rel="stylesheet" href="theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <script src="mini-app-empty-state.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <script src="client-profile-switcher.js?v=202609290"></script>
   <style>
     body {
       font-family: var(--app-font-sans);
@@ -703,8 +703,8 @@
       opacity: 0.92;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609290" />
 </head>
 <body class="ar-pilot ar-pilot--client-passes-certificates">
   <div class="header">
@@ -782,7 +782,7 @@
         <input type="email" id="cert-orderEmail" class="cert-order-input" placeholder="name@example.com" autocomplete="email">
       </div>
       <div class="cert-order-field">
-        <label for="cert-orderName">Имя получателя</label>
+        <label for="cert-orderName">Имя получателя (необязательно)</label>
         <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Как указать в сертификате" autocomplete="name">
       </div>
       <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
@@ -1364,7 +1364,7 @@
           if (certOrderState.anyAmount) {
             lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в BYN в поле ниже.</span>');
           }
-          lines.push('<span style="font-size:14px;">Укажите email и имя получателя — тренер увидит их в заявке.</span>');
+          lines.push('<span style="font-size:14px;">Укажите email — тренер увидит его в заявке. Имя получателя можно не указывать.</span>');
           t.innerHTML = lines.join('<br>');
         }
         var em = document.getElementById('cert-orderEmail');
@@ -1392,10 +1392,6 @@
             var name = (document.getElementById('cert-orderName').value || '').trim();
             if (!email || email.indexOf('@') < 1) {
               alert('Укажите корректный email');
-              return;
-            }
-            if (!name) {
-              alert('Укажите имя получателя');
               return;
             }
             var nominalByn = null;
@@ -1649,6 +1645,6 @@
       loadCertsPanel();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202609287"></script>
+  <script src="mini-app-client-home.js?v=202609290"></script>
 </body>
 </html>

@@ -250,9 +250,7 @@ async def submit_certificate_product_order_request(
 
     if not is_valid_cert_order_email(recipient_email):
         return {"ok": False, "error": "invalid_email"}
-    rname = (recipient_name or "").strip()
-    if not rname:
-        return {"ok": False, "error": "recipient_name_required"}
+    rname = (recipient_name or "").strip()  # optional (TASK-142/AC-004)
 
     edges = await get_all_edges(client_id, session)
     sess_row = await read_client_bot_session(telegram_id, session)
@@ -323,9 +321,12 @@ async def submit_certificate_product_order_request(
     crow = r_client.fetchone()
     purchaser = (crow[0] or "").strip() if crow else ""
 
+    # AC-004/Q-005: no name given -> the "Получатель: …" line is omitted entirely
+    # rather than shown with a placeholder.
+    recipient_line = f"Получатель: {rname}. " if rname else ""
     human = (
         f'Клиент запрашивает сертификат «{pname}» ({amount_line}).\n'
-        f"Получатель: {rname}. Email для отправки PDF: {recipient_email.strip()}.\n"
+        f"{recipient_line}Email для отправки PDF: {recipient_email.strip()}.\n"
         "Свяжитесь для оплаты. После оплаты выдайте сертификат: раздел «Сертификаты» → «Выдать сертификат»."
     )
     comment = build_certificate_product_order_comment(

@@ -808,7 +808,7 @@ TRAINER_CERT_ORDER_NOTIFICATION = (
     "🎁 <b>Клиент заказывает сертификат</b>\n\n"
     "<b>Клиент (заказчик)</b> — {client_name}\n"
     "<b>Сертификат</b> — {cert_name}\n"
-    "<b>Получатель</b> — {recipient_name}\n"
+    "{recipient_line}"
     "<b>Email для PDF</b> — {recipient_email}\n\n"
     "Свяжитесь для оплаты и выдайте сертификат."
 )
