@@ -28,8 +28,16 @@ async def _trainer_id(db_session: AsyncSession) -> int:
 
 @pytest.mark.asyncio
 async def test_issue_certificate_starts_pending_then_batch_marks_ready(
-    db_session: AsyncSession,
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import src.infrastructure.s3 as s3_module
+
+    monkeypatch.setattr(
+        s3_module,
+        "upload_certificate_file",
+        lambda _body, trainer_id, cert_id: f"certificates/{trainer_id}/{cert_id}.pdf",
+    )
+
     trainer_id = await _trainer_id(db_session)
     product_id = await create_certificate_product(
         db_session, trainer_id, name="Подарок", amount_cents=10000
