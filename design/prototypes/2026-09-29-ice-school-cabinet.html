@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Кабинет школы катания — пересмотр</title>
+<style>
+/* ============================================================================
+   Токены — выдержка из static/webapp/theme.css (ICE PAPER, рабочий экран).
+   Прототип одноразовый: токены скопированы, чтобы файл открывался автономно.
+   Правило системы: НЕЙТРАЛИ АХРОМАТИЧНЫ, ЦВЕТ НАЗЫВАЕТ ТОЛЬКО ДЕЙСТВИЕ И СОСТОЯНИЕ.
+   ========================================================================== */
+:root{
+  --glide-500:#45B9BB; --glide-600:#2E9A9C; --glide-700:#0B6E70; --glide-900:#073C3E;
+  --glide-brand:var(--glide-500);
+  --glide-ink-teal:#0B6E70;
+  --glide-on-fill:#04262A;
+  --glide-brand-wash:rgba(69,185,187,.12);
+
+  --glide-paper:#F1F3F2;
+  --glide-surface:#FFFFFF;
+  --glide-line:#E2E6E5;
+  --glide-line-strong:#CFD6D5;
+  --glide-text:#101617;
+  --glide-hint:#5E6B6B;
+
+  --app-ok:#0F7048; --app-ok-ink:#0F7048; --app-ok-wash:rgba(15,112,72,.1);
+  --app-attention:#C87A15; --app-attention-ink:#8A5300; --app-attention-wash:rgba(200,122,21,.12);
+  --app-danger:#C4342A; --app-danger-ink:#C4342A; --app-danger-wash:rgba(196,52,42,.1);
+
+  --shadow-card:0 2px 4px rgba(16,24,28,.06), 0 12px 32px rgba(16,24,28,.1);
+  --glide-shadow-card:0 1px 2px rgba(16,40,40,.05), 0 10px 28px -18px rgba(16,40,40,.35);
+
+  --page-bg:#E7EAE9;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page-bg); color:var(--glide-text);
+  font-family:var(--sans); -webkit-font-smoothing:antialiased; line-height:1.45;
+}
+.wrap{max-width:1780px;margin:0 auto;padding:48px 28px 96px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+
+/* ── шапка обзора ─────────────────────────────────────────────────────────── */
+.doc-head{max-width:880px;margin:0 0 12px}
+.doc-kicker{
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--glide-ink-teal);
+  background:var(--glide-brand-wash); padding:6px 12px;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%);
+}
+.doc-head h1{font-size:34px;line-height:1.15;margin:16px 0 10px;letter-spacing:-.02em}
+.doc-head p{margin:0 0 9px;color:#38484A;font-size:15.5px}
+.doc-head .warn{
+  margin-top:18px;padding:12px 14px;background:var(--app-attention-wash);
+  border-left:3px solid var(--app-attention);color:var(--app-attention-ink);
+  font-size:13.5px;max-width:800px;
+}
+.doc-head .cut{
+  margin-top:12px;padding:12px 14px;background:var(--glide-surface);
+  border-left:3px solid var(--glide-line-strong);color:#41514F;
+  font-size:13.5px;max-width:800px;
+}
+.doc-head .cut b{color:var(--glide-text)}
+
+/* ── зачем малой школе вообще это / как устроено приложение ─────────────── */
+.why-box{
+  max-width:1060px;margin:28px 0 0;padding:20px 22px;
+  background:var(--glide-surface);box-shadow:var(--glide-shadow-card);
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%);
+}
+.why-box h2{font-size:16px;margin:0 0 12px;letter-spacing:-.01em}
+.why-box ul{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
+.why-box li{font-size:13.5px;padding-left:16px;position:relative;color:#2E3E3F}
+.why-box li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;background:var(--glide-brand)}
+.why-box li b{display:block;font-size:13.5px;color:var(--glide-text);margin-bottom:2px}
+.why-box li span{color:var(--glide-hint);font-size:12.5px}
+.why-box .foot-note{margin:14px 0 0;font-size:12.5px;color:var(--glide-hint);line-height:1.5}
+.why-box .foot-note b{color:var(--glide-text)}
+@media(max-width:760px){.why-box ul{grid-template-columns:1fr}}
+
+/* ── группа-разделитель между экранами (не сам экран) ────────────────────── */
+.group-h{margin:56px 0 -8px;max-width:880px}
+.group-h h2{font-size:13px;margin:0 0 4px;letter-spacing:.06em;text-transform:uppercase;color:var(--glide-ink-teal)}
+.group-h p{margin:0;font-size:13.5px;color:var(--glide-hint);max-width:760px}
+
+/* ── разделитель раздела ──────────────────────────────────────────────────── */
+.wave{margin-top:40px;padding-top:26px;border-top:2px solid var(--glide-line-strong)}
+.wave-h{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.wave-h h2{font-size:25px;margin:0;letter-spacing:-.02em}
+.wave-tag{
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:5px 11px;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%);
+}
+.tag-now{background:var(--glide-brand);color:var(--glide-on-fill)}
+.tag-more{background:var(--glide-surface);color:var(--glide-hint);box-shadow:inset 0 0 0 1px var(--glide-line-strong)}
+.wave p.lede{max-width:820px;font-size:14.5px;color:#41514F;margin:6px 0 0}
+
+.band{display:flex;gap:44px;flex-wrap:wrap;margin-top:30px;align-items:flex-start}
+.band .col-rt{flex:1 1 380px;min-width:300px;max-width:600px}
+
+.io{margin-bottom:26px}
+.io h3{
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin:0 0 11px;
+  color:var(--glide-hint);font-weight:700;
+}
+.io ul{list-style:none;margin:0;padding:0}
+.io li{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--glide-line);font-size:13.5px}
+.io li .m{flex:0 0 auto;width:17px;font-weight:700;line-height:1.5}
+.io li .b{flex:1 1 auto}
+.io li .b b{font-weight:700}
+.io li .b em{font-style:normal;color:var(--glide-hint);display:block;margin-top:2px;font-size:12.5px}
+.m-in{color:var(--app-ok-ink)}
+
+/* ── телефон ──────────────────────────────────────────────────────────────── */
+.phone{
+  background:var(--glide-paper);border:1px solid var(--glide-line-strong);
+  border-radius:26px;overflow:hidden;box-shadow:var(--shadow-card);
+  display:flex;flex-direction:column;width:390px;
+}
+.phone--sheet{height:660px}
+.tg-bar{
+  background:var(--glide-surface);border-bottom:1px solid var(--glide-line);
+  padding:11px 16px;display:flex;align-items:center;gap:9px;flex:0 0 auto;
+}
+.tg-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--glide-line-strong)}
+.tg-bar .back{font-size:17px;font-weight:600;color:var(--glide-hint);line-height:1}
+.tg-bar .t{font-size:12.5px;color:var(--glide-hint);font-weight:600}
+.tg-bar .r{margin-left:auto;font-size:11.5px;color:var(--glide-hint)}
+.vp{flex:1 1 auto;padding:0 0 18px}
+.tx .tt,.tx .ts,.rt .v,.rt .k{display:block}
+
+.hdr{
+  background:var(--glide-surface);padding:15px 16px 14px;
+  border-bottom:1px solid var(--glide-line);
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%);
+}
+.hdr .top{display:flex;align-items:baseline;gap:8px}
+.hdr h3{margin:0;font-size:19px;letter-spacing:-.015em}
+.hdr .season{font-size:12px;color:var(--glide-hint);font-weight:600}
+.hdr .sub{margin:4px 0 0;font-size:12.5px;color:var(--glide-hint)}
+
+.status-line{display:flex;align-items:center;gap:8px;padding:13px 16px 0}
+.status-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.status-dot--ok{background:var(--app-ok)}
+.status-dot--wait{background:var(--app-attention)}
+.status-headline{font-size:14.5px;font-weight:700;letter-spacing:-.008em}
+.status-meta{margin:3px 16px 0 33px;font-size:12px;color:var(--glide-hint)}
+
+.seg{display:flex;gap:6px;padding:12px 16px 2px;overflow-x:auto}
+.seg i{
+  font-style:normal;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;
+  color:var(--glide-hint);background:var(--glide-surface);border:1px solid var(--glide-line);
+  white-space:nowrap;flex:0 0 auto;
+}
+.seg i.on{background:var(--glide-brand);color:var(--glide-on-fill);border-color:transparent}
+
+.sec{padding:16px 16px 0}
+.sec-h{
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--glide-hint);margin:0 0 9px;
+}
+.sec-h a{color:var(--glide-ink-teal);text-decoration:none;font-size:11px;letter-spacing:.02em;text-transform:none}
+
+.card{
+  background:var(--glide-surface);border:1px solid var(--glide-line);
+  border-radius:14px;box-shadow:var(--glide-shadow-card);
+}
+
+/* контрольный список готовности — обязательное/по желанию */
+.checklist{overflow:hidden}
+.ck{display:flex;gap:10px;padding:11px 14px;align-items:flex-start}
+.ck + .ck{border-top:1px solid var(--glide-line)}
+.ck .box{
+  flex:0 0 auto;width:18px;height:18px;margin-top:1px;
+  border:1.5px solid var(--glide-line-strong);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+}
+.ck.done .box{background:var(--app-ok);border-color:var(--app-ok);color:#fff}
+.ck.todo .box{color:transparent}
+.ck .t{font-size:13px;font-weight:600;letter-spacing:-.003em}
+.ck.done .t{color:var(--glide-hint);text-decoration:line-through;text-decoration-color:var(--glide-line-strong)}
+.checklist-soft-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--glide-hint);padding:12px 14px 0}
+
+/* карточка предпросмотра (каталог) */
+.preview-row{display:flex;gap:11px;padding:13px 14px;align-items:center}
+.av{
+  flex:0 0 auto;width:40px;height:40px;background:var(--glide-brand-wash);
+  color:var(--glide-ink-teal);font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%);
+}
+.av--round{clip-path:none;border-radius:50%}
+.preview-row .tx{flex:1 1 auto;min-width:0}
+.preview-row .tt{font-size:14.5px;font-weight:700;letter-spacing:-.008em}
+.preview-row .ts{font-size:12px;color:var(--glide-hint);margin-top:2px}
+.badge{
+  display:inline-block;font-size:10.5px;font-weight:700;padding:3px 7px;letter-spacing:.02em;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%);
+  flex:0 0 auto;
+}
+.b-ok{background:var(--app-ok-wash);color:var(--app-ok-ink)}
+.b-att{background:var(--app-attention-wash);color:var(--app-attention-ink)}
+.b-soon{background:var(--glide-paper);color:var(--glide-hint);box-shadow:inset 0 0 0 1px var(--glide-line)}
+
+/* «зачем это нужно» — свёрнутый блок */
+.why-toggle{
+  margin:14px 16px 0;width:calc(100% - 32px);text-align:left;
+  background:none;border:0;border-top:1px solid var(--glide-line);
+  padding:12px 0 0;font-size:13px;font-weight:700;color:var(--glide-ink-teal);
+  font-family:inherit;cursor:pointer;position:relative;
+}
+.why-toggle::after{content:"▾";position:absolute;right:0;top:12px;font-size:11px}
+.why-body{margin:10px 16px 0;font-size:12.5px;color:#41514F}
+.why-body ul{margin:8px 0;padding-left:16px}
+.why-body li{margin-bottom:4px}
+.why-body .note{color:var(--glide-hint);margin-top:8px}
+
+.link-btn{
+  display:block;margin:12px 16px 0;background:none;border:0;padding:0;
+  font-size:13px;font-weight:700;color:var(--glide-ink-teal);font-family:inherit;
+  cursor:pointer;text-align:left;
+}
+
+.cta{
+  display:block;width:calc(100% - 32px);margin:16px auto 0;padding:12px;border:0;
+  background:var(--glide-brand);color:var(--glide-on-fill);
+  font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;letter-spacing:-.005em;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%);
+}
+.cta.ghost{background:var(--glide-surface);color:var(--glide-ink-teal);box-shadow:inset 0 0 0 1px var(--glide-line-strong)}
+
+/* расписание — дни и слоты; клиенты; команда — общий список-строка */
+.day-h{font-size:11.5px;font-weight:700;color:var(--glide-hint);padding:14px 16px 6px;letter-spacing:.01em}
+.list{overflow:hidden}
+.li{display:flex;gap:11px;padding:11px 14px;align-items:center}
+.li + .li{border-top:1px solid var(--glide-line)}
+.li .time{flex:0 0 auto;width:44px;font-size:12px;font-weight:700;color:var(--glide-text);line-height:1.3}
+.li .tx{flex:1 1 auto;min-width:0}
+.li .tt{font-size:13.5px;font-weight:600;letter-spacing:-.005em}
+.li .ts{font-size:11.5px;color:var(--glide-hint);margin-top:2px}
+.li .coach{
+  flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--glide-ink-teal);
+  background:var(--glide-brand-wash);padding:3px 7px;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%);
+}
+.li.empty{opacity:.55}
+.li.empty .time,.li.empty .tt{color:var(--glide-hint)}
+.li.empty .tt{font-weight:500}
+
+/* снимок дня — Главная */
+.stats{display:flex;padding:14px 16px}
+.stats .st{flex:1;text-align:center}
+.stats .st + .st{border-left:1px solid var(--glide-line)}
+.stats .n{font-size:21px;font-weight:700;letter-spacing:-.02em}
+.stats .k{font-size:10.5px;color:var(--glide-hint);margin-top:2px;line-height:1.3}
+
+/* ссылка-строка на другой раздел (Главная → остальное, «Ещё» → разделы) */
+.jump{overflow:hidden}
+.jump-row{display:flex;gap:11px;padding:12px 14px;align-items:center}
+.jump-row + .jump-row{border-top:1px solid var(--glide-line)}
+.jump-row .tt{font-size:13.5px;font-weight:700;letter-spacing:-.005em}
+.jump-row .ts{font-size:11.5px;color:var(--glide-hint);margin-top:2px}
+.jump-row .go{flex:0 0 auto;font-size:16px;color:var(--glide-line-strong)}
+
+/* лист «Ещё» — выезжает снизу поверх приглушённого фона */
+.sheet-wrap{position:relative;flex:1 1 auto;background:rgba(16,24,28,.28)}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;background:var(--glide-surface);
+  border-top:1px solid var(--glide-line-strong);border-radius:18px 18px 0 0;
+  box-shadow:0 -8px 28px rgba(16,24,28,.18);padding-bottom:4px;
+}
+.sheet-handle{width:36px;height:4px;background:var(--glide-line-strong);border-radius:2px;margin:10px auto 4px}
+.sheet-h{padding:6px 16px 12px;font-size:15px;font-weight:700;letter-spacing:-.01em}
+
+/* таб-бар — низ приложения */
+.tabbar{display:flex;border-top:1px solid var(--glide-line);margin-top:16px;padding:9px 4px 2px;background:var(--glide-surface)}
+.tabbar__it{flex:1;text-align:center;font-size:10px;font-weight:600;color:var(--glide-hint);padding:4px 1px}
+.tabbar__it.on{color:var(--glide-ink-teal);font-weight:700}
+
+/* подвал — сознательно не закладываем */
+.foot{margin-top:56px;padding-top:26px;border-top:2px solid var(--glide-line-strong);max-width:940px}
+.foot h2{font-size:20px;margin:0 0 6px;letter-spacing:-.018em}
+.foot p.small{font-size:13.5px;color:#41514F;margin:8px 0 18px;max-width:820px}
+.foot ul{list-style:none;margin:0;padding:0}
+.foot li{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--glide-line);font-size:13.5px}
+.foot li .m{flex:0 0 auto;width:17px;color:var(--glide-line-strong);font-weight:700}
+.foot li b{font-weight:700}
+.foot li em{font-style:normal;color:var(--glide-hint);display:block;margin-top:2px;font-size:12.5px}
+
+@media (max-width:900px){
+  .wrap{padding:28px 16px 64px}
+  .doc-head h1{font-size:26px}
+  .band{gap:30px}
+  .phone{width:100%;max-width:390px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <span class="doc-kicker">EPIC6 · ice-school-b2b · пересмотр после ревью</span>
+    <h1>Кабинет школы катания — заново</h1>
+    <p>Экраны на дизайн-системе GLIDE (ICE PAPER, рабочий режим) — та же визуальная грамматика, что у тренерского каталога и расписания.</p>
+    <p>Пять пунктов таб-бара: <b>Главная</b> (точка входа), <b>Расписание</b>, <b>Клиенты</b>, <b>Каталог</b> и <b>Ещё</b> — полка, куда встают все следующие разделы (Команда, Подписка, Абонементы и сертификаты одним разделом, Заявки, Статистика) без переделки навигации.</p>
+    <div class="cut">
+      <b>Не «пока не в MVP» — не в этом дизайне вообще:</b> счета, долги клиентов, любой учёт задолженности;
+      сценарий ухода тренера и передача его групп школе. Ни модели, ни заглушки под это не закладываем —
+      группа по-прежнему принадлежит тренеру-ведущему, как в соло-продукте. Клиенты, абонементы и сертификаты — это
+      другое: те же справочники, что уже есть у тренера, просто на уровне школы. Им ниже есть место в навигации.
+    </div>
+  </header>
+
+  <div class="why-box">
+    <h2>Что вообще нужно небольшой школе катания (3–15 тренеров, аренда льда, детские группы)</h2>
+    <ul>
+      <li><b>Родитель должен сразу понять, кому доверяет ребёнка</b><span>направление (фигурное катание / хоккейная подготовка / общий каток), возраст групп, состав тренеров с фото — это заменяет школе сайт и отзывы</span></li>
+      <li><b>Группа — единица расписания, не просто время</b><span>родитель ищет «куда записать ребёнка 6 лет», а не свободный слот; группы по возрасту/уровню важнее произвольных окон</span></li>
+      <li><b>Расписание привязано к конкретному льду</b><span>школа не владеет ареной — она арендует часы; где и когда группа катается, должно быть видно без похода в чат с директором</span></li>
+      <li><b>Директор один — тренеров несколько</b><span>ему нужно расставить/поправить расписание всем сразу, не прося каждого тренера сделать это самому в своём телефоне</span></li>
+      <li><b>Пригласить тренера — не форма регистрации</b><span>директор шлёт ссылку в чат, как уже устроен claim школы; тренер просто открывает её и оказывается в составе</span></li>
+      <li><b>Список детей — общий, не у каждого тренера свой</b><span>ребёнок может сменить группу или тренера внутри школы; директору нужно видеть всех, а не спрашивать каждого тренера отдельно</span></li>
+    </ul>
+  </div>
+
+  <div class="why-box">
+    <h2>Как выглядит приложение целиком — навигация, которая не развалится от роста</h2>
+    <div class="seg" style="padding:0;margin:0 0 14px">
+      <i class="on">Главная</i><i>Расписание</i><i>Клиенты</i><i>Каталог</i><i>Ещё</i>
+    </div>
+    <ul>
+      <li><b>Главная</b><span>точка входа: пока профиль не готов — чек-лист наверху; как готов — снимок дня и ссылки на остальное</span></li>
+      <li><b>Расписание</b><span>тот же календарь, что у тренера, с переключателем «чьё расписание» наверху</span></li>
+      <li><b>Клиенты</b><span>общая база детей школы: кто, у какого тренера, в какой группе — независимо от того, кто вносил запись</span></li>
+      <li><b>Каталог</b><span>честное размещение школы — тот же принцип, что у тренера</span></li>
+      <li><b>Ещё</b><span>полка для всего, что не открывают каждый день: Команда, Профиль школы, Подписка — и сюда же встанут Абонементы с сертификатами (один раздел) и Заявки, когда до них дойдёт очередь</span></li>
+    </ul>
+    <p class="foot-note">
+      <b>Это не наша выдумка — так уже устроено тренерское приложение.</b> У тренера в основном таб-баре тоже
+      четыре пункта плюс «Ещё» (<code>mini-app-trainer-shell.js</code>), а «Профиль», «Абонементы», «Подписка», «Заявки», «Группы»
+      и «Рефералы» живут внутри неё. Школа наследует тот же паттерн, но не копирует список 1:1 — Абонементы и
+      Сертификаты объединяем в один раздел (клиенту всё равно, что это разные таблицы в базе), а «Рефералы»
+      не переносим — это тренерская механика привлечения, школе не подходит.
+    </p>
+  </div>
+
+  <!-- ══════════════ ГЛАВНАЯ — ТОЧКА ВХОДА ═══════════════════════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>Главная</h2>
+      <span class="wave-tag tag-now">точка входа, не вкладка «Профиль»</span>
+    </div>
+    <p class="lede">Адаптивный экран. Пока профиль не готов — сверху чек-лист (следующий экран). Как только готов — чек-лист сворачивается в ссылку внизу, а на первый план выходит снимок сегодняшнего дня и ссылки на остальные разделы.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="dot"></span><span class="t">Кристалл · главная</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="hdr">
+              <div class="top"><h3>Кристалл</h3></div>
+              <p class="sub">Минск · фигурное катание</p>
+            </div>
+
+            <div class="status-line">
+              <span class="status-dot status-dot--ok" aria-hidden="true"></span>
+              <span class="status-headline">Школа активна в каталоге</span>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Сегодня, вторник</span></p>
+              <div class="card stats">
+                <div class="st"><div class="n">6</div><div class="k">занятий</div></div>
+                <div class="st"><div class="n">4</div><div class="k">тренера заняты</div></div>
+                <div class="st"><div class="n">2</div><div class="k">окна свободны</div></div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Разделы</span></p>
+              <div class="card jump">
+                <div class="jump-row"><span class="tx"><span class="tt">Расписание</span><span class="ts">2 свободных окна на этой неделе</span></span><span class="go">›</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Клиенты</span><span class="ts">41 ребёнок в 12 группах</span></span><span class="go">›</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Каталог</span><span class="ts">Активна · 124 показа за 7 дней</span></span><span class="go">›</span></div>
+              </div>
+            </div>
+
+            <button type="button" class="link-btn">Редактировать профиль школы →</button>
+
+            <nav class="tabbar" aria-label="Разделы">
+              <span class="tabbar__it on">Главная</span><span class="tabbar__it">Расписание</span><span class="tabbar__it">Клиенты</span><span class="tabbar__it">Каталог</span><span class="tabbar__it">Ещё</span>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Не карточка-визитка, а рабочий экран</b><em>Директор открывает приложение не полюбоваться профилем, а узнать, что сегодня со школой — как тренер открывает «Главную», а не «Профиль».</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Профиль не пропадает — просто уходит вниз</b><em>Ссылка «Редактировать профиль» остаётся всегда доступной, но не спорит за внимание с сегодняшним днём.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Три ссылки, а не дашборд из десяти плиток</b><em>Расписание, клиенты, каталог — больше директору ежедневно нечего проверять в этом дизайне; Команда и остальное — уровнем ниже, в «Ещё».</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="group-h">
+    <h2>Вкладки таб-бара — на них директор заходит каждый день</h2>
+    <p>Расписание, Клиенты, Каталог. Плюс уже показанная Главная. Всё, что реже — ниже, во второй группе.</p>
+  </div>
+
+  <!-- ══════════════ 1 — РАСПИСАНИЕ (АДМИН, НЕСКОЛЬКО ТРЕНЕРОВ) ══════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>1 · Расписание</h2>
+      <span class="wave-tag tag-now">тот же экран, что у тренера</span>
+    </div>
+    <p class="lede">Не второй продукт — тот же календарь, что открывает тренер у себя. Сверху появляется переключатель: чьё расписание сейчас смотришь и редактируешь.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="dot"></span><span class="t">Кристалл · расписание</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="hdr">
+              <div class="top"><h3>Расписание</h3><span class="season">неделя 29 сент – 5 окт</span></div>
+              <p class="sub">Каток «Минск-Арена» · зал 2</p>
+            </div>
+
+            <div class="seg" aria-label="Чьё расписание">
+              <i class="on">Все · 8</i><i>Петрова</i><i>Волкова</i><i>Гринь</i><i>+5</i>
+            </div>
+
+            <p class="day-h">Вторник, 30 сентября</p>
+            <div class="card list">
+              <div class="li">
+                <span class="time">17:00</span>
+                <span class="tx"><span class="tt">Начальная-1</span><span class="ts">12 детей · зал 2</span></span>
+                <span class="coach">Петрова</span>
+              </div>
+              <div class="li">
+                <span class="time">18:30</span>
+                <span class="tx"><span class="tt">Стартовая-2</span><span class="ts">9 детей · зал 2</span></span>
+                <span class="coach">Волкова</span>
+              </div>
+              <div class="li empty">
+                <span class="time">20:00</span>
+                <span class="tx"><span class="tt">Окно свободно</span></span>
+              </div>
+            </div>
+
+            <p class="day-h">Суббота, 4 октября</p>
+            <div class="card list">
+              <div class="li">
+                <span class="time">09:00</span>
+                <span class="tx"><span class="tt">Хоккей-подготовка</span><span class="ts">14 детей · зал 1</span></span>
+                <span class="coach">Гринь</span>
+              </div>
+            </div>
+
+            <button type="button" class="cta">+ Добавить окно</button>
+
+            <nav class="tabbar" aria-label="Разделы">
+              <span class="tabbar__it">Главная</span><span class="tabbar__it on">Расписание</span><span class="tabbar__it">Клиенты</span><span class="tabbar__it">Каталог</span><span class="tabbar__it">Ещё</span>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Один раздел «Расписание», не два продукта</b><em>Сетка, карточка окна, кнопка «Добавить» — 1:1 экран тренера. Меняется только переключатель сверху.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>«Все» показывает подпись тренера на каждом окне</b><em>Директору важно видеть школу целиком за раз, не переключаясь по одному тренеру.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Выбор тренера — тот же экран, что у него самого</b><em>Директор создаёт окно так же, как тренер создал бы себе сам: то же поведение, тот же язык интерфейса.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Лёд не моделируем как ресурс</b><em>Зал/каток — подпись на карточке для ориентира, не отдельная система учёта часов. Экономика льда — гипотеза R3, не подтверждена.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 2 — КЛИЕНТЫ (ОБЩАЯ БАЗА ДЕТЕЙ ШКОЛЫ) ═══════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>2 · Клиенты</h2>
+      <span class="wave-tag tag-now">база детей школы — общая, не у каждого тренера своя</span>
+    </div>
+    <p class="lede">То, о чём спрашивал владелец отдельно: да, база клиентов нужна — но как справочник «кто, у кого, в какой группе», а не как биллинг. Ровно тот же список, что видит тренер про своих, только собранный по всей школе.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="dot"></span><span class="t">Кристалл · клиенты</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="hdr">
+              <div class="top"><h3>Клиенты</h3><span class="season">41 ребёнок</span></div>
+              <p class="sub">12 групп · 8 тренеров</p>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Начальная-1 · Петрова</span></p>
+              <div class="card list">
+                <div class="li">
+                  <span class="av av--round">МК</span>
+                  <span class="tx"><span class="tt">Мирон Ковалёв, 6 лет</span><span class="ts">мама Ирина</span></span>
+                </div>
+                <div class="li">
+                  <span class="av av--round">ЕР</span>
+                  <span class="tx"><span class="tt">Егор Русак, 6 лет</span><span class="ts">мама Светлана</span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Стартовая-2 · Волкова</span></p>
+              <div class="card list">
+                <div class="li">
+                  <span class="av av--round">АЛ</span>
+                  <span class="tx"><span class="tt">Алиса Левчук, 7 лет</span><span class="ts">папа Виктор</span></span>
+                </div>
+              </div>
+            </div>
+
+            <nav class="tabbar" aria-label="Разделы">
+              <span class="tabbar__it">Главная</span><span class="tabbar__it">Расписание</span><span class="tabbar__it on">Клиенты</span><span class="tabbar__it">Каталог</span><span class="tabbar__it">Ещё</span>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Справочник, а не CRM с балансами</b><em>Имя, возраст, контакт родителя, группа и тренер. Ни оплат, ни истории посещений — это следующий вопрос, не этого дизайна.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Сгруппировано по группе, как их видит директор</b><em>Директор думает не «список детей», а «кто в Начальной-1» — заголовки групп повторяют структуру Расписания.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Источник данных не новый</b><em>Ребёнок уже существует в системе, как только записан на первое занятие — экран просто агрегирует то, что у тренеров уже есть, по всей школе.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ 3 — КАТАЛОГ ════════════════════════════════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>3 · Каталог</h2>
+      <span class="wave-tag tag-now">честно и прозрачно, как у тренера</span>
+    </div>
+    <p class="lede">«Так вас видят» — до, а не после публикации. Тот же принцип, что в тренерском каталоге: понятный статус, что мешает, зачем это вообще нужно, и что случилось с карточкой за последнее время.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="dot"></span><span class="t">Кристалл · каталог</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="status-line" style="padding-top:16px">
+              <span class="status-dot status-dot--wait" aria-hidden="true"></span>
+              <span class="status-headline">На проверке</span>
+            </div>
+            <p class="status-meta">Отправлено вчера · обычно проверяем в течение рабочего дня</p>
+
+            <div class="sec">
+              <p class="sec-h"><span>Так вас видят в каталоге</span></p>
+              <div class="card">
+                <div class="preview-row">
+                  <span class="av">КР</span>
+                  <span class="tx">
+                    <span class="tt">Кристалл</span>
+                    <span class="ts">Минск · фигурное катание · 8 тренеров · группы 4–12 лет</span>
+                  </span>
+                  <span class="badge b-att">на проверке</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Мешает публикации</span></p>
+              <div class="card checklist">
+                <div class="ck todo"><span class="box"></span><span class="t">Не хватает фото хотя бы одного тренера</span></div>
+              </div>
+              <button type="button" class="link-btn">Дополнить в анкете →</button>
+            </div>
+
+            <button type="button" class="why-toggle" aria-expanded="false">Зачем это нужно</button>
+            <div class="why-body">
+              <p>Карточка школы работает как витрина для родителей, которые о вас ещё не знают:</p>
+              <ul>
+                <li>её видят в вашем городе и на страницах арен, где вы арендуете лёд</li>
+                <li>родители пишут сразу вам — ссылка на школу не нужна</li>
+                <li>видно направление и возраст групп, поэтому пишут по делу, а не «а что у вас есть»</li>
+              </ul>
+              <p class="note">Проверяем карточку один раз — обычно в течение рабочего дня. Дальше она работает сама.</p>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>История изменений</span></p>
+              <div class="card list">
+                <div class="li"><span class="time">22.09</span><span class="tx"><span class="tt">Отправлено на проверку</span></span></div>
+                <div class="li"><span class="time">21.09</span><span class="tx"><span class="tt">Добавлены 3 тренера в состав</span></span></div>
+              </div>
+            </div>
+
+            <nav class="tabbar" aria-label="Разделы">
+              <span class="tabbar__it">Главная</span><span class="tabbar__it">Расписание</span><span class="tabbar__it">Клиенты</span><span class="tabbar__it on">Каталог</span><span class="tabbar__it">Ещё</span>
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Предпросмотр раньше публикации</b><em>Снимает страх «опубликуется что-то кривое» — директор видит карточку такой, какой её увидит родитель, ещё до отправки на проверку.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Одна фраза, одна причина, одно действие</b><em>Статус наверху экрана — как в тренерском каталоге: не нужно читать весь экран, чтобы понять, что происходит.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>«Зачем» свёрнуто, а не выключено</b><em>Нужно директору один раз — при первом размещении. Развёрнутым занимало бы больше экрана, чем сама карточка.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="group-h">
+    <h2>Открывается из «Ещё» — не каждый день, но нужно</h2>
+    <p>Профиль школы и Команда сегодня; Подписка, Абонементы с сертификатами и Заявки сюда же встанут позже — без нового таба. Эти экраны выезжают поверх текущего, поэтому вместо таб-бара внизу — «‹ Назад» вверху.</p>
+  </div>
+
+  <!-- ══════════════ ЕЩЁ — САМА ПОЛКА ═══════════════════════════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>Ещё</h2>
+      <span class="wave-tag tag-more">полка, а не свалка — короткий список, не меню на 20 строк</span>
+    </div>
+    <p class="lede">Отсюда директор попадает в Команду и Профиль школы сегодня. Подписка, Абонементы с сертификатами, Заявки и Статистика показаны как они лягут в тот же список — это не новая архитектура, просто ещё несколько строк, когда до них дойдёт очередь.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone phone--sheet">
+          <div class="tg-bar"><span class="dot"></span><span class="t">Кристалл</span><span class="r">●●●</span></div>
+          <div class="sheet-wrap">
+            <div class="sheet">
+              <div class="sheet-handle" aria-hidden="true"></div>
+              <p class="sheet-h">Ещё</p>
+              <div class="card jump" style="margin:0 16px;width:calc(100% - 32px)">
+                <div class="jump-row"><span class="tx"><span class="tt">Команда</span><span class="ts">8 тренеров · 1 приглашение ждёт ответ</span></span><span class="go">›</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Профиль школы</span><span class="ts">Заполнен на 70%</span></span><span class="go">›</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Подписка</span><span class="ts">Бэкенд уже есть (TASK-112/113) — нужен только экран</span></span><span class="badge b-soon">скоро</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Абонементы и сертификаты</span><span class="ts">Один раздел, не два — не спроектировано</span></span><span class="badge b-soon">скоро</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Заявки</span><span class="ts">Обращения из каталога — не спроектировано</span></span><span class="badge b-soon">скоро</span></div>
+                <div class="jump-row"><span class="tx"><span class="tt">Статистика</span><span class="ts">Не спроектировано — не в этом дизайне</span></span><span class="badge b-soon">скоро</span></div>
+              </div>
+              <div style="height:14px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Список, а не меню-стена</b><em>6 строк, не 15. Абонементы и сертификаты — один раздел, не два: клиенту всё равно, что в базе это разные таблицы.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>«Скоро» — честная метка, не тёмный узор</b><em>Строка видна сразу, чтобы директор знал, что это планируется, а не забыто — но не даёт нажать на то, чего ещё нет.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Подписка — не новая идея, а недостающий экран</b><em>API для неё уже в проде: TASK-112 (owner/admin видит статус) и TASK-113 (админ платформы вручную выдаёт/продлевает) — самая дешёвая строка списка для реализации.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Паттерн уже проверен в проде</b><em>Тренерское «Ещё» держит семь разделов без потери читаемости — школе хватит и шести надолго.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ ПРОФИЛЬ ШКОЛЫ (ИЗ «ЕЩЁ») ═══════════════════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>Профиль школы</h2>
+      <span class="wave-tag tag-more">качественный онбординг</span>
+    </div>
+    <p class="lede">Не вкладка — открывается с Главной при первом входе, а потом из «Ещё» → «Профиль школы». Тот же чек-лист готовности, что у тренера: обязательное и «можно усилить» разведены, каждый пункт ведёт прямо в анкету.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="back">‹</span><span class="t">Профиль школы</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="hdr">
+              <div class="top"><h3>Кристалл</h3></div>
+              <p class="sub">Минск · фигурное катание · дети 4–12 лет</p>
+            </div>
+
+            <div class="status-line">
+              <span class="status-dot status-dot--wait" aria-hidden="true"></span>
+              <span class="status-headline">Профиль заполнен на 70%</span>
+            </div>
+            <p class="status-meta">Осталось 2 обязательных пункта — без них школа не попадёт в каталог</p>
+
+            <div class="sec">
+              <p class="sec-h"><span>Обязательно</span></p>
+              <div class="card checklist">
+                <div class="ck done"><span class="box">✓</span><span class="t">Название и логотип</span></div>
+                <div class="ck done"><span class="box">✓</span><span class="t">Город и каток, где занимаетесь</span></div>
+                <div class="ck todo"><span class="box"></span><span class="t">Направление и возраст групп</span></div>
+                <div class="ck todo"><span class="box"></span><span class="t">Хотя бы один тренер с фото и специализацией</span></div>
+              </div>
+              <p class="checklist-soft-label">Можно усилить — необязательно</p>
+              <div class="card checklist" style="margin-top:8px">
+                <div class="ck todo"><span class="box"></span><span class="t">Фото зала или льда</span></div>
+                <div class="ck todo"><span class="box"></span><span class="t">Короткое описание школы</span></div>
+              </div>
+              <button type="button" class="link-btn">Заполнить анкету →</button>
+            </div>
+
+            <button type="button" class="cta">Продолжить заполнение</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Обязательное — минимум для доверия родителя</b><em>Название, каток, направление и возраст, хотя бы один тренер с лицом — без этого карточка школы неотличима от пустышки.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>«По желанию» реально необязательно</b><em>Фото зала и описание усиливают карточку, но не блокируют размещение — так же, как у тренера.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Каждый пункт — ссылка в анкету</b><em>Список без двери означает, что директор читает названия полей и не знает, где их искать.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ КОМАНДА (ИЗ «ЕЩЁ») ══════════════════════════════════════ -->
+  <section class="wave">
+    <div class="wave-h">
+      <h2>Команда</h2>
+      <span class="wave-tag tag-more">кто в школе, кого приглашаем</span>
+    </div>
+    <p class="lede">Без неё некого показывать в карточке школы («хотя бы один тренер с фото» из чек-листа) и не на кого переключаться в расписании. Приглашение — та же ссылка-клейм, что уже открывает школу директору.</p>
+
+    <div class="band">
+      <div>
+        <div class="phone">
+          <div class="tg-bar"><span class="back">‹</span><span class="t">Команда</span><span class="r">●●●</span></div>
+          <div class="vp">
+            <div class="hdr">
+              <div class="top"><h3>Команда</h3><span class="season">8 тренеров</span></div>
+              <p class="sub">1 приглашение отправлено</p>
+            </div>
+
+            <div class="sec">
+              <p class="sec-h"><span>Тренеры</span></p>
+              <div class="card list">
+                <div class="li">
+                  <span class="av av--round">ПТ</span>
+                  <span class="tx"><span class="tt">Петрова Анна</span><span class="ts">3 группы · пн, ср, пт</span></span>
+                  <span class="badge b-ok">в школе</span>
+                </div>
+                <div class="li">
+                  <span class="av av--round">ВЛ</span>
+                  <span class="tx"><span class="tt">Волкова Дарья</span><span class="ts">2 группы · вт, чт</span></span>
+                  <span class="badge b-ok">в школе</span>
+                </div>
+                <div class="li">
+                  <span class="av av--round">ГР</span>
+                  <span class="tx"><span class="tt">Гринь Максим</span><span class="ts">2 группы · сб</span></span>
+                  <span class="badge b-ok">в школе</span>
+                </div>
+                <div class="li empty">
+                  <span class="av av--round" style="opacity:.6">СК</span>
+                  <span class="tx"><span class="tt">Скворцова Ольга</span><span class="ts">приглашение отправлено 2 дня назад</span></span>
+                  <span class="badge b-att">ждёт ответ</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="cta">+ Пригласить тренера</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-rt">
+        <div class="io">
+          <h3>Почему так</h3>
+          <ul>
+            <li><span class="m m-in">✓</span><span class="b"><b>Состав, а не CRM</b><em>Имя, группы, дни и статус — ровно то, что нужно директору для расписания и каталога. Ни ставок, ни зарплат.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Приглашение — знакомый механизм</b><em>Та же claim-ссылка, что уже приводит директора в школу (TASK-105) — тренер просто открывает её и появляется здесь со статусом «ждёт ответа», потом «в школе».</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Тап по тренеру ведёт в его расписание</b><em>Замыкает круг на экран «Расписание» — тот же переключатель, уже выбранный на нужном имени.</em></span></li>
+            <li><span class="m m-in">✓</span><span class="b"><b>Уход тренера сюда не входит</b><em>Убрать строку можно, но передачи групп/клиентов не моделируем — см. подвал страницы.</em></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <h2>Сознательно не в этом дизайне</h2>
+    <p class="small">Не «следующая волна» — вопрос, который проектируем отдельно и заново, если/когда встанет. Подписка, Абонементы с сертификатами и Заявки в этот список не входят — для них уже есть место в «Ещё», просто содержимое экранов не спроектировано сейчас.</p>
+    <ul>
+      <li><span class="m">—</span><span class="b"><b>Деньги, счета, долги клиентов</b><em>Оплата школе остаётся вне этих экранов. Директор пока не открывает приложение ради денег.</em></span></li>
+      <li><span class="m">—</span><span class="b"><b>Уход тренера и передача группы школе</b><em>Группа принадлежит тренеру-ведущему, как в соло-продукте. Модель владения не меняем.</em></span></li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

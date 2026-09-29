@@ -28,12 +28,14 @@ MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU = "Эта платформа мини-�
 MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение временно недоступно. Попробуйте позже."
 MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение тренера временно недоступно. Попробуйте позже."
 MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU = "Мини-приложение клиента временно недоступно. Попробуйте позже."
+MINIAPP_ORG_NOT_CONFIGURED_DETAIL_RU = "Кабинет школы временно недоступен. Попробуйте позже."
 
 __all__ = [
     "MINIAPP_ADMIN_NOT_CONFIGURED_DETAIL_RU",
     "MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU",
     "MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU",
     "MINIAPP_NOT_ADMIN_DETAIL_RU",
+    "MINIAPP_ORG_NOT_CONFIGURED_DETAIL_RU",
     "MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU",
     "MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU",
     "MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU",

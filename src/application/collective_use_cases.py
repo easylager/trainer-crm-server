@@ -82,6 +82,12 @@ MEMBER_STATUS_INVITED = "invited"
 MEMBER_STATUS_ACTIVE = "active"
 MEMBER_STATUS_LEFT = "left"
 
+# EPIC5/TASK-141: org bot operator (director), distinct from coach collective_members.
+OPERATOR_ROLE_OWNER = "owner"
+OPERATOR_ROLE_ADMIN = "admin"
+OPERATOR_STATUS_ACTIVE = "active"
+OPERATOR_STATUS_REMOVED = "removed"
+
 TOKEN_KIND_CLAIM = "claim"
 TOKEN_KIND_INVITE = "invite"
 
@@ -115,6 +121,17 @@ class ConsumeCollectiveClaimResult:
     slug: str | None = None
     display_name: str | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class CollectiveOperatorContext:
+    """Org bot operator (director) — separate identity axis from CollectiveMembershipContext."""
+
+    collective_id: int
+    slug: str
+    display_name: str
+    status: str  # collectives.status — draft (onboarding) | active | suspended
+    role: Literal["owner", "admin"]
 
 
 @dataclass(frozen=True)
@@ -737,9 +754,11 @@ async def issue_collective_claim_token(
     await session.commit()
 
     settings = Settings()
-    trainer_uname = (getattr(settings, "trainer_bot_username", None) or "").strip().lstrip("@")
+    # TASK-141/EPIC5 TASK-105: director claims via the org bot, not the trainer bot — an
+    # operator is not a coach (PDEC-007/008), claiming here must never create a ghost trainer.
+    org_uname = (getattr(settings, "org_bot_username", None) or "").strip().lstrip("@")
     start_payload = f"col_claim_{token}"
-    deep_link = f"https://t.me/{trainer_uname}?start={start_payload}" if trainer_uname else None
+    deep_link = f"https://t.me/{org_uname}?start={start_payload}" if org_uname else None
 
     return {
         "collective_id": collective_id,
@@ -878,6 +897,293 @@ async def consume_collective_claim_token(
         slug=slug,
         display_name=display_name,
     )
+
+
+async def consume_collective_claim_token_for_operator(
+    session: AsyncSession,
+    token: str,
+    telegram_id: int,
+) -> ConsumeCollectiveClaimResult:
+    """
+    Org bot claim: assign operator to draft collective and activate it.
+
+    Never touches `trainers` or `collective_members` — operator is a distinct identity axis
+    from coach (PDEC-007/008). `owner_trainer_id` is left null for org-bot claims; only
+    legacy trainer-bot claims (`consume_collective_claim_token`) still write it.
+    """
+    now = datetime.now(timezone.utc)
+    tok = (token or "").strip()
+    if not tok:
+        return ConsumeCollectiveClaimResult(error="invalid_token")
+
+    result = await session.execute(
+        text(
+            """
+            SELECT ct.collective_id, c.slug, c.display_name, c.status
+            FROM collective_tokens ct
+            INNER JOIN collectives c ON c.id = ct.collective_id
+            WHERE ct.token = :token
+              AND ct.kind = :kind
+              AND ct.used_at IS NULL
+              AND ct.expires_at > :now
+            FOR UPDATE OF ct
+            """
+        ),
+        {"token": tok, "kind": TOKEN_KIND_CLAIM, "now": now},
+    )
+    row = result.fetchone()
+    if row is None:
+        return ConsumeCollectiveClaimResult(error="invalid_token")
+
+    collective_id = int(row[0])
+    slug = str(row[1])
+    display_name = str(row[2])
+    status = str(row[3])
+    if status != COLLECTIVE_STATUS_DRAFT:
+        return ConsumeCollectiveClaimResult(error="collective_not_draft")
+
+    existing_op = await session.execute(
+        text(
+            """
+            SELECT telegram_id, role FROM collective_operators
+            WHERE collective_id = :cid AND status = :active
+            FOR UPDATE
+            """
+        ),
+        {"cid": collective_id, "active": OPERATOR_STATUS_ACTIVE},
+    )
+    op_rows = existing_op.fetchall()
+    for op_row in op_rows:
+        if int(op_row[0]) == int(telegram_id):
+            return ConsumeCollectiveClaimResult(error="already_in_collective")
+        if str(op_row[1]) == OPERATOR_ROLE_OWNER:
+            return ConsumeCollectiveClaimResult(error="already_claimed")
+
+    await session.execute(
+        text(
+            """
+            UPDATE collectives
+            SET status = :active,
+                updated_at = :now
+            WHERE id = :cid
+            """
+        ),
+        {"active": COLLECTIVE_STATUS_ACTIVE, "now": now, "cid": collective_id},
+    )
+    await session.execute(
+        text(
+            """
+            INSERT INTO collective_operators (
+                collective_id, telegram_id, role, status, created_at, updated_at
+            )
+            VALUES (:cid, :tgid, :role, :status, :now, :now)
+            ON CONFLICT (collective_id, telegram_id)
+            DO UPDATE SET
+                role = EXCLUDED.role,
+                status = EXCLUDED.status,
+                updated_at = EXCLUDED.updated_at
+            """
+        ),
+        {
+            "cid": collective_id,
+            "tgid": int(telegram_id),
+            "role": OPERATOR_ROLE_OWNER,
+            "status": OPERATOR_STATUS_ACTIVE,
+            "now": now,
+        },
+    )
+    await session.execute(
+        text("UPDATE collective_tokens SET used_at = :now WHERE token = :token"),
+        {"now": now, "token": tok},
+    )
+    await session.commit()
+    return ConsumeCollectiveClaimResult(
+        collective_id=collective_id,
+        slug=slug,
+        display_name=display_name,
+    )
+
+
+async def resolve_operator_membership(
+    session: AsyncSession,
+    telegram_id: int,
+    *,
+    collective_slug: str | None = None,
+) -> CollectiveOperatorContext | None:
+    """Pick operator row by slug or default primary (owner-first, oldest first)."""
+    norm_slug = normalize_collective_slug(collective_slug) if collective_slug else None
+    sql = """
+        SELECT co.collective_id, c.slug, c.display_name, c.status, co.role
+        FROM collective_operators co
+        INNER JOIN collectives c ON c.id = co.collective_id
+        WHERE co.telegram_id = :tgid AND co.status = :active
+    """
+    params: dict[str, Any] = {"tgid": telegram_id, "active": OPERATOR_STATUS_ACTIVE}
+    if norm_slug:
+        sql += " AND c.slug = :slug"
+        params["slug"] = norm_slug
+    sql += """
+        ORDER BY CASE WHEN co.role = :owner THEN 0 ELSE 1 END, co.created_at ASC, c.id ASC
+        LIMIT 1
+    """
+    params["owner"] = OPERATOR_ROLE_OWNER
+    result = await session.execute(text(sql), params)
+    row = result.fetchone()
+    if row is None:
+        return None
+    role = str(row[4])
+    if role not in (OPERATOR_ROLE_OWNER, OPERATOR_ROLE_ADMIN):
+        role = OPERATOR_ROLE_ADMIN
+    return CollectiveOperatorContext(
+        collective_id=int(row[0]),
+        slug=str(row[1]),
+        display_name=str(row[2]),
+        status=str(row[3]),
+        role=role,  # type: ignore[arg-type]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Org webapp (TASK-141 S3) — operator-facing profile, no trainer entitlements.
+#
+# Scope trim vs. EPIC5's is_collective_publish_ready: that version also required a
+# logo/cover before "ready" — dropped here because asset upload isn't wired for the org
+# webapp yet (no multipart endpoint). Readiness below only covers what this slice can
+# actually let the director fill in: name, about, contact. Revisit once upload lands.
+# ---------------------------------------------------------------------------
+
+ORG_PROFILE_MISSING_DISPLAY_NAME = "display_name"
+ORG_PROFILE_MISSING_ABOUT = "about"
+ORG_PROFILE_MISSING_CONTACT = "contact"
+
+
+def org_profile_readiness(row: dict[str, Any]) -> dict[str, Any]:
+    """Minimum fields for a school profile to be considered filled in.
+
+    Accepts a collective row shape like ``get_collective_by_slug``/``_row_to_collective_dict``
+    (raw ``brand_tokens``, not the enriched brand-kit dict).
+    """
+    missing: list[str] = []
+    if not (row.get("display_name") or "").strip():
+        missing.append(ORG_PROFILE_MISSING_DISPLAY_NAME)
+    if not (row.get("about") or "").strip():
+        missing.append(ORG_PROFILE_MISSING_ABOUT)
+
+    tokens = normalize_brand_tokens(row.get("brand_tokens"))
+    contacts = tokens.get("contacts") or {}
+    phone = str(contacts.get("phone") or "").strip()
+    telegram_contact = str(contacts.get("telegram") or "").strip()
+    if not phone and not telegram_contact:
+        missing.append(ORG_PROFILE_MISSING_CONTACT)
+
+    return {"ready": not missing, "missing": missing}
+
+
+async def get_org_collective_profile_payload(
+    session: AsyncSession,
+    collective_id: int,
+) -> dict[str, Any] | None:
+    """Org webapp profile screen (TASK-141 S3): brand + location, operator-facing.
+
+    Deliberately NOT the trainer collective studio payload — that one carries trainer-only
+    concerns (personal entitlements, subscription checkout, studio_access_mode) that don't
+    resolve without a trainer_id and aren't this screen's business.
+    """
+    id_row = await session.execute(
+        text(f"SELECT {_COLLECTIVE_ROW_SELECT} FROM collectives WHERE id = :cid"),
+        {"cid": collective_id},
+    )
+    row = id_row.fetchone()
+    if row is None:
+        return None
+    collective = _row_to_collective_dict(row)
+
+    kit = collective_brand_kit_enrichment(collective)
+    location = await collective_location_payload(session, collective)
+    readiness = org_profile_readiness(collective)
+
+    return {
+        "collective_id": collective["id"],
+        "slug": collective["slug"],
+        "display_name": collective["display_name"],
+        "status": collective["status"],
+        **kit,
+        **location,
+        "readiness": readiness,
+    }
+
+
+async def update_org_collective_profile_for_operator(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    telegram_id: int,
+    display_name: str | None = None,
+    about: str | None = None,
+    clear_about: bool = False,
+    contacts: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Owner-only profile edit (TASK-141 S3) — name/about/contact only, see scope note above."""
+    membership = await resolve_operator_membership(session, telegram_id, collective_slug=None)
+    if membership is None or membership.collective_id != int(collective_id):
+        return {"error": "not_operator"}
+    if membership.role != OPERATOR_ROLE_OWNER:
+        return {"error": "owner_only"}
+
+    row = await session.execute(
+        text("SELECT brand_tokens FROM collectives WHERE id = :id"),
+        {"id": collective_id},
+    )
+    current = row.fetchone()
+    if current is None:
+        return {"error": "collective_missing"}
+    current_tokens = normalize_brand_tokens(current[0])
+
+    updates: list[str] = []
+    params: dict[str, Any] = {"cid": collective_id, "now": datetime.now(timezone.utc)}
+
+    if display_name is not None:
+        name = display_name.strip()
+        if not name:
+            return {"error": "display_name_required"}
+        updates.append("display_name = :name")
+        params["name"] = name[:128]
+    if clear_about:
+        updates.append("about = NULL")
+    elif about is not None:
+        updates.append("about = :about")
+        params["about"] = about.strip()[:4000] or None
+
+    tokens_changed = False
+    next_tokens = dict(current_tokens)
+    if contacts is not None:
+        merged = dict(next_tokens.get("contacts") or {})
+        for field in ("phone", "telegram"):
+            if field in contacts:
+                merged[field] = str(contacts[field] or "").strip()[:500]
+        next_tokens["contacts"] = merged
+        tokens_changed = True
+    if tokens_changed:
+        updates.append("brand_tokens = CAST(:brand_tokens AS jsonb)")
+        params["brand_tokens"] = json.dumps(next_tokens)
+
+    if not updates:
+        return {"error": "nothing_to_update"}
+
+    await session.execute(
+        text(
+            f"""
+            UPDATE collectives
+            SET {", ".join(updates)}, updated_at = :now
+            WHERE id = :cid
+            """
+        ),
+        params,
+    )
+    await session.commit()
+
+    payload = await get_org_collective_profile_payload(session, collective_id)
+    return payload if payload is not None else {"error": "collective_missing"}
 
 
 async def count_active_collective_members(session: AsyncSession, collective_id: int) -> int:
