@@ -12,6 +12,8 @@ env:
   DATABASE_URL_SYNC: postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test
   TELEGRAM_BOT_TOKEN_CLIENT: ci-placeholder
   TELEGRAM_BOT_TOKEN_TRAINER: ci-placeholder
+  TELEGRAM_BOT_TOKEN_ORG: ci-placeholder
+  ORG_BOT_USERNAME: ci_placeholder_org_bot
 
 jobs:
   # ──────────────────────────────────────────────────────
