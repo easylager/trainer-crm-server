@@ -49,6 +49,8 @@ from src.application.trainer_profile_pending import (
     trainer_has_photo_pending_revision,
     trainer_has_pending_text_revision,
 )
+from src.application.trainer_invite_links import build_trainer_preview_link
+from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.catalog_visibility import (
     CATALOG_STATE_DRAFT,
@@ -384,9 +386,16 @@ async def build_catalog_screen_payload(
         for svc in (trainer.get("services") or [])
     ):
         optional_keys.append("prices")
+    preview_link, _preview_link_error = build_trainer_preview_link(
+        client_bot_username=Settings().client_bot_username, trainer_id=trainer_id
+    )
     return {
         # Нужен экрану, чтобы открыть публичную карточку глазами клиента.
         "trainer_id": trainer_id,
+        # Deep link into the REAL client bot (preview_<trainer_id>) — own card if published,
+        # else the general catalog. None when CLIENT_BOT_USERNAME isn't configured; the screen
+        # hides the button rather than offer a dead link.
+        "preview_link": preview_link,
         "state": state,
         "state_reason": trainer.get("catalog_state_reason") or latest_reason,
         "state_detail": reason_detail,

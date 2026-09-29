@@ -128,6 +128,9 @@ CLIENT_BUTTON_CERT_TRAINER_BOOK = "Тренер и запись"
 CLIENT_BUTTON_INVITE_TRAINER_PROFILE = "👤 Карточка тренера"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
+# Trainer preview (preview_<trainer_id>): trainer looks at their own card / the catalog as a client would
+CLIENT_BUTTON_TRAINER_PREVIEW_CARD = "👤 Моя карточка"
+CLIENT_BUTTON_TRAINER_PREVIEW_BROWSE = "⛸ Открыть каталог"
 CLIENT_BOOK_CHOOSE_SLOT = "📅 <b>Выберите время</b>\n\nДоступные слоты (эта и следующая неделя):"
 CLIENT_BOOK_NO_SLOTS = "У этого тренера пока нет свободных слотов. Загляните позже или выберите другого тренера."
 CLIENT_BOOK_NO_TRAINER = "Сначала выберите тренера в каталоге."
@@ -1496,6 +1499,17 @@ CLIENT_WELCOME_BIND_FAILED = (
     "Не удалось привязать профиль. Попросите тренера отправить новую пригласительную ссылку."
 )
 CLIENT_CERT_CODE_INVALID = "Код сертификата не найден или уже использован другим пользователем. Проверьте ссылку или обратитесь к тренеру."
+# Trainer preview: no DB writes on this path (not a real client visit), just a look.
+CLIENT_TRAINER_PREVIEW_PUBLISHED = (
+    "🗂 <b>Вот что видят клиенты</b>\n\n"
+    "Это тот же каталог, что открывают они, — кнопка ниже ведёт на вашу карточку."
+)
+CLIENT_TRAINER_PREVIEW_NOT_PUBLISHED = (
+    "🗂 <b>Вот что видят клиенты</b>\n\n"
+    "Ваша карточка пока не опубликована, поэтому в списке её нет — но вы можете "
+    "посмотреть, как выглядит каталог целиком."
+)
+CLIENT_TRAINER_PREVIEW_NOT_FOUND = "Не удалось найти профиль для предпросмотра."
 CLIENT_MY_CERTIFICATES_INTRO = "🎁 Ваши сертификаты: номинал, код, статус. Нажмите кнопку ниже."
 # Reminders: fixed date/time (no "через" — notifications may be delayed by poll interval).
 CLIENT_REMINDER_24H = (
@@ -4184,3 +4198,41 @@ SERVICE_UNAVAILABLE_USER = (
     "Сейчас ведутся технические работы. Попробуйте через несколько минут — "
     "записи и расписание на месте."
 )
+
+# Org bot (TASK-141/EPIC5 TASK-105) — school director/operator, separate bot from trainer/client.
+ORG_START_GENERIC = (
+    "Это бот для управления школой в GLIDE. Чтобы подключить школу, откройте ссылку "
+    "активации, которую вам передали."
+)
+ORG_CLAIM_SUCCESS = (
+    "🏢 Школа <b>{name}</b> активирована — вы owner.\n\n"
+    "Профиль, ссылки и команда — в приложении школы."
+)
+ORG_START_OPERATOR = (
+    "Школа <b>{name}</b>. Откройте кабинет — профиль, ссылки и команда."
+)
+ORG_BTN_FILL_PROFILE = "Заполнить профиль школы"
+ORG_BTN_OPEN_CABINET = "Открыть кабинет школы"
+ORG_CLAIM_INVALID = "Ссылка активации недействительна или уже использована."
+ORG_CLAIM_ALREADY = "У этой школы уже есть owner."
+ORG_CLAIM_ALREADY_OPERATOR = "Вы уже оператор этой школы."
+ORG_CLAIM_NOT_DRAFT = "Эта школа уже активирована."
+
+
+def build_org_webapp_reply_markup(*, url: str, fill_profile: bool):
+    """WebApp CTA into the org cabinet. Telegram rejects non-HTTPS Mini App URLs."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    target = (url or "").strip()
+    if not target.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=ORG_BTN_FILL_PROFILE if fill_profile else ORG_BTN_OPEN_CABINET,
+                    web_app=WebAppInfo(url=target),
+                )
+            ]
+        ]
+    )
