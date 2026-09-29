@@ -4184,3 +4184,41 @@ SERVICE_UNAVAILABLE_USER = (
     "Сейчас ведутся технические работы. Попробуйте через несколько минут — "
     "записи и расписание на месте."
 )
+
+# Org bot (TASK-141/EPIC5 TASK-105) — school director/operator, separate bot from trainer/client.
+ORG_START_GENERIC = (
+    "Это бот для управления школой в GLIDE. Чтобы подключить школу, откройте ссылку "
+    "активации, которую вам передали."
+)
+ORG_CLAIM_SUCCESS = (
+    "🏢 Школа <b>{name}</b> активирована — вы owner.\n\n"
+    "Профиль, ссылки и команда — в приложении школы."
+)
+ORG_START_OPERATOR = (
+    "Школа <b>{name}</b>. Откройте кабинет — профиль, ссылки и команда."
+)
+ORG_BTN_FILL_PROFILE = "Заполнить профиль школы"
+ORG_BTN_OPEN_CABINET = "Открыть кабинет школы"
+ORG_CLAIM_INVALID = "Ссылка активации недействительна или уже использована."
+ORG_CLAIM_ALREADY = "У этой школы уже есть owner."
+ORG_CLAIM_ALREADY_OPERATOR = "Вы уже оператор этой школы."
+ORG_CLAIM_NOT_DRAFT = "Эта школа уже активирована."
+
+
+def build_org_webapp_reply_markup(*, url: str, fill_profile: bool):
+    """WebApp CTA into the org cabinet. Telegram rejects non-HTTPS Mini App URLs."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    target = (url or "").strip()
+    if not target.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=ORG_BTN_FILL_PROFILE if fill_profile else ORG_BTN_OPEN_CABINET,
+                    web_app=WebAppInfo(url=target),
+                )
+            ]
+        ]
+    )

@@ -21,6 +21,7 @@ from src.shared.webapp_http_messages import (
     MINIAPP_ADMIN_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
     MINIAPP_CLIENT_NOT_CONFIGURED_DETAIL_RU,
     MINIAPP_NOT_ADMIN_DETAIL_RU,
+    MINIAPP_ORG_NOT_CONFIGURED_DETAIL_RU,
     MINIAPP_PLATFORM_NOT_SUPPORTED_DETAIL_RU,
     MINIAPP_TRAINER_NOT_CONFIGURED_DETAIL_RU,
     MINIAPP_VK_NOT_CONFIGURED_DETAIL_RU,
@@ -153,6 +154,28 @@ def get_trainer_miniapp_principal_multipart(
 ) -> MiniAppPrincipal:
     """Trainer Mini App auth for ``multipart/form-data`` (photo / document upload)."""
     return _principal_from_credential_trainer(cred)
+
+
+def get_org_miniapp_principal(
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+) -> MiniAppPrincipal:
+    """Org Web App (TASK-141/EPIC5 TASK-105): initData verified against the org bot token.
+
+    No allowlist here — authorization is "does this telegram_id have an operator row for
+    some collective", which the route/use-case resolves per request (resolve_operator_membership).
+    """
+    if cred.platform == MiniAppPlatform.MAX.value:
+        raise HTTPException(
+            status_code=501,
+            detail="Org Web App from MAX/VK is not supported — use Telegram.",
+        )
+    token = Settings().telegram_bot_token_org
+    if not token:
+        raise HTTPException(status_code=503, detail=MINIAPP_ORG_NOT_CONFIGURED_DETAIL_RU)
+    try:
+        return verify_telegram_init_data_principal(cred.raw, token)
+    except InitDataAuthError:
+        raise miniapp_credential_http_exception() from None
 
 
 def get_admin_miniapp_principal(

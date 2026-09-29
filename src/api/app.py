@@ -26,6 +26,7 @@ from src.api.routes import (
     webapp_router,
     webhooks_router,
 )
+from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
@@ -563,6 +564,57 @@ def webapp_trainer_home_page():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
+
+
+@app.api_route("/webapp/org-home", methods=["GET", "HEAD"])
+def webapp_org_home_page():
+    """Org cabinet (TASK-141/EPIC5 TASK-105): director's entry screen."""
+    path = _WEBAPP_DIR / "org-home.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.api_route("/webapp/org-profile", methods=["GET", "HEAD"])
+def webapp_org_profile_page():
+    """Org cabinet (TASK-141 S3): school profile checklist + edit form."""
+    path = _WEBAPP_DIR / "org-profile.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-profile-main.js")
+def webapp_org_profile_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-profile-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.api_route("/webapp/org-subscription", methods=["GET", "HEAD"])
+def webapp_org_subscription_page():
+    """Org cabinet (TASK-141 S2): school's platform subscription status."""
+    path = _WEBAPP_DIR / "org-subscription.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-subscription-main.js")
+def webapp_org_subscription_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-subscription-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/trainer-groups")
@@ -1483,6 +1535,44 @@ def webapp_mini_app_trainer_shell_js(request: Request):
     )
 
 
+@app.get("/webapp/org-home-main.js")
+def webapp_org_home_main_js(request: Request):
+    """Org Главная page logic (TASK-141 S1). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "org-home-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-org-shell.js")
+def webapp_mini_app_org_shell_js(request: Request):
+    """Org shell (TASK-141 S1): 5-tab bar + «Ещё» sheet, same pattern as the trainer shell."""
+    path = _WEBAPP_DIR / "mini-app-org-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-org-shell.css")
+def webapp_mini_app_org_shell_css(request: Request):
+    path = _WEBAPP_DIR / "mini-app-org-shell.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-bookings.css")
 def webapp_mini_app_client_bookings_css(request: Request):
     """Client bookings list/detail styles (split from client-bookings.html). Use ``?v=…`` for long cache."""
@@ -1680,6 +1770,7 @@ app.include_router(public_ice_page_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)
+app.include_router(org_webapp_router)
 webapp_router.include_router(webapp_trainer_catalog_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)

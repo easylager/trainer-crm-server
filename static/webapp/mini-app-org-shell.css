@@ -1,0 +1,366 @@
+/**
+ * Org shell (TASK-141 S1): bottom tab bar + «Ещё» sheet — same pattern as the trainer shell
+ * (mini-app-trainer-shell.css), lean version: 5 tabs, no drill-down observers yet (no complex
+ * screens exist under org context to hide the bar for).
+ */
+
+.org-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  background: var(--glide-surface);
+  border-top: 1px solid var(--glide-line);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+.org-tabbar__it {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--glide-hint);
+  cursor: pointer;
+}
+
+.org-tabbar__it svg {
+  width: 22px;
+  height: 22px;
+}
+
+.org-tabbar__it.on {
+  color: var(--glide-ink-teal);
+}
+
+.org-page {
+  padding-bottom: 76px; /* clears the fixed tab bar */
+}
+
+/* «Ещё» — bottom sheet over a dimmed backdrop */
+.org-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(16, 24, 28, 0.32);
+  display: none;
+}
+
+.org-more-backdrop.open {
+  display: block;
+}
+
+.org-more-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  background: var(--glide-surface);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 28px rgba(16, 24, 28, 0.18);
+  padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 0.18s ease-out;
+}
+
+.org-more-backdrop.open .org-more-sheet {
+  transform: translateY(0);
+}
+
+.org-more-sheet__handle {
+  width: 36px;
+  height: 4px;
+  background: var(--glide-line-strong);
+  border-radius: 2px;
+  margin: 0 auto 10px;
+}
+
+.org-more-sheet__title {
+  margin: 0 16px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.org-more-sheet__list {
+  margin: 0 16px;
+  border: 1px solid var(--glide-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--glide-surface);
+}
+
+.org-more-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  text-align: left;
+  background: none;
+  border: 0;
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+}
+
+.org-more-row + .org-more-row {
+  border-top: 1px solid var(--glide-line);
+}
+
+.org-more-row[disabled] {
+  cursor: default;
+}
+
+.org-more-row__tx {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.org-more-row__tt {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--glide-text);
+  letter-spacing: -0.005em;
+}
+
+.org-more-row__ts {
+  display: block;
+  font-size: 11.5px;
+  color: var(--glide-hint);
+  margin-top: 2px;
+}
+
+.org-more-row__go {
+  flex: 0 0 auto;
+  font-size: 16px;
+  color: var(--glide-line-strong);
+}
+
+/* Вторичные экраны (Профиль школы, Команда, Подписка…) — открываются из «Ещё»,
+   без таб-бара, с «‹ Назад» вместо него. */
+.org-back-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+}
+
+.org-back-header__btn {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--glide-hint);
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.org-back-header__title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.org-subscription-card {
+  margin: 16px;
+  padding: 16px;
+  border: 1px solid var(--glide-line);
+  border-radius: 14px;
+  background: var(--glide-surface);
+  box-shadow: 0 1px 2px rgba(16, 40, 40, 0.05), 0 10px 28px -18px rgba(16, 40, 40, 0.35);
+}
+
+.org-subscription-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.org-subscription-card__meta {
+  font-size: 12.5px;
+  color: var(--glide-hint);
+  margin: 0;
+}
+
+.org-subscription-support {
+  margin: 0 16px;
+  font-size: 12.5px;
+  color: var(--glide-hint);
+}
+
+/* Профиль школы (S3) — чек-лист готовности + форма редактирования на одном экране */
+.org-checklist {
+  margin: 16px;
+  border: 1px solid var(--glide-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--glide-surface);
+  box-shadow: 0 1px 2px rgba(16, 40, 40, 0.05), 0 10px 28px -18px rgba(16, 40, 40, 0.35);
+}
+
+.org-ck {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  align-items: flex-start;
+}
+
+.org-ck + .org-ck {
+  border-top: 1px solid var(--glide-line);
+}
+
+.org-ck__box {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--glide-line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+.org-ck--done .org-ck__box {
+  background: var(--app-ok);
+  border-color: var(--app-ok);
+  color: #fff;
+}
+
+.org-ck--done .org-ck__t {
+  color: var(--glide-hint);
+  text-decoration: line-through;
+  text-decoration-color: var(--glide-line-strong);
+}
+
+.org-ck__t {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.org-profile-form {
+  margin: 20px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.org-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--glide-hint);
+}
+
+.org-profile-field input,
+.org-profile-field textarea {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--glide-text);
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: 10px;
+  background: var(--glide-surface);
+  resize: vertical;
+}
+
+.org-profile-field input:focus,
+.org-profile-field textarea:focus {
+  outline: none;
+  border-color: var(--glide-brand);
+}
+
+.org-profile-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--app-danger, #C4342A);
+}
+
+/* Главная (S1) — минимальный набор, до того как появятся снимок дня / ссылки */
+.org-home-state {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--glide-hint);
+}
+
+.org-home-header {
+  padding: 20px 16px 0;
+}
+
+.org-home-header h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.org-home-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.org-home-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.org-home-status__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.org-home-status__dot--ok {
+  background: var(--app-ok);
+}
+
+.org-home-status__dot--wait {
+  background: var(--app-attention);
+}
+
+.org-home-profile-link {
+  display: block;
+  margin: 4px 16px 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--glide-ink-teal);
+  cursor: pointer;
+  text-align: left;
+}
+
+.org-more-row__soon {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  background: var(--glide-paper);
+  color: var(--glide-hint);
+  box-shadow: inset 0 0 0 1px var(--glide-line);
+  border-radius: 3px;
+}

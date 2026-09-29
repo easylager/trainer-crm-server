@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     telegram_bot_token_trainer: str
     # Optional: admin bot for moderation (separate process, can be disabled if token is not set)
     telegram_bot_token_admin: str | None = None
+    # Optional: org bot for school directors/operators (TASK-141/EPIC5 TASK-105, separate process)
+    telegram_bot_token_org: str | None = None
+    org_bot_username: str | None = None
+    # Org webapp Mini App base URL — same backend as WEBAPP_BASE_URL, different route prefix (/org/*).
+    org_webapp_base_url: str | None = None
     # Mini App initData: reject if auth_date is older than this (seconds). Telegram sends Unix time when the Web App was opened.
     telegram_webapp_init_data_max_age_sec: int = 86400
     # Allow initData auth_date slightly in the future (clock skew, seconds).
