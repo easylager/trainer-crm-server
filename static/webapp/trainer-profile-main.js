@@ -5039,6 +5039,7 @@
         var box = document.getElementById('arenaEmptyActions');
         if (!box) return;
         state.arenaCreateOpen = true;
+        state.newArenaVenueType = 'ice';
         box.hidden = false;
         renderArenaCreateForm(box, { name: prefillName || '' });
       }
@@ -5599,6 +5600,39 @@
         nameWrap.appendChild(nameInp);
         box.appendChild(nameWrap);
 
+        /* Тип площадки. До этого поля не было вообще, и любая новая площадка
+           молча становилась катком — так зал «Lifestyle» (#201) и попал в
+           ледовый каталог со снежинкой и «карточкой катка». Тот же пикер, что
+           и в мастере онбординга (renderVenueTypePicker в trainer-onboarding-main.js). */
+        var typeWrap = document.createElement('div');
+        typeWrap.className = 'field';
+        var typeLab = document.createElement('label');
+        typeLab.textContent = 'Что это за место';
+        typeWrap.appendChild(typeLab);
+        var typeChips = document.createElement('div');
+        typeChips.className = 'arena-empty-actions-row';
+        typeChips.setAttribute('role', 'group');
+        typeChips.setAttribute('aria-label', 'Тип площадки');
+        state.newArenaVenueType = state.newArenaVenueType || 'ice';
+        function renderVenueTypeChips() {
+          typeChips.innerHTML = '';
+          (state.venueTypes || []).forEach(function(vt) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'filter-btn' + (state.newArenaVenueType === vt.key ? ' active' : '');
+            b.textContent = (vt.icon ? vt.icon + ' ' : '') + vt.chip;
+            b.setAttribute('aria-pressed', state.newArenaVenueType === vt.key ? 'true' : 'false');
+            b.addEventListener('click', function() {
+              state.newArenaVenueType = vt.key;
+              renderVenueTypeChips();
+            });
+            typeChips.appendChild(b);
+          });
+        }
+        renderVenueTypeChips();
+        typeWrap.appendChild(typeChips);
+        box.appendChild(typeWrap);
+
         var addrWrap = document.createElement('div');
         addrWrap.className = 'field';
         var addrLab = document.createElement('label');
@@ -5652,6 +5686,7 @@
             mode: 'create',
             arena_name: nm,
             address: addr,
+            venue_type: state.newArenaVenueType || 'ice',
             confirm_duplicate: !!confirmDuplicate,
             /* Selected city from the form — may not be PATCH'ed yet (PDEC-001 / draft). */
             city_id: (state.trainer.profile && state.trainer.profile.city_id) || null,
@@ -5965,6 +6000,7 @@
             var refs = data.refs || {};
             state.cities = (refs.cities && refs.cities.items) ? refs.cities.items : [];
             state.servicesCatalog = (refs.services && refs.services.items) ? refs.services.items : [];
+            state.venueTypes = (refs.venue_types && refs.venue_types.items) ? refs.venue_types.items : [];
             var eduOpts = (refs.education_options && refs.education_options.items) ? refs.education_options.items : [];
             applyRefsToDom(eduOpts);
             state.trainer = data.trainer;
