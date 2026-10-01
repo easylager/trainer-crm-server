@@ -271,6 +271,35 @@
     return null;
   }
 
+  /**
+   * TASK-146: диплинк «каталог города» (catalog_<city>[_<intent>]) приходит сюда как
+   * ?city_id=…&intent=…|venue=…. Город из ссылки важнее сохранённого и города из
+   * профиля: человек открыл ссылку на Брест — он хочет Брест, а не свой Минск.
+   */
+  function cityIdFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var value = String(new URLSearchParams(raw).get('city_id') || '').trim();
+      return /^[1-9][0-9]*$/.test(value) ? Number(value) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  var VENUE_KEYS = ['ice', 'gym', 'choreo', 'pool', 'outdoor', 'other', 'shop'];
+
+  function venueFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var value = String(new URLSearchParams(raw).get('venue') || '').trim().toLowerCase();
+      return VENUE_KEYS.indexOf(value) >= 0 ? value : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function mapHref() {
     return '';
   }
@@ -828,6 +857,8 @@
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
     intentFromSearch: intentFromSearch,
+    cityIdFromSearch: cityIdFromSearch,
+    venueFromSearch: venueFromSearch,
     mapHref: mapHref,
     trainerHref: trainerHref,
     arenaHref: arenaHref,

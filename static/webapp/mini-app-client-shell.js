@@ -915,6 +915,7 @@
     readBookingsWarmCache: readBookingsWarmCache,
     writeBookingsWarmCache: writeBookingsWarmCache,
     maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
+    deepLinkTarget: deepLinkTarget,
     TAB_ICONS: TAB_ICONS,
   };
 
@@ -935,13 +936,43 @@
     }
   }
 
+  /**
+   * startapp-диплинки (src/application/place_links.py — там же их собирает сервер):
+   *   arena_<ref>                  → карточка места;
+   *   catalog_<city>[_<intent>]    → каталог города: skate | coach — интент,
+   *                                  shop | gym — сразу с фильтром по типу места.
+   * Срабатывает один раз за сессию мини-аппа: start_param живёт всё время, пока
+   * открыт WebView, и без защёлки «Назад» с карточки снова уводил бы на неё же.
+   */
+  var DEEP_LINK_FLAG = 'glide_start_param_used_v1';
+
+  function deepLinkTarget(sp) {
+    sp = String(sp || '').trim();
+    var arena = /^arena[_-](.+)$/i.exec(sp);
+    if (arena) return { key: 'arena', path: 'arena?ref=' + encodeURIComponent(arena[1]) };
+    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym))?$/i.exec(sp);
+    if (catalog) {
+      var q = 'city_id=' + catalog[1];
+      var intent = (catalog[2] || '').toLowerCase();
+      if (intent === 'shop' || intent === 'gym') q += '&venue=' + intent;
+      else if (intent) q += '&intent=' + intent;
+      return { key: 'ice', path: 'ice?' + q };
+    }
+    return null;
+  }
+
   function maybeOpenArenaDeepLink() {
-    var key = pathnameKey();
-    if (key === 'arena') return false;
     var sp = String(readStartParam() || '').trim();
-    var m = /^arena[_-](.+)$/i.exec(sp);
-    if (!m) return false;
-    navigate('arena?ref=' + encodeURIComponent(m[1]));
+    var target = deepLinkTarget(sp);
+    if (!target) return false;
+    try {
+      if (global.sessionStorage.getItem(DEEP_LINK_FLAG) === sp) return false;
+      global.sessionStorage.setItem(DEEP_LINK_FLAG, sp);
+    } catch (e) { /* без storage — как раньше, по ключу страницы */ }
+    var current = pathnameKey();
+    if (current === target.key && target.key === 'arena') return false;
+    if (current === target.key && global.location.search === '?' + target.path.split('?')[1]) return false;
+    navigate(target.path);
     return true;
   }
 

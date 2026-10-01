@@ -873,7 +873,11 @@
     state.cityId = city.id;
     state.cityName = city.name || '';
     state.skateCount = city.skate_count;
-    var nextIntent = M.pickCityIntent(city, state.intent);
+    /* Явно выбранный тип места (чип или ссылка ?venue=shop) — это просьба о местах:
+       не перескакиваем на тренеров, даже если массового катания в городе нет. */
+    var nextIntent = state.venueTypes && state.venueTypes.length
+      ? state.intent
+      : M.pickCityIntent(city, state.intent);
     if (nextIntent !== state.intent) state.intent = nextIntent;
     if (state.intent === 'coach') state.view = 'list';
     setCityLabel();
@@ -992,6 +996,16 @@
     return fetchJson(M.buildIceCitiesUrl())
       .then(function (data) {
         state.cities = M.filterIceCities((data && data.items) || []);
+        var urlCityId = M.cityIdFromSearch(global.location.search || '');
+        if (urlCityId) {
+          var fromUrl = state.cities.filter(function (c) {
+            return Number(c.id) === urlCityId;
+          })[0];
+          if (fromUrl) {
+            applyCity(fromUrl);
+            return;
+          }
+        }
         var saved = M.loadIceState(global.sessionStorage);
         if (saved && saved.cityId) {
           var fromSaved = state.cities.filter(function (c) {
@@ -1299,6 +1313,11 @@
       var params = new URLSearchParams(global.location.search || '');
       var urlIntent = M.intentFromSearch(global.location.search || '');
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
+      var urlVenue = M.venueFromSearch(global.location.search || '');
+      if (urlVenue) {
+        state.intent = 'skate';
+        state.venueTypes = [urlVenue];
+      }
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {
         global.setTimeout(function () {

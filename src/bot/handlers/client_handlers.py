@@ -42,6 +42,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
+from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
 from src.application.client_invite_use_cases import (
     bind_client_invite_trainer_context as _bind_client_invite_trainer_context,
     client_invite_needs_registration_form,
@@ -805,6 +806,25 @@ async def cmd_start(message: Message) -> None:
                 ),
             )
         return
+
+    # TASK-146: arena_<id> / catalog_<city>[_<intent>] — с публичной страницы места или
+    # из пересланного сообщения. Человек хочет этот экран, а не меню: одна кнопка на него.
+    if is_catalog_deep_link(payload):
+        async with async_session_factory() as db_session:
+            reply = await build_catalog_deep_link_reply(
+                db_session, payload, webapp_base_url=Settings().webapp_base_url
+            )
+        if reply is not None:
+            await message.answer(
+                reply["text"],
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=reply["button_text"], web_app=WebAppInfo(url=reply["url"]))]
+                    ]
+                ),
+            )
+            return
 
     # Studio / center landing: col_<slug> — format-aware catalog entry (O6.13–O6.14).
     if payload.startswith("col_"):
