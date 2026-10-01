@@ -4831,6 +4831,22 @@ class AdminArenaCreateBody(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     sort_order: int | None = None
+    #: ice|gym|choreo|pool|outdoor|other|shop. Магазин заводит только админ (TASK-146).
+    venue_type: str | None = None
+
+
+def _admin_venue_type(raw: str | None) -> str | None:
+    """Строгая проверка на входе админки: опечатка не должна молча превратиться в «лёд»."""
+    if raw is None:
+        return None
+    from src.shared.venue_types import VENUE_TYPE_KEYS
+
+    key = raw.strip().lower()
+    if key not in VENUE_TYPE_KEYS:
+        raise HTTPException(
+            status_code=400, detail="venue_type must be one of: " + ", ".join(VENUE_TYPE_KEYS)
+        )
+    return key
 
 
 class AdminArenaPatchBody(BaseModel):
@@ -4841,6 +4857,7 @@ class AdminArenaPatchBody(BaseModel):
     longitude: float | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    venue_type: str | None = None
     phone: str | None = None
     website_url: str | None = None
     tickets_url: str | None = None
@@ -4871,7 +4888,7 @@ async def get_admin_arenas(
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
                p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
-               p.amenities, p.status
+               p.amenities, p.status, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         WHERE a.city_id = :cid
@@ -4909,11 +4926,14 @@ async def get_admin_arenas(
             "season_end_month": row[17],
             "amenities": row[18] or {},
             "status": row[19] or "published",
+            "venue_type": row[20] or "ice",
         }
         for row in rows
     ]
     await attach_arena_media_payloads(session, items)
-    return {"items": items}
+    from src.shared.venue_types import venue_type_options
+
+    return {"items": items, "venue_types": venue_type_options(include_shop=True)}
 
 
 @router.post("/admin/arenas")
@@ -4933,15 +4953,18 @@ async def post_admin_arena(
     if not r_chk.fetchone():
         raise HTTPException(status_code=400, detail="City not found")
     sort_order = body.sort_order if body.sort_order is not None else 0
+    venue_type = _admin_venue_type(body.venue_type) or "ice"
     r = await session.execute(
         text(
             """
-            INSERT INTO arenas (city_id, name, address, latitude, longitude, sort_order, is_active)
-            VALUES (:city_id, :name, :address, :lat, :lon, :sort_order, true)
-            RETURNING id, name, address, latitude, longitude, sort_order, is_active
+            INSERT INTO arenas (city_id, name, address, latitude, longitude, sort_order, is_active,
+                                venue_type)
+            VALUES (:city_id, :name, :address, :lat, :lon, :sort_order, true, :venue_type)
+            RETURNING id, name, address, latitude, longitude, sort_order, is_active, venue_type
             """
         ),
         {
+            "venue_type": venue_type,
             "city_id": body.city_id,
             "name": name,
             "address": (body.address or "").strip() or None,
@@ -4961,6 +4984,7 @@ async def post_admin_arena(
         "longitude": row[4],
         "sort_order": row[5],
         "is_active": row[6],
+        "venue_type": row[7],
     }
 
 
@@ -5005,9 +5029,23 @@ async def patch_admin_arena(
     if body.is_active is not None:
         updates.append("is_active = :is_active")
         params["is_active"] = body.is_active
+    venue_type = _admin_venue_type(body.venue_type)
+    if venue_type is not None:
+        # Пишется до профиля: удобства ниже сверяются уже с новым типом.
+        updates.append("venue_type = :venue_type")
+        params["venue_type"] = venue_type
     profile_fields = body.model_dump(
         exclude_unset=True,
-        exclude={"city_id", "name", "address", "latitude", "longitude", "sort_order", "is_active"},
+        exclude={
+            "city_id",
+            "name",
+            "address",
+            "latitude",
+            "longitude",
+            "sort_order",
+            "is_active",
+            "venue_type",
+        },
     )
     if body.city_id is not None:
         profile_fields["city_id"] = body.city_id
@@ -8578,6 +8616,8 @@ async def get_trainer_onboarding_quick_setup(
             JOIN cities c ON c.id = a.city_id AND c.is_active = true
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
             WHERE a.is_active = true
+              -- Магазин — не место работы тренера (TASK-146).
+              AND a.venue_type <> 'shop'
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         )

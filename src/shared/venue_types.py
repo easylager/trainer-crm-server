@@ -12,7 +12,14 @@
 подставляется в одну строку копирайта, и склонять её в трёх местах руками —
 верный способ получить «карточка зал».
 
-Клиентский двойник: ``static/webapp/venue-types.js`` (те же ключи и подписи).
+Клиентская сторона своего словаря не держит: подписи (``venue_chip``,
+``venue_noun``, ``venue_cta``) приезжают готовыми в ответах ``/api/public/*``.
+
+Магазин (``shop``, TASK-146) — площадка другого рода: там не тренируются, туда
+идут за коньками, заточкой и прокатом. Он живёт в той же таблице ради гео, фото
+и модерации, но тренеру как место работы не предлагается
+(``TRAINER_VENUE_TYPE_KEYS``) и в ленту «Где заниматься» сам не попадает —
+только по явному фильтру (``DEFAULT_HIDDEN_VENUE_TYPES``).
 """
 from __future__ import annotations
 
@@ -24,6 +31,7 @@ VENUE_TYPE_CHOREO = "choreo"
 VENUE_TYPE_POOL = "pool"
 VENUE_TYPE_OUTDOOR = "outdoor"
 VENUE_TYPE_OTHER = "other"
+VENUE_TYPE_SHOP = "shop"
 
 DEFAULT_VENUE_TYPE = VENUE_TYPE_ICE
 
@@ -48,9 +56,18 @@ VENUE_TYPES: tuple[Mapping[str, str], ...] = (
         "icon": "🌳",
     },
     {"key": VENUE_TYPE_OTHER, "chip": "Другое", "noun": "Площадка", "genitive": "места", "icon": "📍"},
+    {"key": VENUE_TYPE_SHOP, "chip": "Магазин", "noun": "Магазин", "genitive": "магазина", "icon": "🧰"},
 )
 
 VENUE_TYPE_KEYS: tuple[str, ...] = tuple(v["key"] for v in VENUE_TYPES)
+
+#: Где можно тренироваться — и значит, что тренер может выбрать местом работы.
+TRAINER_VENUE_TYPE_KEYS: tuple[str, ...] = tuple(k for k in VENUE_TYPE_KEYS if k != VENUE_TYPE_SHOP)
+
+#: Типы, которые лента каталога показывает только по явному фильтру. Магазин в
+#: списке «где покататься» — шум для того, кто ищет лёд; но чип «Магазин» в
+#: фасетах остаётся, чтобы до магазинов можно было дойти в один тап.
+DEFAULT_HIDDEN_VENUE_TYPES: frozenset[str] = frozenset({VENUE_TYPE_SHOP})
 
 _BY_KEY: dict[str, Mapping[str, str]] = {v["key"]: v for v in VENUE_TYPES}
 
@@ -90,6 +107,12 @@ def venue_site_label(value: Any) -> str:
     return f"Сайт {_BY_KEY[normalize_venue_type(value)]['genitive']}"
 
 
-def venue_type_options() -> list[dict[str, str]]:
-    """Список для селектора в Mini App и для админки."""
-    return [dict(v) for v in VENUE_TYPES]
+def normalize_trainer_venue_type(value: Any) -> str:
+    """Тип площадки, которую заводит тренер. Магазин тренеру недоступен — это лёд по умолчанию."""
+    key = normalize_venue_type(value)
+    return key if key in TRAINER_VENUE_TYPE_KEYS else DEFAULT_VENUE_TYPE
+
+
+def venue_type_options(*, include_shop: bool = False) -> list[dict[str, str]]:
+    """Список для селектора: тренеру — без магазина, админке — все типы."""
+    return [dict(v) for v in VENUE_TYPES if include_shop or v["key"] != VENUE_TYPE_SHOP]

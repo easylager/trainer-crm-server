@@ -15,9 +15,13 @@ from src.shared.specialist_roles import (
     specialist_role_display,
 )
 from src.shared.venue_types import (
+    DEFAULT_HIDDEN_VENUE_TYPES,
     DEFAULT_VENUE_TYPE,
+    TRAINER_VENUE_TYPE_KEYS,
     VENUE_TYPE_KEYS,
+    normalize_trainer_venue_type,
     normalize_venue_type,
+    venue_type_options,
     venue_card_cta,
     venue_site_label,
     venue_type_chip,
@@ -51,6 +55,21 @@ class TestVenueTypes:
         assert venue_site_label("gym") == "Сайт зала"
         assert "катк" not in venue_card_cta("gym")
         assert "катк" not in venue_site_label("gym")
+
+    def test_shop_is_a_place_but_not_a_workplace(self):
+        """TASK-146: магазин есть в каталоге, но тренер не может «работать» в магазине."""
+        assert "shop" in VENUE_TYPE_KEYS
+        assert "shop" not in TRAINER_VENUE_TYPE_KEYS
+        assert normalize_venue_type("shop") == "shop"
+        assert normalize_trainer_venue_type("shop") == DEFAULT_VENUE_TYPE
+        assert normalize_trainer_venue_type("gym") == "gym"
+        assert "shop" not in {o["key"] for o in venue_type_options()}
+        assert "shop" in {o["key"] for o in venue_type_options(include_shop=True)}
+
+    def test_shop_copy_reads_as_a_shop(self):
+        assert venue_card_cta("shop") == "Открыть карточку магазина"
+        assert venue_type_chip("shop") == "Магазин"
+        assert "shop" in DEFAULT_HIDDEN_VENUE_TYPES
 
     def test_ice_copy_is_unchanged(self):
         """Для льда формулировки должны остаться ровно прежними."""

@@ -38,6 +38,7 @@ from src.shared.currency import currency_for_country
 from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
+    DEFAULT_HIDDEN_VENUE_TYPES,
     VENUE_TYPE_KEYS,
     normalize_venue_type,
     venue_card_cta,
@@ -696,6 +697,14 @@ async def list_public_ice_arenas(
     facets = _venue_type_facets(rows)
     if venue_filter:
         rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
+    else:
+        # TASK-146: «все типы» — это все места, где занимаются. Магазин приходит
+        # только по своему чипу: в ленте «где покататься» он шум, а не находка.
+        rows = [
+            r
+            for r in rows
+            if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
+        ]
     rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
@@ -934,6 +943,8 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "gallery": row.get("gallery") or [],
         "tier": row["tier"],
         "currency_code": row.get("currency_code"),
+        # TASK-146: публичная страница места говорит «здесь работают N тренеров».
+        "trainer_count": int(row.get("trainer_count") or 0),
         "freshness": _freshness_payload(
             row,
             observed_at=obs_row[0] if obs_row else None,
@@ -1059,6 +1070,33 @@ async def _pg_trgm_enabled(session: AsyncSession) -> bool:
     return bool(result.scalar())
 
 
+# TASK-146: «где заточить коньки» ищут словом услуги, а не названием мастерской.
+# Корень слова → ключ удобства: ищем по префиксу, чтобы «заточка», «заточить»,
+# «наточить» и «прокат коньков» попадали без морфологии.
+_SERVICE_SEARCH_STEMS: tuple[tuple[str, str], ...] = (
+    ("заточ", "skate_sharpening"),
+    ("наточ", "skate_sharpening"),
+    ("точк", "skate_sharpening"),
+    ("прокат", "skate_rental"),
+    ("аренд", "skate_rental"),
+    ("ремонт", "repair"),
+    ("купить", "retail"),
+    ("магазин", "retail"),
+    ("экипир", "retail"),
+)
+
+
+def service_amenity_keys_for_query(query: str) -> list[str]:
+    """Ключи удобств, о которых спрашивает запрос («заточка» → skate_sharpening)."""
+    words = [w for w in (query or "").lower().replace("ё", "е").split() if w]
+    keys: list[str] = []
+    for word in words:
+        for stem, key in _SERVICE_SEARCH_STEMS:
+            if (word.startswith(stem) or stem in word) and key not in keys:
+                keys.append(key)
+    return keys
+
+
 async def search_public_ice(
     session: AsyncSession, q: str, *, limit: int = SEARCH_LIMIT
 ) -> dict[str, Any]:
@@ -1069,7 +1107,7 @@ async def search_public_ice(
     like = f"%{query}%"
     use_trgm = await _pg_trgm_enabled(session)
     arena_sql = """
-        SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name
+        SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
@@ -1081,13 +1119,17 @@ async def search_public_ice(
               @@ plainto_tsquery('simple', :q)
             OR a.name ILIKE :like
             OR coalesce(p.district, '') ILIKE :like
+            OR EXISTS (
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
+            )
           )
         ORDER BY a.name, a.id
         LIMIT :lim
     """
     if use_trgm:
         arena_sql = """
-            SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name
+            SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
@@ -1100,6 +1142,10 @@ async def search_public_ice(
                 OR a.name ILIKE :like
                 OR coalesce(p.district, '') ILIKE :like
                 OR similarity(a.name, :q) > 0.2
+                OR EXISTS (
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
+            )
               )
             ORDER BY GREATEST(similarity(a.name, :q), 0) DESC, a.name, a.id
             LIMIT :lim
@@ -1110,6 +1156,7 @@ async def search_public_ice(
             "q": query,
             "like": like,
             "lim": cap,
+            "svc_keys": service_amenity_keys_for_query(query),
             "published": ARENA_PROFILE_STATUS_PUBLISHED,
             "ice_countries": ice_discovery_countries(),
         },
@@ -1157,6 +1204,8 @@ async def search_public_ice(
             "city_id": int(r[3]),
             "district": r[4],
             "city_name": r[5],
+            "venue_type": normalize_venue_type(r[6]),
+            "venue_chip": venue_type_chip(r[6]),
         }
         for r in arenas.fetchall()
     ]

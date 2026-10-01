@@ -25,7 +25,9 @@ ARENA_PROFILE_STATUSES = (
 )
 
 # Canonical amenity keys (prototype chips + accessibility). Values are bool.
-AMENITY_KEYS = frozenset(
+# Three states, not two: key absent = unknown, False = known absent, True = present.
+# The Minsk loader relies on that (an unknown amenity stays unset, never False).
+VENUE_AMENITY_KEYS = frozenset(
     {
         "skate_rental",  # прокат
         "skate_sharpening",  # заточка
@@ -36,6 +38,23 @@ AMENITY_KEYS = frozenset(
     }
 )
 
+# TASK-146: магазин описывается тем же полем, но другим набором ключей. Прокат и
+# заточка — те же самые услуги, что «на катке есть прокат», поэтому ключи общие:
+# фильтр «где заточить коньки» найдёт и мастерскую, и каток с заточкой.
+# Розница и ремонт бывают только у магазина — катку их не поставить.
+SHOP_AMENITY_KEYS = frozenset(
+    {
+        "retail",  # розница
+        "skate_sharpening",
+        "skate_rental",
+        "repair",  # ремонт
+        "parking",
+        "accessibility",
+    }
+)
+
+AMENITY_KEYS = VENUE_AMENITY_KEYS | SHOP_AMENITY_KEYS
+
 AMENITY_LABELS_RU = {
     "skate_rental": "Прокат",
     "skate_sharpening": "Заточка",
@@ -43,7 +62,19 @@ AMENITY_LABELS_RU = {
     "locker_rooms": "Раздевалки",
     "cafe": "Кафе",
     "accessibility": "Доступность",
+    "retail": "Розница",
+    "repair": "Ремонт",
 }
+
+
+def amenity_keys_for_venue(venue_type: str | None) -> frozenset[str]:
+    """Допустимые ключи для типа площадки. Неизвестный тип — как каток."""
+    from src.shared.venue_types import VENUE_TYPE_SHOP, normalize_venue_type
+
+    if normalize_venue_type(venue_type) == VENUE_TYPE_SHOP:
+        return SHOP_AMENITY_KEYS
+    return VENUE_AMENITY_KEYS
+
 
 _CYRILLIC_TO_LATIN = {
     "а": "a",
@@ -127,14 +158,18 @@ def choose_arena_slug(
     return f"{base}-{int(arena_id)}"
 
 
-def validate_amenities(value: Mapping[str, Any] | None) -> dict[str, bool]:
+def validate_amenities(
+    value: Mapping[str, Any] | None, venue_type: str | None = None
+) -> dict[str, bool]:
+    """Ключи сверяются с типом площадки: «розница» у катка — ошибка ввода, а не данные."""
     if value is None:
         return {}
     if not isinstance(value, Mapping):
         raise InvalidAmenitiesError("amenities must be an object")
+    allowed = amenity_keys_for_venue(venue_type)
     out: dict[str, bool] = {}
     for key, raw in value.items():
-        if key not in AMENITY_KEYS:
+        if key not in allowed:
             raise InvalidAmenitiesError(f"unknown amenity key: {key}")
         if not isinstance(raw, bool):
             raise InvalidAmenitiesError(f"amenity {key} must be a boolean")
@@ -369,13 +404,14 @@ async def apply_admin_arena_profile_patch(
     """Upsert vitrine fields. Unknown amenity keys raise InvalidAmenitiesError."""
     arena = (
         await session.execute(
-            text("SELECT id, city_id, name FROM arenas WHERE id = :id"),
+            text("SELECT id, city_id, name, venue_type FROM arenas WHERE id = :id"),
             {"id": arena_id},
         )
     ).fetchone()
     if arena is None:
         raise LookupError("Arena not found")
     _arena_id, city_id, name = int(arena[0]), int(arena[1]), str(arena[2] or "")
+    venue_type = str(arena[3] or "")
     await ensure_arena_profile(session, _arena_id, city_id=city_id, name=name)
 
     assignments: list[str] = []
@@ -408,7 +444,7 @@ async def apply_admin_arena_profile_patch(
         assignments.append("season_end_month = :season_end_month")
         params["season_end_month"] = _optional_month(fields["season_end_month"])
     if "amenities" in fields:
-        amenities = validate_amenities(fields["amenities"])
+        amenities = validate_amenities(fields["amenities"], venue_type)
         assignments.append("amenities = CAST(:amenities AS jsonb)")
         params["amenities"] = json.dumps(amenities)
     if "status" in fields and fields["status"] is not None:

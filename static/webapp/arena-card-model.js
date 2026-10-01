@@ -24,6 +24,9 @@
     ['locker_rooms', 'Раздевалки'],
     ['cafe', 'Кафе'],
     ['accessibility', 'Доступность'],
+    /* TASK-146: услуги магазина (ключи — src/application/arena_profile.py). */
+    ['retail', 'Розница'],
+    ['repair', 'Ремонт'],
   ];
 
   var MONTHS_PREP = [

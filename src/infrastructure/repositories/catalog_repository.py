@@ -135,6 +135,8 @@ class CatalogRepository:
         (default ``False``, e.g. ``GET /api/public/arenas``) until an admin confirms.
 
         Public callers also hide ``arena_profiles.status != 'published'`` (TASK-048).
+        Shops (``venue_type='shop'``, TASK-146) are never listed: this is the list of
+        places where trainers work, and every caller uses it that way.
         Missing profile is treated as published so legacy rows stay listed. ``district``
         may be NULL — the row is still returned.
         """
@@ -153,6 +155,7 @@ class CatalogRepository:
                     FROM arenas a
                     LEFT JOIN arena_profiles p ON p.arena_id = a.id
                     WHERE a.city_id = :cid AND a.is_active {confirmed_filter} {published_filter}
+                      AND a.venue_type <> 'shop'
                     ORDER BY a.sort_order, a.id
                     """
                 ),
@@ -212,6 +215,7 @@ class CatalogRepository:
                     GROUP BY ta.arena_id
                 ) cnt ON cnt.arena_id = a.id
                 WHERE a.city_id = :city_id AND a.is_active {confirmed_filter} {published_filter}
+                  AND a.venue_type <> 'shop'
                 ORDER BY COALESCE(cnt.trainer_count, 0) DESC, a.sort_order, a.id
                 """
             ),

@@ -5,6 +5,8 @@ import pytest
 
 from src.application.arena_profile import (
     AMENITY_KEYS,
+    SHOP_AMENITY_KEYS,
+    VENUE_AMENITY_KEYS,
     InvalidAmenitiesError,
     choose_arena_slug,
     district_from_nominatim_address,
@@ -38,7 +40,7 @@ def test_choose_slug_uses_district_then_id_on_name_collision() -> None:
 
 
 def test_validate_amenities_accepts_known_keys_only() -> None:
-    raw = {key: True for key in sorted(AMENITY_KEYS)}
+    raw = {key: True for key in sorted(VENUE_AMENITY_KEYS)}
     assert validate_amenities(raw) == raw
 
 
@@ -102,3 +104,23 @@ def test_serialize_list_item_keeps_row_when_district_is_null() -> None:
     assert row["id"] == 7
     assert row["district"] is None
     assert row["name"] == "Каток без района"
+
+
+def test_shop_amenities_are_services_not_rink_comforts() -> None:
+    """TASK-146: у магазина свой набор ключей; прокат и заточка — общие с катком."""
+    raw = {key: True for key in sorted(SHOP_AMENITY_KEYS)}
+    assert validate_amenities(raw, "shop") == raw
+    assert {"skate_rental", "skate_sharpening"} <= VENUE_AMENITY_KEYS & SHOP_AMENITY_KEYS
+    assert AMENITY_KEYS == VENUE_AMENITY_KEYS | SHOP_AMENITY_KEYS
+
+
+def test_retail_on_a_rink_is_a_typo_not_data() -> None:
+    with pytest.raises(InvalidAmenitiesError):
+        validate_amenities({"retail": True}, "ice")
+    with pytest.raises(InvalidAmenitiesError):
+        validate_amenities({"retail": True})
+
+
+def test_shop_has_no_locker_rooms() -> None:
+    with pytest.raises(InvalidAmenitiesError):
+        validate_amenities({"locker_rooms": True}, "shop")

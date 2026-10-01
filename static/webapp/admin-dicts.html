@@ -470,6 +470,15 @@
       <div id="addArenaForm" class="add-arena-form">
         <div class="field"><label>Название арены</label><input type="text" id="newArenaName" placeholder="Манеж, стадион…"></div>
         <div class="field"><label>Адрес (необязательно)</label><textarea id="newArenaAddress" rows="2" placeholder="Улица, дом, ориентиры"></textarea></div>
+        <div class="field"><label>Тип места</label><select id="newArenaVenueType">
+          <option value="ice" selected>Лёд</option>
+          <option value="gym">Зал</option>
+          <option value="choreo">Хореография</option>
+          <option value="pool">Бассейн</option>
+          <option value="outdoor">Улица</option>
+          <option value="other">Другое</option>
+          <option value="shop">Магазин (розница, заточка, прокат)</option>
+        </select></div>
         <div class="form-actions">
           <button type="button" class="btn-submit" id="btnArenaSubmit">Добавить</button>
           <button type="button" class="btn-cancel" id="btnArenaCancel">Отмена</button>
@@ -760,6 +769,33 @@
         ['cafe', 'Кафе'],
         ['accessibility', 'Доступность']
       ];
+      /* TASK-146: у магазина вместо удобств — услуги. Прокат и заточка — те же ключи,
+         что у катка (сервер сверяет набор с типом площадки: arena_profile.py). */
+      var SHOP_AMENITY_OPTIONS = [
+        ['retail', 'Розница'],
+        ['skate_sharpening', 'Заточка'],
+        ['skate_rental', 'Прокат'],
+        ['repair', 'Ремонт'],
+        ['parking', 'Парковка'],
+        ['accessibility', 'Доступность']
+      ];
+      var VENUE_TYPE_FALLBACK = [
+        { key: 'ice', chip: 'Лёд' }, { key: 'gym', chip: 'Зал' },
+        { key: 'choreo', chip: 'Хореография' }, { key: 'pool', chip: 'Бассейн' },
+        { key: 'outdoor', chip: 'Улица' }, { key: 'other', chip: 'Другое' },
+        { key: 'shop', chip: 'Магазин' }
+      ];
+      function amenityOptionsFor(venueType) {
+        return venueType === 'shop' ? SHOP_AMENITY_OPTIONS : AMENITY_OPTIONS;
+      }
+      function venueTypeSelectHtml(dataAttr, selected) {
+        var types = (state.venueTypes && state.venueTypes.length) ? state.venueTypes : VENUE_TYPE_FALLBACK;
+        var html = '<select ' + dataAttr + '>';
+        types.forEach(function(t) {
+          html += '<option value="' + escapeHtml(t.key) + '"' + (t.key === selected ? ' selected' : '') + '>' + escapeHtml(t.chip) + '</option>';
+        });
+        return html + '</select>';
+      }
 
       function escapeHtml(s) {
         return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -815,6 +851,7 @@
           html += '</div>';
           html += '<div class="field-row">';
           html += '<div class="field"><label>Сайт</label><input data-field="website_url" value="' + escapeHtml(a.website_url || '') + '" placeholder="https://"></div>';
+          html += '<div class="field"><label>Тип места</label>' + venueTypeSelectHtml('data-field="venue_type"', a.venue_type || 'ice') + '</div>';
           html += '<div class="field"><label>Публикация</label><select data-field="status">';
           ['draft','published','archived'].forEach(function(st) {
             html += '<option value="' + st + '"' + (status === st ? ' selected' : '') + '>' + st + '</option>';
@@ -831,8 +868,8 @@
           html += '<div class="field"><label>Сезон с (мес.)</label><input data-field="season_start_month" type="number" min="1" max="12" value="' + (a.season_start_month || '') + '"></div>';
           html += '<div class="field"><label>по (мес.)</label><input data-field="season_end_month" type="number" min="1" max="12" value="' + (a.season_end_month || '') + '"></div>';
           html += '</div>';
-          html += '<div class="field"><label>Удобства</label><div class="amenity-grid">';
-          AMENITY_OPTIONS.forEach(function(pair) {
+          html += '<div class="field"><label>' + (a.venue_type === 'shop' ? 'Услуги' : 'Удобства') + '</label><div class="amenity-grid">';
+          amenityOptionsFor(a.venue_type || 'ice').forEach(function(pair) {
             var checked = amenities[pair[0]] === true ? ' checked' : '';
             html += '<label><input type="checkbox" data-amenity="' + pair[0] + '"' + checked + '> ' + pair[1] + '</label>';
           });
@@ -886,9 +923,15 @@
             var addressEl = row.querySelector('textarea[data-field="address"], input[data-field="address"]');
             var openH = (row.querySelector('[data-field="hours_open"]') || {}).value || '';
             var closeH = (row.querySelector('[data-field="hours_close"]') || {}).value || '';
+            var venueType = (row.querySelector('[data-field="venue_type"]') || {}).value || 'ice';
+            /* Тип мог смениться в этом же сохранении: шлём только ключи, допустимые для
+               нового типа, иначе сервер честно отклонит «раздевалки» у магазина. */
+            var allowedAmenities = {};
+            amenityOptionsFor(venueType).forEach(function(pair) { allowedAmenities[pair[0]] = true; });
             var amenities = {};
             row.querySelectorAll('[data-amenity]').forEach(function(cb) {
-              amenities[cb.getAttribute('data-amenity')] = !!cb.checked;
+              var key = cb.getAttribute('data-amenity');
+              if (allowedAmenities[key]) amenities[key] = !!cb.checked;
             });
             var seasonStart = (row.querySelector('[data-field="season_start_month"]') || {}).value;
             var seasonEnd = (row.querySelector('[data-field="season_end_month"]') || {}).value;
@@ -899,6 +942,7 @@
               website_url: ((row.querySelector('[data-field="website_url"]') || {}).value || '').trim() || null,
               short_description: ((row.querySelector('[data-field="short_description"]') || {}).value || '').trim() || null,
               status: (row.querySelector('[data-field="status"]') || {}).value || 'published',
+              venue_type: venueType,
               season_start_month: seasonStart ? Number(seasonStart) : null,
               season_end_month: seasonEnd ? Number(seasonEnd) : null,
               amenities: amenities
@@ -1044,6 +1088,7 @@
         return getJson(buildArenasPath())
           .then(function(data) {
             state.arenas = (data && data.items) || [];
+            state.venueTypes = (data && data.venue_types) || state.venueTypes || [];
             renderArenas();
           }).catch(function(err) {
             showAlert(err.message || 'Не удалось загрузить арены');
@@ -1118,6 +1163,7 @@
         if (show) {
           document.getElementById('newArenaName').value = '';
           document.getElementById('newArenaAddress').value = '';
+          document.getElementById('newArenaVenueType').value = 'ice';
           document.getElementById('newArenaName').focus();
         }
       }
@@ -1135,13 +1181,15 @@
           return;
         }
         var addr = (document.getElementById('newArenaAddress').value || '').trim();
+        var venueType = document.getElementById('newArenaVenueType').value || 'ice';
         showAddArenaForm(false);
         sendJson('POST', '/admin/arenas', {
           city_id: state.selectedCityId,
           name: name,
-          address: addr || undefined
+          address: addr || undefined,
+          venue_type: venueType
         }).then(function() {
-          showToast('Арена добавлена');
+          showToast(venueType === 'shop' ? 'Магазин добавлен' : 'Арена добавлена');
           return loadCities(true);
         }).catch(function(err) {
           showAlert(err.message || String(err));
