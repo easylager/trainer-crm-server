@@ -859,3 +859,35 @@ describe('formatSortCaption во время загрузки (TASK-095)', () => 
     assert.match(caption, /^5 катков/);
   });
 });
+
+describe('TASK-146: подпись и строка ленты для магазинов и залов', () => {
+  it('считает магазины магазинами, а не катками', () => {
+    const { formatSortCaption } = loadModel();
+    const shops = [{ venue_type: 'shop', tier: 'B' }];
+    assert.equal(formatSortCaption({ total: 1, items: shops, intent: 'skate' }), '1 магазин');
+    assert.equal(
+      formatSortCaption({ total: 0, items: [], intent: 'skate', venueTypes: ['shop'] }),
+      'Пока нет магазинов · смените город или чип'
+    );
+    const gyms = [{ venue_type: 'gym' }, { venue_type: 'choreo' }];
+    assert.equal(formatSortCaption({ total: 2, items: gyms, intent: 'skate' }), '2 зала');
+    const mixed = [{ venue_type: 'ice' }, { venue_type: 'gym' }, { venue_type: 'pool' }];
+    assert.equal(formatSortCaption({ total: 3, items: mixed, intent: 'skate' }), '3 места');
+  });
+
+  it('лёд по-прежнему — катки с расписанием', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(
+      formatSortCaption({ total: 2, items: [{ venue_type: 'ice', tier: 'B' }, {}], intent: 'skate' }),
+      '2 катка · расписание уточняется'
+    );
+  });
+});
+
+describe('TASK-146: строка ленты места без сеансов', () => {
+  it('магазин показывает услуги и часы, а не «расписание уточняется»', () => {
+    const { formatLiveLine } = loadModel();
+    const line = formatLiveLine({ tier: 'B', live: { kind: 'place', text: 'Розница · Заточка · ежедневно 10:00–20:00' } });
+    assert.equal(line, 'Розница · Заточка · ежедневно 10:00–20:00');
+  });
+});

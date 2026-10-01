@@ -147,3 +147,40 @@ async def test_trainer_pickers_never_offer_a_shop(app_use_test_db, db_session) -
 
     row = (await db_session.execute(text("SELECT venue_type FROM arenas WHERE id = :id"), {"id": shop_id})).scalar_one()
     assert row == "shop"
+
+
+@pytest.mark.asyncio
+async def test_shop_row_says_what_it_offers_not_schedule_tbd(app_use_test_db, db_session) -> None:
+    city_id = await _insert_city(db_session, name=f"Строчинск {uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    shop_id = await _admin_create_shop(city_id, f"Магазин {uuid.uuid4().hex[:6]}")
+    with patch_admin_principal():
+        async with _client() as client:
+            await client.patch(
+                f"/api/webapp/admin/arenas/{shop_id}",
+                json={"opening_hours": {"daily": {"open": "10:00", "close": "20:00"}}},
+            )
+    async with _client() as client:
+        resp = await client.get("/api/public/ice/arenas", params={"city_id": city_id, "venue_type": "shop"})
+    item = resp.json()["items"][0]
+    assert item["live"]["kind"] == "place"
+    assert item["live_line"] == "Розница · Заточка · ежедневно 10:00–20:00"
+
+
+@pytest.mark.asyncio
+async def test_out_of_season_rink_stays_listed_and_says_when_it_opens(app_use_test_db, db_session) -> None:
+    from datetime import date
+
+    city_id = await _insert_city(db_session, name=f"Сезонск {uuid.uuid4().hex[:6]}")
+    rink_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}")
+    nxt = (date.today().month % 12) + 1
+    await db_session.execute(
+        text("UPDATE arena_profiles SET season_start_month = :m, season_end_month = :m WHERE arena_id = :id"),
+        {"m": nxt, "id": rink_id},
+    )
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get("/api/public/ice/arenas", params={"city_id": city_id})
+    item = next(i for i in resp.json()["items"] if i["id"] == rink_id)
+    assert item["live"]["kind"] == "closed"
+    assert item["live_line"].startswith("Сезон закрыт · откроется в ")

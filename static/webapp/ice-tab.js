@@ -399,6 +399,7 @@
         loadedIntent: state.loadedIntent,
         serviceLabel: currentServiceLabel(),
         loading: state.loading,
+        venueTypes: state.venueTypes,
       });
     }
     setShareButton();
@@ -472,9 +473,13 @@
    * живёт в четырёх других точках.
    */
   function shareAvailable() {
+    // TASK-146: артефакт — расписание льда; под фильтром «Магазин» или «Зал» его нет.
+    var venues = state.venueTypes || [];
+    var iceLens = !venues.length || venues.indexOf('ice') >= 0 || venues.indexOf('outdoor') >= 0;
     return !!(
       state.cityId &&
       state.intent === 'skate' &&
+      iceLens &&
       !state.loading &&
       state.items.length
     );

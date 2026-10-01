@@ -39,7 +39,10 @@ from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
+    VENUE_TYPE_ICE,
     VENUE_TYPE_KEYS,
+    VENUE_TYPE_OUTDOOR,
+    VENUE_TYPE_SHOP,
     normalize_venue_type,
     venue_card_cta,
     venue_site_label,
@@ -272,8 +275,61 @@ def _rank_tuple(item: Mapping[str, Any]) -> tuple:
     return (tier_rank, distance_key, has_48h, completeness, int(item["id"]))
 
 
+_MONTHS_PREP_RU = (
+    "январе", "феврале", "марте", "апреле", "мае", "июне",
+    "июле", "августе", "сентябре", "октябре", "ноябре", "декабре",
+)
+
+_SHOP_SERVICE_LABELS = (
+    ("retail", "Розница"),
+    ("skate_sharpening", "Заточка"),
+    ("skate_rental", "Прокат"),
+    ("repair", "Ремонт"),
+)
+
+
+def _place_line(item: Mapping[str, Any]) -> str:
+    """Строка ленты для места без сеансов (магазин, зал): что тут есть и когда открыто.
+
+    «Расписание уточняется» у магазина — неверный вопрос к месту: расписания у него
+    не бывает. Говорим то, что знаем: услуги и часы. Не знаем — честно «уточняйте».
+    """
+    bits: list[str] = []
+    if normalize_venue_type(item.get("venue_type")) == VENUE_TYPE_SHOP:
+        amenities = _as_mapping(item.get("amenities"))
+        services = [label for key, label in _SHOP_SERVICE_LABELS if amenities.get(key) is True]
+        if services:
+            bits.append(" · ".join(services))
+    hours = _as_mapping(item.get("opening_hours"))
+    daily = hours.get("daily") if isinstance(hours.get("daily"), Mapping) else None
+    if daily and daily.get("open") and daily.get("close"):
+        bits.append(f"ежедневно {daily['open']}–{daily['close']}")
+    if not bits:
+        bits.append("часы работы уточняйте по телефону" if item.get("phone") else "часы работы уточняются")
+    line = " · ".join(bits)
+    return line[:1].upper() + line[1:]
+
+
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
+    if intent == INTENT_SKATE and normalize_venue_type(item.get("venue_type")) not in (
+        VENUE_TYPE_ICE,
+        VENUE_TYPE_OUTDOOR,
+    ):
+        # TASK-146: у зала и магазина нет массового катания — у них «что и когда открыто».
+        return {"kind": "place", "text": _place_line(item), "currency_code": currency}
+    if (
+        intent == INTENT_SKATE
+        and not item.get("next_session_id")
+        and not is_in_season(item.get("season_start_month"), item.get("season_end_month"), today.month)
+    ):
+        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске),
+        # но говорит правду — «закрыт до ноября», а не «расписание уточняется».
+        start = item.get("season_start_month")
+        text = (
+            f"Сезон закрыт · откроется в {_MONTHS_PREP_RU[int(start) - 1]}" if start else "Сезон закрыт"
+        )
+        return {"kind": "closed", "text": text, "currency_code": currency}
     if intent == INTENT_SKATE:
         if not item.get("next_session_id"):
             return {

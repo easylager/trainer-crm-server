@@ -595,6 +595,8 @@
       }
       return parts.join(' · ');
     }
+    // TASK-146: магазин и зал — без сеансов; сервер уже сказал, что там есть и когда открыто.
+    if (kind === 'place' || kind === 'closed') return String(live.text || '').trim();
     var tier = String(item.tier || '').toUpperCase();
     if (tier === 'C') return 'Есть в справочнике · данных пока нет';
     if (tier === 'B') return 'Расписание уточняется · есть телефон и сайт';
@@ -763,14 +765,50 @@
       if (total === 0) return 'Пока нет тренеров' + svc;
       return total + ' ' + coachWord + svc;
     }
-    var word = pluralRu(total, 'каток', 'катка', 'катков');
     var items = opts.items || [];
+    var noun = venueNoun(items, opts.venueTypes);
+    var word = pluralRu(total, noun[0], noun[1], noun[2]);
     var hasA = items.some(function (it) {
       return String(it.tier || '').toUpperCase() === 'A';
     });
     if (hasA) return total + ' ' + word + ' · сначала с актуальным расписанием';
-    if (total === 0) return 'Пока нет катков · смените город или чип';
+    if (total === 0) return 'Пока нет ' + noun[2] + ' · смените город или чип';
+    // «Расписание уточняется» — вопрос ко льду; у магазина и зала расписания нет.
+    if (noun[0] !== 'каток') return total + ' ' + word;
     return total + ' ' + word + ' · расписание уточняется';
+  }
+
+  /**
+   * TASK-146. Чем считать результаты: «1 каток» для зала и магазина было неправдой.
+   * Один тип в выдаче (или в фильтре) — его существительное; смесь — «места».
+   */
+  var VENUE_NOUNS = {
+    ice: ['каток', 'катка', 'катков'],
+    outdoor: ['каток', 'катка', 'катков'],
+    gym: ['зал', 'зала', 'залов'],
+    choreo: ['зал', 'зала', 'залов'],
+    pool: ['бассейн', 'бассейна', 'бассейнов'],
+    shop: ['магазин', 'магазина', 'магазинов'],
+    other: ['место', 'места', 'мест'],
+  };
+
+  function venueNoun(items, venueTypes) {
+    var keys = [];
+    (venueTypes || []).forEach(function (k) {
+      if (keys.indexOf(k) < 0) keys.push(k);
+    });
+    if (!keys.length) {
+      (items || []).forEach(function (it) {
+        var k = String((it && it.venue_type) || 'ice');
+        if (keys.indexOf(k) < 0) keys.push(k);
+      });
+    }
+    if (!keys.length) return VENUE_NOUNS.ice;
+    var first = VENUE_NOUNS[keys[0]] || VENUE_NOUNS.other;
+    for (var i = 1; i < keys.length; i++) {
+      if ((VENUE_NOUNS[keys[i]] || VENUE_NOUNS.other)[0] !== first[0]) return VENUE_NOUNS.other;
+    }
+    return first;
   }
 
   var SEARCH_LABELS = { arena: 'Катки', trainer: 'Тренеры', city: 'Города' };
