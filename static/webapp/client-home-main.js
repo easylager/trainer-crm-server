@@ -39,6 +39,8 @@
       /* ── State ──────────────────────────────────────────────────────── */
       /** selected_trainer_id from catalog/bot session */
       var selectedTrainerId = null;
+      /* TASK-146 (DEC-009): город для карусели каталога — из сессии или из тизера льда. */
+      var discoveryCityId = null;
       /** From hub bootstrap — service aligned with primary-trainer tier (booking / save / session). */
       var primaryCatalogServiceId = null;
       /** Authoritative last booking (by slot start) from bootstrap — «Записаться снова» must not depend on catalog session. */
@@ -1330,33 +1332,85 @@
         );
       }
 
+      /**
+       * TASK-146 (DEC-009). Карточка места в карусели — тот же компактный tcard, что у
+       * тренера: каталог один, и на Главной он выглядит одним, а не двумя витринами.
+       * Вторая строка — то, ради чего идут: ближайший лёд, услуги магазина, часы зала.
+       */
+      function buildDiscoveryPlaceHtml(item) {
+        var name = String((item && item.name) || '').trim();
+        var thumb = item && (item.thumb || item.card);
+        var mediaHtml = thumb
+          ? '<div class="tcard__media"><img src="' + esc(thumb) + '" alt="" loading="lazy" decoding="async" /></div>'
+          : '<div class="tcard__media tcard__media--empty">' + esc(initials(name)) + '</div>';
+        var chip = String((item && item.venue_chip) || '').trim();
+        var line = String((item && item.live_line) || '').trim();
+        return (
+          '<button type="button" class="tcard tcard--compact tcard--place" data-arena="' + esc(String(item.id)) + '">' +
+            mediaHtml +
+            '<div class="tcard__body">' +
+              '<div class="tcard__name">' + esc(name) + '</div>' +
+              (chip ? '<div class="tcard__where"><span>' + esc(chip) + '</span></div>' : '') +
+              (line ? '<div class="tcard__rating">' + esc(line) + '</div>' : '') +
+            '</div>' +
+          '</button>'
+        );
+      }
+
+      function fetchDiscoveryPlaces() {
+        if (!discoveryCityId) return Promise.resolve([]);
+        // Те же места, что во вкладке «Поиск»: живой лёд первым (tier A), магазины — по чипу.
+        var url = '/api/public/ice/arenas?intent=skate&limit=4&city_id=' + encodeURIComponent(String(discoveryCityId));
+        return fetch(url, { cache: 'no-store' })
+          .then(function(r) { return r.ok ? r.json() : { items: [] }; })
+          .then(function(p) { return ((p && p.items) || []).filter(function(i) { return i && i.id != null; }); })
+          .catch(function() { return []; });
+      }
+
       function loadAndRenderDiscovery() {
         var el = document.getElementById('hubDiscovery');
         if (!el) return Promise.resolve();
         var url = '/api/public/trainers?limit=6';
-        return fetch(url, { headers: { 'Content-Type': 'application/json' } })
+        var trainersP = fetch(url, { headers: { 'Content-Type': 'application/json' } })
           .then(function(r) { return r.ok ? r.json() : { items: [] }; })
-          .catch(function() { return { items: [] }; })
-          .then(function(payload) {
+          .catch(function() { return { items: [] }; });
+        return Promise.all([trainersP, fetchDiscoveryPlaces()])
+          .then(function(parts) {
+            var payload = parts[0];
+            var places = (parts[1] || []).slice(0, 3);
             var items = (payload && (payload.items || payload.trainers)) || [];
-            items = items.filter(function(t) { return t && t.id != null; }).slice(0, 6);
-            if (!items.length) {
+            items = items.filter(function(t) { return t && t.id != null; }).slice(0, places.length ? 4 : 6);
+            if (!items.length && !places.length) {
               hideDiscovery();
               return;
             }
-            var cards = items.map(buildDiscoveryCardHtml).join('');
+            var cards = places.map(buildDiscoveryPlaceHtml).join('') + items.map(buildDiscoveryCardHtml).join('');
+            var title = places.length ? 'Каталог: лёд, тренеры, магазины' : 'Тренеры на платформе';
             el.innerHTML =
               '<div class="hub-discovery__head">' +
-                '<span class="hub-discovery__title">Тренеры на платформе</span>' +
+                '<span class="hub-discovery__title">' + title + '</span>' +
                 '<button type="button" class="hub-discovery__link" id="hubDiscoveryAll">Все</button>' +
               '</div>' +
               '<div class="hub-discovery__row">' + cards + '</div>';
             el.removeAttribute('hidden');
             wireDiscoveryCardPhotos(el);
             var allBtn = document.getElementById('hubDiscoveryAll');
-            if (allBtn) allBtn.addEventListener('click', function() { navigateTo('ice?intent=coach'); });
+            if (allBtn) {
+              allBtn.addEventListener('click', function() {
+                navigateTo(
+                  places.length
+                    ? 'ice?city_id=' + encodeURIComponent(String(discoveryCityId))
+                    : 'ice?intent=coach'
+                );
+              });
+            }
             el.querySelectorAll('.tcard').forEach(function(btn) {
               btn.addEventListener('click', function() {
+                var arena = btn.getAttribute('data-arena');
+                if (arena) {
+                  navigateTo('arena?ref=' + encodeURIComponent(arena));
+                  return;
+                }
                 var tid = btn.getAttribute('data-tid');
                 if (tid) navigateTo('catalog?trainer_id=' + encodeURIComponent(tid));
               });
@@ -1613,6 +1667,9 @@
         var cs = (hubMeta && hubMeta.client_session) || {};
         var iceTeaser = hubMeta && hubMeta.ice_teaser;
         renderIceTeaser(iceTeaser);
+        discoveryCityId =
+          (cs.city_id != null && cs.city_id !== '' ? Number(cs.city_id) : null) ||
+          (iceTeaser && !iceTeaser.is_country_fallback && iceTeaser.city_id ? Number(iceTeaser.city_id) : null);
         // far_confirmed means IP-country (src/shared/ip_geo.py) already told us this visitor
         // is outside every served market — the honest card is already showing, GPS would
         // only ask for a permission we don't need.
