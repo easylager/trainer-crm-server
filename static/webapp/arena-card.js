@@ -205,6 +205,42 @@
     );
   }
 
+  /**
+   * TASK-146: «Поделиться» на карточке места (DEC-004). Для катка с ближайшими
+   * сеансами главная кнопка — «Позвать с собой»: зовут на конкретное время, а не
+   * пересылают объявление (DEC-014 — приглашение не прячется в оверлей).
+   */
+  function renderShareBar() {
+    if (!global.GlideShareSheet) return '';
+    var isIce = String(state.card.venue_type || 'ice') === 'ice';
+    var slots = isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [];
+    if (slots.length) {
+      return (
+        '<div class="arena-share">' +
+        '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">Позвать с собой</button>' +
+        '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="arena-share arena-share--one">' +
+      '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
+      '</div>'
+    );
+  }
+
+  function openShare(invite) {
+    if (!global.GlideShareSheet || !state.card) return;
+    var isIce = String(state.card.venue_type || 'ice') === 'ice';
+    global.GlideShareSheet.open({
+      ref: state.card.id,
+      slots: isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [],
+      invite: !!invite,
+      venueType: state.card.venue_type,
+      context: 'arena_card',
+    });
+  }
+
   function renderAmenities() {
     var chips = M.amenityChips(state.card.amenities);
     if (!chips.length) return '';
@@ -548,6 +584,7 @@
     if (title) title.textContent = state.card.name || state.card.venue_noun || 'Площадка';
     root.innerHTML =
       renderHero() +
+      renderShareBar() +
       renderAmenities() +
       renderIceSection() +
       renderTrainers() +
@@ -689,6 +726,10 @@
     if (action === 'open-day') {
       state.day = M.dayTabFromIso(t.getAttribute('data-date'), todayIso());
       paint();
+      return;
+    }
+    if (action === 'share' || action === 'share-invite') {
+      openShare(action === 'share-invite');
       return;
     }
     if (action === 'report') openModal();

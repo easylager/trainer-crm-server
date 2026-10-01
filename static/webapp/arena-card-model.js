@@ -520,6 +520,33 @@
     return bits.join(' · ');
   }
 
+  /**
+   * TASK-146: ближайшие сеансы для шита «Поделиться» — делятся конкретным временем.
+   * «Сегодня 19:00» / «Завтра 11:00» / «Сб 18:30». Порядок — как в ленте.
+   */
+  function shareSlots(days, todayIso, limit) {
+    days = days || [];
+    limit = limit || 6;
+    var tomorrow = '';
+    try {
+      var t = parseLocalDate(todayIso);
+      t.setDate(t.getDate() + 1);
+      tomorrow = ymd(t);
+    } catch (e) { /* */ }
+    var out = [];
+    for (var i = 0; i < days.length && out.length < limit; i++) {
+      var iso = days[i].local_date;
+      var head = iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
+      var list = days[i].sessions || [];
+      for (var j = 0; j < list.length && out.length < limit; j++) {
+        var hhmm = String(list[j].starts_at_local || '').slice(0, 5);
+        if (list[j].id == null || !hhmm) continue;
+        out.push({ id: list[j].id, label: head + ' ' + hhmm });
+      }
+    }
+    return out;
+  }
+
   function startParamFromLocation(loc) {
     loc = loc || (typeof window !== 'undefined' ? window.location : null);
     if (!loc) return null;
@@ -560,6 +587,7 @@
     ribbonIsoForDay: ribbonIsoForDay,
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
+    shareSlots: shareSlots,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
   };
 });

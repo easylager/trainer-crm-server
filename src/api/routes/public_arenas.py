@@ -240,6 +240,9 @@ async def get_public_arena_trainers(
     return payload
 
 
+_SHARE_CHANNELS = ("telegram", "copy", "story", "system")
+
+
 @router.get("/arenas/{arena_ref}/share")
 async def get_public_place_share(
     arena_ref: str,
@@ -247,6 +250,8 @@ async def get_public_place_share(
     session_id: int | None = Query(None, description="Сеанс, которым делятся (ссылка ведёт прямо на него)."),
     invite: bool = Query(False, description="Тон «Позвать с собой» вместо «Расписание»."),
     share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
+    record: bool = Query(True, description="false — предпросмотр в шите: показать, но не считать шерингом."),
+    channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -259,6 +264,10 @@ async def get_public_place_share(
     «погнали?», чтобы переключатель в шит-оверлее не ходил на сервер второй раз.
 
     Публичная ручка: кто поделился, не знает (``actor_hash = NULL``), как и ``/ice/share``.
+
+    Шит «Поделиться» сначала показывает превью (``record=false`` — переключатели и выбор
+    сеанса не должны раздувать счётчик), а событие пишет по нажатию канала: одна строка ==
+    одно намерение отправить, с каналом в ``payload.channel`` (Q-007: что реально шерят и куда).
     """
     response.headers["Cache-Control"] = "no-store"
     view = await load_place_view(session, arena_ref, session_id=session_id)
@@ -274,18 +283,21 @@ async def get_public_place_share(
     chosen = invited if invite else plain
 
     ctx = (share_context or "").strip().lower()[:40] or "arena_card"
-    await record_client_share(
-        session,
-        kind=CLIENT_SHARE_KIND_PLACE,
-        share_context=ctx,
-        city_id=int(card["city_id"]),
-        arena_id=int(card["id"]),
-        payload={
-            "venue_type": card.get("venue_type"),
-            "session_id": focus_id,
-            "invite": bool(invite),
-        },
-    )
+    if record:
+        ch = (channel or "").strip().lower()
+        await record_client_share(
+            session,
+            kind=CLIENT_SHARE_KIND_PLACE,
+            share_context=ctx,
+            city_id=int(card["city_id"]),
+            arena_id=int(card["id"]),
+            payload={
+                "venue_type": card.get("venue_type"),
+                "session_id": focus_id,
+                "invite": bool(invite),
+                "channel": ch if ch in _SHARE_CHANNELS else None,
+            },
+        )
     return {
         **chosen,
         "invite_share_url": invited["share_url"],

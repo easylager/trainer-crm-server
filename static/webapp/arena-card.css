@@ -586,3 +586,13 @@ body.client-shell-tabs-hidden .arena-tickets-cta {
     grid-template-columns: 38px minmax(0, 1fr) minmax(0, auto);
   }
 }
+
+/* TASK-146: «Позвать с собой» / «Поделиться» сразу под шапкой карточки. */
+.arena-share {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.arena-share--one { grid-template-columns: 1fr; }
+.arena-share .arena-btn { margin: 0; }

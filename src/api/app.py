@@ -1146,6 +1146,32 @@ def webapp_arena_card_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-share-sheet.js")
+def webapp_share_sheet_js(request: Request):
+    """TASK-146 «Поделиться»: шит с превью карточки и каналами. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-share-sheet.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-share-sheet.css")
+def webapp_share_sheet_css(request: Request):
+    """TASK-146 стили шита «Поделиться». Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-share-sheet.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/ice-tab.css")
 def webapp_ice_tab_css(request: Request):
     """TASK-053 Ice tab styles. Use ``?v=…`` for long cache."""

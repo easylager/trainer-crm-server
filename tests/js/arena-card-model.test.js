@@ -541,3 +541,21 @@ describe('practiceContacts', () => {
     assert.deepEqual(empty.socials, []);
   });
 });
+
+describe('shareSlots (TASK-146)', () => {
+  it('ближайшие сеансы с человеческими подписями и лимитом', () => {
+    const { shareSlots } = loadModel();
+    const days = [
+      { local_date: '2026-10-02', sessions: [{ id: 1, starts_at_local: '19:00' }, { id: 2, starts_at_local: '20:45:00' }] },
+      { local_date: '2026-10-03', sessions: [{ id: 3, starts_at_local: '11:00' }] },
+      { local_date: '2026-10-04', sessions: [{ id: 4, starts_at_local: '18:30' }, { id: 5, starts_at_local: '' }] },
+    ];
+    assert.deepEqual(shareSlots(days, '2026-10-02', 3), [
+      { id: 1, label: 'Сегодня 19:00' },
+      { id: 2, label: 'Сегодня 20:45' },
+      { id: 3, label: 'Завтра 11:00' },
+    ]);
+    assert.deepEqual(shareSlots(days, '2026-10-02', 10).slice(-1), [{ id: 4, label: 'Вс 18:30' }]);
+    assert.deepEqual(shareSlots([], '2026-10-02'), []);
+  });
+});

@@ -278,3 +278,34 @@ def test_city_day_page_links_every_rink_to_its_place_page() -> None:
     assert '<a href="/p/minsk/minsk-arena">Минск-Арена</a>' in html
     # Без slug ссылки нет — мёртвой ссылки лучше не рисовать.
     assert "<a " not in _arena_html({"name": "Каток", "slug": None, "sessions": []}, city_name="Минск")
+
+
+@pytest.mark.asyncio
+async def test_share_preview_is_not_counted_and_channel_is(app_use_test_db, db_session) -> None:
+    place = await _place(db_session)
+    async with _client() as client:
+        for _ in range(3):  # переключатели в шите
+            await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"record": "false"})
+        await client.get(f"/api/public/arenas/{place['arena_id']}/share", params={"channel": "telegram"})
+    rows = (
+        (
+            await db_session.execute(
+                text("SELECT payload FROM client_share_events WHERE arena_id = :aid"), {"aid": place["arena_id"]}
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0]["channel"] == "telegram"
+
+
+@pytest.mark.asyncio
+async def test_share_sheet_assets_are_served_and_wired_into_the_arena_card(app_use_test_db) -> None:
+    async with _client() as client:
+        js = await client.get("/webapp/mini-app-share-sheet.js?v=1")
+        css = await client.get("/webapp/mini-app-share-sheet.css?v=1")
+        page = await client.get("/webapp/arena")
+    assert js.status_code == 200 and "GlideShareSheet" in js.text
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    assert "mini-app-share-sheet.js" in page.text and "mini-app-share-sheet.css" in page.text
