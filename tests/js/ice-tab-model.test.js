@@ -322,7 +322,7 @@ describe('groupSearchResults (AC-004)', () => {
       grouped.map((g) => g.type),
       ['arena', 'trainer', 'city']
     );
-    assert.equal(grouped[0].label, 'Катки');
+    assert.equal(grouped[0].label, 'Места');
     assert.equal(grouped[1].label, 'Тренеры');
     assert.equal(grouped[2].label, 'Города');
     assert.equal(grouped[1].items[0].last_name, 'Иванова');
@@ -405,7 +405,9 @@ describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
 describe('hrefs', () => {
   it('arena rows open the TASK-052 card by slug or id', () => {
     const { arenaHref } = loadModel();
-    assert.equal(arenaHref({ slug: 'minsk-chizhovka', id: 12 }), 'arena?ref=minsk-chizhovka');
+    // TASK-146: id важнее slug — slug уникален только в городе, а поиск идёт по стране.
+    assert.equal(arenaHref({ slug: 'minsk-chizhovka', id: 12 }), 'arena?ref=12');
+    assert.equal(arenaHref({ slug: 'minsk-chizhovka' }), 'arena?ref=minsk-chizhovka');
     assert.equal(arenaHref({ id: 12 }), 'arena?ref=12');
   });
 

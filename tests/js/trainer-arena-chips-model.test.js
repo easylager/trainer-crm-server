@@ -55,13 +55,14 @@ describe('buildTrainerArenaChips (AC-003)', () => {
     assert.equal(view.items[1].id, 11);
   });
 
-  it('uses slug in href when the trainer payload includes arena_slugs', () => {
+  it('keeps id in href even when the trainer payload includes arena_slugs', () => {
+    // TASK-146: slug уникален только в городе — ссылка по нему могла открыть чужую арену.
     const { buildTrainerArenaChips } = loadModel();
     const view = buildTrainerArenaChips(
       trainer({ arena_slugs: ['chizhovka', 'zamok'] })
     );
-    assert.equal(view.items[0].href, 'arena?ref=chizhovka');
-    assert.equal(view.items[1].href, 'arena?ref=zamok');
+    assert.equal(view.items[0].href, 'arena?ref=10');
+    assert.equal(view.items[1].href, 'arena?ref=11');
   });
 
   it('hides the block when the trainer has no arenas', () => {

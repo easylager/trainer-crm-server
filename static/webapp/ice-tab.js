@@ -1072,7 +1072,9 @@
           var sub = '';
           if (g.type === 'arena') {
             href = M.arenaHref(it);
-            sub = [it.district, it.city_name, it.address].filter(Boolean).join(' · ');
+            // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
+            var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
+            sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
           } else if (g.type === 'trainer') {
             href = M.trainerHref(it);
             title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');

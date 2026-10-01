@@ -390,7 +390,8 @@ describe('pin sheet target (TASK-075 AC-002)', () => {
   it('opens our arena card, never a Yandex org card', () => {
     const { pinSheetTarget } = loadModel();
     const target = pinSheetTarget(rink({ slug: 'minsk-chizhovka', id: 12 }));
-    assert.equal(target.href, 'arena?ref=minsk-chizhovka');
+    // TASK-146: id важнее slug — slug уникален только внутри города.
+    assert.equal(target.href, 'arena?ref=12');
     assert.equal(target.opens, 'arena-card');
     assert.equal(target.yandexOrgCard, false);
     assert.equal(pinSheetTarget(rink({ id: 12, slug: null })).href, 'arena?ref=12');

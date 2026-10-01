@@ -310,7 +310,10 @@
   }
 
   function arenaHref(item) {
-    var ref = (item && (item.slug || item.id)) || '';
+    /* TASK-146: по id, а не по slug. Slug уникален только внутри города, а поиск и
+       карта — по всей стране: «ledovyy-dvorets» в Бресте открывал минский дворец.
+       Читаемые адреса нужны публичной странице (/p/{city}/{slug}), не мини-аппу. */
+    var ref = (item && (item.id != null ? item.id : item.slug)) || '';
     return 'arena?ref=' + encodeURIComponent(String(ref));
   }
 
@@ -811,7 +814,8 @@
     return first;
   }
 
-  var SEARCH_LABELS = { arena: 'Катки', trainer: 'Тренеры', city: 'Города' };
+  // «Места», а не «Катки»: по слову «заточка» находятся и мастерские, и залы.
+  var SEARCH_LABELS = { arena: 'Места', trainer: 'Тренеры', city: 'Города' };
 
   function groupSearchResults(payload) {
     var groups = (payload && payload.groups) || [];

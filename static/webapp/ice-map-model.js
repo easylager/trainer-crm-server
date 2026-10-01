@@ -173,7 +173,8 @@
   }
 
   function pinSheetTarget(item) {
-    var ref = (item && (item.slug || item.id)) || '';
+    // id важнее slug: slug уникален только в городе (TASK-146).
+    var ref = (item && (item.id != null ? item.id : item.slug)) || '';
     return {
       href: 'arena?ref=' + encodeURIComponent(String(ref)),
       opens: 'arena-card',
