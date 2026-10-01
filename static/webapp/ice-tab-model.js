@@ -139,7 +139,9 @@
       return (
         (Number(c.skate_count) || 0) > 0 ||
         (Number(c.trainer_count) || 0) > 0 ||
-        (Number(c.map_rink_count) || 0) > 0
+        (Number(c.map_rink_count) || 0) > 0 ||
+        // TASK-146: город с одними магазинами (ещё без координат) — тоже город каталога.
+        (Number(c.place_count) || 0) > 0
       );
     });
   }

@@ -19,6 +19,8 @@ from src.application.arena_media import attach_arena_media_payloads
 from src.application.arena_profile import (
     AMENITY_LABELS_RU,
     ARENA_PROFILE_STATUS_PUBLISHED,
+    hours_for_weekday,
+    hours_groups,
     SHOP_SERVICE_KEYS,
     is_in_season,
     public_http_url,
@@ -302,9 +304,12 @@ def _place_line(item: Mapping[str, Any]) -> str:
             rest = len(services) - 3
             bits.append(f"{head} · ещё {rest}" if rest > 0 else head)
     hours = _as_mapping(item.get("opening_hours"))
-    daily = hours.get("daily") if isinstance(hours.get("daily"), Mapping) else None
-    if daily and daily.get("open") and daily.get("close"):
-        bits.append(f"ежедневно {daily['open']}–{daily['close']}")
+    groups = hours_groups(hours)
+    if len(groups) == 1 and groups[0][1]:
+        bits.append(f"ежедневно {groups[0][1][0]}–{groups[0][1][1]}")
+    elif groups:
+        today_pair = hours_for_weekday(hours, _today_minsk().weekday())
+        bits.append(f"сегодня {today_pair[0]}–{today_pair[1]}" if today_pair else "сегодня выходной")
     if not bits:
         bits.append("часы работы уточняйте по телефону" if item.get("phone") else "часы работы уточняются")
     line = " · ".join(bits)
@@ -608,6 +613,17 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND (p.status IS NULL OR p.status = :published)
                        ) AS map_rink_count,
                        (
+                           -- TASK-146: город, где пока есть только магазины без координат
+                           -- (до геокодинга), тоже должен быть в выборе — иначе его места
+                           -- недостижимы ни из списка, ни по диплинку.
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                       ) AS place_count,
+                       (
                            SELECT AVG(a.latitude)
                            FROM arenas a
                            LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -679,7 +695,8 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
         skate_count = int(row["skate_count"] or 0)
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
-        if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0:
+        place_count = int(row["place_count"] or 0)
+        if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0 and place_count <= 0:
             continue
         lat = row["latitude"]
         lon = row["longitude"]
@@ -704,6 +721,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "skate_count": skate_count,
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
+                "place_count": place_count,
                 "latitude": float(lat) if lat is not None else None,
                 "longitude": float(lon) if lon is not None else None,
                 "bounds": bounds,

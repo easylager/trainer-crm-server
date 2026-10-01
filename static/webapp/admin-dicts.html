@@ -953,8 +953,12 @@
               season_end_month: seasonEnd ? Number(seasonEnd) : null,
               amenities: amenities
             };
+            var current = (state.arenas.filter(function(x) { return Number(x.id) === id; })[0] || {}).opening_hours || {};
             if (openH.trim() || closeH.trim()) {
               payload.opening_hours = { daily: { open: openH.trim() || null, close: closeH.trim() || null } };
+            } else if (current.weekly) {
+              /* TASK-146: часы по дням приходят из импорта, а форма знает только «ежедневно».
+                 Пустые поля здесь не значат «часов нет» — не трогаем то, чего форма не показывает. */
             } else {
               payload.opening_hours = null;
             }

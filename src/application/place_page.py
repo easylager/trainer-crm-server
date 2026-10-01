@@ -40,6 +40,12 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
+from src.application.arena_profile import (
+    has_known_hours,
+    hours_for_weekday,
+    hours_groups,
+    opening_hours_schema_org,
+)
 from src.application.place_links import place_query
 from src.shared.venue_types import has_public_skating
 
@@ -251,48 +257,24 @@ def ago_label(moment: datetime | None, *, now: datetime) -> str:
     return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
 
 
-def _norm_hhmm(raw: Any) -> str:
-    """«7:00» / «07.00» / «7» → «07:00». Непонятное — пустая строка.
-
-    Часы вводят руками в админке; сравнивать «7:00» и «10:00» строками нельзя —
-    «7:00» окажется позже, и магазин «закроется» с утра.
-    """
-    text = str(raw or "").strip().replace(".", ":")
-    if not text:
-        return ""
-    head, _, tail = text.partition(":")
-    if not head.isdigit() or (tail and not tail.isdigit()):
-        return ""
-    h, m = int(head), int(tail or 0)
-    if not (0 <= h <= 24 and 0 <= m < 60):
-        return ""
-    return f"{h:02d}:{m:02d}"
-
-
-def _daily_hours(card: Mapping[str, Any]) -> tuple[str, str] | None:
-    hours = card.get("opening_hours") or {}
-    daily = hours.get("daily") if isinstance(hours, Mapping) else None
-    if not isinstance(daily, Mapping):
-        return None
-    open_, close = _norm_hhmm(daily.get("open")), _norm_hhmm(daily.get("close"))
-    if not open_ or not close:
-        return None
-    return open_, close
-
-
 def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
-    """«Открыто до 22:00» / «Закрыто · откроется в 10:00» по ежедневным часам."""
-    pair = _daily_hours(card)
-    if pair is None:
-        return ""
-    open_, close = pair
+    """«Открыто до 22:00» / «Закрыто · откроется в 10:00» / «Сегодня выходной»."""
     tz = ZoneInfo(str(card.get("timezone") or "Europe/Minsk"))
-    hhmm = now.astimezone(tz).strftime("%H:%M")
+    local = now.astimezone(tz)
+    if not has_known_hours(card.get("opening_hours")):
+        return ""
+    pair = hours_for_weekday(card.get("opening_hours"), local.weekday())
+    if pair is None:
+        return "Сегодня выходной"
+    open_, close = pair
+    hhmm = local.strftime("%H:%M")
     if close > open_:
         is_open = open_ <= hhmm < close
     else:  # работает за полночь
         is_open = hhmm >= open_ or hhmm < close
-    return f"Открыто до {close}" if is_open else f"Закрыто · откроется в {open_}"
+    if is_open:
+        return f"Открыто до {close}"
+    return f"Закрыто · откроется в {open_}" if hhmm < open_ else "Сегодня уже закрыто"
 
 
 # ---------------------------------------------------------------------------
@@ -633,13 +615,14 @@ def _amenities_html(card: Mapping[str, Any]) -> str:
 
 
 def _hours_html(card: Mapping[str, Any]) -> str:
-    pair = _daily_hours(card)
-    if pair is None:
+    groups = hours_groups(card.get("opening_hours"))
+    if not groups:
         return ""
-    return (
-        '<section class="sec"><h2 class="sec__title">Часы работы</h2>'
-        f'<p class="row"><span>Ежедневно</span><b>{_esc(pair[0])}–{_esc(pair[1])}</b></p></section>'
+    rows = "".join(
+        f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{pair[0]}–{pair[1]}" if pair else "выходной")}</b></p>'
+        for label, pair in groups
     )
+    return f'<section class="sec"><h2 class="sec__title">Часы работы</h2>{rows}</section>'
 
 
 def _trainers_html(card: Mapping[str, Any], *, cta_url: str | None) -> str:
@@ -673,6 +656,15 @@ def _maps_url(card: Mapping[str, Any]) -> str | None:
     return f"https://yandex.ru/maps/?text={quote(query)}" if query else None
 
 
+def _display_host(url: str) -> str:
+    """«https://xn--j1aaid0h.xn--90ais/» → «конёк.бел»: адрес показываем так, как его набирают."""
+    host = url.split("://", 1)[-1].rstrip("/")
+    try:
+        return host.encode("ascii").decode("idna") if "xn--" in host else host
+    except UnicodeError:
+        return host
+
+
 def _contacts_html(card: Mapping[str, Any]) -> str:
     rows: list[str] = []
     address = str(card.get("address") or "").strip()
@@ -691,7 +683,14 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
         label = str(card.get("venue_site_label") or "Сайт")
         rows.append(
             f'<p class="row"><span>{_esc(label)}</span><b><a href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
-            f'{_esc(site.split("://", 1)[1].rstrip("/"))}</a></b></p>'
+            f"{_esc(_display_host(site))}</a></b></p>"
+        )
+    instagram = str((card.get("social_urls") or {}).get("instagram") or "").strip()
+    if instagram.lower().startswith("https://"):
+        handle = instagram.rstrip("/").rsplit("/", 1)[-1]
+        rows.append(
+            f'<p class="row"><span>Instagram</span><b><a href="{_esc(instagram)}" rel="noopener nofollow" '
+            f'target="_blank">@{_esc(handle)}</a></b></p>'
         )
     tickets = str(card.get("tickets_url") or "").strip()
     if tickets:
@@ -745,7 +744,7 @@ def _trust_html(view: Mapping[str, Any]) -> str:
     if edited is not None and (verified is None or edited > verified):
         # Q-012: у места без расписания с сайта единственный честный сигнал свежести —
         # последняя правка карточки командой.
-        lines.append(f"Данные карточки {ago_label(edited, now=now)}.")
+        lines.append(f"Данные карточки {ago_label(edited, now=now).replace('обновлено', 'обновлены', 1)}.")
     if not lines:
         lines.append("Карточку собрала команда Glide по открытым данным.")
     if card.get("venue_type") == "outdoor":
@@ -778,9 +777,9 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
         }
     if card.get("phone"):
         place["telephone"] = card["phone"]
-    pair = _daily_hours(card)
-    if pair:
-        place["openingHours"] = f"Mo-Su {pair[0]}-{pair[1]}"
+    schema_hours = opening_hours_schema_org(card.get("opening_hours"))
+    if schema_hours:
+        place["openingHours"] = schema_hours[0] if len(schema_hours) == 1 else schema_hours
     events = []
     for day in view.get("days") or []:
         for slot in day.get("sessions") or []:

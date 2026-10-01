@@ -532,19 +532,67 @@
     return chips;
   }
 
-  function formatOpeningHours(hours) {
-    hours = hours || {};
-    var daily = hours.daily;
-    if (daily && (daily.open || daily.close)) {
-      return 'Пн–Вс ' + (daily.open || '') + '–' + (daily.close || '');
-    }
-    return '';
+  /* TASK-146: часы бывают daily (каждый день) и weekly (по дням). Ключи — как на сервере
+     (src/application/arena_profile.py: WEEKDAY_KEYS), неделя с понедельника. */
+  var WEEK_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  var WEEK_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  function normHhmm(raw) {
+    var t = String(raw == null ? '' : raw).trim().replace('.', ':');
+    var m = /^(\d{1,2})(?::(\d{1,2}))?$/.exec(t);
+    if (!m) return '';
+    var h = Number(m[1]);
+    var mi = Number(m[2] || 0);
+    if (h > 24 || mi > 59) return '';
+    return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
   }
 
-  function openUntilLabel(hours) {
+  /** Часы на день недели (0 = понедельник) или null — выходной/неизвестно. */
+  function hoursForWeekday(hours, weekday) {
     hours = hours || {};
+    if (hours.weekly && typeof hours.weekly === 'object') {
+      var pair = hours.weekly[WEEK_KEYS[((weekday % 7) + 7) % 7]];
+      if (pair && pair.length === 2 && normHhmm(pair[0]) && normHhmm(pair[1])) {
+        return [normHhmm(pair[0]), normHhmm(pair[1])];
+      }
+      return null;
+    }
     var daily = hours.daily;
-    if (daily && daily.close) return 'открыт до ' + daily.close;
+    if (daily && normHhmm(daily.open) && normHhmm(daily.close)) return [normHhmm(daily.open), normHhmm(daily.close)];
+    return null;
+  }
+
+  function formatOpeningHours(hours) {
+    var days = [];
+    var known = false;
+    for (var d = 0; d < 7; d++) {
+      days.push(hoursForWeekday(hours, d));
+      if (days[d]) known = true;
+    }
+    if (!known) return '';
+    var key = function (p) { return p ? p[0] + '–' + p[1] : 'выходной'; };
+    var parts = [];
+    var start = 0;
+    for (var i = 1; i <= 7; i++) {
+      if (i === 7 || key(days[i]) !== key(days[start])) {
+        var label = i - 1 === start ? WEEK_SHORT[start] : WEEK_SHORT[start] + '–' + WEEK_SHORT[i - 1];
+        parts.push(label + ' ' + key(days[start]));
+        start = i;
+      }
+    }
+    return parts.join(' · ');
+  }
+
+  /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
+  function openUntilLabel(hours, now) {
+    now = now || new Date();
+    var weekday = (now.getDay() + 6) % 7;
+    var pair = hoursForWeekday(hours, weekday);
+    if (!pair) return '';
+    var hm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+    var open = pair[1] > pair[0] ? hm >= pair[0] && hm < pair[1] : hm >= pair[0] || hm < pair[1];
+    if (open) return 'открыт до ' + pair[1];
+    if (hm < pair[0]) return 'откроется в ' + pair[0];
     return '';
   }
 
@@ -641,6 +689,8 @@
     seasonClosedBanner: seasonClosedBanner,
     amenityChips: amenityChips,
     formatOpeningHours: formatOpeningHours,
+    openUntilLabel: openUntilLabel,
+    hoursForWeekday: hoursForWeekday,
     heroMetaLine: heroMetaLine,
     trainerSubtitle: trainerSubtitle,
     parseLocalDate: parseLocalDate,

@@ -502,3 +502,84 @@ async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:
     await session.execute(
         text("UPDATE arena_profiles SET updated_at = now() WHERE arena_id = :id"), {"id": int(arena_id)}
     )
+
+
+# ---------------------------------------------------------------------------
+# Часы работы (TASK-146). Два формата в opening_hours:
+#   {"daily": {"open": "10:00", "close": "20:00"}}                 — каждый день одинаково;
+#   {"weekly": {"mon": ["10:00", "19:00"], ..., "sun": null}}        — по дням; null/нет — выходной.
+# ---------------------------------------------------------------------------
+
+WEEKDAY_KEYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_SHORT_RU: tuple[str, ...] = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def normalize_hhmm(raw: Any) -> str:
+    """«7:00» / «07.00» / «7» → «07:00». Непонятное — пустая строка.
+
+    Часы вводят руками; сравнивать «7:00» и «10:00» строками нельзя — «7:00»
+    окажется позже, и магазин «закроется» с утра.
+    """
+    text_value = str(raw or "").strip().replace(".", ":")
+    if not text_value:
+        return ""
+    head, _, tail = text_value.partition(":")
+    if not head.isdigit() or (tail and not tail.isdigit()):
+        return ""
+    h, m = int(head), int(tail or 0)
+    if not (0 <= h <= 24 and 0 <= m < 60):
+        return ""
+    return f"{h:02d}:{m:02d}"
+
+
+def hours_for_weekday(opening_hours: Mapping[str, Any] | None, weekday: int) -> tuple[str, str] | None:
+    """Часы на день недели (0 = понедельник). None — выходной или неизвестно."""
+    hours = opening_hours if isinstance(opening_hours, Mapping) else {}
+    weekly = hours.get("weekly")
+    if isinstance(weekly, Mapping):
+        pair = weekly.get(WEEKDAY_KEYS[weekday % 7])
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            o, c = normalize_hhmm(pair[0]), normalize_hhmm(pair[1])
+            return (o, c) if o and c else None
+        return None
+    daily = hours.get("daily")
+    if isinstance(daily, Mapping):
+        o, c = normalize_hhmm(daily.get("open")), normalize_hhmm(daily.get("close"))
+        return (o, c) if o and c else None
+    return None
+
+
+def has_known_hours(opening_hours: Mapping[str, Any] | None) -> bool:
+    return any(hours_for_weekday(opening_hours, d) for d in range(7))
+
+
+def hours_groups(opening_hours: Mapping[str, Any] | None) -> list[tuple[str, tuple[str, str] | None]]:
+    """Соседние дни с одинаковыми часами — одной строкой: [("Пн–Пт", ("10:00","19:00")), ("Вс", None)]."""
+    if not has_known_hours(opening_hours):
+        return []
+    days = [hours_for_weekday(opening_hours, d) for d in range(7)]
+    if all(day == days[0] for day in days):
+        return [("Ежедневно", days[0])]
+    groups: list[tuple[str, tuple[str, str] | None]] = []
+    start = 0
+    for i in range(1, 8):
+        if i == 7 or days[i] != days[start]:
+            label = WEEKDAY_SHORT_RU[start] if i - 1 == start else f"{WEEKDAY_SHORT_RU[start]}–{WEEKDAY_SHORT_RU[i - 1]}"
+            groups.append((label, days[start]))
+            start = i
+    return groups
+
+
+def opening_hours_schema_org(opening_hours: Mapping[str, Any] | None) -> list[str]:
+    """«Mo-Fr 10:00-19:00» — для schema.org openingHours."""
+    codes = ("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
+    out: list[str] = []
+    days = [hours_for_weekday(opening_hours, d) for d in range(7)]
+    start = 0
+    for i in range(1, 8):
+        if i == 7 or days[i] != days[start]:
+            if days[start]:
+                span = codes[start] if i - 1 == start else f"{codes[start]}-{codes[i - 1]}"
+                out.append(f"{span} {days[start][0]}-{days[start][1]}")
+            start = i
+    return out
