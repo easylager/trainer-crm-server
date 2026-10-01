@@ -43,6 +43,7 @@
 | [growth_loop.md](product-knowledge/growth_loop.md) | Циклы роста под ICP |
 | [client-booking-url-contract.md](product-knowledge/client-booking-url-contract.md) | Контракт ссылок записи клиента |
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
+| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест, шеринг каталога, диплинки, магазины |
 
 ## strategy — куда идём
 
