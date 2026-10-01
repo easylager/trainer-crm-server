@@ -1,7 +1,7 @@
 /*
  * Шит «Поделиться» (TASK-146). Светлый, как вся среда мини-аппа: тёмное — только
  * сама карточка-превью внутри (это и есть экспортируемый артефакт, DEC-007).
- * Срез угла у листа — ribbon-геометрия продукта (--app-ribbon-clip-*).
+ * Только токены theme.css — шит переключает тему вместе с приложением.
  */
 .gss {
   position: fixed;
@@ -10,10 +10,10 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(4, 18, 26, 0);
+  background: transparent;
   transition: background 0.18s ease;
 }
-.gss.is-open { background: rgba(4, 18, 26, 0.42); }
+.gss.is-open { background: var(--app-scrim, rgba(4, 18, 26, 0.42)); }
 .gss[hidden] { display: none; }
 
 .gss-sheet {
@@ -21,9 +21,9 @@
   max-width: 560px;
   max-height: 92vh;
   overflow-y: auto;
-  background: var(--glide-card, #fff);
-  color: var(--glide-text, #0d1b26);
-  border-radius: 20px 20px 0 0;
+  background: var(--glide-card);
+  color: var(--glide-text);
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
   padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   transform: translateY(24px);
   opacity: 0;
@@ -36,16 +36,16 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-  font-size: 17px;
+  font-size: var(--app-text-lead);
 }
 .gss-x {
   border: 0;
-  background: var(--app-chip-bg, #eef3f5);
+  background: var(--app-chip-bg);
   color: inherit;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  font-size: 14px;
+  border-radius: var(--app-radius-pill);
+  font-size: var(--app-text-body);
   cursor: pointer;
 }
 
@@ -54,8 +54,8 @@
   grid-template-columns: 1fr 1fr;
   gap: 4px;
   padding: 4px;
-  border-radius: 12px;
-  background: var(--app-chip-bg, #eef3f5);
+  border-radius: var(--app-radius-md);
+  background: var(--app-chip-bg);
   margin-bottom: 10px;
 }
 .gss-tab {
@@ -63,13 +63,13 @@
   background: transparent;
   color: inherit;
   padding: 9px 8px;
-  border-radius: 9px;
+  border-radius: var(--app-radius-sm);
   font: inherit;
-  font-size: var(--app-text-body, 14px);
-  font-weight: var(--app-weight-semibold, 600);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
 }
-.gss-tab.is-on { background: var(--glide-card, #fff); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.gss-tab.is-on { background: var(--glide-card); box-shadow: var(--app-float-shadow); }
 
 .gss-slots {
   display: flex;
@@ -82,20 +82,20 @@
 .gss-slots::-webkit-scrollbar { display: none; }
 .gss-slot {
   flex: 0 0 auto;
-  border: 1px solid var(--glide-line, #e1e8ec);
+  border: 1px solid var(--glide-line);
   background: transparent;
   color: inherit;
   padding: 7px 11px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--app-text-caption);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 .gss-slot.is-on {
-  border-color: var(--app-cta-fill, #45b9bb);
-  background: var(--glide-brand-wash, #e3f4f3);
-  font-weight: 600;
+  border-color: var(--app-cta-fill);
+  background: var(--glide-brand-wash);
+  font-weight: var(--app-weight-semibold);
 }
 
 .gss-preview { margin: 0 0 12px; }
@@ -104,18 +104,17 @@
   width: 100%;
   aspect-ratio: 1200 / 630;
   object-fit: cover;
-  border-radius: 14px;
-  background: #0b2a30;
-  clip-path: var(--app-ribbon-clip-sm, none);
+  border-radius: var(--app-radius-lg);
+  background: var(--glide-deep);
 }
 .gss-preview__img--wait { animation: gss-pulse 1.2s ease-in-out infinite; }
 @keyframes gss-pulse { 50% { opacity: 0.6; } }
 .gss-preview figcaption {
   margin-top: 8px;
   white-space: pre-line;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--glide-hint, #5d7285);
+  font-size: var(--app-text-caption);
+  line-height: 1.45;
+  color: var(--glide-hint);
 }
 
 .gss-channels {
@@ -124,19 +123,23 @@
   gap: 6px;
 }
 .gss-ch {
-  border: 1px solid var(--glide-line, #e1e8ec);
-  background: var(--glide-card, #fff);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-card);
   color: inherit;
   padding: 12px 4px;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   font: inherit;
-  font-size: 13px;
-  font-weight: var(--app-weight-semibold, 600);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
 }
 .gss-ch:disabled { opacity: 0.5; }
-.gss-ch--tg { background: #229ed9; border-color: #229ed9; color: #fff; }
-.gss-note { margin: 10px 0 0; font-size: 12px; color: var(--glide-hint, #5d7285); text-align: center; }
+.gss-ch--tg {
+  background: var(--app-brand-telegram);
+  border-color: var(--app-brand-telegram);
+  color: var(--app-brand-telegram-on);
+}
+.gss-note { margin: 10px 0 0; font-size: var(--app-text-caption); color: var(--glide-hint); text-align: center; }
 
 .gss-toast {
   position: fixed;
@@ -145,10 +148,10 @@
   transform: translateX(-50%);
   max-width: calc(100% - 32px);
   padding: 10px 14px;
-  border-radius: 12px;
-  background: var(--glide-text, #0d1b26);
-  color: var(--glide-card, #fff);
-  font-size: 13px;
+  border-radius: var(--app-radius-md);
+  background: var(--glide-text);
+  color: var(--glide-card);
+  font-size: var(--app-text-caption);
   opacity: 0;
   transition: opacity 0.2s;
   pointer-events: none;

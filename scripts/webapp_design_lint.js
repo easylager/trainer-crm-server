@@ -57,6 +57,7 @@ const CLIENT_FILES = [
   'mini-app-trainer-card.css',
   'mini-app-arena-ribbon.css',
   'booking-client.css',
+  'mini-app-share-sheet.css',
 ];
 
 /**

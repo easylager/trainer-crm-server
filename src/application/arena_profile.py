@@ -47,11 +47,32 @@ SHOP_AMENITY_KEYS = frozenset(
         "retail",  # розница
         "skate_sharpening",
         "skate_rental",
-        "repair",  # ремонт
+        "repair",  # ремонт коньков, клюшек, формы
+        "skate_molding",  # формовка (термоформовка ботинка)
+        "blade_profiling",  # профилирование лезвия
+        "foot_scan",  # 3D-скан стопы для подбора коньков
+        # Специализация: заточка хоккейных и фигурных — физически разные работы,
+        # и «хоккейный магазин» фигуристу почти бесполезен. Поэтому явно, а не тегом.
+        "discipline_hockey",
+        "discipline_figure",
+        "discipline_roller",
         "parking",
         "accessibility",
     }
 )
+
+#: Услуги магазина в порядке показа (плитки и строка ленты).
+SHOP_SERVICE_KEYS: tuple[str, ...] = (
+    "retail",
+    "skate_sharpening",
+    "skate_molding",
+    "blade_profiling",
+    "foot_scan",
+    "skate_rental",
+    "repair",
+)
+#: Специализации — отдельной строкой тегов, не плитками.
+SHOP_DISCIPLINE_KEYS: tuple[str, ...] = ("discipline_hockey", "discipline_figure", "discipline_roller")
 
 AMENITY_KEYS = VENUE_AMENITY_KEYS | SHOP_AMENITY_KEYS
 
@@ -64,6 +85,12 @@ AMENITY_LABELS_RU = {
     "accessibility": "Доступность",
     "retail": "Розница",
     "repair": "Ремонт",
+    "skate_molding": "Формовка",
+    "blade_profiling": "Профилирование",
+    "foot_scan": "3D-скан стопы",
+    "discipline_hockey": "Хоккей",
+    "discipline_figure": "Фигурное",
+    "discipline_roller": "Ролики",
 }
 
 
@@ -463,7 +490,15 @@ async def apply_admin_arena_profile_patch(
             params["tickets_url"] = url
     if not assignments:
         return
+    assignments.append("updated_at = now()")
     await session.execute(
         text("UPDATE arena_profiles SET " + ", ".join(assignments) + " WHERE arena_id = :id"),
         params,
+    )
+
+
+async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:
+    """Правка самой арены (имя, адрес, тип) — тоже правка карточки для «обновлено N назад»."""
+    await session.execute(
+        text("UPDATE arena_profiles SET updated_at = now() WHERE arena_id = :id"), {"id": int(arena_id)}
     )

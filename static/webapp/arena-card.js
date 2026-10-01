@@ -249,12 +249,37 @@
   }
 
   function renderAmenities() {
+    if (String(state.card.venue_type || '') === 'shop') return renderShopServices();
     var chips = M.amenityChips(state.card.amenities);
     if (!chips.length) return '';
     return (
       '<div class="arena-sec"><div class="arena-amen">' +
       chips.map(function (c) { return '<span>' + esc(c) + '</span>'; }).join('') +
       '</div></div>'
+    );
+  }
+
+  /** TASK-146: у магазина вместо чипов удобств — плитки услуг и специализация. */
+  function renderShopServices() {
+    var v = M.shopServicesView(state.card.amenities);
+    if (!v.tiles.length && !v.disciplines.length) return '';
+    var tiles = v.tiles
+      .map(function (t) {
+        return (
+          '<div class="arena-svc"><b>' + esc(t.title) + '</b><span>' + esc(t.sub) + '</span></div>'
+        );
+      })
+      .join('');
+    var tags = v.disciplines.length
+      ? '<div class="arena-amen arena-svc-for">' +
+        v.disciplines.map(function (d) { return '<span>' + esc(d) + '</span>'; }).join('') +
+        '</div>'
+      : '';
+    return (
+      '<div class="arena-sec"><p class="arena-h">Что здесь можно сделать</p>' +
+      (tiles ? '<div class="arena-svcs">' + tiles + '</div>' : '') +
+      tags +
+      '</div>'
     );
   }
 
@@ -579,6 +604,9 @@
     var text = M.formatFreshness(state.card.freshness, new Date());
     var html = '<div class="arena-sec"><div class="arena-fresh">';
     if (text) html += '<span>' + esc(text) + '</span>';
+    M.trustLines(state.card, new Date()).forEach(function (line) {
+      html += '<span>' + esc(line) + '</span>';
+    });
     html +=
       '<span><button type="button" class="linkish" data-action="report">Сообщить об ошибке</button> — конкретное поле, а не письмо в поддержку</span>';
     html += '</div></div>';

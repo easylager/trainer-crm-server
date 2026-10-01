@@ -559,3 +559,35 @@ describe('shareSlots (TASK-146)', () => {
     assert.deepEqual(shareSlots([], '2026-10-02'), []);
   });
 });
+
+describe('магазин и доверие (TASK-146)', () => {
+  it('плитки услуг в порядке показа, специализация отдельно, false не рисуется', () => {
+    const { shopServicesView } = loadModel();
+    const v = shopServicesView({
+      repair: true,
+      retail: true,
+      skate_molding: true,
+      foot_scan: false,
+      discipline_hockey: true,
+      discipline_figure: false,
+    });
+    assert.deepEqual(v.tiles.map((t) => t.title), ['Розница', 'Формовка', 'Ремонт']);
+    assert.deepEqual(v.disciplines, ['Хоккей']);
+  });
+
+  it('свежесть карточки без расписания — по последней правке; улица — про погоду', () => {
+    const { trustLines } = loadModel();
+    const now = new Date('2026-10-02T12:00:00Z');
+    const shop = trustLines(
+      { venue_type: 'shop', freshness: { profile_updated_at: '2026-09-29T10:00:00Z' } },
+      now
+    );
+    assert.equal(shop.length, 1);
+    assert.match(shop[0], /^Данные обновлены 3 дня назад$/);
+    assert.deepEqual(trustLines({ venue_type: 'gym', freshness: {} }, now), [
+      'Карточку собрала команда Glide по открытым данным',
+    ]);
+    const outdoor = trustLines({ venue_type: 'outdoor', freshness: { schedule_observed_at: '2026-10-02T08:00:00Z' } }, now);
+    assert.deepEqual(outdoor, ['Открытый лёд зависит от погоды — уточняйте перед выездом']);
+  });
+});

@@ -96,9 +96,17 @@ _MONTHS_PREP = (
 #: Услуги магазина — тайлы с короткой подписью, а не просто теги.
 _SHOP_SERVICES: tuple[tuple[str, str, str, str], ...] = (
     ("retail", "🛒", "Розница", "Коньки, защита, форма"),
-    ("skate_sharpening", "🔧", "Заточка", "Фигурные и хоккейные — уточняйте"),
+    ("skate_sharpening", "🔧", "Заточка", "Лезвия под ваш стиль катания"),
+    ("skate_molding", "🔥", "Формовка", "Ботинок по форме стопы"),
+    ("blade_profiling", "📐", "Профилирование", "Профиль лезвия под игрока"),
+    ("foot_scan", "🦶", "3D-скан стопы", "Точный подбор размера"),
     ("skate_rental", "🔁", "Прокат", "Коньки на время"),
-    ("repair", "🛠️", "Ремонт", "Лезвия, крепления"),
+    ("repair", "🛠️", "Ремонт", "Коньки, клюшки, форма"),
+)
+_SHOP_DISCIPLINES: tuple[tuple[str, str], ...] = (
+    ("discipline_hockey", "🏒 Хоккей"),
+    ("discipline_figure", "⛸ Фигурное"),
+    ("discipline_roller", "🛼 Ролики"),
 )
 _AMENITY_CHIPS: tuple[tuple[str, str], ...] = (
     ("skate_rental", "⛸ Прокат коньков"),
@@ -595,11 +603,19 @@ def _services_html(card: Mapping[str, Any]) -> str:
         for key, icon, title, sub in _SHOP_SERVICES
         if amenities.get(key) is True
     ]
-    if not tiles:
+    disciplines = [
+        f'<span class="chip">{_esc(label)}</span>' for key, label in _SHOP_DISCIPLINES if amenities.get(key) is True
+    ]
+    if not tiles and not disciplines:
         return ""
+    for_whom = (
+        f'<p class="for-whom">Специализация</p><div class="chips">{"".join(disciplines)}</div>' if disciplines else ""
+    )
     return (
         '<section class="sec"><h2 class="sec__title">Что здесь можно сделать</h2>'
-        f'<div class="tiles">{"".join(tiles)}</div></section>'
+        + (f'<div class="tiles">{"".join(tiles)}</div>' if tiles else "")
+        + for_whom
+        + "</section>"
     )
 
 
@@ -721,11 +737,16 @@ def _trust_html(view: Mapping[str, Any]) -> str:
             source = "сайта " + source[5:]
         lines.append(f"Расписание с {source}, {ago_label(observed, now=now)}.")
     verified = _parse_iso_dt(fresh.get("verified_at"))
+    edited = _parse_iso_dt(fresh.get("profile_updated_at"))
     if verified is not None:
         lines.append(
             f"Карточку проверила команда Glide {verified.day} {_MONTHS_GEN[verified.month - 1]} {verified.year}."
         )
-    elif not lines:
+    if edited is not None and (verified is None or edited > verified):
+        # Q-012: у места без расписания с сайта единственный честный сигнал свежести —
+        # последняя правка карточки командой.
+        lines.append(f"Данные карточки {ago_label(edited, now=now)}.")
+    if not lines:
         lines.append("Карточку собрала команда Glide по открытым данным.")
     if card.get("venue_type") == "outdoor":
         lines.append("Открытый лёд зависит от погоды — уточняйте перед выездом.")

@@ -221,6 +221,7 @@ from src.application.arena_profile import (
     InvalidArenaProfileStatusError,
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
+    touch_arena_profile,
 )
 from src.application.arena_public_use_cases import get_hub_ice_teaser, parse_near
 from src.api.middleware.http_limits import client_ip_from_request
@@ -5059,6 +5060,7 @@ async def patch_admin_arena(
         r = await session.execute(text(q), params)
         if r.rowcount == 0:
             raise HTTPException(status_code=404, detail="Arena not found")
+        await touch_arena_profile(session, arena_id)
     else:
         exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
         if not exists.fetchone():

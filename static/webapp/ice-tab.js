@@ -296,8 +296,18 @@
         ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
         : ''
       : '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    /* «Позвать» — поверх кадра, но вне ссылки карточки: вложенная кнопка в <a> ломает
+       клик на iOS, а тап должен звать друга, а не открывать карточку. */
+    var invite =
+      v.sessionId != null && global.GlideShareSheet
+        ? '<button type="button" class="ice-board__invite" data-invite-arena="' + esc(v.arenaId) +
+          '" data-invite-session="' + esc(v.sessionId) + '" data-invite-label="' + esc(v.inviteLabel) +
+          '">Позвать</button>'
+        : '';
     return (
-      '<a class="ice-board" href="' +
+      '<div class="ice-board-wrap">' +
+      invite +
+      '<a class="ice-board ice-board--type-' + esc(v.venueType) + '" href="' +
       esc(v.href) +
       '" data-href="' +
       esc(v.href) +
@@ -310,7 +320,8 @@
       esc(v.depth) +
       '<span class="ice-board__go" aria-hidden="true">→</span>' +
       '</span>' +
-      '</a>'
+      '</a>' +
+      '</div>'
     );
   }
 
@@ -1106,6 +1117,20 @@
   }
 
   function onRootClick(ev) {
+    var invite = ev.target.closest('[data-invite-arena]');
+    if (invite && global.GlideShareSheet) {
+      ev.preventDefault();
+      global.GlideShareSheet.open({
+        ref: invite.getAttribute('data-invite-arena'),
+        sessionId: invite.getAttribute('data-invite-session'),
+        slots: [
+          { id: invite.getAttribute('data-invite-session'), label: invite.getAttribute('data-invite-label') },
+        ],
+        invite: true,
+        context: 'ice_list',
+      });
+      return;
+    }
     var card = ev.target.closest('[data-href]');
     if (!card) return;
     var href = card.getAttribute('data-href') || card.getAttribute('href') || '';

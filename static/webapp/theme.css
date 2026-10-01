@@ -145,6 +145,18 @@
   --app-attention-on: #FFFFFF;
   --app-attention-wash: rgba(200, 122, 21, 0.12);
 
+  /*
+   * TASK-146 (DEC-006). Тип места — рейка карточки каталога. Своя семантика, не статус:
+   * лёд — тил продукта, зал — тёплый, магазин — фиолетовый, бассейн — синий.
+   */
+  --app-venue-ice: var(--glide-brand);
+  --app-venue-gym: #D9822B;
+  --app-venue-shop: #7A5AF5;
+  --app-venue-pool: #2A7FD4;
+  /* Кнопка «Telegram» в шите «Поделиться» — фирменный цвет канала, узнаваемый с полувзгляда. */
+  --app-brand-telegram: #229ED9;
+  --app-brand-telegram-on: #FFFFFF;
+
   /* Историческое имя — оставлено ради обратной совместимости, равно --app-attention. */
   --app-warning: var(--app-attention);
   /* Историческое имя: успех. Равно --app-ok. */
@@ -560,6 +572,10 @@ html.sub-root-dark {
     --app-ok-ink: #5FCF94;
     --app-ok-on: #06301B;
     --app-ok-wash: rgba(79, 201, 138, 0.13);
+
+    --app-venue-gym: #F0A24B;
+    --app-venue-shop: #A48BFF;
+    --app-venue-pool: #5AA7F0;
 
     --app-attention: #F0A24B;
     --app-attention-ink: #F0A24B;

@@ -596,3 +596,27 @@ body.client-shell-tabs-hidden .arena-tickets-cta {
 }
 .arena-share--one { grid-template-columns: 1fr; }
 .arena-share .arena-btn { margin: 0; }
+
+/* TASK-146: услуги магазина — плитки, как на публичной странице места. */
+.arena-svcs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.arena-svc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--app-chip-bg);
+}
+.arena-svc b {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-svc span {
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+.arena-svc-for { margin-top: 10px; }

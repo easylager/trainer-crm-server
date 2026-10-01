@@ -26,8 +26,38 @@
     ['accessibility', 'Доступность'],
     /* TASK-146: услуги магазина (ключи — src/application/arena_profile.py). */
     ['retail', 'Розница'],
+    ['skate_molding', 'Формовка'],
+    ['blade_profiling', 'Профилирование'],
+    ['foot_scan', '3D-скан стопы'],
     ['repair', 'Ремонт'],
   ];
+
+  /* TASK-146: услуги магазина — плитками с подписью, специализация — тегами. */
+  var SHOP_SERVICES = [
+    ['retail', 'Розница', 'Коньки, защита, форма'],
+    ['skate_sharpening', 'Заточка', 'Лезвия под ваш стиль катания'],
+    ['skate_molding', 'Формовка', 'Ботинок по форме стопы'],
+    ['blade_profiling', 'Профилирование', 'Профиль лезвия под игрока'],
+    ['foot_scan', '3D-скан стопы', 'Точный подбор размера'],
+    ['skate_rental', 'Прокат', 'Коньки на время'],
+    ['repair', 'Ремонт', 'Коньки, клюшки, форма'],
+  ];
+  var SHOP_DISCIPLINES = [
+    ['discipline_hockey', 'Хоккей'],
+    ['discipline_figure', 'Фигурное'],
+    ['discipline_roller', 'Ролики'],
+  ];
+
+  function shopServicesView(amenities) {
+    amenities = amenities || {};
+    var tiles = SHOP_SERVICES.filter(function (s) { return amenities[s[0]] === true; }).map(function (s) {
+      return { key: s[0], title: s[1], sub: s[2] };
+    });
+    var disciplines = SHOP_DISCIPLINES.filter(function (d) { return amenities[d[0]] === true; }).map(function (d) {
+      return d[1];
+    });
+    return { tiles: tiles, disciplines: disciplines };
+  }
 
   var MONTHS_PREP = [
     '',
@@ -192,6 +222,38 @@
     }
     return text;
   }
+
+  /**
+   * TASK-146 (DEC-014): откуда данные карточки и насколько они свежие — для мест без
+   * владельца-аккаунта (магазин, зал). Расписание льда говорит само за себя
+   * (formatFreshness); здесь — карточка: проверка, последняя правка, погода.
+   */
+  function trustLines(card, now) {
+    card = card || {};
+    var f = card.freshness || {};
+    var lines = [];
+    var verified = f.verified_at ? new Date(f.verified_at) : null;
+    var edited = f.profile_updated_at ? new Date(f.profile_updated_at) : null;
+    if (verified && !isNaN(verified.getTime())) {
+      lines.push('Проверено командой Glide ' + verified.getDate() + ' ' + MONTHS_GEN[verified.getMonth()]);
+    }
+    if (edited && !isNaN(edited.getTime()) && (!verified || edited > verified)) {
+      var d = daysBetween(f.profile_updated_at, now || new Date());
+      if (d != null && d >= 0) {
+        lines.push('Данные обновлены ' + (d === 0 ? 'сегодня' : pluralDays(d) + ' назад'));
+      }
+    }
+    if (!lines.length && !f.schedule_observed_at) {
+      lines.push('Карточку собрала команда Glide по открытым данным');
+    }
+    if (card.venue_type === 'outdoor') {
+      lines.push('Открытый лёд зависит от погоды — уточняйте перед выездом');
+    }
+    return lines;
+  }
+
+  var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+    'сентября', 'октября', 'ноября', 'декабря'];
 
   function sessionNowState(session, now) {
     if (!session) return 'upcoming';
@@ -588,6 +650,8 @@
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
     shareSlots: shareSlots,
+    shopServicesView: shopServicesView,
+    trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
   };
 });

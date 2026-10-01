@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_media import attach_arena_media_payloads
 from src.application.arena_profile import (
+    AMENITY_LABELS_RU,
     ARENA_PROFILE_STATUS_PUBLISHED,
+    SHOP_SERVICE_KEYS,
     is_in_season,
     public_http_url,
 )
@@ -281,12 +283,7 @@ _MONTHS_PREP_RU = (
     "июле", "августе", "сентябре", "октябре", "ноябре", "декабре",
 )
 
-_SHOP_SERVICE_LABELS = (
-    ("retail", "Розница"),
-    ("skate_sharpening", "Заточка"),
-    ("skate_rental", "Прокат"),
-    ("repair", "Ремонт"),
-)
+_SHOP_SERVICE_LABELS = tuple((key, AMENITY_LABELS_RU[key]) for key in SHOP_SERVICE_KEYS)
 
 
 def _place_line(item: Mapping[str, Any]) -> str:
@@ -300,7 +297,10 @@ def _place_line(item: Mapping[str, Any]) -> str:
         amenities = _as_mapping(item.get("amenities"))
         services = [label for key, label in _SHOP_SERVICE_LABELS if amenities.get(key) is True]
         if services:
-            bits.append(" · ".join(services))
+            # Строка ленты — одна строка: три главные услуги, остальное — на карточке.
+            head = " · ".join(services[:3])
+            rest = len(services) - 3
+            bits.append(f"{head} · ещё {rest}" if rest > 0 else head)
     hours = _as_mapping(item.get("opening_hours"))
     daily = hours.get("daily") if isinstance(hours.get("daily"), Mapping) else None
     if daily and daily.get("open") and daily.get("close"):
@@ -353,6 +353,8 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             parts.append(f"ещё {more} {word}")
         return {
             "kind": "session",
+            # TASK-146: «Позвать» на карточке ленты зовёт на этот самый сеанс.
+            "session_id": int(item["next_session_id"]),
             "text": " · ".join(parts),
             "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
             "starts_at_local": hhmm,
@@ -428,7 +430,7 @@ SELECT
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
-    p.amenities, p.status, p.verified_at,
+    p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
     nxt.id AS next_session_id,
     nxt.kind AS next_kind,
@@ -945,6 +947,9 @@ def _freshness_payload(
         "source_label": source_label,
         "source_url": website,
         "verified_at": _iso(row.get("verified_at")),
+        # Q-012: последняя правка карточки — источник «обновлено N назад» у мест без
+        # расписания с сайта (магазин, зал). NULL — неизвестно, тогда о свежести молчим.
+        "profile_updated_at": _iso(row.get("profile_updated_at")),
     }
 
 
@@ -1140,6 +1145,12 @@ _SERVICE_SEARCH_STEMS: tuple[tuple[str, str], ...] = (
     ("прокат", "skate_rental"),
     ("аренд", "skate_rental"),
     ("ремонт", "repair"),
+    ("формовк", "skate_molding"),
+    ("профилир", "blade_profiling"),
+    ("скан", "foot_scan"),
+    ("хокке", "discipline_hockey"),
+    ("фигурн", "discipline_figure"),
+    ("ролик", "discipline_roller"),
     ("купить", "retail"),
     ("магазин", "retail"),
     ("экипир", "retail"),

@@ -296,6 +296,8 @@ class ArenaProfile(Base):
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Последняя правка карточки в админке (TASK-146, Q-012). NULL — неизвестно.
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 
     arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")

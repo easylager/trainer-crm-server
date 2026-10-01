@@ -184,3 +184,45 @@ async def test_out_of_season_rink_stays_listed_and_says_when_it_opens(app_use_te
     item = next(i for i in resp.json()["items"] if i["id"] == rink_id)
     assert item["live"]["kind"] == "closed"
     assert item["live_line"].startswith("Сезон закрыт · откроется в ")
+
+
+@pytest.mark.asyncio
+async def test_admin_edit_stamps_updated_at_and_card_shows_it(app_use_test_db, db_session) -> None:
+    """Q-012: у магазина свежесть — это последняя правка карточки, а не выдуманная дата."""
+    city_id = await _insert_city(db_session, name=f"Свежинск {uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    shop_id = await _admin_create_shop(city_id, f"Мастерская {uuid.uuid4().hex[:6]}")
+    async with _client() as client:
+        card = (await client.get(f"/api/public/arenas/{shop_id}")).json()
+    assert card["freshness"]["profile_updated_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_long_service_list_stays_one_line(app_use_test_db, db_session) -> None:
+    city_id = await _insert_city(db_session, name=f"Сервисинск {uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    shop_id = await _admin_create_shop(city_id, f"Сервис {uuid.uuid4().hex[:6]}")
+    with patch_admin_principal():
+        async with _client() as client:
+            resp = await client.patch(
+                f"/api/webapp/admin/arenas/{shop_id}",
+                json={
+                    "amenities": {
+                        "retail": True,
+                        "skate_sharpening": True,
+                        "skate_molding": True,
+                        "blade_profiling": True,
+                        "repair": True,
+                        "discipline_hockey": True,
+                    }
+                },
+            )
+            assert resp.status_code == 200, resp.text
+    async with _client() as client:
+        items = (await client.get("/api/public/ice/arenas", params={"city_id": city_id, "venue_type": "shop"})).json()[
+            "items"
+        ]
+        found = await client.get("/api/public/search", params={"q": "формовка"})
+    assert items[0]["live_line"].startswith("Розница · Заточка · Формовка · ещё 2")
+    arena_group = next(g for g in found.json()["groups"] if g["type"] == "arena")
+    assert shop_id in {i["id"] for i in arena_group["items"]}

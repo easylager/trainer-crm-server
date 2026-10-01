@@ -645,6 +645,12 @@
       status: isSession ? '' : formatLiveLine(item, now),
       depth: depth,
       tone: liveTone(item),
+      // TASK-146: тип места — цветная рейка карточки (DEC-006: своя семантика,
+      // не статус записи) и ближайший сеанс для «Позвать».
+      venueType: String(item.venue_type || 'ice'),
+      arenaId: item.id,
+      sessionId: isSession && live.session_id != null ? live.session_id : null,
+      inviteLabel: isSession ? sessionDayLabel(live, now) + ' ' + String(live.starts_at_local || '').slice(0, 5) : '',
     };
   }
 

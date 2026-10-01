@@ -1086,3 +1086,47 @@ body.ice-view-map .ice-map-offmap {
   font-size: var(--app-text-body);
   line-height: 1;
 }
+
+/*
+ * TASK-146. Рейка типа места (DEC-006). Своя семантика — тип, а не статус записи,
+ * поэтому свой класс, а не hub-booking-row/slot-card. Лёд — тил продукта, зал — тёплый,
+ * магазин — фиолетовый: три типа различимы без подписи.
+ */
+.ice-board-wrap { position: relative; }
+.ice-board::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  z-index: 2;
+  background: transparent;
+}
+.ice-board--type-ice::before,
+.ice-board--type-outdoor::before { background: var(--app-venue-ice); }
+.ice-board--type-gym::before,
+.ice-board--type-choreo::before { background: var(--app-venue-gym); }
+.ice-board--type-shop::before { background: var(--app-venue-shop); }
+.ice-board--type-pool::before { background: var(--app-venue-pool); }
+
+/* «Позвать» на кадре карточки с ближайшим сеансом. */
+.ice-board__invite {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  padding: 7px 12px;
+  background: var(--glide-card);
+  color: var(--glide-text);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.ice-board__invite::before { content: "⛸ "; }
