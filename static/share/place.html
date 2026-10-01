@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>__TITLE__</title>
+  <meta name="description" content="__DESCRIPTION__" />
+  <link rel="canonical" href="__CANONICAL__" />
+  <meta name="robots" content="__ROBOTS__" />
+
+  <meta property="og:type" content="place" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:site_name" content="Glide — карта льда" />
+  <meta property="og:title" content="__TITLE__" />
+  <meta property="og:description" content="__DESCRIPTION__" />
+  <meta property="og:url" content="__OG_URL__" />
+  <meta property="og:image" content="__OG_IMAGE__" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <script type="application/ld+json">__JSONLD__</script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <style>
+    /*
+      TASK-146. Страница самодостаточная, как «Лёд сегодня»: один запрос, ноль своих
+      ассетов — её открывают из пересланного сообщения на чужом телефоне.
+
+      Холст светлый и спокойный (design/CREATIVE-DIRECTIONS-2026-08-24.md): тил — акцент,
+      не заливка. Тёмная драматичная подача живёт только в картинке для шеринга
+      (og.png / story.png) — это экспортируемый артефакт, а не среда.
+      Срез 45° у hero — та же «ribbon»-геометрия, что в мини-аппе.
+    */
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f6f7;
+      --surface: #ffffff;
+      --ink: #0d1b26;
+      --muted: #5d7285;
+      --line: #e1e8ec;
+      --accent: #0f8f8a;
+      --accent-ink: #ffffff;
+      --accent-wash: #e3f4f3;
+      --chip: #eef3f5;
+      --live: #12a150;
+      --warn: #b4690e;
+      --cut: 18px;
+      --ice: #2aa7c9;
+      --gym: #e08a1e;
+      --shop: #7a5af5;
+      --other: #5d7285;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a1620;
+        --surface: #101f2b;
+        --ink: #f2f7fa;
+        --muted: #90a7b8;
+        --line: #1d3040;
+        --accent: #5ed6d2;
+        --accent-ink: #06222a;
+        --accent-wash: #11303a;
+        --chip: #162835;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 16px 16px 112px; }
+    .top {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      margin: 0 0 14px; font-size: 14px; color: var(--muted);
+    }
+    .top__brand { font-weight: 700; color: var(--ink); text-decoration: none; letter-spacing: -.01em; }
+    .top__brand span { color: var(--accent); }
+
+    .hero {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 20px 20px 18px 23px;
+      clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+      margin-bottom: 12px;
+    }
+    .hero::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--other);
+    }
+    .hero--ice::before { background: var(--ice); }
+    .hero--gym::before, .hero--choreo::before { background: var(--gym); }
+    .hero--shop::before { background: var(--shop); }
+    .hero__type { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+    .hero__title { margin: 0; font-size: clamp(26px, 7vw, 34px); line-height: 1.12; letter-spacing: -.02em; }
+    .hero__where { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px; margin: 12px 0 0;
+      padding: 6px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; font-weight: 600;
+    }
+    .badge__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .badge--live .badge__dot, .badge--open .badge__dot { background: var(--live); box-shadow: 0 0 0 4px rgba(18,161,80,.15); }
+    .badge--soon .badge__dot { background: var(--accent); }
+    .badge--closed .badge__dot, .badge--shut .badge__dot { background: var(--warn); }
+    .about { margin: 0 0 12px; color: var(--muted); }
+
+    .plan {
+      background: var(--accent-wash);
+      border: 1px solid var(--accent);
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin: 0 0 12px;
+    }
+    .plan__kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+    .plan__day { margin: 8px 0 0; font-size: 16px; font-weight: 600; }
+    .plan__time { margin: 2px 0 0; font-size: 40px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .plan__label { margin: 4px 0 0; color: var(--muted); }
+    .plan__soon { margin: 8px 0 0; font-weight: 600; color: var(--live); }
+    .plan__prices { margin: 10px 0 0; padding: 0; list-style: none; font-size: 15px; }
+    .plan__prices li { padding: 2px 0; }
+    .plan__where { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+    .plan--gone { background: var(--surface); border-color: var(--line); }
+    .plan--gone .plan__kicker { color: var(--warn); }
+    .plan__note { margin: 6px 0 0; }
+
+    .actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 12px; }
+    @media (min-width: 420px) { .actions { grid-template-columns: 1fr 1fr; } }
+    .cta {
+      display: block; padding: 14px 18px; border-radius: 14px;
+      background: var(--accent); color: var(--accent-ink);
+      font-size: 16px; font-weight: 600; text-align: center; text-decoration: none;
+    }
+    .cta--ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+
+    .sec {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+      padding: 16px 18px; margin: 0 0 12px;
+    }
+    .sec__title { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .sec p { margin: 0; }
+    .muted { color: var(--muted); }
+    .hint { margin: 10px 0 0 !important; color: var(--muted); font-size: 13px; }
+    .day + .day { margin-top: 14px; }
+    .day__label { margin: 0 0 8px !important; font-weight: 600; }
+    .slots { display: flex; flex-wrap: wrap; gap: 8px; }
+    .slot {
+      display: inline-flex; flex-direction: column; gap: 1px; min-width: 86px;
+      padding: 8px 12px; border-radius: 12px; background: var(--chip);
+      color: var(--ink); text-decoration: none; border: 1px solid transparent;
+    }
+    .slot--focus { border-color: var(--accent); background: var(--accent-wash); }
+    .slot--more { color: var(--muted); justify-content: center; }
+    .slot__time { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .slot__price { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tile { background: var(--chip); border-radius: 14px; padding: 12px; }
+    .tile__icon { font-size: 20px; }
+    .tile__title { margin: 6px 0 2px !important; font-weight: 700; }
+    .tile__sub { font-size: 13px; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 7px 12px; border-radius: 999px; background: var(--chip); font-size: 14px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .row:first-of-type { border-top: 0; padding-top: 0; }
+    .row span { color: var(--muted); }
+    .row b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+    .share { margin: 18px 0 0; }
+    .share__title { margin: 0 0 8px; font-weight: 700; }
+    .share__row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .share__btn {
+      flex: 1 1 auto; min-width: 96px; padding: 11px 14px; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+      font: inherit; font-size: 15px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
+    }
+    .share__btn--tg { background: #229ed9; border-color: #229ed9; color: #fff; }
+    .share__story { display: inline-block; margin-top: 10px; font-size: 14px; }
+    .trust { margin: 22px 0 0; color: var(--muted); font-size: 13px; }
+    .trust p { margin: 0 0 4px; }
+    footer { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+    footer a { color: inherit; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg);
+      font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <nav class="top">
+      <a class="top__brand" href="/">Glide<span> · карта льда</span></a>
+      <span>__CITY__</span>
+    </nav>
+    __BODY__
+    <a class="share__story" href="__STORY_IMAGE__" download>Картинка для истории (Instagram, VK)</a>
+    <div class="trust">__TRUST__</div>
+    <footer>__CITY_LINK__</footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    /*
+      Единственный JS страницы — «Скопировать» и системное меню «Поделиться».
+      Без JS все остальные кнопки — обычные ссылки и работают и так.
+    */
+    (function () {
+      var toast = document.getElementById('toast');
+      function say(text) {
+        toast.textContent = text;
+        toast.classList.add('show');
+        setTimeout(function () { toast.classList.remove('show'); }, 1800);
+      }
+      document.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var text = btn.getAttribute('data-copy') || '';
+          var done = function () { say('Скопировано — вставьте в любой чат'); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { window.prompt('Скопируйте:', text); });
+          } else {
+            window.prompt('Скопируйте:', text);
+          }
+        });
+      });
+      if (navigator.share) {
+        var row = document.querySelector('.share__row');
+        var copy = document.querySelector('[data-copy]');
+        if (row && copy) {
+          var more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'share__btn';
+          more.textContent = 'Ещё…';
+          more.addEventListener('click', function () {
+            navigator.share({ title: document.title, text: copy.getAttribute('data-copy') || '' }).catch(function () {});
+          });
+          row.appendChild(more);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -80,6 +80,8 @@
       margin-bottom: 12px;
     }
     .arena__name { margin: 0; font-size: 18px; font-weight: 600; }
+    .arena__name a { color: inherit; text-decoration: none; }
+    .arena__name a::after { content: " ›"; color: var(--ic-accent); }
     .arena__where { margin: 2px 0 12px; color: var(--ic-muted); font-size: 14px; }
     .slots { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .slot {

@@ -30,7 +30,9 @@ from src.application.ice_city_day import (
     ice_city_day_page_url,
     summary_line,
 )
-from src.infrastructure.db.models import CLIENT_SHARE_KIND_ICE_CITY_DAY
+from src.application.place_links import place_image_url, place_page_url
+from src.application.place_page import load_place_view, share_payload
+from src.infrastructure.db.models import CLIENT_SHARE_KIND_ICE_CITY_DAY, CLIENT_SHARE_KIND_PLACE
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
@@ -236,6 +238,68 @@ async def get_public_arena_trainers(
     for trainer in payload["items"]:
         _enrich_trainer_photo_urls(trainer)
     return payload
+
+
+@router.get("/arenas/{arena_ref}/share")
+async def get_public_place_share(
+    arena_ref: str,
+    response: Response,
+    session_id: int | None = Query(None, description="Сеанс, которым делятся (ссылка ведёт прямо на него)."),
+    invite: bool = Query(False, description="Тон «Позвать с собой» вместо «Расписание»."),
+    share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Готовое сообщение для шеринга места (TASK-146): ссылка на публичную страницу
+    ``/p/{city}/{slug}``, а не на бота — у страницы своё превью, и она открывается
+    в любом мессенджере без Telegram.
+
+    Контракт тот же, что у ``/ice/share`` и ``share-trainer``. Плюс ``story_image_url``
+    для «Сохранить картинку» (истории Instagram/VK) и ``invite_*`` — тот же текст в тоне
+    «погнали?», чтобы переключатель в шит-оверлее не ходил на сервер второй раз.
+
+    Публичная ручка: кто поделился, не знает (``actor_hash = NULL``), как и ``/ice/share``.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    view = await load_place_view(session, arena_ref, session_id=session_id)
+    if view is None or not view["card"].get("slug"):
+        raise HTTPException(status_code=404, detail="Arena not found")
+    card = view["card"]
+    base = Settings().webapp_base_url
+    city_name = str(card.get("city_name") or "")
+    focus_id = int(view["focus"]["id"]) if view.get("focus") is not None else None
+    url_kwargs = {"base_url": base, "city_name": city_name, "slug": str(card["slug"]), "session_id": focus_id}
+    plain = share_payload(view, page_url=place_page_url(**url_kwargs), invite=False)
+    invited = share_payload(view, page_url=place_page_url(**url_kwargs, invite=True), invite=True)
+    chosen = invited if invite else plain
+
+    ctx = (share_context or "").strip().lower()[:40] or "arena_card"
+    await record_client_share(
+        session,
+        kind=CLIENT_SHARE_KIND_PLACE,
+        share_context=ctx,
+        city_id=int(card["city_id"]),
+        arena_id=int(card["id"]),
+        payload={
+            "venue_type": card.get("venue_type"),
+            "session_id": focus_id,
+            "invite": bool(invite),
+        },
+    )
+    return {
+        **chosen,
+        "invite_share_url": invited["share_url"],
+        "invite_share_body": invited["share_body"],
+        "invite_share_text": invited["share_text"],
+        "place_share_url": plain["share_url"],
+        "place_share_body": plain["share_body"],
+        "place_share_text": plain["share_text"],
+        "og_image_url": place_image_url(**url_kwargs, invite=invite),
+        "story_image_url": place_image_url(**url_kwargs, invite=invite, story=True),
+        "venue_type": card.get("venue_type"),
+        "session_id": focus_id,
+        "share_context": ctx,
+    }
 
 
 @router.get("/arenas/{arena_ref}")

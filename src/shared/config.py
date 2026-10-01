@@ -195,6 +195,10 @@ class Settings(BaseSettings):
 
     # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
     client_bot_username: str | None = None
+    # TASK-146: короткое имя мини-аппа клиентского бота (BotFather → /newapp), например "app".
+    # Задано → публичные страницы мест ведут в t.me/<bot>/<app>?startapp=arena_<id> и мини-апп
+    # открывается сразу на карточке. Пусто → t.me/<bot>?start=arena_<id>, бот отвечает кнопкой.
+    client_mini_app_short_name: str | None = None
     # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
     certificate_pdf_brand_display_name: str = "GLIDE"
     # Одна строка под названием бренда — не абзац: в PDF она стоит над номиналом, и всё,
