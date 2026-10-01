@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карточки мест — система</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  :root{
+    --glide-500:#45B9BB; --glide-600:#2E9A9C; --glide-700:#0B6E70; --glide-900:#073C3E;
+    --glide-brand:var(--glide-500); --glide-ink-teal:#0B6E70;
+    --glide-paper:#F1F3F2; --glide-surface:#FFFFFF; --glide-line:#E2E6E5; --glide-line-strong:#CFD6D5;
+    --glide-text:#101617; --glide-hint:#5E6B6B;
+    --glide-brand-wash:rgba(69,185,187,.12);
+    --glide-shadow-card:0 1px 2px rgba(16,40,40,.05), 0 10px 28px -18px rgba(16,40,40,.35);
+
+    --app-surface-row-top:#FFFFFF; --app-surface-row-bot:#F4F6F5;
+    --app-surface-card-top:#FFFFFF; --app-surface-card-bot:#EEF1F0;
+    --app-surface-header-top:#FFFFFF; --app-surface-header-bot:#F4F6F5;
+    --app-hairline: inset 0 1px 0 rgba(255,255,255,.88);
+    --app-lift: var(--glide-shadow-card);
+    --app-cta-fill: var(--glide-brand); --app-cta-text:#04262A;
+    --app-cta-inset: inset 0 1px 0 rgba(255,255,255,.25);
+    --app-cta-glow: 0 8px 22px -8px rgba(69,185,187,.55);
+    --app-ok:#0F7048; --app-ok-ink:#0F7048; --app-ok-wash:rgba(15,112,72,.1);
+
+    --cut-lg:16px; --cut-md:12px; --cut-sm:8px;
+    --clip-container: polygon(0 0, calc(100% - var(--cut-lg)) 0, 100% var(--cut-lg), 100% 100%, var(--cut-lg) 100%, 0 calc(100% - var(--cut-lg)));
+    --clip-sm: polygon(0 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm), 100% 100%, var(--cut-sm) 100%, 0 calc(100% - var(--cut-sm)));
+
+    --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-pill:999px;
+    --t-kicker:10px; --t-caption:12px; --t-body:14px; --t-lead:17px; --t-title:20px; --t-headline:24px; --t-display:29px;
+    --w-reg:400; --w-med:500; --w-semi:600; --w-bold:700;
+    --font:'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Цвет типа — единственное, что переключается между карточками одной плотности */
+    --ice:#3FA7D6;    --ice-wash:#EAF6FB;    --ice-wash2:#D7ECF6;
+    --gym:#C87A15;    --gym-wash:#FBF2E6;    --gym-wash2:#F5E4CB;
+    --shop:#8A63D2;   --shop-wash:#F2EEFB;   --shop-wash2:#E4DAF5;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:var(--font); background:var(--glide-paper); color:var(--glide-text);}
+
+  .page{max-width:1180px; margin:0 auto; padding:36px 20px 80px;}
+  .masthead{margin-bottom:8px;}
+  .masthead h1{font-size:var(--t-headline); font-weight:var(--w-bold); margin:0 0 6px; letter-spacing:-.01em;}
+  .masthead p{font-size:var(--t-body); color:var(--glide-hint); margin:0; max-width:640px; line-height:1.55;}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:20px 0 10px; padding:13px 16px; background:var(--glide-surface); border:1px solid var(--glide-line); border-radius:var(--r-md); box-shadow:var(--app-hairline);}
+  .legend-sub{font-size:var(--t-caption); color:var(--glide-hint); margin:0 0 48px; line-height:1.5;}
+  .legend-item{display:flex; align-items:center; gap:7px; font-size:var(--t-caption); font-weight:var(--w-semi); color:var(--glide-text);}
+  .legend-dot{width:10px; height:10px; border-radius:50%;}
+  .legend-item.ice .legend-dot{background:var(--ice);}
+  .legend-item.gym .legend-dot{background:var(--gym);}
+  .legend-item.shop .legend-dot{background:var(--shop);}
+  .legend-note{font-size:var(--t-caption); color:var(--glide-hint); margin-left:auto;}
+
+  .section{margin-bottom:64px;}
+  .section-head{display:flex; align-items:baseline; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
+  .section-head h2{font-size:var(--t-title); font-weight:var(--w-bold); margin:0;}
+  .section-head span{font-size:var(--t-caption); color:var(--glide-hint);}
+
+  .cols3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+  @media (max-width:900px){.cols3{grid-template-columns:1fr;}}
+
+  .typelabel{display:flex; align-items:center; gap:7px; margin-bottom:10px; font-size:var(--t-caption); font-weight:var(--w-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--glide-hint);}
+  .typelabel .dot{width:8px; height:8px; border-radius:50%;}
+  .typelabel.ice .dot{background:var(--ice);} .typelabel.gym .dot{background:var(--gym);} .typelabel.shop .dot{background:var(--shop);}
+
+  /* ================= МИНИ (строка списка) ================= */
+  .row{
+    position:relative; display:flex; align-items:center; gap:11px;
+    padding:12px 13px 12px 15px; border-radius:var(--r-lg); border:1px solid var(--glide-line);
+    background:linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+    box-shadow:var(--app-hairline);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .row:hover{transform:translateY(-2px); box-shadow:var(--app-hairline), var(--glide-shadow-card);}
+  @media (prefers-reduced-motion:reduce){ .row{transition:none;} .row:hover{transform:none;} }
+  .row::before{content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px; border-radius:0 3px 3px 0;}
+  .row.ice::before{background:var(--ice);} .row.gym::before{background:var(--gym);} .row.shop::before{background:var(--shop);}
+  .row__badge{width:46px; height:46px; border-radius:var(--r-md); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:20px; border:1px solid var(--glide-line);}
+  .row.ice .row__badge{background:linear-gradient(160deg,var(--ice-wash),var(--ice-wash2));}
+  .row.gym .row__badge{background:linear-gradient(160deg,var(--gym-wash),var(--gym-wash2));}
+  .row.shop .row__badge{background:linear-gradient(160deg,var(--shop-wash),var(--shop-wash2));}
+  .row__body{min-width:0; flex:1;}
+  .row__title{font-size:var(--t-lead); font-weight:var(--w-semi); margin:0 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row__meta{font-size:var(--t-caption); color:var(--glide-hint); margin:0;}
+  .row__slots{display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;}
+  .slotpill{font-size:11px; font-weight:var(--w-semi); padding:3px 8px; border-radius:var(--r-pill); background:var(--app-ok-wash); color:var(--app-ok-ink); white-space:nowrap;}
+  .tagpill{font-size:11px; font-weight:var(--w-med); padding:3px 8px; border-radius:var(--r-pill); background:var(--shop-wash); color:#5B3FA8; white-space:nowrap;}
+  .row__tags, .row__slots{display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;}
+  .row__right{display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:auto;}
+  .sharebtn{width:30px; height:30px; border-radius:50%; border:none; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--glide-hint);}
+  .sharebtn:hover{color:var(--glide-ink-teal); background:var(--glide-brand-wash);}
+  .sharebtn svg{width:15px; height:15px;}
+  .chev{width:7px; height:7px; border-right:2px solid var(--glide-hint); border-top:2px solid var(--glide-hint); transform:rotate(45deg); margin-left:3px;}
+
+  .quiet-note{margin-top:14px; font-size:var(--t-caption); color:var(--glide-hint); display:flex; align-items:center; gap:7px;}
+  .quiet-note b{color:var(--glide-text); font-weight:var(--w-semi);}
+
+  /* ================= КАРТА (пин + поп-ап) ================= */
+  .mapstage{
+    position:relative; height:230px; border-radius:var(--r-lg); overflow:hidden; margin-bottom:18px;
+    border:1px solid var(--glide-line); box-shadow:var(--app-hairline);
+    background:
+      repeating-linear-gradient(0deg, rgba(16,40,40,.05) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(90deg, rgba(16,40,40,.05) 0 1px, transparent 1px 46px),
+      linear-gradient(135deg, rgba(69,185,187,.10), transparent 55%),
+      #E4E9E7;
+  }
+  .mapstage::after{
+    content:''; position:absolute; left:-10%; top:60%; width:130%; height:34px;
+    background:rgba(255,255,255,.55); transform:rotate(-7deg); border-radius:20px;
+  }
+  .pin{
+    position:absolute; width:36px; height:36px; border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg); box-shadow:0 6px 14px -6px rgba(16,40,40,.4); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; border:2px solid #fff;
+    transition:transform .18s ease;
+    animation:pindrop .4s ease backwards;
+  }
+  .pin:hover{transform:rotate(-45deg) translateY(-3px) scale(1.06);}
+  @media (prefers-reduced-motion:reduce){ .pin{animation:none;} .pin:hover{transform:rotate(-45deg);} }
+  @keyframes pindrop{from{opacity:0; transform:rotate(-45deg) translateY(-14px) scale(.6);} to{opacity:1; transform:rotate(-45deg) translateY(0) scale(1);}}
+  .pin.ice{background:var(--ice); left:22%; top:28%; animation-delay:.02s;}
+  .pin.gym{background:var(--gym); left:52%; top:48%; animation-delay:.12s;}
+  .pin.shop{background:var(--shop); left:72%; top:22%; animation-delay:.22s;}
+  .pin.active{z-index:5; outline:3px solid rgba(255,255,255,.7); outline-offset:2px;}
+  .pin__icon{transform:rotate(45deg); font-size:15px; filter:drop-shadow(0 1px 1px rgba(0,0,0,.25));}
+
+  .popup-row{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+  @media (max-width:900px){.popup-row{grid-template-columns:1fr;}}
+  .popup-card{
+    display:flex; gap:12px; padding:12px; border-radius:var(--r-lg); border:1px solid var(--glide-line);
+    background:linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+    box-shadow:var(--app-hairline), var(--app-lift); cursor:pointer;
+    transition:transform .15s ease;
+  }
+  .popup-card:hover{transform:translateY(-2px);}
+  @media (prefers-reduced-motion:reduce){ .popup-card{transition:none;} .popup-card:hover{transform:none;} }
+  .popup-thumb{width:64px; height:64px; border-radius:var(--r-md); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:24px; position:relative; overflow:hidden;}
+  .popup-thumb.ice{background:linear-gradient(155deg,var(--ice-wash),var(--ice) 140%); color:#fff;}
+  .popup-thumb.gym{background:linear-gradient(155deg,var(--gym-wash),var(--gym) 140%); color:#fff;}
+  .popup-thumb.shop{background:linear-gradient(155deg,var(--shop-wash),var(--shop) 140%); color:#fff;}
+  .popup-body{min-width:0; flex:1; display:flex; flex-direction:column; justify-content:center;}
+  .popup-title{font-size:var(--t-body); font-weight:var(--w-bold); margin:0 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .popup-meta{font-size:11.5px; color:var(--glide-hint); margin:0 0 6px;}
+  .popup-cta{display:flex; gap:5px; flex-wrap:wrap;}
+
+  /* ================= ПОЛНАЯ КАРТОЧКА ================= */
+  .full-frame{
+    width:100%; max-width:360px; margin:0 auto; border-radius:28px; overflow:hidden;
+    background:var(--glide-paper); border:1px solid var(--glide-line);
+    box-shadow:0 2px 6px rgba(16,40,40,.07), 0 26px 50px -20px rgba(16,40,40,.3);
+  }
+  .full-header{display:flex; align-items:center; gap:10px; padding:13px 15px; background:linear-gradient(180deg,var(--app-surface-header-top),var(--app-surface-header-bot)); border-bottom:1px solid var(--glide-line);}
+  .full-header .back{width:26px; height:26px; display:flex; align-items:center; justify-content:center; color:var(--glide-hint);}
+  .full-header h3{font-size:var(--t-title); font-weight:var(--w-bold); margin:0;}
+  .full-header .fshare{margin-left:auto; width:32px; height:32px; border-radius:50%; border:1px solid var(--glide-line); background:#fff; display:flex; align-items:center; justify-content:center; color:var(--glide-ink-teal);}
+  .full-header .fshare svg{width:14px; height:14px;}
+
+  .full-hero{position:relative; height:168px; display:flex; align-items:flex-end; padding:14px 16px; overflow:hidden;}
+  .full-hero.ice{background:radial-gradient(120% 120% at 15% 0%, rgba(255,255,255,.35), transparent 60%), linear-gradient(160deg, var(--ice), #1E6E95);}
+  .full-hero.gym{background:radial-gradient(120% 120% at 15% 0%, rgba(255,255,255,.3), transparent 60%), linear-gradient(160deg, var(--gym), #8A5300);}
+  .full-hero.shop{background:radial-gradient(120% 120% at 15% 0%, rgba(255,255,255,.3), transparent 60%), linear-gradient(160deg, var(--shop), #5B3FA8);}
+  .full-hero::after{content:''; position:absolute; inset:0; pointer-events:none; opacity:.5; background:repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 1px, transparent 1px 18px);}
+  .full-hero__wm{position:absolute; right:10px; top:10px; font-size:54px; opacity:.16;}
+  .full-hero__badge{position:relative; z-index:1; display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:var(--w-bold); color:#fff; background:rgba(0,0,0,.22); padding:4px 9px; border-radius:var(--r-pill); margin-bottom:8px; width:fit-content;}
+  .full-hero__dot{width:6px; height:6px; border-radius:50%; background:#6CF08A; animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(108,240,138,.5);} 50%{box-shadow:0 0 0 4px rgba(108,240,138,0);}}
+  @media (prefers-reduced-motion:reduce){ .full-hero__dot{animation:none;} }
+  .full-hero__title{position:relative; z-index:1; color:#fff; font-size:var(--t-title); font-weight:var(--w-bold); margin:0; line-height:1.2;}
+
+  /* Полоска фото — Media уже хранит несколько записей на владельца, карточка
+     раньше показывала только одно фото в hero. Реальной арене/магазину одно
+     фото говорит "верьте мне", несколько — "смотрите сами". */
+  .photo-strip{display:flex; gap:6px; padding:10px 16px 0;}
+  .photo-thumb{flex:1; height:52px; border-radius:var(--r-sm); background:linear-gradient(150deg,#D9E6E8,#C3D6D9); position:relative; overflow:hidden;}
+  .photo-thumb:nth-child(2){background:linear-gradient(150deg,#E3DCEE,#CFC3E6);}
+  .photo-thumb:nth-child(3){background:linear-gradient(150deg,#DCE9D9,#C3D9C9);}
+  .photo-thumb--more{display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:var(--w-bold); background:rgba(16,22,23,.42) !important;}
+
+  .full-body{padding:12px 16px 18px;}
+  .full-meta{display:flex; align-items:center; gap:6px; font-size:var(--t-caption); color:var(--glide-hint); margin:10px 0 10px; flex-wrap:wrap;}
+  .full-meta b{color:var(--glide-text); font-weight:var(--w-semi);}
+  .full-meta .sep{opacity:.5;}
+
+  /* Доверительные бейджи — показываем только когда факт true. Отсутствие
+     бейджа не кричит "непроверено"/"нельзя забронировать", оно просто
+     тише — так разница не выглядит как предупреждение. */
+  .badgerow{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px;}
+  .trustbadge, .bookbadge{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:var(--w-semi); padding:4px 9px; border-radius:var(--r-pill);}
+  .trustbadge{background:var(--glide-brand-wash); color:var(--glide-ink-teal);}
+  .bookbadge{background:var(--app-ok-wash); color:var(--app-ok-ink);}
+
+  /* Переключатель зала/дисциплины — только у арен с несколькими льдами. */
+  .hall-switch{display:flex; gap:6px; margin:0 0 16px; padding:3px; background:var(--glide-surface); border:1px solid var(--glide-line); border-radius:var(--r-pill);}
+  .hall-opt{flex:1; text-align:center; padding:7px 4px; font-size:11.5px; font-weight:var(--w-semi); border-radius:var(--r-pill); cursor:pointer; color:var(--glide-hint);}
+  .hall-opt.active{background:var(--app-cta-fill); color:var(--app-cta-text); box-shadow:var(--app-cta-inset), var(--app-cta-glow);}
+
+  /* Мини/карта: точка на бейдже вместо отдельного текста — бронь видна до клика, без роста плотности строки. */
+  .row__badge.bookable, .popup-thumb.bookable{position:relative;}
+  .row__badge.bookable::after, .popup-thumb.bookable::after{
+    content:''; position:absolute; right:-2px; bottom:-2px; width:12px; height:12px; border-radius:50%;
+    background:var(--app-ok); border:2px solid var(--glide-surface);
+  }
+
+  .full-sec{margin-bottom:18px;}
+  .full-sec__title{font-size:var(--t-caption); font-weight:var(--w-bold); text-transform:uppercase; letter-spacing:.04em; color:var(--glide-hint); margin:0 0 9px;}
+
+  /* Лёд: расписание по дням */
+  .day-group{margin-bottom:10px;}
+  .day-group__label{font-size:var(--t-caption); font-weight:var(--w-semi); color:var(--glide-text); margin:0 0 6px;}
+  .slot-grid{display:flex; gap:6px; flex-wrap:wrap;}
+  .slot-chip{display:flex; flex-direction:column; align-items:center; padding:7px 11px; border-radius:var(--r-md); background:linear-gradient(180deg,var(--app-surface-row-top),var(--app-surface-row-bot)); border:1px solid var(--glide-line); box-shadow:var(--app-hairline); min-width:64px;}
+  .slot-chip b{font-size:var(--t-caption); font-weight:var(--w-bold); font-variant-numeric:tabular-nums;}
+  .slot-chip span{font-size:10.5px; color:var(--glide-hint);}
+
+  /* ОФП: таблица часов */
+  .hours-table{border-radius:var(--r-md); border:1px solid var(--glide-line); overflow:hidden;}
+  .hours-row{display:flex; justify-content:space-between; padding:9px 12px; font-size:var(--t-caption); background:var(--glide-surface); border-bottom:1px solid var(--glide-line);}
+  .hours-row:last-child{border-bottom:none;}
+  .hours-row.today{background:var(--gym-wash); font-weight:var(--w-bold);}
+  .hours-row span:first-child{color:var(--glide-text);}
+  .hours-row span:last-child{color:var(--glide-hint); font-variant-numeric:tabular-nums;}
+  .hours-row.today span{color:#8A5300;}
+
+  .amenity-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:7px;}
+  .amenity{display:flex; align-items:center; gap:7px; padding:9px 10px; border-radius:var(--r-md); background:var(--glide-surface); border:1px solid var(--glide-line); font-size:12.5px; font-weight:var(--w-med);}
+
+  /* Магазин: тайлы услуг — отдельная структура, не слоты и не часы */
+  .service-tiles{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .service-tile{padding:12px; border-radius:var(--r-md); background:linear-gradient(165deg,var(--shop-wash),#fff); border:1px solid var(--glide-line); box-shadow:var(--app-hairline);}
+  .service-tile__icon{font-size:19px; margin-bottom:5px; display:block;}
+  .service-tile__title{font-size:var(--t-caption); font-weight:var(--w-bold); margin:0 0 2px; color:#5B3FA8;}
+  .service-tile__sub{font-size:11px; color:var(--glide-hint); margin:0; line-height:1.35;}
+
+  .contact-rows{display:flex; flex-direction:column; gap:7px;}
+  .contact-row{display:flex; align-items:center; gap:9px; font-size:var(--t-caption); color:var(--glide-text);}
+  .contact-row svg{width:15px; height:15px; color:var(--glide-hint); flex-shrink:0;}
+
+  .full-actions{display:flex; gap:8px; margin-top:16px;}
+  .fbtn{flex:1; text-align:center; padding:11px; font-size:var(--t-caption); font-weight:var(--w-bold); border-radius:0; clip-path:var(--clip-sm); cursor:pointer; border:none;}
+  .fbtn.pri{background:var(--app-cta-fill); color:var(--app-cta-text); box-shadow:var(--app-cta-inset), var(--app-cta-glow);}
+  .fbtn.sec{background:var(--glide-surface); color:var(--glide-text); border:1px solid var(--glide-line); box-shadow:var(--app-hairline);}
+
+  .fullrow{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start;}
+  @media (max-width:1040px){.fullrow{grid-template-columns:1fr; max-width:380px; margin:0 auto; gap:28px;}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <h1>Карточки мест — единая система, своя структура</h1>
+    <p>Общие токены, геометрия и типографика у всех трёх типов места — отличаются только цвет-акцент и то, какие поля вообще существуют у этого типа. Три плотности: мини-строка списка, пин/поп-ап карты, полная карточка при открытии.</p>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item ice"><span class="legend-dot"></span>❄️ Лёд (арена)</div>
+    <div class="legend-item gym"><span class="legend-dot"></span>🏋️ ОФП (зал)</div>
+    <div class="legend-item shop"><span class="legend-dot"></span>🧰 Магазин</div>
+    <div class="legend-note">Строгая структура: у льда — расписание сессий, у зала — часы по дням, у магазина — тайлы услуг. Разные секции, общий каркас.</div>
+  </div>
+  <p class="legend-sub">🟢 на бейдже/фото — «бронируем у нас», видно до клика. Нет точки — карточка информационная, запись на месте. Бейджи доверия и «бронь» показываются только когда факт true — отсутствие не читается как предупреждение.</p>
+
+  <!-- ============== МИНИ ============== -->
+  <div class="section">
+    <div class="section-head"><h2>Мини — строка в ленте каталога</h2><span>badge + рейка-цвет + заголовок + одна строка, специфичная для типа</span></div>
+    <div class="cols3">
+      <div>
+        <div class="typelabel ice"><span class="dot"></span>Лёд</div>
+        <div class="row ice">
+          <div class="row__badge bookable" title="Бронируем у нас">❄️</div>
+          <div class="row__body">
+            <p class="row__title">Минск-Арена</p>
+            <p class="row__meta">Фрунзенский р-н · 1.2 км</p>
+            <div class="row__slots"><span class="slotpill">Пт 19:00</span><span class="slotpill">Пт 20:45</span></div>
+          </div>
+          <div class="row__right">
+            <button class="sharebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+            <span class="chev"></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="typelabel gym"><span class="dot"></span>ОФП</div>
+        <div class="row gym">
+          <div class="row__badge">🏋️</div>
+          <div class="row__body">
+            <p class="row__title">Зал «Атлет» на Притыцкого</p>
+            <p class="row__meta">Московский р-н · Пн–Вс 7:00–22:00</p>
+          </div>
+          <div class="row__right">
+            <button class="sharebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+            <span class="chev"></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="typelabel shop"><span class="dot"></span>Магазин</div>
+        <div class="row shop">
+          <div class="row__badge">🧰</div>
+          <div class="row__body">
+            <p class="row__title">«Коньки&amp;Точка»</p>
+            <p class="row__meta">Центр · 900 м</p>
+            <div class="row__tags"><span class="tagpill">Заточка</span><span class="tagpill">Прокат</span></div>
+          </div>
+          <div class="row__right">
+            <button class="sharebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+            <span class="chev"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="quiet-note">❄️ <b>Когда данных мало</b> — лёд без живого расписания не прячется, просто теряет слоты: badge → адрес → «Уточняйте расписание» вместо pill-ов. Карточка не исчезает из выдачи.</div>
+  </div>
+
+  <!-- ============== КАРТА ============== -->
+  <div class="section">
+    <div class="section-head"><h2>Карта — пин и поп-ап</h2><span>цвет пина = тип; тап по пину выделяет его поп-ап карточку ниже</span></div>
+    <div class="mapstage">
+      <div class="pin ice active" onclick="selectPin('ice')"><span class="pin__icon">❄️</span></div>
+      <div class="pin gym" onclick="selectPin('gym')"><span class="pin__icon">🏋️</span></div>
+      <div class="pin shop" onclick="selectPin('shop')"><span class="pin__icon">🧰</span></div>
+    </div>
+    <div class="popup-row">
+      <div class="popup-card" id="popup-ice" onclick="selectPin('ice')">
+        <div class="popup-thumb ice bookable" title="Бронируем у нас">❄️</div>
+        <div class="popup-body">
+          <p class="popup-title">Минск-Арена</p>
+          <p class="popup-meta">Фрунзенский р-н · сегодня есть лёд</p>
+          <div class="popup-cta"><span class="slotpill">19:00</span><span class="slotpill">20:45</span></div>
+        </div>
+      </div>
+      <div class="popup-card" id="popup-gym" onclick="selectPin('gym')">
+        <div class="popup-thumb gym">🏋️</div>
+        <div class="popup-body">
+          <p class="popup-title">Зал «Атлет»</p>
+          <p class="popup-meta">Открыто сейчас · до 22:00</p>
+          <div class="popup-cta"><span class="tagpill" style="background:var(--gym-wash); color:#8A5300;">ОФП</span></div>
+        </div>
+      </div>
+      <div class="popup-card" id="popup-shop" onclick="selectPin('shop')">
+        <div class="popup-thumb shop">🧰</div>
+        <div class="popup-body">
+          <p class="popup-title">«Коньки&amp;Точка»</p>
+          <p class="popup-meta">900 м · заточка от 20 мин</p>
+          <div class="popup-cta"><span class="tagpill">Заточка</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== ПОЛНАЯ ============== -->
+  <div class="section">
+    <div class="section-head"><h2>Полная карточка — при открытии</h2><span>общий каркас (шапка/hero/действия), но у каждого типа своя внутренняя структура</span></div>
+    <div class="fullrow">
+
+      <!-- ЛЁД -->
+      <div class="full-frame">
+        <div class="full-header">
+          <span class="back">←</span>
+          <h3>Арена</h3>
+          <button class="fshare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+        </div>
+        <div class="full-hero ice">
+          <span class="full-hero__wm">❄️</span>
+          <div>
+            <div class="full-hero__badge"><span class="full-hero__dot"></span>Сегодня есть лёд</div>
+            <h4 class="full-hero__title">Минск-Арена</h4>
+          </div>
+        </div>
+        <div class="photo-strip">
+          <div class="photo-thumb"></div>
+          <div class="photo-thumb"></div>
+          <div class="photo-thumb photo-thumb--more">+6</div>
+        </div>
+        <div class="full-body">
+          <p class="full-meta"><b>Фрунзенский р-н</b><span class="sep">·</span>1.2 км<span class="sep">·</span>🚇 5 мин от «Малиновки»<span class="sep">·</span>пр-т Победителей, 20</p>
+          <div class="badgerow">
+            <span class="trustbadge">✓ Подтверждено платформой</span>
+            <span class="bookbadge">Бронируем у нас</span>
+          </div>
+
+          <!-- Два льда в одном комплексе — разные дисциплины, разное расписание, не один список на двоих. -->
+          <div class="hall-switch" id="hallSwitch">
+            <div class="hall-opt active" data-hall="a">Зал А · хоккейный</div>
+            <div class="hall-opt" data-hall="b">Зал Б · фигурное</div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Расписание массового катания</p>
+            <div id="hallSchedule">
+              <div class="day-group">
+                <p class="day-group__label">Пятница, 2 окт</p>
+                <div class="slot-grid">
+                  <div class="slot-chip"><b>19:00</b><span>25 BYN</span></div>
+                  <div class="slot-chip"><b>20:45</b><span>25 BYN</span></div>
+                </div>
+              </div>
+              <div class="day-group">
+                <p class="day-group__label">Суббота, 3 окт</p>
+                <div class="slot-grid">
+                  <div class="slot-chip"><b>11:00</b><span>20 BYN</span></div>
+                  <div class="slot-chip"><b>15:00</b><span>20 BYN</span></div>
+                  <div class="slot-chip"><b>16:30</b><span>20 BYN</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Тарифы</p>
+            <div class="hours-table">
+              <div class="hours-row"><span>Взрослый / детский (до 12)</span><span>25 / 15 BYN</span></div>
+              <div class="hours-row"><span>Прокат коньков</span><span>+8 BYN</span></div>
+              <div class="hours-row today"><span>Выходные — надбавка</span><span>+5 BYN</span></div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Удобства</p>
+            <div class="amenity-grid">
+              <div class="amenity">⛸ Прокат коньков</div>
+              <div class="amenity">☕ Кафе</div>
+              <div class="amenity">🅿️ Парковка</div>
+              <div class="amenity">🚪 Раздевалки</div>
+              <div class="amenity">🔧 Заточка на месте</div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Контакты</p>
+            <div class="contact-rows">
+              <div class="contact-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>+375 29 000-00-00</div>
+              <div class="contact-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>minsk-arena.by</div>
+            </div>
+          </div>
+
+          <div class="full-actions">
+            <button class="fbtn pri">Поделиться</button>
+            <button class="fbtn sec">Сообщить об ошибке</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ОФП -->
+      <div class="full-frame">
+        <div class="full-header">
+          <span class="back">←</span>
+          <h3>Спортзал</h3>
+          <button class="fshare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+        </div>
+        <div class="full-hero gym">
+          <span class="full-hero__wm">🏋️</span>
+          <div>
+            <div class="full-hero__badge">Открыто сейчас</div>
+            <h4 class="full-hero__title">Зал «Атлет» на Притыцкого</h4>
+          </div>
+        </div>
+        <div class="photo-strip">
+          <div class="photo-thumb"></div>
+          <div class="photo-thumb"></div>
+        </div>
+        <div class="full-body">
+          <p class="full-meta"><b>Московский р-н</b><span class="sep">·</span>2.4 км<span class="sep">·</span>🚌 3 мин от остановки<span class="sep">·</span>ул. Притыцкого, 44</p>
+          <div class="badgerow">
+            <span class="trustbadge">✓ Подтверждено платформой</span>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Часы работы</p>
+            <div class="hours-table">
+              <div class="hours-row"><span>Понедельник</span><span>7:00–22:00</span></div>
+              <div class="hours-row"><span>Вторник</span><span>7:00–22:00</span></div>
+              <div class="hours-row"><span>Среда</span><span>7:00–22:00</span></div>
+              <div class="hours-row today"><span>Четверг</span><span>7:00–22:00</span></div>
+              <div class="hours-row"><span>Пятница</span><span>7:00–22:00</span></div>
+              <div class="hours-row"><span>Суббота</span><span>9:00–20:00</span></div>
+              <div class="hours-row"><span>Воскресенье</span><span>9:00–20:00</span></div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Оснащение</p>
+            <div class="amenity-grid">
+              <div class="amenity">🪞 Зеркала</div>
+              <div class="amenity">🧘 Коврики</div>
+              <div class="amenity">🚿 Душевые</div>
+              <div class="amenity">❄️ Кондиционер</div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Контакты</p>
+            <div class="contact-rows">
+              <div class="contact-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>+375 29 111-11-11</div>
+            </div>
+          </div>
+
+          <div class="full-actions">
+            <button class="fbtn pri">Поделиться</button>
+            <button class="fbtn sec">Сообщить об ошибке</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- МАГАЗИН -->
+      <div class="full-frame">
+        <div class="full-header">
+          <span class="back">←</span>
+          <h3>Магазин</h3>
+          <button class="fshare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg></button>
+        </div>
+        <div class="full-hero shop">
+          <span class="full-hero__wm">🧰</span>
+          <div>
+            <div class="full-hero__badge">Открыто сейчас</div>
+            <h4 class="full-hero__title">«Коньки&amp;Точка»</h4>
+          </div>
+        </div>
+        <div class="photo-strip">
+          <div class="photo-thumb"></div>
+          <div class="photo-thumb"></div>
+          <div class="photo-thumb photo-thumb--more">+3</div>
+        </div>
+        <div class="full-body">
+          <p class="full-meta"><b>Центр</b><span class="sep">·</span>900 м<span class="sep">·</span>🚇 4 мин от «Купаловской»<span class="sep">·</span>ул. Карла Маркса, 15</p>
+          <div class="badgerow">
+            <span class="trustbadge">✓ Подтверждено платформой</span>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Что здесь можно сделать</p>
+            <div class="service-tiles">
+              <div class="service-tile"><span class="service-tile__icon">🛒</span><p class="service-tile__title">Розница</p><p class="service-tile__sub">Коньки, форма, защита · размеры 28–45</p></div>
+              <!--
+                Заточка — не одна услуга: хоккейный желобок и фигурный rocker
+                физически разная заточка, не каждая мастерская умеет обе.
+                Показываем дисциплины явно, а не одним общим тегом.
+              -->
+              <div class="service-tile">
+                <span class="service-tile__icon">🔧</span><p class="service-tile__title">Заточка</p>
+                <div class="row__tags" style="margin:0 0 4px;"><span class="tagpill">Фигурное</span><span class="tagpill">Хоккей</span></div>
+                <p class="service-tile__sub">Ожидание ~25 минут, без записи</p>
+              </div>
+              <div class="service-tile"><span class="service-tile__icon">🔁</span><p class="service-tile__title">Прокат</p><p class="service-tile__sub">Коньки и защита на час · размеры 30–42</p></div>
+              <div class="service-tile"><span class="service-tile__icon">🛠️</span><p class="service-tile__title">Ремонт</p><p class="service-tile__sub">Лезвия, крепления</p></div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Часы работы</p>
+            <div class="hours-table">
+              <div class="hours-row today"><span>Ежедневно</span><span>10:00–20:00</span></div>
+            </div>
+          </div>
+
+          <div class="full-sec">
+            <p class="full-sec__title">Контакты</p>
+            <div class="contact-rows">
+              <div class="contact-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>+375 29 222-22-22</div>
+              <div class="contact-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>konkitochka.by</div>
+            </div>
+          </div>
+
+          <div class="full-actions">
+            <button class="fbtn pri">Поделиться</button>
+            <button class="fbtn sec">Сообщить об ошибке</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+<script>
+  // Зал А/Б — разное расписание на один комплекс (TASK-146 гап: несколько льдов на арене).
+  var HALL_SCHEDULE = {
+    a: '<div class="day-group"><p class="day-group__label">Пятница, 2 окт</p><div class="slot-grid">' +
+         '<div class="slot-chip"><b>19:00</b><span>25 BYN</span></div><div class="slot-chip"><b>20:45</b><span>25 BYN</span></div></div></div>' +
+       '<div class="day-group"><p class="day-group__label">Суббота, 3 окт</p><div class="slot-grid">' +
+         '<div class="slot-chip"><b>11:00</b><span>20 BYN</span></div><div class="slot-chip"><b>15:00</b><span>20 BYN</span></div><div class="slot-chip"><b>16:30</b><span>20 BYN</span></div></div></div>',
+    b: '<div class="day-group"><p class="day-group__label">Пятница, 2 окт</p><div class="slot-grid">' +
+         '<div class="slot-chip"><b>18:00</b><span>22 BYN</span></div></div></div>' +
+       '<div class="day-group"><p class="day-group__label">Воскресенье, 4 окт</p><div class="slot-grid">' +
+         '<div class="slot-chip"><b>10:00</b><span>18 BYN</span></div><div class="slot-chip"><b>12:30</b><span>18 BYN</span></div></div></div>'
+  };
+  document.querySelectorAll('#hallSwitch .hall-opt').forEach(function(el){
+    el.addEventListener('click', function(){
+      document.querySelectorAll('#hallSwitch .hall-opt').forEach(function(c){ c.classList.remove('active'); });
+      el.classList.add('active');
+      document.getElementById('hallSchedule').innerHTML = HALL_SCHEDULE[el.dataset.hall] || HALL_SCHEDULE.a;
+    });
+  });
+
+  function selectPin(type){
+    document.querySelectorAll('.pin').forEach(function(p){ p.classList.remove('active'); });
+    document.querySelector('.pin.' + type).classList.add('active');
+    document.querySelectorAll('.popup-card').forEach(function(c){ c.style.outline = 'none'; });
+    var card = document.getElementById('popup-' + type);
+    card.style.outline = '2px solid rgba(69,185,187,.55)';
+    card.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'});
+  }
+</script>
+</body>
+</html>

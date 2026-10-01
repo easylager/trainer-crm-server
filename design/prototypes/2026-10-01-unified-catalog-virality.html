@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Единый каталог — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /* ============================================================
+     Токены — подмножество static/webapp/theme.css (светлая тема).
+     Значения скопированы 1:1, чтобы прототип читался как родной экран.
+     ============================================================ */
+  :root{
+    --glide-500:#45B9BB; --glide-600:#2E9A9C; --glide-700:#0B6E70; --glide-900:#073C3E;
+    --glide-brand:var(--glide-500); --glide-ink-teal:#0B6E70;
+    --glide-paper:#F1F3F2; --glide-surface:#FFFFFF; --glide-line:#E2E6E5; --glide-line-strong:#CFD6D5;
+    --glide-text:#101617; --glide-hint:#5E6B6B;
+    --glide-brand-wash:rgba(69,185,187,.12);
+    --glide-shadow-card:0 1px 2px rgba(16,40,40,.05), 0 10px 28px -18px rgba(16,40,40,.35);
+    --ice-frost:#C9E4FF;
+
+    --app-surface-row-top:#FFFFFF; --app-surface-row-bot:#F4F6F5;
+    --app-surface-card-top:#FFFFFF; --app-surface-card-bot:#EEF1F0;
+    --app-surface-header-top:#FFFFFF; --app-surface-header-bot:#F4F6F5;
+    --app-hairline: inset 0 1px 0 rgba(255,255,255,.88);
+    --app-lift: var(--glide-shadow-card);
+    --app-cta-fill: var(--glide-brand); --app-cta-text:#04262A;
+    --app-cta-inset: inset 0 1px 0 rgba(255,255,255,.25);
+    --app-cta-glow: 0 8px 22px -8px rgba(69,185,187,.55);
+    --app-ok:#0F7048; --app-ok-ink:#0F7048; --app-ok-wash:rgba(15,112,72,.1);
+    --app-attention:#C87A15; --app-attention-ink:#8A5300; --app-attention-wash:rgba(200,122,21,.12);
+
+    --app-cut-lg:16px; --app-cut-md:12px; --app-cut-sm:8px;
+    --clip-container: polygon(0 0, calc(100% - var(--app-cut-lg)) 0, 100% var(--app-cut-lg), 100% 100%, var(--app-cut-lg) 100%, 0 calc(100% - var(--app-cut-lg)));
+    --clip-btn: polygon(0 0, calc(100% - var(--app-cut-md)) 0, 100% var(--app-cut-md), 100% 100%, var(--app-cut-md) 100%, 0 calc(100% - var(--app-cut-md)));
+    --clip-sm: polygon(0 0, calc(100% - var(--app-cut-sm)) 0, 100% var(--app-cut-sm), 100% 100%, var(--app-cut-sm) 100%, 0 calc(100% - var(--app-cut-sm)));
+
+    --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-pill:999px;
+
+    --t-kicker:10px; --t-caption:12px; --t-body:14px; --t-lead:17px; --t-title:20px; --t-headline:24px; --t-display:29px;
+    --w-reg:400; --w-med:500; --w-semi:600; --w-bold:700;
+
+    --font: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    color-scheme: light;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--font);
+    background:#E7EBEA;
+    color:var(--glide-text);
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:28px 16px 60px;
+  }
+
+  .lab-note{
+    max-width:420px; text-align:center; color:var(--glide-hint); font-size:var(--t-caption);
+    margin-bottom:18px; line-height:1.5;
+  }
+  .lab-note b{color:var(--glide-text); font-weight:var(--w-semi);}
+
+  /* ---------- Телефон ---------- */
+  .phone{
+    width:390px; max-width:100%;
+    background:var(--glide-paper);
+    border-radius:40px;
+    box-shadow:0 2px 6px rgba(16,40,40,.08), 0 30px 60px -20px rgba(16,40,40,.35);
+    overflow:hidden;
+    border:1px solid rgba(16,40,40,.08);
+    position:relative;
+  }
+  .phone-notch{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    width:120px; height:22px; background:#0B1314; border-radius:14px; z-index:30;
+  }
+  .screen{
+    height:844px; max-height:92vh;
+    overflow-y:auto; overflow-x:hidden;
+    -ms-overflow-style:none; scrollbar-width:none;
+    padding-top:40px;
+    position:relative;
+  }
+  .screen::-webkit-scrollbar{display:none;}
+
+  /* ---------- Шапка (ribbon container) ---------- */
+  .top{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin:0 12px 14px; padding:13px 15px;
+    background:linear-gradient(180deg, var(--app-surface-header-top), var(--app-surface-header-bot));
+    border:1px solid var(--glide-line);
+    box-shadow:var(--app-hairline);
+    clip-path:var(--clip-container);
+  }
+  .top__title{display:flex; align-items:center; gap:9px;}
+  .top__mark{
+    width:26px; height:26px; border-radius:50%;
+    background:radial-gradient(60% 60% at 30% 25%, #BDEFEF, var(--glide-500) 70%);
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    box-shadow:inset 0 0 0 1px rgba(7,60,62,.15);
+  }
+  .top__title h1{font-size:var(--t-title); font-weight:var(--w-bold); margin:0; letter-spacing:-.01em;}
+  .top__actions{display:flex; align-items:center; gap:6px;}
+  .citypill{
+    display:flex; align-items:center; gap:4px;
+    padding:7px 11px; font-size:var(--t-caption); font-weight:var(--w-semi); color:var(--glide-ink-teal);
+    background:var(--glide-brand-wash); border-radius:var(--r-pill); border:none; cursor:pointer;
+    white-space:nowrap;
+  }
+  .iconbtn{
+    width:32px; height:32px; border-radius:50%; border:1px solid var(--glide-line);
+    background:linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+    box-shadow:var(--app-hairline);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    color:var(--glide-ink-teal);
+  }
+  .iconbtn svg{width:15px; height:15px;}
+
+  .body-pad{padding:0 12px 100px;}
+
+  /* ---------- Hero: умный дефолт ---------- */
+  .hero{
+    position:relative; overflow:hidden;
+    margin:0 0 14px; padding:18px 17px 16px;
+    background:linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+    border:1px solid var(--glide-line);
+    box-shadow:var(--app-hairline), var(--app-lift);
+    clip-path:var(--clip-container);
+  }
+  .hero::after{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(45deg, rgba(69,185,187,.06) 0 1px, transparent 1px 22px);
+  }
+  .hero::before{
+    content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    width:76px; height:76px; opacity:.07; pointer-events:none;
+    background:radial-gradient(circle at 30% 30%, #fff 0 2px, transparent 3px) , var(--glide-900);
+    background-size:10px 10px; border-radius:50%;
+  }
+  .hero__kicker{position:relative; z-index:1; font-size:var(--t-caption); color:var(--glide-hint); font-weight:var(--w-med); margin:0 0 6px;}
+  .hero__title{position:relative; z-index:1; font-size:var(--t-headline); font-weight:var(--w-bold); line-height:1.22; margin:0 0 3px; letter-spacing:-.01em;}
+  .hero__sub{position:relative; z-index:1; font-size:var(--t-body); color:var(--glide-hint); margin:0 0 14px;}
+
+  .chiprow{position:relative; z-index:1; display:flex; gap:7px; overflow-x:auto; padding-bottom:2px; margin-bottom:12px;}
+  .chiprow::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; display:flex; align-items:center; gap:5px;
+    padding:8px 13px; font-size:var(--t-caption); font-weight:var(--w-semi); color:var(--glide-text);
+    background:linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+    border:1px solid var(--glide-line); box-shadow:var(--app-hairline);
+    clip-path:var(--clip-sm); cursor:pointer; user-select:none; white-space:nowrap;
+  }
+  .chip.active{
+    background:var(--app-cta-fill); color:var(--app-cta-text); border-color:transparent;
+    box-shadow:var(--app-cta-inset), var(--app-cta-glow);
+  }
+
+  .searchbar{
+    position:relative; z-index:1; display:flex; align-items:center; gap:9px;
+    padding:11px 15px; background:var(--glide-surface); border:1px solid var(--glide-line);
+    border-radius:var(--r-pill); box-shadow:var(--app-hairline);
+  }
+  .searchbar svg{width:16px; height:16px; color:var(--glide-hint); flex-shrink:0;}
+  .searchbar input{
+    border:none; outline:none; background:transparent; font-family:var(--font);
+    font-size:var(--t-body); color:var(--glide-text); width:100%;
+  }
+  .searchbar input::placeholder{color:var(--glide-hint);}
+  .nearbtn{
+    flex-shrink:0; width:30px; height:30px; border-radius:50%; border:1px solid var(--glide-line);
+    background:var(--glide-surface); display:flex; align-items:center; justify-content:center;
+    color:var(--glide-hint); cursor:pointer; padding:0;
+  }
+  .nearbtn svg{width:15px; height:15px;}
+  .nearbtn.active{background:var(--app-cta-fill); border-color:transparent; color:var(--app-cta-text); box-shadow:var(--app-cta-inset), var(--app-cta-glow);}
+
+  /* ---------- Фильтры типа ---------- */
+  .typefilters{display:flex; gap:7px; overflow-x:auto; padding:2px 0 14px; margin:0;}
+  .typefilters::-webkit-scrollbar{display:none;}
+  .tf{
+    flex-shrink:0; display:flex; align-items:center; gap:6px;
+    padding:8px 13px; font-size:var(--t-caption); font-weight:var(--w-semi);
+    background:linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+    border:1px solid var(--glide-line); box-shadow:var(--app-hairline);
+    clip-path:var(--clip-sm); cursor:pointer; white-space:nowrap; color:var(--glide-text);
+  }
+  .tf.active{background:var(--app-cta-fill); color:var(--app-cta-text); border-color:transparent; box-shadow:var(--app-cta-inset), var(--app-cta-glow);}
+
+  /* ---------- Секции ---------- */
+  .sec-head{
+    display:flex; align-items:center; gap:8px; padding:0 2px 9px;
+    font-size:var(--t-caption); font-weight:var(--w-semi); color:var(--glide-hint);
+    text-transform:none; letter-spacing:.01em;
+  }
+  .sec-head b{color:var(--glide-text); font-weight:var(--w-semi);}
+  .sec-head .cnt{margin-left:auto; color:var(--glide-hint); font-weight:var(--w-reg);}
+
+  /* ---------- Горячая карточка (единственная "полная глубина" в ленте) ---------- */
+  .hot{
+    position:relative; overflow:hidden; display:block; width:100%;
+    text-align:left; font-family:var(--font); cursor:pointer;
+    margin-bottom:10px; padding:14px 15px;
+    background:linear-gradient(158deg, #E8F7F7, var(--app-surface-card-top) 55%);
+    border:1px solid var(--glide-line);
+    box-shadow:var(--app-hairline), var(--app-lift);
+    clip-path:var(--clip-container);
+  }
+  .hot__row{display:flex; align-items:center; gap:10px; position:relative; z-index:1;}
+  .hot__dot{width:7px; height:7px; border-radius:50%; background:var(--app-ok); flex-shrink:0; animation:pulse 1.8s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){ .hot__dot{animation:none;} }
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(15,112,72,.45);} 50%{box-shadow:0 0 0 5px rgba(15,112,72,0);}}
+  .hot__eyebrow{font-size:var(--t-caption); font-weight:var(--w-bold); color:var(--app-ok-ink); text-transform:uppercase; letter-spacing:.04em;}
+  .hot__title{font-size:var(--t-lead); font-weight:var(--w-bold); margin:6px 0 3px; position:relative; z-index:1;}
+  .hot__meta{font-size:var(--t-caption); color:var(--glide-hint); margin:0 0 11px; position:relative; z-index:1;}
+  .hot__foot{display:flex; align-items:center; gap:8px; position:relative; z-index:1;}
+  .hot__price{font-size:var(--t-body); font-weight:var(--w-semi); color:var(--glide-ink-teal);}
+  .hot__go{
+    margin-left:auto; display:flex; align-items:center; gap:6px;
+    padding:9px 14px; font-size:var(--t-caption); font-weight:var(--w-bold); color:var(--app-cta-text);
+    background:var(--app-cta-fill); clip-path:var(--clip-sm); box-shadow:var(--app-cta-inset), var(--app-cta-glow);
+  }
+  .hot__share{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--glide-line); background:var(--glide-surface);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:var(--app-hairline);
+  }
+  .hot__share svg{width:15px;height:15px;color:var(--glide-ink-teal);}
+
+  /* ---------- Строка списка (общий каркас для всех типов) ---------- */
+  .row{
+    position:relative; display:flex; align-items:center; gap:11px;
+    margin-bottom:9px; padding:11px 12px 11px 14px;
+    border-radius:var(--r-lg); border:1px solid var(--glide-line);
+    background:linear-gradient(180deg, var(--app-surface-row-top), var(--app-surface-row-bot));
+    box-shadow:var(--app-hairline);
+  }
+  .row::before{
+    content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+    border-radius:0 3px 3px 0;
+  }
+  .row--ice::before{background:#3FA7D6;}
+  .row--gym::before{background:var(--app-attention);}
+  .row--shop::before{background:#8A63D2;}
+  .row--coach::before{background:var(--glide-brand);}
+
+  .row__badge{
+    width:44px; height:44px; border-radius:var(--r-md); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+    background:linear-gradient(160deg,#fff,#EEF1F0);
+    border:1px solid var(--glide-line);
+  }
+  .row--ice .row__badge{background:linear-gradient(160deg,#EAF6FB,#D7ECF6);}
+  .row--gym .row__badge{background:linear-gradient(160deg,#FBF2E6,#F5E4CB);}
+  .row--shop .row__badge{background:linear-gradient(160deg,#F2EEFB,#E4DAF5);}
+  .row__avatar{
+    width:44px; height:44px; border-radius:50%; flex-shrink:0; color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:var(--w-bold);
+    background:linear-gradient(140deg, var(--glide-500), var(--glide-700));
+  }
+
+  .row__body{min-width:0; flex:1;}
+  .row__title{font-size:var(--t-lead); font-weight:var(--w-semi); margin:0 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row__meta{font-size:var(--t-caption); color:var(--glide-hint); margin:0; display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
+  .row__slots{display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;}
+  .slotpill{
+    font-size:11px; font-weight:var(--w-semi); padding:3px 8px; border-radius:var(--r-pill);
+    background:var(--app-ok-wash); color:var(--app-ok-ink); white-space:nowrap;
+  }
+  .tagpill{
+    font-size:11px; font-weight:var(--w-med); padding:3px 8px; border-radius:var(--r-pill);
+    background:#F2EEFB; color:#5B3FA8; white-space:nowrap;
+  }
+  .row__tags{display:flex; gap:5px; margin-top:6px; flex-wrap:wrap;}
+  .rating{display:inline-flex; align-items:center; gap:3px;}
+
+  .row__right{display:flex; align-items:center; gap:4px; flex-shrink:0;}
+  .sharebtn{
+    width:30px; height:30px; border-radius:50%; border:none; background:transparent;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--glide-hint);
+  }
+  .sharebtn:hover{color:var(--glide-ink-teal); background:var(--glide-brand-wash);}
+  .sharebtn svg{width:15px; height:15px;}
+  .chev{width:7px; height:7px; border-right:2px solid var(--glide-hint); border-top:2px solid var(--glide-hint); transform:rotate(45deg); margin-left:2px;}
+
+  /* ---------- Пустое состояние / крауд-сорсинг ---------- */
+  .empty{
+    position:relative; overflow:hidden; text-align:center; padding:26px 20px;
+    margin:4px 0 10px;
+    background:linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+    border:1px dashed var(--glide-line-strong);
+    box-shadow:var(--app-hairline);
+    clip-path:var(--clip-container);
+  }
+  .empty::after{content:''; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(45deg, rgba(69,185,187,.06) 0 1px, transparent 1px 22px);}
+  .empty__icon{font-size:22px; margin-bottom:8px; position:relative; z-index:1;}
+  .empty__title{font-size:var(--t-body); font-weight:var(--w-semi); margin:0 0 4px; position:relative; z-index:1;}
+  .empty__hint{font-size:var(--t-caption); color:var(--glide-hint); margin:0 0 13px; line-height:1.45; position:relative; z-index:1;}
+  .empty__btn{
+    position:relative; z-index:1; display:inline-block; padding:9px 16px; font-size:var(--t-caption); font-weight:var(--w-semi);
+    color:var(--glide-ink-teal); background:var(--glide-brand-wash); border-radius:var(--r-pill); border:none; cursor:pointer;
+  }
+
+  /* ---------- Таб-бар (декоративный, для контекста) ---------- */
+  .tabbar{
+    position:absolute; left:0; right:0; bottom:0;
+    display:flex; justify-content:space-around; align-items:center;
+    padding:9px 6px calc(9px + env(safe-area-inset-bottom,0px));
+    background:rgba(241,243,242,.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--glide-line);
+  }
+  .tabitem{display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; color:var(--glide-hint); font-weight:var(--w-med);}
+  .tabitem.active{color:var(--glide-ink-teal); font-weight:var(--w-bold);}
+  .tabitem .dot{width:18px; height:18px; display:flex; align-items:center; justify-content:center;}
+
+  /* ---------- Шер-оверлей ---------- */
+  .overlay{
+    position:absolute; inset:0; z-index:50; display:none;
+    background:rgba(5,14,15,.72); backdrop-filter:blur(3px);
+    align-items:flex-end;
+  }
+  .overlay.show{display:flex;}
+  .sheet{
+    width:100%; background:#101617; border-radius:26px 26px 0 0; padding:18px 18px calc(22px + env(safe-area-inset-bottom,0px));
+    max-height:88%; overflow-y:auto; animation:slideup .28s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce){ .sheet{animation:none;} }
+  @keyframes slideup{from{transform:translateY(24px); opacity:.4;} to{transform:translateY(0); opacity:1;}}
+  .sheet__head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .sheet__head h3{color:#fff; font-size:var(--t-lead); font-weight:var(--w-bold); margin:0;}
+  .closex{width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.08); border:none; color:#fff; font-size:15px; cursor:pointer;}
+
+  .presettabs{display:flex; gap:6px; margin-bottom:16px;}
+  .preset{
+    flex:1; text-align:center; padding:8px 6px; font-size:var(--t-caption); font-weight:var(--w-semi);
+    border-radius:var(--r-pill); background:rgba(255,255,255,.07); color:rgba(255,255,255,.65); cursor:pointer; border:1px solid transparent;
+  }
+  .preset.active{background:rgba(69,185,187,.18); color:#8FE0E1; border-color:rgba(69,185,187,.4);}
+
+  /* ---- Стори-карточка (единственное место, где уместна "тёмная" драматургия) ---- */
+  .story{
+    position:relative; overflow:hidden; border-radius:22px;
+    aspect-ratio:9/16; max-width:260px; margin:0 auto 18px;
+    background:
+      radial-gradient(120% 70% at 85% 0%, rgba(69,185,187,.35), transparent 60%),
+      radial-gradient(90% 60% at 10% 100%, rgba(69,185,187,.18), transparent 55%),
+      linear-gradient(165deg, #0E3A3B, #06181A 65%);
+    box-shadow:0 20px 44px -16px rgba(0,0,0,.6);
+    display:flex; flex-direction:column; padding:18px 18px 16px;
+    clip-path:polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+  }
+  .story::after{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 1px, transparent 1px 16px);
+  }
+  .story__top{display:flex; align-items:center; gap:7px; position:relative; z-index:1;}
+  .story__mark{width:20px; height:20px; border-radius:50%; background:linear-gradient(140deg,#BDEFEF,#45B9BB); flex-shrink:0;}
+  .story__brand{color:rgba(255,255,255,.85); font-size:11px; font-weight:var(--w-semi); letter-spacing:.02em;}
+  .story__city{margin-left:auto; color:rgba(255,255,255,.55); font-size:11px; font-weight:var(--w-med); background:rgba(255,255,255,.08); padding:3px 8px; border-radius:var(--r-pill);}
+
+  .story__mid{flex:1; display:flex; flex-direction:column; justify-content:center; position:relative; z-index:1;}
+  .story__venue{color:#fff; font-size:19px; font-weight:var(--w-bold); line-height:1.2; margin:0 0 10px;}
+  .story__time{color:#fff; font-size:38px; font-weight:var(--w-bold); line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin:0 0 8px;}
+  .story__sub{color:rgba(255,255,255,.75); font-size:13px; font-weight:var(--w-med); margin:0;}
+
+  .story__foot{position:relative; z-index:1; padding-top:12px; border-top:1px solid rgba(255,255,255,.12);}
+  .story__caption{color:rgba(255,255,255,.5); font-size:10px; margin:0 0 3px;}
+  .story__link{color:#8FE0E1; font-size:12px; font-weight:var(--w-semi); margin:0; font-variant-numeric:tabular-nums;}
+
+  .sharerow{display:flex; gap:9px; margin-bottom:14px;}
+  .sharebig{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 6px; border-radius:var(--r-md); background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08);
+    color:#fff; font-size:11px; font-weight:var(--w-med); cursor:pointer;
+  }
+  .sharebig svg{width:18px; height:18px;}
+  .sharebig.tg{background:rgba(69,185,187,.16); border-color:rgba(69,185,187,.35);}
+
+  .reassure{text-align:center; color:rgba(255,255,255,.45); font-size:11.5px; line-height:1.5; margin:0; padding:0 8px;}
+
+  .toast{
+    position:absolute; left:50%; bottom:90px; transform:translateX(-50%) translateY(10px);
+    background:#101617; color:#fff; font-size:var(--t-caption); font-weight:var(--w-semi);
+    padding:10px 16px; border-radius:var(--r-pill); z-index:60; opacity:0; pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease; white-space:nowrap;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:430px){
+    body{padding:0;}
+    .phone{border-radius:0; box-shadow:none; border:none;}
+    .screen{height:100vh; max-height:100vh;}
+    .lab-note{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<p class="lab-note">Прототип (не продакшен-код). <b>Нажмите на значок «поделиться»</b> у любой карточки — откроется шер-карточка. Чипы и фильтры кликабельны.</p>
+
+<div class="phone">
+  <div class="phone-notch"></div>
+  <div class="screen" id="screen">
+
+    <div class="top">
+      <div class="top__title">
+        <div class="top__mark">❄️</div>
+        <h1>Каталог</h1>
+      </div>
+      <div class="top__actions">
+        <button class="citypill">Минск <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button class="iconbtn" title="Поделиться каталогом города" onclick="openShare('city')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="body-pad">
+
+      <!-- Умный дефолт: система уже понимает, когда и где -->
+      <div class="hero">
+        <p class="hero__kicker">Сегодня четверг · Минск</p>
+        <h2 class="hero__title">Вот что свободно завтра вечером</h2>
+        <p class="hero__sub">Пятница, после 18:00 — дефолт по дню и по тому, что реально есть в городе</p>
+
+        <div class="searchbar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="text" placeholder="Каток, тренер, заточка, город…">
+          <!--
+            "Рядом" — сквозной модификатор, не тип. Раньше жил чипом в конце
+            прокручиваемого ряда (data-what="near") — а это ровно то место,
+            которое не долистают: клиент не обязан знать, что чипы скроллятся.
+            Теперь это постоянно видимая кнопка в самой строке поиска —
+            её не нужно находить, она просто там.
+          -->
+          <button type="button" class="nearbtn" id="nearChip" title="Рядом со мной">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 00-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 00-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!--
+        Два уровня, не один плоский ряд:
+        1) ЧТО — реальные backend-интенты skate/coach/group (ice-tab-model.js)
+           плюс gym/shop как равноправные входы, а не под-фильтр льда.
+        2) Контекст — у каждого "ЧТО" своя вторая строка, а не общие чипы:
+           у катания — дни, у тренера — цель (сценарии), у магазина — услуга.
+        "Рядом" — сквозной модификатор, работает при любом "ЧТО".
+      -->
+      <div class="typefilters" id="whatChips">
+        <div class="tf active" data-what="skate">❄️ Покататься</div>
+        <div class="tf" data-what="coach">🧑‍🏫 Тренер</div>
+        <div class="tf" data-what="gym">🏋️ ОФП</div>
+        <div class="tf" data-what="shop">🧰 Магазин</div>
+      </div>
+
+      <div class="chiprow" id="contextRow" style="margin:0 0 14px;"></div>
+
+      <div class="sec-head"><b id="secHeadTitle">Свободно завтра вечером</b><span class="cnt" id="secHeadCnt">6 мест</span></div>
+
+      <!-- Горячая карточка — единственная "полная глубина" в ленте -->
+      <button class="hot" onclick="openShare('hot')">
+        <div class="hot__row">
+          <span class="hot__dot"></span>
+          <span class="hot__eyebrow">Сегодня · начнётся через 40 минут</span>
+        </div>
+        <h3 class="hot__title">Минск-Арена — массовое катание</h3>
+        <p class="hot__meta">❄️ Лёд · Фрунзенский р-н · 20:30–22:00</p>
+        <div class="hot__foot">
+          <span class="hot__price">25 BYN</span>
+          <button class="hot__share" onclick="event.stopPropagation(); openShare('hot')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="hot__go">Подробнее <span class="chev" style="border-color:#04262A"></span></span>
+        </div>
+      </button>
+
+      <!-- Арена (Tier A — живой лёд) -->
+      <div class="row row--ice">
+        <div class="row__badge">❄️</div>
+        <div class="row__body">
+          <p class="row__title">Ледовый дворец «Чижовка-Арена»</p>
+          <p class="row__meta">Партизанский р-н · 1.8 км</p>
+          <div class="row__slots">
+            <span class="slotpill">Пт 19:00</span>
+            <span class="slotpill">Пт 20:15</span>
+            <span class="slotpill">Сб 11:00</span>
+          </div>
+        </div>
+        <div class="row__right">
+          <button class="sharebtn" onclick="openShare('chizhovka')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="chev"></span>
+        </div>
+      </div>
+
+      <!-- Тренер -->
+      <div class="row row--coach">
+        <div class="row__avatar">АК</div>
+        <div class="row__body">
+          <p class="row__title">Анна Ковалёва</p>
+          <p class="row__meta">Фигурное катание, с нуля · при Минск-Арене</p>
+          <p class="row__meta rating">★ 4.9 · 23 отзыва</p>
+        </div>
+        <div class="row__right">
+          <button class="sharebtn" onclick="openShare('coach')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="chev"></span>
+        </div>
+      </div>
+
+      <!-- ОФП / зал -->
+      <div class="row row--gym">
+        <div class="row__badge">🏋️</div>
+        <div class="row__body">
+          <p class="row__title">Зал ОФП на Притыцкого</p>
+          <p class="row__meta">Московский р-н · Пн–Вс 7:00–22:00</p>
+        </div>
+        <div class="row__right">
+          <button class="sharebtn" onclick="openShare('gym')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="chev"></span>
+        </div>
+      </div>
+
+      <!-- Магазин + сервис -->
+      <div class="row row--shop">
+        <div class="row__badge">🧰</div>
+        <div class="row__body">
+          <p class="row__title">«Коньки&Точка» — магазин и заточка</p>
+          <p class="row__meta">Центр · 900 м</p>
+          <div class="row__tags">
+            <span class="tagpill">Розница</span>
+            <span class="tagpill">Заточка</span>
+            <span class="tagpill">Прокат</span>
+          </div>
+        </div>
+        <div class="row__right">
+          <button class="sharebtn" onclick="openShare('shop')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="chev"></span>
+        </div>
+      </div>
+
+      <!-- Вторая арена, спокойная строка без живого льда (Tier B) -->
+      <div class="row row--ice">
+        <div class="row__badge">❄️</div>
+        <div class="row__body">
+          <p class="row__title">Каток «Лидо» (Lifestyle)</p>
+          <p class="row__meta">Зал проверяет расписание — есть адрес и контакты</p>
+        </div>
+        <div class="row__right">
+          <button class="sharebtn" onclick="openShare('lido')" title="Поделиться">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+          </button>
+          <span class="chev"></span>
+        </div>
+      </div>
+
+      <!-- Честный холодный старт: мало данных — не пусто, а приглашение помочь -->
+      <div class="empty">
+        <div class="empty__icon">🧊</div>
+        <p class="empty__title">Город пока только открывается</p>
+        <p class="empty__hint">Нашли ещё 3 места рядом. Знаете каток или магазин,<br>которого здесь нет?</p>
+        <button class="empty__btn" onclick="showToast('Спасибо! Передали команде 🧊')">Подсказать место</button>
+      </div>
+
+    </div>
+
+    <div class="tabbar">
+      <div class="tabitem"><span class="dot">🏠</span>Главная</div>
+      <div class="tabitem active"><span class="dot">❄️</span>Каталог</div>
+      <div class="tabitem"><span class="dot">📅</span>Записи</div>
+      <div class="tabitem"><span class="dot">⋯</span>Ещё</div>
+    </div>
+
+    <!-- ===================== ШЕР-ОВЕРЛЕЙ ===================== -->
+    <div class="overlay" id="overlay" onclick="if(event.target===this) closeShare()">
+      <div class="sheet">
+        <div class="sheet__head">
+          <h3>Поделиться</h3>
+          <button class="closex" onclick="closeShare()">✕</button>
+        </div>
+
+        <div class="presettabs">
+          <div class="preset active" id="presetPlace" onclick="setPreset('place')">Расписание</div>
+          <div class="preset" id="presetInvite" onclick="setPreset('invite')">Позвать с собой</div>
+        </div>
+
+        <div class="story">
+          <div class="story__top">
+            <div class="story__mark"></div>
+            <span class="story__brand">Карта льда</span>
+            <span class="story__city" id="sCity">Минск</span>
+          </div>
+          <div class="story__mid">
+            <p class="story__venue" id="sVenue">Минск-Арена — массовое катание</p>
+            <p class="story__time" id="sTime">ПТ 20:30</p>
+            <p class="story__sub" id="sSub">25 BYN · Фрунзенский р-н</p>
+          </div>
+          <div class="story__foot">
+            <p class="story__caption" id="sCaption">Нашли на «Карте льда»</p>
+            <p class="story__link">glide.by/a/minsk-arena</p>
+          </div>
+        </div>
+
+        <div class="sharerow">
+          <div class="sharebig tg" onclick="showToast('Открыли бы Telegram')">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.9 3.5L2.7 11c-1.1.4-1.1 1.9 0 2.3l4.8 1.6 1.8 5.8c.3.9 1.4 1.1 2 .4l2.6-2.9 4.9 3.6c.8.6 2 .2 2.2-.8l3-16.3c.2-1-.8-1.9-1.9-1.4zM8.6 14.3l9.3-7.8c.3-.2.6.1.4.4l-7.5 8.4c-.3.3-.5.8-.5 1.3l-.2 2.4-1.1-3.5c-.1-.5-.1-.9-.4-1.2z"/></svg>
+            Telegram
+          </div>
+          <div class="sharebig" onclick="showToast('Ссылка скопирована')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Ссылка
+          </div>
+          <div class="sharebig" onclick="showToast('Картинка сохранена — готова для Historii/VK')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Сохранить
+          </div>
+          <div class="sharebig" onclick="showToast('Открыли бы системное меню «Поделиться» — WhatsApp, Viber, VK')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/><line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/></svg>
+            Другое
+          </div>
+        </div>
+
+        <p class="reassure" id="sReassure">Друзья увидят точное время и место — без скачивания приложения и регистрации.</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+  </div>
+</div>
+
+<script>
+  /*
+   * Контекстная вторая строка фильтров. У каждого "ЧТО" — своя строка,
+   * а не общий набор чипов на все случаи (прототип меняет только разметку
+   * чипов и заголовок секции; сам список карточек ниже не перефильтровывается
+   * — это демонстрация механики, не рабочий поиск).
+   */
+  var CONTEXT = {
+    skate: {
+      chips: [
+        {k:'today', label:'Сегодня'},
+        {k:'tomorrow-eve', label:'Завтра вечером', active:true},
+        {k:'weekend', label:'Выходные'},
+        {k:'any', label:'Выбрать дату'},
+      ],
+      heading: 'Свободно завтра вечером', count: '6 мест'
+    },
+    coach: {
+      chips: [
+        {k:'any-coach', label:'Любой тренер', active:true},
+        {k:'skating', label:'⛸️ Улучшить катание'},
+        {k:'from-zero', label:'🌱 С нуля'},
+      ],
+      heading: 'Тренеры в Минске', count: '14 анкет'
+    },
+    gym: {
+      chips: [
+        {k:'open-now', label:'🟢 Открыто сейчас', active:true},
+      ],
+      heading: 'Залы ОФП рядом', count: '4 зала'
+    },
+    shop: {
+      chips: [
+        {k:'all-svc', label:'Все услуги', active:true},
+        {k:'retail', label:'Розница'},
+        {k:'sharpen', label:'Заточка'},
+        {k:'rent', label:'Прокат'},
+        {k:'repair', label:'Ремонт'},
+      ],
+      heading: 'Магазины и сервис рядом', count: '2 места'
+    },
+  };
+
+  function renderContext(what){
+    var cfg = CONTEXT[what] || CONTEXT.skate;
+    var row = document.getElementById('contextRow');
+    row.innerHTML = cfg.chips.map(function(c){
+      return '<div class="chip' + (c.active ? ' active' : '') + '" data-ctx="' + c.k + '">' + c.label + '</div>';
+    }).join('');
+    row.querySelectorAll('.chip').forEach(function(el){
+      el.addEventListener('click', function(){
+        row.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('active'); });
+        el.classList.add('active');
+      });
+    });
+    document.getElementById('secHeadTitle').textContent = cfg.heading;
+    document.getElementById('secHeadCnt').textContent = cfg.count;
+  }
+
+  document.querySelectorAll('#whatChips .tf').forEach(function(el){
+    el.addEventListener('click', function(){
+      document.querySelectorAll('#whatChips .tf').forEach(function(c){ c.classList.remove('active'); });
+      el.classList.add('active');
+      renderContext(el.dataset.what);
+    });
+  });
+  renderContext('skate');
+
+  // "Рядом" — постоянно видимая кнопка в поиске, отдельно от ряда "ЧТО".
+  document.getElementById('nearChip').addEventListener('click', function(){
+    this.classList.toggle('active');
+  });
+
+  var CARDS = {
+    hot:       { venue:'Минск-Арена — массовое катание', time:'СБ 20:30', sub:'25 BYN · Фрунзенский р-н' },
+    chizhovka: { venue:'Чижовка-Арена', time:'ПТ 19:00', sub:'32 BYN · Партизанский р-н' },
+    coach:     { venue:'Анна Ковалёва — тренер', time:'Запись по слотам', sub:'Фигурное катание, с нуля · Минск-Арена' },
+    gym:       { venue:'Зал ОФП на Притыцкого', time:'7:00–22:00', sub:'Московский р-н · ежедневно' },
+    shop:      { venue:'«Коньки&Точка»', time:'10:00–20:00', sub:'Розница · заточка · прокат · Центр' },
+    lido:      { venue:'Каток «Лидо» (Lifestyle)', time:'Уточняйте расписание', sub:'Адрес и контакты на карточке' },
+    city:      { venue:'Каталог льда — Минск', time:'24 места', sub:'Катки, тренеры, залы и магазины города' }
+  };
+
+  function openShare(key){
+    var c = CARDS[key] || CARDS.hot;
+    document.getElementById('sVenue').textContent = c.venue;
+    document.getElementById('sTime').textContent = c.time;
+    document.getElementById('sSub').textContent = c.sub;
+    setPreset('place');
+    document.getElementById('overlay').classList.add('show');
+  }
+  function closeShare(){ document.getElementById('overlay').classList.remove('show'); }
+
+  function setPreset(p){
+    var place = document.getElementById('presetPlace');
+    var invite = document.getElementById('presetInvite');
+    var caption = document.getElementById('sCaption');
+    var reassure = document.getElementById('sReassure');
+    if(p === 'invite'){
+      invite.classList.add('active'); place.classList.remove('active');
+      caption.textContent = 'Погнали со мной? 🙂';
+      reassure.textContent = 'Другу достаточно открыть ссылку — платформа и регистрация не нужны.';
+    } else {
+      place.classList.add('active'); invite.classList.remove('active');
+      caption.textContent = 'Нашли на «Карте льда»';
+      reassure.textContent = 'Друзья увидят точное время и место — без скачивания приложения и регистрации.';
+    }
+  }
+
+  var toastTimer;
+  function showToast(text){
+    var t = document.getElementById('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+  }
+</script>
+</body>
+</html>
