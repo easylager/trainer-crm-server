@@ -39,6 +39,7 @@ from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
+    has_public_skating,
     VENUE_TYPE_ICE,
     VENUE_TYPE_KEYS,
     VENUE_TYPE_OUTDOOR,
@@ -975,6 +976,9 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "venue_noun": venue_type_noun(row.get("venue_type")),
         "venue_chip": venue_type_chip(row.get("venue_type")),
         "venue_site_label": venue_site_label(row.get("venue_type")),
+        # TASK-146: у места бывает массовое катание (каток или уличный лёд) — клиент
+        # не решает это сам по строке типа, а берёт готовый ответ.
+        "has_skating": has_public_skating(row.get("venue_type")),
         "district": row.get("district"),
         "address": row.get("address"),
         "latitude": row.get("latitude"),

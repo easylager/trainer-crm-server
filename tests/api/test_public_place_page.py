@@ -309,3 +309,52 @@ async def test_share_sheet_assets_are_served_and_wired_into_the_arena_card(app_u
     assert js.status_code == 200 and "GlideShareSheet" in js.text
     assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
     assert "mini-app-share-sheet.js" in page.text and "mini-app-share-sheet.css" in page.text
+
+
+@pytest.mark.asyncio
+async def test_outdoor_rink_has_its_schedule_like_any_rink(app_use_test_db, db_session) -> None:
+    """Уличный лёд — тоже массовое катание; раньше его расписание терялось."""
+    place = await _place(db_session, venue_type="outdoor")
+    await _add_future_session(db_session, place["arena_id"], days_ahead=2, starts_at_local="18:15")
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"])
+        card = await client.get(f"/api/public/arenas/{place['arena_id']}")
+    assert "Массовое катание</h2>" in resp.text and "18:15" in resp.text
+    assert "зависит от погоды" in resp.text
+    assert card.json()["has_skating"] is True
+
+
+@pytest.mark.asyncio
+async def test_slot_ten_days_ahead_is_not_called_past(app_use_test_db, db_session) -> None:
+    """Шит предлагает сеансы на две недели; ссылка на них не должна говорить «прошёл»."""
+    place = await _place(db_session)
+    sid = await _add_future_session(db_session, place["arena_id"], days_ahead=10, starts_at_local="12:00")
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"], params={"s": sid})
+    assert "Этот сеанс уже прошёл" not in resp.text
+    assert 'id="plan"' in resp.text and "12:00" in resp.text
+
+
+def test_hours_without_leading_zero_are_not_compared_as_strings() -> None:
+    from datetime import datetime, timezone
+
+    from src.application.place_page import open_now_label
+
+    card = {"opening_hours": {"daily": {"open": "7:00", "close": "22:00"}}, "timezone": "Europe/Minsk"}
+    noon_minsk = datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc)  # 12:00 по Минску
+    assert open_now_label(card, now=noon_minsk) == "Открыто до 22:00"
+    broken = {"opening_hours": {"daily": {"open": "утром", "close": "22:00"}}}
+    assert open_now_label(broken, now=noon_minsk) == ""
+
+
+def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
+    from src.application.place_page import _hero_photo_url
+
+    assert _hero_photo_url({"hero": {"variants": {"hero": "/api/public/photos/arenas/1/h.jpg"}}}) == (
+        "/api/public/photos/arenas/1/h.jpg"
+    )
+    assert _hero_photo_url({"hero": {"variants": {"card": "https://cdn.example/a.jpg"}}}) == "https://cdn.example/a.jpg"
+    assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
+    assert _hero_photo_url({"hero": None}) is None

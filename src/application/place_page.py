@@ -41,11 +41,15 @@ from src.application.arena_public_use_cases import (
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
 from src.application.place_links import place_query
+from src.shared.venue_types import has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
 
 #: Сколько дней расписания показывает страница. Неделя — горизонт «планирую выходные».
 SCHEDULE_DAYS = 7
+#: Сколько дней ищем выбранный сеанс (?s=). Шит «Поделиться» предлагает сеансы из ленты
+#: карточки (две недели) — сеанс через 10 дней не должен выглядеть «уже прошедшим».
+FOCUS_LOOKUP_DAYS = 14
 #: Сколько слотов дня показывать до «ещё N».
 _SLOTS_PER_DAY = 12
 
@@ -239,12 +243,30 @@ def ago_label(moment: datetime | None, *, now: datetime) -> str:
     return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
 
 
+def _norm_hhmm(raw: Any) -> str:
+    """«7:00» / «07.00» / «7» → «07:00». Непонятное — пустая строка.
+
+    Часы вводят руками в админке; сравнивать «7:00» и «10:00» строками нельзя —
+    «7:00» окажется позже, и магазин «закроется» с утра.
+    """
+    text = str(raw or "").strip().replace(".", ":")
+    if not text:
+        return ""
+    head, _, tail = text.partition(":")
+    if not head.isdigit() or (tail and not tail.isdigit()):
+        return ""
+    h, m = int(head), int(tail or 0)
+    if not (0 <= h <= 24 and 0 <= m < 60):
+        return ""
+    return f"{h:02d}:{m:02d}"
+
+
 def _daily_hours(card: Mapping[str, Any]) -> tuple[str, str] | None:
     hours = card.get("opening_hours") or {}
     daily = hours.get("daily") if isinstance(hours, Mapping) else None
     if not isinstance(daily, Mapping):
         return None
-    open_, close = str(daily.get("open") or "").strip(), str(daily.get("close") or "").strip()
+    open_, close = _norm_hhmm(daily.get("open")), _norm_hhmm(daily.get("close"))
     if not open_ or not close:
         return None
     return open_, close
@@ -285,20 +307,22 @@ async def load_place_view(
     tz = ZoneInfo(str(card.get("timezone") or "Europe/Minsk"))
     today = now.astimezone(tz).date()
 
-    days: list[dict[str, Any]] = []
-    if card.get("venue_type") == "ice":
+    lookup_days: list[dict[str, Any]] = []
+    if _skating(card):
         feed = await list_public_arena_sessions(
             session,
             str(card["id"]),
             date_from=today,
-            date_to=today + timedelta(days=SCHEDULE_DAYS - 1),
+            date_to=today + timedelta(days=FOCUS_LOOKUP_DAYS - 1),
         )
-        days = list((feed or {}).get("days") or [])
+        lookup_days = list((feed or {}).get("days") or [])
 
     focus = None
     focus_missing = False
+    week_end = today + timedelta(days=SCHEDULE_DAYS - 1)
+    days = [d for d in lookup_days if (_parse_iso_date(d.get("local_date")) or today) <= week_end]
     if session_id is not None:
-        for day in days:
+        for day in lookup_days:
             for slot in day.get("sessions") or []:
                 if int(slot["id"]) == int(session_id):
                     focus = slot
@@ -325,7 +349,7 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     card = view["card"]
     today: date = view["today"]
     now: datetime = view["now"]
-    if card.get("venue_type") == "ice":
+    if _skating(card):
         if card.get("in_season") is False:
             start = card.get("season_start_month")
             if start:
@@ -340,6 +364,10 @@ def status_badge(view: Mapping[str, Any]) -> tuple[str, str] | None:
     if label:
         return ("open" if label.startswith("Открыто") else "shut"), label
     return None
+
+
+def _skating(card: Mapping[str, Any]) -> bool:
+    return has_public_skating(card.get("venue_type"))
 
 
 def _city(card: Mapping[str, Any]) -> str:
@@ -368,7 +396,7 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     if invite:
         return f"Погнали? {name}"
     vt = card.get("venue_type")
-    if vt == "ice":
+    if has_public_skating(vt):
         return f"{name}, {city} — расписание массового катания" if city else name
     if vt == "shop":
         services = ", ".join(s.lower() for s in _services(card))
@@ -387,7 +415,7 @@ def page_description(view: Mapping[str, Any]) -> str:
         price = slot_price(focus)
         if price:
             bits.append(price)
-    elif card.get("venue_type") == "ice" and view.get("session_count"):
+    elif _skating(card) and view.get("session_count"):
         n = int(view["session_count"])
         bits.append(f"{n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')} массового катания на неделе")
     services = _services(card) if card.get("venue_type") == "shop" else []
@@ -426,13 +454,13 @@ def compose_place_share_message(view: Mapping[str, Any], *, page_url: str, invit
     slot = view.get("focus") or view.get("next_slot")
     lines: list[str] = []
     if invite:
-        lines.append("Погнали кататься? ⛸" if card.get("venue_type") == "ice" else "Сходим сюда?")
+        lines.append("Погнали кататься? ⛸" if _skating(card) else "Сходим сюда?")
     else:
-        if card.get("venue_type") == "ice":
+        if _skating(card):
             lines.append(f"{name} — массовое катание")
         else:
             lines.append(f"{name} — {str(card.get('venue_noun') or '').lower()}".rstrip(" —"))
-    if slot is not None and card.get("venue_type") == "ice":
+    if slot is not None and _skating(card):
         when = slot_when(slot, today=today, absolute=True)
         price = slot_price(slot)
         line = f"{when}" + (f" · {price}" if price else "")
@@ -484,7 +512,7 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
 
 def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> str:
     card = view["card"]
-    if card.get("venue_type") != "ice" or card.get("in_season") is False:
+    if not _skating(card) or card.get("in_season") is False:
         return ""
     days = view.get("days") or []
     focus = view.get("focus")
@@ -611,6 +639,16 @@ def _trainers_html(card: Mapping[str, Any], *, cta_url: str | None) -> str:
     )
 
 
+def _hero_photo_url(card: Mapping[str, Any]) -> str | None:
+    """Первое опубликованное фото места — во всю ширину шапки. Нет фото — шапка без него."""
+    hero = card.get("hero")
+    variants = hero.get("variants") if isinstance(hero, Mapping) else None
+    if not isinstance(variants, Mapping):
+        return None
+    url = str(variants.get("hero") or variants.get("card") or "").strip()
+    return url if url.lower().startswith(("https://", "http://", "/")) else None
+
+
 def _maps_url(card: Mapping[str, Any]) -> str | None:
     lat, lon = card.get("latitude"), card.get("longitude")
     if lat is not None and lon is not None:
@@ -677,7 +715,7 @@ def _trust_html(view: Mapping[str, Any]) -> str:
     fresh = card.get("freshness") or {}
     lines: list[str] = []
     observed = _parse_iso_dt(fresh.get("schedule_observed_at"))
-    if card.get("venue_type") == "ice" and observed is not None:
+    if _skating(card) and observed is not None:
         source = str(fresh.get("source_label") or "сайта катка")
         if source.startswith("сайт "):
             source = "сайта " + source[5:]
@@ -691,7 +729,7 @@ def _trust_html(view: Mapping[str, Any]) -> str:
         lines.append("Карточку собрала команда Glide по открытым данным.")
     if card.get("venue_type") == "outdoor":
         lines.append("Открытый лёд зависит от погоды — уточняйте перед выездом.")
-    if card.get("venue_type") == "ice" and view.get("session_count"):
+    if _skating(card) and view.get("session_count"):
         lines.append("Время и цену конкретного сеанса лучше уточнить на месте.")
     return "".join(f"<p>{_esc(line)}</p>" for line in lines)
 
@@ -777,9 +815,16 @@ def render_place_page(
         else ""
     )
     where = _where(card)
+    photo = _hero_photo_url(card)
+    photo_html = (
+        f'<img class="hero__photo" src="{_esc(photo)}" alt="{_esc(card.get("name"))}" loading="eager" decoding="async" />'
+        if photo
+        else ""
+    )
     hero = (
-        f'<header class="hero hero--{_esc(vt)}">'
-        f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
+        f'<header class="hero hero--{_esc(vt)}{" hero--photo" if photo else ""}">'
+        + photo_html
+        + f'<p class="hero__type">{icon} {_esc(card.get("venue_noun") or "")}</p>'
         f'<h1 class="hero__title">{_esc(card.get("name"))}</h1>'
         + (f'<p class="hero__where">{_esc(where)}</p>' if where else "")
         + badge_html
@@ -794,7 +839,12 @@ def render_place_page(
         if maps
         else ""
     )
-    actions = f'<div class="actions">{cta}{route}</div>' if (cta or route) else ""
+    # Telegram — в закреплённой кнопке снизу (dock), сверху только маршрут: две одинаковые
+    # кнопки на одном экране выглядят как сбой, а не как настойчивость.
+    del cta
+    actions = f'<div class="actions actions--one">{route}</div>' if route else ""
+    # Главная кнопка всегда под пальцем: страницу читают с телефона, листая до конца.
+    sticky = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
     body = "".join(
         [
             hero,
@@ -808,6 +858,7 @@ def render_place_page(
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
             _share_html(share, venue_type=vt),
+            sticky,
         ]
     )
     city = _city(card)

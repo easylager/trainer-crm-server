@@ -19,6 +19,7 @@ from typing import Any, Mapping
 from PIL import Image, ImageDraw, ImageFont
 
 from src.application.ice_city_day_og import _font
+from src.shared.venue_types import has_public_skating
 from src.application.ice_city_day import plural_ru
 from src.application.place_page import (
     _parse_iso_date,
@@ -85,6 +86,7 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font: Any, max_w: int, max_lines
 
 _TYPE_COLORS = {
     "ice": (42, 167, 201),
+    "outdoor": (42, 167, 201),
     "gym": (224, 138, 30),
     "choreo": (224, 138, 30),
     "shop": (122, 90, 245),
@@ -99,10 +101,11 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
     card = view["card"]
     city = str(card.get("city_name") or "").strip()
     vt = card.get("venue_type")
-    kicker = "Погнали кататься?" if invite and vt == "ice" else ("Погнали?" if invite else "Карта льда")
+    skating = has_public_skating(vt)
+    kicker = "Погнали кататься?" if invite and skating else ("Погнали?" if invite else "Карта льда")
     if city and not invite:
         kicker = f"{kicker} · {city}"
-    slot = view.get("focus") or (view.get("next_slot") if vt == "ice" else None)
+    slot = view.get("focus") or (view.get("next_slot") if skating else None)
     big = ""
     day = ""
     time = ""
@@ -121,7 +124,7 @@ def card_lines(view: Mapping[str, Any], *, invite: bool) -> dict[str, str]:
         badge = status_badge(view)
         if badge and badge[0] in ("closed", "open", "shut"):
             big = badge[1]
-        elif vt == "ice" and view.get("session_count"):
+        elif skating and view.get("session_count"):
             n = int(view["session_count"])
             big = f"{n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')} на неделе"
         else:

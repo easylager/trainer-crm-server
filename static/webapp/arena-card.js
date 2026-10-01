@@ -210,9 +210,16 @@
    * сеансами главная кнопка — «Позвать с собой»: зовут на конкретное время, а не
    * пересылают объявление (DEC-014 — приглашение не прячется в оверлей).
    */
+  function skatingCard() {
+    var c = state.card || {};
+    if (typeof c.has_skating === 'boolean') return c.has_skating;
+    var vt = String(c.venue_type || 'ice');
+    return vt === 'ice' || vt === 'outdoor';
+  }
+
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
-    var isIce = String(state.card.venue_type || 'ice') === 'ice';
+    var isIce = skatingCard();
     var slots = isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [];
     if (slots.length) {
       return (
@@ -231,12 +238,12 @@
 
   function openShare(invite) {
     if (!global.GlideShareSheet || !state.card) return;
-    var isIce = String(state.card.venue_type || 'ice') === 'ice';
+    var isIce = skatingCard();
     global.GlideShareSheet.open({
       ref: state.card.id,
       slots: isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [],
       invite: !!invite,
-      venueType: state.card.venue_type,
+      venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
     });
   }
@@ -341,8 +348,8 @@
     /* Секция про массовое катание существует только для льда. На зале она
        обещала бы расписание сеансов, которых там не бывает в принципе —
        это не «данных пока нет», а неверный вопрос к площадке. */
-    var venueType = String(state.card.venue_type || 'ice');
-    if (venueType !== 'ice') return '';
+    // has_skating — каток или уличный лёд (сервер: venue_types.has_public_skating).
+    if (!skatingCard()) return '';
     var feed = M.iceFeedView({
       card: state.card,
       hasSessions: hasAnySessions(),

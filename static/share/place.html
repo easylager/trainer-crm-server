@@ -99,6 +99,16 @@
     .hero--ice::before { background: var(--ice); }
     .hero--gym::before, .hero--choreo::before { background: var(--gym); }
     .hero--shop::before { background: var(--shop); }
+    .hero--photo { padding-top: 0; }
+    .hero__photo {
+      display: block; width: calc(100% + 43px); max-width: none; margin: 0 -20px 16px -23px;
+      aspect-ratio: 16 / 9; object-fit: cover; background: var(--chip);
+    }
+    .dock {
+      position: sticky; bottom: 0; margin: 16px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(180deg, transparent, var(--bg) 30%);
+    }
+    .dock .cta { box-shadow: 0 8px 24px rgba(15, 143, 138, .28); }
     .hero__type { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
     .hero__title { margin: 0; font-size: clamp(26px, 7vw, 34px); line-height: 1.12; letter-spacing: -.02em; }
     .hero__where { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
@@ -132,7 +142,7 @@
     .plan__note { margin: 6px 0 0; }
 
     .actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0 0 12px; }
-    @media (min-width: 420px) { .actions { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 420px) { .actions { grid-template-columns: 1fr 1fr; } .actions--one { grid-template-columns: 1fr; } }
     .cta {
       display: block; padding: 14px 18px; border-radius: 14px;
       background: var(--accent); color: var(--accent-ink);

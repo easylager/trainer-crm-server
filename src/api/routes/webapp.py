@@ -2854,8 +2854,11 @@ async def get_client_hub_bootstrap(
                                 else (str(lca) if lca is not None else None)
                             ),
                         }
+            city_raw = (row or {}).get("city_id")
             return {
                 "selected_trainer_id": int(tid) if tid is not None else None,
+                # TASK-146: карусель «Каталог» на Главной показывает места города клиента.
+                "city_id": int(city_raw) if city_raw is not None else None,
                 "primary_trainer_id": pid,
                 "primary_trainer_name": (
                     (p_hint or {}).get("trainer_display_name") if pid else None

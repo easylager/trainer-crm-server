@@ -61,6 +61,10 @@ VENUE_TYPES: tuple[Mapping[str, str], ...] = (
 
 VENUE_TYPE_KEYS: tuple[str, ...] = tuple(v["key"] for v in VENUE_TYPES)
 
+#: Где бывает массовое катание (публичные сеансы льда). Уличный каток — тоже лёд:
+#: зимой это главный массовый вход в катание, и его расписание — такое же расписание.
+SKATING_VENUE_TYPES: frozenset[str] = frozenset({VENUE_TYPE_ICE, VENUE_TYPE_OUTDOOR})
+
 #: Где можно тренироваться — и значит, что тренер может выбрать местом работы.
 TRAINER_VENUE_TYPE_KEYS: tuple[str, ...] = tuple(k for k in VENUE_TYPE_KEYS if k != VENUE_TYPE_SHOP)
 
@@ -81,6 +85,11 @@ def normalize_venue_type(value: Any) -> str:
     """
     key = str(value or "").strip().lower()
     return key if key in _BY_KEY else DEFAULT_VENUE_TYPE
+
+
+def has_public_skating(value: Any) -> bool:
+    """Каток или уличный лёд — у места есть сеансы массового катания."""
+    return normalize_venue_type(value) in SKATING_VENUE_TYPES
 
 
 def venue_type_noun(value: Any) -> str:
