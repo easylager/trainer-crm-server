@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     telegram_webapp_init_data_clock_skew_sec: int = 300
     # Comma-separated list of admin telegram IDs, e.g. "123,456"
     admin_telegram_ids: list[int] | None = None
+    # TASK-146: куда админ-бот шлёт алерты по источникам льда (например, общий чат
+    # команды, id группы отрицательный). Пусто — в ADMIN_TELEGRAM_IDS.
+    ice_alert_chat_ids: list[int] | None = None
     # When True: no Telegram getChat to backfill `clients.telegram_username` (temporary QA for relay / no-@username DMs).
     disable_client_telegram_username_enrich: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # When True: trainer hub «Написать» always opens bot relay (never t.me), for QA when DM is blocked but @ exists.

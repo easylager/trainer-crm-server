@@ -18,6 +18,9 @@ ICE_INGEST_LOOP_INTERVAL_SEC = 60
 ICE_TTL_LOOP_INTERVAL_SEC = 3600
 ICE_HEALTH_ALERT_INTERVAL_SEC = 3600
 ICE_HEALTH_DIGEST_INTERVAL_SEC = 3600
+# TASK-146: алерты по конкретной арене — отдельным циклом, а не внутри тика
+# планировщика: если планировщик завис или падает, устаревание всё равно заметим.
+ICE_SOURCE_ALERT_INTERVAL_SEC = 120
 
 
 async def run_ice_ingest_scheduler_loop() -> None:
@@ -87,6 +90,25 @@ async def run_ice_health_alert_loop() -> None:
             break
         except Exception:
             logger.exception("ice health alert tick failed")
+
+
+async def run_ice_source_alert_loop() -> None:
+    """Каждые 2 минуты: пуш в админ-бот по арене, чей парсер сломался/устарел, и «восстановлено»."""
+    from src.infrastructure.db import async_session_factory
+    from src.ingestion.source_alerts import tick_source_failure_alerts
+
+    while True:
+        await asyncio.sleep(ICE_SOURCE_ALERT_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                alerts = await tick_source_failure_alerts(session, now=datetime.now(timezone.utc))
+                await session.commit()
+                if alerts:
+                    logger.info("ice source alerts sent: %s", len(alerts))
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("ice source alert tick failed")
 
 
 async def run_ice_health_weekly_digest_loop() -> None:

@@ -41,6 +41,7 @@ from src.bot.notification_loops import (
 )
 from src.ingestion.loop import (
     run_ice_health_alert_loop,
+    run_ice_source_alert_loop,
     run_ice_health_weekly_digest_loop,
     run_ice_ingest_scheduler_loop,
     run_ice_scrape_ttl_loop,
@@ -124,6 +125,7 @@ async def main() -> None:
         asyncio.create_task(run_ice_ingest_scheduler_loop(), name="ice_ingest_scheduler"),
         asyncio.create_task(run_ice_scrape_ttl_loop(), name="ice_scrape_ttl"),
         asyncio.create_task(run_ice_health_alert_loop(), name="ice_health_alert"),
+        asyncio.create_task(run_ice_source_alert_loop(), name="ice_source_alert"),
         asyncio.create_task(run_ice_health_weekly_digest_loop(), name="ice_health_weekly_digest"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
