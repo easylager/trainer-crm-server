@@ -1723,11 +1723,14 @@ CLIENT_SHARE_KIND_ICE_CITY_DAY = "ice_city_day"
 CLIENT_SHARE_KIND_TRAINER = "trainer"
 # TASK-146: «Поделиться» с карточки конкретного места (каток, зал, магазин).
 CLIENT_SHARE_KIND_PLACE = "place"
+# TASK-146: «Поделиться подборкой» — город + тип места + окно времени (/c/{город}).
+CLIENT_SHARE_KIND_SELECTION = "selection"
 
 CLIENT_SHARE_KINDS = (
     CLIENT_SHARE_KIND_ICE_CITY_DAY,
     CLIENT_SHARE_KIND_TRAINER,
     CLIENT_SHARE_KIND_PLACE,
+    CLIENT_SHARE_KIND_SELECTION,
 )
 
 

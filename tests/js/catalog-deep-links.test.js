@@ -69,3 +69,10 @@ describe('ice tab URL: город и тип места из ссылки', () =>
     assert.equal(M.venueFromSearch('?venue=casino'), null);
   });
 });
+
+describe('маркетинговый вход', () => {
+  it('голый catalog — каталог без города (город по геолокации)', () => {
+    const target = loadDeepLinkTarget();
+    assert.deepEqual(target('catalog'), { key: 'ice', path: 'ice' });
+  });
+});

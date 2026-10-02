@@ -22,6 +22,8 @@
     venueFacets: [],
     /* TASK-146 (Q-006): окно времени. auto — умный дефолт на сервере; window — что применено. */
     when: 'auto',
+    /* Где человек (lat,lon) — если разрешил геолокацию; ближние места выше. */
+    near: null,
     window: null,
     cities: [],
     items: [],
@@ -489,16 +491,8 @@
    * живёт в четырёх других точках.
    */
   function shareAvailable() {
-    // TASK-146: артефакт — расписание льда; под фильтром «Магазин» или «Зал» его нет.
-    var venues = state.venueTypes || [];
-    var iceLens = !venues.length || venues.indexOf('ice') >= 0 || venues.indexOf('outdoor') >= 0;
-    return !!(
-      state.cityId &&
-      state.intent === 'skate' &&
-      iceLens &&
-      !state.loading &&
-      state.items.length
-    );
+    // TASK-146: делимся подборкой — она есть для любого типа места (лёд, магазины, залы).
+    return !!(state.cityId && state.intent === 'skate' && !state.loading && state.items.length);
   }
 
   function setShareButton() {
@@ -509,9 +503,11 @@
     if (!show) return;
     var label = $('iceShareLabel');
     if (label) {
-      label.textContent = state.cityName
-        ? 'Поделиться расписанием — ' + state.cityName
-        : 'Поделиться расписанием';
+      label.textContent = global.GlideShareSheet
+        ? 'Поделиться подборкой'
+        : state.cityName
+          ? 'Поделиться расписанием — ' + state.cityName
+          : 'Поделиться расписанием';
     }
     btn.setAttribute(
       'aria-label',
@@ -523,6 +519,16 @@
 
   function openIceShareDialog() {
     if (!state.cityId) return;
+    /* TASK-146: делимся ровно тем, что на экране — город, тип места, окно времени —
+       страницей подборки /c/{город}. Без шита (старые клиенты) — прежний «Лёд сегодня». */
+    if (global.GlideShareSheet) {
+      var q = ['city_id=' + encodeURIComponent(state.cityId)];
+      if (state.venueTypes && state.venueTypes.length === 1) q.push('venue_type=' + encodeURIComponent(state.venueTypes[0]));
+      var key = state.window && state.window.key;
+      if (key && M.whenChipsVisible(state.intent, state.venueTypes)) q.push('when=' + encodeURIComponent(key));
+      global.GlideShareSheet.open({ endpoint: '/api/public/ice/selection/share?' + q.join('&'), context: 'ice_list' });
+      return;
+    }
     var btn = $('iceShareBtn');
     if (btn) btn.disabled = true;
     fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
@@ -773,6 +779,8 @@
       venueTypes: state.venueTypes,
       limit: 50,
       when: M.whenChipsVisible(state.intent, state.venueTypes) ? state.when : '',
+      // Знаем, где человек, — ближние места выше (сервер считает distance_km).
+      near: state.near || '',
     });
     return fetchJson(url)
       .then(function (data) {
@@ -1113,12 +1121,65 @@
             applyCity(fromSession);
             return;
           }
-          applyCity(M.pickFallbackCity(state.cities));
+          return geolocateOrFallback(session);
         });
       })
       .catch(function () {
         applyCity(M.pickFallbackCity(state.cities));
       });
+  }
+
+  /**
+   * TASK-146: холодный вход (маркетинговая ссылка, первый запуск) — города нет ни в ссылке,
+   * ни в сохранённом, ни в профиле. Спрашиваем геолокацию один раз и берём ближайший город
+   * (CatalogGeoModel: не дальше 150 км — дальний «ближайший» не совпадение). Отказ или
+   * нет совпадения — прежний фолбэк, и больше не спрашиваем.
+   */
+  function geolocateOrFallback(session) {
+    var G = global.CatalogGeoModel;
+    var fallback = function () {
+      applyCity(M.pickFallbackCity(state.cities));
+    };
+    var go =
+      G &&
+      G.shouldAutoGeolocate({
+        cityId: null,
+        hasExplicitQueryCityId: !!M.cityIdFromSearch(global.location.search || ''),
+        hasCollectiveContext: false,
+        hasDeepLinkTrainer: false,
+        hasPrimaryTrainer: false,
+        geolocationSupported: !!(global.navigator && global.navigator.geolocation),
+        previouslyDeclined: G.readDeclinedFlag(global.localStorage),
+        ipSaysUnserved: !!(session && session.ip_country_served === false),
+      });
+    if (!go) {
+      fallback();
+      return;
+    }
+    return new Promise(function (resolve) {
+      global.navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          state.near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+          fetchJson(G.buildNearUrl(pos.coords.latitude, pos.coords.longitude))
+            .then(function (data) {
+              var cityId = G.pickCityFromNearResponse(data);
+              var city = cityId
+                ? state.cities.filter(function (c) { return Number(c.id) === cityId; })[0]
+                : null;
+              if (city) applyCity(city);
+              else fallback();
+            })
+            .catch(fallback)
+            .then(resolve);
+        },
+        function () {
+          G.writeDeclinedFlag(global.localStorage);
+          fallback();
+          resolve();
+        },
+        { timeout: 8000, maximumAge: 300000 }
+      );
+    });
   }
 
   function showSearch(q) {

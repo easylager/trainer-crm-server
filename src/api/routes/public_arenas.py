@@ -33,7 +33,11 @@ from src.application.ice_city_day import (
 )
 from src.application.place_links import place_image_url, place_page_url
 from src.application.place_page import load_place_view, share_payload
-from src.infrastructure.db.models import CLIENT_SHARE_KIND_ICE_CITY_DAY, CLIENT_SHARE_KIND_PLACE
+from src.infrastructure.db.models import (
+    CLIENT_SHARE_KIND_ICE_CITY_DAY,
+    CLIENT_SHARE_KIND_PLACE,
+    CLIENT_SHARE_KIND_SELECTION,
+)
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
@@ -262,6 +266,62 @@ async def get_public_arena_trainers(
 
 
 _SHARE_CHANNELS = ("telegram", "copy", "story", "system")
+
+
+@router.get("/ice/selection/share")
+async def get_public_selection_share(
+    response: Response,
+    city_id: int = Query(...),
+    venue_type: str | None = Query(None),
+    when: str | None = Query(None),
+    record: bool = Query(True),
+    channel: str | None = Query(None),
+    share_context: str | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    «Поделиться подборкой» из каталога (TASK-146): ссылка на /c/{город}?t=&w= — ровно
+    та выборка, что на экране (город, тип места, окно времени). Тот же контракт, что у
+    шеринга места; превью — og.png подборки.
+    """
+    from src.application.selection_page import (
+        clean_venue,
+        clean_when,
+        compose_selection_share,
+        load_selection_view,
+        selection_image_path,
+        selection_path,
+    )
+
+    response.headers["Cache-Control"] = "no-store"
+    row = (
+        await session.execute(text("SELECT id, name FROM cities WHERE id = :cid AND is_active"), {"cid": int(city_id)})
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    city = {"id": int(row[0]), "name": str(row[1])}
+    venue, window_key = clean_venue(venue_type), clean_when(when)
+    if window_key is None and (when or "").strip().lower() == "auto":
+        from src.application.ice_time_windows import resolve_window
+
+        resolved = resolve_window("auto")
+        window_key = resolved.key if resolved else None
+    view = await load_selection_view(session, city=city, venue=venue, when=window_key)
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    page_url = base + selection_path(city_name=city["name"], venue=venue, when=window_key)
+    payload = compose_selection_share(view, page_url=page_url)
+    if record:
+        ch = (channel or "").strip().lower()
+        await record_client_share(
+            session,
+            kind=CLIENT_SHARE_KIND_SELECTION,
+            share_context=(share_context or "ice_list").strip().lower()[:40],
+            city_id=city["id"],
+            payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
+        )
+    image = base + selection_image_path(city_name=city["name"], venue=venue, when=window_key)
+    story = image.replace("/og.png", "/story.png")
+    return {**payload, "og_image_url": image, "story_image_url": story, "venue_type": venue, "when": window_key}
 
 
 @router.get("/arenas/{arena_ref}/share")

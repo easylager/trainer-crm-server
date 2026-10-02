@@ -21,6 +21,7 @@ from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card
 from src.application.place_links import (
+    catalog_start_param,
     place_image_url,
     place_page_url,
     place_path,
@@ -233,11 +234,17 @@ async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
     rows = (await session.execute(_SITEMAP_SQL, {"countries": ice_discovery_countries()})).mappings().all()
     urls: list[tuple[str, str]] = [(base + "/", "weekly")]
     seen_cities: set[str] = set()
+    shop_cities: set[str] = set()
     for row in rows:
         city_name = str(row["city_name"])
         if city_name not in seen_cities:
             seen_cities.add(city_name)
             urls.append((ice_city_day_page_url(base_url=base, city_name=city_name), "daily"))
+            # Подборка города — ответ на «где покататься в <город>» (TASK-146).
+            urls.append((f"{base}/c/{city_slug(city_name)}", "daily"))
+        if row["venue_type"] == "shop" and city_name not in shop_cities:
+            shop_cities.add(city_name)
+            urls.append((f"{base}/c/{city_slug(city_name)}?t=shop", "weekly"))
         freq = "daily" if row["venue_type"] == "ice" else "weekly"
         urls.append((place_page_url(base_url=base, city_name=city_name, slug=str(row["slug"])), freq))
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
@@ -265,3 +272,83 @@ async def robots() -> Response:
         ]
     )
     return Response(content=content, media_type="text/plain", headers={"Cache-Control": "public, max-age=86400"})
+
+
+# ---------------------------------------------------------------------------
+# Подборка /c/{город}?t=<тип>&w=<окно> — то, чем делятся прямо из каталога.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/c/{city_ref}", response_class=HTMLResponse)
+async def selection_page(
+    city_ref: str,
+    request: Request,
+    t: str | None = Query(None, description="Тип места: ice|shop|gym|…"),
+    w: str | None = Query(None, description="Окно: today_evening|today|tomorrow|weekend"),
+    session: AsyncSession = Depends(get_session),
+):
+    from src.application.selection_page import (
+        clean_venue,
+        clean_when,
+        compose_selection_share,
+        load_selection_view,
+        render_selection_page,
+        selection_image_path,
+        selection_path,
+    )
+
+    base = _base()
+    city = await resolve_city_by_ref(session, city_ref)
+    if city is None:
+        return _not_found(base + "/webapp/ice")
+    venue, when = clean_venue(t), clean_when(w)
+    city_name = str(city["name"])
+    path = selection_path(city_name=city_name, venue=venue, when=when)
+    if city_ref != city_slug(city_name):
+        return RedirectResponse(url=path, status_code=301)
+    view = await load_selection_view(session, city=city, venue=venue, when=when)
+    intent = "shop" if venue == "shop" else ("gym" if venue == "gym" else ("skate" if when else None))
+    settings = Settings()
+    html = render_selection_page(
+        view,
+        canonical_url=base + path,
+        og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
+        cta_url=telegram_open_link(
+            client_bot_username=settings.client_bot_username,
+            mini_app_short_name=settings.client_mini_app_short_name,
+            start_param=catalog_start_param(int(city["id"]), intent),
+        ),
+        share=compose_selection_share(view, page_url=base + path),
+        city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
+        story_image_url=base
+        + selection_image_path(city_name=city_name, venue=venue, when=when).replace("/og.png", "/story.png"),
+    )
+    return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
+
+
+async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, w: str | None, *, story: bool):
+    from src.application.place_card_image import render_selection_card
+    from src.application.selection_page import clean_venue, clean_when, load_selection_view, selection_path
+
+    city = await resolve_city_by_ref(session, city_ref)
+    if city is None:
+        return Response(status_code=404)
+    venue, when = clean_venue(t), clean_when(w)
+    view = await load_selection_view(session, city=city, venue=venue, when=when)
+    page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
+    view["display_url"] = page.split("://", 1)[-1]
+    return Response(content=render_selection_card(view, story=story), media_type="image/png", headers=_IMAGE_CACHE)
+
+
+@router.get("/c/{city_ref}/og.png")
+async def selection_og_image(
+    city_ref: str, t: str | None = None, w: str | None = None, session: AsyncSession = Depends(get_session)
+) -> Response:
+    return await _selection_image(session, city_ref, t, w, story=False)
+
+
+@router.get("/c/{city_ref}/story.png")
+async def selection_story_image(
+    city_ref: str, t: str | None = None, w: str | None = None, session: AsyncSession = Depends(get_session)
+) -> Response:
+    return await _selection_image(session, city_ref, t, w, story=True)

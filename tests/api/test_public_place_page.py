@@ -267,6 +267,7 @@ async def test_sitemap_lists_places_and_city_days_for_search(app_use_test_db, db
     assert place["path"] + "</loc>" in sm.text
     assert f"/ice/{city_slug(place['city_name'])}/today</loc>" in sm.text
     assert hidden["path"] + "</loc>" not in sm.text
+    assert f"/c/{city_slug(place['city_name'])}</loc>" in sm.text
     assert "Sitemap: " in robots.text and "/sitemap.xml" in robots.text
     assert "Disallow: /api/" in robots.text
 
@@ -358,3 +359,18 @@ def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
     assert _hero_photo_url({"hero": {"variants": {"card": "https://cdn.example/a.jpg"}}}) == "https://cdn.example/a.jpg"
     assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
     assert _hero_photo_url({"hero": None}) is None
+
+
+@pytest.mark.asyncio
+async def test_every_script_the_client_pages_load_is_actually_served(app_use_test_db) -> None:
+    """catalog-geo-model.js годами отдавался с 404 — геолокация молча не работала.
+    Ловим весь класс: каждый локальный <script>/<link> клиентских страниц должен отвечать 200."""
+    pages = ["ice", "arena", "catalog?trainer_id=1", "client-home", "book?trainer_id=1", "client-bookings", "client-requests"]
+    async with _client() as client:
+        for page in pages:
+            html = (await client.get(f"/webapp/{page}")).text
+            assets = re.findall(r'(?:src|href)="([a-z0-9-]+\.(?:js|css))\?v=[0-9]+"', html)
+            assert assets, page
+            for asset in set(assets):
+                resp = await client.get(f"/webapp/{asset}?v=1")
+                assert resp.status_code == 200, f"{page}: /webapp/{asset} → {resp.status_code}"

@@ -284,3 +284,34 @@ def render_place_card(
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
+
+
+def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> bytes:
+    """og.png / story.png подборки (/c/{город}): что за подборка, сколько мест и сеансов, первые места."""
+    from src.application.selection_page import selection_description, selection_title
+
+    window = view.get("window")
+    kicker = f"Карта льда · {window['label']}" if window and view.get("skating") else "Карта льда"
+    names = [str(i.get("name") or "") for i in (view.get("items") or [])[:3]]
+    lines = {
+        "kicker": kicker.upper(),
+        "title": selection_title(view),
+        "big": selection_description(view),
+        "sub": " · ".join(n for n in names if n),
+        "foot": "Расписание, цены и адреса — по ссылке",
+    }
+    fake_view = {"card": {"venue_type": view.get("venue") or "ice"}}
+    if story:
+        # В середине билета — первые места с ближайшим временем: ради этого и смотрят историю.
+        picks = []
+        for item in (view.get("items") or [])[:4]:
+            slots = (view.get("slots") or {}).get(int(item["id"])) or []
+            when = str(slots[0].get("starts_at_local") or "")[:5] if slots else ""
+            picks.append(f"{item.get('name')} {when}".strip())
+        lines = {**lines, "day": "", "time": "", "sub": "", "extra": " · ".join(picks)}
+        img = _render_story(fake_view, lines, display_url=view.get("display_url") or "")
+    else:
+        img = _render_og(fake_view, lines)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()

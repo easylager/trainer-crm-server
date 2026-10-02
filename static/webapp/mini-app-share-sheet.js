@@ -46,6 +46,15 @@
   }
 
   function endpoint(extra) {
+    if (state.endpoint) {
+      // Подборка (/api/public/ice/selection/share?…): свой URL с фильтрами, без сеанса и тона.
+      var tail = Object.keys(extra || {})
+        .map(function (k) { return k + '=' + encodeURIComponent(String(extra[k])); })
+        .join('&');
+      var sep = state.endpoint.indexOf('?') >= 0 ? '&' : '?';
+      return state.endpoint + sep + 'share_context=' + encodeURIComponent(state.context || 'ice_list') +
+        (tail ? '&' + tail : '');
+    }
     var q = ['share_context=' + encodeURIComponent(state.context || 'arena_card')];
     if (state.sessionId) q.push('session_id=' + encodeURIComponent(String(state.sessionId)));
     if (state.invite) q.push('invite=true');
@@ -175,12 +184,15 @@
     var preview = p && p.og_image_url
       ? '<img class="gss-preview__img" src="' + esc(sameOriginPath(p.og_image_url)) + '" alt="Так ссылку увидят в чате" loading="eager" />'
       : '<div class="gss-preview__img gss-preview__img--wait"></div>';
+    var tabs = state.endpoint
+      ? ''
+      : '<div class="gss-tabs" role="group" aria-label="Тон">' +
+        '<button type="button" class="gss-tab' + (!state.invite ? ' is-on' : '') + '" data-invite="0">' +
+        (isIce ? 'Расписание' : 'Место') + '</button>' +
+        '<button type="button" class="gss-tab' + (state.invite ? ' is-on' : '') + '" data-invite="1">Позвать с собой</button>' +
+        '</div>';
     root.querySelector('.gss-body').innerHTML =
-      '<div class="gss-tabs" role="group" aria-label="Тон">' +
-      '<button type="button" class="gss-tab' + (!state.invite ? ' is-on' : '') + '" data-invite="0">' +
-      (isIce ? 'Расписание' : 'Место') + '</button>' +
-      '<button type="button" class="gss-tab' + (state.invite ? ' is-on' : '') + '" data-invite="1">Позвать с собой</button>' +
-      '</div>' +
+      tabs +
       slotChips() +
       '<figure class="gss-preview">' + preview +
       '<figcaption>' + esc(p ? p.share_body : 'Готовим карточку…') + '</figcaption></figure>' +
@@ -260,10 +272,11 @@
 
   function open(opts) {
     opts = opts || {};
-    if (opts.ref == null || opts.ref === '') return;
+    if ((opts.ref == null || opts.ref === '') && !opts.endpoint) return;
     ensureRoot();
     state = {
       ref: opts.ref,
+      endpoint: opts.endpoint || null,
       slots: opts.slots || [],
       sessionId: opts.sessionId || (opts.slots && opts.slots[0] && opts.slots[0].id) || null,
       invite: !!opts.invite,

@@ -30,6 +30,7 @@ from src.api.routes.org_webapp import router as org_webapp_router
 from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
+from src.api.routes.catalog_entry import router as catalog_entry_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
@@ -1146,6 +1147,34 @@ def webapp_arena_card_js(request: Request):
     )
 
 
+@app.get("/webapp/ru-text.js")
+def webapp_ru_text_js(request: Request):
+    """Русская типографика (склонения, неразрывные пробелы). Подключён на шести клиентских
+    страницах, но по /webapp/ не отдавался — страницы молча работали без него (TASK-146)."""
+    path = _WEBAPP_DIR / "ru-text.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/catalog-geo-model.js")
+def webapp_catalog_geo_model_js(request: Request):
+    """Автоопределение города (catalog, Главная, «Поиск»). Раньше не отдавался по /webapp/ —
+    catalog.html и client-home.html грузили его с 404, и геолокация молча не работала."""
+    path = _WEBAPP_DIR / "catalog-geo-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-share-sheet.js")
 def webapp_share_sheet_js(request: Request):
     """TASK-146 «Поделиться»: шит с превью карточки и каналами. Use ``?v=…`` for long cache."""
@@ -1795,6 +1824,7 @@ app.include_router(public_router)
 app.include_router(public_arenas_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
+app.include_router(catalog_entry_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)

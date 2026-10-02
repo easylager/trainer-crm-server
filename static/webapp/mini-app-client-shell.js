@@ -950,6 +950,8 @@
     sp = String(sp || '').trim();
     var arena = /^arena[_-](.+)$/i.exec(sp);
     if (arena) return { key: 'arena', path: 'arena?ref=' + encodeURIComponent(arena[1]) };
+    // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
+    if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
     var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym))?$/i.exec(sp);
     if (catalog) {
       var q = 'city_id=' + catalog[1];

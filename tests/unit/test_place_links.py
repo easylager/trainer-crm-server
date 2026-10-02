@@ -39,6 +39,7 @@ def test_start_params_round_trip() -> None:
     assert parse_catalog_start_param("catalog_12") == (12, None)
     assert parse_catalog_start_param("catalog_12_sauna") == (12, None)
     assert parse_catalog_start_param("catalog_x") is None
+    assert parse_catalog_start_param("catalog") == (None, None), "маркетинговый вход /go"
     assert parse_catalog_start_param("cert_ABC") is None
 
 

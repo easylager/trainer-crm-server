@@ -68,8 +68,10 @@ async def build_catalog_deep_link_reply(
         return None
     city_id, intent = target
     row = (
-        await session.execute(text("SELECT name FROM cities WHERE id = :id AND is_active"), {"id": int(city_id)})
-    ).first()
+        (await session.execute(text("SELECT name FROM cities WHERE id = :id AND is_active"), {"id": int(city_id)})).first()
+        if city_id is not None
+        else None
+    )
     params: dict[str, str] = {}
     if row is not None:
         params["city_id"] = str(int(city_id))
@@ -78,9 +80,14 @@ async def build_catalog_deep_link_reply(
     elif intent:
         params["intent"] = intent
     city_name = html.escape(str(row[0])) if row is not None else ""
-    head = f"Каталог: <b>{city_name}</b>" if city_name else "Каталог Glide"
+    head = f"Каталог: <b>{city_name}</b>" if city_name else "<b>Карта льда</b>"
+    lede = (
+        "Катки, тренеры, залы и магазины — в одном поиске."
+        if city_name
+        else "Где покататься сегодня, тренеры, магазины и заточка. Откройте — покажем, что рядом."
+    )
     return {
-        "text": f"{head}\nКатки, тренеры, залы и магазины — в одном поиске.",
+        "text": f"{head}\n{lede}",
         "button_text": _CATALOG_BUTTONS.get(intent, "Открыть каталог"),
         "url": f"{base}/webapp/ice" + (("?" + urlencode(params)) if params else ""),
     }

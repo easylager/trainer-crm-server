@@ -95,9 +95,15 @@ def catalog_start_param(city_id: int, intent: str | None = None) -> str:
     return param
 
 
-def parse_catalog_start_param(value: str | None) -> tuple[int, str | None] | None:
-    """``catalog_12_coach`` → ``(12, "coach")``; всё прочее → ``None``."""
+#: Голый «catalog» — маркетинговый вход (/go): каталог без города, город — по геолокации.
+CATALOG_START_ANY = "catalog"
+
+
+def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None] | None:
+    """``catalog_12_coach`` → ``(12, "coach")``; ``catalog`` → ``(None, None)``; прочее → ``None``."""
     raw = (value or "").strip()
+    if raw == CATALOG_START_ANY:
+        return None, None
     if not raw.startswith(CATALOG_START_PREFIX):
         return None
     rest = raw[len(CATALOG_START_PREFIX) :]
