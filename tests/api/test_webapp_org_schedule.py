@@ -201,6 +201,105 @@ async def test_org_schedule_post_slots_creates_slot(app_use_test_db, db_session)
     assert len(body["slots"]) == 2
 
 
+async def _enable_group_classes_with_service(db_session, trainer_id: int) -> int:
+    """TASK-144 S3: trainer with group classes on + one own service (services/trainer_services)."""
+    from tests.db_catalog_helpers import require_seed_service_id
+
+    service_id = await require_seed_service_id(db_session)
+    await db_session.execute(
+        text("INSERT INTO trainer_profiles (trainer_id, first_name, last_name) VALUES (:tid, 'Group', 'Coach')"),
+        {"tid": trainer_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET group_classes_enabled = true WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 1000)"),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.commit()
+    return service_id
+
+
+@pytest.mark.asyncio
+async def test_org_schedule_post_slots_group_capacity_creates_group_slot(
+    app_use_test_db, db_session
+) -> None:
+    """TASK-144 S3 / AC-003: the payload the org UI sends (start_times + capacity +
+    group_service_id) creates a group slot for the selected trainer."""
+    telegram_id = 8_600_000_006
+    collective_id = await _claim_school(db_session, slug="org-sched-group", telegram_id=telegram_id)
+    trainer_id = await _create_trainer(db_session, telegram_id + 1)
+    await _add_trainer_to_collective(db_session, collective_id, trainer_id)
+    await _grant_crm_subscription(db_session, trainer_id)
+    service_id = await _enable_group_classes_with_service(db_session, trainer_id)
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    slot_date = monday.isoformat()
+
+    with patch_org_webapp_init(telegram_id):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/org/schedule/slots",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "trainer_id": trainer_id,
+                    "slot_date": slot_date,
+                    "start_times": ["18:00"],
+                    "duration_minutes": 60,
+                    "capacity": 6,
+                    "group_service_id": service_id,
+                },
+            )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    with patch_org_webapp_init(telegram_id):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                f"/api/webapp/org/schedule?trainer_id={trainer_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    body = resp.json()
+    assert len(body["slots"]) == 1
+    assert body["slots"][0]["capacity"] == 6
+    assert body["slots"][0]["service_id"] == service_id
+
+
+@pytest.mark.asyncio
+async def test_org_schedule_post_slots_group_capacity_requires_service(
+    app_use_test_db, db_session
+) -> None:
+    """AC-003: same validation the trainer sees — group slot (capacity > 1) without
+    a service is rejected with 400."""
+    telegram_id = 8_600_000_007
+    collective_id = await _claim_school(db_session, slug="org-sched-group-neg", telegram_id=telegram_id)
+    trainer_id = await _create_trainer(db_session, telegram_id + 1)
+    await _add_trainer_to_collective(db_session, collective_id, trainer_id)
+    await _grant_crm_subscription(db_session, trainer_id)
+    await _enable_group_classes_with_service(db_session, trainer_id)
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+
+    with patch_org_webapp_init(telegram_id):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/org/schedule/slots",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "trainer_id": trainer_id,
+                    "slot_date": monday.isoformat(),
+                    "start_times": ["18:00"],
+                    "duration_minutes": 60,
+                    "capacity": 6,
+                },
+            )
+    assert resp.status_code == 400
+
+
 @pytest.mark.asyncio
 async def test_org_schedule_post_slots_forbidden_for_admin(app_use_test_db, db_session) -> None:
     owner_tgid = 8_600_000_004

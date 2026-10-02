@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
   <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202609300" />
   <script src="mini-app-confirm.js?v=202609300"></script>
-  <link rel="preload" href="org-schedule-main.js?v=202609300" as="script" />
+  <link rel="preload" href="org-schedule-main.js?v=202610020" as="script" />
   <link rel="preload" href="mini-app-org-shell.js?v=202609290" as="script" />
   <style>
     .org-schedule-coach-picker {
@@ -210,6 +210,26 @@
             <option value="90">90 мин</option>
           </select>
         </div>
+        <div class="org-schedule-panel__row" id="orgSchedulePanelGroupRow" hidden>
+          <label for="orgSchedulePanelCapacity">Мест в группе</label>
+          <select id="orgSchedulePanelCapacity">
+            <option value="1" selected>1 — индивидуальный</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+            <option value="12">12</option>
+          </select>
+        </div>
+        <div class="org-schedule-panel__row" id="orgSchedulePanelServiceRow" hidden>
+          <label for="orgSchedulePanelService">Услуга</label>
+          <select id="orgSchedulePanelService">
+            <option value="">— выберите услугу —</option>
+          </select>
+        </div>
         <div id="hourGrid" role="group" aria-describedby="orgSchedulePanelHint"></div>
         <div class="org-schedule-panel__actions">
           <button type="button" class="btn-secondary" id="orgSchedulePanelCancel">Отмена</button>
@@ -252,7 +272,7 @@
     </div>
   </main>
 
-  <script defer src="org-schedule-main.js?v=202609300"></script>
+  <script defer src="org-schedule-main.js?v=202610020"></script>
   <script defer src="mini-app-org-shell.js?v=202609290"></script>
 </body>
 </html>

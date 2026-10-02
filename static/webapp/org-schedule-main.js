@@ -181,6 +181,7 @@
       .then(function (data) {
         state.slots = data.slots || [];
         state.scheduleGrid = data.schedule_grid || defaultGridPreset();
+        state.groupClassesEnabled = !!data.group_classes_enabled;
         hide(el('orgScheduleLoading'));
         show(el('orgScheduleRoot'));
         renderWeek();
@@ -261,7 +262,48 @@
     el('orgSchedulePanelHint').textContent = 'Отметьте начала — занятые уже недоступны';
     show(el('orgSchedulePanel'));
     el('orgSchedulePanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setupGroupControls();
     renderHourGrid();
+  }
+
+  /** TASK-144 S3: group-slot controls are visible only when the trainer has
+   * group classes enabled; service options come from the trainer's own services. */
+  function setupGroupControls() {
+    var groupRow = el('orgSchedulePanelGroupRow');
+    var serviceRow = el('orgSchedulePanelServiceRow');
+    var capacitySel = el('orgSchedulePanelCapacity');
+    var serviceSel = el('orgSchedulePanelService');
+    if (!groupRow || !serviceRow || !capacitySel || !serviceSel) return;
+    capacitySel.value = '1';
+    serviceSel.value = '';
+    serviceSel.innerHTML = '<option value="">— выберите услугу —</option>';
+    serviceRow.hidden = true;
+    if (state.groupClassesEnabled) {
+      groupRow.hidden = false;
+      loadGroupServices(serviceSel);
+    } else {
+      groupRow.hidden = true;
+    }
+  }
+
+  function loadGroupServices(serviceSel) {
+    fetch('/api/webapp/org/schedule/services?trainer_id=' + state.selectedTrainerId, { headers: authHeaders() })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('Не удалось загрузить услуги тренера');
+        return resp.json();
+      })
+      .then(function (data) {
+        serviceSel.innerHTML = '<option value="">— выберите услугу —</option>';
+        (data.items || []).forEach(function (s) {
+          var opt = document.createElement('option');
+          opt.value = String(s.id);
+          opt.textContent = s.name || ('Услуга #' + s.id);
+          serviceSel.appendChild(opt);
+        });
+      })
+      .catch(function (err) {
+        el('orgSchedulePanelHint').textContent = err.message || 'Не удалось загрузить услуги тренера';
+      });
   }
 
   function closePanel() {
@@ -341,6 +383,22 @@
     var allMinutes = new Set(existing);
     state.selectedStarts.forEach(function (m) { allMinutes.add(m); });
     var startTimes = Array.from(allMinutes).sort(function (a, b) { return a - b; }).map(minutesToHHMM);
+    var capacity = parseInt(el('orgSchedulePanelCapacity') ? el('orgSchedulePanelCapacity').value : '1', 10) || 1;
+    var body = {
+      trainer_id: state.selectedTrainerId,
+      slot_date: state.panelDay,
+      start_times: startTimes,
+      duration_minutes: durationMinutes,
+      capacity: capacity,
+    };
+    if (capacity > 1) {
+      var serviceId = parseInt(el('orgSchedulePanelService').value, 10) || null;
+      if (!serviceId) {
+        el('orgSchedulePanelHint').textContent = 'Для группового слота выберите услугу.';
+        return;
+      }
+      body.group_service_id = serviceId;
+    }
 
     var saveBtn = el('orgSchedulePanelSave');
     saveBtn.disabled = true;
@@ -348,12 +406,7 @@
     fetch('/api/webapp/org/schedule/slots', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-      body: JSON.stringify({
-        trainer_id: state.selectedTrainerId,
-        slot_date: state.panelDay,
-        start_times: startTimes,
-        duration_minutes: durationMinutes,
-      }),
+      body: JSON.stringify(body),
     })
       .then(function (resp) {
         if (resp.status === 403) throw new Error('Только владелец школы может редактировать расписание.');
@@ -569,6 +622,12 @@
 
   var durationSelect = el('orgSchedulePanelDuration');
   if (durationSelect) durationSelect.addEventListener('change', renderHourGrid);
+
+  var capacitySelect = el('orgSchedulePanelCapacity');
+  if (capacitySelect) capacitySelect.addEventListener('change', function () {
+    var serviceRow = el('orgSchedulePanelServiceRow');
+    if (serviceRow) serviceRow.hidden = (parseInt(capacitySelect.value, 10) || 1) <= 1;
+  });
 
   var templateOpenBtn = el('orgScheduleTemplateOpen');
   if (templateOpenBtn) templateOpenBtn.addEventListener('click', openTemplatePanel);
