@@ -1,5 +1,5 @@
 {
-  "_source": "Магазины и Мастерские — Минск (PDF от партнёра, 2026-10-01). Перенесено как есть; услуги — только явно названные в источнике.",
+  "_source": "Магазины и Мастерские — Минск (PDF от партнёра, 2026-10-01; дополнен 2026-10-02: Figuristshop.by и фото/логотипы). Перенесено как есть; услуги — только явно названные в источнике. Фото — data/catalog/photos/minsk/, кадрированы под обложку 1200×750.",
   "_schema": "src/application/catalog_shops_import.py — ShopRecord",
   "city": "Минск",
   "shops": [
@@ -8,151 +8,321 @@
       "name": "SportContinent",
       "address": "ул. Притыцкого, 27",
       "address_note": "Здание Минского ледового Дворца спорта, 1-й этаж",
-      "phones": ["+375 29 611-66-55"],
+      "phones": [
+        "+375 29 611-66-55"
+      ],
       "website": "https://sportcontinent.by",
       "instagram": "sportcontinent.by",
       "description": "Интернет-магазин и розничная точка хоккейной экипировки.",
-      "services": ["retail", "skate_molding"],
-      "disciplines": ["hockey"]
+      "services": [
+        "retail",
+        "skate_molding"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/sportcontinent.jpg"
     },
     {
       "key": "hotice",
       "name": "HotIce",
       "address": null,
       "address_note": null,
-      "phones": ["+375 29 360-96-91"],
+      "phones": [
+        "+375 29 360-96-91"
+      ],
       "website": "https://hotice.by",
       "instagram": "hotice.by",
       "description": "Мастерская: заточка коньков, ремонт клюшек, коньков и хоккейной экипировки, формовка.",
-      "services": ["skate_sharpening", "repair", "skate_molding"],
-      "disciplines": ["hockey"]
+      "services": [
+        "skate_sharpening",
+        "repair",
+        "skate_molding"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/hotice.jpg"
     },
     {
       "key": "figurist",
       "name": "Фигурист.by",
       "address": "пр-т Независимости, 58",
       "address_note": "ТЦ «Московско-Венский», 3-й этаж, пав. 336",
-      "phones": ["+375 29 581-80-80"],
+      "phones": [
+        "+375 29 581-80-80"
+      ],
       "website": "https://figurist.by",
       "instagram": "figurist.by",
       "description": "Магазин для фигурного катания: ботинки, лезвия, профессиональная одежда и аксессуары.",
-      "services": ["retail"],
-      "disciplines": ["figure"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "figure"
+      ],
+      "photo": "photos/minsk/figurist.jpg"
     },
     {
       "key": "lepshy-hockey",
       "name": "Lepshy Hockey",
       "address": "ул. Ратомская, 2",
       "address_note": "Рядом со спорткомплексом «Олимпик Парк»",
-      "phones": ["+375 29 620-66-22"],
+      "phones": [
+        "+375 29 620-66-22"
+      ],
       "website": null,
       "instagram": "lepshyhockey",
       "description": "Хоккейная экипировка, форма, клюшки и аксессуары; заточка, формовка и 3D-скан стопы для подбора коньков.",
-      "services": ["retail", "skate_sharpening", "foot_scan", "skate_molding"],
-      "disciplines": ["hockey"]
+      "services": [
+        "retail",
+        "skate_sharpening",
+        "foot_scan",
+        "skate_molding"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/lepshy-hockey.jpg"
     },
     {
       "key": "proskating",
       "name": "Proskating.by",
       "address": "ул. Карла Либкнехта, 127, офис 69",
       "address_note": null,
-      "phones": ["+375 29 164-18-88"],
+      "phones": [
+        "+375 29 164-18-88"
+      ],
       "website": "https://proskating.by",
       "instagram": "proskating.by",
       "description": "Центр и магазин роликовых коньков, скейтов, экипировки и аксессуаров.",
-      "services": ["retail"],
-      "disciplines": ["roller"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "roller"
+      ],
+      "photo": "photos/minsk/proskating.jpg"
     },
     {
       "key": "icecity",
       "name": "IceCity",
       "address": "ул. Притыцкого, 29",
       "address_note": "ТРЦ «Тивали», 3-й этаж, пав. 327",
-      "phones": ["+375 29 666-94-22", "+375 33 666-94-21"],
+      "phones": [
+        "+375 29 666-94-22",
+        "+375 33 666-94-21"
+      ],
       "website": "https://icecity.by",
       "instagram": "icecity.by",
       "description": "Профессиональная и любительская хоккейная экипировка.",
-      "services": ["retail"],
-      "disciplines": ["hockey"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/icecity.jpg"
     },
     {
       "key": "konek-bel",
       "name": "Конёк.бел",
       "address": "ул. Цнянская, 2-1-39",
       "address_note": "Офис / точка выдачи интернет-магазина",
-      "phones": ["+375 25 605-81-40"],
+      "phones": [
+        "+375 25 605-81-40"
+      ],
       "website": "https://xn--j1aaid0h.xn--90ais",
       "instagram": null,
       "description": "Интернет-магазин роликовых и ледовых коньков, защитной экипировки и запчастей.",
-      "services": ["retail"],
-      "disciplines": ["roller"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "roller"
+      ],
+      "photo": "photos/minsk/konek-bel.jpg"
     },
     {
       "key": "het-trik",
       "name": "Хет-Трик",
       "address": "ул. Кальварийская, 25",
       "address_note": "Пом. 223, 2-й этаж",
-      "phones": ["+375 29 629-37-60", "+375 44 599-90-97"],
+      "phones": [
+        "+375 29 629-37-60",
+        "+375 44 599-90-97"
+      ],
       "website": "https://het-trik-minsk.by",
       "instagram": "het_trik_minsk",
       "description": "Хоккейная мастерская: заточка, профилирование лезвий, формовка, сложный ремонт формы и клюшек.",
-      "services": ["skate_sharpening", "blade_profiling", "skate_molding", "repair"],
-      "disciplines": ["hockey"]
+      "services": [
+        "skate_sharpening",
+        "blade_profiling",
+        "skate_molding",
+        "repair"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/het-trik.jpg"
     },
     {
       "key": "ccmshop",
       "name": "CCMshop",
       "address": "ул. Лобанка, 94",
       "address_note": "ТЦ «Maximus», 1-й этаж, павильон № 61",
-      "phones": ["+375 29 615-12-99", "+375 29 699-12-15", "+375 29 377-12-15"],
+      "phones": [
+        "+375 29 615-12-99",
+        "+375 29 699-12-15",
+        "+375 29 377-12-15"
+      ],
       "website": "https://ccmshop.by",
       "instagram": null,
       "description": "Экипировка для хоккея и фигурного катания, профессиональный подбор коньков, клюшек и защиты.",
-      "services": ["retail"],
-      "disciplines": ["hockey", "figure"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "hockey",
+        "figure"
+      ],
+      "photo": "photos/minsk/ccmshop.jpg"
     },
     {
       "key": "hockey-service",
       "name": "Hockey Service",
       "address": "ул. Мястровская, 5",
       "address_note": null,
-      "phones": ["+375 29 228-57-70"],
+      "phones": [
+        "+375 29 228-57-70"
+      ],
       "website": null,
       "instagram": "hockey_service_minsk",
       "description": "Сервисный центр и магазин хоккейной экипировки: заточка, профилирование, формовка, ремонт формы и клюшек.",
-      "services": ["skate_sharpening", "blade_profiling", "skate_molding", "repair", "retail"],
-      "disciplines": ["hockey"]
+      "services": [
+        "skate_sharpening",
+        "blade_profiling",
+        "skate_molding",
+        "repair",
+        "retail"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "photo": "photos/minsk/hockey-service.jpg"
     },
     {
       "key": "sport-ice-palace",
       "name": "Sport-Ice — Дворец спорта",
       "address": "пр-т Победителей, 4А",
       "address_note": "Малая ледовая арена Дворца спорта, вход со стороны реки Свислочь",
-      "phones": ["+375 17 396-95-93", "+375 29 148-80-08"],
+      "phones": [
+        "+375 17 396-95-93",
+        "+375 29 148-80-08"
+      ],
       "website": "https://sport-ice.by",
       "instagram": "sport_ice.by",
       "description": "Более 20 лет на рынке: хоккейная экипировка, коньки, клюшки, форма, аксессуары и атрибутика.",
-      "services": ["retail"],
-      "disciplines": ["hockey"],
-      "hours": {"mon": ["10:00", "19:00"], "tue": ["10:00", "19:00"], "wed": ["10:00", "19:00"], "thu": ["10:00", "19:00"], "fri": ["10:00", "19:00"], "sat": ["10:00", "18:00"], "sun": ["11:00", "17:00"]}
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "hockey"
+      ],
+      "hours": {
+        "mon": [
+          "10:00",
+          "19:00"
+        ],
+        "tue": [
+          "10:00",
+          "19:00"
+        ],
+        "wed": [
+          "10:00",
+          "19:00"
+        ],
+        "thu": [
+          "10:00",
+          "19:00"
+        ],
+        "fri": [
+          "10:00",
+          "19:00"
+        ],
+        "sat": [
+          "10:00",
+          "18:00"
+        ],
+        "sun": [
+          "11:00",
+          "17:00"
+        ]
+      },
+      "photo": "photos/minsk/sport-ice-palace.jpg"
     },
     {
       "key": "sport-ice-gorky-park",
       "name": "Sport-Ice — парк Горького",
       "address": "ул. Первомайская, 3",
       "address_note": "Административное здание ХК «Юность-Минск» / крытый каток",
-      "phones": ["+375 29 148-80-08"],
+      "phones": [
+        "+375 29 148-80-08"
+      ],
       "website": "https://sport-ice.by",
       "instagram": "sport_ice.by",
       "description": "Хоккейная экипировка, коньки, клюшки, форма и аксессуары — магазин при ХК «Юность».",
-      "services": ["retail"],
-      "disciplines": ["hockey"]
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "hockey"
+      ]
+    },
+    {
+      "key": "figuristshop",
+      "name": "Figuristshop.by",
+      "address": "ул. Лобанка, 94",
+      "address_note": "ТЦ «MAXIMUS», павильон № 61",
+      "phones": [
+        "+375 29 615-12-99"
+      ],
+      "website": "https://figuristshop.by",
+      "description": "Магазин товаров и аксессуаров для фигурного катания: спиннеры, одежда, защита, чехлы и сопутствующий инвентарь.",
+      "services": [
+        "retail"
+      ],
+      "disciplines": [
+        "figure"
+      ],
+      "photo": "photos/minsk/figuristshop.jpg"
     }
   ],
   "rink_sharpening": [
-    {"match": ["олимпик"], "note": "Олимпик Арена"},
-    {"match": ["чижовк"], "note": "Чижовка-Арена (малая арена)"},
-    {"match": ["конькобеж", "speed_oval"], "note": "Минск-Арена, конькобежный стадион"},
-    {"match": ["ледовый дворец спорта минской"], "note": "Ледовый Дворец спорта Минской области"}
+    {
+      "match": [
+        "олимпик"
+      ],
+      "note": "Олимпик Арена"
+    },
+    {
+      "match": [
+        "чижовк"
+      ],
+      "note": "Чижовка-Арена (малая арена)"
+    },
+    {
+      "match": [
+        "конькобеж",
+        "speed_oval"
+      ],
+      "note": "Минск-Арена, конькобежный стадион"
+    },
+    {
+      "match": [
+        "ледовый дворец спорта минской"
+      ],
+      "note": "Ледовый Дворец спорта Минской области"
+    }
   ]
 }

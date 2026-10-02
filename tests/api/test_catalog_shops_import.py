@@ -23,7 +23,8 @@ REPO = Path(__file__).resolve().parents[2]
 def test_real_partner_file_parses_and_names_only_stated_services() -> None:
     city, records, rinks = parse_shops_file(REPO / "data" / "catalog" / "shops-minsk.json")
     assert city == "Минск"
-    assert len(records) == 12
+    assert len(records) == 13
+    assert sum(1 for r in records if r.photo) == 12  # у Sport-Ice в парке Горького фото нет
     by_key = {r.key: r for r in records}
     # Фигурист.by — магазин; про заточку источник молчит → ключа нет (неизвестно), а не False.
     assert by_key["figurist"].amenities == {"retail": True, "discipline_figure": True}
@@ -220,3 +221,31 @@ async def test_rink_import_creates_missing_and_enriches_existing_without_wiping(
     assert created[0] == "outdoor"
     assert (created[1], created[2]) == (11, 3)
     assert created[3] == {"skate_rental": True}
+
+
+@pytest.mark.asyncio
+async def test_partner_photo_is_attached_once(db_session, tmp_path: Path, monkeypatch) -> None:
+    """Фото из файла — одно на место; повторный импорт копий не плодит."""
+    monkeypatch.delenv("S3_ENDPOINT", raising=False)
+    monkeypatch.setenv("LOCAL_STORAGE_PATH", str(tmp_path / "media"))
+    city_name = f"Фотоград-{uuid.uuid4().hex[:6]}"
+    await _insert_city(db_session, name=city_name)
+    await db_session.commit()
+    photo = REPO / "data" / "catalog" / "photos" / "minsk" / "het-trik.jpg"
+    data = {"city": city_name, "shops": [{"name": "Мастерская", "services": ["skate_sharpening"], "photo": str(photo)}]}
+    path = tmp_path / "shops.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    for _ in range(2):
+        city, records, rules = parse_shops_file(path)
+        plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+        await apply_plan(db_session, plan)
+        await db_session.commit()
+    rows = (
+        await db_session.execute(
+            text("SELECT m.license, m.attribution FROM media m JOIN arenas a ON a.id = m.owner_id "
+                 "JOIN cities c ON c.id = a.city_id WHERE m.owner_type = 'arena' AND c.name = :c"),
+            {"c": city_name},
+        )
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "permitted" and "партнёра" in rows[0][1]

@@ -205,6 +205,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     env = dict(os.environ, PYTHONPATH=str(ROOT))
+    settings = Settings()
+    if not (settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key) and not settings.local_storage_path:
+        # Без S3 фото катков и магазинов иначе просто пропустятся. Локальная папка — то,
+        # что API отдаёт сам, если в .env стоит тот же LOCAL_STORAGE_PATH.
+        env["LOCAL_STORAGE_PATH"] = str(ROOT / "var" / "media")
+        print(f"\nS3 не настроен: фото сохраним в {env['LOCAL_STORAGE_PATH']}.")
+        print("Чтобы API их показывал, добавьте в .env: LOCAL_STORAGE_PATH=var/media")
     failed: list[str] = []
     for title, cmd in steps:
         print(f"\n=== {title}: python {' '.join(cmd)}")

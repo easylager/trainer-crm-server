@@ -148,6 +148,8 @@ async def main() -> int:
             print(f"  {title}: {line}")
     if report["not_on_map"]:
         print("  Без координат (не на карте): " + ", ".join(report["not_on_map"]))
+    for line in report.get("photos") or []:
+        print(f"  ! {line}")
     return 0
 
 

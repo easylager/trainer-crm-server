@@ -17,6 +17,9 @@
 * **Не только магазины.** ``venue_type`` в записи (``shop`` по умолчанию, ``ice``,
   ``outdoor``) заводит и пропущенные катки: их ищем по имени и по ``match`` среди
   всех мест города, чтобы «Олимпик Арена» из файла не задвоила «Олимпик-арену» в базе.
+* **Фото — из файла партнёра и только одно, если у места фото ещё нет.** Повторный
+  запуск не плодит копии; фото, загруженное админом руками, не трогаем. Лицензия —
+  ``permitted`` с атрибуцией «материалы партнёра».
 * **Координаты не выдумываем.** Геокодер — снаружи (Nominatim в скрипте); нет ответа —
   место есть в списке и на своей странице, но не на карте.
 """
@@ -67,6 +70,7 @@ class ShopRecord:
     match: list[str] = field(default_factory=list)
     season: tuple[int, int] | None = None
     tickets_url: str | None = None
+    photo: Path | None = None
 
     @property
     def display_address(self) -> str | None:
@@ -101,13 +105,14 @@ class ImportPlan:
 
 def parse_shops_file(path: Path) -> tuple[str, list[ShopRecord], list[dict[str, Any]]]:
     data = json.loads(path.read_text(encoding="utf-8"))
+    photo_root = path.resolve().parent
     city = str(data.get("city") or "").strip()
     if not city:
         raise ShopImportError("city is required")
     records: list[ShopRecord] = []
     seen: set[str] = set()
     for raw in data.get("shops") or []:
-        records.append(_parse_record(raw))
+        records.append(_parse_record(raw, photo_root=photo_root))
         name_key = records[-1].name.lower()
         if name_key in seen:
             raise ShopImportError(f"duplicate shop name: {records[-1].name}")
@@ -115,7 +120,7 @@ def parse_shops_file(path: Path) -> tuple[str, list[ShopRecord], list[dict[str, 
     return city, records, list(data.get("rink_sharpening") or [])
 
 
-def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
+def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> ShopRecord:
     name = str(raw.get("name") or "").strip()
     if not name:
         raise ShopImportError(f"shop without name: {raw.get('key')}")
@@ -149,6 +154,11 @@ def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
         if not (isinstance(season, list) and len(season) == 2 and all(isinstance(m, int) and 1 <= m <= 12 for m in season)):
             raise ShopImportError(f"{name}: season must be [start_month, end_month]")
         season = (season[0], season[1])
+    photo: Path | None = None
+    if raw.get("photo"):
+        photo = ((photo_root or Path.cwd()) / str(raw["photo"])).resolve()
+        if not photo.is_file():
+            raise ShopImportError(f"{name}: photo not found: {raw['photo']}")
     tickets = (raw.get("tickets_url") or "").strip() or None
     if tickets and not tickets.lower().startswith(("https://", "http://")):
         raise ShopImportError(f"{name}: tickets_url must be http(s): {tickets}")
@@ -167,6 +177,7 @@ def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
         match=[str(m).strip().lower() for m in raw.get("match") or [] if str(m).strip()],
         season=season,
         tickets_url=tickets,
+        photo=photo,
     )
 
 
@@ -251,6 +262,38 @@ def _profile_fields(rec: ShopRecord) -> dict[str, Any]:
     return fields
 
 
+PARTNER_PHOTO_ATTRIBUTION = "Материалы партнёра: «Магазины и Мастерские — Минск»"
+
+
+async def _attach_photo(session: AsyncSession, arena_id: int, rec: ShopRecord) -> str | None:
+    """Одно фото из файла, если у места ещё нет ни одного. Возвращает причину пропуска."""
+    if rec.photo is None:
+        return None
+    has_media = (
+        await session.execute(
+            text("SELECT 1 FROM media WHERE owner_type = 'arena' AND owner_id = :id LIMIT 1"), {"id": arena_id}
+        )
+    ).first()
+    if has_media:
+        return None
+    from src.application.arena_media import upload_arena_media_from_bytes
+
+    try:
+        await upload_arena_media_from_bytes(
+            session,
+            arena_id,
+            rec.photo.read_bytes(),
+            "image/jpeg" if rec.photo.suffix.lower() in (".jpg", ".jpeg") else "image/png",
+            license_key="permitted",
+            attribution=PARTNER_PHOTO_ATTRIBUTION,
+        )
+    except RuntimeError as exc:
+        if "S3 not configured" not in str(exc):
+            raise
+        return "фото не загружены: нет ни S3, ни LOCAL_STORAGE_PATH"
+    return None
+
+
 async def _enrich_existing_place(session: AsyncSession, arena_id: int, rec: ShopRecord) -> None:
     city_id = (await session.execute(text("SELECT city_id FROM arenas WHERE id = :id"), {"id": arena_id})).scalar()
     await ensure_arena_profile(session, arena_id, city_id=int(city_id), name=rec.name)
@@ -289,7 +332,12 @@ async def apply_plan(
     geocode: Geocoder | None = None,
 ) -> dict[str, Any]:
     """Пишет план в одной транзакции вызывающего. Возвращает отчёт для человека."""
-    report: dict[str, Any] = {"created": [], "updated": [], "rinks": [], "not_on_map": []}
+    report: dict[str, Any] = {"created": [], "updated": [], "rinks": [], "not_on_map": [], "photos": []}
+
+    async def photo(arena_id: int, rec: ShopRecord) -> None:
+        problem = await _attach_photo(session, arena_id, rec)
+        if problem and problem not in report["photos"]:
+            report["photos"].append(problem)
 
     async def coords(rec: ShopRecord) -> tuple[float, float] | None:
         if geocode is None or not rec.address:
@@ -319,6 +367,7 @@ async def apply_plan(
         arena_id = int(row)
         await ensure_arena_profile(session, arena_id, city_id=plan.city_id, name=rec.name)
         await apply_admin_arena_profile_patch(session, arena_id, _profile_fields(rec))
+        await photo(arena_id, rec)
         report["created"].append(f"#{arena_id} {rec.name}")
         if point is None:
             report["not_on_map"].append(rec.name)
@@ -328,6 +377,7 @@ async def apply_plan(
             # Каток уже есть (досье, админка): дополняем тем, что есть в файле, и ничего
             # не стираем — пустое поле в файле значит «не знаем», а не «удалить».
             await _enrich_existing_place(session, arena_id, rec)
+            await photo(arena_id, rec)
             report["updated"].append(f"#{arena_id} {rec.name} (дополнено)")
             continue
         point = await coords(rec)
@@ -338,6 +388,7 @@ async def apply_plan(
             params.update(lat=point[0], lon=point[1])
         await session.execute(text("UPDATE arenas SET " + ", ".join(sets) + " WHERE id = :id"), params)
         await apply_admin_arena_profile_patch(session, arena_id, _profile_fields(rec))
+        await photo(arena_id, rec)
         report["updated"].append(f"#{arena_id} {rec.name}")
 
     for arena_id, note in plan.rink_updates:
