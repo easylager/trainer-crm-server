@@ -605,3 +605,68 @@ describe('магазин и доверие (TASK-146)', () => {
     assert.deepEqual(outdoor, ['Открытый лёд зависит от погоды — уточняйте перед выездом']);
   });
 });
+
+describe('TASK-146: расписание как сеансы в кино', () => {
+  const now = new Date('2026-10-02T10:00:00Z'); // 13:00 по Минску
+  const s = (id, t, extra = {}) => ({
+    id, kind: 'public_skate', local_date: '2026-10-02',
+    starts_at_local: t + ':00', ends_at_local: t.replace(/:\d+$/, ':59') + ':00',
+    starts_at_utc: '2026-10-02T' + String(Number(t.slice(0, 2)) - 3).padStart(2, '0') + t.slice(2) + ':00Z',
+    ends_at_utc: '2026-10-02T' + String(Number(t.slice(0, 2)) - 2).padStart(2, '0') + t.slice(2) + ':00Z',
+    price_adult_minor: 1000, price_child_minor: 800, price_rental_minor: 900, currency_code: 'BYN', ...extra,
+  });
+
+  it('одинаковые сеансы — одна группа, цены один раз, ближайший подсвечен, прошедшие скрыты', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({
+      sessions: [s(1, '11:15'), s(2, '14:15'), s(3, '15:15'), s(4, '18:00', { price_adult_minor: 1200 })],
+      now, ticketsUrl: 'https://koronaticket.by/rink', markNext: true,
+    });
+    assert.equal(v.count, 3);
+    assert.equal(v.groups.length, 2);
+    assert.deepEqual(v.groups[0].times.map((t) => t.time), ['14:15', '15:15']);
+    assert.equal(v.groups[0].times[0].next, true);
+    assert.equal(v.groups[0].times[1].next, false);
+    assert.equal(v.groups[0].times[0].href, 'https://koronaticket.by/rink');
+    assert.deepEqual(v.groups[0].prices.map((p) => p.label + ' ' + p.value), ['Взрослый 10 BYN', 'Детский 8 BYN', 'Прокат 9 BYN']);
+    assert.equal(v.groups[1].prices[0].value, '12 BYN');
+  });
+
+  it('без кассы время — не ссылка', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({ sessions: [s(2, '14:15')], now });
+    assert.equal(v.groups[0].times[0].href, null);
+  });
+
+  it('полоса дней считает только будущие сеансы; по умолчанию — первый день со льдом', () => {
+    const { dayStrip, defaultScheduleDay } = loadModel();
+    const strip = dayStrip([{ local_date: '2026-10-02', sessions: [s(1, '11:15')] },
+      { local_date: '2026-10-04', sessions: [s(5, '18:00', { local_date: '2026-10-04' })] }], '2026-10-02', now, 7);
+    assert.equal(strip.length, 7);
+    assert.equal(strip[0].top, 'Сегодня');
+    assert.equal(strip[1].top, 'Завтра');
+    assert.equal(strip[2].top, 'Вс');
+    assert.equal(strip[0].count, 0); // единственный сеанс сегодня уже прошёл
+    assert.equal(defaultScheduleDay(strip), '2026-10-04');
+  });
+
+  it('быстрые действия — только то, что есть; сайт важнее инстаграма', () => {
+    const { quickActions } = loadModel();
+    assert.deepEqual(quickActions({}), []);
+    const a = quickActions({ latitude: 53.9, longitude: 27.5, phone: '+375 (29) 111-22-33',
+      social_urls: { instagram: 'https://instagram.com/x' } });
+    assert.deepEqual(a.map((x) => x.id), ['route', 'call', 'insta']);
+    assert.equal(a[1].href, 'tel:+375291112233');
+  });
+
+  it('часы по дням: сегодня отмечен, одинаковые дни — «ежедневно»', () => {
+    const { weekHours } = loadModel();
+    assert.equal(weekHours(null, now), null);
+    assert.equal(weekHours({ daily: { open: '10:00', close: '23:00' } }, now).uniform, true);
+    const w = weekHours({ weekly: { mon: ['10:00', '20:00'], tue: ['10:00', '20:00'], wed: ['10:00', '20:00'],
+      thu: ['10:00', '20:00'], fri: ['10:00', '20:00'], sat: ['11:00', '18:00'], sun: null } }, now);
+    assert.equal(w.uniform, false);
+    assert.equal(w.rows.filter((r) => r.today)[0].label, 'Пт');
+    assert.equal(w.rows[6].value, 'выходной');
+  });
+});

@@ -12,7 +12,7 @@
     card: null,
     sessions: null,
     trainers: null,
-    day: 'today',
+    day: null,
     galleryIndex: 0,
   };
 
@@ -89,22 +89,6 @@
       }
     }
     global.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-  function setTicketsCta() {
-    var bar = document.getElementById('arenaTicketsCta');
-    var link = document.getElementById('arenaTicketsCtaLink');
-    var cta = M.ticketCta(state.card);
-    if (!bar || !link) return;
-    if (!cta) {
-      bar.hidden = true;
-      document.body.classList.remove('arena-has-tickets');
-      return;
-    }
-    bar.hidden = false;
-    link.href = cta.href;
-    link.textContent = cta.label;
-    document.body.classList.add('arena-has-tickets');
   }
 
   /**
@@ -219,9 +203,7 @@
 
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
-    var isIce = skatingCard();
-    var slots = isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [];
-    if (slots.length) {
+    if (scheduleSlots().length) {
       return (
         '<div class="arena-share">' +
         '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">Позвать с собой</button>' +
@@ -229,11 +211,8 @@
         '</div>'
       );
     }
-    return (
-      '<div class="arena-share arena-share--one">' +
-      '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
-      '</div>'
-    );
+    // Без сеансов «Поделиться» живёт в ряду быстрых действий.
+    return '';
   }
 
   function openShare(invite) {
@@ -328,46 +307,106 @@
     });
   }
 
-  function renderRibbonRows() {
-    var today = todayIso();
-    if (state.day === 'week') {
-      var weekFrom = today;
-      var weekTo = addDaysIso(today, 6);
-      var summaries = M.buildWeekSummaries({
-        from: weekFrom,
-        to: weekTo,
-        sessionDays: (state.sessions && state.sessions.days) || [],
-        groups: allGroups(),
-      });
-      return summaries
-        .map(function (d) {
-          return rowHtml({
-            nature: 'ice',
-            empty: d.empty,
-            time: d.weekday,
-            weekday: d.weekday,
-            title: d.title,
-            meta: d.meta,
-            cta: d.cta,
-            ctaKind: 'ghost',
-            openDay: !d.empty,
-            localDate: d.localDate,
-          });
-        })
-        .join('');
-    }
-    var iso = M.ribbonIsoForDay(state.day, today) || today;
-    var rows = ribbonForIso(iso);
-    if (!rows.length) {
+  var ICONS = {
+    route: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    call: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    site: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    insta: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17" cy="7" r="0.6"/>',
+    share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
+  };
+
+  function icon(id) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[id] || '') + '</svg>';
+  }
+
+  /** Ряд быстрых действий под обложкой: то, ради чего открывают карточку места. */
+  function renderQuickActions() {
+    var items = M.quickActions(state.card).map(function (a) {
+      var external = a.id !== 'call';
       return (
-        '<div class="arena-row arena-row--empty">' +
-        '<span class="arena-row__t">—</span>' +
-        '<span class="arena-row__m"><b>Данных нет</b><span>на этот день расписания нет</span></span>' +
-        '<span class="arena-cta arena-cta--ghost">—</span>' +
-        '</div>'
+        '<a class="arena-qa" href="' + esc(a.href) + '"' +
+        (external ? ' data-action="external" data-href="' + esc(a.href) + '"' : '') +
+        '>' + icon(a.id) + '<span>' + esc(a.label) + '</span></a>'
       );
+    });
+    // У катка с сеансами «Поделиться» стоит рядом с «Позвать с собой»; у остальных — здесь.
+    if (!scheduleSlots().length && global.GlideShareSheet) {
+      items.push('<button type="button" class="arena-qa" data-action="share">' + icon('share') + '<span>Поделиться</span></button>');
     }
-    return rows.map(rowHtml).join('');
+    if (!items.length) return '';
+    return '<div class="arena-qas arena-qas--' + items.length + '">' + items.join('') + '</div>';
+  }
+
+  function scheduleSlots() {
+    return skatingCard() ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [];
+  }
+
+  function strip() {
+    return M.dayStrip((state.sessions && state.sessions.days) || [], todayIso(), new Date(), 7);
+  }
+
+  function renderDayStrip(days) {
+    return (
+      '<div class="arena-strip" id="arenaDayTabs" role="tablist">' +
+      days.map(function (d) {
+        return (
+          '<button type="button" role="tab" class="arena-strip__day' +
+          (d.count ? '' : ' arena-strip__day--empty') +
+          (d.weekend ? ' arena-strip__day--weekend' : '') +
+          '" data-day="' + esc(d.iso) + '" aria-pressed="' + (state.day === d.iso ? 'true' : 'false') + '">' +
+          '<span>' + esc(d.top) + '</span><b>' + esc(d.num) + '</b>' +
+          '<i>' + (d.count ? esc(String(d.count)) : '—') + '</i>' +
+          '</button>'
+        );
+      }).join('') +
+      '</div>'
+    );
+  }
+
+  function renderShowtimes() {
+    var iso = state.day || todayIso();
+    var byDate = sessionsByDate();
+    var view = M.showtimesForDay({
+      sessions: byDate[iso] || [],
+      now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
+      markNext: iso === todayIso(),
+    });
+    var lessons = ribbonForIso(iso).filter(function (r) { return r.nature === 'lesson'; });
+    var html = '';
+    if (!view.count) {
+      var next = strip().filter(function (d) { return d.count && d.iso > iso; })[0];
+      html +=
+        '<div class="arena-none"><b>' + (iso === todayIso() ? 'Сегодня сеансов больше нет' : 'В этот день сеансов нет') + '</b>' +
+        (next ? '<button type="button" class="linkish" data-day-jump="' + esc(next.iso) + '">Ближайший — ' + esc(next.top.toLowerCase() === 'завтра' ? 'завтра' : next.top + ' ' + next.num) + ' →</button>' : '') +
+        '</div>';
+    }
+    view.groups.forEach(function (g) {
+      html +=
+        '<div class="arena-show">' +
+        '<div class="arena-show__head"><b>' + esc(g.title) + '</b>' +
+        (g.duration ? '<span>' + esc(g.duration) + '</span>' : '') + '</div>' +
+        (g.prices.length
+          ? '<div class="arena-show__prices">' + g.prices.map(function (p) {
+              return '<span><small>' + esc(p.label) + '</small>' + esc(p.value) + '</span>';
+            }).join('') + '</div>'
+          : '') +
+        '<div class="arena-times">' +
+        g.times.map(function (t) {
+          var cls = 'arena-time' + (t.next ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
+          var body = '<b>' + esc(t.time) + '</b>' + (t.next ? '<small>ближайший</small>' : t.capacity ? '<small>' + esc(t.capacity) + '</small>' : '');
+          return t.href
+            ? '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>'
+            : '<span class="' + cls + '">' + body + '</span>';
+        }).join('') +
+        '</div>' +
+        (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
+        '</div>';
+    });
+    if (lessons.length) {
+      html += '<p class="arena-h arena-h--sub">Занятия с тренером</p><div class="arena-rows">' + lessons.map(rowHtml).join('') + '</div>';
+    }
+    return html;
   }
 
   function renderIceSection() {
@@ -383,7 +422,7 @@
     if (feed.mode === 'closed') {
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Лёд</p>' +
+        '<p class="arena-h">Расписание</p>' +
         '<div class="arena-closed">' + esc(feed.banner) + '</div>' +
         '</div>'
       );
@@ -392,64 +431,28 @@
       return '';
     }
     if (feed.mode === 'pending') {
-      var phone = (state.card.phone || '').trim();
-      var site = (state.card.website_url || '').trim();
-      var actions = '';
-      if (phone) {
-        actions +=
-          '<a class="arena-btn" href="tel:' +
-          esc(phone.replace(/\s+/g, '')) +
-          '">Позвонить ' +
-          esc(phone) +
-          '</a>';
-      }
-      if (site) {
-        actions +=
-          '<a class="arena-btn" href="' +
-          esc(site) +
-          '" target="_blank" rel="noopener">Сайт катка</a>';
-      }
       return (
         '<div class="arena-sec">' +
-        '<p class="arena-h">Лёд</p>' +
+        '<p class="arena-h">Расписание</p>' +
         '<div class="arena-empty">' +
         '<b>Расписание уточняется</b>' +
-        '<p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем.</p>' +
-        actions +
+        '<p>Мы пока не получили расписание массового катания от этого катка. Не показываем то, за что не отвечаем — позвоните или загляните на сайт.</p>' +
         '</div>' +
         '</div>'
       );
     }
+    var days = strip();
+    if (!state.day) state.day = M.defaultScheduleDay(days);
+    var tickets = M.ticketCta(state.card);
     return (
       '<div class="arena-sec">' +
-      '<p class="arena-h">Лента льда<span class="arena-new">НОВОЕ</span></p>' +
-      '<div class="arena-days" id="arenaDayTabs">' +
-      '<button type="button" class="arena-day" data-day="today" aria-pressed="' +
-      (state.day === 'today' ? 'true' : 'false') +
-      '">Сегодня</button>' +
-      '<button type="button" class="arena-day" data-day="tomorrow" aria-pressed="' +
-      (state.day === 'tomorrow' ? 'true' : 'false') +
-      '">Завтра</button>' +
-      '<button type="button" class="arena-day" data-day="week" aria-pressed="' +
-      (state.day === 'week' ? 'true' : 'false') +
-      '">Неделя</button>' +
+      '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
+      (tickets
+        ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
+        : '') +
       '</div>' +
-      '<div class="arena-rows" id="arenaRows">' +
-      renderRibbonRows() +
-      '</div>' +
-      '<div class="arena-legend">' +
-      M.ribbonLegend()
-        .map(function (item) {
-          return (
-            '<span><i class="arena-sw arena-sw--' +
-            esc(item.stripe) +
-            '"></i>' +
-            esc(item.text) +
-            '</span>'
-          );
-        })
-        .join('') +
-      '</div>' +
+      renderDayStrip(days) +
+      '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'
     );
   }
@@ -516,89 +519,56 @@
     return html;
   }
 
-  function renderPractice() {
+  /** «Адрес и часы»: одинаковые строки, длинные часы не вылезают — по дням списком. */
+  function renderInfo() {
     var card = state.card;
-    var mode = M.iceSectionMode({ tier: card.tier, hasSessions: hasAnySessions() });
     var contacts = M.practiceContacts(card);
-    if (
-      mode === 'none' &&
-      !card.address &&
-      !card.phone &&
-      !contacts.website &&
-      !contacts.socials.length &&
-      !contacts.shortDescription
-    ) {
-      return '';
-    }
-    var html = '<div class="arena-sec"><p class="arena-h">Как добраться и что есть</p>';
-    if (contacts.shortDescription) {
-      html += '<p class="arena-sub">' + esc(contacts.shortDescription) + '</p>';
-    }
+    var rows = '';
+    var route = M.quickActions(card).filter(function (a) { return a.id === 'route'; })[0];
     if (card.address) {
-      var mapHref = '';
-      if (card.latitude != null && card.longitude != null) {
-        mapHref =
-          'https://maps.google.com/?q=' +
-          encodeURIComponent(card.latitude + ',' + card.longitude);
+      rows +=
+        '<a class="arena-info"' + (route ? ' href="' + esc(route.href) + '" data-action="external" data-href="' + esc(route.href) + '"' : '') + '>' +
+        '<small>Адрес</small><b>' + esc(card.address) + '</b>' + (card.district ? '<span>' + esc(card.district) + '</span>' : '') +
+        '</a>';
+    }
+    var week = M.weekHours(card.opening_hours, new Date());
+    if (week) {
+      var status = week.status ? '<em class="arena-info__open">' + esc(week.status) + '</em>' : '';
+      if (week.uniform) {
+        rows += '<div class="arena-info"><small>Часы работы</small><b>Ежедневно ' + esc(week.rows[0].value) + '</b>' + status + '</div>';
       } else {
-        mapHref = 'https://maps.google.com/?q=' + encodeURIComponent(card.address);
+        rows +=
+          '<div class="arena-info"><small>Часы работы</small>' + status +
+          '<ul class="arena-week">' +
+          week.rows.map(function (r) {
+            return '<li class="' + (r.today ? 'is-today' : '') + (r.closed ? ' is-closed' : '') + '"><span>' + esc(r.label) + '</span><span>' + esc(r.value) + '</span></li>';
+          }).join('') +
+          '</ul></div>';
       }
-      html +=
-        '<a class="arena-fake-row" href="' +
-        esc(mapHref) +
-        '" target="_blank" rel="noopener"><b style="font-weight:600;font-size:13.5px">' +
-        esc(card.address) +
-        '</b><span>Открыть карту</span></a>';
+    } else if (card.season_start_month === 1 && card.season_end_month === 12) {
+      rows += '<div class="arena-info"><small>Сезон</small><b>Круглый год</b></div>';
     }
     if (card.phone) {
-      html +=
-        '<a class="arena-fake-row" href="tel:' +
-        esc(String(card.phone).replace(/\s+/g, '')) +
-        '"><b style="font-weight:600;font-size:13.5px">' +
-        esc(card.phone) +
-        '</b><span>Позвонить</span></a>';
-    }
-    var hours = M.formatOpeningHours(card.opening_hours);
-    var season =
-      card.season_start_month === 1 && card.season_end_month === 12
-        ? 'Сезон: круглый год'
-        : hours
-          ? 'Часы работы'
-          : '';
-    if (hours || season) {
-      html +=
-        '<div class="arena-fake-row"><b style="font-weight:600;font-size:13.5px">' +
-        esc(season || 'Часы работы') +
-        '</b><span>' +
-        esc(hours) +
-        '</span></div>';
+      rows +=
+        '<a class="arena-info" href="tel:' + esc(String(card.phone).replace(/[^\d+]/g, '')) + '">' +
+        '<small>Телефон</small><b>' + esc(card.phone) + '</b></a>';
     }
     if (contacts.website) {
-      html +=
-        '<a class="arena-fake-row" href="' +
-        esc(contacts.website.href) +
-        '" target="_blank" rel="noopener"><b style="font-weight:600;font-size:13.5px">' +
-        esc(contacts.website.label) +
-        '</b><span>Открыть</span></a>';
+      rows +=
+        '<a class="arena-info" href="' + esc(contacts.website.href) + '" data-action="external" data-href="' + esc(contacts.website.href) + '">' +
+        '<small>Сайт</small><b>' + esc(contacts.website.href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')) + '</b></a>';
     }
-    if (contacts.socials.length) {
-      html +=
-        '<p class="arena-sub">' +
-        contacts.socials
-          .map(function (s) {
-            return (
-              '<a href="' +
-              esc(s.href) +
-              '" target="_blank" rel="noopener">' +
-              esc(s.label) +
-              '</a>'
-            );
-          })
-          .join(' · ') +
-        '</p>';
-    }
-    html += '</div>';
-    return html;
+    contacts.socials.forEach(function (x) {
+      rows +=
+        '<a class="arena-info" href="' + esc(x.href) + '" data-action="external" data-href="' + esc(x.href) + '">' +
+        '<small>' + esc(x.label) + '</small><b>' + esc(x.href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')) + '</b></a>';
+    });
+    if (!rows && !contacts.shortDescription) return '';
+    return (
+      '<div class="arena-sec"><p class="arena-h">Адрес и часы</p>' +
+      (contacts.shortDescription ? '<p class="arena-sub">' + esc(contacts.shortDescription) + '</p>' : '') +
+      '<div class="arena-infos">' + rows + '</div></div>'
+    );
   }
 
   function renderFreshness() {
@@ -617,22 +587,28 @@
   function paint() {
     if (!root || !state.card) return;
     var title = document.getElementById('headerTitle');
-    if (title) title.textContent = state.card.name || state.card.venue_noun || 'Площадка';
+    // Имя места — на обложке; в шапке — что это за место, без дубля.
+    if (title) title.textContent = capitalize(state.card.venue_noun) || 'Площадка';
     root.innerHTML =
       renderHero() +
       renderShareBar() +
-      renderAmenities() +
+      renderQuickActions() +
       renderIceSection() +
+      renderAmenities() +
       renderTrainers() +
       renderGroups() +
-      renderPractice() +
+      renderInfo() +
       renderFreshness();
-    setTicketsCta();
+  }
+
+  function capitalize(text) {
+    text = String(text || '');
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
   }
 
   function paintRowsOnly() {
     var el = document.getElementById('arenaRows');
-    if (el) el.innerHTML = renderRibbonRows();
+    if (el) el.innerHTML = renderShowtimes();
     var tabs = document.getElementById('arenaDayTabs');
     if (!tabs) return;
     [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
@@ -736,6 +712,12 @@
       paintRowsOnly();
       return;
     }
+    var jump = ev.target.closest('[data-day-jump]');
+    if (jump) {
+      state.day = jump.getAttribute('data-day-jump');
+      paintRowsOnly();
+      return;
+    }
     var t = ev.target.closest('[data-action]');
     if (!t) return;
     var action = t.getAttribute('data-action');
@@ -759,9 +741,10 @@
       goBooking(t.getAttribute('data-trainer'), { groupId: t.getAttribute('data-group') });
       return;
     }
-    if (action === 'open-day') {
-      state.day = M.dayTabFromIso(t.getAttribute('data-date'), todayIso());
-      paint();
+    if (action === 'external') {
+      // Касса, карта, сайт: из Mini App — через Telegram, иначе ссылка откроется внутри webview.
+      ev.preventDefault();
+      openExternal(t.getAttribute('data-href'));
       return;
     }
     if (action === 'share' || action === 'share-invite') {
@@ -783,7 +766,6 @@
     if (!root) return;
     root.innerHTML = '<div class="arena-state">' + esc(text) + '</div>';
     state.card = null;
-    setTicketsCta();
   }
 
   function resolveRef() {
@@ -844,15 +826,6 @@
     if (form) form.addEventListener('submit', submitModal);
     var cancel = document.getElementById('arenaModalCancel');
     if (cancel) cancel.addEventListener('click', closeModal);
-    var ticketsLink = document.getElementById('arenaTicketsCtaLink');
-    if (ticketsLink) {
-      ticketsLink.addEventListener('click', function (ev) {
-        var href = ticketsLink.getAttribute('href');
-        if (!href || href === '#') return;
-        ev.preventDefault();
-        openExternal(href);
-      });
-    }
     if (global.ClientShell && typeof global.ClientShell.setForcedTab === 'function') {
       global.ClientShell.setForcedTab('catalog');
     }

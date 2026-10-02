@@ -16,14 +16,6 @@ body.ar-pilot--arena {
   padding-bottom: var(--client-shell-tab-inset);
 }
 
-body.ar-pilot--arena.arena-has-tickets {
-  padding-bottom: calc(var(--client-shell-tab-inset) + 72px);
-}
-
-body.ar-pilot--arena.arena-has-tickets.client-shell-tabs-hidden {
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-}
-
 body.ar-pilot--arena .client-app-header {
   margin-bottom: 0;
 }
@@ -472,32 +464,6 @@ a.arena-row {
   clip-path: var(--app-ribbon-clip-sm, none);
 }
 
-.arena-tickets-cta {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(480px, 100%);
-  bottom: var(--client-shell-tab-inset, 80px);
-  z-index: 8500;
-  padding: 10px 16px;
-  background: color-mix(in srgb, var(--app-canvas-bg) 92%, transparent);
-  backdrop-filter: blur(10px);
-  box-sizing: border-box;
-  box-shadow: 0 -10px 24px -12px rgba(15, 26, 34, 0.28);
-}
-
-body.client-shell-tabs-hidden .arena-tickets-cta {
-  bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.arena-tickets-cta[hidden] {
-  display: none;
-}
-
-.arena-tickets-cta .arena-btn {
-  margin: 0;
-}
-
 .arena-closed {
   border: 1px solid var(--glide-line);
   border-left: 3px solid var(--app-cta-fill);
@@ -600,7 +566,8 @@ body.client-shell-tabs-hidden .arena-tickets-cta {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 8px;
-  margin: 10px 0 4px;
+  margin: 10px 0 8px;
+  padding: 0 16px;
 }
 .arena-share--one { grid-template-columns: 1fr; }
 .arena-share .arena-btn { margin: 0; }
@@ -628,3 +595,251 @@ body.client-shell-tabs-hidden .arena-tickets-cta {
   color: var(--glide-hint);
 }
 .arena-svc-for { margin-top: 10px; }
+
+/* ─── TASK-146: карточка места, второй проход ───────────────────────────────── */
+
+/* Быстрые действия под обложкой: маршрут · позвонить · сайт · поделиться. */
+.arena-qas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px 16px 14px;
+}
+.arena-qas--1 { grid-template-columns: 1fr; }
+.arena-qas--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.arena-qas--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.arena-qa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px 10px;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  color: var(--glide-text);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.arena-qa svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--glide-ink-teal);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.arena-qa:active { transform: scale(0.97); }
+
+/* Заголовок секции с действием справа («Расписание · Билеты онлайн ↗»). */
+.arena-h-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.arena-h-row .arena-cta { text-decoration: none; }
+.arena-h--sub {
+  font-size: var(--app-text-body);
+  margin-top: 6px;
+}
+
+/* Полоса дней: число крупно, под ним — сколько сеансов. Пустой день не прячем, а гасим. */
+.arena-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.arena-strip__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 0 6px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--glide-text);
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.arena-strip__day span {
+  font-size: var(--app-text-kicker);
+  color: var(--glide-hint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.arena-strip__day b {
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.15;
+}
+.arena-strip__day i {
+  font-style: normal;
+  font-size: var(--app-text-kicker);
+  color: var(--glide-ink-teal);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-strip__day--weekend b { color: var(--glide-ink-teal); }
+.arena-strip__day--empty b,
+.arena-strip__day--empty i { color: var(--glide-hint); opacity: 0.6; }
+.arena-strip__day[aria-pressed="true"] {
+  background: var(--app-cta-fill);
+  border-color: transparent;
+}
+.arena-strip__day[aria-pressed="true"] span,
+.arena-strip__day[aria-pressed="true"] b,
+.arena-strip__day[aria-pressed="true"] i { color: var(--app-cta-text); opacity: 1; }
+
+/* Группа сеансов: что это, цены один раз, сетка времени. */
+.arena-show {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+}
+.arena-show__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.arena-show__head b { font-size: var(--app-text-body); }
+.arena-show__head span { font-size: var(--app-text-caption); color: var(--glide-hint); }
+.arena-show__prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-show__prices small {
+  display: block;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-regular);
+  color: var(--glide-hint);
+}
+.arena-show__note {
+  margin: 0;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+.arena-times {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.arena-time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 6px 2px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-sm);
+  color: var(--glide-text);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.arena-time b { font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
+.arena-time small { font-size: var(--app-text-kicker); color: var(--glide-hint); }
+.arena-time--link { border-color: var(--glide-brand); }
+.arena-time--link:active { background: var(--glide-brand-wash); }
+.arena-time--next {
+  background: var(--app-cta-fill);
+  border-color: transparent;
+}
+.arena-time--next b,
+.arena-time--next small { color: var(--app-cta-text); }
+
+.arena-none {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed var(--glide-line);
+  border-radius: var(--app-radius-md);
+}
+.arena-none b { font-size: var(--app-text-body); }
+.arena-none .linkish { align-self: flex-start; font-weight: var(--app-weight-semibold); }
+
+/* «Адрес и часы»: одна карточка, строки-разделители, подпись сверху. */
+.arena-infos {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+  overflow: hidden;
+}
+.arena-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--glide-line);
+  color: var(--glide-text);
+  text-decoration: none;
+  min-width: 0;
+}
+.arena-info:first-child { border-top: 0; }
+.arena-info small { font-size: var(--app-text-kicker); color: var(--glide-hint); }
+.arena-info b {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.arena-info > span { font-size: var(--app-text-caption); color: var(--glide-hint); }
+a.arena-info b { color: var(--glide-ink-teal); }
+.arena-info__open {
+  font-style: normal;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--app-ok-ink);
+}
+.arena-week {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--app-text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.arena-week li { display: flex; justify-content: space-between; color: var(--glide-hint); }
+.arena-week li.is-today { color: var(--glide-text); font-weight: var(--app-weight-semibold); }
+.arena-week li.is-closed span:last-child { opacity: 0.7; }
+
+/* Глобальный сброс tel:-ссылок (mini-app-components.css, с !important) снимал с плитки
+   «Позвонить» и строки «Телефон» рамку, фон и отступы. Возвращаем их только здесь. */
+.ar-pilot .arena-card a.arena-qa.arena-qa[href^="tel:"] {
+  display: flex;
+  padding: 12px 4px 10px;
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg) !important;
+  box-shadow: var(--app-card-shadow);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ar-pilot .arena-card a.arena-info.arena-info[href^="tel:"] {
+  display: flex;
+  padding: 12px 14px;
+  border-top: 1px solid var(--glide-line);
+}

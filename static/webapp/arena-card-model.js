@@ -604,6 +604,129 @@
     return '';
   }
 
+  /*
+   * TASK-146: расписание как сеансы в кино. Раньше каждая строка повторяла «Массовое катание ·
+   * взр. 10 · дет. 8 · прокат +9» — у Замка тринадцать раз подряд. Теперь цены один раз над
+   * группой, ниже — сетка времени; у каждого времени своя ссылка в кассу, если она есть.
+   */
+  var DAY_TOP = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  function upcomingSessions(sessions, now) {
+    return (sessions || []).filter(function (s) { return sessionNowState(s, now) === 'upcoming'; });
+  }
+
+  /** Полоса дней: «Сегодня · Завтра · Пн 5 …», у каждого — число сеансов впереди. */
+  function dayStrip(sessionDays, todayIso, now, n) {
+    var byDate = {};
+    (sessionDays || []).forEach(function (d) { byDate[String(d.local_date || '').slice(0, 10)] = d.sessions || []; });
+    var out = [];
+    for (var i = 0; i < (n || 7); i++) {
+      var iso = addDaysYmd(todayIso, i);
+      var date = parseLocalDate(iso);
+      out.push({
+        iso: iso,
+        top: i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : DAY_TOP[date.getDay()],
+        num: String(date.getDate()),
+        count: upcomingSessions(byDate[iso], now).length,
+        weekend: date.getDay() === 0 || date.getDay() === 6,
+      });
+    }
+    return out;
+  }
+
+  /** Сегодня, если впереди есть сеансы; иначе первый день со льдом; иначе сегодня. */
+  function defaultScheduleDay(strip) {
+    for (var i = 0; i < (strip || []).length; i++) if (strip[i].count) return strip[i].iso;
+    return strip && strip.length ? strip[0].iso : null;
+  }
+
+  function minutesBetween(a, b) {
+    var pa = String(a || '').split(':');
+    var pb = String(b || '').split(':');
+    if (pa.length < 2 || pb.length < 2) return null;
+    var d = (Number(pb[0]) * 60 + Number(pb[1])) - (Number(pa[0]) * 60 + Number(pa[1]));
+    if (d < 0) d += 24 * 60;
+    return d > 0 && d < 12 * 60 ? d : null;
+  }
+
+  function priceChips(session) {
+    var cur = session.currency_code || 'BYN';
+    var adult = formatMinor(session.price_adult_minor, cur);
+    var child = formatMinor(session.price_child_minor, cur);
+    var rental = formatMinor(session.price_rental_minor, cur);
+    var out = [];
+    if (adult) out.push({ label: child ? 'Взрослый' : 'Билет', value: adult.withCurrency });
+    if (child) out.push({ label: 'Детский', value: child.withCurrency });
+    if (rental) out.push({ label: 'Прокат', value: rental.withCurrency });
+    return out;
+  }
+
+  /**
+   * Сеансы дня, сгруппированные по «что это и сколько стоит». Одинаковые сеансы —
+   * одна группа с сеткой времени; другой тип или другая цена — своя группа.
+   * `next` — ближайший сеанс дня (подсвечивается), только среди будущих.
+   */
+  function showtimesForDay(opts) {
+    opts = opts || {};
+    var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(function (a, b) {
+      return String(a.starts_at_local).localeCompare(String(b.starts_at_local));
+    });
+    var groups = [];
+    var index = {};
+    list.forEach(function (s, i) {
+      var start = hhmm(s.starts_at_local);
+      var dur = minutesBetween(start, hhmm(s.ends_at_local));
+      var key = [iceKindLabel(s), s.price_adult_minor, s.price_child_minor, s.price_rental_minor, dur, s.age_note || ''].join('|');
+      if (!(key in index)) {
+        index[key] = groups.length;
+        groups.push({ title: iceKindLabel(s), duration: dur ? dur + ' мин' : '', prices: priceChips(s), note: s.age_note || '', times: [] });
+      }
+      var cta = iceRowCta(s, opts.ticketsUrl);
+      groups[index[key]].times.push({
+        time: start,
+        href: cta.href,
+        sessionId: s.id != null ? s.id : null,
+        next: i === 0 && !!opts.markNext,
+        capacity: s.capacity_note || '',
+      });
+    });
+    return { groups: groups, count: list.length };
+  }
+
+  /** Быстрые действия под обложкой: маршрут, звонок, сайт/инстаграм — только то, что есть. */
+  function quickActions(card) {
+    card = card || {};
+    var out = [];
+    if (card.latitude != null && card.longitude != null) {
+      out.push({ id: 'route', label: 'Маршрут', href: 'https://yandex.by/maps/?rtext=~' + card.latitude + ',' + card.longitude + '&rtt=auto' });
+    } else if (card.address) {
+      out.push({ id: 'route', label: 'Маршрут', href: 'https://yandex.by/maps/?text=' + encodeURIComponent(card.address) });
+    }
+    var phone = String(card.phone || '').trim();
+    if (phone) out.push({ id: 'call', label: 'Позвонить', href: 'tel:' + phone.replace(/[^\d+]/g, '') });
+    var contacts = practiceContacts(card);
+    var insta = contacts.socials.filter(function (x) { return x.label === 'Instagram'; })[0];
+    if (contacts.website) out.push({ id: 'site', label: 'Сайт', href: contacts.website.href });
+    else if (insta) out.push({ id: 'insta', label: 'Instagram', href: insta.href });
+    return out;
+  }
+
+  /** Часы по дням для списка «Часы работы»: сегодняшний день отмечен. */
+  function weekHours(hours, now) {
+    now = now || new Date();
+    var today = (now.getDay() + 6) % 7;
+    var known = false;
+    var rows = [];
+    for (var d = 0; d < 7; d++) {
+      var pair = hoursForWeekday(hours, d);
+      if (pair) known = true;
+      rows.push({ label: WEEK_SHORT[d], value: pair ? pair[0] + '–' + pair[1] : 'выходной', today: d === today, closed: !pair });
+    }
+    if (!known) return null;
+    var uniform = rows.every(function (r) { return r.value === rows[0].value; });
+    return { uniform: uniform, rows: rows, todayValue: rows[today].value, status: openUntilLabel(hours, now) };
+  }
+
   function heroMetaLine(card) {
     card = card || {};
     var bits = [];
@@ -711,5 +834,10 @@
     shopServicesView: shopServicesView,
     trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
+    dayStrip: dayStrip,
+    defaultScheduleDay: defaultScheduleDay,
+    showtimesForDay: showtimesForDay,
+    quickActions: quickActions,
+    weekHours: weekHours,
   };
 });
