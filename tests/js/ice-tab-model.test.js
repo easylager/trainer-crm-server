@@ -409,6 +409,12 @@ describe('hrefs', () => {
     assert.equal(arenaHref({ slug: 'minsk-chizhovka', id: 12 }), 'arena?ref=12');
     assert.equal(arenaHref({ slug: 'minsk-chizhovka' }), 'arena?ref=minsk-chizhovka');
     assert.equal(arenaHref({ id: 12 }), 'arena?ref=12');
+    // Карточка открывается на дне и сеансе с плитки ленты (выбрал «Завтра» — попал на завтра).
+    assert.equal(
+      arenaHref({ id: 12, live: { kind: 'session', local_date: '2026-10-03', session_id: 77 } }),
+      'arena?ref=12&day=2026-10-03&s=77',
+    );
+    assert.equal(arenaHref({ id: 12, live: { kind: 'place', text: 'Заточка' } }), 'arena?ref=12');
   });
 
   it('trainer search hits open the catalog trainer card, not the browse funnel', () => {

@@ -342,7 +342,17 @@
        карта — по всей стране: «ledovyy-dvorets» в Бресте открывал минский дворец.
        Читаемые адреса нужны публичной странице (/p/{city}/{slug}), не мини-аппу. */
     var ref = (item && (item.id != null ? item.id : item.slug)) || '';
-    return 'arena?ref=' + encodeURIComponent(String(ref));
+    var href = 'arena?ref=' + encodeURIComponent(String(ref));
+    /* Карточка открывается на том дне и сеансе, которые человек видел на плитке:
+       выбрал «Завтра», тапнул «Завтра 18:00» — попал на завтра с выделенным 18:00,
+       а не на «Сегодня» по умолчанию карточки. */
+    var live = (item && item.live) || {};
+    var day = String(live.local_date || '').slice(0, 10);
+    if (String(live.kind || '') === 'session' && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      href += '&day=' + day;
+      if (live.session_id != null) href += '&s=' + encodeURIComponent(String(live.session_id));
+    }
+    return href;
   }
 
   function listRowCta() {

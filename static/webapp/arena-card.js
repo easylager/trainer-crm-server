@@ -371,6 +371,7 @@
       now: new Date(),
       ticketsUrl: state.card && state.card.tickets_url,
       markNext: iso === todayIso(),
+      pickedId: state.focus && state.focus.sessionId,
     });
     var lessons = ribbonForIso(iso).filter(function (r) { return r.nature === 'lesson'; });
     var html = '';
@@ -393,8 +394,10 @@
           : '') +
         '<div class="arena-times">' +
         g.times.map(function (t) {
-          var cls = 'arena-time' + (t.next ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
-          var body = '<b>' + esc(t.time) + '</b>' + (t.next ? '<small>ближайший</small>' : t.capacity ? '<small>' + esc(t.capacity) + '</small>' : '');
+          var hot = t.next || t.picked;
+          var cls = 'arena-time' + (hot ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
+          var tag = t.picked ? 'выбран' : t.next ? 'ближайший' : t.capacity;
+          var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
           return t.href
             ? '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>'
             : '<span class="' + cls + '">' + body + '</span>';
@@ -442,7 +445,12 @@
       );
     }
     var days = strip();
-    if (!state.day) state.day = M.defaultScheduleDay(days);
+    if (!state.day) {
+      // День из ленты — если он есть в полосе; иначе свой умный дефолт.
+      var focusDay = state.focus && state.focus.day;
+      var inStrip = focusDay && days.some(function (d) { return d.iso === focusDay; });
+      state.day = inStrip ? focusDay : M.defaultScheduleDay(days);
+    }
     var tickets = M.ticketCta(state.card);
     return (
       '<div class="arena-sec">' +
@@ -778,6 +786,7 @@
 
   function load() {
     state.ref = resolveRef();
+    state.focus = M.parseScheduleFocus(global.location.search || '');
     if (!state.ref) {
       showError('Не указана арена. Откройте карточку по ссылке из каталога или бота.');
       return;

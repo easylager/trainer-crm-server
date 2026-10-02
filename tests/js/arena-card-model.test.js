@@ -670,3 +670,23 @@ describe('TASK-146: расписание как сеансы в кино', () =>
     assert.equal(w.rows[6].value, 'выходной');
   });
 });
+
+describe('TASK-146: карточка открывается на дне и сеансе из ленты', () => {
+  it('parseScheduleFocus читает day и s, мусор отбрасывает', () => {
+    const { parseScheduleFocus } = loadModel();
+    assert.deepEqual(parseScheduleFocus('?ref=1&day=2026-10-03&s=77'), { day: '2026-10-03', sessionId: '77' });
+    assert.deepEqual(parseScheduleFocus('?ref=1&day=завтра&s=x'), { day: null, sessionId: null });
+  });
+
+  it('выбранный в ленте сеанс подсвечен вместо ближайшего', () => {
+    const { showtimesForDay } = loadModel();
+    const mk = (id, h) => ({ id, kind: 'public_skate', starts_at_local: h + ':15:00', ends_at_local: h + ':59:00',
+      starts_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':15:00Z',
+      ends_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':59:00Z', currency_code: 'BYN' });
+    const now = new Date('2026-10-02T10:00:00Z');
+    const v = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '2' });
+    assert.deepEqual(v.groups[0].times.map((t) => [t.time, t.next, t.picked]), [['14:15', false, false], ['18:15', false, true]]);
+    const w = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '999' });
+    assert.equal(w.groups[0].times[0].next, true);
+  });
+});

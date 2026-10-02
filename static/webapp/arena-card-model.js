@@ -487,6 +487,14 @@
     return 'catalog?' + parts.join('&');
   }
 
+  /** «?day=2026-10-03&s=123» из ленты: день и сеанс, на которых открыть расписание. */
+  function parseScheduleFocus(search) {
+    var qp = new URLSearchParams(search || '');
+    var day = isoDate(qp.get('day'));
+    var sid = String(qp.get('s') || '').trim();
+    return { day: day, sessionId: /^\d+$/.test(sid) ? sid : null };
+  }
+
   function parseArenaRef(search, startParam) {
     var qp = new URLSearchParams(search || '');
     var ref = qp.get('ref') || qp.get('arena') || qp.get('arena_id') || qp.get('id') || qp.get('slug');
@@ -673,6 +681,8 @@
     });
     var groups = [];
     var index = {};
+    var picked = opts.pickedId != null ? String(opts.pickedId) : null;
+    var hasPicked = !!picked && list.some(function (x) { return String(x.id) === picked; });
     list.forEach(function (s, i) {
       var start = hhmm(s.starts_at_local);
       var dur = minutesBetween(start, hhmm(s.ends_at_local));
@@ -686,7 +696,9 @@
         time: start,
         href: cta.href,
         sessionId: s.id != null ? s.id : null,
-        next: i === 0 && !!opts.markNext,
+        // Выбранный в ленте сеанс важнее «ближайшего»: подсветка одна.
+        next: !hasPicked && i === 0 && !!opts.markNext,
+        picked: hasPicked && String(s.id) === picked,
         capacity: s.capacity_note || '',
       });
     });
@@ -835,6 +847,7 @@
     trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
+    parseScheduleFocus: parseScheduleFocus,
     defaultScheduleDay: defaultScheduleDay,
     showtimesForDay: showtimesForDay,
     quickActions: quickActions,
