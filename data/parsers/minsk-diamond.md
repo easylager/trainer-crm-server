@@ -3,7 +3,7 @@
 - arena_id: 7
 - city: Минск
 - parser_key: diamond_html_v1
-- cadence: weekly
+- cadence: daily
 - requires_by_egress: false
 
 ## Sources

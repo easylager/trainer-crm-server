@@ -9,13 +9,13 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="mini-app-full-height.js?v=202609290"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js" async></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-trainer-theme.js?v=202609290"></script>
   <script src="mini-app-telegram-chrome.js?v=202609290"></script>
   <link rel="stylesheet" href="theme.css?v=202609290" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
   <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609290" />
-  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
 </head>
 <body>
   <header class="org-back-header">
@@ -53,9 +53,68 @@
           <span>Telegram</span>
           <input type="text" id="orgProfileTelegram" maxlength="64" placeholder="@username">
         </label>
+
+        <div class="org-profile-field">
+          <span>Площадка</span>
+          <div class="org-arena-current" id="orgProfileArenaCurrent">
+            <span class="org-arena-current__text" id="orgProfileArenaCurrentText">Не выбрана</span>
+            <button type="button" class="btn-secondary" id="orgProfileArenaPickBtn">Выбрать</button>
+          </div>
+        </div>
+
         <p class="org-profile-error" id="orgProfileFormError" hidden></p>
         <button type="submit" class="btn-primary" id="orgProfileSave">Сохранить</button>
       </form>
+
+      <div class="org-photo-section">
+        <h2 class="org-section-title">Фото школы</h2>
+        <div class="org-photo-row">
+          <div class="org-photo-item">
+            <div class="org-photo-preview" id="orgProfileLogoPreview">
+              <span class="org-photo-preview__empty">Лого</span>
+            </div>
+            <label class="btn-secondary org-photo-btn">
+              Загрузить лого
+              <input type="file" accept="image/*" id="orgProfileLogoInput" hidden>
+            </label>
+          </div>
+          <div class="org-photo-item">
+            <div class="org-photo-preview org-photo-preview--wide" id="orgProfileCoverPreview">
+              <span class="org-photo-preview__empty">Обложка</span>
+            </div>
+            <label class="btn-secondary org-photo-btn">
+              Загрузить обложку
+              <input type="file" accept="image/*" id="orgProfileCoverInput" hidden>
+            </label>
+          </div>
+        </div>
+        <div class="org-photo-gallery" id="orgProfileGallery"></div>
+        <label class="btn-secondary org-photo-btn">
+          Добавить фото в галерею
+          <input type="file" accept="image/*" id="orgProfileGalleryInput" hidden>
+        </label>
+        <p class="org-profile-error" id="orgProfilePhotoError" hidden></p>
+      </div>
+    </section>
+
+    <section class="org-arena-picker" id="orgProfileArenaPicker" hidden>
+      <header class="org-back-header">
+        <button type="button" class="org-back-header__btn" id="orgProfileArenaPickerClose" aria-label="Закрыть">‹</button>
+        <span class="org-back-header__title">Выбор площадки</span>
+      </header>
+      <div class="org-arena-picker__body">
+        <label class="org-profile-field">
+          <span>Город</span>
+          <select id="orgProfileArenaCity"></select>
+        </label>
+        <label class="org-profile-field">
+          <span>Поиск по названию</span>
+          <input type="text" id="orgProfileArenaFilter" placeholder="Название арены">
+        </label>
+        <div class="org-arena-list" id="orgProfileArenaList"></div>
+        <p class="org-arena-list__empty" id="orgProfileArenaEmpty" hidden>Арен не найдено</p>
+        <button type="button" class="btn-secondary" id="orgProfileArenaClearBtn">Не выбирать площадку</button>
+      </div>
     </section>
 
     <div class="org-home-state org-home-state--error" id="orgProfileError" hidden>
@@ -64,6 +123,6 @@
     </div>
   </main>
 
-  <script defer src="org-profile-main.js?v=202609290"></script>
+  <script defer src="org-profile-main.js?v=202609300"></script>
 </body>
 </html>

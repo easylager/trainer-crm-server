@@ -38,24 +38,24 @@ class TestVenueTypes:
         """Тип приходит и из формы, и из строк, созданных до появления колонки."""
         assert normalize_venue_type(raw) in VENUE_TYPE_KEYS
 
-    def test_blank_falls_back_to_ice(self):
+    def test_blank_falls_back_to_arena(self):
         """200+ существующих арен — катки; дефолт обязан сохранять их поведение."""
-        assert normalize_venue_type(None) == DEFAULT_VENUE_TYPE == "ice"
+        assert normalize_venue_type(None) == DEFAULT_VENUE_TYPE == "arena"
 
     def test_case_and_whitespace_are_tolerated(self):
         assert normalize_venue_type("  GyM  ") == "gym"
 
     def test_gym_never_reads_as_a_rink(self):
         """Ровно тот баг, из-за которого всё затевалось: зал, названный катком."""
-        assert venue_card_cta("gym") == "Открыть карточку зала"
-        assert venue_site_label("gym") == "Сайт зала"
+        assert venue_card_cta("gym") == "Открыть карточку спортзала"
+        assert venue_site_label("gym") == "Сайт спортзала"
         assert "катк" not in venue_card_cta("gym")
         assert "катк" not in venue_site_label("gym")
 
-    def test_ice_copy_is_unchanged(self):
-        """Для льда формулировки должны остаться ровно прежними."""
-        assert venue_card_cta("ice") == "Открыть карточку катка"
-        assert venue_site_label("ice") == "Сайт катка"
+    def test_arena_copy_is_unchanged(self):
+        """Для арены формулировки должны остаться ровно прежними."""
+        assert venue_card_cta("arena") == "Открыть карточку арены"
+        assert venue_site_label("arena") == "Сайт арены"
 
 
 class TestSpecialistRole:

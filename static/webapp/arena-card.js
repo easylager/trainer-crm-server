@@ -256,39 +256,42 @@
       groups: allGroups(),
       weekday: weekdayOf(iso),
       now: new Date(),
+      card: state.card,
     });
   }
 
-  function renderRibbonRows() {
+  /**
+   * Строки текущей вкладки как данные, а не как HTML: по ним же считается,
+   * нужна ли легенда под лентой.
+   */
+  function currentRibbonRows() {
     var today = todayIso();
     if (state.day === 'week') {
-      var weekFrom = today;
-      var weekTo = addDaysIso(today, 6);
-      var summaries = M.buildWeekSummaries({
-        from: weekFrom,
-        to: weekTo,
+      return M.buildWeekSummaries({
+        from: today,
+        to: addDaysIso(today, 6),
         sessionDays: (state.sessions && state.sessions.days) || [],
         groups: allGroups(),
+      }).map(function (d) {
+        return {
+          nature: 'ice',
+          empty: d.empty,
+          time: d.weekday,
+          weekday: d.weekday,
+          title: d.title,
+          meta: d.meta,
+          cta: d.cta,
+          ctaKind: 'ghost',
+          openDay: !d.empty,
+          localDate: d.localDate,
+        };
       });
-      return summaries
-        .map(function (d) {
-          return rowHtml({
-            nature: 'ice',
-            empty: d.empty,
-            time: d.weekday,
-            weekday: d.weekday,
-            title: d.title,
-            meta: d.meta,
-            cta: d.cta,
-            ctaKind: 'ghost',
-            openDay: !d.empty,
-            localDate: d.localDate,
-          });
-        })
-        .join('');
     }
     var iso = M.ribbonIsoForDay(state.day, today) || today;
-    var rows = ribbonForIso(iso);
+    return ribbonForIso(iso);
+  }
+
+  function renderRibbonRows(rows) {
     if (!rows.length) {
       return (
         '<div class="arena-row arena-row--empty">' +
@@ -301,12 +304,34 @@
     return rows.map(rowHtml).join('');
   }
 
+  function renderLegendItems(rows) {
+    return M.ribbonLegendForRows(rows)
+      .map(function (item) {
+        return (
+          '<span><i class="arena-sw arena-sw--' +
+          esc(item.stripe) +
+          '"></i>' +
+          esc(item.text) +
+          '</span>'
+        );
+      })
+      .join('');
+  }
+
+  function paintLegend(rows) {
+    var el = document.getElementById('arenaLegend');
+    if (!el) return;
+    var html = renderLegendItems(rows);
+    el.innerHTML = html;
+    el.hidden = !html;
+  }
+
   function renderIceSection() {
     /* Секция про массовое катание существует только для льда. На зале она
        обещала бы расписание сеансов, которых там не бывает в принципе —
        это не «данных пока нет», а неверный вопрос к площадке. */
-    var venueType = String(state.card.venue_type || 'ice');
-    if (venueType !== 'ice') return '';
+    var venueType = String(state.card.venue_type || 'arena');
+    if (venueType !== 'arena') return '';
     var feed = M.iceFeedView({
       card: state.card,
       hasSessions: hasAnySessions(),
@@ -351,6 +376,8 @@
         '</div>'
       );
     }
+    var ribbonRows = currentRibbonRows();
+    var legendHtml = renderLegendItems(ribbonRows);
     return (
       '<div class="arena-sec">' +
       '<p class="arena-h">Лента льда<span class="arena-new">НОВОЕ</span></p>' +
@@ -366,20 +393,12 @@
       '">Неделя</button>' +
       '</div>' +
       '<div class="arena-rows" id="arenaRows">' +
-      renderRibbonRows() +
+      renderRibbonRows(ribbonRows) +
       '</div>' +
-      '<div class="arena-legend">' +
-      M.ribbonLegend()
-        .map(function (item) {
-          return (
-            '<span><i class="arena-sw arena-sw--' +
-            esc(item.stripe) +
-            '"></i>' +
-            esc(item.text) +
-            '</span>'
-          );
-        })
-        .join('') +
+      '<div class="arena-legend" id="arenaLegend"' +
+      (legendHtml ? '' : ' hidden') +
+      '>' +
+      legendHtml +
       '</div>' +
       '</div>'
     );
@@ -558,8 +577,10 @@
   }
 
   function paintRowsOnly() {
+    var rows = currentRibbonRows();
     var el = document.getElementById('arenaRows');
-    if (el) el.innerHTML = renderRibbonRows();
+    if (el) el.innerHTML = renderRibbonRows(rows);
+    paintLegend(rows);
     var tabs = document.getElementById('arenaDayTabs');
     if (!tabs) return;
     [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
@@ -661,6 +682,19 @@
     if (dayBtn && dayBtn.closest('#arenaDayTabs')) {
       state.day = dayBtn.getAttribute('data-day');
       paintRowsOnly();
+      return;
+    }
+    // Внешний билет открываем через Telegram.openLink: target="_blank" внутри
+    // Mini App на iOS просто не срабатывает. Раньше ссылка на строке была почти
+    // мёртвой (external_url есть у единиц сеансов), теперь на неё уходит каждая
+    // арена с tickets_url — и молча ничего не делать уже нельзя.
+    var extRow = ev.target.closest('a.arena-row[href]');
+    if (extRow) {
+      var extHref = extRow.getAttribute('href') || '';
+      if (/^https?:\/\//i.test(extHref)) {
+        ev.preventDefault();
+        openExternal(extHref);
+      }
       return;
     }
     var t = ev.target.closest('[data-action]');

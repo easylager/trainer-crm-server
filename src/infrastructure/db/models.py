@@ -230,9 +230,9 @@ class Arena(Base):
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
-    #: ice|gym|choreo|pool|outdoor|other — см. src/shared/venue_types.py. Лёд здесь
-    #: частный случай, а не синоним арены; дефолт сохраняет поведение старых строк.
-    venue_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ice")
+    #: arena|gym|roller|outdoor|other — см. src/shared/venue_types.py. Арена здесь
+    #: частный случай, а не синоним катка; дефолт сохраняет поведение старых строк.
+    venue_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="arena")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True
@@ -1355,6 +1355,10 @@ class CertificateInstance(Base):
     recipient_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     recipient_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     file_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    #: pending|ready|failed — PDF/S3/email happen in the background (TASK-142/AC-002),
+    #: not inline in POST /trainer/certificate-issue. See certificate_use_cases.process_pending_certificate_files_batch.
+    file_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    file_error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
 
 
 # --- Trainer subscription to platform (billing: trial + paid plans) ---

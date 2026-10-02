@@ -33,10 +33,12 @@ from src.application.trainer_start_payload import (
 
 
 class TestTrainerStartPayload:
-    def test_collective_claim_prefix(self) -> None:
+    def test_collective_claim_prefix_is_not_special_cased(self) -> None:
+        """School ownership claims go through the org bot now, not the trainer bot
+        (TASK-141) — a col_claim_* payload here just falls through to the generic
+        col_ open-collective classification, unhandled by any trainer command."""
         parsed = parse_trainer_start_payload("col_claim_abc123")
-        assert parsed.kind == TrainerStartKind.COLLECTIVE_CLAIM
-        assert parsed.collective_token == "abc123"
+        assert parsed.kind == TrainerStartKind.COLLECTIVE_OPEN
 
     def test_collective_invite_prefix(self) -> None:
         parsed = parse_trainer_start_payload("col_inv_xyz")

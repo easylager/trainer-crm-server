@@ -143,9 +143,9 @@
     customServiceNames: [],
     /* Независимо от площадки: у консультанта может быть и зал, и онлайн. */
     onlineEnabled: false,
-    /* Типы площадок для формы создания (ice|gym|choreo|…). */
+    /* Типы площадок для формы создания (arena|gym|roller|…). */
     venueTypes: [],
-    newArenaVenueType: 'ice',
+    newArenaVenueType: 'arena',
     cities: [],
     cityId: null,
     arenas: [],
@@ -932,9 +932,9 @@
       el.obArenaCreateDup.innerHTML = '';
     }
     setArenaCreateStatus('');
-    /* Каждая новая форма начинается со льда: это по-прежнему подавляющее
+    /* Каждая новая форма начинается с арены: это по-прежнему подавляющее
        большинство площадок, и лишний тап им платить не за что. */
-    state.newArenaVenueType = 'ice';
+    state.newArenaVenueType = 'arena';
     renderVenueTypePicker();
     if (el.obArenaCreateName && !el.obArenaCreateName.value) {
       try { el.obArenaCreateName.focus(); } catch (eF) {}
@@ -1031,7 +1031,7 @@
         address: addr,
         confirm_duplicate: !!confirmDuplicate,
         city_id: state.cityId,
-        venue_type: state.newArenaVenueType || 'ice',
+        venue_type: state.newArenaVenueType || 'arena',
       }),
     })
       .then(function (r) {

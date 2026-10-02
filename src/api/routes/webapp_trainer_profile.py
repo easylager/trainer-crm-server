@@ -68,6 +68,7 @@ from src.infrastructure import s3
 from src.shared.catalog_visibility import CATALOG_ACTOR_TRAINER
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
+from src.shared.venue_types import venue_type_options
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +360,7 @@ async def get_trainer_profile_page_bootstrap(
             "cities": {"items": cities},
             "services": {"items": services},
             "education_options": {"items": list(TRAINER_EDUCATION_OPTIONS)},
+            "venue_types": {"items": venue_type_options()},
         },
     }
 

@@ -209,10 +209,33 @@
     return 'Массовое катание';
   }
 
-  function iceRowCta(session) {
-    var href = String((session && session.external_url) || '').trim() || null;
+  function safeHttpUrl(value) {
+    var href = String(value == null ? '' : value).trim();
+    if (!href) return null;
+    var lower = href.toLowerCase();
+    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
+    if (/\s/.test(href)) return null;
+    return href;
+  }
+
+  /**
+   * «Билет на месте» — это утверждение о катке, а не заглушка: так мы говорим
+   * человеку, что онлайн-продажи нет и платить он будет в кассе. Если у арены
+   * есть страница билетов (или у сеанса — своя ссылка), утверждение ложное,
+   * поэтому ведём на сайт и называем вещи своими именами.
+   *
+   * Записаться через нас на массовое катание всё равно нельзя (PDEC-005):
+   * kind остаётся ghost, bookable — false, «Записаться» тут не появляется.
+   *
+   * @param {object} session
+   * @param {{tickets_url?: string}} [card] карточка арены
+   */
+  function iceRowCta(session, card) {
+    var href =
+      safeHttpUrl(session && session.external_url) ||
+      safeHttpUrl(card && card.tickets_url);
     return {
-      cta: 'Билет на месте',
+      cta: href ? 'Билет на сайте' : 'Билет на месте',
       ctaKind: 'ghost',
       href: href,
       bookable: false,
@@ -235,7 +258,7 @@
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
       if (nowState !== 'upcoming') continue;
-      var cta = iceRowCta(s);
+      var cta = iceRowCta(s, opts.card);
       rows.push({
         nature: 'ice',
         stripe: 'ice',
@@ -385,6 +408,29 @@
     ];
   }
 
+  /**
+   * Легенда объясняет цвет полоски слева, то есть нужна ровно тогда, когда
+   * различать есть что: в ленте есть и сеансы катка, и занятия тренеров.
+   * На арене без занятий (а таких большинство) она объясняла различие,
+   * которого на экране нет, — поэтому здесь пусто.
+   *
+   * @param {Array<{nature?: string}>} rows строки текущей ленты
+   * @returns {Array<{nature: string, stripe: string, text: string}>}
+   */
+  function ribbonLegendForRows(rows) {
+    rows = rows || [];
+    var hasIce = false;
+    var hasLesson = false;
+    var i;
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].empty) continue;
+      if (rows[i] && rows[i].nature === 'lesson') hasLesson = true;
+      else if (rows[i] && rows[i].nature === 'ice') hasIce = true;
+    }
+    if (!hasIce || !hasLesson) return [];
+    return ribbonLegend();
+  }
+
   function trainerCta(trainer) {
     if (trainer && trainer.can_book) {
       return { label: 'Записаться', kind: 'solid' };
@@ -393,11 +439,8 @@
   }
 
   function ticketCta(card) {
-    var href = String((card && card.tickets_url) || '').trim();
+    var href = safeHttpUrl(card && card.tickets_url);
     if (!href) return null;
-    var lower = href.toLowerCase();
-    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
-    if (/\s/.test(href)) return null;
     return { href: href, label: 'Купить билет' };
   }
 
@@ -540,6 +583,7 @@
     heroPhotoUrl: heroPhotoUrl,
     heroView: heroView,
     ribbonLegend: ribbonLegend,
+    ribbonLegendForRows: ribbonLegendForRows,
     trainerCta: trainerCta,
     ticketCta: ticketCta,
     buildBookingHref: buildBookingHref,

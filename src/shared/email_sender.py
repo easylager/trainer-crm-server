@@ -73,7 +73,10 @@ def _send_sync(
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", "attachment", filename=attachment_filename)
         msg.attach(part)
-    with smtplib.SMTP(s.smtp_host, s.smtp_port) as server:
+    # timeout обязателен: без него smtplib берёт socket._GLOBAL_DEFAULT_TIMEOUT, то есть ждёт
+    # недоступный хост бесконечно. Вложение сертификата — около мегабайта, так что зависнуть
+    # можно и на sendmail, а не только на connect.
+    with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=s.smtp_timeout_sec) as server:
         server.starttls()
         server.login(s.smtp_user, s.smtp_password)
         server.sendmail(s.smtp_from_email, [to_email], msg.as_string())
@@ -99,16 +102,31 @@ async def send_certificate_pdf_email(
     )
     try:
         import asyncio
-        await asyncio.to_thread(
-            _send_sync,
-            to_email,
-            CERTIFICATE_PDF_EMAIL_SUBJECT,
-            body,
-            attachment_bytes=pdf_bytes,
-            attachment_filename="certificate.pdf",
+
+        # Жёсткий потолок поверх сокетного таймаута: сокет ограничивает отдельные операции, а
+        # этот — весь разговор с сервером. Именно он гарантирует, что HTTP-ответ вернётся, даже
+        # если SMTP отвечает по байту в секунду. Не отправленное письмо не теряется: вызывающий
+        # кладёт его в certificate_email_outbox, и ретрай-цикл заберёт его через пару минут.
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                _send_sync,
+                to_email,
+                CERTIFICATE_PDF_EMAIL_SUBJECT,
+                body,
+                attachment_bytes=pdf_bytes,
+                attachment_filename="certificate.pdf",
+            ),
+            timeout=Settings().smtp_inline_deadline_sec,
         )
         logger.info("Certificate PDF email sent to %s", to_email)
         return True
+    except TimeoutError:  # asyncio.TimeoutError — его же алиас начиная с Python 3.11
+        logger.warning(
+            "Certificate PDF email to %s exceeded %.0fs — оставляем очереди повторной отправки",
+            to_email,
+            Settings().smtp_inline_deadline_sec,
+        )
+        return False
     except Exception as e:
         logger.exception("Failed to send certificate PDF email to %s: %s", to_email, e)
         return False
@@ -134,7 +152,12 @@ async def send_certificate_link_email(to_email: str, code: str, ref_trainer_id: 
     body = CERTIFICATE_EMAIL_BODY_HTML_TEMPLATE.format(link=link)
     try:
         import asyncio
-        await asyncio.to_thread(_send_sync, to_email, CERTIFICATE_EMAIL_SUBJECT, body)
+        # Тот же потолок, что и у отправки PDF: ни один вызов SMTP не должен уметь держать
+        # запрос дольше своего бюджета.
+        await asyncio.wait_for(
+            asyncio.to_thread(_send_sync, to_email, CERTIFICATE_EMAIL_SUBJECT, body),
+            timeout=Settings().smtp_inline_deadline_sec,
+        )
         logger.info("Certificate link email sent to %s", to_email)
         return True
     except Exception as e:

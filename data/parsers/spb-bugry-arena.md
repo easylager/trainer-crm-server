@@ -3,7 +3,7 @@
 - arena_id: 111
 - city: Санкт-Петербург
 - parser_key: bugryarena_html_v1
-- cadence: weekly
+- cadence: daily
 - timezone: Europe/Moscow
 - currency: RUB
 - requires_by_egress: false

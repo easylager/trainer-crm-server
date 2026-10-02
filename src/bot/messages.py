@@ -128,6 +128,9 @@ CLIENT_BUTTON_CERT_TRAINER_BOOK = "Тренер и запись"
 CLIENT_BUTTON_INVITE_TRAINER_PROFILE = "👤 Карточка тренера"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
+# Trainer preview (preview_<trainer_id>): trainer looks at their own card / the catalog as a client would
+CLIENT_BUTTON_TRAINER_PREVIEW_CARD = "👤 Моя карточка"
+CLIENT_BUTTON_TRAINER_PREVIEW_BROWSE = "⛸ Открыть каталог"
 CLIENT_BOOK_CHOOSE_SLOT = "📅 <b>Выберите время</b>\n\nДоступные слоты (эта и следующая неделя):"
 CLIENT_BOOK_NO_SLOTS = "У этого тренера пока нет свободных слотов. Загляните позже или выберите другого тренера."
 CLIENT_BOOK_NO_TRAINER = "Сначала выберите тренера в каталоге."
@@ -805,7 +808,7 @@ TRAINER_CERT_ORDER_NOTIFICATION = (
     "🎁 <b>Клиент заказывает сертификат</b>\n\n"
     "<b>Клиент (заказчик)</b> — {client_name}\n"
     "<b>Сертификат</b> — {cert_name}\n"
-    "<b>Получатель</b> — {recipient_name}\n"
+    "{recipient_line}"
     "<b>Email для PDF</b> — {recipient_email}\n\n"
     "Свяжитесь для оплаты и выдайте сертификат."
 )
@@ -1496,6 +1499,17 @@ CLIENT_WELCOME_BIND_FAILED = (
     "Не удалось привязать профиль. Попросите тренера отправить новую пригласительную ссылку."
 )
 CLIENT_CERT_CODE_INVALID = "Код сертификата не найден или уже использован другим пользователем. Проверьте ссылку или обратитесь к тренеру."
+# Trainer preview: no DB writes on this path (not a real client visit), just a look.
+CLIENT_TRAINER_PREVIEW_PUBLISHED = (
+    "🗂 <b>Вот что видят клиенты</b>\n\n"
+    "Это тот же каталог, что открывают они, — кнопка ниже ведёт на вашу карточку."
+)
+CLIENT_TRAINER_PREVIEW_NOT_PUBLISHED = (
+    "🗂 <b>Вот что видят клиенты</b>\n\n"
+    "Ваша карточка пока не опубликована, поэтому в списке её нет — но вы можете "
+    "посмотреть, как выглядит каталог целиком."
+)
+CLIENT_TRAINER_PREVIEW_NOT_FOUND = "Не удалось найти профиль для предпросмотра."
 CLIENT_MY_CERTIFICATES_INTRO = "🎁 Ваши сертификаты: номинал, код, статус. Нажмите кнопку ниже."
 # Reminders: fixed date/time (no "через" — notifications may be delayed by poll interval).
 CLIENT_REMINDER_24H = (
@@ -4113,15 +4127,6 @@ ADMIN_COLLECTIVE_INVOICE_CONFIRMED = (
     "Студия: <b>{display_name}</b> · <code>{slug}</code>"
 )
 
-TRAINER_COLLECTIVE_CLAIM_SUCCESS = (
-    "🏢 Студия <b>{name}</b> активирована — вы владелец.\n\n"
-    "Клиентская ссылка и приглашения команды — в приложении, раздел «Студия»."
-)
-TRAINER_COLLECTIVE_CLAIM_INVALID = "Ссылка активации студии недействительна или уже использована."
-TRAINER_COLLECTIVE_CLAIM_NEED_LINK = (
-    "Не удалось привязать аккаунт. Если вы уже тренер в другом профиле — напишите в поддержку."
-)
-TRAINER_COLLECTIVE_CLAIM_ALREADY = "Вы уже состоите в другой студии."
 TRAINER_COLLECTIVE_INVITE_SUCCESS = (
     "Вы в команде студии <b>{name}</b>.\n\n"
     "Работайте как обычно — клиенты и расписание только ваши. Студия — общий бренд и ссылка для клиентов."

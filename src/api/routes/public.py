@@ -378,9 +378,21 @@ async def get_public_collective(
     slug: str,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Public studio landing metadata for client catalog (?collective=slug)."""
+    """Public studio landing metadata for client catalog (?collective=slug).
+
+    Gated on ``catalog_state == published`` (TASK-141 S5) — a school hidden or not yet
+    published by its director must not be reachable by its slug either.
+    """
+    from src.application.collective_catalog_state import (
+        COLLECTIVE_CATALOG_STATE_PUBLISHED,
+        get_collective_catalog_state,
+    )
+
     row = await get_collective_by_slug(session, slug, active_only=True)
     if row is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    catalog_state = await get_collective_catalog_state(session, row["id"])
+    if catalog_state is None or catalog_state["catalog_state"] != COLLECTIVE_CATALOG_STATE_PUBLISHED:
         raise HTTPException(status_code=404, detail="Collective not found")
     brand = resolve_brand_from_collective_row(row)
     payload = brand_presentation_to_public_dict(brand, slug=row["slug"])
@@ -407,8 +419,23 @@ async def get_public_collective_sessions(
     to_date: date | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Bookable center grid for studio_central collectives (ADR-003 W2)."""
+    """Bookable center grid for studio_central collectives (ADR-003 W2).
+
+    Same ``catalog_state`` gate as the landing page (TASK-141 S5) — otherwise a hidden
+    school's session grid stayed reachable by slug even with its landing page gone.
+    """
+    from src.application.collective_catalog_state import (
+        COLLECTIVE_CATALOG_STATE_PUBLISHED,
+        get_collective_catalog_state,
+    )
     from src.application.collective_session_use_cases import list_public_collective_sessions
+
+    gate_row = await get_collective_by_slug(session, slug, active_only=True)
+    if gate_row is None:
+        raise HTTPException(status_code=404, detail="Collective not found")
+    catalog_state = await get_collective_catalog_state(session, gate_row["id"])
+    if catalog_state is None or catalog_state["catalog_state"] != COLLECTIVE_CATALOG_STATE_PUBLISHED:
+        raise HTTPException(status_code=404, detail="Collective not found")
 
     today = date.today()
     fd = from_date or today

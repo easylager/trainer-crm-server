@@ -51,8 +51,8 @@ class TestArenaVenueType:
         result = await create_trainer_arena(
             db_session,
             trainer_id,
-            name="Lifestyle",
-            address="Машерова 76А",
+            name="Lifestyle Тест",
+            address="Машерова 76А, корп. 99",
             venue_type="gym",
         )
         assert result["status"] == "created"
@@ -65,7 +65,7 @@ class TestArenaVenueType:
         assert stored == "gym"
 
     @pytest.mark.asyncio
-    async def test_missing_type_defaults_to_ice(self, db_session, monkeypatch):
+    async def test_missing_type_defaults_to_arena(self, db_session, monkeypatch):
         """Старые клиенты Mini App поля не шлют — они должны и дальше заводить катки."""
         trainer_id, _ = await _seed_trainer(db_session, monkeypatch)
         result = await create_trainer_arena(
@@ -77,7 +77,7 @@ class TestArenaVenueType:
                 {"id": result["arena_id"]},
             )
         ).scalar()
-        assert stored == "ice"
+        assert stored == "arena"
 
     @pytest.mark.asyncio
     async def test_garbage_type_does_not_block_creation(self, db_session, monkeypatch):
@@ -116,7 +116,7 @@ class TestVenueTypeFilter:
         assert parse_venue_type_filter("  ") == set()
 
     def test_comma_separated(self):
-        assert parse_venue_type_filter("ice,gym") == {"ice", "gym"}
+        assert parse_venue_type_filter("arena,gym") == {"arena", "gym"}
 
     def test_unknown_key_is_an_error_not_a_silent_pass(self):
         """Молча отдать все площадки — значит показать каток тому, кто просил зал."""
@@ -125,14 +125,14 @@ class TestVenueTypeFilter:
 
     def test_facets_skip_absent_types(self):
         """Город без бассейнов не должен рисовать чип, за которым пусто."""
-        rows = [{"venue_type": "ice"}, {"venue_type": "ice"}, {"venue_type": "gym"}]
+        rows = [{"venue_type": "arena"}, {"venue_type": "arena"}, {"venue_type": "gym"}]
         facets = _venue_type_facets(rows)
-        assert [f["key"] for f in facets] == ["ice", "gym"]
+        assert [f["key"] for f in facets] == ["arena", "gym"]
         assert [f["count"] for f in facets] == [2, 1]
 
-    def test_facets_treat_legacy_null_as_ice(self):
+    def test_facets_treat_legacy_null_as_arena(self):
         assert _venue_type_facets([{"venue_type": None}]) == [
-            {"key": "ice", "chip": "Лёд", "count": 1}
+            {"key": "arena", "chip": "Арена", "count": 1}
         ]
 
 

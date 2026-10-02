@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glide — лендинг, пересборка «Полоса дня»</title>
+<link rel="stylesheet" href="fonts/embedded.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   АРТ-ДИРЕКЦИЯ «ПОЛОСА ДНЯ»
+
+   Подпись страницы — одна горизонтальная ось времени, 06:00–23:30.
+   Она повторяется на каждом масштабе повествования и каждый раз читается
+   по-новому: день города → день арены → день тренера → один слот.
+   Это не шаблон-клон секции, а мотив: вокруг него верстка меняется сильно.
+
+   Предыдущая версия объявляла подписью «сетку времени», рисовала стену
+   карточек и держала три секции на одном каркасе. Каркас убивал ритм —
+   читатель выучивал его на первой секции. Здесь общий только инструмент.
+
+   Запреты, которые держат концепт:
+   - никаких теней и градиентов на контенте (тень есть только у модалки);
+   - teal живёт на слотах тренера, на бесплатном входе и на главном CTA;
+     занятый публичный лёд — всегда нейтральный;
+   - скругления не больше 3px;
+   - страница обязана быть сильной с полностью выключенной анимацией.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --paper:#EDF0EF;
+  --surface:#FFFFFF;
+  --ink:#0E1415;
+  --hint:#63706F;
+  --line:#D6DEDD;
+  --dense:#141D1E;
+  --dense-line:rgba(230,236,235,.18);
+  --dense-hint:rgba(230,236,235,.58);
+  --dense-ink:#E6ECEB;
+  /* Точный брендовый accent из static/logos/README.md, а не приблизительный. */
+  --teal:#47B6B9;
+  --teal-ink:#0A6669;
+  --warn:#8A6D1F;
+  --sans:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'DM Mono',ui-monospace,SFMono-Regular,monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --pad:clamp(20px,4vw,56px);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;overflow-x:clip;scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);overflow-x:clip;
+  font-family:var(--sans);-webkit-font-smoothing:antialiased;
+  font-size:16px;line-height:1.5;
+}
+h1,h2,h3{font-weight:500;letter-spacing:-.03em;margin:0}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--teal-ink);outline-offset:2px}
+
+/* ─── Общие атомы ──────────────────────────────────────── */
+.wrap{padding-left:var(--pad);padding-right:var(--pad)}
+.eyebrow{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--hint);margin:0 0 14px;font-family:var(--sans);
+}
+.num{font-family:var(--mono);letter-spacing:-.02em}
+.lede{font-size:clamp(15px,1.25vw,17.5px);line-height:1.6;color:var(--hint);margin:0;max-width:52ch}
+.lede b{color:var(--ink);font-weight:500}
+
+.btn{
+  font:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  padding:16px 26px;border:1px solid var(--ink);background:transparent;color:var(--ink);
+  transition:background .18s var(--ease),color .18s var(--ease),border-color .18s var(--ease);
+}
+.btn .ar{font-family:var(--mono)}
+.btn--fill{background:var(--ink);color:var(--paper);font-weight:500}
+.btn--fill:hover{background:#000}
+.btn--ghost:hover{background:rgba(14,20,21,.06)}
+.btn--sm{padding:10px 17px;font-size:14px}
+.btn--light{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.btn--light:hover{background:#fff;border-color:#fff}
+.btn--onDark{color:var(--dense-ink);border-color:rgba(230,236,235,.4)}
+.btn--onDark:hover{background:rgba(230,236,235,.1)}
+
+.tlink{
+  color:var(--hint);text-decoration:none;font-size:14px;
+  border-bottom:1px solid var(--line);padding-bottom:2px;
+}
+.tlink:hover,.tlink:focus-visible{color:var(--ink);border-bottom-color:var(--ink)}
+
+/* ─── ПОЛОСА ДНЯ — подпись страницы ─────────────────────────
+   Строка = субъект (арена, тренер, студия). Трек = сутки.
+   Засечка = сеанс. Плотность возникает сама и читается как
+   «здесь много льда», а пустота — как «здесь есть куда встать».
+   Проценты, а не пиксели: полоса живёт на любой ширине без скролла. */
+.rail{--t0:360;--t1:1410}          /* 06:00 → 23:30 в минутах */
+.rail__hours{
+  position:relative;height:15px;margin-bottom:7px;
+  font-family:var(--mono);font-size:10.5px;color:var(--hint);
+}
+.rail__hour{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.rail__row{
+  display:grid;grid-template-columns:minmax(120px,var(--label,1.1fr)) minmax(0,4fr);
+  gap:clamp(12px,1.6vw,22px);align-items:center;
+  padding:9px 0;border-top:1px solid var(--line);
+}
+.rail__row:last-child{border-bottom:1px solid var(--line)}
+.rail__name{font-size:13.5px;line-height:1.3;min-width:0}
+.rail__name b{font-weight:500;display:block}
+.rail__meta{font-family:var(--mono);font-size:11px;color:var(--hint);display:block;margin-top:2px}
+.rail__track{position:relative;height:30px}
+/* Часовая сетка — волосяная и почти неощутимая. В первой редакции она была
+   вровень с засечками, и полоса читалась как таблица с ячейками, а не как
+   сутки: линии конкурировали с данными. Теперь сетка — короткие риски у
+   основания, а вес отдан засечкам. */
+.rail__grid{position:absolute;inset:0;pointer-events:none}
+.rail__gridline{position:absolute;bottom:0;height:7px;width:1px;background:var(--line)}
+.rail__base{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.tick{
+  position:absolute;bottom:0;width:4px;height:21px;background:var(--dense);
+  border-radius:1px;
+}
+/* Слот тренера — единственный teal на полосе. */
+.tick--mine{background:var(--teal);height:28px;width:5px}
+.rail__empty{
+  position:absolute;left:0;top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:11px;color:var(--hint);
+}
+.rail--dark .rail__row{border-color:var(--dense-line)}
+.rail--dark .rail__gridline,.rail--dark .rail__base{background:var(--dense-line)}
+.rail--dark .tick{background:var(--dense-ink);opacity:.72}
+.rail--dark .rail__meta,.rail--dark .rail__hours{color:var(--dense-hint)}
+
+@media (max-width:700px){
+  .rail__row{grid-template-columns:1fr;gap:6px;padding:11px 0}
+  .rail__track{height:26px}
+}
+
+/* ═══ Шапка ═════════════════════════════════════════════ */
+.mast{
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:16px var(--pad);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:800;
+  background:rgba(237,240,239,.92);backdrop-filter:saturate(1.4) blur(8px);
+}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+.brand img{width:22px;height:22px;display:block}
+.brand span{font-weight:700;font-size:18px;letter-spacing:-.02em}
+.mast nav{display:flex;align-items:center;gap:24px}
+.mast nav a:not(.btn){font-size:14px;color:var(--hint);text-decoration:none;padding-bottom:2px;border-bottom:1px solid transparent}
+.mast nav a:not(.btn):hover{color:var(--ink);border-bottom-color:var(--ink)}
+@media (max-width:820px){
+  .mast nav a:not(.btn){display:none}
+}
+
+/* ═══ Герой ═════════════════════════════════════════════ */
+.hero{padding:clamp(30px,4vw,54px) var(--pad) clamp(40px,5vw,72px)}
+.hero__top{
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:13px;color:var(--hint);margin-bottom:clamp(18px,2vw,26px);
+}
+.city-wrap{position:relative;display:inline-block}
+.city{
+  font-family:var(--mono);font-size:13px;color:var(--ink);
+  background:none;border:0;border-bottom:1px solid var(--ink);
+  padding:0 0 2px;cursor:pointer;
+}
+.city-menu{
+  position:absolute;top:calc(100% + 8px);left:0;z-index:900;
+  margin:0;padding:6px 0;list-style:none;min-width:260px;
+  background:var(--surface);border:1px solid var(--line);
+  box-shadow:0 18px 40px -26px rgba(14,20,21,.6);
+}
+.city-menu[hidden]{display:none}
+.city-menu button{
+  width:100%;text-align:left;background:none;border:0;cursor:pointer;
+  font:inherit;font-size:14px;color:var(--ink);padding:9px 14px;
+  display:flex;justify-content:space-between;gap:16px;align-items:baseline;
+}
+.city-menu button:hover{background:var(--paper)}
+.city-menu em{font-style:normal;font-family:var(--mono);font-size:11.5px;color:var(--hint)}
+.city-menu [aria-selected="true"]{font-weight:700}
+
+/* Пропорция 1.45/.55, а не 1.25/.75: при более узкой колонке вторая строка
+   заголовка ломалась на «…своё / имя.», и герой уезжал в четыре строки. */
+.hero__head{
+  display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,.55fr);
+  align-items:end;gap:clamp(24px,4vw,64px);margin-bottom:clamp(26px,3vw,40px);
+}
+h1{font-size:clamp(32px,4.6vw,56px);line-height:1.03;max-width:21ch}
+/* Обе половины заголовка — основным цветом. В прошлой версии первая
+   фраза красилась серым, и удар делился надвое ровно на том месте,
+   где он должен быть цельным. */
+.hero__stats{font-family:var(--mono);font-size:13px;color:var(--hint);line-height:1.75;margin:0 0 6px}
+.hero__stats b{color:var(--ink);font-weight:500}
+
+.hero__railcap{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+  flex-wrap:wrap;margin-bottom:10px;
+}
+.hero__railcap p{margin:0;font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--hint)}
+.live{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;color:var(--hint)}
+.live__dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.28}}
+
+.hero__cta{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-top:clamp(26px,3vw,38px)}
+.hero__note{font-family:var(--mono);font-size:12px;color:var(--hint);margin:0}
+.hero__alt{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px}
+
+@media (max-width:860px){
+  .hero__head{grid-template-columns:1fr;align-items:start;gap:16px}
+  h1{max-width:none}
+}
+
+/* ═══ Акт I — Сеть (тёмный: машинное отделение) ═════════ */
+.net{background:var(--dense);color:var(--dense-ink);padding:clamp(56px,7vw,110px) var(--pad)}
+.net .eyebrow{color:var(--dense-hint)}
+.net h2{font-size:clamp(26px,3.4vw,44px);line-height:1.07;max-width:20ch;margin:0 0 clamp(26px,3vw,40px)}
+.net__grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(30px,4.5vw,76px);align-items:start}
+.net__nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--dense-line);margin-bottom:26px}
+.net__nums div{padding:15px 18px 17px 0}
+.net__nums b{display:block;font-family:var(--mono);font-size:clamp(24px,2.7vw,34px);letter-spacing:-.025em;margin-bottom:5px}
+.net__nums span{font-size:12.5px;color:var(--dense-hint);line-height:1.45}
+
+/* Журнал обхода — голые линии, без карточки. Показывает и сбои:
+   пятьдесят зелёных строк выглядят нарисованными. */
+.log__cap{
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--dense-hint);
+  padding-bottom:9px;border-bottom:1px solid var(--dense-ink);
+}
+.log__row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;align-items:baseline;
+  padding:10px 0;border-bottom:1px solid var(--dense-line);font-size:13px;
+}
+.log__city{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--dense-hint);margin-left:9px}
+.log__n{font-family:var(--mono);font-size:12px;color:var(--dense-hint);white-space:nowrap}
+.log__t{font-family:var(--mono);font-size:11.5px;color:var(--dense-hint);white-space:nowrap}
+.log__row--bad .log__n{color:#D8A33A}
+.log__foot{margin:14px 0 0;font-size:12px;color:var(--dense-hint);line-height:1.6}
+
+.map svg{width:100%;height:auto;display:block}
+.map__node{fill:var(--teal)}
+.map__label{font-family:var(--sans);font-size:11.5px;fill:var(--dense-ink)}
+.markets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--dense-ink);margin:22px 0 0}
+.markets > div{padding:13px 16px 0 0}
+.markets dt{font-size:13.5px;margin-bottom:4px}
+.markets dd{margin:0;font-family:var(--mono);font-size:12.5px;color:var(--dense-hint)}
+.markets dd b{color:var(--dense-ink);font-weight:500}
+
+@media (max-width:900px){
+  .net__grid{grid-template-columns:1fr;gap:38px}
+  .net h2{max-width:none}
+  .markets{grid-template-columns:1fr}
+  .markets > div{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--dense-line)}
+}
+
+/* ═══ Акт II — Вас находят ══════════════════════════════ */
+.sect{padding:clamp(56px,7vw,110px) var(--pad);border-top:1px solid var(--line)}
+.sect__head{margin-bottom:clamp(30px,3.6vw,48px);max-width:min(100%,1180px)}
+.sect h2{font-size:clamp(27px,3.6vw,46px);line-height:1.06;max-width:19ch;margin-bottom:18px}
+
+.found{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(30px,4.5vw,72px);align-items:start}
+/* Карточка арены — не выдуманный экран: повторяет arena-card.js,
+   включая секцию «Тренеры на этой арене». */
+.acard{border:1px solid var(--ink);background:var(--surface)}
+.acard__pic{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;filter:saturate(.94) contrast(1.03)}
+.acard__body{padding:16px 17px 17px}
+.acard__name{font-size:17px;font-weight:500;margin:0 0 3px;letter-spacing:-.02em}
+.acard__addr{font-family:var(--mono);font-size:11.5px;color:var(--hint);margin:0 0 14px}
+.acard__sub{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--hint);margin:0 0 4px;padding-top:13px;border-top:1px solid var(--line)}
+.acard__coach{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:11px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.acard__coach i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint)}
+.acard__coach s{text-decoration:none;font-family:var(--mono);font-size:11.5px;color:var(--hint)}
+.acard__you{display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px;align-items:baseline;padding:11px 0 2px;font-size:13.5px;color:var(--teal-ink)}
+.acard__you i{font-style:normal;font-family:var(--mono);font-size:11px}
+
+.freebox{border-top:1px solid var(--ink);padding-top:16px;margin:clamp(24px,3vw,34px) 0}
+.freebox p{margin:0}
+.freebox__k{font-size:clamp(19px,2vw,24px);font-weight:500;letter-spacing:-.025em;margin-bottom:8px!important}
+.freebox__k em{font-style:normal;color:var(--teal-ink)}
+.steps{margin:0;padding:0;list-style:none;border-top:1px solid var(--ink)}
+.steps li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:13px;padding:14px 0;border-bottom:1px solid var(--line)}
+.steps i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint);padding-top:2px}
+.steps b{display:block;font-weight:500;font-size:14.5px;margin-bottom:3px}
+.steps span{font-size:13px;color:var(--hint);line-height:1.5;display:block}
+.honest{
+  margin:clamp(22px,2.6vw,30px) 0 0;padding:13px 15px;
+  border-left:2px solid var(--line);
+  font-size:12.5px;line-height:1.6;color:var(--hint);
+}
+.honest b{color:var(--ink);font-weight:500}
+
+@media (max-width:900px){ .found{grid-template-columns:1fr;gap:34px} .sect h2{max-width:none} }
+
+/* ═══ Акт III — Студия ══════════════════════════════════ */
+.studio{background:var(--surface)}
+.studio__head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(24px,4vw,72px);align-items:end;margin-bottom:clamp(28px,3.4vw,44px)}
+.studio__brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.studio__name{font-size:clamp(21px,2.3vw,28px);font-weight:700;letter-spacing:-.025em}
+.chip{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--hint);border:1px solid var(--line);padding:3px 7px}
+.studio__price{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--ink);margin-top:clamp(26px,3vw,36px)}
+.studio__price div{padding:14px 16px 0 0}
+.studio__price b{display:block;font-family:var(--mono);font-size:clamp(19px,2vw,25px);letter-spacing:-.02em;margin-bottom:4px}
+.studio__price span{font-size:12.5px;color:var(--hint);line-height:1.45}
+@media (max-width:860px){
+  .studio__head{grid-template-columns:1fr;align-items:start;gap:20px}
+  .studio__price{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* ═══ Акт IV — Один слот ════════════════════════════════ */
+.slot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(30px,4.5vw,72px);align-items:start}
+/* Телеграм-хром настоящий: без него мокап читается как рисунок,
+   а не как продукт. Текст — дословная цитата messages.py:2917. */
+.tg{border:1px solid var(--line);background:var(--surface);max-width:430px}
+.tg__bar{display:flex;align-items:center;gap:10px;padding:10px 13px;border-bottom:1px solid var(--line);background:var(--paper)}
+.tg__av{width:26px;height:26px;border-radius:50%;background:var(--dense);display:grid;place-items:center}
+.tg__av img{width:16px;height:16px;display:block}
+.tg__who{font-size:13px;font-weight:500;line-height:1.25}
+.tg__who span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--hint);font-weight:400}
+.tg__msg{padding:14px 15px 13px;font-size:13.5px;line-height:1.62}
+.tg__msg p{margin:0 0 9px}
+.tg__msg p:last-of-type{margin-bottom:0}
+.tg__msg b{font-weight:500}
+.tg__msg em{font-style:italic;color:var(--hint);font-size:12.5px}
+.tg__btns{display:grid;gap:5px;padding:0 9px 11px}
+.tg__row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.tgbtn{
+  font:inherit;font-size:12.5px;cursor:pointer;padding:10px 8px;text-align:center;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink);
+}
+.tgbtn:hover{border-color:var(--ink)}
+.tg__time{font-family:var(--mono);font-size:10.5px;color:var(--hint);text-align:right;padding:0 14px 10px}
+
+.after{border-top:1px solid var(--ink);margin-top:clamp(24px,3vw,34px)}
+.after__row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;padding:12px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.after__t{font-family:var(--mono);font-size:12px;color:var(--hint)}
+.after__d{font-size:13.5px}
+.after__d span{display:block;font-size:12.5px;color:var(--hint);margin-top:2px}
+@media (max-width:900px){ .slot{grid-template-columns:1fr;gap:34px} }
+
+/* ═══ Акт V — Цена ══════════════════════════════════════ */
+.price{background:var(--surface)}
+/* Якорь: занятие дороже месяца. Это сильнейший экономический довод
+   страницы, и он набран крупно, а не серой сноской в футере секции. */
+.anchor{
+  display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  gap:clamp(16px,3vw,44px);align-items:center;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+  padding:clamp(24px,3vw,36px) 0;margin-bottom:clamp(32px,4vw,52px);
+}
+.anchor__side b{display:block;font-family:var(--mono);font-size:clamp(28px,4vw,52px);letter-spacing:-.03em;line-height:1}
+.anchor__side span{display:block;font-size:13px;color:var(--hint);margin-top:7px;line-height:1.45}
+.anchor__vs{font-family:var(--mono);font-size:13px;color:var(--hint)}
+.anchor__side--win b{color:var(--teal-ink)}
+@media (max-width:760px){
+  .anchor{grid-template-columns:1fr;gap:18px;text-align:left}
+  .anchor__vs{display:none}
+}
+
+.plan{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--ink)}
+.plan > div{padding:16px 18px 18px 0;border-right:1px solid var(--line)}
+.plan > div:last-child{border-right:0}
+.plan__base{background:rgba(71,182,185,.06)}
+.plan b{display:block;font-size:14px;font-weight:500;margin-bottom:9px}
+.plan .p{font-family:var(--mono);font-size:clamp(20px,2.2vw,27px);letter-spacing:-.02em;margin:0 0 9px}
+.plan .p i{font-style:normal;font-size:12px;color:var(--hint)}
+.plan ul{margin:0;padding:0;list-style:none}
+.plan li{font-size:12.5px;color:var(--hint);line-height:1.5;padding:3px 0}
+.pricenote{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);margin-top:clamp(26px,3vw,38px)}
+.pricenote div{padding:14px 18px 0 0}
+.pricenote b{display:block;font-size:13.5px;font-weight:500;margin-bottom:4px}
+.pricenote span{font-size:12.5px;color:var(--hint);line-height:1.5}
+@media (max-width:860px){
+  .plan{grid-template-columns:1fr}
+  .plan > div{border-right:0;border-bottom:1px solid var(--line);padding:16px 0}
+  .pricenote{grid-template-columns:1fr}
+  .pricenote div{padding:13px 0;border-bottom:1px solid var(--line)}
+}
+
+/* ═══ Акт VI — Двери ════════════════════════════════════ */
+.doors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(22px,3.4vw,54px)}
+.door{border-top:1px solid var(--ink);padding-top:18px}
+.door h3{font-size:clamp(20px,2.1vw,26px);line-height:1.12;margin-bottom:12px;max-width:18ch}
+.door__state{margin:18px 0 20px;border-top:1px solid var(--line)}
+.door__state div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:11px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;align-items:baseline}
+.door__state i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint)}
+.door__state .soon{color:var(--hint)}
+@media (max-width:860px){ .doors{grid-template-columns:1fr;gap:40px} }
+
+/* ═══ Закрытие ══════════════════════════════════════════ */
+.close{background:var(--dense);color:var(--dense-ink);padding:clamp(56px,7vw,104px) var(--pad)}
+.close h2{font-size:clamp(29px,3.8vw,48px);line-height:1.05;max-width:17ch;margin-bottom:clamp(28px,3.4vw,42px)}
+.close__cta{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.close__note{font-family:var(--mono);font-size:12px;color:var(--dense-hint);margin:0}
+.close__legal{
+  margin:clamp(34px,4vw,50px) 0 0;padding-top:18px;border-top:1px solid var(--dense-line);
+  font-size:12px;line-height:1.75;color:rgba(230,236,235,.55);
+}
+.close__legal a{color:rgba(230,236,235,.82)}
+
+/* ═══ Модалка ═══════════════════════════════════════════ */
+.sheet-wrap{position:fixed;inset:0;z-index:1000;background:rgba(14,20,21,.55);display:flex;align-items:center;justify-content:center;padding:22px}
+.sheet-wrap[hidden]{display:none}
+.sheet{position:relative;background:var(--surface);color:var(--ink);width:100%;max-width:430px;border:1px solid var(--line);padding:clamp(22px,3vw,30px);box-shadow:0 40px 90px -50px rgba(14,20,21,.8)}
+.sheet:focus{outline:none}
+.sheet__x{position:absolute;top:8px;right:11px;background:none;border:0;cursor:pointer;font-size:23px;line-height:1;color:var(--hint);padding:6px}
+.sheet__x:hover{color:var(--ink)}
+.sheet h3{font-size:21px;margin:0 0 4px}
+.sheet__rows{margin:16px 0 20px;padding:0;list-style:none}
+.sheet__rows li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:11px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.sheet__rows i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint)}
+.sheet .btn{width:100%}
+.sheet__note{margin:15px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--hint);line-height:1.6}
+@media (max-width:640px){ .sheet-wrap{align-items:flex-end;padding:0} .sheet{max-width:none;border-left:0;border-right:0;border-bottom:0} }
+
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} html{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <a class="brand" href="#top"><img src="pics/glide-icon.png" alt=""><span>Glide</span></a>
+  <nav>
+    <a href="#found">Тренерам</a>
+    <a href="#doors">Школам</a>
+    <a href="#doors">Кататься</a>
+    <a href="#" data-sheet="tg">Войти</a>
+    <a class="btn btn--fill btn--sm" href="#" data-sheet="tg">Начать бесплатно</a>
+  </nav>
+</header>
+
+<!-- ═══ ГЕРОЙ — масштаб «город» ═══════════════════════════════════════════ -->
+<main class="hero" id="top">
+  <div class="hero__top">
+    <span class="city-wrap">
+      <button class="city" type="button" id="cityBtn" aria-haspopup="listbox" aria-expanded="false">Минск ▾</button>
+      <ul class="city-menu" id="cityMenu" role="listbox" aria-label="Город" hidden></ul>
+    </span>
+    <span>вторник, 23 сентября</span>
+  </div>
+
+  <div class="hero__head">
+    <h1>Лёд города уже расписан.<br>Поставьте на него своё имя.</h1>
+    <!-- Две короткие строки вместо одной длинной: в узкой колонке фраза
+         «15 городов» разрывалась между числом и словом. -->
+    <p class="hero__stats">
+      <b class="num" id="sArenas">30</b> арен · <b class="num" id="sCities">15</b> городов<br>
+      <b class="num" id="sSessions">450</b> сеансов на неделю вперёд<br>
+      расписание собирается само
+    </p>
+  </div>
+
+  <div class="hero__railcap">
+    <p id="railCap">Минск · вторник, 23 сентября</p>
+    <span class="live"><span class="live__dot"></span><span id="liveTxt">обновлено сегодня в 00:32</span></span>
+  </div>
+  <div class="rail" id="heroRail"></div>
+
+  <div class="hero__cta">
+    <a class="btn btn--fill" href="#" data-sheet="tg">Начать бесплатно <span class="ar">→</span></a>
+    <p class="hero__note">14 дней полного доступа · карта не нужна · вход через Telegram</p>
+  </div>
+  <!-- Одна дверь, а не три равные кнопки: платит тренер. Остальные роли —
+       тихими ссылками, они никуда не делись, но не делят первый экран. -->
+  <div class="hero__alt">
+    <a class="tlink" href="#doors">Мы школа →</a>
+    <a class="tlink" href="#doors">Я просто хочу кататься →</a>
+  </div>
+</main>
+
+<!-- ═══ АКТ I — СЕТЬ, масштаб «страна» ════════════════════════════════════ -->
+<section class="net" id="net">
+  <p class="eyebrow">Акт I · Сеть</p>
+  <h2>Эти расписания никто не вводит руками.</h2>
+
+  <div class="net__grid">
+    <div>
+      <div class="net__nums">
+        <div><b class="num">30</b><span>арен с живым расписанием — их можно открыть и проверить</span></div>
+        <div><b class="num">457</b><span>сеансов вперёд в базе прямо сейчас</span></div>
+        <div><b class="num">15</b><span>городов с живым льдом</span></div>
+        <div><b class="num">330</b><span>обходов арен · 245 вернулись с расписанием</span></div>
+      </div>
+
+      <div class="log__cap"><span>Журнал обхода</span><span>сеансов · время</span></div>
+      <div id="log"></div>
+      <p class="log__foot">
+        Строки со сбоями остаются в журнале намеренно: сайт арены не ответил или
+        выложил пустую сетку — мы показываем это, а не прячем. Из 330 обходов
+        59 вернулись пустыми и 26 — ошибкой.
+      </p>
+    </div>
+
+    <div class="map">
+      <p class="eyebrow">Домашний рынок — Беларусь</p>
+      <svg id="map" viewBox="0 0 620 400" role="img" aria-label="Карта покрытия Беларуси"></svg>
+      <dl class="markets">
+        <div><dt>Беларусь · домашний</dt><dd><b class="num">17</b> арен · 13 городов</dd></div>
+        <div><dt>Санкт-Петербург · экспансия</dt><dd><b class="num">12</b> арен</dd></div>
+        <div><dt>Москва · следующий</dt><dd><b class="num">1</b> арена · осень 2026</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ АКТ II — ВАС НАХОДЯТ, масштаб «арена» ═════════════════════════════
+     Недостающий аргумент прошлой версии. Здесь страница впервые объясняет,
+     зачем тренеру сеть, — и почему вход в неё ничего не стоит.            -->
+<section class="sect" id="found">
+  <div class="sect__head">
+    <p class="eyebrow">Акт II · Вас находят</p>
+    <h2>Родитель приходит за льдом. Уходит — с тренером.</h2>
+    <p class="lede">Человек ищет, где покататься в субботу, и открывает карточку арены.
+      Под расписанием сеансов — <b>тренеры, которые работают на этом льду</b>. Не отдельный
+      каталог, куда надо специально пойти, а та же страница, на которую он и так пришёл.</p>
+  </div>
+
+  <div class="found">
+    <div class="acard">
+      <img class="acard__pic" src="pics/arena-3.jpg" alt="ТЦ Замок, Минск">
+      <div class="acard__body">
+        <p class="acard__name">ТЦ Замок</p>
+        <p class="acard__addr">Минск · 13 сеансов сегодня · 10:15–22:15</p>
+        <p class="acard__sub">Тренеры на этой арене</p>
+        <div class="acard__coach"><i>01</i><span>Александр Г.</span><s>обучение с нуля</s></div>
+        <div class="acard__coach"><i>02</i><span>Татьяна Я.</span><s>фигурное катание</s></div>
+        <div class="acard__coach"><i>03</i><span>Владислав С.</span><s>хоккей</s></div>
+        <div class="acard__you"><i>→</i><span>Здесь могло быть ваше имя</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="freebox">
+        <p class="freebox__k">Попасть в каталог — <em>бесплатно.</em> Навсегда.</p>
+        <p class="lede">Публикация карточки не входит ни в один платный модуль и намеренно
+          исключена из тарифных пунктов. Платить нужно только за то, чем вы начнёте
+          пользоваться, когда ученики пойдут.</p>
+      </div>
+
+      <ol class="steps">
+        <li><i>01</i><div><b>Заводите профиль в боте</b><span>Имя, вид спорта, город, арены, где вы работаете</span></div></li>
+        <li><i>02</i><div><b>Включаете видимость в каталоге</b><span>Один тумблер — и карточка появляется на страницах ваших арен</span></div></li>
+        <li><i>03</i><div><b>Вас находят на том льду, куда и так идут</b><span>Родитель видит вас там, где смотрел расписание катания</span></div></li>
+      </ol>
+
+      <p class="honest">
+        <b>Честно о состоянии:</b> видимость в каталоге — это ваш личный тумблер, и по
+        умолчанию он выключен. Тренеров на платформе пока единицы — поэтому на большинстве
+        арен страны вы будете первым и единственным. Это одновременно и главный минус
+        сегодня, и главная причина зайти сейчас.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ АКТ III — СТУДИЯ, масштаб «команда» ═══════════════════════════════ -->
+<section class="sect studio" id="studio">
+  <div class="studio__head">
+    <div>
+      <p class="eyebrow">Акт III · Партнёр</p>
+      <div class="studio__brand">
+        <span class="studio__name">JustSkate</span>
+        <span class="chip">Минск</span>
+        <span class="chip">партнёр</span>
+      </div>
+      <h2 style="font-size:clamp(23px,2.7vw,34px);max-width:22ch">Шесть тренеров, один лёд, один бренд.</h2>
+    </div>
+    <p class="lede">Студия катания на коньках в Минске: обучение с нуля, фигурное катание,
+      хоккей, ОФП. Мы строим Glide вместе с её фаундером — поэтому это не отзыв клиента,
+      а <b>партнёр, на котором продукт проверяется раньше всех остальных</b>.
+      <a class="tlink" href="https://www.justskate.by/" target="_blank" rel="noopener">justskate.by</a></p>
+  </div>
+
+  <div class="rail" id="studioRail"></div>
+
+  <div class="studio__price">
+    <div><b class="num">42 BYN</b><span>обучение с нуля, за занятие</span></div>
+    <div><b class="num">50–55 BYN</b><span>индивидуальное: дети до 14 / взрослые</span></div>
+    <div><b class="num">60 BYN</b><span>парное занятие</span></div>
+    <div><b class="num">20 BYN</b><span>ОФП</span></div>
+  </div>
+  <p class="honest" style="max-width:62ch">
+    <b>Цены — публичные, со страницы студии.</b> Они пригодятся через два экрана:
+    именно с ними имеет смысл сравнивать стоимость Glide.
+  </p>
+</section>
+
+<!-- ═══ АКТ IV — ОДИН СЛОТ, масштаб «час» ═════════════════════════════════ -->
+<section class="sect" id="slot">
+  <div class="sect__head">
+    <p class="eyebrow">Акт IV · Один слот</p>
+    <h2>Ученик занял окно. Дальше вы нажимаете одну кнопку.</h2>
+    <p class="lede">Это весь объём вашего участия в цикле записи. Ниже — настоящее
+      сообщение бота, не рисунок: текст и кнопки взяты из продукта дословно.</p>
+  </div>
+
+  <div class="slot">
+    <div>
+      <div class="tg">
+        <div class="tg__bar">
+          <span class="tg__av"><img src="pics/glide-icon.png" alt=""></span>
+          <span class="tg__who">Glide · тренер<span>бот</span></span>
+        </div>
+        <div class="tg__msg">
+          <p>🔔 <b>Новая запись</b> — нужно ваше решение</p>
+          <p>👤 <b>ФИО:</b> Анна Ковалёва<br>
+             📞 +375 29 123-45-67<br>
+             📅 <b>25.09 (чт) 18:00</b> — 60 мин.<br>
+             🎯 Фигурное катание<br>
+             💳 <b>Тариф:</b> взрослый<br>
+             📍 Минск · 🏟 ТЦ Замок</p>
+          <p><b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.</p>
+          <p><em>Слот занят; клиент получит напоминания автоматически.</em></p>
+        </div>
+        <div class="tg__btns">
+          <div class="tg__row">
+            <button class="tgbtn" type="button" data-sheet="confirm">✅ Подтвердить</button>
+            <button class="tgbtn" type="button" data-sheet="confirm">❌ Отклонить</button>
+          </div>
+          <button class="tgbtn" type="button" data-sheet="confirm">✉️ Написать клиенту</button>
+        </div>
+        <p class="tg__time">00:41</p>
+      </div>
+    </div>
+
+    <div>
+      <p class="eyebrow">Что происходит дальше без вас</p>
+      <div class="after">
+        <div class="after__row"><span class="after__t">сразу</span>
+          <span class="after__d">Клиент получает «Ваша запись подтверждена»<span>С адресом арены, кнопкой карты и связью с вами</span></span></div>
+        <div class="after__row"><span class="after__t">за 24 ч</span>
+          <span class="after__d">Напоминание клиенту<span>«Напоминание: занятие завтра»</span></span></div>
+        <div class="after__row"><span class="after__t">за 2 ч</span>
+          <span class="after__d">Второе напоминание<span>«Скоро: занятие через ~2 ч»</span></span></div>
+        <div class="after__row"><span class="after__t">если молчите</span>
+          <span class="after__d">Бот напомнит вам подтвердить<span>За два часа до слота, один раз</span></span></div>
+        <div class="after__row"><span class="after__t">при отмене</span>
+          <span class="after__d">Окно возвращается в каталог<span>И вы можете предложить его своим одной кнопкой</span></span></div>
+      </div>
+      <p class="honest">
+        Пуши уходят только с 08:00 до 22:00. Несколько занятий клиента в один день
+        сливаются в одно напоминание, а не приходят пачкой.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ АКТ V — ЦЕНА, после ценности ══════════════════════════════════════ -->
+<section class="sect price" id="price">
+  <div class="sect__head">
+    <p class="eyebrow">Акт V · Цена</p>
+    <h2>Одно занятие окупает месяц.</h2>
+  </div>
+
+  <div class="anchor">
+    <div class="anchor__side">
+      <b class="num">42–55 BYN</b>
+      <span>стоит одно занятие по публичному прайсу JustSkate</span>
+    </div>
+    <div class="anchor__vs">против</div>
+    <div class="anchor__side anchor__side--win">
+      <b class="num">35 BYN</b>
+      <span>месяц Glide с онлайн-записью — CRM плюс модуль записи</span>
+    </div>
+  </div>
+
+  <div class="plan">
+    <div class="plan__base">
+      <b>CRM — база</b>
+      <p class="p num">20 <i>BYN / мес</i></p>
+      <ul><li>Расписание и шаблоны</li><li>Ручная запись клиентов</li><li>Клиентская база</li><li>Абонементы и сертификаты</li></ul>
+    </div>
+    <div>
+      <b>+ Онлайн-запись</b>
+      <p class="p num">+15 <i>BYN</i></p>
+      <ul><li>Ученики записываются сами</li><li>Публичная ссылка на запись</li><li>Уведомления о записях</li></ul>
+    </div>
+    <div>
+      <b>+ Аналитика</b>
+      <p class="p num">+5 <i>BYN</i></p>
+      <ul><li>Выручка по месяцам</li><li>Топ-клиенты и удержание</li><li>Выгрузка данных</li></ul>
+    </div>
+    <div>
+      <b>+ Группы</b>
+      <p class="p num">+5 <i>BYN</i></p>
+      <ul><li>Групповые тренировки</li><li>Посещаемость</li><li>Списание с абонементов</li></ul>
+    </div>
+  </div>
+
+  <div class="pricenote">
+    <div><b>Каталог — вне тарифа</b><span>Карточка и то, что вас находят, не стоят ничего и не входят ни в один модуль.</span></div>
+    <div><b>Дешевле на сроке и в малых городах</b><span>−10% за три месяца, −20% за год. Для городов Беларуси кроме областных центров — −15% к любой позиции.</span></div>
+    <div><b>14 дней полного доступа</b><span>Все модули сразу, карта не нужна. После триала собираете свой набор — или остаётесь только в каталоге.</span></div>
+  </div>
+
+  <div class="hero__cta">
+    <a class="btn btn--fill" href="#" data-sheet="tg">Начать бесплатно <span class="ar">→</span></a>
+    <p class="hero__note">Профиль в каталоге остаётся, даже если подписку не продлить</p>
+  </div>
+</section>
+
+<!-- ═══ АКТ VI — ДВЕРИ ════════════════════════════════════════════════════
+     Школы и катающиеся — не клоны тренерской секции на одном каркасе,
+     а два плотных входа с честной разметкой состояния.                    -->
+<section class="sect" id="doors">
+  <p class="eyebrow">Акт VI · Ещё две двери</p>
+  <div class="doors">
+    <div class="door">
+      <h3>Школам и студиям</h3>
+      <p class="lede">У каждого тренера своя переписка и свой блокнот, а лёд, бренд и
+        родители — общие. Кабинет директора собирает команду в одну картину.</p>
+      <div class="door__state">
+        <div><i>✓</i><span>Профиль школы, ростер, приглашение тренеров ссылкой</span></div>
+        <div><i>✓</i><span>Сводка: записи, новые клиенты, абонементы, выручка — за 7 или 30 дней</span></div>
+        <div class="soon"><i>—</i><span>Абонементы от имени школы, учёт арендованного льда, счёт на юрлицо — осень 2026</span></div>
+      </div>
+      <a class="btn btn--ghost btn--sm" href="#" data-sheet="school">Поговорить о пилоте <span class="ar">→</span></a>
+    </div>
+
+    <div class="door">
+      <h3>Тем, кто просто катается</h3>
+      <p class="lede">Расписание массовых катаний всех арен города в одном месте — без
+        обзвона и без сайтов катков. Рядом — тренеры, которые работают на этом льду.</p>
+      <div class="door__state">
+        <div><i>✓</i><span>Лёд города на сегодня и на неделю — открывается и без Telegram</span></div>
+        <div><i>✓</i><span>Несколько профилей в одном аккаунте: для себя и для детей</span></div>
+        <div><i>✓</i><span>Напоминания за сутки и за два часа, абонементы с остатком занятий</span></div>
+      </div>
+      <a class="btn btn--ghost btn--sm" href="#" data-sheet="client">Посмотреть лёд Минска <span class="ar">→</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="close">
+  <h2>Лёд уже расписан. Осталось встать в него.</h2>
+  <div class="close__cta">
+    <a class="btn btn--light" href="#" data-sheet="tg">Начать в Telegram <span class="ar">→</span></a>
+    <p class="close__note">14 дней полного доступа · карта не нужна</p>
+  </div>
+  <p class="close__legal">
+    Glide — сервис онлайн-записи к тренерам. <a href="#">Публичная оферта</a> ·
+    <a href="#">Политика обработки персональных данных</a> · <a href="#">Условия возврата</a><br>
+    Реквизиты юридического лица · УНП · адрес · support@glide.by<br>
+    <span style="color:rgba(230,236,235,.42)">Прототип. Расписание арен, журнал обхода, счётчики
+    и цены — настоящие, по состоянию на 23 сентября 2026. Имена учеников в примере записи
+    вымышлены.</span>
+  </p>
+</section>
+
+<div class="sheet-wrap" id="sheetWrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1" id="sheet">
+    <button class="sheet__x" type="button" id="sheetX" aria-label="Закрыть">×</button>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════════
+   ДАННЫЕ
+
+   Ни одно число на странице не набрано в вёрстке руками — всё приходит отсюда.
+   Прошлая редакция лендинга обещала это правило и нарушила его: на странице
+   стояли «45 арен / 26 городов» (счёт файлов в data/parsers, а не живых арен)
+   и тарифы «Starter 19 / Pro 49», которых в коде не существует вовсе.
+
+   Значения ниже сняты с продакшен-базы 23.09.2026. В бою страница читает:
+     счётчики        → GET /api/public/platform-stats
+     полоса города   → GET /api/public/ice/arenas + /arenas/{ref}/sessions
+     журнал обхода   → ice_scrape_runs (arena_id, status, slots_found, finished_at)
+     тренеры на арене→ GET /api/public/arenas/{ref}/trainers
+     тарифы          → subscription_tiers
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const STATS = { arenas: 30, cities: 15, sessions7d: 450, sessionsAhead: 457, runs: 330, runsOk: 245 };
+
+const CITIES = {
+  minsk: {
+    label: 'Минск', date: 'вторник, 23 сентября', updated: 'обновлено сегодня в 00:32',
+    arenas: [
+      { name:'ТЦ Замок',    meta:'13 сеансов · 10:15–22:15', t:['10:15','11:15','12:15','13:15','14:15','15:15','16:15','17:15','18:15','19:15','20:15','21:15','22:15'] },
+      { name:'ТЦ DiaMond city', meta:'5 сеансов · 11:00–15:30', t:['11:00','11:45','12:45','13:30','15:30'] },
+      { name:'Чижовка-арена',   meta:'2 сеанса · малая арена', t:['10:30','12:15'] },
+      { name:'Ледовый дворец спорта Минской области', meta:'1 сеанс', t:['20:15'] },
+    ],
+  },
+  spb: {
+    label: 'Санкт-Петербург', date: 'вторник, 23 сентября', updated: 'обновлено сегодня в 00:32',
+    arenas: [
+      { name:'Ледовый дворец',            meta:'7 сеансов · 12:30–20:00', t:['12:30','13:45','15:00','16:15','17:30','18:45','20:00'] },
+      { name:'Ледовая арена Бугры',       meta:'6 сеансов · 09:00–14:45', t:['09:00','10:00','11:15','12:15','13:30','14:45'] },
+      { name:'Ледовая арена Магнит',      meta:'6 сеансов · 08:15–15:15', t:['08:15','09:45','11:15','12:45','14:00','15:15'] },
+      { name:'ЛД «Гранд Каньон Айс»',     meta:'5 сеансов · 09:45–18:30', t:['09:45','10:45','12:00','13:15','18:30'] },
+      { name:'Ледовая арена Озерки',      meta:'4 сеанса · 11:30–21:00',  t:['11:30','14:00','15:15','21:00'] },
+      { name:'Балтик Арена',              meta:'3 сеанса · 09:15–22:15',  t:['09:15','14:15','22:15'] },
+      { name:'Ледовый комплекс «Шанс Арена»', meta:'2 сеанса · утро',     t:['10:30','11:45'] },
+    ],
+  },
+};
+
+/* Журнал — настоящие обходы. Строки со статусом empty оставлены намеренно. */
+const LOG = [
+  ['Ледовый дворец спорта Минской области','Минск','ok',4,'00:32'],
+  ['ТЦ DiaMond city','Минск','ok',36,'00:32'],
+  ['Чижовка-арена','Минск','ok',9,'00:32'],
+  ['Ледовый дворец «Сокольники»','Москва','ok',4,'00:24'],
+  ['ТЦ Замок','Минск','ok',78,'23:52'],
+  ['Ледовый дворец','Лида','empty',0,'23:52'],
+  ['Ледовый дворец спорта','Гродно','empty',0,'23:52'],
+  ['Минск Арена','Минск','empty',0,'23:52'],
+  ['Ледовая арена УСК «Волна»','Пинск','ok',11,'23:52'],
+  ['Ледовая арена','Кобрин','empty',0,'23:52'],
+  ['Брестский ледовый дворец спорта','Брест','ok',6,'23:52'],
+  ['Дворец спорта «Могилёв»','Могилёв','ok',5,'23:52'],
+  ['Ледовый дворец спорта','Барановичи','ok',13,'23:52'],
+];
+
+/* Ростер JustSkate — состав и регалии с публичной страницы студии.
+   Времена занятий демонстрационные: расписание студии не публично. */
+const STUDIO = [
+  { name:'Александр Гаевский', meta:'обучение с нуля · 6+ лет · БГУФК',          t:['07:30','09:00','17:00','18:00'] },
+  { name:'Татьяна Яцкова',     meta:'фигурное катание · КМС · 4+ года',          t:['10:00','11:00','16:00','19:00'] },
+  { name:'Владислав Сак',      meta:'хоккей · 3+ года · БГУФК',                  t:['08:00','13:00','20:00'] },
+  { name:'Никита Шикалов',     meta:'МС по конькобежному спорту · 3+ года',      t:['07:00','12:00','18:30'] },
+  { name:'Арина Иванова',      meta:'фигурное катание · 4+ года',                t:['09:30','15:00','17:30','21:00'] },
+  { name:'Юлия Белоусова',     meta:'фигурное катание · 4+ года · БГУФК',        t:['11:30','14:00','19:30'] },
+];
+
+/* Русская форма числительного. Без неё в журнале стояло «4 сеансов». */
+const plural = (n, one, few, many) => {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5)   return few;
+  if (b === 1)          return one;
+  return many;
+};
+
+/* ─── Полоса дня ────────────────────────────────────────────────────────── */
+const T0 = 6*60, T1 = 23*60 + 30;
+const toMin = s => { const [h,m] = s.split(':').map(Number); return h*60 + m; };
+const pct   = s => ((toMin(s) - T0) / (T1 - T0)) * 100;
+
+function renderRail(host, rows, opts){
+  opts = opts || {};
+  host.innerHTML = '';
+
+  const hours = document.createElement('div');
+  hours.className = 'rail__hours';
+  for (let h = 6; h <= 23; h += 3){
+    const s = document.createElement('span');
+    s.className = 'rail__hour';
+    s.style.left = pct(h + ':00') + '%';
+    s.textContent = String(h).padStart(2,'0');
+    hours.appendChild(s);
+  }
+  // Первая и последняя метки уезжали за край из-за translateX(-50%).
+  hours.firstChild.style.transform = 'none';
+  hours.lastChild.style.transform = 'translateX(-100%)';
+  host.appendChild(hours);
+
+  rows.forEach(row => {
+    const r = document.createElement('div');
+    r.className = 'rail__row';
+
+    const nm = document.createElement('div');
+    nm.className = 'rail__name';
+    nm.innerHTML = `<b>${row.name}</b><span class="rail__meta">${row.meta}</span>`;
+    r.appendChild(nm);
+
+    const tr = document.createElement('div');
+    tr.className = 'rail__track';
+    const grid = document.createElement('div');
+    grid.className = 'rail__grid';
+    const base = document.createElement('span');
+    base.className = 'rail__base';
+    grid.appendChild(base);
+    for (let h = 6; h <= 23; h += 3){
+      const g = document.createElement('span');
+      g.className = 'rail__gridline';
+      g.style.left = pct(h + ':00') + '%';
+      grid.appendChild(g);
+    }
+    tr.appendChild(grid);
+
+    if (!row.t.length){
+      const e = document.createElement('span');
+      e.className = 'rail__empty';
+      e.textContent = 'расписание подключаем';
+      tr.appendChild(e);
+    }
+    row.t.forEach(time => {
+      const k = document.createElement('span');
+      k.className = 'tick' + (opts.mine ? ' tick--mine' : '');
+      k.style.left = pct(time) + '%';
+      k.title = time;
+      tr.appendChild(k);
+    });
+
+    r.appendChild(tr);
+    host.appendChild(r);
+  });
+}
+
+/* ─── Город ─────────────────────────────────────────────────────────────── */
+const heroRail = document.getElementById('heroRail');
+const railCap  = document.getElementById('railCap');
+const liveTxt  = document.getElementById('liveTxt');
+const cityBtn  = document.getElementById('cityBtn');
+const cityMenu = document.getElementById('cityMenu');
+let currentCity = 'minsk';
+
+function renderCity(key){
+  const c = CITIES[key];
+  currentCity = key;
+  cityBtn.textContent = c.label + ' ▾';
+  railCap.textContent = c.label + ' · ' + c.date;
+  liveTxt.textContent = c.updated;
+  renderRail(heroRail, c.arenas);
+}
+
+Object.entries(CITIES).forEach(([key, c]) => {
+  const li = document.createElement('li');
+  li.dataset.key = key;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('role','option');
+  const n = c.arenas.reduce((a, x) => a + x.t.length, 0);
+  b.innerHTML = `<span>${c.label}</span><em>${c.arenas.length} ${plural(c.arenas.length,'арена','арены','арен')}` +
+                ` · ${n} ${plural(n,'сеанс','сеанса','сеансов')}</em>`;
+  b.addEventListener('click', () => { renderCity(key); closeMenu(); cityBtn.focus(); });
+  li.appendChild(b);
+  cityMenu.appendChild(li);
+});
+function openMenu(){
+  cityMenu.hidden = false;
+  cityBtn.setAttribute('aria-expanded','true');
+  cityMenu.querySelectorAll('li').forEach(li =>
+    li.firstChild.setAttribute('aria-selected', String(li.dataset.key === currentCity)));
+}
+function closeMenu(){ cityMenu.hidden = true; cityBtn.setAttribute('aria-expanded','false'); }
+cityBtn.addEventListener('click', () => cityMenu.hidden ? openMenu() : closeMenu());
+document.addEventListener('click', e => { if(!cityMenu.hidden && !e.target.closest('.city-wrap')) closeMenu(); });
+
+renderCity('minsk');
+renderRail(document.getElementById('studioRail'), STUDIO, { mine:true });
+
+/* Счётчики — из STATS, не из разметки. */
+document.getElementById('sArenas').textContent   = STATS.arenas;
+document.getElementById('sCities').textContent   = STATS.cities;
+document.getElementById('sSessions').textContent = STATS.sessions7d;
+
+/* ─── Журнал ────────────────────────────────────────────────────────────── */
+const logEl = document.getElementById('log');
+LOG.forEach(([name, city, status, n, t]) => {
+  const row = document.createElement('div');
+  row.className = 'log__row' + (status === 'ok' ? '' : ' log__row--bad');
+  row.innerHTML =
+    `<span>${name}<i class="log__city">${city}</i></span>` +
+    `<span class="log__n">${status === 'ok'
+        ? n + ' ' + plural(n,'сеанс','сеанса','сеансов')
+        : 'пустая сетка'}</span>` +
+    `<span class="log__t">${t}</span>`;
+  logEl.appendChild(row);
+});
+
+/* ─── Карта ─────────────────────────────────────────────────────────────────
+   Созвездие с опорными подписями вместо рисованного контура: границу по
+   памяти не рисуем. Показаны только города, где лёд реально живой. */
+const PINS = [
+  ['Минск',53.90,27.57,5],   ['Гродно',53.68,23.83,1], ['Брест',52.10,23.69,1],
+  ['Гомель',52.44,30.99,1],  ['Могилёв',53.90,30.33,1],['Барановичи',53.13,26.01,1],
+  ['Пинск',52.12,26.10,1],   ['Солигорск',52.79,27.54,1],['Новополоцк',55.53,28.66,1],
+  ['Орша',54.51,30.42,1],    ['Шклов',54.21,30.29,1],  ['Горки',54.28,30.98,1],
+  ['Островец',54.61,25.95,1],
+];
+const M = { w:620, h:400, lon0:22.8, lon1:32.9, lat0:51.2, lat1:56.3 };
+const px = lon => (lon - M.lon0)/(M.lon1 - M.lon0) * M.w;
+const py = lat => (M.lat1 - lat)/(M.lat1 - M.lat0) * M.h;
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('map');
+const ANCHORS = ['Минск','Брест','Гомель','Гродно','Новополоцк','Могилёв'];
+PINS.forEach(([name, lat, lon, n]) => {
+  const r = 3.2 + Math.sqrt(n) * 2.2;
+  const c = document.createElementNS(NS,'circle');
+  c.setAttribute('cx', px(lon).toFixed(1));
+  c.setAttribute('cy', py(lat).toFixed(1));
+  c.setAttribute('r', r.toFixed(1));
+  c.setAttribute('class','map__node');
+  svg.appendChild(c);
+  if (ANCHORS.includes(name)){
+    const t = document.createElementNS(NS,'text');
+    t.setAttribute('x', (px(lon) + r + 7).toFixed(1));
+    t.setAttribute('y', (py(lat) + 4).toFixed(1));
+    t.setAttribute('class','map__label');
+    t.textContent = name + (n > 1 ? ` · ${n}` : '');
+    svg.appendChild(t);
+  }
+});
+
+/* ─── Модалка ───────────────────────────────────────────────────────────────
+   Всё кликабельное что-то делает, и ничего не притворяется продакшеном.
+   Фокус заперт внутри: Tab из модалки уводил на страницу под ней. */
+const sheetWrap = document.getElementById('sheetWrap');
+const sheetEl   = document.getElementById('sheet');
+const sheetBody = document.getElementById('sheetBody');
+let lastFocus = null;
+
+function openSheet(title, rows, note){
+  lastFocus = document.activeElement;
+  sheetBody.innerHTML =
+    `<h3 id="sheetTitle">${title}</h3>` +
+    `<ul class="sheet__rows">${rows.map((r,i) =>
+      `<li><i>${String(i+1).padStart(2,'0')}</i><span>${r}</span></li>`).join('')}</ul>` +
+    `<button class="btn btn--ghost" type="button" data-close>Закрыть</button>` +
+    `<p class="sheet__note">${note}</p>`;
+  sheetWrap.hidden = false;
+  sheetEl.focus();
+}
+function closeSheet(){
+  sheetWrap.hidden = true;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+document.getElementById('sheetX').addEventListener('click', closeSheet);
+sheetWrap.addEventListener('click', e => {
+  if (e.target === sheetWrap || e.target.hasAttribute('data-close')) closeSheet();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ if(!sheetWrap.hidden) closeSheet(); closeMenu(); return; }
+  if (e.key !== 'Tab' || sheetWrap.hidden) return;
+  const f = sheetEl.querySelectorAll('button, [href], input, select, textarea');
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+
+const SHEETS = {
+  tg: ['Glide открылся бы в Telegram', [
+    'Бот заводит ваш профиль и расписание за пару минут',
+    'Включаете видимость — карточка встаёт на страницы ваших арен',
+    '14 дней полного доступа, карта не нужна',
+  ], 'Прототип: бот в этой версии не открывается.'],
+  school: ['Разговор о пилоте', [
+    'Созвон на 30 минут: как устроена ваша школа сегодня',
+    'Показываем кабинет директора, ростер и профиль для родителей',
+    'Набираем первые школы в Минске',
+  ], 'Прототип: форма не отправляется. Контакт — support@glide.by'],
+  client: ['Лёд Минска на сегодня', [
+    'Расписание массовых катаний всех арен города',
+    'Открывается обычной ссылкой, Telegram не нужен',
+    'Рядом с ареной — тренеры, которые на ней работают',
+  ], 'Прототип: в бою это страница /ice/minsk/today.'],
+  confirm: ['Так это работает в боте', [
+    'Одно нажатие — слот закрыт, клиенту уходит подтверждение',
+    'Напоминания за 24 часа и за 2 часа уходят сами',
+    'Отклонить можно с коротким комментарием для клиента',
+  ], 'Прототип: кнопки бота здесь не работают.'],
+};
+document.querySelectorAll('[data-sheet]').forEach(el => {
+  el.addEventListener('click', e => {
+    e.preventDefault();
+    const s = SHEETS[el.dataset.sheet];
+    if (s) openSheet(s[0], s[1], s[2]);
+  });
+});
+</script>
+</body>
+</html>

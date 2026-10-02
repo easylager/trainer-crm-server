@@ -30,4 +30,24 @@ describe('ice / arena brand tokens (TASK-076 AC-001)', () => {
     assert.match(css, /\.arena-row--lesson[\s\S]*--app-cta-fill/);
     assert.match(css, /\.arena-cta--solid[\s\S]*--app-cta-fill/);
   });
+
+  it('legend swatches repeat the row stripe colours, not a third palette', () => {
+    // Легенда — подпись к полоске слева. Пока свотч льда стоял на --glide-brand,
+    // он совпадал с занятием (тот же тил) и не совпадал с самой полоской (--app-ok):
+    // два одинаковых квадратика, ни один не про то, что на экране.
+    const css = readCss('arena-card.css');
+    const stripeIce = /\.arena-row\s*\{[^}]*border-left:[^;]*var\(([^)]+)\)/.exec(css);
+    const stripeLesson = /\.arena-row--lesson\s*\{[^}]*border-left-color:\s*var\(([^)]+)\)/.exec(css);
+    const swIce = /\.arena-sw--ice\s*\{[^}]*background:\s*var\(([^)]+)\)/.exec(css);
+    const swLesson = /\.arena-sw--lesson\s*\{[^}]*background:\s*var\(([^)]+)\)/.exec(css);
+    assert.ok(stripeIce && stripeLesson && swIce && swLesson, 'stripe/swatch rules moved');
+    assert.equal(swIce[1].trim(), stripeIce[1].trim());
+    assert.equal(swLesson[1].trim(), stripeLesson[1].trim());
+    assert.notEqual(swIce[1].trim(), swLesson[1].trim());
+  });
+
+  it('a hidden legend is actually hidden despite display:flex', () => {
+    const css = readCss('arena-card.css');
+    assert.match(css, /\.arena-legend\[hidden\]\s*\{\s*display:\s*none/);
+  });
 });

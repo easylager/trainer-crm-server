@@ -264,6 +264,113 @@ describe('buildRibbonForDay', () => {
   });
 });
 
+describe('iceRowCta', () => {
+  it('keeps «Билет на месте» only when there is nowhere online to buy', () => {
+    const { iceRowCta } = loadModel();
+    const cta = iceRowCta({ kind: 'public_skate' }, { tickets_url: null });
+    assert.equal(cta.cta, 'Билет на месте');
+    assert.equal(cta.href, null);
+    assert.equal(cta.bookable, false);
+  });
+
+  it('sends the row to the arena ticket page instead of claiming «на месте»', () => {
+    const { iceRowCta } = loadModel();
+    const cta = iceRowCta(
+      { kind: 'public_skate' },
+      { tickets_url: 'https://tczamok.by/entertainments/ice-rink' }
+    );
+    assert.equal(cta.cta, 'Билет на сайте');
+    assert.equal(cta.href, 'https://tczamok.by/entertainments/ice-rink');
+    assert.equal(cta.ctaKind, 'ghost');
+    assert.equal(cta.bookable, false);
+    assert.ok(!/запис/i.test(cta.cta));
+  });
+
+  it('prefers the session link over the arena-wide one', () => {
+    const { iceRowCta } = loadModel();
+    const cta = iceRowCta(
+      { external_url: 'https://rink.example/session/7' },
+      { tickets_url: 'https://rink.example/tickets' }
+    );
+    assert.equal(cta.href, 'https://rink.example/session/7');
+    assert.equal(cta.cta, 'Билет на сайте');
+  });
+
+  it('ignores a non-http ticket link', () => {
+    const { iceRowCta } = loadModel();
+    const cta = iceRowCta({}, { tickets_url: 'javascript:alert(1)' });
+    assert.equal(cta.cta, 'Билет на месте');
+    assert.equal(cta.href, null);
+  });
+});
+
+describe('buildRibbonForDay + arena tickets', () => {
+  it('carries the arena ticket page onto every ice row', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [
+        {
+          id: 1,
+          kind: 'public_skate',
+          starts_at_local: '17:15',
+          starts_at_utc: '2026-09-06T14:15:00+00:00',
+          ends_at_utc: '2026-09-06T15:00:00+00:00',
+        },
+      ],
+      groups: [],
+      weekday: 0,
+      now: new Date('2026-09-06T06:00:00Z'),
+      card: { tickets_url: 'https://tczamok.by/entertainments/ice-rink' },
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].cta, 'Билет на сайте');
+    assert.equal(rows[0].href, 'https://tczamok.by/entertainments/ice-rink');
+    assert.equal(rows[0].bookable, false);
+  });
+});
+
+describe('ribbonLegendForRows', () => {
+  it('stays empty when the ribbon is ice only — nothing to tell apart', () => {
+    const { ribbonLegendForRows } = loadModel();
+    const items = ribbonLegendForRows([
+      { nature: 'ice' },
+      { nature: 'ice' },
+    ]);
+    assert.deepEqual(items, []);
+  });
+
+  it('stays empty when the ribbon is lessons only', () => {
+    const { ribbonLegendForRows } = loadModel();
+    assert.deepEqual(ribbonLegendForRows([{ nature: 'lesson' }]), []);
+  });
+
+  it('explains the stripes once both natures are on screen', () => {
+    const { ribbonLegendForRows } = loadModel();
+    const items = ribbonLegendForRows([
+      { nature: 'ice' },
+      { nature: 'lesson' },
+    ]);
+    assert.equal(items.length, 2);
+    assert.equal(items[0].stripe, 'ice');
+    assert.equal(items[1].stripe, 'lesson');
+  });
+
+  it('does not count an empty placeholder row as ice', () => {
+    const { ribbonLegendForRows } = loadModel();
+    const items = ribbonLegendForRows([
+      { nature: 'ice', empty: true },
+      { nature: 'lesson' },
+    ]);
+    assert.deepEqual(items, []);
+  });
+
+  it('survives no rows at all', () => {
+    const { ribbonLegendForRows } = loadModel();
+    assert.deepEqual(ribbonLegendForRows(), []);
+  });
+});
+
 describe('ribbonLegend', () => {
   it('matches the prototype legend under the ribbon', () => {
     const { ribbonLegend } = loadModel();
@@ -334,8 +441,8 @@ describe('heroView', () => {
   });
 });
 
-describe('iceRowCta', () => {
-  it('is informational Билет на месте; external_url is a link, never booking', () => {
+describe('iceRowCta — informational, never booking', () => {
+  it('stays a ghost link, never «Записаться», even with external_url', () => {
     const { iceRowCta } = loadModel();
     assert.deepEqual(iceRowCta({ kind: 'public_skate' }), {
       cta: 'Билет на месте',
@@ -347,10 +454,10 @@ describe('iceRowCta', () => {
       kind: 'open_ice',
       external_url: 'https://chizhovka.example',
     });
-    assert.equal(linked.cta, 'Билет на месте');
     assert.equal(linked.ctaKind, 'ghost');
     assert.equal(linked.bookable, false);
     assert.equal(linked.href, 'https://chizhovka.example');
+    assert.ok(!/запис/i.test(linked.cta));
   });
 });
 

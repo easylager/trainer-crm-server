@@ -3,7 +3,7 @@
 - arena_id: 187
 - city: Санкт-Петербург
 - parser_key: magnitarena_html_v1
-- cadence: weekly
+- cadence: daily
 - timezone: Europe/Moscow
 - currency: RUB
 - requires_by_egress: false

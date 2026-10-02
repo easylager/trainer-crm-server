@@ -86,6 +86,7 @@ from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
     get_certificate_product,
     process_certificate_email_outbox_batch,
+    process_pending_certificate_files_batch,
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.group_attendance_use_cases import (
@@ -627,6 +628,7 @@ BOOKING_NOTIFIER_INTERVAL_SEC = 15
 REQUEST_NOTIFIER_INTERVAL_SEC = 20
 COMPLETED_FEEDBACK_INTERVAL_SEC = 20
 CERTIFICATE_OUTBOX_INTERVAL_SEC = 2 * 60  # every 2 min: retry failed certificate emails
+CERTIFICATE_FILE_GENERATION_INTERVAL_SEC = 7  # trainer is watching a spinner (TASK-142/AC-002)
 
 
 def _subscription_loop_interval_sec() -> int:
@@ -1032,11 +1034,23 @@ async def process_request_notifications_batch(
     only_request_id: int | None = None,
     bypass_quiet_hours_for_that_request: bool = False,
 ) -> None:
-    """Send pending «new request» DMs. Claim before send so two workers cannot double-fire."""
+    """
+    Send pending «new request» DMs. Claim before send so two workers cannot double-fire.
+
+    TASK-142/EDGE-003: this loop used to be silent on every path but an actual send
+    failure — "found nothing this cycle" and "found a row but quiet-hours/missing-tid
+    skipped it" were indistinguishable in the logs. The debug/info lines below exist so
+    a repeat of that incident (a request that never got a single delivery attempt) can
+    be diagnosed from logs instead of a DB/log archaeology session.
+    """
     pending = await get_pending_request_notifications(session)
+    logger.debug("Request notifier: %d pending this cycle", len(pending))
     for p in pending:
         if only_request_id is not None and int(p["request_id"]) != only_request_id:
             continue
+
+        request_id = int(p["request_id"])
+        trainer_id = int(p["trainer_id"])
 
         enforce_quiet_hours = True
         if (
@@ -1046,19 +1060,33 @@ async def process_request_notifications_batch(
         ):
             enforce_quiet_hours = False
 
-        if enforce_quiet_hours and not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+        if enforce_quiet_hours and not await is_trainer_push_allowed_now(session, trainer_id):
+            logger.info(
+                "Request notifier: request_id=%s trainer_id=%s skipped (quiet hours)",
+                request_id, trainer_id,
+            )
             continue
         tid = p.get("trainer_telegram_id")
         if not tid:
+            logger.warning(
+                "Request notifier: request_id=%s trainer_id=%s has no telegram_id, skipping",
+                request_id, trainer_id,
+            )
             continue
 
-        request_id = int(p["request_id"])
-        trainer_id = int(p["trainer_id"])
         claimed = await mark_request_trainer_notified(session, request_id, trainer_id)
         if not claimed:
+            logger.debug(
+                "Request notifier: request_id=%s trainer_id=%s already claimed this cycle",
+                request_id, trainer_id,
+            )
             continue
         try:
             await _deliver_trainer_new_request_message(trainer_bot, session, p)
+            logger.info(
+                "Request notifier: request_id=%s trainer_id=%s delivered",
+                request_id, trainer_id,
+            )
         except Exception as e:
             await release_request_trainer_notification(session, request_id, trainer_id)
             logger.warning("Request notifier send to %s: %s", tid, e)
@@ -1222,13 +1250,18 @@ async def build_cert_order_trainer_notification(
         if product
         else "Подарочный сертификат"
     )
-    recipient_name = (cert_meta.get("recipient_name") or "").strip() or "—"
+    recipient_name = (cert_meta.get("recipient_name") or "").strip()
     recipient_email = (cert_meta.get("recipient_email") or "").strip() or "—"
+    # AC-004/Q-005: no name given -> the "Получатель" line is omitted entirely,
+    # not shown with a placeholder.
+    recipient_line = (
+        f"<b>Получатель</b> — {html_lib.escape(recipient_name)}\n" if recipient_name else ""
+    )
 
     text = msg.TRAINER_CERT_ORDER_NOTIFICATION.format(
         client_name=html_lib.escape(client_name),
         cert_name=html_lib.escape(cert_name),
-        recipient_name=html_lib.escape(recipient_name),
+        recipient_line=recipient_line,
         recipient_email=html_lib.escape(recipient_email),
     )
 
@@ -2745,6 +2778,27 @@ async def run_certificate_email_outbox_loop() -> None:
             break
         except Exception as e:
             logger.exception("Certificate email outbox loop: %s", e)
+
+
+async def run_certificate_file_generation_loop() -> None:
+    """
+    Every ~7 sec: render/upload pending certificate PDFs (TASK-142/AC-002).
+    POST /trainer/certificate-issue only inserts the row and returns; this loop does
+    the PDF render + S3 upload + email attempt that used to block that request, so a
+    trainer watching the issue screen sees a real pending -> ready/failed transition
+    within a couple of ticks instead of a long spinner.
+    """
+    while True:
+        await asyncio.sleep(CERTIFICATE_FILE_GENERATION_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                n = await process_pending_certificate_files_batch(session, limit=10)
+                if n:
+                    logger.info("Certificate file generation: %d processed", n)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Certificate file generation loop: %s", e)
 
 
 # =============================================================================

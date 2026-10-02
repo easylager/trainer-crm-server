@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glide — прототип героя «Ледовое время»</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF0EF;
+  --surface:#FFFFFF;
+  --ink:#0E1415;
+  --hint:#63706F;
+  --line:#D6DEDD;
+  --dense:#141D1E;         /* занятый лёд */
+  --dense-ink:#95A5A4;
+  --teal:#45B9BB;
+  --teal-ink:#0A6669;
+  --sans:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'DM Mono',ui-monospace,SFMono-Regular,monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box}
+/* Скролл-контейнер сетки выходит за поля отрицательными margin — без clip
+   он растягивает страницу и срезает шапку справа. */
+html{-webkit-text-size-adjust:100%;overflow-x:clip}
+body{
+  margin:0;background:var(--paper);color:var(--ink);overflow-x:clip;
+  font-family:var(--sans);-webkit-font-smoothing:antialiased;
+}
+
+/* ─── Masthead ─────────────────────────────────────────── */
+.mast{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px clamp(20px,4vw,56px);
+  border-bottom:1px solid var(--line);
+}
+.brandbox{display:flex;align-items:center;gap:11px}
+.wordmark{font-weight:700;font-size:19px;letter-spacing:-.02em}
+.demochip{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--hint);
+  border:1px solid var(--line-2,var(--line));padding:3px 7px;
+}
+.mast nav{display:flex;align-items:center;gap:26px}
+.mast a{
+  font-size:14px;color:var(--hint);text-decoration:none;
+  border-bottom:1px solid transparent;padding-bottom:2px;
+}
+.mast a:hover,.mast a:focus-visible{color:var(--ink);border-bottom-color:var(--ink)}
+
+/* ─── Hero ─────────────────────────────────────────────── */
+.hero{padding:clamp(26px,3.4vw,42px) clamp(20px,4vw,56px) clamp(40px,6vw,80px)}
+.hero__top{
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:13px;color:var(--hint);
+  letter-spacing:.02em;margin-bottom:clamp(14px,1.6vw,20px);
+}
+.city{
+  font-family:var(--mono);font-size:13px;color:var(--ink);
+  background:none;border:0;border-bottom:1px solid var(--ink);
+  padding:0 0 2px;cursor:pointer;letter-spacing:.02em;
+}
+/* Заголовок и строка доверия стоят в одну линию: справа от заголовка
+   больше нет мёртвого поля, а сетка поднимается над сгибом. */
+.hero__head{
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+  align-items:end;gap:clamp(20px,4vw,64px);
+  margin-bottom:clamp(18px,2.2vw,28px);
+}
+.city-wrap{position:relative;display:inline-block}
+.city-menu{
+  position:absolute;top:calc(100% + 8px);left:0;z-index:900;
+  margin:0;padding:6px 0;list-style:none;min-width:250px;white-space:nowrap;
+  background:var(--surface);border:1px solid var(--line);
+  box-shadow:0 18px 40px -26px rgba(14,20,21,.6);
+}
+.city-menu li{margin:0}
+.city-menu button{
+  width:100%;text-align:left;background:none;border:0;cursor:pointer;
+  font-family:var(--sans);font-size:14px;color:var(--ink);
+  padding:9px 14px;display:flex;justify-content:space-between;gap:14px;
+}
+.city-menu button:hover,.city-menu button:focus-visible{background:var(--paper)}
+.city-menu em{font-style:normal;font-family:var(--mono);font-size:11.5px;color:var(--hint)}
+.city-menu [aria-selected="true"]{font-weight:700}
+
+h1{
+  font-size:clamp(32px,4.3vw,54px);line-height:1.04;
+  letter-spacing:-.032em;font-weight:500;margin:0;
+  max-width:17ch;
+}
+h1 em{font-style:normal;color:var(--hint)}
+.stats{
+  font-family:var(--mono);font-size:13px;color:var(--hint);
+  margin:0 0 4px;letter-spacing:.01em;line-height:1.7;
+}
+.stats b{color:var(--ink);font-weight:500}
+
+/* ─── Стена арен ───────────────────────────────────────────
+   Единица измерения — арена, а не «занято/свободно»: занятости
+   в данных нет, у арены есть сеансы и есть тренеры. Карточка —
+   живой замер плотности сети: сеансы растут, пустая строка
+   тренеров заполняется сама, макет не меняется.              */
+.wall{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:clamp(10px,1.2vw,18px);
+  margin-bottom:clamp(22px,2.6vw,32px);
+}
+.acard{
+  display:flex;flex-direction:column;
+  border:1px solid var(--line);background:var(--surface);
+  text-align:left;font:inherit;color:inherit;cursor:pointer;padding:0;
+  transition:border-color .18s var(--ease);
+}
+.acard:hover,.acard:focus-visible{border-color:var(--ink)}
+.acard__pic{
+  width:100%;aspect-ratio:16/10;object-fit:cover;display:block;
+  filter:saturate(.94) contrast(1.03);
+}
+.acard__body{padding:13px 14px 14px;display:flex;flex-direction:column;flex:1}
+.acard__name{
+  margin:0 0 9px;font-size:14.5px;font-weight:500;letter-spacing:-.01em;
+  line-height:1.25;
+}
+.acard__ice{
+  margin:0 0 11px;font-family:var(--mono);font-size:12px;color:var(--hint);
+  line-height:1.5;
+}
+.acard__ice b{color:var(--ink);font-weight:500}
+.acard__ice--none{color:var(--hint);opacity:.75}
+/* Строка тренеров — смысловой центр карточки и точка роста. */
+.acard__coach{
+  margin:auto 0 0;padding-top:10px;border-top:1px solid var(--line);
+  font-size:12.5px;display:flex;align-items:center;gap:7px;
+}
+.acard__dot{width:5px;height:5px;border-radius:50%;background:var(--teal);flex:none}
+.acard__coach--empty{color:var(--teal-ink)}
+.acard__coach--empty .acard__dot{background:none;border:1px solid var(--teal)}
+
+@media (max-width:900px){ .wall{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:460px){ .wall{grid-template-columns:1fr} }
+
+/* ─── Timetable (зарезервировано под расписание тренера) ─── */
+.tt{
+  --cols:8;
+  display:grid;
+  grid-template-columns:78px repeat(var(--cols),minmax(0,1fr));
+  gap:5px;
+  margin-bottom:clamp(26px,3vw,38px);
+}
+/* Фото у арены нет — нейтральный блок, а не чужой снимок. Выглядит
+   намеренно, и никто не подумает, что это и есть та самая арена. */
+.tt__pic--none{
+  width:100%;aspect-ratio:16/9;
+  border:1px solid var(--line);
+  background:repeating-linear-gradient(
+    -45deg,transparent 0 7px,rgba(14,20,21,.05) 7px 8px);
+}
+
+/* занято — плотный блок */
+.cell{
+  height:49px;border:0;padding:0;font:inherit;
+  display:block;width:100%;
+}
+/* свободно — вырез: бумага + волосяная рамка.
+   Подписано каждое окно, а не одно: без подписи посетитель не понимал,
+   что пустые ячейки — это товар, и находил глазами ровно один слот. */
+.cell--free{
+  background:transparent;
+  border:1px solid var(--line);
+  cursor:pointer;text-align:left;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 10px;gap:1px;
+  transition:border-color .18s var(--ease), background .18s var(--ease);
+}
+/* один действующий слот — единственный teal на экране */
+.cell--pick{
+  border:1.5px solid var(--teal);
+  background:rgba(69,185,187,.08);
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 11px;gap:2px;text-align:left;
+}
+
+.tt__live{
+  font-family:var(--mono);font-size:12px;color:var(--hint);
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:clamp(30px,4vw,46px);
+}
+.more{
+  margin-left:auto;color:var(--hint);text-decoration:none;
+  border-bottom:1px solid var(--line);padding-bottom:2px;
+}
+.more:hover,.more:focus-visible{color:var(--ink);border-bottom-color:var(--ink)}
+.dot{
+  width:6px;height:6px;border-radius:50%;background:var(--teal);
+  animation:pulse 2.6s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ─── Двери ────────────────────────────────────────────── */
+.doors{display:flex;gap:14px;flex-wrap:wrap}
+.door{
+  font:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:10px;
+  padding:17px 26px;border:1px solid var(--ink);
+  transition:background .18s var(--ease),color .18s var(--ease);
+}
+.door--primary{background:var(--ink);color:var(--paper);font-weight:500}
+.door--primary:hover{background:#000}
+.door--ghost{background:transparent;color:var(--ink)}
+.door--ghost:hover{background:rgba(14,20,21,.06)}
+.door span.ar{font-family:var(--mono)}
+.door--sm{padding:10px 17px;font-size:14px}
+
+/* ─── Мобильный: сетка поворачивается ──────────────────── */
+@media (max-width:760px){
+  /* Сетка не «поворачивается», а едет вбок: колонка часов липнет к левому
+     краю, так что время всегда на экране, сколько арен ни пролистай. */
+  .tt-scroll{overflow-x:auto;scrollbar-width:none}
+  h1{max-width:none}
+  .hero__head{grid-template-columns:1fr;align-items:start;gap:14px}
+  /* На телефоне в шапке остаётся только то, ради чего она нужна. */
+  .mast{padding:14px clamp(20px,4vw,56px)}
+  .mast nav{gap:16px}
+  .mast nav a:not(.door){display:none}
+  .more{margin-left:0;flex-basis:100%}
+  .tt__live{flex-wrap:wrap;row-gap:10px}
+  .door--sm{padding:9px 13px;font-size:13px;white-space:nowrap}
+  .doors{flex-direction:column;align-items:stretch}
+  .door{justify-content:center}
+}
+
+/* ─── Акт II — механизм ────────────────────────────────── */
+.act2{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,7vw,104px) clamp(20px,4vw,56px) clamp(56px,7vw,110px);
+}
+
+/* журнал обхода — не карточка, а голые линии */
+.log__cap{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;
+  color:var(--hint);padding-bottom:9px;border-bottom:1px solid var(--ink);
+}
+/* Город — тихий спутник названия, не отдельная колонка: колонка съела бы
+   ширину, которая нужна длинным названиям вроде «Ледовый дворец Сокольники». */
+.log__city{
+  font-style:normal;font-family:var(--mono);font-size:11px;
+  color:var(--hint);margin-left:9px;
+}
+
+/* карта покрытия */
+.map svg{width:100%;height:auto;display:block}
+/* Классы точек и подписей ставятся через setAttribute в JS — автоматическая
+   чистка по class="..." их не видит и однажды уже снесла. Не удалять. */
+.map__node{fill:var(--teal)}
+.map__node--soon{fill:none;stroke:var(--hint);stroke-width:1.2;stroke-dasharray:2.5 2.5}
+.map__label{font-family:var(--sans);font-size:11.5px;fill:var(--ink)}
+.map__label--soon{fill:var(--hint)}
+.map__cap{
+  margin:0 0 10px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--hint);
+}
+.markets{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:0;margin:20px 0 0;border-top:1px solid var(--ink);
+}
+.markets > div{padding:13px 16px 0 0}
+.markets dt{font-size:13.5px;margin-bottom:4px}
+.markets dd{margin:0;font-family:var(--mono);font-size:12.5px;color:var(--hint)}
+.markets dd b{color:var(--ink);font-weight:500}
+.markets__soon dt,.markets__soon dd{color:var(--hint)}
+
+/* ─── Сеть ─────────────────────────────────────────────── */
+.net{border-top:1px solid var(--line);padding:clamp(48px,6vw,92px) clamp(20px,4vw,56px)}
+.net__grid{
+  display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);
+  gap:clamp(28px,4.5vw,72px);align-items:start;
+}
+.net__title{
+  font-size:clamp(22px,2.6vw,32px);line-height:1.12;letter-spacing:-.025em;
+  font-weight:500;margin:0 0 22px;max-width:22ch;
+}
+.net__nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-bottom:24px}
+.net__nums div{padding:14px 18px 16px 0;border-top:1px solid var(--ink)}
+.net__nums b{
+  display:block;font-family:var(--mono);font-size:clamp(22px,2.5vw,31px);
+  letter-spacing:-.02em;margin-bottom:4px;
+}
+.net__nums span{font-size:12.5px;color:var(--hint);line-height:1.45}
+
+/* ─── Триптих ролей ────────────────────────────────────────
+   Три секции на одинаковом каркасе: один ритм, одни элементы,
+   разное содержание. Гармонию держит структура, а не вкус —
+   её нельзя расстроить случайной правкой. Четвёртая роль
+   встанет тем же блоком без передела макета.                */
+.role{border-top:1px solid var(--line);padding:clamp(52px,7vw,104px) clamp(20px,4vw,56px)}
+.role__head{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:clamp(20px,4vw,72px);align-items:start;margin-bottom:clamp(30px,4vw,54px);
+}
+.role h2{
+  font-size:clamp(26px,3.3vw,42px);line-height:1.08;letter-spacing:-.03em;
+  font-weight:500;margin:0;max-width:21ch;
+}
+.role__lede{font-size:clamp(15px,1.25vw,17px);line-height:1.6;color:var(--hint);margin:0;max-width:46ch}
+.role__body{
+  display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);
+  gap:clamp(26px,4vw,64px);align-items:start;margin-bottom:clamp(26px,3.4vw,42px);
+}
+.role__steps{margin:0;padding:0;list-style:none;border-top:1px solid var(--ink)}
+.role__steps li{
+  display:grid;grid-template-columns:26px minmax(0,1fr);gap:12px;
+  padding:13px 0;border-bottom:1px solid var(--line);
+}
+.role__steps i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint);padding-top:2px}
+.role__steps b{display:block;font-weight:500;font-size:14.5px;margin-bottom:3px}
+.role__steps span.d{font-size:13px;color:var(--hint);line-height:1.5}
+.role__cta{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.role__note{font-family:var(--mono);font-size:12px;color:var(--hint);margin:0}
+.role__foot{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;
+  border-top:1px solid var(--line);margin-top:clamp(26px,3.4vw,42px);
+}
+.role__foot div{padding:14px 20px 0 0}
+.role__foot b{display:block;font-size:13.5px;font-weight:500;margin-bottom:4px}
+.role__foot span{font-size:12.5px;color:var(--hint);line-height:1.5}
+.role__foot .m{font-family:var(--mono);font-size:19px;letter-spacing:-.02em;color:var(--ink);margin:0 0 5px}
+.role__foot .m i{font-style:normal;font-size:12px;color:var(--hint)}
+
+/* Уведомление о записи — момент ценности: единственное действие тренера
+   во всём цикле. Текст — цитата из src/bot/messages.py:2917. */
+.notif{
+  border:1px solid var(--ink);background:var(--surface);
+  padding:15px 16px 14px;margin-bottom:16px;
+}
+.notif__t{
+  margin:0 0 10px;font-size:14px;font-weight:500;
+  display:flex;align-items:center;gap:8px;
+}
+.notif__rows{margin:0 0 13px;font-size:13px;line-height:1.65;color:var(--hint)}
+.notif__rows b{color:var(--ink);font-weight:500}
+.notif__btns{display:flex;gap:8px;flex-wrap:wrap}
+.nbtn{
+  font:inherit;font-size:13px;cursor:pointer;padding:9px 16px;
+  border:1px solid var(--ink);background:var(--ink);color:var(--paper);
+}
+.nbtn--ghost{background:none;color:var(--ink)}
+.notif__foot{margin:11px 0 0;font-size:11.5px;color:var(--hint);font-style:italic}
+
+/* «Ближайшие занятия» — так расписание выглядит в боте: список по дням,
+   а не матрица недели. Матрицы в продукте нет. */
+.agenda{border-top:1px solid var(--ink)}
+.agenda__day{
+  font-size:11px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--hint);padding:13px 0 7px;
+}
+.agenda__row{
+  display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--line);align-items:baseline;
+}
+.agenda__t{font-family:var(--mono);font-size:13px}
+.agenda__n{font-size:13.5px}
+.agenda__s{font-family:var(--mono);font-size:11px;color:var(--hint)}
+.agenda__row--free .agenda__n{color:var(--teal-ink)}
+.agenda__row--free .agenda__s{color:var(--teal-ink)}
+.agenda__row--wait .agenda__s{color:#8A6D1F}
+
+/* Дашборд школы — подписи из org-dashboard.html ветки EPIC5. */
+.dash{border-top:1px solid var(--ink);margin-bottom:16px}
+.dash__row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  padding:11px 0;border-bottom:1px solid var(--line);
+}
+.dash__k{font-size:13.5px}
+.dash__v{font-family:var(--mono);font-size:17px;letter-spacing:-.01em}
+.team__cap{
+  font-size:11px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--hint);padding:4px 0 7px;
+}
+.team__row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+  padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;
+}
+.team__row span{font-family:var(--mono);font-size:12px;color:var(--hint)}
+.team__add{
+  padding:10px 0 0;font-size:13px;color:var(--teal-ink);
+}
+
+/* Список сеансов — доказательство для катающегося: времена настоящие. */
+.slots{border-top:1px solid var(--ink)}
+.slots__row{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;
+  padding:10px 0;border-bottom:1px solid var(--line);align-items:baseline;
+}
+.slots__t{font-family:var(--mono);font-size:14px;color:var(--ink)}
+.slots__n{font-size:13px;color:var(--hint)}
+.slots__p{font-family:var(--mono);font-size:12.5px;color:var(--hint)}
+
+@media (max-width:860px){
+  .role__head,.role__body,.net__grid{grid-template-columns:1fr;gap:26px}
+  .role h2,.net__title{max-width:none}
+  .role__foot{grid-template-columns:1fr}
+  .role__foot div{padding:13px 0;border-bottom:1px solid var(--line)}
+}
+
+/* ─── Акт III — ваше место ─────────────────────────────── */
+.act3{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,7vw,104px) clamp(20px,4vw,56px) clamp(56px,7vw,110px);
+}
+/* «С Glide» — та же волосяная эстетика, что и сетка: ссылка и результат. */
+.linkbox{border-top:1px solid var(--ink);padding-top:14px}
+
+/* Расписание тренера — единственное место на странице, где сетка занятости
+   честна: слоты принадлежат тренеру, занятость реальна, can_book существует.
+   Здесь же страница впервые показывает сам продукт, а не его следствия. */
+.tgrid{
+  display:grid;grid-template-columns:52px repeat(5,minmax(0,1fr));
+  gap:3px;margin:12px 0 10px;
+}
+.pillars span.d{font-size:13px;color:var(--hint);line-height:1.55}
+
+/* ─── Цена ─────────────────────────────────────────────── */
+.price{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,7vw,104px) clamp(20px,4vw,56px) clamp(56px,7vw,110px);
+}
+/* Возражения — компактной полосой, а не отдельным актом: их надо снять,
+   а не посвящать им экран. */
+.objections{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:0;border-top:1px solid var(--line);margin-top:clamp(28px,3.6vw,44px);
+}
+
+@media (max-width:760px){
+  .plans,.objections{grid-template-columns:1fr}
+}
+
+/* ─── Акт IV — закрытие ────────────────────────────────── */
+.close{
+  border-top:1px solid var(--line);background:var(--dense);color:#E6ECEB;
+  padding:clamp(52px,7vw,100px) clamp(20px,4vw,56px);
+}
+.close h2{
+  font-size:clamp(28px,3.6vw,46px);line-height:1.06;letter-spacing:-.03em;
+  font-weight:500;margin:0 0 clamp(26px,3.4vw,40px);max-width:17ch;
+}
+.close__nums{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:0;border-top:1px solid rgba(230,236,235,.22);
+  margin-bottom:clamp(30px,4vw,48px);
+}
+.close__nums div{padding:15px 18px 0 0}
+.close__nums b{
+  display:block;font-family:var(--mono);font-size:clamp(21px,2.4vw,30px);
+  letter-spacing:-.02em;margin-bottom:5px;
+}
+.close__nums span{font-size:12.5px;color:rgba(230,236,235,.6)}
+.close__cta{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.door--light{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.door--light:hover{background:#fff;border-color:#fff}
+.close__legal{
+  margin:clamp(30px,4vw,46px) 0 0;padding-top:18px;
+  border-top:1px solid rgba(230,236,235,.22);
+  font-size:12px;line-height:1.7;color:rgba(230,236,235,.55);
+}
+.close__legal a{color:rgba(230,236,235,.8)}
+
+@media (max-width:860px){
+  .compare{grid-template-columns:1fr;gap:30px}
+  .pillars,.close__nums{grid-template-columns:1fr}
+  .close__nums div{padding:13px 0;border-bottom:1px solid rgba(230,236,235,.18)}
+  .close h2{max-width:none}
+}
+
+/* ─── Школам ───────────────────────────────────────────── */
+.school{
+  border-top:1px solid var(--line);
+  padding:clamp(52px,7vw,104px) clamp(20px,4vw,56px) clamp(56px,7vw,110px);
+}
+.eyebrow{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;
+  color:var(--hint);margin:0 0 14px;
+}
+/* Ростер — та же сетка, что в герое: школа это много тренеров на одном льду. */
+.roster{display:grid;grid-template-columns:62px repeat(4,minmax(0,1fr));gap:4px}
+.roster__brand{
+  grid-column:1/-1;display:flex;align-items:baseline;gap:10px;
+  padding-bottom:11px;margin-bottom:5px;border-bottom:1px solid var(--ink);
+}
+.roster__name{font-weight:700;font-size:15px;letter-spacing:-.01em}
+.roster__meta{font-family:var(--mono);font-size:11.5px;color:var(--hint)}
+.roster__chip{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--hint);border:1px solid var(--line);padding:2px 6px;
+}
+
+@media (max-width:860px){
+  .school__grid{grid-template-columns:1fr;gap:34px}
+  .markets{grid-template-columns:1fr}
+  .markets > div{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:11px 0;border-bottom:1px solid var(--line);
+  }
+}
+
+/* ─── Панель записи ────────────────────────────────────── */
+.sheet-wrap{
+  position:fixed;inset:0;z-index:1000;
+  background:rgba(14,20,21,.55);
+  display:flex;align-items:center;justify-content:center;padding:22px;
+}
+/* Обязательно: авторский display:flex перебивает браузерный
+   [hidden]{display:none}, и панель висит пустой поверх страницы,
+   а closeSheet() не даёт никакого эффекта. */
+.sheet-wrap[hidden]{display:none}
+.sheet{
+  position:relative;background:var(--surface);color:var(--ink);
+  width:100%;max-width:430px;border:1px solid var(--line);
+  padding:clamp(22px,3vw,30px);
+  box-shadow:0 40px 90px -50px rgba(14,20,21,.8);
+}
+/* Фокус ставится программно при открытии — кольцо вокруг всей панели тут
+   только шумит. У кнопок внутри свои focus-visible остаются. */
+.sheet:focus{outline:none}
+.sheet__x{
+  position:absolute;top:10px;right:12px;
+  background:none;border:0;cursor:pointer;
+  font-size:22px;line-height:1;color:var(--hint);padding:6px;
+}
+.sheet__x:hover,.sheet__x:focus-visible{color:var(--ink)}
+.sheet__eyebrow{
+  margin:0 0 12px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.13em;color:var(--hint);
+}
+.sheet h3{margin:0 0 4px;font-size:21px;font-weight:500;letter-spacing:-.02em}
+.sheet__time{
+  font-family:var(--mono);font-size:27px;letter-spacing:-.02em;
+  color:var(--teal-ink);margin:14px 0 2px;
+}
+.sheet__meta{font-family:var(--mono);font-size:12.5px;color:var(--hint);margin:0 0 20px}
+.sheet__rows{margin:0 0 22px;padding:0;list-style:none}
+.sheet__rows li{
+  display:grid;grid-template-columns:20px minmax(0,1fr);gap:11px;
+  padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;
+}
+.sheet__rows i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--hint)}
+.sheet .door{width:100%;justify-content:center}
+.sheet__note{
+  margin:16px 0 0;font-family:var(--mono);font-size:11.5px;
+  color:var(--hint);line-height:1.6;
+}
+@media (max-width:640px){
+  .sheet-wrap{align-items:flex-end;padding:0}
+  .sheet{max-width:none;border-left:0;border-right:0;border-bottom:0}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <!-- Пометка намеренно сдержанная: на сцене баннер «ДЕМО» мешал бы, но любой,
+       кто подойдёт и посмотрит, увидит, что расписание здесь показательное. -->
+  <div class="brandbox">
+    <span class="wordmark">Glide</span>
+    <span class="demochip" title="Расписание и загрузка — демонстрационные">демо</span>
+  </div>
+  <nav>
+    <a href="#" data-go="#role-trainer">Тренерам</a>
+    <a href="#" data-go="#role-school">Школам</a>
+    <a href="#" data-go="#role-client">Кататься</a>
+    <a href="#" data-sheet="telegram">Войти</a>
+    <a class="door door--primary door--sm" href="#" data-sheet="telegram">Начать бесплатно</a>
+  </nav>
+</header>
+
+<main class="hero">
+  <!-- div, не p: <ul> меню внутри <p> невалиден, и парсер закрывал параграф
+       до списка — дата отрывалась на отдельную строку. -->
+  <div class="hero__top">
+    <span class="city-wrap">
+      <button class="city" type="button" id="cityBtn"
+              aria-haspopup="listbox" aria-expanded="false">Минск ▾</button>
+      <ul class="city-menu" id="cityMenu" role="listbox" hidden></ul>
+    </span>
+    <span>четверг, 22 сентября</span>
+  </div>
+
+  <div class="hero__head">
+    <!-- Заголовок не кодирует состояние рынка («тренеров почти нет») — такое
+         пришлось бы переписывать по мере роста. Механизм же верен всегда. -->
+    <h1><em>Ученики находят лёд.</em><br>Пусть находят и тренера.</h1>
+    <p class="stats"><b>45</b> арен · <b>26</b> городов<br>расписание обновляется каждый день</p>
+  </div>
+
+  <div class="wall" id="wall"></div>
+
+  <p class="tt__live">
+    <a class="more" href="#" id="moreLink" data-sheet="client" style="margin-left:0">все арены города · ещё 37 в других городах →</a>
+  </p>
+
+  <!-- Три входа равны по форме: роль выбирает посетитель, а не страница. -->
+  <div class="doors">
+    <a class="door door--primary" href="#" data-go="#role-trainer">Я тренер <span class="ar">→</span></a>
+    <a class="door door--ghost" href="#" data-go="#role-school">Мы школа <span class="ar">→</span></a>
+    <a class="door door--ghost" href="#" data-go="#role-client">Хочу кататься <span class="ar">→</span></a>
+  </div>
+</main>
+
+<!-- ═══ 2. Сеть — масштаб и свежесть ═══════════════════════════════════════ -->
+<section class="net" id="net">
+  <div class="net__grid">
+    <div>
+      <p class="eyebrow">Сеть</p>
+      <h2 class="net__title">Лёд Беларуси и России — в одном расписании.</h2>
+      <div class="net__nums">
+        <div><b>45</b><span>арен с живым расписанием</span></div>
+        <div><b>26</b><span>городов</span></div>
+        <div><b>614</b><span>сеансов на ближайшие недели</span></div>
+        <div><b>24/7</b><span>расписание обновляется само</span></div>
+      </div>
+      <p class="tt__live"><span class="dot"></span><span id="live">обновлено 4 минуты назад</span></p>
+    </div>
+
+    <div class="map">
+      <p class="map__cap">Домашний рынок — Беларусь, 33 арены в 24 городах</p>
+      <svg id="map" viewBox="0 0 620 400" role="img"
+           aria-label="Карта покрытия Беларуси: 33 арены в 24 городах"></svg>
+      <dl class="markets">
+        <div><dt>Беларусь · домашний</dt><dd><b>33</b> арены · 24 города</dd></div>
+        <div><dt>Санкт-Петербург · экспансия</dt><dd><b>10</b> арен</dd></div>
+        <div class="markets__soon"><dt>Москва · следующий</dt><dd>осень 2026</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3. Тренерам ════════════════════════════════════════════════════════ -->
+<section class="role" id="role-trainer">
+  <div class="role__head">
+    <div>
+      <p class="eyebrow">Тренерам</p>
+      <h2>Ученик записывается сам.<br>Вы просто подтверждаете.</h2>
+    </div>
+    <p class="role__lede">Одна ссылка вместо переписки «а когда можно?». Ученик видит
+      свободные окна и занимает одно, вам приходит уведомление — вы подтверждаете
+      в боте. Занятие стоит дороже месяца Glide: один не потерянный слот окупает
+      подписку.</p>
+  </div>
+
+  <div class="role__body">
+    <div>
+      <!-- Текст уведомления — цитата из src/bot/messages.py:2917, сокращённая. -->
+      <div class="notif">
+        <p class="notif__t">🔔 Новая запись — нужно ваше решение</p>
+        <p class="notif__rows">
+          <b>Анна К.</b><br>
+          24 сентября (ср) 18:00 — 60 мин.<br>
+          Фигурное катание · Минск · Минск-Арена
+        </p>
+        <div class="notif__btns">
+          <button class="nbtn" type="button">Подтвердить</button>
+          <button class="nbtn nbtn--ghost" type="button">Отклонить</button>
+        </div>
+        <p class="notif__foot">Слот занят; клиент получит напоминания автоматически.</p>
+      </div>
+
+      <div class="agenda">
+        <p class="agenda__day">Среда, 24 сентября</p>
+        <div class="agenda__row"><span class="agenda__t">16:00</span><span class="agenda__n">Кирилл</span><span class="agenda__s">подтверждено</span></div>
+        <div class="agenda__row agenda__row--wait"><span class="agenda__t">18:00</span><span class="agenda__n">Анна К.</span><span class="agenda__s">ждёт решения</span></div>
+        <div class="agenda__row agenda__row--free"><span class="agenda__t">19:00</span><span class="agenda__n">свободно</span><span class="agenda__s">по ссылке</span></div>
+        <p class="agenda__day">Четверг, 25 сентября</p>
+        <div class="agenda__row"><span class="agenda__t">07:30</span><span class="agenda__n">Максим</span><span class="agenda__s">подтверждено</span></div>
+        <div class="agenda__row agenda__row--free"><span class="agenda__t">17:00</span><span class="agenda__n">свободно</span><span class="agenda__s">по ссылке</span></div>
+        <div class="agenda__row"><span class="agenda__t">19:00</span><span class="agenda__n">Дарья</span><span class="agenda__s">подтверждено</span></div>
+      </div>
+    </div>
+
+    <ol class="role__steps">
+      <li><i>01</i><div><b>Отправили ссылку</b><span class="d">Одну, в чат ученику или родителю — больше ничего не нужно</span></div></li>
+      <li><i>02</i><div><b>Ученик занял окно</b><span class="d">Сам выбрал время из свободных, без единого сообщения вам</span></div></li>
+      <li><i>03</i><div><b>Вы подтвердили в боте</b><span class="d">Слот закрыт, напоминания обоим уходят сами</span></div></li>
+    </ol>
+  </div>
+
+  <div class="role__cta">
+    <a class="door door--primary" href="#" data-sheet="telegram">Начать бесплатно <span class="ar">→</span></a>
+    <p class="role__note">14 дней · без карты · только Telegram</p>
+  </div>
+
+  <div class="role__foot">
+    <div><b>Starter</b><p class="m">19 <i>BYN / мес</i></p><span>Запись, расписание, клиенты, напоминания</span></div>
+    <div><b>Pro</b><p class="m">49 <i>BYN / мес</i></p><span>Плюс абонементы, сертификаты, каталог и аналитика</span></div>
+    <div><b>А если я уже веду учеников?</b><span>Переносим ваше расписание и клиентов при подключении — вручную вбивать ничего не нужно.</span></div>
+  </div>
+</section>
+
+<!-- ═══ 4. Школам ══════════════════════════════════════════════════════════ -->
+<section class="role" id="role-school">
+  <div class="role__head">
+    <div>
+      <p class="eyebrow">Школам</p>
+      <h2>Десять тренеров, один лёд — и одна картина</h2>
+    </div>
+    <p class="role__lede">У каждого тренера своя переписка и свой блокнот, а лёд, бренд
+      и родители общие. Директор перестаёт собирать отчёт по чатам: занятия всей
+      команды, загрузка льда и новые ученики видны на одном экране.</p>
+  </div>
+
+  <div class="role__body">
+    <div>
+      <div class="roster__brand" style="margin-bottom:14px">
+        <span class="roster__name">Ваша школа</span>
+        <span class="roster__chip">пример</span>
+        <span class="roster__meta">10 тренеров · 2 арены</span>
+      </div>
+      <!-- Подписи — из org-dashboard.html ветки EPIC5: «Итого по школе». -->
+      <div class="dash">
+        <div class="dash__row"><span class="dash__k">Занятий за неделю</span><span class="dash__v">48</span></div>
+        <div class="dash__row"><span class="dash__k">Загрузка арендованного льда</span><span class="dash__v">72%</span></div>
+        <div class="dash__row"><span class="dash__k">Новых учеников</span><span class="dash__v">6</span></div>
+      </div>
+      <p class="team__cap">Команда школы</p>
+      <div class="team__row">Анна К.<span>12 занятий</span></div>
+      <div class="team__row">Кирилл<span>9 занятий</span></div>
+      <div class="team__row">Максим<span>8 занятий</span></div>
+      <p class="team__add">+ пригласить тренера по ссылке</p>
+    </div>
+
+    <ol class="role__steps">
+      <li><i>01</i><div><b>Завели профиль школы</b><span class="d">Название, каток, контакты — так вас увидят родители</span></div></li>
+      <li><i>02</i><div><b>Позвали тренеров ссылкой</b><span class="d">Тренер переходит и попадает в ростер школы</span></div></li>
+      <li><i>03</i><div><b>Видите итог по команде</b><span class="d">Занятия, загрузка льда и новые ученики — в одном месте</span></div></li>
+    </ol>
+  </div>
+
+  <div class="role__cta">
+    <a class="door door--primary" href="#" data-sheet="school">Поговорить о пилоте <span class="ar">→</span></a>
+    <p class="role__note">Закрытый пилот · набираем первые школы в Минске</p>
+  </div>
+
+  <div class="role__foot">
+    <div><b>Готово сейчас</b><span>Профиль школы, команда и приглашения, общие ссылки, дашборд директора</span></div>
+    <div><b>Осень 2026</b><span>Абонементы от имени школы, учёт арендованного льда, счёт на юрлицо</span></div>
+    <div><b>Кому подойдёт</b><span>Школе, арендующей лёд: директор и 3–15 тренеров, детские группы</span></div>
+  </div>
+</section>
+
+<!-- ═══ 5. Кататься ════════════════════════════════════════════════════════ -->
+<section class="role" id="role-client">
+  <div class="role__head">
+    <div>
+      <p class="eyebrow">Кататься</p>
+      <h2>Где сегодня лёд — и кто научит</h2>
+    </div>
+    <p class="role__lede">Расписание массовых катаний всех арен города в одном месте,
+      без обзвона и без сайтов катков. Рядом — тренеры, которые работают на этом льду.</p>
+  </div>
+
+  <div class="role__body">
+    <div>
+      <p class="map__cap" id="slotsCap">ТЦ Замок · сегодня</p>
+      <div class="slots" id="slots"></div>
+    </div>
+    <ol class="role__steps">
+      <li><i>01</i><div><b>Выберите город</b><span class="d">Минск, Санкт-Петербург и ещё 24 города</span></div></li>
+      <li><i>02</i><div><b>Смотрите живое расписание</b><span class="d">Сеансы на сегодня и на неделю вперёд</span></div></li>
+      <li><i>03</i><div><b>Запишитесь к тренеру</b><span class="d">Прямо на той арене, куда собрались</span></div></li>
+    </ol>
+  </div>
+
+  <div class="role__cta">
+    <a class="door door--primary" href="#" data-sheet="client">Открыть в Telegram <span class="ar">→</span></a>
+    <p class="role__note">Бесплатно · без регистрации и установки</p>
+  </div>
+
+  <div class="role__foot">
+    <div><b>Для себя и для детей</b><span>Несколько профилей в одном аккаунте</span></div>
+    <div><b>Напоминания</b><span>Придут накануне и за час до занятия</span></div>
+    <div><b>Абонементы</b><span>Остаток занятий виден в любой момент</span></div>
+  </div>
+</section>
+
+<section class="close">
+  <h2>Ваш лёд уже в расписании. Осталось встать в него.</h2>
+
+  <div class="close__nums">
+    <div><b>45</b><span>арен с живым расписанием</span></div>
+    <div><b>26</b><span>городов Беларуси и России</span></div>
+    <div><b>24/7</b><span>расписание обновляется само</span></div>
+    <div><b>14</b><span>дней бесплатно, без карты</span></div>
+  </div>
+
+  <div class="close__cta">
+    <a class="door door--light" href="#" data-sheet="telegram">Начать в Telegram <span class="ar">→</span></a>
+    <a class="door door--ghost" href="#" data-go="#role-school"
+       style="color:#E6ECEB;border-color:rgba(230,236,235,.4)">Мы школа <span class="ar">→</span></a>
+  </div>
+
+  <!-- Юридический блок: не формальность, а прямое требование банка-эквайера
+       при подключении мерчанта (bePaid). Без публичной оферты и реквизитов
+       заявку не одобрят. -->
+  <p class="close__legal">
+    Glide — сервис онлайн-записи к тренерам. <a href="#">Публичная оферта</a> ·
+    <a href="#">Политика обработки персональных данных</a> · <a href="#">Условия возврата</a><br>
+    Реквизиты юридического лица · УНП · адрес · support@glide.by<br>
+    <span style="color:rgba(230,236,235,.42)">Демонстрационная версия: названия арен,
+    городов и покрытие — настоящие; загрузка расписания и время обновления —
+    показательные.</span>
+  </p>
+</section>
+
+<div class="sheet-wrap" id="sheetWrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1" id="sheet">
+    <button class="sheet__x" type="button" id="sheetX" aria-label="Закрыть">×</button>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+/* Города демо. Названия арен и id — из БД (arenas), фото каждое своё:
+   uploads/arenas/<id>/*_card.jpg. Где снимка нет — нейтральный блок, а не
+   чужая картинка: перепутанные фото убивают доверие быстрее, чем
+   отсутствующие. Занятость сетки демонстрационная.                        */
+const CITY_DATA = {
+  // Показываем только арены с настоящим фото. У остальных минских снимки
+  // лежат в прод-хранилище и локально недоступны — заглушки в витрине
+  // смотрятся как недоделка, поэтому город показывает меньше колонок.
+  minsk: {
+    label:'Минск', others:37,
+    // sessions/coaches — настоящие: ice_sessions и trainer_arenas на 19.09.2026.
+    arenas:[
+      {name:'ТЦ Замок',        pic:'pics/arena-3.jpg', sessions:13, from:'10:15', to:'22:15', coaches:2},
+      {name:'ТЦ DiaMond city', pic:'pics/arena-7.jpg', sessions:10, from:'12:15', to:'21:05', coaches:1},
+      {name:'Чижовка-арена',   pic:'pics/arena-6.jpg', sessions:1,  from:'19:00', to:'19:00', coaches:1},
+      {name:'Минск-Арена',     pic:'pics/arena-2.jpg', sessions:1,  from:'18:45', to:'18:45', coaches:1},
+    ],
+  },
+  // Питер показывает вторую стадию зрелости: фото и арены есть, расписание
+  // ещё подключается, тренеров нет. Это не дыра в макете, а состояние, через
+  // которое проходит каждый новый город — и карточка его переживает без правок.
+  spb: {
+    label:'Санкт-Петербург', others:35,
+    arenas:[
+      {name:'СК «Юбилейный»',   pic:'pics/arena-97.jpg',  sessions:0, coaches:0},
+      {name:'Балтик Арена',     pic:'pics/arena-192.jpg', sessions:0, coaches:0},
+      {name:'Айсбург Арена',    pic:'pics/arena-193.jpg', sessions:0, coaches:0},
+      {name:'Гранд Каньон Айс', pic:'pics/arena-99.jpg',  sessions:0, coaches:0},
+      {name:'Шанс Арена',       pic:'pics/arena-100.jpg', sessions:0, coaches:0},
+      {name:'Арена «Озерки»',   pic:'pics/arena-101.jpg', sessions:0, coaches:0},
+      {name:'ЦЛВС «Парнас»',    pic:'pics/arena-174.jpg', sessions:0, coaches:0},
+      {name:'Арена «Магнит»',   pic:'pics/arena-187.jpg', sessions:0, coaches:0},
+    ],
+  },
+};
+const plural = (n,one,few,many)=>{
+  const a=Math.abs(n)%100, b=a%10;
+  if(a>10&&a<20) return many; if(b>1&&b<5) return few; if(b===1) return one; return many;
+};
+const wall     = document.getElementById('wall');
+const cityBtn  = document.getElementById('cityBtn');
+const cityMenu = document.getElementById('cityMenu');
+const moreLink = document.getElementById('moreLink');
+const liveEl   = document.getElementById('live');
+let flipTimer  = null;
+let currentCity = 'minsk';
+
+function renderCity(key){
+  const city = CITY_DATA[key];
+  currentCity = key;
+
+  cityBtn.textContent = city.label + ' ▾';
+  moreLink.textContent = `все арены города · ещё ${city.others} в других городах →`;
+  liveEl.textContent = 'обновлено 4 минуты назад';
+
+  wall.innerHTML = '';
+  city.arenas.forEach((a,i)=>{
+    const card = document.createElement('button');
+    card.className = 'acard';
+    card.type = 'button';
+    card.dataset.i = i;
+    const ice = a.sessions > 0
+      ? `<b>${a.sessions}</b> ${plural(a.sessions,'сеанс','сеанса','сеансов')} сегодня<br>${a.from}–${a.to}`
+      : `расписание подключаем`;
+    const coach = a.coaches > 0
+      ? `<span class="acard__dot"></span>${a.coaches} ${plural(a.coaches,'тренер','тренера','тренеров')}`
+      : `<span class="acard__dot"></span>станьте первым тренером`;
+    card.innerHTML =
+      `<img class="acard__pic" src="${a.pic}" alt="">`+
+      `<span class="acard__body">`+
+        `<span class="acard__name">${a.name}</span>`+
+        `<span class="acard__ice${a.sessions?'':' acard__ice--none'}">${ice}</span>`+
+        `<span class="acard__coach${a.coaches?'':' acard__coach--empty'}">${coach}</span>`+
+      `</span>`;
+    wall.appendChild(card);
+  });
+  armFlip();
+}
+
+// Единственная анимация на странице: живое обновление данных. Раньше ячейка
+// перещёлкивалась в «занято»; теперь у арены прибавляется сеанс — то же
+// доказательство живости, но на модели, которая существует в данных.
+function armFlip(){
+  clearTimeout(flipTimer);
+  const city = CITY_DATA[currentCity];
+  const i = city.arenas.findIndex(a=>a.sessions>0);
+  if(i < 0) return;
+  flipTimer = setTimeout(()=>{
+    const card = wall.querySelector(`.acard[data-i="${i}"] .acard__ice`);
+    if(!card) return;
+    const a = city.arenas[i];
+    const n = a.sessions + 1;
+    card.style.transition='opacity .4s';
+    card.style.opacity='0';
+    setTimeout(()=>{
+      card.innerHTML = `<b>${n}</b> ${plural(n,'сеанс','сеанса','сеансов')} сегодня<br>${a.from}–${a.to}`;
+      card.style.opacity='1';
+      liveEl.textContent='обновлено только что';
+    }, 400);
+  }, 3600);
+}
+
+// Переключатель города
+Object.entries(CITY_DATA).forEach(([key,city])=>{
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type='button';
+  b.innerHTML = `<span>${city.label}</span>`;
+  b.addEventListener('click',()=>{ renderCity(key); closeMenu(); cityBtn.focus(); });
+  li.appendChild(b); li.dataset.key=key;
+  cityMenu.appendChild(li);
+});
+function openMenu(){
+  cityMenu.hidden=false; cityBtn.setAttribute('aria-expanded','true');
+  cityMenu.querySelectorAll('li').forEach(li=>{
+    li.firstChild.setAttribute('aria-selected', String(li.dataset.key===currentCity));
+  });
+}
+function closeMenu(){ cityMenu.hidden=true; cityBtn.setAttribute('aria-expanded','false'); }
+cityBtn.addEventListener('click',()=> cityMenu.hidden ? openMenu() : closeMenu());
+document.addEventListener('click',e=>{
+  if(!cityMenu.hidden && !e.target.closest('.city-wrap')) closeMenu();
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeMenu(); });
+
+/* ─── Взаимодействия ──────────────────────────────────────────────────────
+   На выставке в страницу будут тыкать, и мёртвые кнопки читаются как
+   недоделка. Всё кликабельное что-то делает; ничего не притворяется
+   работающим продакшеном — панель прямо говорит, что это показ.        */
+const sheetWrap = document.getElementById('sheetWrap');
+const sheetEl   = document.getElementById('sheet');
+const sheetBody = document.getElementById('sheetBody');
+let lastFocus = null;
+
+function openSheet(html){
+  lastFocus = document.activeElement;
+  sheetBody.innerHTML = html;
+  sheetWrap.hidden = false;
+  sheetEl.focus();
+}
+function closeSheet(){
+  sheetWrap.hidden = true;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+document.getElementById('sheetX').addEventListener('click', closeSheet);
+sheetWrap.addEventListener('click', e=>{ if(e.target===sheetWrap) closeSheet(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !sheetWrap.hidden) closeSheet(); });
+
+const DAY = 'четверг, 22 сентября';
+
+/* Панель арены. Показывает то, что в данных действительно есть: сеансы
+   на льду и тренеров на этой арене. Бронирования массового катания здесь
+   нет и быть не может — записывают на себя тренеры, а не арены.        */
+function arenaSheet(a){
+  const ice = a.sessions > 0
+    ? `<p class="sheet__time">${a.sessions}</p>
+       <p class="sheet__meta">${plural(a.sessions,'сеанс','сеанса','сеансов')} на льду · ${a.from}–${a.to}</p>`
+    : `<p class="sheet__meta">Расписание этой арены подключаем.</p>`;
+  const coach = a.coaches > 0
+    ? `<li><i>✓</i><span>${a.coaches} ${plural(a.coaches,'тренер ведёт','тренера ведут','тренеров ведут')} занятия здесь — их находят в каталоге</span></li>`
+    : `<li><i>—</i><span>Тренеров на этой арене пока нет: вас здесь ещё не ищут</span></li>`;
+  openSheet(`
+    <p class="sheet__eyebrow">${DAY}</p>
+    <h3 id="sheetTitle">${a.name}</h3>
+    ${ice}
+    <ul class="sheet__rows">
+      ${coach}
+      <li><i>→</i><span>Ученики видят вашу арену, ваше время и записываются сами</span></li>
+      <li><i>→</i><span>Расписание арены подтягивается без вашего участия</span></li>
+    </ul>
+    <button class="door door--primary" type="button" data-sheet="telegram">
+      Стать тренером на этой арене <span class="ar">→</span>
+    </button>
+    <p class="sheet__note">Показ: числа взяты из базы, бот в этой версии не открывается.</p>
+  `);
+  sheetBody.querySelector('[data-sheet]').addEventListener('click', ()=>{
+    infoSheet('Glide открылся бы в Telegram', 'Начать бесплатно', [
+      'Бот заводит ваше расписание за пару минут',
+      'Вы получаете ссылку и отправляете её ученикам',
+      '14 дней бесплатно, карта не нужна',
+    ], 'Показ: бот в этой версии не открывается.');
+  });
+}
+
+function infoSheet(title, lead, rows, note){
+  openSheet(`
+    <p class="sheet__eyebrow">${lead}</p>
+    <h3 id="sheetTitle">${title}</h3>
+    <ul class="sheet__rows">${rows.map((r,i)=>
+      `<li><i>${String(i+1).padStart(2,'0')}</i><span>${r}</span></li>`).join('')}</ul>
+    <button class="door door--ghost" type="button" onclick="closeSheet()">Закрыть</button>
+    <p class="sheet__note">${note}</p>
+  `);
+}
+
+// Клик по свободному окну
+wall.addEventListener('click', e=>{
+  const card = e.target.closest('.acard');
+  if(!card) return;
+  arenaSheet(CITY_DATA[currentCity].arenas[Number(card.dataset.i)]);
+});
+
+// Навигация и двери
+function scrollTo(sel){
+  const el = document.querySelector(sel);
+  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+document.querySelectorAll('[data-go]').forEach(el=>{
+  el.addEventListener('click', e=>{ e.preventDefault(); scrollTo(el.dataset.go); });
+});
+document.querySelectorAll('[data-sheet]').forEach(el=>{
+  el.addEventListener('click', e=>{
+    e.preventDefault();
+    const kind = el.dataset.sheet;
+    if (kind === 'telegram') {
+      infoSheet('Glide открылся бы в Telegram', 'Начать бесплатно', [
+        'Бот заводит ваше расписание за пару минут',
+        'Вы получаете ссылку и отправляете её ученикам',
+        '14 дней бесплатно, карта не нужна',
+      ], 'Показ: бот в этой версии не открывается.');
+    } else if (kind === 'school') {
+      infoSheet('Разговор о пилоте', 'Школам', [
+        'Созвон на 30 минут: как устроена ваша школа сегодня',
+        'Показываем кабинет директора, ростер и профиль для родителей',
+        'Набираем первые школы в Минске',
+      ], 'Показ: форма не отправляется. Контакт — support@glide.by');
+    } else {
+      infoSheet('Клиентская часть', 'Я катаюсь', [
+        'Каталог арен и тренеров по городу',
+        'Свободный лёд на сегодня и на неделю',
+        'Запись в два касания прямо в Telegram',
+      ], 'Показ: клиентский бот в этой версии не открывается.');
+    }
+  });
+});
+
+// Минск по умолчанию: это единственный город, где есть и фото, и живые
+// сеансы, и тренеры. Питер показывает следующую стадию зрелости.
+renderCity('minsk');
+
+/* ─── Акт II ──────────────────────────────────────────────────────────────
+   parser_key настоящие (имена файлов data/parsers/*.md); slot_count и время —
+   демонстрационные. В продакшене строка берётся из ScrapeRunRecord
+   (src/ingestion/types.py:96) — parser_key, slot_count, status, finished_at.
+   Координаты городов приблизительные: у Arena есть latitude/longitude
+   (models.py:193), продакшен-карта строится на них.                          */
+// Тренеру нечего делать с ключами парсеров: в журнале человеческие названия
+// арен и города. Ключ остаётся внутренним. Арены с пометкой SKIP V1
+// (spb-hockey-city, spb-ska-arena, spb-mega-ice и др.) сюда не попадают —
+// они ещё не живые, показывать их было бы враньём.
+/* Сеансы одной арены — доказательство для катающегося. Времена настоящие:
+   ice_sessions для ТЦ Замок, 19.09.2026. */
+const SLOTS = [
+  ['10:15','Массовое катание'], ['11:45','Массовое катание'],
+  ['13:15','Массовое катание'], ['14:45','Массовое катание'],
+  ['16:15','Массовое катание'], ['17:45','Массовое катание'],
+  ['19:15','Массовое катание'], ['22:15','Открытый лёд'],
+];
+const slotsEl = document.getElementById('slots');
+if (slotsEl) SLOTS.forEach(([t,kind])=>{
+  const r=document.createElement('div');
+  r.className='slots__row';
+  r.innerHTML=`<span class="slots__t">${t}</span>`+
+              `<span class="slots__n">${kind}</span>`+
+              `<span class="slots__p">60 мин</span>`;
+  slotsEl.appendChild(r);
+});
+
+// Беларусь в собственном масштабе: одна рамка на три рынка давала пустоту
+// в центре и делала покрытие реже, чем оно есть. Питер и Москва — отдельной
+// разбивкой, они не пины, а факты экспансии.
+// [название, широта, долгота, число арен, режим]
+const CITIES = [
+  ['Минск',53.90,27.57,8,'live'],
+  ['Гродно',53.68,23.83,2,'live'],  ['Гомель',52.44,30.99,2,'live'],
+  ['Брест',52.10,23.69,1,'live'],   ['Витебск',55.19,30.20,1,'live'],
+  ['Могилёв',53.90,30.33,1,'live'], ['Бобруйск',53.15,29.22,1,'live'],
+  ['Барановичи',53.13,26.01,1,'live'],['Пинск',52.12,26.10,1,'live'],
+  ['Солигорск',52.79,27.54,1,'live'],['Молодечно',54.32,26.85,1,'live'],
+  ['Орша',54.51,30.42,1,'live'],    ['Новополоцк',55.53,28.66,1,'live'],
+  ['Лида',53.89,25.30,1,'live'],    ['Жлобин',52.89,30.03,1,'live'],
+  ['Светлогорск',52.63,29.73,1,'live'],['Шклов',54.21,30.29,1,'live'],
+  ['Горки',54.28,30.98,1,'live'],   ['Кобрин',52.21,24.36,1,'live'],
+  ['Лунинец',52.25,26.80,1,'live'],
+  ['Островец',54.61,25.95,1,'live'],['Жодино',54.10,28.34,1,'live'],
+  ['Силичи',54.21,27.72,1,'live'],  ['Раубичи',54.05,27.80,1,'live'],
+];
+const MAP={w:620,h:400,lon0:23.0,lon1:32.8,lat0:51.2,lat1:56.3};
+const px=lon=>(lon-MAP.lon0)/(MAP.lon1-MAP.lon0)*MAP.w;
+const py=lat=>(MAP.lat1-lat)/(MAP.lat1-MAP.lat0)*MAP.h;
+const NS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('map');
+CITIES.forEach(([name,lat,lon,n,mode])=>{
+  const c=document.createElementNS(NS,'circle');
+  c.setAttribute('cx',px(lon).toFixed(1));
+  c.setAttribute('cy',py(lat).toFixed(1));
+  c.setAttribute('r',(3.4+Math.sqrt(n)*2.1).toFixed(1));
+  c.setAttribute('class',mode==='soon'?'map__node--soon':'map__node');
+  svg.appendChild(c);
+  // Опорные подписи по углам: очертание страны читается без рисованной границы.
+  const ANCHORS=['Брест','Витебск','Гомель','Гродно','Минск'];
+  if(n>1||mode==='soon'||ANCHORS.includes(name)){
+    const t=document.createElementNS(NS,'text');
+    t.setAttribute('x',(px(lon)+3.4+Math.sqrt(n)*2.1+7).toFixed(1));
+    t.setAttribute('y',(py(lat)+4).toFixed(1));
+    t.setAttribute('class','map__label'+(mode==='soon'?' map__label--soon':''));
+    t.textContent=name+(mode==='soon'?' · скоро':(n>1?` · ${n}`:''));
+    svg.appendChild(t);
+  }
+});
+
+</script>
+</body>
+</html>

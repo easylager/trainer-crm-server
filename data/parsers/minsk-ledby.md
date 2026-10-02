@@ -2,7 +2,7 @@
 
 - arena_id: 5
 - parser_key: ledby_html_v1
-- cadence: weekly
+- cadence: daily
 - requires_by_egress: false
 
 ## Sources

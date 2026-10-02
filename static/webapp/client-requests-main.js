@@ -138,6 +138,13 @@
       state.bookBaseUrl = (window.location.origin || '') + (base ? base + '/' : '/') + 'book';
 
       async function fetchRequests() {
+        // Wait for the acting profile before the first fetch: without this, the request
+        // races client-profile-switcher.js's own profile load, goes out with no
+        // X-Profile-Id, and resolves to "self" instead of the account's default profile —
+        // a request created under a child/guardian profile then looks like it vanished.
+        if (window.ClientProfileSwitcher && typeof ClientProfileSwitcher.init === 'function') {
+          await ClientProfileSwitcher.init();
+        }
         var url = apiUrl('/client/requests', false);
         var res = await fetch(url, { headers: headers() });
         if (!res.ok) {

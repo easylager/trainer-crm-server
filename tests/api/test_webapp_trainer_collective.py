@@ -1,6 +1,12 @@
-"""API tests for trainer collective studio — brand, governance, billing (Wave P1–P2)."""
+"""API tests for trainer collective studio — brand, governance, billing (Wave P1–P2).
+POST /trainer/collective/assets coverage added TASK-143 as a regression net for the
+`upload_collective_asset_from_bytes` core extraction (shared with the new org upload path).
+"""
+from io import BytesIO
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 from sqlalchemy import text
 
 from src.api.app import app
@@ -12,6 +18,12 @@ from tests.api.test_webapp_trainer_schedule_integration import (
 )
 
 pytestmark = pytest.mark.collective
+
+
+def _jpeg_bytes(color: tuple[int, int, int] = (40, 100, 170)) -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (64, 48), color=color).save(buf, "JPEG", quality=80)
+    return buf.getvalue()
 
 
 @pytest.mark.asyncio
@@ -259,3 +271,61 @@ async def test_collective_invoice_request_owner_only(app_use_test_db, db_session
     pending = (studio.get("subscription_checkout") or {}).get("pending_invoice")
     assert pending is not None
     assert pending.get("invoice_id") == body["invoice_id"]
+
+
+@pytest.mark.asyncio
+async def test_collective_asset_upload_owner_logo(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    owner_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await seed_active_collective_owner(db_session, owner_id, slug="assets-owner-logo")
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/collective/assets",
+                params={"kind": "logo"},
+                headers={"X-Telegram-Init-Data": "mock"},
+                files={"file": ("logo.jpg", _jpeg_bytes(), "image/jpeg")},
+            )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["asset"]["kind"] == "logo"
+    assert body["studio"]["logo_url"] == body["asset"]["url"]
+
+
+@pytest.mark.asyncio
+async def test_collective_asset_upload_rejects_non_image(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    owner_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await seed_active_collective_owner(db_session, owner_id, slug="assets-owner-badtype")
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/collective/assets",
+                params={"kind": "cover"},
+                headers={"X-Telegram-Init-Data": "mock"},
+                files={"file": ("note.txt", b"not an image", "text/plain")},
+            )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_collective_asset_upload_non_owner_member_forbidden(app_use_test_db, db_session) -> None:
+    tg_owner = _fresh_trainer_telegram_id()
+    owner_id = await _create_active_trainer(db_session, tg_owner, with_crm=True)
+    collective_id = await seed_active_collective_owner(db_session, owner_id, slug="assets-non-owner")
+    member_id = await seed_active_collective_member(db_session, collective_id)
+    tg_member = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :tid"),
+        {"tg": tg_member, "tid": member_id},
+    )
+    await db_session.commit()
+    with patch_trainer_webapp_init(tg_member):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/collective/assets",
+                params={"kind": "logo"},
+                headers={"X-Telegram-Init-Data": "mock"},
+                files={"file": ("logo.jpg", _jpeg_bytes(), "image/jpeg")},
+            )
+    assert resp.status_code == 403

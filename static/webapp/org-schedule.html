@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Расписание</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="mini-app-full-height.js?v=202609290"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <link rel="stylesheet" href="theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202609300" />
+  <script src="mini-app-confirm.js?v=202609300"></script>
+  <link rel="preload" href="org-schedule-main.js?v=202609300" as="script" />
+  <link rel="preload" href="mini-app-org-shell.js?v=202609290" as="script" />
+  <style>
+    .org-schedule-coach-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .org-schedule-coach-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .org-schedule-coach-chip.is-active {
+      background: rgba(var(--accent-rgb, 69, 185, 187), 0.15);
+      border-color: var(--accent-rgb, #45b9bb);
+    }
+    .org-schedule-week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .org-schedule-week-nav__btn {
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .org-schedule-week-nav__label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .org-schedule-day {
+      margin-bottom: 12px;
+    }
+    .org-schedule-day__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      margin-bottom: 8px;
+    }
+    .org-schedule-day__name {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .org-schedule-day__add {
+      border: none;
+      background: var(--accent-rgb, #45b9bb);
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .org-schedule-slots {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .org-schedule-slot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 10px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .org-schedule-slot__time {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .org-schedule-slot__label {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+    }
+    .org-schedule-slot__del {
+      border: none;
+      background: transparent;
+      color: var(--tg-theme-destructive-text-color, #ff3b30);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    .org-schedule-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+    }
+    .org-schedule-slot--booked {
+      opacity: 0.85;
+    }
+    .org-schedule-panel {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .org-schedule-panel__title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 10px;
+    }
+    .org-schedule-panel__row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .org-schedule-panel__row label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+    .org-schedule-panel__row select {
+      font: inherit;
+      font-size: 14px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(128, 128, 128, 0.25);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .org-schedule-panel__actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .org-schedule-panel__actions .btn-primary,
+    .org-schedule-panel__actions .btn-secondary {
+      flex: 1;
+    }
+    .org-schedule-panel__hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+  </style>
+</head>
+<body data-org-shell="tabs" data-org-active="schedule">
+  <main class="org-page" id="orgSchedulePage">
+    <div class="org-home-state org-home-state--loading" id="orgScheduleLoading">
+      <p>Загрузка</p>
+    </div>
+
+    <section id="orgScheduleRoot" hidden>
+      <header class="org-home-header">
+        <h1>Расписание</h1>
+      </header>
+
+      <div class="org-schedule-coach-picker" id="orgScheduleCoachPicker"></div>
+
+      <div class="org-schedule-week-nav">
+        <button type="button" class="org-schedule-week-nav__btn" id="orgSchedulePrevWeek">←</button>
+        <span class="org-schedule-week-nav__label" id="orgScheduleWeekLabel"></span>
+        <button type="button" class="org-schedule-week-nav__btn" id="orgScheduleNextWeek">→</button>
+      </div>
+
+      <div id="orgScheduleDays"></div>
+
+      <button type="button" class="btn-secondary" id="orgScheduleTemplateOpen">Шаблон недели</button>
+
+      <div class="org-schedule-panel" id="orgSchedulePanel" hidden>
+        <p class="org-schedule-panel__title" id="orgSchedulePanelTitle"></p>
+        <p class="org-schedule-panel__hint" id="orgSchedulePanelHint"></p>
+        <div class="org-schedule-panel__row">
+          <label for="orgSchedulePanelDuration">Длительность</label>
+          <select id="orgSchedulePanelDuration">
+            <option value="30">30 мин</option>
+            <option value="45" selected>45 мин</option>
+            <option value="60">60 мин</option>
+            <option value="90">90 мин</option>
+          </select>
+        </div>
+        <div id="hourGrid" role="group" aria-describedby="orgSchedulePanelHint"></div>
+        <div class="org-schedule-panel__actions">
+          <button type="button" class="btn-secondary" id="orgSchedulePanelCancel">Отмена</button>
+          <button type="button" class="btn-primary" id="orgSchedulePanelSave">Создать</button>
+        </div>
+      </div>
+
+      <div class="org-schedule-panel" id="orgScheduleTemplatePanel" hidden>
+        <p class="org-schedule-panel__title">Шаблон недели</p>
+        <div class="org-schedule-coach-picker" id="orgScheduleTemplateDayPicker"></div>
+        <div id="orgScheduleTemplateEditor" hidden>
+          <p class="org-schedule-panel__hint" id="orgScheduleTemplateHint"></p>
+          <div class="org-schedule-panel__row">
+            <label for="orgScheduleTemplateDuration">Длительность</label>
+            <select id="orgScheduleTemplateDuration">
+              <option value="30">30 мин</option>
+              <option value="45" selected>45 мин</option>
+              <option value="60">60 мин</option>
+              <option value="90">90 мин</option>
+            </select>
+          </div>
+          <div id="templateHourGrid" role="group" aria-describedby="orgScheduleTemplateHint"></div>
+          <div class="org-schedule-panel__actions">
+            <button type="button" class="btn-secondary" id="orgScheduleTemplateSaveDay">Сохранить день</button>
+          </div>
+          <div class="org-schedule-panel__actions">
+            <button type="button" class="btn-secondary" id="orgScheduleApplyThisWeek">Применить на эту неделю</button>
+            <button type="button" class="btn-secondary" id="orgScheduleApplyNextWeek">На следующую</button>
+          </div>
+        </div>
+        <div class="org-schedule-panel__actions">
+          <button type="button" class="btn-secondary" id="orgScheduleTemplateClose">Закрыть</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="org-home-state org-home-state--error" id="orgScheduleError" hidden>
+      <p id="orgScheduleErrorText">Не удалось загрузить расписание</p>
+      <button type="button" class="btn-secondary" id="orgScheduleRetry">Повторить</button>
+    </div>
+  </main>
+
+  <script defer src="org-schedule-main.js?v=202609300"></script>
+  <script defer src="mini-app-org-shell.js?v=202609290"></script>
+</body>
+</html>

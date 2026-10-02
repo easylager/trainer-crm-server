@@ -8,7 +8,6 @@ from src.application.collective_use_cases import (
     COLLECTIVE_STATUS_ACTIVE,
     COLLECTIVE_STATUS_DRAFT,
     MEMBER_ROLE_MEMBER,
-    MEMBER_ROLE_OWNER,
     MEMBER_STATUS_ACTIVE,
     ORG_FORMAT_CENTER,
     ORG_FORMAT_CENTER_HYBRID,
@@ -16,7 +15,6 @@ from src.application.collective_use_cases import (
     SCHEDULE_MODE_STUDIO_CENTRAL,
     STUDIO_ACCESS_MODE_ADMIN_ONLY,
     STUDIO_ACCESS_MODE_FULL,
-    consume_collective_claim_token,
     create_collective_draft,
     issue_collective_claim_token,
     parse_admin_collective_draft_body,
@@ -180,54 +178,7 @@ async def test_suspended_collective_notice_for_member(db_session) -> None:
     assert "приостановлена" in notice["message"]
 
 
-@pytest.mark.asyncio
-async def test_claim_applies_owner_studio_access_mode(db_session) -> None:
-    now = datetime.now(timezone.utc)
-    r_tr = await db_session.execute(
-        text("INSERT INTO trainers (status, created_at) VALUES ('active', :now) RETURNING id"),
-        {"now": now},
-    )
-    trainer_id = int(r_tr.scalar_one())
-
-    created = await create_collective_draft(
-        db_session,
-        slug="claim-manager",
-        display_name="Claim Manager",
-        organization_format=ORG_FORMAT_CENTER,
-        schedule_mode=SCHEDULE_MODE_STUDIO_CENTRAL,
-        owner_studio_access_mode=STUDIO_ACCESS_MODE_ADMIN_ONLY,
-    )
-    claim = await issue_collective_claim_token(db_session, int(created["id"]))
-    assert claim is not None
-
-    result = await consume_collective_claim_token(db_session, claim["token"], trainer_id)
-    assert result.error is None
-
-    r_mode = await db_session.execute(
-        text("SELECT studio_access_mode FROM trainers WHERE id = :tid"),
-        {"tid": trainer_id},
-    )
-    assert r_mode.scalar_one() == STUDIO_ACCESS_MODE_ADMIN_ONLY
-
-    r_col = await db_session.execute(
-        text("SELECT status, owner_trainer_id FROM collectives WHERE slug = :slug"),
-        {"slug": "claim-manager"},
-    )
-    col = r_col.fetchone()
-    assert col is not None
-    assert col[0] == COLLECTIVE_STATUS_ACTIVE
-    assert int(col[1]) == trainer_id
-
-    r_mem = await db_session.execute(
-        text(
-            """
-            SELECT role, status FROM collective_members
-            WHERE collective_id = :cid AND trainer_id = :tid
-            """
-        ),
-        {"cid": int(created["id"]), "tid": trainer_id},
-    )
-    mem = r_mem.fetchone()
-    assert mem is not None
-    assert mem[0] == MEMBER_ROLE_OWNER
-    assert mem[1] == MEMBER_STATUS_ACTIVE
+# The trainer-bot claim path this test covered (consume_collective_claim_token) was removed —
+# a trainer never becomes a school "owner" through the trainer bot (TASK-141). See
+# consume_collective_claim_token_for_operator's docstring for the accepted gap this leaves
+# for `center`-format collectives.

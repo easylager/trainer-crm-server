@@ -1,0 +1,179 @@
+<!-- removed-sections.html
+     Снято с главной (prototype-v2.html) 2026-09-23, TASK-131, решение PDEC-017:
+     главная пишется одному адресату — тренеру. Ниже — разметка двух секций
+     в том виде, в каком она стояла на главной, вместе с авторскими
+     комментариями.
+
+     · «Школам» (#role-school) — содержание переезжает на страницу студии, TASK-134.
+     · «Кататься» (#role-client) — катающийся приходит в продукт, а не на лендинг;
+       фрагменты про лёд города и арены нужны странице арен, TASK-132.
+
+     Файл — архив, а не страница: стили (.b2b, .ice, .shop, .dash, .pillar,
+     .slots/.times) и скрипты остались в prototype-v2.html, здесь только разметка.
+     Третий блок — закрывающая дверь «Мы школа» из секции .close, там же
+     заменённая на ссылку-заглушку до TASK-134.
+-->
+
+<!-- ═══ 4. Школам ══════════════════════════════════════════════════════════ -->
+<section class="role" id="role-school">
+  <div class="role__head">
+    <div>
+      <p class="eyebrow">Школам</p>
+      <h2>Лёд вы уже оплатили.<br>Осталось его заполнить.</h2>
+    </div>
+    <!-- Разговор начинается с экономики директора, а не с наших экранов.
+         Учёт есть у всех; дефицитен канал набора. -->
+    <p class="role__lede">Час льда куплен заранее и сгорает, даже если на нём никого нет.
+      Набор идёт в сентябре, и идёт он там, где родители ищут каток. <b>Мы — единственное
+      место, где они ищут каток и видят, кто на нём учит.</b></p>
+  </div>
+
+  <div class="b2b">
+    <!-- Книга льда. В целевом состоянии школа владеет купленным льдом как
+         ресурсом: часы, заполняемость, стоимость простоя — и действие прямо
+         отсюда. Это единственный экран, который директор открывает каждый
+         понедельник. -->
+    <div>
+      <div class="ice">
+        <p class="ice__cap"><span>Лёд школы · эта неделя</span><span>пример интерфейса</span></p>
+        <div class="ice__rows">
+          <div class="ice__row"><span class="ice__k">Куплено часов</span><span class="ice__v">42</span><span class="ice__m">3 360 BYN</span></div>
+          <div class="ice__row ice__row--fill"><span class="ice__k">Заполнено занятиями</span><span class="ice__v">34</span><span class="ice__m">81%</span></div>
+          <div class="ice__row ice__row--loss"><span class="ice__k">Простаивает</span><span class="ice__v">8</span><span class="ice__m">−640 BYN</span></div>
+        </div>
+        <div class="ice__free">
+          <p>Свободные часы — можно занять</p>
+          <div class="ice__slot"><span class="ice__when">чт 16:00</span><span class="ice__where">ТЦ Замок</span><button class="ice__act" type="button" data-sheet="school">Открыть набор</button></div>
+          <div class="ice__slot"><span class="ice__when">сб 08:00</span><span class="ice__where">Чижовка-арена</span><button class="ice__act" type="button" data-sheet="school">Открыть набор</button></div>
+          <div class="ice__slot"><span class="ice__when">вс 19:30</span><span class="ice__where">ТЦ Замок</span><button class="ice__act" type="button" data-sheet="school">Открыть набор</button></div>
+        </div>
+      </div>
+
+      <p class="note-h" style="margin-top:18px">Один клик — и свободный час уходит в набор:
+        появляется на странице арены, в вашей витрине и в уведомлениях родителям,
+        которые уже у вас занимаются.</p>
+    </div>
+
+    <div>
+      <div class="pillar">
+        <div class="pillar__row"><span class="pillar__n">01</span>
+          <div><p class="pillar__t">Лёд как ресурс, а не как расход</p>
+          <p class="pillar__d">Часы, заполняемость, себестоимость часа и маржа по каждой
+            группе. <b>Видно, какой час не окупается</b> — и что с ним сделать сегодня.</p></div></div>
+        <div class="pillar__row"><span class="pillar__n">02</span>
+          <div><p class="pillar__t">Набор идёт там, где родители ищут каток</p>
+          <p class="pillar__d">Группы школы стоят на страницах арен рядом с расписанием
+            катаний — <b><span data-num="arenas"></span> арен в <span data-num="cities"></span> городах</b>. Не реклама, а то же место, куда родитель
+            и так пришёл.</p></div></div>
+        <div class="pillar__row"><span class="pillar__n">03</span>
+          <div><p class="pillar__t">База принадлежит школе</p>
+          <p class="pillar__d">Группы, абонементы и родители закреплены за школой, а не за
+            тренером. <b>Тренер уходит — ученики остаются.</b> Передача группы — в два
+            касания.</p></div></div>
+        <div class="pillar__row"><span class="pillar__n">04</span>
+          <div><p class="pillar__t">Деньги по-взрослому</p>
+          <p class="pillar__d">Абонементы от имени школы, оплата картой и ЕРИП,
+            <b>счёт на юрлицо</b> и закрывающие документы. Один счёт за всю команду.</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Витрина: как школу видит родитель. Вторым рядом, потому что сначала
+       директору важна экономика, а потом уже как он выглядит. -->
+  <div class="b2b" style="margin-top:clamp(34px,4vw,56px)">
+    <div>
+      <div class="shop">
+        <div class="shop__cover">
+          <img src="pics/hq-lds-minoblast.jpg" alt="">
+          <span class="shop__mark">В</span>
+        </div>
+        <div class="shop__body">
+          <p class="shop__name"><b>Ваша школа</b><span class="roster__chip">пример</span></p>
+          <p class="shop__meta">Минск · ТЦ Замок, Чижовка-арена<br>6 тренеров · 4 группы · 128 учеников</p>
+
+          <p class="shop__cap">Группы с набором</p>
+          <div class="shop__grp"><span>Новички, 5–7 лет</span><span class="shop__when">сб 10:00</span><span class="shop__spots">набор открыт</span></div>
+          <div class="shop__grp"><span>Продолжающие, 8–11</span><span class="shop__when">вт·чт 18:00</span><span class="shop__spots">2 места</span></div>
+          <div class="shop__grp"><span>Хоккей, подготовка</span><span class="shop__when">вс 09:15</span><span class="shop__spots">4 места</span></div>
+          <p class="shop__foot">Так школа выглядит на странице арены — под расписанием
+            массовых катаний, там же, где родитель смотрел, куда пойти в субботу.
+            Ваш логотип, ваш цвет, ваши группы.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="roster__brand" style="margin-bottom:12px">
+        <span class="roster__name" style="font-size:13.5px;font-weight:500">Понедельник директора</span>
+        <span class="roster__chip">пример интерфейса</span>
+      </div>
+      <div class="dash">
+        <div class="dash__row"><span class="dash__k">Записи за неделю</span><span class="dash__v">126</span></div>
+        <div class="dash__row"><span class="dash__k">Новые ученики</span><span class="dash__v">9</span></div>
+        <div class="dash__row"><span class="dash__k">Активные абонементы</span><span class="dash__v">84</span></div>
+        <div class="dash__row"><span class="dash__k">Выручка</span><span class="dash__v">7 940 BYN</span></div>
+        <div class="dash__row"><span class="dash__k">Маржа после льда</span><span class="dash__v">4 580 BYN</span></div>
+      </div>
+      <p class="note-h">Вся команда на одном экране и каждый тренер отдельно. Родитель
+        заходит одним аккаунтом на двоих детей и видит остаток абонемента. Приглашение
+        тренера в ростер — одной ссылкой.</p>
+    </div>
+  </div>
+
+  <div class="role__cta" style="margin-top:clamp(30px,3.6vw,46px)">
+    <a class="door door--primary" href="#" data-sheet="school">Поговорить о пилоте <span class="ar">→</span></a>
+    <p class="role__note">Первые школы Минска · переносим базу и расписание за вас</p>
+  </div>
+
+  <div class="role__foot">
+    <div><b>Кому подойдёт</b><span>Школе, арендующей лёд: директор и 3–15 тренеров, детские группы и индивидуальные занятия</span></div>
+    <div><b>Что переносим</b><span>Расписание, группы, клиентскую базу и остатки абонементов — вручную вбивать ничего не нужно</span></div>
+    <div><b>Первая студия</b><span>JustSkate, Минск — 6 тренеров, обучение с нуля, фигурное катание и хоккей</span></div>
+  </div>
+</section>
+
+<!-- ═══ 5. Кататься ════════════════════════════════════════════════════════ -->
+<section class="role" id="role-client">
+  <div class="role__head">
+    <div>
+      <p class="eyebrow">Кататься</p>
+      <h2>Где сегодня лёд — и кто научит</h2>
+    </div>
+    <p class="role__lede">Расписание массовых катаний всех арен города в одном месте,
+      без обзвона и без сайтов катков. Рядом — тренеры, которые работают на этом льду.</p>
+  </div>
+
+  <div class="role__body">
+    <div>
+      <p class="map__cap" id="slotsCap"></p>
+      <div class="slots" id="slots"></div>
+    </div>
+    <!-- Нумерованный список 01/02/03 убран: он стоял третий раз подряд
+         и к этому месту уже ничего не сообщал. -->
+    <div>
+      <p class="role__lede" style="margin-bottom:18px">Лёд города на сегодня и на неделю
+        вперёд открывается обычной ссылкой — Telegram для просмотра не нужен. Рядом с
+        ареной видно тренеров, которые на ней работают.</p>
+      <div class="team__row">Города с живым расписанием<span data-num="cities"></span></div>
+      <div class="team__row">Арены<span data-num="arenas"></span></div>
+      <div class="team__row">Сеансов на неделю вперёд<span data-num="sessionsWeek"></span></div>
+    </div>
+  </div>
+
+  <div class="role__cta">
+    <a class="door door--primary" href="#" data-sheet="client">Открыть в Telegram <span class="ar">→</span></a>
+    <p class="role__note">Бесплатно · без регистрации и установки</p>
+  </div>
+
+  <div class="role__foot">
+    <div><b>Для себя и для детей</b><span>Несколько профилей в одном аккаунте</span></div>
+    <!-- Реальные интервалы: booking_use_cases.py:1204-1205 — 24 ч и 2 ч,
+         а не «за час», как было написано. -->
+    <div><b>Напоминания</b><span>Придут за сутки и за два часа до занятия</span></div>
+    <div><b>Абонементы</b><span>Остаток занятий виден в любой момент</span></div>
+  </div>
+</section>
+
+<!-- ═══ Из секции .close (закрытие): вторая дверь ═════════════════════════ -->
+<a class="door door--ghost" href="#" data-go="#role-school"
+   style="color:#E6ECEB;border-color:rgba(230,236,235,.4)">Мы школа <span class="ar">→</span></a>

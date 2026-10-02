@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Каталог</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="mini-app-full-height.js?v=202609290"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <link rel="stylesheet" href="theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
+  <link rel="preload" href="org-catalog-main.js?v=202609290" as="script" />
+  <link rel="preload" href="mini-app-org-shell.js?v=202609290" as="script" />
+</head>
+<body data-org-shell="tabs" data-org-active="catalog">
+  <main class="org-page" id="orgCatalogPage">
+    <div class="org-home-state org-home-state--loading" id="orgCatalogLoading">
+      <p>Загрузка</p>
+    </div>
+
+    <section id="orgCatalogRoot" hidden>
+      <header class="org-home-header">
+        <h1>Каталог</h1>
+      </header>
+
+      <div class="org-home-status" id="orgCatalogStatus">
+        <span class="org-home-status__dot" aria-hidden="true"></span>
+        <span id="orgCatalogStatusText"></span>
+      </div>
+      <p class="org-catalog-body" id="orgCatalogBody"></p>
+
+      <div class="org-subscription-card" id="orgCatalogPreview">
+        <p class="org-catalog-preview__label">Так вас видят на странице школы</p>
+        <p class="org-subscription-card__title" id="orgCatalogPreviewName"></p>
+        <p class="org-subscription-card__meta" id="orgCatalogPreviewAbout"></p>
+        <p class="org-subscription-card__meta" id="orgCatalogPreviewContact"></p>
+      </div>
+
+      <div class="org-checklist" id="orgCatalogChecklist" hidden></div>
+
+      <details class="org-catalog-why">
+        <summary>Зачем это нужно</summary>
+        <p>
+          Публичная страница школы — то, на что вы можете дать ссылку клиентам и партнёрам.
+          Пока школа не опубликована, страница по ссылке недоступна.
+        </p>
+      </details>
+
+      <button type="button" class="btn-primary" id="orgCatalogPublish" hidden>Опубликовать</button>
+      <button type="button" class="btn-secondary" id="orgCatalogHide" hidden>Снять с публикации</button>
+      <a class="org-catalog-public-link" id="orgCatalogPublicLink" href="#" target="_blank" rel="noopener" hidden>Открыть публичную страницу →</a>
+      <p class="org-catalog-action-error" id="orgCatalogActionError" hidden></p>
+
+      <h2 class="org-catalog-history-title">История</h2>
+      <div id="orgCatalogHistory" class="org-catalog-history"></div>
+    </section>
+
+    <div class="org-home-state org-home-state--error" id="orgCatalogError" hidden>
+      <p id="orgCatalogErrorText">Не удалось загрузить раздел</p>
+      <button type="button" class="btn-secondary" id="orgCatalogRetry">Повторить</button>
+    </div>
+  </main>
+
+  <script defer src="org-catalog-main.js?v=202609290"></script>
+  <script defer src="mini-app-org-shell.js?v=202609290"></script>
+</body>
+</html>

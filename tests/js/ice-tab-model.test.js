@@ -25,8 +25,8 @@ describe('фильтр по типу площадки', () => {
 
   it('выбранные типы едут списком через запятую', () => {
     const { buildListUrl } = loadModel();
-    const url = buildListUrl({ cityId: 3, intent: 'skate', venueTypes: ['gym', 'choreo'] });
-    assert.match(url, /venue_type=gym%2Cchoreo/);
+    const url = buildListUrl({ cityId: 3, intent: 'skate', venueTypes: ['gym', 'roller'] });
+    assert.match(url, /venue_type=gym%2Croller/);
   });
 
   it('дубли и регистр не плодят мусор в параметре', () => {
@@ -50,38 +50,38 @@ describe('фильтр по типу площадки', () => {
 
   it('город с одним типом площадок не показывает фильтр из одного варианта', () => {
     // Выбор из одной кнопки — шум, а не выбор: в чисто ледовом городе
-    // чип «Лёд» не сообщает ничего, чего не сообщал бы сам список.
+    // чип «Арена» не сообщает ничего, чего не сообщал бы сам список.
     const { venueChipsView } = loadModel();
-    assert.deepEqual(venueChipsView([{ key: 'ice', chip: 'Лёд', count: 8 }], []), []);
+    assert.deepEqual(venueChipsView([{ key: 'arena', chip: 'Арена', count: 8 }], []), []);
   });
 
   it('смешанный город даёт «Все» плюс чип на каждый тип', () => {
     const { venueChipsView } = loadModel();
     const chips = venueChipsView(
       [
-        { key: 'ice', chip: 'Лёд', count: 8 },
-        { key: 'gym', chip: 'Зал', count: 1 },
+        { key: 'arena', chip: 'Арена', count: 8 },
+        { key: 'gym', chip: 'Спортзал', count: 1 },
       ],
       []
     );
-    assert.deepEqual(chips.map((c) => c.label), ['Все', 'Лёд', 'Зал']);
+    assert.deepEqual(chips.map((c) => c.label), ['Все', 'Арена', 'Спортзал']);
     assert.equal(chips[0].active, true);
   });
 
   it('выбранный чип остаётся в списке — из фильтра должно быть куда выйти', () => {
-    // Фасеты сервер считает ДО фильтра именно поэтому: иначе «Зал» исчезал бы
+    // Фасеты сервер считает ДО фильтра именно поэтому: иначе «Спортзал» исчезал бы
     // из собственного списка сразу после нажатия.
     const { venueChipsView } = loadModel();
     const chips = venueChipsView(
       [
-        { key: 'ice', chip: 'Лёд', count: 8 },
-        { key: 'gym', chip: 'Зал', count: 1 },
+        { key: 'arena', chip: 'Арена', count: 8 },
+        { key: 'gym', chip: 'Спортзал', count: 1 },
       ],
       ['gym']
     );
     assert.equal(chips.find((c) => c.key === 'gym').active, true);
     assert.equal(chips.find((c) => c.key === '').active, false);
-    assert.ok(chips.some((c) => c.key === 'ice'));
+    assert.ok(chips.some((c) => c.key === 'arena'));
   });
 });
 

@@ -303,6 +303,11 @@ a.arena-row {
   color: var(--glide-hint);
 }
 
+/* display:flex на .arena-legend перебивает UA-правило [hidden]{display:none}. */
+.arena-legend[hidden] {
+  display: none;
+}
+
 .arena-legend span {
   display: inline-flex;
   align-items: center;
@@ -316,8 +321,9 @@ a.arena-row {
   display: inline-block;
 }
 
+/* Свотч обязан совпадать с полоской строки: у сеанса катка она --app-ok. */
 .arena-sw--ice {
-  background: var(--glide-brand);
+  background: var(--app-ok);
 }
 
 .arena-sw--lesson {

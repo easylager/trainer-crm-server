@@ -2,7 +2,7 @@
 
 - arena_id: 6
 - parser_key: chizhovka_html_v1
-- cadence: weekly
+- cadence: daily
 - requires_by_egress: false
 
 ## Sources

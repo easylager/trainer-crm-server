@@ -156,14 +156,7 @@ def get_trainer_miniapp_principal_multipart(
     return _principal_from_credential_trainer(cred)
 
 
-def get_org_miniapp_principal(
-    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
-) -> MiniAppPrincipal:
-    """Org Web App (TASK-141/EPIC5 TASK-105): initData verified against the org bot token.
-
-    No allowlist here — authorization is "does this telegram_id have an operator row for
-    some collective", which the route/use-case resolves per request (resolve_operator_membership).
-    """
+def _principal_from_credential_org(cred: MiniappCredentialIn) -> MiniAppPrincipal:
     if cred.platform == MiniAppPlatform.MAX.value:
         raise HTTPException(
             status_code=501,
@@ -176,6 +169,24 @@ def get_org_miniapp_principal(
         return verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
         raise miniapp_credential_http_exception() from None
+
+
+def get_org_miniapp_principal(
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+) -> MiniAppPrincipal:
+    """Org Web App (TASK-141/EPIC5 TASK-105): initData verified against the org bot token.
+
+    No allowlist here — authorization is "does this telegram_id have an operator row for
+    some collective", which the route/use-case resolves per request (resolve_operator_membership).
+    """
+    return _principal_from_credential_org(cred)
+
+
+def get_org_miniapp_principal_multipart(
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in_multipart),
+) -> MiniAppPrincipal:
+    """Org Web App auth for ``multipart/form-data`` (TASK-143: logo/cover/gallery upload)."""
+    return _principal_from_credential_org(cred)
 
 
 def get_admin_miniapp_principal(

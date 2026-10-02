@@ -1,0 +1,115 @@
+{
+  "snapshot_taken_at_utc": "2026-09-23T14:24:08Z",
+  "source": "Railway Postgres-W--1 (prod), DATABASE_PUBLIC_URL, readonly SELECTs via psycopg",
+  "reference_local_date": "2026-09-23",
+  "notes": [
+    "Все города платформы работают в UTC+3 (arena_profiles.timezone не заполнен ни для одной арены), поэтому local_date в ice_sessions уже локальный и снимался как есть.",
+    "kind='public_skate' взят как 'массовое катание'; kind='open_ice' ('открытый лёд') считался отдельно и исключён из sessions_today/sessions_horizon, если не сказано иное полем *_all_kinds.",
+    "'Непустое расписание арены' = есть хотя бы 1 сеанс с local_date >= reference_local_date (не обязательно сегодня — данные по некоторым аренам приходят волнами, раз в неделю).",
+    "Данные в ice_sessions хранят и прошлые даты (09-09..09-22) — их отбросили при подсчётах горизонта.",
+    "Горизонт данных заканчивается 2026-09-30, то есть 'ближайшие недели' на факте — это 7-8 дней, не больше; дальше данных просто нет."
+  ],
+  "cities": {
+    "Минск": {
+      "country": "BY",
+      "arenas_active_total": 16,
+      "arenas_nonempty_schedule": 5,
+      "qualifies_for_switcher_ge4_rule": true,
+      "arenas": [
+        {"arena_id": 3, "name": "ТЦ Замок", "sessions_today_public_skate": 13, "first_session_local": "10:15", "last_session_local": "22:15", "sessions_horizon_public_skate": 78, "coaches_linked": 6},
+        {"arena_id": 7, "name": "ТЦ DiaMond city", "sessions_today_public_skate": 5, "first_session_local": "11:00", "last_session_local": "15:30", "sessions_horizon_public_skate": 36, "coaches_linked": 1},
+        {"arena_id": 6, "name": "Чижовка-арена", "sessions_today_public_skate": 2, "first_session_local": "10:30", "last_session_local": "12:15", "sessions_horizon_public_skate": 9, "coaches_linked": 0},
+        {"arena_id": 5, "name": "Ледовый дворец спорта Минской области", "sessions_today_public_skate": 1, "first_session_local": "20:15", "last_session_local": "20:15", "sessions_horizon_public_skate": 4, "coaches_linked": 0},
+        {"arena_id": 115, "name": "Конькобежный стадион", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 1, "coaches_linked": 0, "note": "0 сеансов сегодня, 1 сеанс 2026-09-24 — не подходит для карточки 'сегодня'"}
+      ]
+    },
+    "Санкт-Петербург/ЛО": {
+      "country": "RU",
+      "arenas_active_total": 49,
+      "arenas_nonempty_schedule": 12,
+      "qualifies_for_switcher_ge4_rule": true,
+      "arenas": [
+        {"arena_id": 105, "name": "Ледовый дворец", "sessions_today_public_skate": 7, "first_session_local": "12:30", "last_session_local": "20:00", "sessions_horizon_public_skate": 53, "coaches_linked": 0},
+        {"arena_id": 111, "name": "Ледовая арена Бугры", "sessions_today_public_skate": 6, "first_session_local": "09:00", "last_session_local": "14:45", "sessions_horizon_public_skate": 35, "coaches_linked": 0},
+        {"arena_id": 196, "name": "Шуваловский лёд", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 28, "coaches_linked": 0, "note": "0 сегодня, следующий сеанс 2026-09-24"},
+        {"arena_id": 187, "name": "Ледовая арена Магнит", "sessions_today_public_skate": 6, "first_session_local": "08:15", "last_session_local": "15:15", "sessions_horizon_public_skate": 22, "coaches_linked": 0},
+        {"arena_id": 101, "name": "Ледовая арена Озерки", "sessions_today_public_skate": 4, "first_session_local": "11:30", "last_session_local": "21:00", "sessions_horizon_public_skate": 19, "coaches_linked": 0},
+        {"arena_id": 99, "name": "ЛД «Гранд Каньон Айс»", "sessions_today_public_skate": 1, "first_session_local": "18:30", "last_session_local": "18:30", "sessions_horizon_public_skate": 18, "coaches_linked": 0},
+        {"arena_id": 100, "name": "Ледовый комплекс «Шанс Арена»", "sessions_today_public_skate": 2, "first_session_local": "10:30", "last_session_local": "11:45", "sessions_horizon_public_skate": 12, "coaches_linked": 0},
+        {"arena_id": 192, "name": "Балтик Арена", "sessions_today_public_skate": 3, "first_session_local": "09:15", "last_session_local": "22:15", "sessions_horizon_public_skate": 11, "coaches_linked": 0},
+        {"arena_id": 193, "name": "Айсбург Арена", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 6, "coaches_linked": 0, "note": "0 сегодня; парсер работает (status=ok каждый запуск), но текущие слоты — на 2026-09-26/27, не на эту неделю"},
+        {"arena_id": 185, "name": "Ижорец", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 3, "coaches_linked": 0},
+        {"arena_id": 110, "name": "Ледовая арена «Купчино»", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 2, "coaches_linked": 0},
+        {"arena_id": 173, "name": "Ледовая арена Динамо-Юниор", "sessions_today_public_skate": 0, "first_session_local": null, "last_session_local": null, "sessions_horizon_public_skate": 1, "coaches_linked": 0}
+      ],
+      "arenas_featured_in_prototype_but_still_empty": [
+        {"arena_id": 97, "name": "СКК «Юбилейный»", "parser_key": "yubileyny_afisha_html_v1", "is_enabled": true, "last_run_status": "empty", "last_run_at_utc": "2026-09-22T21:44:36Z", "sessions_horizon_public_skate": 0, "verdict": "джоб включён и отрабатывает по расписанию, но парсер стабильно возвращает пустую сетку — не тестовые данные, а реальный empty."},
+        {"arena_id": 174, "name": "Центр ледовых видов спорта Парнас", "parser_key": "parnasarena_text_v1", "is_enabled": true, "last_run_status": "empty", "last_run_at_utc": "2026-09-19T13:56:55Z", "sessions_horizon_public_skate": 0, "verdict": "джоб включён (weekly), последний запуск 2026-09-19 вернул пустую сетку."}
+      ]
+    },
+    "other_cities_with_nonempty_schedule_but_below_4_arenas_rule": [
+      {"city": "Барановичи", "arenas_nonempty_schedule": 1},
+      {"city": "Брест", "arenas_nonempty_schedule": 1},
+      {"city": "Гомель", "arenas_nonempty_schedule": 1},
+      {"city": "Горки", "arenas_nonempty_schedule": 1},
+      {"city": "Гродно", "arenas_nonempty_schedule": 1},
+      {"city": "Могилев", "arenas_nonempty_schedule": 1},
+      {"city": "Новополоцк", "arenas_nonempty_schedule": 1},
+      {"city": "Орша", "arenas_nonempty_schedule": 1},
+      {"city": "Островец", "arenas_nonempty_schedule": 1},
+      {"city": "Пинск", "arenas_nonempty_schedule": 1},
+      {"city": "Солигорск", "arenas_nonempty_schedule": 1},
+      {"city": "Шклов", "arenas_nonempty_schedule": 1},
+      {"city": "Москва/МО", "arenas_nonempty_schedule": 1, "note": "cities.is_active=false в БД; 101 активная арена в городе, но с реальным расписанием — только одна (Сокольники, 4 сеанса в горизонте)."}
+    ]
+  },
+  "totals": {
+    "arenas_active_total_all_cities": 195,
+    "arenas_with_nonempty_schedule": 30,
+    "cities_with_nonempty_schedule": 15,
+    "cities_qualifying_for_switcher_ge4_rule": ["Минск", "Санкт-Петербург/ЛО"],
+    "sessions_next_7_days_public_skate": 440,
+    "sessions_next_7_days_all_kinds": 446,
+    "sessions_full_data_horizon_public_skate": 447,
+    "sessions_full_data_horizon_all_kinds": 453,
+    "data_horizon_note": "Горизонт данных в ice_sessions заканчивается 2026-09-30 (7 дней после снимка + текущий день = 8 календарных дат). 'ближайшие 7 дней' (23.09-29.09) и 'весь горизонт' (23.09-30.09) — два осмысленных числа, оба посчитаны выше."
+  },
+  "crawl_stats": {
+    "last_successful_run_utc": "2026-09-23T13:59:53Z",
+    "last_run_any_status_utc": "2026-09-23T13:59:53Z",
+    "last_24h": {"total": 35, "ok": 28, "empty": 6, "error": 1},
+    "all_time": {"total_runs": 340, "ok": 254, "empty": 60, "error": 26},
+    "last_330_runs": {"ok": 246, "empty": 58, "error": 26}
+  },
+  "landing_number_reconciliation": [
+    {"landing_value": "30 арен · 15 городов (hero, line 785 и net-секция line 815-816)", "real_value": "30 арен с непустым расписанием в горизонте, 15 городов", "verdict": "СОВПАДАЕТ"},
+    {"landing_value": "457 сеансов на ближайшие недели (net-секция, line 817)", "real_value": "453 (весь горизонт, все kind) / 447 (public_skate)", "verdict": "РАСХОДИТСЯ на 4-10, устарело на несколько дней съёмки, не выдумано"},
+    {"landing_value": "450 сеансов на неделю вперёд (team__row, line 1120)", "real_value": "446 (7 дней, все kind) / 440 (public_skate)", "verdict": "РАСХОДИТСЯ на 4-10, тот же характер — устаревший срез"},
+    {"landing_value": "ТЦ Замок: 13 сеансов сегодня (line 867, line 1246 CITY_DATA)", "real_value": "13 сеансов сегодня (kind=public_skate)", "verdict": "СОВПАДАЕТ. 'Разница 13 vs 14' — не из данных: это JS-анимация armFlip() (строка ~1316-1333), которая через 3.6 сек сама прибавляет +1 к сеансам без обращения к БД. Баг в коде, а не расхождение снимков."},
+    {"landing_value": "Журнал обхода: ТЦ Замок — 78 сеансов (line 1522)", "real_value": "78 сеансов в горизонте (совпадает с sessions_horizon для арены 3)", "verdict": "СОВПАДАЕТ, но подписано как 'сеансов' в одной строке со счётчиком 'сегодня' на карточке (13) — разные величины со сходной подписью, что и создаёт видимость противоречия."},
+    {"landing_value": "Журнал обхода: 330 последних обходов, 245 ok / 59 empty / 26 error (line 825-826)", "real_value": "все время: 340 обходов, 254 ok / 60 empty / 26 error; последние 330: 246 ok / 58 empty / 26 error", "verdict": "ПОЧТИ СОВПАДАЕТ (устарело на ~10 запусков), error совпадает точно"},
+    {"landing_value": "Карта Беларуси: 13 городов, 17 арен (комментарий line 1540)", "real_value": "13 городов Беларуси (без Минска не считая), 17 арен — при подсчёте 'непустых' арен по всем BY-городам кроме Минска", "verdict": "СОВПАДАЕТ включая городские разбивки в массиве CITIES (Минск 5, Гродно 1, Брест 1, Гомель 1, Могилёв 1, Витебск 0, Новополоцк 1, Орша 1, Шклов 1, Горки 1, Барановичи 1, Пинск 1, Солигорск 1, Островец 1)"},
+    {"landing_value": "SPB CITY_DATA: все 8 арен sessions:0 (lines 1258-1265)", "real_value": "5 из этих 8 арен реально отдают сеансы сегодня (Балтик 3, Гранд Каньон 1, Шанс 2, Озерки 4, Магнит 6); 2 из 8 (Юбилейный, Парнас) действительно пустые; Айсбург — пустой сегодня, но есть сеансы через 3 дня", "verdict": "УСТАРЕЛО. Питерские джобы включены и в проде дают реальные сеансы — витрину нужно переснять, см. spb_verdict ниже"}
+  ],
+  "spb_verdict": {
+    "jobs_enabled": true,
+    "jobs_recently_run": "все проверенные ice_parser_jobs для SPB имеют last_run_at в пределах последних 1-4 дней и is_enabled=true",
+    "arenas_with_real_sessions_in_horizon": 12,
+    "arenas_with_zero_sessions_in_horizon": "97 (Юбилейный) и 174 (Парнас) среди изначально показанных 8; плюс ряд не показанных ранее арен города без расписания вовсе",
+    "conclusion": "Санкт-Петербург прошёл DEC-001 правило (12 >= 4) и должен показываться в переключателе городов с реальными числами, а не 'расписание подключаем'. Но 2 из 8 арен, выбранных для витрины прототипа (Юбилейный, Парнас), нужно либо заменить на реально живые SPB-арены (например, Ледовый дворец id=105 — 53 сеанса в горизонте, Бугры id=111 — 35, Шуваловский лёд id=196 — 28), либо оставить с честной пометкой 'расписание подключаем', раз их парсеры пока действительно пустые."
+  },
+  "crawl_log": [
+    {"arena": "Ледовый комплекс «Шанс Арена»", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 10, "finished_at_local": "2026-09-23T16:59:53+03:00"},
+    {"arena": "ЛД «Гранд Каньон Айс»", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 18, "finished_at_local": "2026-09-23T16:59:53+03:00"},
+    {"arena": "Ледовая арена Динамо-Юниор", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 1, "finished_at_local": "2026-09-23T13:08:48+03:00"},
+    {"arena": "Шуваловский лёд", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 28, "finished_at_local": "2026-09-23T13:08:48+03:00"},
+    {"arena": "Ижорец", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 3, "finished_at_local": "2026-09-23T12:17:47+03:00"},
+    {"arena": "Ледовая арена «Купчино»", "city": "Санкт-Петербург/ЛО", "status": "ok", "sessions": 2, "finished_at_local": "2026-09-23T11:38:46+03:00"},
+    {"arena": "ТЦ Замок", "city": "Минск", "status": "ok", "sessions": 78, "finished_at_local": "2026-09-22T23:52:51+03:00"},
+    {"arena": "ТЦ \"Тринити\"", "city": "Гродно", "status": "ok", "sessions": 48, "finished_at_local": "2026-09-22T23:52:51+03:00"},
+    {"arena": "Гомельский ледовый дворец спорта", "city": "Гомель", "status": "ok", "sessions": 5, "finished_at_local": "2026-09-22T23:52:51+03:00"},
+    {"arena": "Бобруйск-арена", "city": "Бобруйск", "status": "error", "sessions": 0, "finished_at_local": "2026-09-22T23:52:51+03:00"},
+    {"arena": "Ледовый дворец", "city": "Лида", "status": "empty", "sessions": 0, "finished_at_local": "2026-09-22T23:52:51+03:00"},
+    {"arena": "Минск Арена", "city": "Минск", "status": "empty", "sessions": 0, "finished_at_local": "2026-09-22T23:52:51+03:00"}
+  ]
+}

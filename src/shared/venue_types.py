@@ -1,14 +1,16 @@
 """
-Тип площадки: лёд — частный случай, а не синоним.
+Тип площадки: арена — частный случай, а не синоним.
 
 До этого модуля сущность ``arenas`` молча означала «каток», и допущение было
 зашито в UI (снежинка в табе, «карточка катка», «Сайт катка»). Первый же тренер
 не со льда — зал на Машерова, арена #201 — сломал его во всех местах разом.
 
-Заметь: для фигуриста лёд + ОФП + хореография — это один тренировочный цикл,
-а не три разных продукта. Так что это достройка домена, а не расширение.
+Набор типов определяется тем, что реально создают тренеры: арена (лёд),
+спортзал, роллердром, уличная площадка, другое. Хореография и бассейн —
+не самостоятельные площадки, а зоны внутри арены или зала, поэтому
+отдельными типами не выделены.
 
-Падежи держим здесь, а не в шаблонах: «карточка катка» → «карточка зала»
+Падежи держим здесь, а не в шаблонах: «карточка арены» → «карточка зала»
 подставляется в одну строку копирайта, и склонять её в трёх местах руками —
 верный способ получить «карточка зал».
 
@@ -18,28 +20,26 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-VENUE_TYPE_ICE = "ice"
+VENUE_TYPE_ARENA = "arena"
 VENUE_TYPE_GYM = "gym"
-VENUE_TYPE_CHOREO = "choreo"
-VENUE_TYPE_POOL = "pool"
+VENUE_TYPE_ROLLER = "roller"
 VENUE_TYPE_OUTDOOR = "outdoor"
 VENUE_TYPE_OTHER = "other"
 
-DEFAULT_VENUE_TYPE = VENUE_TYPE_ICE
+DEFAULT_VENUE_TYPE = VENUE_TYPE_ARENA
 
 #: ``chip`` — фильтр в каталоге, ``noun`` — заголовок карточки,
 #: ``genitive`` — «Открыть карточку {genitive}», ``icon`` — бейдж в списке.
 VENUE_TYPES: tuple[Mapping[str, str], ...] = (
-    {"key": VENUE_TYPE_ICE, "chip": "Лёд", "noun": "Каток", "genitive": "катка", "icon": "❄️"},
-    {"key": VENUE_TYPE_GYM, "chip": "Зал", "noun": "Зал", "genitive": "зала", "icon": "🏋️"},
+    {"key": VENUE_TYPE_ARENA, "chip": "Арена", "noun": "Арена", "genitive": "арены", "icon": "❄️"},
+    {"key": VENUE_TYPE_GYM, "chip": "Спортзал", "noun": "Спортзал", "genitive": "спортзала", "icon": "🏋️"},
     {
-        "key": VENUE_TYPE_CHOREO,
-        "chip": "Хореография",
-        "noun": "Хореографический зал",
-        "genitive": "зала",
-        "icon": "🩰",
+        "key": VENUE_TYPE_ROLLER,
+        "chip": "Роллердром",
+        "noun": "Роллердром",
+        "genitive": "роллердрома",
+        "icon": "🛼",
     },
-    {"key": VENUE_TYPE_POOL, "chip": "Бассейн", "noun": "Бассейн", "genitive": "бассейна", "icon": "🏊"},
     {
         "key": VENUE_TYPE_OUTDOOR,
         "chip": "Улица",
@@ -56,7 +56,7 @@ _BY_KEY: dict[str, Mapping[str, str]] = {v["key"]: v for v in VENUE_TYPES}
 
 
 def normalize_venue_type(value: Any) -> str:
-    """Неизвестное или пустое значение — это ``ice``, а не ошибка.
+    """Неизвестное или пустое значение — это ``arena``, а не ошибка.
 
     Тип приходит из формы тренера и из строк, созданных до появления колонки;
     уронить чтение каталога из-за незнакомого ключа мы не хотим ни в одном из
@@ -67,12 +67,12 @@ def normalize_venue_type(value: Any) -> str:
 
 
 def venue_type_noun(value: Any) -> str:
-    """«Каток» / «Зал» — подпись типа в карточке площадки."""
+    """«Арена» / «Спортзал» — подпись типа в карточке площадки."""
     return _BY_KEY[normalize_venue_type(value)]["noun"]
 
 
 def venue_type_chip(value: Any) -> str:
-    """«Лёд» / «Зал» — короткая подпись для фильтра и бейджа."""
+    """«Арена» / «Спортзал» — короткая подпись для фильтра и бейджа."""
     return _BY_KEY[normalize_venue_type(value)]["chip"]
 
 
@@ -81,12 +81,12 @@ def venue_type_icon(value: Any) -> str:
 
 
 def venue_card_cta(value: Any) -> str:
-    """«Открыть карточку катка» / «…зала» — CTA в списке площадок."""
+    """«Открыть карточку арены» / «…зала» — CTA в списке площадок."""
     return f"Открыть карточку {_BY_KEY[normalize_venue_type(value)]['genitive']}"
 
 
 def venue_site_label(value: Any) -> str:
-    """«Сайт катка» / «Сайт зала» — ссылка на оператора в карточке."""
+    """«Сайт арены» / «Сайт зала» — ссылка на оператора в карточке."""
     return f"Сайт {_BY_KEY[normalize_venue_type(value)]['genitive']}"
 
 
