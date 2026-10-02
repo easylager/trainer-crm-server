@@ -759,7 +759,8 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     const later = Object.assign({}, sessionItem, {
       live: Object.assign({}, sessionItem.live, { local_date: '2026-09-10' }),
     });
-    assert.equal(boardCardView(later, now).day, '10.09');
+    // 10.09.2026 — четверг: под чипом «Выходные» голая дата не говорит, суббота ли это.
+    assert.equal(boardCardView(later, now).day, 'Чт, 10.09');
   });
 
   it('«Сегодня» считается по Europe/Minsk, не по UTC-календарю', () => {
@@ -774,7 +775,7 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(boardCardView(minskToday, afterUtcMidnight).day, 'Сегодня');
     assert.equal(
       sessionDayLabel({ local_date: '2026-09-06' }, afterUtcMidnight),
-      '06.09'
+      'Вс, 06.09'
     );
   });
 });
@@ -922,5 +923,58 @@ describe('TASK-146 (Q-006): окно времени', () => {
       '1 каток · выходные'
     );
     assert.match(buildListUrl({ cityId: 1, intent: 'skate', when: 'auto' }), /when=auto/);
+  });
+});
+
+describe('TASK-146: окно сортирует, а не фильтрует — две группы карточек', () => {
+  const win = { key: 'tomorrow', label: 'Завтра', hits: 1 };
+  const now = new Date('2026-10-02T08:00:00Z'); // пятница, Минск
+  const hit = { id: 1, name: 'Чижовка', venue_type: 'ice', distance_km: 9,
+    live: { kind: 'session', local_date: '2026-10-03', starts_at_local: '12:00', session_id: 11 } };
+  const off = { id: 2, name: 'ТЦ Замок', venue_type: 'ice', distance_km: 2,
+    live: { kind: 'session', outside_window: true, local_date: '2026-10-02', starts_at_local: '16:15', session_id: 22 } };
+  const unknown = { id: 3, name: 'Юность', venue_type: 'ice', distance_km: 1, live: { kind: 'unknown' } };
+
+  it('в окне — только сеанс без outside_window; места без сеанса — вне окна', () => {
+    const { splitByWindow } = loadModel();
+    const parts = splitByWindow([off, hit, unknown], win);
+    assert.deepEqual(parts.hits.map((i) => i.id), [1]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [2, 3]);
+    assert.equal(splitByWindow([off, unknown], null).rest.length, 0, 'без окна делить нечего');
+  });
+
+  it('карточка вне окна говорит «Завтра нет · ближайший», а не выдаёт «Сегодня» за ответ', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(off, now, { window: win });
+    assert.equal(v.offWindow, true);
+    assert.equal(v.offLabel, 'Завтра нет · ближайший');
+    assert.equal(v.day, 'Сегодня');
+    assert.equal(boardCardView(hit, now, { window: win }).offWindow, false);
+    assert.equal(boardCardView(off, now).offWindow, false, 'без окна приглушать нечего');
+  });
+
+  it('разделитель называет окно и число мест ниже', () => {
+    const { windowBreakView } = loadModel();
+    assert.deepEqual(windowBreakView({ key: 'weekend', label: 'Выходные' }, [off, unknown]), {
+      title: 'На выходных нет',
+      sub: '2 катка · их ближайшее время',
+    });
+    assert.equal(windowBreakView(win, []), null);
+  });
+
+  it('строка ленты и шторка карты помечают сеанс вне окна как ближайший', () => {
+    const { formatLiveLine } = loadModel();
+    assert.match(formatLiveLine(off, now), /^Ближайший: Сегодня 16:15/);
+    assert.match(formatLiveLine(hit, now), /^Завтра 12:00/);
+  });
+
+  it('«Рядом» сортирует по расстоянию внутри групп, а не смешивает их', () => {
+    const { orderForFeed } = loadModel();
+    const far = Object.assign({}, hit, { id: 4, distance_km: 20 });
+    const parts = orderForFeed([far, off, unknown, hit], win, true);
+    assert.deepEqual(parts.hits.map((i) => i.id), [1, 4]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [3, 2]);
+    const asServer = orderForFeed([far, off, unknown, hit], win, false);
+    assert.deepEqual(asServer.hits.map((i) => i.id), [4, 1], 'без «Рядом» — порядок сервера');
   });
 });

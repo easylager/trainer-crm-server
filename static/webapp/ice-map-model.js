@@ -380,15 +380,19 @@
   function pinView(item) {
     var tone = pinTone(item);
     var label = '';
+    // TASK-146: сеанс вне выбранного окна — пин гаснет и не хвастается временем:
+    // «19:30» на карте под чипом «Завтра» читается как завтрашние 19:30.
+    var off = !!(item && item.live && item.live.outside_window);
     if (tone === 'a') {
       var short = shortArenaName(item && item.name);
-      var time = sessionTime(item);
+      var time = off ? '' : sessionTime(item);
       if (short && time) label = short + ' · ' + time;
       else label = short;
     }
     return {
       tone: tone,
-      muted: tone === 'c',
+      muted: tone === 'c' || off,
+      when: off ? 'off' : 'in',
       label: label,
       shortName: shortArenaName(item && item.name),
     };

@@ -1036,6 +1036,13 @@ body.ice-view-map .ice-map-offmap {
   background: var(--glide-hint);
 }
 
+/* TASK-146: сеанс вне выбранного окна — пин полый и бледный, без времени на ярлыке. */
+.ice-ypin--off { opacity: 0.6; }
+.ice-ypin--off .ice-ypin__dot {
+  background: var(--tg-theme-bg-color);
+  border-color: var(--glide-hint);
+}
+
 .ice-ypin__label {
   font-size: var(--app-text-kicker);
   font-weight: var(--app-weight-bold);
@@ -1131,7 +1138,84 @@ body.ice-view-map .ice-map-offmap {
 }
 .ice-board__invite::before { content: "⛸ "; }
 
-/* TASK-146 (Q-013): «Лёд рядом сейчас» — сразу под поиском, одним тапом. */
+/*
+ * TASK-146: окно времени сортирует, а не фильтрует. Карточки вне окна — «афиша
+ * в архиве»: кадр ниже и обесцвечен, время сжато до строки, рейка типа пунктиром,
+ * а над временем прямо написано «Завтра нет · ближайший». Различие читается
+ * боковым зрением, без чтения подписей.
+ */
+.ice-board--off .ice-board__photo {
+  aspect-ratio: 5 / 2;
+  filter: grayscale(1) contrast(0.9) brightness(0.85);
+}
+.ice-board--off::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--glide-hint) 0 6px,
+    transparent 6px 11px
+  ) !important;
+  opacity: 0.7;
+}
+.ice-board--off .ice-board__scrim { padding-top: var(--app-space-4); }
+.ice-board--off .ice-board__time {
+  display: inline;
+  font-size: var(--app-text-title);
+  letter-spacing: -0.01em;
+  color: var(--app-on-media-dim);
+}
+.ice-board--off .ice-board__day {
+  display: inline;
+  margin: 0 6px 0 0;
+}
+.ice-board--off .ice-board__depth { color: var(--glide-hint); }
+.ice-board__off {
+  display: table;
+  margin-bottom: 6px;
+  padding: 3px 9px;
+  border: 1px dashed var(--app-on-media-dim);
+  border-radius: var(--app-radius-pill);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.04em;
+  color: var(--app-on-media);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Граница окна: липкая плашка — пока листаешь приглушённые карточки, она сверху. */
+.ice-window-break {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.ice-window-break::before,
+.ice-window-break::after {
+  content: "";
+  flex: 1 1 auto;
+  border-top: 1px dashed var(--glide-line);
+}
+.ice-window-break__pill {
+  flex: 0 1 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-float-bg);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  text-align: center;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.ice-window-break__pill b {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-semibold);
+}
+
+/* TASK-146: «Рядом» — переключатель сортировки ленты по расстоянию. */
 .ice-search input { min-width: 0; }
 .ice-nearest {
   display: inline-flex;
@@ -1150,6 +1234,10 @@ body.ice-view-map .ice-map-offmap {
   cursor: pointer;
 }
 .ice-nearest:disabled { opacity: 0.6; }
+.ice-nearest[aria-pressed="true"] {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
 .ice-nearest__dot {
   width: 8px;
   height: 8px;

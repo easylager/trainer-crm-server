@@ -17,14 +17,14 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610027" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610028" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
   <script src="mini-app-client-shell.js?v=202610027"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
-  <script src="ice-tab-model.js?v=202610026"></script>
+  <script src="ice-tab-model.js?v=202610028"></script>
   <script src="mini-app-share-sheet.js?v=202610027"></script>
-  <script src="ice-map-model.js?v=202610023"></script>
+  <script src="ice-map-model.js?v=202610028"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -60,12 +60,13 @@
           spellcheck="false"
         />
         <!--
-          TASK-146 (Q-013): «Лёд рядом сейчас» — один тап: геолокация, сегодня, ближайший каток.
+          TASK-146: «Рядом» — переключатель: текущая лента (тип места, окно времени) по расстоянию.
+          Было «Лёд рядом» — но в поиске не только лёд: залы, заточка, роллеры.
           Внутри строки поиска, а не в прокручиваемом ряду чипов: там его не долистают (DEC-012),
           а отдельная строка съела бы первый экран (G-P3).
         -->
-        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-label="Лёд рядом сейчас" title="Лёд рядом сейчас">
-          <span class="ice-nearest__dot" aria-hidden="true"></span>Лёд рядом
+        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-pressed="false" aria-label="Сначала ближайшие" title="Сначала ближайшие">
+          <span class="ice-nearest__dot" aria-hidden="true"></span>Рядом
         </button>
       </div>
       <div class="ice-chips ice-chips--intent" id="iceIntentChips" role="group" aria-label="Намерение">
@@ -156,7 +157,7 @@
   </button>
 
   <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-map.js?v=202609287"></script>
-  <script src="ice-tab.js?v=202610027"></script>
+  <script src="ice-map.js?v=202610028"></script>
+  <script src="ice-tab.js?v=202610028"></script>
 </body>
 </html>

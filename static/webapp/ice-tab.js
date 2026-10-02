@@ -24,6 +24,8 @@
     when: 'auto',
     /* Где человек (lat,lon) — если разрешил геолокацию; ближние места выше. */
     near: null,
+    /* «Рядом» нажата: лента по расстоянию (внутри групп окна времени). */
+    nearOn: false,
     window: null,
     cities: [],
     items: [],
@@ -216,6 +218,8 @@
                список, а на карте по-прежнему висели все катки города. */
             venueTypes: state.venueTypes,
             limit: extra.limit || 50,
+            /* Окно времени — и на карту: иначе пин «19:30» под чипом «Завтра» — сегодняшний. */
+            when: M.whenChipsVisible(state.intent, state.venueTypes) ? state.when : '',
           };
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
@@ -276,7 +280,7 @@
    * отдельными строками на поверхности карточки, где контраст измерим.
    */
   function renderArenaCard(item) {
-    var v = M.boardCardView(item);
+    var v = M.boardCardView(item, undefined, { window: state.window });
     var photo = v.photo
       ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
       : '<span class="ice-board__photo ice-board__photo--empty">' +
@@ -285,6 +289,7 @@
         '</span>';
     var scrim =
       '<span class="ice-board__scrim">' +
+      (v.offWindow ? '<span class="ice-board__off">' + esc(v.offLabel) + '</span>' : '') +
       (v.isSession
         ? '<span class="ice-board__day">' +
           esc(v.day) +
@@ -313,7 +318,7 @@
     return (
       '<div class="ice-board-wrap">' +
       invite +
-      '<a class="ice-board ice-board--type-' + esc(v.venueType) + '" href="' +
+      '<a class="ice-board ice-board--type-' + esc(v.venueType) + (v.offWindow ? ' ice-board--off' : '') + '" href="' +
       esc(v.href) +
       '" data-href="' +
       esc(v.href) +
@@ -447,11 +452,24 @@
       showActiveList();
       return;
     }
-    list.innerHTML = state.items
-      .map(function (item) {
-        return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
-      })
-      .join('');
+    if (state.intent === 'coach') {
+      list.innerHTML = state.items.map(renderTrainerCard).join('');
+      showActiveList();
+      return;
+    }
+    /* TASK-146: окно сортирует, а не фильтрует. Между «в окне» и «вне окна» — липкая
+       плашка: пока человек листает приглушённые карточки, она висит сверху и не даёт
+       забыть, что это уже не ответ на выбранный чип. */
+    var parts = M.orderForFeed(state.items, state.window, state.nearOn);
+    var brk = parts.hits.length ? M.windowBreakView(state.window, parts.rest, state.venueTypes) : null;
+    list.innerHTML =
+      parts.hits.map(renderArenaCard).join('') +
+      (brk
+        ? '<div class="ice-window-break" role="separator">' +
+          '<span class="ice-window-break__pill"><b>' + esc(brk.title) + '</b> · ' + esc(brk.sub) + '</span>' +
+          '</div>'
+        : '') +
+      parts.rest.map(renderArenaCard).join('');
     showActiveList();
   }
 
@@ -669,41 +687,67 @@
   }
 
   /**
-   * TASK-146 (Q-013): «Лёд рядом сейчас». Один тап: геолокация один раз → ближайший
-   * каток со льдом сегодня (нет сегодня — в ближайший день) → его карточка.
+   * TASK-146: «Рядом». Было «Лёд рядом сейчас» — один каток со льдом сегодня. Но в поиске
+   * не только лёд: зал, магазин заточки, роллеры. Поэтому кнопка не уводит на один каток,
+   * а переставляет текущую ленту по расстоянию — с теми же типом места и окном времени.
+   * Второй тап выключает. Отказ в геолокации — не тупик с одной кнопкой «Close», а
+   * выбор: открыть города или закрыть.
    */
-  function openNearestIce() {
+  function setNearButton() {
     var btn = $('iceNearestBtn');
-    var fail = function (text) {
-      if (btn) btn.disabled = false;
-      var tg = global.Telegram && global.Telegram.WebApp;
-      if (tg && typeof tg.showAlert === 'function') tg.showAlert(text);
-      else global.alert(text);
-    };
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', state.nearOn ? 'true' : 'false');
+  }
+
+  function geoDeniedPopup(text) {
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (tg && typeof tg.showPopup === 'function') {
+      try {
+        tg.showPopup(
+          {
+            message: text,
+            buttons: [
+              { id: 'city', type: 'default', text: 'Выбрать город' },
+              { id: 'close', type: 'cancel' },
+            ],
+          },
+          function (id) {
+            if (id === 'city') openCityPicker(true);
+          }
+        );
+        return;
+      } catch (e) {
+        /* старый клиент Telegram без showPopup с кнопками — ниже обычный confirm */
+      }
+    }
+    if (global.confirm(text + '\n\nОткрыть выбор города?')) openCityPicker(true);
+  }
+
+  function toggleNear() {
+    var btn = $('iceNearestBtn');
+    if (state.nearOn) {
+      state.nearOn = false;
+      setNearButton();
+      renderList();
+      return;
+    }
     if (!(global.navigator && global.navigator.geolocation)) {
-      fail('Не получилось определить место. Выберите город — покажем лёд в нём.');
+      geoDeniedPopup('Не получилось определить, где вы. Выберите город — покажем места в нём.');
       return;
     }
     if (btn) btn.disabled = true;
     global.navigator.geolocation.getCurrentPosition(
       function (pos) {
-        var near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
-        fetchJson('/api/public/ice/nearest?near=' + encodeURIComponent(near))
-          .then(function (data) {
-            var item = data && data.item;
-            if (!item) {
-              fail('Рядом пока нет массового катания в расписании. Посмотрите каталог города.');
-              return;
-            }
-            if (btn) btn.disabled = false;
-            shellNav('arena?ref=' + encodeURIComponent(String(item.arena_id)));
-          })
-          .catch(function () {
-            fail('Не получилось загрузить ближайший лёд. Проверьте связь и попробуйте ещё раз.');
-          });
+        if (btn) btn.disabled = false;
+        state.near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+        state.nearOn = true;
+        setNearButton();
+        // Сервер считает distance_km только по near — перезапрашиваем ту же ленту с ним.
+        loadArenas();
       },
       function () {
-        fail('Разрешите доступ к геолокации — или выберите город, покажем лёд в нём.');
+        if (btn) btn.disabled = false;
+        geoDeniedPopup('Разрешите доступ к геолокации в настройках — или выберите город, покажем места в нём.');
       },
       { timeout: 8000, maximumAge: 120000 }
     );
@@ -1337,7 +1381,7 @@
       });
     }
     var nearestBtn = $('iceNearestBtn');
-    if (nearestBtn) nearestBtn.addEventListener('click', openNearestIce);
+    if (nearestBtn) nearestBtn.addEventListener('click', toggleNear);
 
     var venueBox = $('iceVenueChips');
     if (venueBox) {

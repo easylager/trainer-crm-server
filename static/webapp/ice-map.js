@@ -263,6 +263,7 @@
             tone: view.tone,
             label: view.label,
             muted: view.muted,
+            when: view.when,
             arenaId: item.id,
           },
           {
@@ -375,7 +376,7 @@
 
     function buildLayouts() {
       PinLayout = ymaps.templateLayoutFactory.createClass(
-        '<div class="ice-ypin ice-ypin--$[properties.tone]">' +
+        '<div class="ice-ypin ice-ypin--$[properties.tone] ice-ypin--$[properties.when]">' +
           '<b class="ice-ypin__label">$[properties.label]</b>' +
           '<i class="ice-ypin__dot"></i></div>'
       );

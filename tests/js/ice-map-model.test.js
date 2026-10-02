@@ -155,6 +155,16 @@ describe('pin chrome (A label, muted C)', () => {
     assert.equal(c.muted, true);
     assert.equal(c.label, '');
   });
+
+  it('TASK-146: сеанс вне выбранного окна — пин полый и без времени', () => {
+    const { pinView } = loadModel();
+    const base = rink();
+    const off = pinView(rink({ live: Object.assign({}, base.live, { outside_window: true }) }));
+    assert.equal(off.when, 'off');
+    assert.equal(off.muted, true);
+    assert.equal(off.label, 'Чижовка');
+    assert.equal(pinView(base).when, 'in');
+  });
 });
 
 describe('bbox load on pan (AC-002)', () => {

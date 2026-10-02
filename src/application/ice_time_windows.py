@@ -5,9 +5,13 @@
 «что на выходных?». Умный дефолт отвечает на этот вопрос сам — по дню недели и часу
 в Минске, без истории клиента (честно и не трогает персональные данные, Q-008):
 
-* будни (пн–чт) до 21:00 — «Сегодня вечером» (с 16:00 или с текущего момента);
+* до 21:00 — «Сегодня вечером» (с 16:00 или с текущего момента), в том числе в пятницу;
 * после 21:00 — «Завтра»;
-* с четверга 16:00 до воскресенья 21:00 — «Выходные» (пятница вечер — воскресенье).
+* с пятницы 21:00 до воскресенья 21:00 — «Выходные».
+
+«Выходные» — суббота и воскресенье, без пятничного вечера. Пятница в окне давала
+карточку «Сегодня 16:15» под чипом «Выходные»: формально верно, а для человека —
+обман, он читает «Выходные» как субботу. Пятничный вечер честно живёт в «Сегодня вечером».
 
 Окна считаются здесь, на сервере, а клиент получает уже готовые ключ и подпись:
 один источник правды, и подпись чипа всегда совпадает с тем, что реально отфильтровано.
@@ -51,7 +55,7 @@ def auto_window_key(now: datetime) -> str:
     local = now.astimezone(ZoneInfo(NOTIFICATION_TZ))
     weekday = local.weekday()  # 0 = понедельник
     t = local.time()
-    is_weekend_stretch = (weekday == 3 and t >= _EVENING_FROM) or weekday in (4, 5) or (weekday == 6 and t < _LATE)
+    is_weekend_stretch = (weekday == 4 and t >= _LATE) or weekday == 5 or (weekday == 6 and t < _LATE)
     if is_weekend_stretch:
         return "weekend"
     if t >= _LATE:
@@ -82,10 +86,10 @@ def resolve_window(raw: str | None, now: datetime | None = None) -> TimeWindow |
     if key == "tomorrow":
         tomorrow = today + timedelta(days=1)
         return TimeWindow("tomorrow", "Завтра", at(tomorrow, time(0, 0)), at(tomorrow + timedelta(days=1), time(0, 0)))
-    # weekend: пятница с 16:00 — конец воскресенья; уже идут выходные — с текущего момента.
-    days_to_friday = (4 - today.weekday()) % 7
+    # weekend: суббота 00:00 — конец воскресенья; уже идут выходные — с текущего момента.
     if today.weekday() in (5, 6):
-        days_to_friday = -(today.weekday() - 4)
-    friday = today + timedelta(days=days_to_friday)
-    monday = friday + timedelta(days=3)
-    return TimeWindow("weekend", "Выходные", max(now, at(friday, _EVENING_FROM)), at(monday, time(0, 0)))
+        saturday = today - timedelta(days=today.weekday() - 5)
+    else:
+        saturday = today + timedelta(days=5 - today.weekday())
+    monday = saturday + timedelta(days=2)
+    return TimeWindow("weekend", "Выходные", max(now, at(saturday, time(0, 0))), at(monday, time(0, 0)))

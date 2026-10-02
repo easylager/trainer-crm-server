@@ -598,7 +598,90 @@
     var today = minskDateIso(now instanceof Date ? now : new Date());
     if (localDate === today) return 'Сегодня';
     if (localDate === addDaysIso(today, 1)) return 'Завтра';
-    return localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+    // День недели обязателен: под чипом «Выходные» голое «03.10» не говорит, суббота ли это.
+    var bits = localDate.split('-');
+    var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
+    return WEEKDAYS_SHORT_RU[wd] + ', ' + localDate.slice(8, 10) + '.' + localDate.slice(5, 7);
+  }
+
+  var WEEKDAYS_SHORT_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  /**
+   * Попадает ли карточка в выбранное окно времени. Сервер кладёт в окно только сеанс;
+   * ближайший сеанс вне окна он помечает outside_window, а место без сеансов (зал,
+   * магазин, «расписание уточняется») в окно не попадает по определению.
+   */
+  function inWindow(item, win) {
+    if (!win) return true;
+    var live = (item && item.live) || {};
+    return String(live.kind || '') === 'session' && !live.outside_window;
+  }
+
+  /**
+   * TASK-146: окно сортирует, а не фильтрует. Сверху — то, что есть в окне; ниже —
+   * остальные со своим ближайшим временем. Две группы разные по смыслу, и лента
+   * обязана это показать, иначе «Сегодня 16:15» под чипом «Завтра» — обман.
+   */
+  function splitByWindow(items, win) {
+    var hits = [];
+    var rest = [];
+    (items || []).forEach(function (it) {
+      (inWindow(it, win) ? hits : rest).push(it);
+    });
+    return { hits: hits, rest: rest };
+  }
+
+  var WINDOW_MISS = {
+    today_evening: 'Сегодня вечером нет',
+    today: 'Сегодня нет',
+    tomorrow: 'Завтра нет',
+    weekend: 'На выходных нет',
+  };
+
+  function windowMissLabel(win) {
+    if (!win) return '';
+    return WINDOW_MISS[win.key] || String(win.label || '') + ' нет';
+  }
+
+  /** Разделитель между «в окне» и «вне окна»: что это за места и что на них показано. */
+  function windowBreakView(win, rest, venueTypes) {
+    rest = rest || [];
+    if (!win || !rest.length) return null;
+    var noun = venueNoun(rest, venueTypes);
+    var n = rest.length;
+    return {
+      title: windowMissLabel(win),
+      sub: n + ' ' + pluralRu(n, noun[0], noun[1], noun[2]) + ' · их ближайшее время',
+    };
+  }
+
+  /**
+   * TASK-146: «Рядом» — сортировка текущей ленты по расстоянию, внутри групп окна.
+   * Сервер ставит уровень данных выше расстояния (tier A первым), а человек, который
+   * нажал «Рядом», спрашивает именно «что ближе». Без расстояния — в конец, порядок
+   * сервера внутри равных сохраняется.
+   */
+  function sortByDistance(items) {
+    return (items || [])
+      .map(function (it, i) {
+        var d = it && it.distance_km;
+        return { it: it, i: i, d: d == null || isNaN(Number(d)) ? Infinity : Number(d) };
+      })
+      .sort(function (a, b) {
+        return a.d - b.d || a.i - b.i;
+      })
+      .map(function (x) {
+        return x.it;
+      });
+  }
+
+  function orderForFeed(items, win, byDistance) {
+    var parts = splitByWindow(items, win);
+    if (byDistance) {
+      parts.hits = sortByDistance(parts.hits);
+      parts.rest = sortByDistance(parts.rest);
+    }
+    return parts;
   }
 
   function sessionWhenLabel(live, now) {
@@ -617,6 +700,8 @@
     if (kind === 'session') {
       var parts = [];
       var when = sessionWhenLabel(live, now);
+      // Вне выбранного окна — не «сеанс», а «ближайший»: строка не должна выдавать себя за ответ.
+      if (when && live.outside_window) when = 'Ближайший: ' + when;
       var prices = formatThreePrices(live);
       var more = Number(live.more_count);
       if (when) parts.push(when);
@@ -639,10 +724,12 @@
    * время как якорь, глубина предложения отдельной строкой. Функция чистая:
    * решает, ЧТО написано в каждом слоте, разметку собирает ice-tab.js.
    */
-  function boardCardView(item, now) {
+  function boardCardView(item, now, opts) {
     item = item || {};
+    opts = opts || {};
     var live = item.live || {};
     var isSession = String(live.kind || '') === 'session';
+    var off = !!opts.window && !inWindow(item, opts.window);
     var name = String(item.name || '');
     var currency = live.currency_code || item.currency_code || '';
     var prices = isSession ? formatThreePrices(live) : '';
@@ -679,6 +766,9 @@
       arenaId: item.id,
       sessionId: isSession && live.session_id != null ? live.session_id : null,
       inviteLabel: isSession ? sessionDayLabel(live, now) + ' ' + String(live.starts_at_local || '').slice(0, 5) : '',
+      // TASK-146: карточка вне окна — приглушённая, время не герой, и прямо сказано почему.
+      offWindow: off,
+      offLabel: off ? windowMissLabel(opts.window) + (isSession ? ' · ближайший' : '') : '',
     };
   }
 
@@ -959,6 +1049,12 @@
     formatThreePrices: formatThreePrices,
     formatLiveLine: formatLiveLine,
     sessionDayLabel: sessionDayLabel,
+    inWindow: inWindow,
+    splitByWindow: splitByWindow,
+    windowMissLabel: windowMissLabel,
+    windowBreakView: windowBreakView,
+    sortByDistance: sortByDistance,
+    orderForFeed: orderForFeed,
     boardCardView: boardCardView,
     formatEmptyList: formatEmptyList,
     formatEmptySearch: formatEmptySearch,
