@@ -21,13 +21,43 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/sportcontinent.jpg"
+      "photo": "photos/minsk/sportcontinent.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "21:00"
+        ],
+        "tue": [
+          "11:00",
+          "21:00"
+        ],
+        "wed": [
+          "11:00",
+          "21:00"
+        ],
+        "thu": [
+          "11:00",
+          "21:00"
+        ],
+        "fri": [
+          "11:00",
+          "21:00"
+        ],
+        "sat": [
+          "11:00",
+          "18:00"
+        ],
+        "sun": [
+          "11:00",
+          "18:00"
+        ]
+      }
     },
     {
       "key": "hotice",
       "name": "HotIce",
-      "address": null,
-      "address_note": null,
+      "address": "ул. Козлова, 14",
+      "address_note": "вход с ул. Берестянской, 7 — чёрная дверь рядом с кофейней",
       "phones": [
         "+375 29 360-96-91"
       ],
@@ -42,7 +72,31 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/hotice.jpg"
+      "photo": "photos/minsk/hotice.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "19:00"
+        ],
+        "tue": [
+          "11:00",
+          "19:00"
+        ],
+        "wed": null,
+        "thu": [
+          "11:00",
+          "19:00"
+        ],
+        "fri": [
+          "11:00",
+          "18:00"
+        ],
+        "sat": null,
+        "sun": [
+          "11:00",
+          "19:00"
+        ]
+      }
     },
     {
       "key": "figurist",
@@ -61,7 +115,37 @@
       "disciplines": [
         "figure"
       ],
-      "photo": "photos/minsk/figurist.jpg"
+      "photo": "photos/minsk/figurist.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "20:00"
+        ],
+        "tue": [
+          "11:00",
+          "20:00"
+        ],
+        "wed": [
+          "11:00",
+          "20:00"
+        ],
+        "thu": [
+          "11:00",
+          "20:00"
+        ],
+        "fri": [
+          "11:00",
+          "20:00"
+        ],
+        "sat": [
+          "11:00",
+          "20:00"
+        ],
+        "sun": [
+          "11:00",
+          "20:00"
+        ]
+      }
     },
     {
       "key": "lepshy-hockey",
@@ -83,7 +167,37 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/lepshy-hockey.jpg"
+      "photo": "photos/minsk/lepshy-hockey.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "21:00"
+        ],
+        "tue": [
+          "11:00",
+          "21:00"
+        ],
+        "wed": [
+          "11:00",
+          "21:00"
+        ],
+        "thu": [
+          "11:00",
+          "21:00"
+        ],
+        "fri": [
+          "11:00",
+          "21:00"
+        ],
+        "sat": [
+          "11:00",
+          "19:00"
+        ],
+        "sun": [
+          "11:00",
+          "19:00"
+        ]
+      }
     },
     {
       "key": "proskating",
@@ -102,7 +216,34 @@
       "disciplines": [
         "roller"
       ],
-      "photo": "photos/minsk/proskating.jpg"
+      "photo": "photos/minsk/proskating.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "20:00"
+        ],
+        "tue": [
+          "11:00",
+          "20:00"
+        ],
+        "wed": [
+          "11:00",
+          "20:00"
+        ],
+        "thu": [
+          "11:00",
+          "20:00"
+        ],
+        "fri": [
+          "11:00",
+          "20:00"
+        ],
+        "sat": [
+          "11:00",
+          "18:00"
+        ],
+        "sun": null
+      }
     },
     {
       "key": "icecity",
@@ -122,7 +263,37 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/icecity.jpg"
+      "photo": "photos/minsk/icecity.jpg",
+      "hours": {
+        "mon": [
+          "10:00",
+          "20:00"
+        ],
+        "tue": [
+          "10:00",
+          "20:00"
+        ],
+        "wed": [
+          "10:00",
+          "20:00"
+        ],
+        "thu": [
+          "10:00",
+          "20:00"
+        ],
+        "fri": [
+          "10:00",
+          "20:00"
+        ],
+        "sat": [
+          "10:00",
+          "19:00"
+        ],
+        "sun": [
+          "10:00",
+          "19:00"
+        ]
+      }
     },
     {
       "key": "konek-bel",
@@ -141,7 +312,37 @@
       "disciplines": [
         "roller"
       ],
-      "photo": "photos/minsk/konek-bel.jpg"
+      "photo": "photos/minsk/konek-bel.jpg",
+      "hours": {
+        "mon": [
+          "10:00",
+          "21:00"
+        ],
+        "tue": [
+          "10:00",
+          "21:00"
+        ],
+        "wed": [
+          "10:00",
+          "21:00"
+        ],
+        "thu": [
+          "10:00",
+          "21:00"
+        ],
+        "fri": [
+          "10:00",
+          "21:00"
+        ],
+        "sat": [
+          "10:00",
+          "21:00"
+        ],
+        "sun": [
+          "10:00",
+          "21:00"
+        ]
+      }
     },
     {
       "key": "het-trik",
@@ -164,7 +365,34 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/het-trik.jpg"
+      "photo": "photos/minsk/het-trik.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "19:00"
+        ],
+        "tue": [
+          "11:00",
+          "19:00"
+        ],
+        "wed": [
+          "11:00",
+          "19:00"
+        ],
+        "thu": [
+          "11:00",
+          "19:00"
+        ],
+        "fri": [
+          "11:00",
+          "19:00"
+        ],
+        "sat": [
+          "11:00",
+          "15:00"
+        ],
+        "sun": null
+      }
     },
     {
       "key": "ccmshop",
@@ -186,13 +414,43 @@
         "hockey",
         "figure"
       ],
-      "photo": "photos/minsk/ccmshop.jpg"
+      "photo": "photos/minsk/ccmshop.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "20:00"
+        ],
+        "tue": [
+          "11:00",
+          "20:00"
+        ],
+        "wed": [
+          "11:00",
+          "20:00"
+        ],
+        "thu": [
+          "11:00",
+          "20:00"
+        ],
+        "fri": [
+          "11:00",
+          "20:00"
+        ],
+        "sat": [
+          "11:00",
+          "20:00"
+        ],
+        "sun": [
+          "11:00",
+          "20:00"
+        ]
+      }
     },
     {
       "key": "hockey-service",
       "name": "Hockey Service",
       "address": "ул. Мястровская, 5",
-      "address_note": null,
+      "address_note": "ЖК «Променад», офис 121, цокольный этаж",
       "phones": [
         "+375 29 228-57-70"
       ],
@@ -209,7 +467,8 @@
       "disciplines": [
         "hockey"
       ],
-      "photo": "photos/minsk/hockey-service.jpg"
+      "photo": "photos/minsk/hockey-service.jpg",
+      "hours_pending": "2ГИС показывает только «сегодня 10:00–19:00» — дни и выходные уточнить по +375 29 228-57-70"
     },
     {
       "key": "sport-ice-palace",
@@ -277,7 +536,31 @@
       ],
       "disciplines": [
         "hockey"
-      ]
+      ],
+      "hours": {
+        "mon": null,
+        "tue": [
+          "10:00",
+          "19:00"
+        ],
+        "wed": [
+          "10:00",
+          "19:00"
+        ],
+        "thu": [
+          "10:00",
+          "19:00"
+        ],
+        "fri": [
+          "10:00",
+          "19:00"
+        ],
+        "sat": [
+          "10:00",
+          "18:00"
+        ],
+        "sun": null
+      }
     },
     {
       "key": "figuristshop",
@@ -295,7 +578,37 @@
       "disciplines": [
         "figure"
       ],
-      "photo": "photos/minsk/figuristshop.jpg"
+      "photo": "photos/minsk/figuristshop.jpg",
+      "hours": {
+        "mon": [
+          "11:00",
+          "20:00"
+        ],
+        "tue": [
+          "11:00",
+          "20:00"
+        ],
+        "wed": [
+          "11:00",
+          "20:00"
+        ],
+        "thu": [
+          "11:00",
+          "20:00"
+        ],
+        "fri": [
+          "11:00",
+          "20:00"
+        ],
+        "sat": [
+          "11:00",
+          "20:00"
+        ],
+        "sun": [
+          "11:00",
+          "20:00"
+        ]
+      }
     }
   ],
   "rink_sharpening": [
@@ -324,5 +637,6 @@
       ],
       "note": "Ледовый Дворец спорта Минской области"
     }
-  ]
+  ],
+  "_hours_source": "Часы работы и адрес HotIce — открытые источники 2026-10-02: сайты магазинов (hotice.by, het-trik-minsk.by, proskating.by/contacts, figuristshop.by/Contacts, sport-ice.by, icecity.by), Яндекс Карты (SportContinent, Lepshy Hockey, Фигурист.by, Конёк.бел), карточки ТЦ (Тивали, Maximus). Sport-Ice — Дворец спорта — из документа партнёра. Sport-Ice — парк Горького: обед 13:00–14:00 (не отражено в часах)."
 }

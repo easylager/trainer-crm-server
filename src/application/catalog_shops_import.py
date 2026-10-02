@@ -20,6 +20,10 @@
 * **Фото — из файла партнёра и только одно, если у места фото ещё нет.** Повторный
   запуск не плодит копии; фото, загруженное админом руками, не трогаем. Лицензия —
   ``permitted`` с атрибуцией «материалы партнёра».
+* **Часы работы у магазина обязательны.** Без часов карточка не может сказать «открыто
+  до 20:00», а это первое, что человек хочет знать перед выездом. Нет часов — файл не
+  проходит проверку. Единственное исключение — явное ``hours_pending`` с причиной
+  («2ГИС показывает только сегодня — позвонить»): такое место видно в отчёте как долг.
 * **Координаты не выдумываем.** Геокодер — снаружи (Nominatim в скрипте); нет ответа —
   место есть в списке и на своей странице, но не на карте.
 """
@@ -27,6 +31,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping
@@ -71,6 +76,8 @@ class ShopRecord:
     season: tuple[int, int] | None = None
     tickets_url: str | None = None
     photo: Path | None = None
+    point: tuple[float, float] | None = None
+    hours_pending: str | None = None
 
     @property
     def display_address(self) -> str | None:
@@ -159,6 +166,17 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
         photo = ((photo_root or Path.cwd()) / str(raw["photo"])).resolve()
         if not photo.is_file():
             raise ShopImportError(f"{name}: photo not found: {raw['photo']}")
+    hours_pending = (raw.get("hours_pending") or "").strip() or None
+    if venue_type == "shop" and hours is None and not hours_pending:
+        raise ShopImportError(f"{name}: нет часов работы (hours) — у магазина они обязательны")
+    point = None
+    if raw.get("lat") is not None or raw.get("lon") is not None:
+        try:
+            point = (float(raw["lat"]), float(raw["lon"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ShopImportError(f"{name}: lat/lon должны быть числами") from exc
+        if not (-90 <= point[0] <= 90 and -180 <= point[1] <= 180):
+            raise ShopImportError(f"{name}: lat/lon вне диапазона")
     tickets = (raw.get("tickets_url") or "").strip() or None
     if tickets and not tickets.lower().startswith(("https://", "http://")):
         raise ShopImportError(f"{name}: tickets_url must be http(s): {tickets}")
@@ -178,6 +196,8 @@ def _parse_record(raw: Mapping[str, Any], *, photo_root: Path | None = None) -> 
         season=season,
         tickets_url=tickets,
         photo=photo,
+        point=point,
+        hours_pending=hours_pending,
     )
 
 
@@ -262,6 +282,41 @@ def _profile_fields(rec: ShopRecord) -> dict[str, Any]:
     return fields
 
 
+_ABBREVIATIONS = (
+    (r"\bпр-т\.?\s*", "проспект "),
+    (r"\bпросп\.\s*", "проспект "),
+    (r"\bул\.\s*", "улица "),
+    (r"\bпер\.\s*", "переулок "),
+    (r"\bпл\.\s*", "площадь "),
+)
+
+
+def address_variants(address: str) -> list[str]:
+    """Варианты адреса для геокодера: от точного к грубому.
+
+    Nominatim не понимает «пр-т», «офис 69», «пом. 223» и «2-1-39» (дом-корпус-квартира) —
+    без этих хвостов «ул. Карла Либкнехта, 127, офис 69» находится, с ними — нет.
+    """
+    out: list[str] = []
+
+    def add(value: str) -> None:
+        value = re.sub(r"\s+", " ", value).strip(" ,")
+        if value and value not in out:
+            out.append(value)
+
+    add(address)
+    expanded = address
+    for pattern, repl in _ABBREVIATIONS:
+        expanded = re.sub(pattern, repl, expanded, flags=re.IGNORECASE)
+    add(expanded)
+    no_room = re.sub(r",?\s*(офис|оф\.|пом\.|помещение|павильон|пав\.|кв\.)\s*[\w№-]+", "", expanded, flags=re.IGNORECASE)
+    add(no_room)
+    house = re.sub(r"(\d+)-\d+(-\d+)?\b", r"\1", no_room)
+    add(house)
+    add(re.sub(r"(\d+)\s*[А-Яа-яA-Za-z]\b", r"\1", house))
+    return out
+
+
 PARTNER_PHOTO_ATTRIBUTION = "Материалы партнёра: «Магазины и Мастерские — Минск»"
 
 
@@ -340,9 +395,15 @@ async def apply_plan(
             report["photos"].append(problem)
 
     async def coords(rec: ShopRecord) -> tuple[float, float] | None:
+        if rec.point is not None:
+            return rec.point
         if geocode is None or not rec.address:
             return None
-        return await geocode(rec.address, plan.city_name)
+        for variant in address_variants(rec.address):
+            point = await geocode(variant, plan.city_name)
+            if point:
+                return point
+        return None
 
     for rec in plan.creates:
         point = await coords(rec)

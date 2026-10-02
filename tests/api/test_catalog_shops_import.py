@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from src.application.catalog_shops_import import (
     ShopImportError,
+    address_variants,
     apply_plan,
     build_plan,
     parse_shops_file,
@@ -25,12 +26,15 @@ def test_real_partner_file_parses_and_names_only_stated_services() -> None:
     assert city == "Минск"
     assert len(records) == 13
     assert sum(1 for r in records if r.photo) == 12  # у Sport-Ice в парке Горького фото нет
+    # Часы у магазина обязательны; единственный долг — явный и с причиной.
+    assert [r.key for r in records if r.hours is None] == ["hockey-service"]
+    assert "228-57-70" in by_key_pending(records)["hockey-service"]
     by_key = {r.key: r for r in records}
     # Фигурист.by — магазин; про заточку источник молчит → ключа нет (неизвестно), а не False.
     assert by_key["figurist"].amenities == {"retail": True, "discipline_figure": True}
     assert "skate_sharpening" not in by_key["figurist"].amenities
     assert by_key["het-trik"].amenities["blade_profiling"] is True
-    assert by_key["hotice"].display_address is None
+    assert by_key["hotice"].display_address.startswith("ул. Козлова, 14 (вход с ул. Берестянской, 7")
     assert by_key["sportcontinent"].display_address.endswith("(здание Минского ледового Дворца спорта, 1-й этаж)")
     assert by_key["icecity"].display_address.endswith("(ТРЦ «Тивали», 3-й этаж, пав. 327)")
     assert "Ещё телефоны: +375 44 599-90-97." in by_key["het-trik"].short_description
@@ -232,7 +236,8 @@ async def test_partner_photo_is_attached_once(db_session, tmp_path: Path, monkey
     await _insert_city(db_session, name=city_name)
     await db_session.commit()
     photo = REPO / "data" / "catalog" / "photos" / "minsk" / "het-trik.jpg"
-    data = {"city": city_name, "shops": [{"name": "Мастерская", "services": ["skate_sharpening"], "photo": str(photo)}]}
+    data = {"city": city_name, "shops": [{"name": "Мастерская", "services": ["skate_sharpening"], "photo": str(photo),
+                                              "hours": {"mon": ["10:00", "19:00"]}}]}
     path = tmp_path / "shops.json"
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     for _ in range(2):
@@ -249,3 +254,22 @@ async def test_partner_photo_is_attached_once(db_session, tmp_path: Path, monkey
     ).fetchall()
     assert len(rows) == 1
     assert rows[0][0] == "permitted" and "партнёра" in rows[0][1]
+
+
+def by_key_pending(records):
+    return {r.key: r.hours_pending for r in records if r.hours_pending}
+
+
+def test_shop_without_hours_rejects_the_file(tmp_path: Path) -> None:
+    bad = {"city": "Минск", "shops": [{"name": "Без часов", "services": ["retail"]}]}
+    path = tmp_path / "shops.json"
+    path.write_text(json.dumps(bad, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ShopImportError, match="часов"):
+        parse_shops_file(path)
+
+
+def test_address_variants_drop_what_nominatim_cannot_read() -> None:
+    assert address_variants("ул. Карла Либкнехта, 127, офис 69")[-1] == "улица Карла Либкнехта, 127"
+    assert "улица Цнянская, 2" in address_variants("ул. Цнянская, 2-1-39")
+    assert "проспект Независимости, 58" in address_variants("пр-т Независимости, 58")
+    assert address_variants("пр-т Победителей, 4А")[-1] == "проспект Победителей, 4"

@@ -80,6 +80,9 @@ def print_plan(plan) -> None:
     print(f"Обновить: {len(plan.updates)}")
     for arena_id, rec in plan.updates:
         print(f"  ~ #{arena_id} {rec.name}")
+    pending = [rec for rec in plan.creates + [r for _, r in plan.updates] if rec.hours_pending]
+    for rec in pending:
+        print(f"  ! без часов: {rec.name} — {rec.hours_pending}")
     print(f"Заточка на катках: {len(plan.rink_updates)}")
     for arena_id, note in plan.rink_updates:
         print(f"  ✓ #{arena_id} {note}")

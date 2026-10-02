@@ -38,6 +38,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.exc import ProgrammingError  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from src.shared import minsk_speed_oval as speed_oval  # noqa: E402
@@ -57,6 +58,29 @@ def _database_url() -> str:
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
+
+
+def migrations_behind(url: str) -> str | None:
+    """«0210 → 0211», если база отстаёт от кода; None — всё на месте.
+
+    Загрузчики и разовый прогон парсеров читают новые колонки (0211: last_ok_at и т.д.) —
+    на отставшей базе они падают в середине прогона, после половины записей.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    heads = set(ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_heads())
+    engine = create_engine(url)
+    try:
+        with engine.connect() as conn:
+            current = {row[0] for row in conn.execute(text("SELECT version_num FROM alembic_version"))}
+    except ProgrammingError:  # нет таблицы версий: база не создана миграциями
+        current = set()
+    finally:
+        engine.dispose()
+    if current == heads:
+        return None
+    return f"{', '.join(sorted(current)) or 'пусто'} → {', '.join(sorted(heads))}"
 
 
 def minsk_rows() -> list[dict[str, object]]:
@@ -180,6 +204,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     url = _database_url()
+    behind = migrations_behind(url)
+    if behind:
+        print(f"База не на последней миграции ({behind}). Сначала: alembic upgrade head", file=sys.stderr)
+        return 2
     # Без флага прода: assert_database_url отказывает облачным хостам и чужим именам баз.
     assert_database_url(url, apply=True)
 
