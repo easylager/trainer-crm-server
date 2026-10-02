@@ -41,6 +41,8 @@
       var selectedTrainerId = null;
       /* TASK-146 (DEC-009): город для карусели каталога — из сессии или из тизера льда. */
       var discoveryCityId = null;
+      /* Каток из тизера «На льду» уже на экране — в карусели его не повторяем. */
+      var teaserArenaId = null;
       /** From hub bootstrap — service aligned with primary-trainer tier (booking / save / session). */
       var primaryCatalogServiceId = null;
       /** Authoritative last booking (by slot start) from bootstrap — «Записаться снова» must not depend on catalog session. */
@@ -227,10 +229,15 @@
       }
 
       function initials(name) {
-        if (!name) return '?';
-        var parts = String(name).trim().split(/\s+/);
-        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-        return parts[0].slice(0, 2).toUpperCase();
+        // Только буквы и цифры: «Каток «Лидо»» → «КЛ», а не «К«» (TASK-146: места в карусели).
+        var words = String(name || '')
+          .replace(/[^0-9A-Za-zА-Яа-яЁё\s-]/g, ' ')
+          .trim()
+          .split(/[\s-]+/)
+          .filter(Boolean);
+        if (!words.length) return '?';
+        if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+        return words[0].slice(0, 2).toUpperCase();
       }
 
       function trainerHubThumb(fileKey) {
@@ -1363,7 +1370,11 @@
         var url = '/api/public/ice/arenas?intent=skate&limit=4&city_id=' + encodeURIComponent(String(discoveryCityId));
         return fetch(url, { cache: 'no-store' })
           .then(function(r) { return r.ok ? r.json() : { items: [] }; })
-          .then(function(p) { return ((p && p.items) || []).filter(function(i) { return i && i.id != null; }); })
+          .then(function(p) {
+            return ((p && p.items) || []).filter(function(i) {
+              return i && i.id != null && Number(i.id) !== teaserArenaId;
+            });
+          })
           .catch(function() { return []; });
       }
 
@@ -1385,7 +1396,12 @@
               return;
             }
             var cards = places.map(buildDiscoveryPlaceHtml).join('') + items.map(buildDiscoveryCardHtml).join('');
-            var title = places.length ? 'Каталог: лёд, тренеры, магазины' : 'Тренеры на платформе';
+            // Заголовок — о том, что в карусели реально лежит, а не обещание всего каталога.
+            var title = places.length && items.length
+              ? 'Места и тренеры'
+              : places.length
+                ? 'Где заниматься'
+                : 'Тренеры на платформе';
             el.innerHTML =
               '<div class="hub-discovery__head">' +
                 '<span class="hub-discovery__title">' + title + '</span>' +
@@ -1667,6 +1683,7 @@
         var cs = (hubMeta && hubMeta.client_session) || {};
         var iceTeaser = hubMeta && hubMeta.ice_teaser;
         renderIceTeaser(iceTeaser);
+        teaserArenaId = iceTeaser && iceTeaser.arena_id != null ? Number(iceTeaser.arena_id) : null;
         discoveryCityId =
           (cs.city_id != null && cs.city_id !== '' ? Number(cs.city_id) : null) ||
           (iceTeaser && !iceTeaser.is_country_fallback && iceTeaser.city_id ? Number(iceTeaser.city_id) : null);
