@@ -20,6 +20,9 @@
        фильтра, иначе выбранный чип исчез бы из собственного списка. */
     venueTypes: [],
     venueFacets: [],
+    /* TASK-146 (Q-006): окно времени. auto — умный дефолт на сервере; window — что применено. */
+    when: 'auto',
+    window: null,
     cities: [],
     items: [],
     skateCount: null,
@@ -105,6 +108,7 @@
       }
     });
     renderServiceChips();
+    renderWhenChips();
   }
 
   /*
@@ -411,6 +415,7 @@
         serviceLabel: currentServiceLabel(),
         loading: state.loading,
         venueTypes: state.venueTypes,
+        window: state.window,
       });
     }
     setShareButton();
@@ -632,7 +637,70 @@
     state.total = data && data.total != null ? data.total : incoming.length;
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
+    state.window = (data && data.window) || null;
     renderVenueChips();
+    renderWhenChips();
+  }
+
+  function renderWhenChips() {
+    var box = $('iceWhenChips');
+    if (!box) return;
+    if (!M.whenChipsVisible(state.intent, state.venueTypes)) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    var resolved = state.window ? state.window.key : 'any';
+    box.hidden = false;
+    box.innerHTML = M.whenChipsView(state.when, resolved)
+      .map(function (c) {
+        return (
+          '<button type="button" class="ice-chip" data-when="' + esc(c.key) + '" aria-pressed="' +
+          (c.active ? 'true' : 'false') + '">' + esc(c.label) + '</button>'
+        );
+      })
+      .join('');
+  }
+
+  /**
+   * TASK-146 (Q-013): «Лёд рядом сейчас». Один тап: геолокация один раз → ближайший
+   * каток со льдом сегодня (нет сегодня — в ближайший день) → его карточка.
+   */
+  function openNearestIce() {
+    var btn = $('iceNearestBtn');
+    var fail = function (text) {
+      if (btn) btn.disabled = false;
+      var tg = global.Telegram && global.Telegram.WebApp;
+      if (tg && typeof tg.showAlert === 'function') tg.showAlert(text);
+      else global.alert(text);
+    };
+    if (!(global.navigator && global.navigator.geolocation)) {
+      fail('Не получилось определить место. Выберите город — покажем лёд в нём.');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    global.navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+        fetchJson('/api/public/ice/nearest?near=' + encodeURIComponent(near))
+          .then(function (data) {
+            var item = data && data.item;
+            if (!item) {
+              fail('Рядом пока нет массового катания в расписании. Посмотрите каталог города.');
+              return;
+            }
+            if (btn) btn.disabled = false;
+            shellNav('arena?ref=' + encodeURIComponent(String(item.arena_id)));
+          })
+          .catch(function () {
+            fail('Не получилось загрузить ближайший лёд. Проверьте связь и попробуйте ещё раз.');
+          });
+      },
+      function () {
+        fail('Разрешите доступ к геолокации — или выберите город, покажем лёд в нём.');
+      },
+      { timeout: 8000, maximumAge: 120000 }
+    );
   }
 
   function applyTrainerPayload(data) {
@@ -704,6 +772,7 @@
       intent: state.intent,
       venueTypes: state.venueTypes,
       limit: 50,
+      when: M.whenChipsVisible(state.intent, state.venueTypes) ? state.when : '',
     });
     return fetchJson(url)
       .then(function (data) {
@@ -1195,6 +1264,19 @@
         loadTrainers();
       });
     }
+
+    var whenBox = $('iceWhenChips');
+    if (whenBox) {
+      whenBox.addEventListener('click', function (ev) {
+        var chip = ev.target.closest('[data-when]');
+        if (!chip) return;
+        state.when = chip.getAttribute('data-when') || 'any';
+        renderWhenChips();
+        loadArenas();
+      });
+    }
+    var nearestBtn = $('iceNearestBtn');
+    if (nearestBtn) nearestBtn.addEventListener('click', openNearestIce);
 
     var venueBox = $('iceVenueChips');
     if (venueBox) {

@@ -65,7 +65,9 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "iceMapSec" in body
     # Плейсхолдер перестал обещать только лёд: вкладка держит площадки любого типа
     # (зал, хореография) и тренеров, а не один каток.
-    assert "Тренер, место или город" in body
+    # TASK-146: плейсхолдер подсказывает поиск по услуге; рядом — «Лёд рядом сейчас».
+    assert "Каток, тренер, заточка" in body
+    assert 'id="iceNearestBtn"' in body and 'id="iceWhenChips"' in body
     # Фильтр по типу площадки; чипы рисуются по фасетам города (venue_type_facets).
     assert "iceVenueChips" in body
     assert js.status_code == 200

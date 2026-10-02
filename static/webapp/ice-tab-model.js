@@ -44,6 +44,7 @@
     if (venue) params.push('venue_type=' + encodeURIComponent(venue));
     if (opts.limit) params.push('limit=' + encodeURIComponent(String(opts.limit)));
     if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
+    if (opts.when) params.push('when=' + encodeURIComponent(String(opts.when)));
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
@@ -300,6 +301,31 @@
     } catch (e) {
       return null;
     }
+  }
+
+  /**
+   * TASK-146 (Q-006): чипы окна времени. По умолчанию — «auto»: сервер сам выбирает окно
+   * по дню и часу и возвращает его ключ; подсвечиваем ровно то, что применено.
+   */
+  var WHEN_CHIPS = [
+    ['today_evening', 'Сегодня вечером'],
+    ['tomorrow', 'Завтра'],
+    ['weekend', 'Выходные'],
+    ['any', 'Любое время'],
+  ];
+
+  function whenChipsView(selected, resolvedKey) {
+    var active = selected && selected !== 'auto' ? selected : resolvedKey || 'any';
+    return WHEN_CHIPS.map(function (c) {
+      return { key: c[0], label: c[1], active: c[0] === active };
+    });
+  }
+
+  /** Окно времени — только про лёд: у магазина и зала сеансов нет. */
+  function whenChipsVisible(intent, venueTypes) {
+    if (coerceIntent(intent) !== INTENTS.skate) return false;
+    var v = venueTypes || [];
+    return !v.length || v.indexOf('ice') >= 0 || v.indexOf('outdoor') >= 0;
   }
 
   function mapHref() {
@@ -770,6 +796,15 @@
     if ((opts.loading && !total) || wrongLens) {
       return intent === INTENTS.coach ? 'Ищем тренеров…' : 'Ищем катки…';
     }
+    // TASK-146 (Q-006): окно времени. Пусто в окне — не тупик, а «вот ближайшее».
+    var win = opts.window;
+    if (win && opts.intent !== INTENTS.coach && total > 0) {
+      var winLabel = String(win.label || '');
+      if (!Number(win.hits)) return winLabel + ' сеансов нет · показываем ближайшие';
+      var wn = venueNoun(opts.items || [], opts.venueTypes);
+      var hits = Number(win.hits);
+      return hits + ' ' + pluralRu(hits, wn[0], wn[1], wn[2]) + ' · ' + winLabel.toLowerCase();
+    }
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
       var svc = opts.serviceLabel ? ' · ' + opts.serviceLabel : '';
@@ -908,6 +943,8 @@
     iceCoachHref: iceCoachHref,
     intentFromSearch: intentFromSearch,
     cityIdFromSearch: cityIdFromSearch,
+    whenChipsView: whenChipsView,
+    whenChipsVisible: whenChipsVisible,
     venueFromSearch: venueFromSearch,
     mapHref: mapHref,
     trainerHref: trainerHref,

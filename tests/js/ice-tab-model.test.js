@@ -893,3 +893,34 @@ describe('TASK-146: строка ленты места без сеансов', (
     assert.equal(line, 'Розница · Заточка · ежедневно 10:00–20:00');
   });
 });
+
+describe('TASK-146 (Q-006): окно времени', () => {
+  it('auto подсвечивает окно, выбранное сервером; явный выбор — его', () => {
+    const { whenChipsView } = loadModel();
+    const auto = whenChipsView('auto', 'weekend');
+    assert.deepEqual(auto.filter((c) => c.active).map((c) => c.key), ['weekend']);
+    const manual = whenChipsView('tomorrow', 'weekend');
+    assert.deepEqual(manual.filter((c) => c.active).map((c) => c.key), ['tomorrow']);
+  });
+
+  it('чипы времени — только про лёд', () => {
+    const { whenChipsVisible } = loadModel();
+    assert.equal(whenChipsVisible('skate', []), true);
+    assert.equal(whenChipsVisible('skate', ['shop']), false);
+    assert.equal(whenChipsVisible('coach', []), false);
+  });
+
+  it('подпись честна, когда в окне пусто', () => {
+    const { formatSortCaption, buildListUrl } = loadModel();
+    const items = [{ venue_type: 'ice', tier: 'A' }, { venue_type: 'ice', tier: 'A' }];
+    assert.equal(
+      formatSortCaption({ total: 2, items, intent: 'skate', window: { label: 'Сегодня вечером', hits: 0 } }),
+      'Сегодня вечером сеансов нет · показываем ближайшие'
+    );
+    assert.equal(
+      formatSortCaption({ total: 2, items, intent: 'skate', window: { label: 'Выходные', hits: 1 } }),
+      '1 каток · выходные'
+    );
+    assert.match(buildListUrl({ cityId: 1, intent: 'skate', when: 'auto' }), /when=auto/);
+  });
+});

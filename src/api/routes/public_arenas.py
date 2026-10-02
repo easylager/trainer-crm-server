@@ -14,6 +14,7 @@ from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
     MAX_LIST_LIMIT,
     IcePublicQueryError,
+    find_nearest_ice_now,
     get_public_arena_card,
     list_ice_discovery_cities,
     list_public_arena_sessions,
@@ -74,6 +75,10 @@ async def get_public_ice_arenas(
     ),
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     cursor: str | None = None,
+    when: str | None = Query(
+        None,
+        description="Окно времени: auto | today_evening | today | tomorrow | weekend | any. auto — умный дефолт.",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -93,9 +98,25 @@ async def get_public_ice_arenas(
             venue_type=venue_type,
             limit=limit,
             cursor=cursor,
+            when=when,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
+
+
+@router.get("/ice/nearest")
+async def get_nearest_ice_now(
+    response: Response,
+    near: str = Query(..., description="lat,lon"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Лёд рядом сейчас»: ближайший каток с сеансом сегодня, иначе — в ближайший день со льдом."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        found = await find_nearest_ice_now(session, near=near)
+    except IcePublicQueryError as exc:
+        raise _query_error(exc) from exc
+    return {"item": found}
 
 
 @router.get("/ice/share/{city_id}")

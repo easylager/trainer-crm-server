@@ -25,6 +25,7 @@ from src.application.arena_profile import (
     is_in_season,
     public_http_url,
 )
+from src.application.ice_time_windows import TimeWindow, resolve_window
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -360,6 +361,8 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             "kind": "session",
             # TASK-146: «Позвать» на карточке ленты зовёт на этот самый сеанс.
             "session_id": int(item["next_session_id"]),
+            # Q-006: сеанс вне выбранного окна — ближайший из того, что есть.
+            "outside_window": bool(item.get("outside_window")),
             "text": " · ".join(parts),
             "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
             "starts_at_local": hhmm,
@@ -446,6 +449,15 @@ SELECT
     nxt.price_child_minor AS next_price_child_minor,
     nxt.price_rental_minor AS next_price_rental_minor,
     nxt.currency_code AS next_currency_code,
+    nxw.id AS win_session_id,
+    nxw.kind AS win_kind,
+    nxw.starts_at_utc AS win_starts_at_utc,
+    nxw.local_date AS win_local_date,
+    nxw.starts_at_local AS win_starts_at_local,
+    nxw.price_adult_minor AS win_price_adult_minor,
+    nxw.price_child_minor AS win_price_child_minor,
+    nxw.price_rental_minor AS win_price_rental_minor,
+    nxw.currency_code AS win_currency_code,
     COALESCE(sa.future_count, 0) AS future_session_count,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
     COALESCE(tc.trainer_count, 0) AS trainer_count,
@@ -466,6 +478,17 @@ LEFT JOIN LATERAL (
     ORDER BY s.starts_at_utc
     LIMIT 1
 ) nxt ON true
+-- TASK-146 (Q-006): ближайший сеанс внутри выбранного окна времени («сегодня вечером»,
+-- «выходные»). Без окна границы — «сейчас … +1 год», и nxw совпадает с nxt.
+LEFT JOIN LATERAL (
+    SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+    FROM ice_sessions s
+    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+      AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to
+    ORDER BY s.starts_at_utc
+    LIMIT 1
+) nxw ON true
 LEFT JOIN (
     SELECT s.arena_id,
            COUNT(*)::int AS future_count,
@@ -534,6 +557,13 @@ def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _window_params(window: TimeWindow | None, now: datetime) -> dict[str, datetime]:
+    """Границы окна для nxw. Без окна — «сейчас … +1 год»: nxw совпадает с nxt."""
+    if window is None:
+        return {"win_from": now, "win_to": now + timedelta(days=366)}
+    return {"win_from": window.starts_at, "win_to": window.ends_at}
+
+
 async def _load_ice_arena_rows(
     session: AsyncSession,
     *,
@@ -541,6 +571,7 @@ async def _load_ice_arena_rows(
     bbox: tuple[float, float, float, float] | None,
     intent: str,
     now: datetime,
+    window: TimeWindow | None = None,
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "now": now,
@@ -550,6 +581,7 @@ async def _load_ice_arena_rows(
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
         "ice_countries": ice_discovery_countries(),
+        **_window_params(window, now),
     }
     where = []
     if city_id is not None:
@@ -740,6 +772,7 @@ async def list_public_ice_arenas(
     venue_type: str | None = None,
     limit: int = DEFAULT_LIST_LIMIT,
     cursor: str | None = None,
+    when: str | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
     venue_filter = parse_venue_type_filter(venue_type)
@@ -755,9 +788,13 @@ async def list_public_ice_arenas(
         except ValueError as exc:
             raise IcePublicQueryError("cursor must be an integer offset") from exc
     now = datetime.now(timezone.utc)
+    # Окно времени имеет смысл только для «где покататься»: у тренеров — слоты недели.
+    window = resolve_window(when, now) if intent_value == INTENT_SKATE else None
     rows = await _load_ice_arena_rows(
-        session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now
+        session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
     )
+    if window is not None:
+        _apply_window(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
         for row in rows:
@@ -782,7 +819,11 @@ async def list_public_ice_arenas(
             for r in rows
             if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
         ]
-    rows.sort(key=_rank_tuple)
+    if window is not None:
+        # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
+        rows.sort(key=lambda r: (0 if r.get("window_hit") else 1, *_rank_tuple(r)))
+    else:
+        rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
     today = _today_minsk()
@@ -795,7 +836,120 @@ async def list_public_ice_arenas(
         "venue_type": sorted(venue_filter) if venue_filter else None,
         "venue_type_facets": facets,
         "next_cursor": next_cursor,
+        # TASK-146 (Q-006): какое окно применено и сколько мест в нём реально есть.
+        # hits == 0 — лента не пустая, а «в это время нет, вот ближайшее».
+        "window": (
+            {**window.as_payload(), "hits": sum(1 for r in rows if r.get("window_hit"))}
+            if window is not None
+            else None
+        ),
     }
+
+
+_WEEKDAYS_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_MONTHS_SHORT_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+
+
+def _human_day(local_date: date, today: date) -> str:
+    """«Сегодня» / «Завтра» / «Сб, 4 окт» — для подписи в интерфейсе, не ISO."""
+    if local_date in (today, today + timedelta(days=1)):
+        return _date_label(local_date, today)
+    return f"{_WEEKDAYS_SHORT_RU[local_date.weekday()]}, {local_date.day} {_MONTHS_SHORT_RU[local_date.month - 1]}"
+
+
+async def find_nearest_ice_now(
+    session: AsyncSession, *, near: str, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """
+    «Лёд рядом сейчас» (TASK-146, Q-013): ближайший к человеку каток, где сегодня ещё
+    будет массовое катание. Сегодня нигде — ближайший день, где лёд есть, и на нём —
+    ближайший каток. Не тупик «сегодня ничего», а честный следующий шаг.
+    """
+    lat, lon = parse_near(near) or (None, None)
+    if lat is None:
+        raise IcePublicQueryError("near must be lat,lon")
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT s.id AS session_id, s.local_date, s.starts_at_local, s.starts_at_utc,
+                       s.price_adult_minor, s.currency_code,
+                       a.id AS arena_id, a.name AS arena_name, a.latitude, a.longitude
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE {_CURRENT_SESSION_SQL}
+                  AND a.is_active AND a.is_confirmed
+                  AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                  AND (p.status IS NULL OR p.status = :published)
+                  AND c.country = ANY(:ice_countries)
+                  AND s.local_date <= :horizon
+                ORDER BY s.starts_at_utc
+                """
+            ),
+            {
+                "st": STATUS_ACTIVE,
+                "now": now,
+                "published": ARENA_PROFILE_STATUS_PUBLISHED,
+                "ice_countries": ice_discovery_countries(),
+                "horizon": today + timedelta(days=13),
+            },
+        )
+    ).mappings().all()
+    if not rows:
+        return None
+    first_day = min(r["local_date"] for r in rows)
+    day = today if any(r["local_date"] == today for r in rows) else first_day
+    best: dict[str, Any] | None = None
+    for r in rows:
+        if r["local_date"] != day:
+            continue
+        dist = haversine_km(lat, lon, float(r["latitude"]), float(r["longitude"]))
+        # Сеансы уже отсортированы по времени: на каждом катке берём ближайший по времени.
+        if best is None or dist < best["distance_km"]:
+            best = {**dict(r), "distance_km": dist}
+    if best is None:
+        return None
+    local_date = best["local_date"]
+    return {
+        "arena_id": int(best["arena_id"]),
+        "arena_name": best["arena_name"],
+        "session_id": int(best["session_id"]),
+        "local_date": local_date.isoformat(),
+        "starts_at_local": _hhmm(best["starts_at_local"]),
+        "day_label": _human_day(local_date, today),
+        "is_today": local_date == today,
+        "distance_km": best["distance_km"],
+        "price": _format_price_minor(best["price_adult_minor"], best["currency_code"] or "BYN"),
+    }
+
+
+_WINDOW_FIELDS = (
+    ("win_session_id", "next_session_id"),
+    ("win_kind", "next_kind"),
+    ("win_starts_at_utc", "next_starts_at_utc"),
+    ("win_local_date", "next_local_date"),
+    ("win_starts_at_local", "next_starts_at_local"),
+    ("win_price_adult_minor", "next_price_adult_minor"),
+    ("win_price_child_minor", "next_price_child_minor"),
+    ("win_price_rental_minor", "next_price_rental_minor"),
+    ("win_currency_code", "next_currency_code"),
+)
+
+
+def _apply_window(rows: list[dict[str, Any]]) -> None:
+    """Есть сеанс в окне — карточка показывает его; нет — ближайший вне окна, с пометкой."""
+    for row in rows:
+        hit = row.get("win_session_id") is not None
+        row["window_hit"] = hit
+        if hit:
+            for src, dst in _WINDOW_FIELDS:
+                row[dst] = row.get(src)
+        elif row.get("next_session_id") is not None:
+            row["outside_window"] = True
 
 
 async def get_hub_ice_teaser(
@@ -938,6 +1092,7 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
         "ice_countries": ice_discovery_countries(),
+        **_window_params(None, now),
     }
     sql = _LIST_SQL
     if arena_ref.isdigit():

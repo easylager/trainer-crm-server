@@ -1130,3 +1130,30 @@ body.ice-view-map .ice-map-offmap {
   backdrop-filter: blur(6px);
 }
 .ice-board__invite::before { content: "⛸ "; }
+
+/* TASK-146 (Q-013): «Лёд рядом сейчас» — сразу под поиском, одним тапом. */
+.ice-search input { min-width: 0; }
+.ice-nearest {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin: -3px -4px -3px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--app-cta-fill);
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+.ice-nearest:disabled { opacity: 0.6; }
+.ice-nearest__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-ok);
+  box-shadow: 0 0 0 4px var(--app-ok-wash);
+}

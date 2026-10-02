@@ -17,11 +17,11 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610024" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610026" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610024" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
   <script src="mini-app-client-shell.js?v=202610021"></script>
-  <script src="ice-tab-model.js?v=202610025"></script>
+  <script src="ice-tab-model.js?v=202610026"></script>
   <script src="mini-app-share-sheet.js?v=202610024"></script>
   <script src="ice-map-model.js?v=202610023"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
@@ -51,21 +51,31 @@
         <input
           type="search"
           id="iceSearchInput"
-          placeholder="Тренер, место или город"
+          placeholder="Каток, тренер, заточка"
           autocomplete="off"
           enterkeyhint="search"
           autocorrect="off"
           autocapitalize="off"
           spellcheck="false"
         />
+        <!--
+          TASK-146 (Q-013): «Лёд рядом сейчас» — один тап: геолокация, сегодня, ближайший каток.
+          Внутри строки поиска, а не в прокручиваемом ряду чипов: там его не долистают (DEC-012),
+          а отдельная строка съела бы первый экран (G-P3).
+        -->
+        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-label="Лёд рядом сейчас" title="Лёд рядом сейчас">
+          <span class="ice-nearest__dot" aria-hidden="true"></span>Лёд рядом
+        </button>
       </div>
-      <div class="ice-chips" id="iceIntentChips" role="group" aria-label="Намерение">
+      <div class="ice-chips ice-chips--intent" id="iceIntentChips" role="group" aria-label="Намерение">
         <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">Где заниматься</button>
         <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">Тренеры</button>
       </div>
       <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
       <!-- Типы площадок: рисуются только по фасетам города, чтобы не было чипа, за которым пусто. -->
       <div class="ice-chips ice-chips--venue" id="iceVenueChips" hidden role="group" aria-label="Тип площадки"></div>
+      <!-- TASK-146 (Q-006): когда. По умолчанию сервер сам выбирает окно по дню и часу. -->
+      <div class="ice-chips ice-chips--when" id="iceWhenChips" hidden role="group" aria-label="Когда"></div>
       <!--
         TASK-103: карта вернулась, но переключатель сюда — нет.
         Сегмент «Список / Карта» стоял здесь и стоил ~46px над сгибом; это и было
@@ -146,6 +156,6 @@
 
   <script src="ru-text.js?v=202609287"></script>
   <script src="ice-map.js?v=202609287"></script>
-  <script src="ice-tab.js?v=202610024"></script>
+  <script src="ice-tab.js?v=202610026"></script>
 </body>
 </html>
