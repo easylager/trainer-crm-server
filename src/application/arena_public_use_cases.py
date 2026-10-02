@@ -429,6 +429,8 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "currency_code": item.get("currency_code"),
         "live": live,
         "live_line": live.get("text"),
+        # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
+        "freshness": _schedule_freshness(item),
     }
 
 
@@ -460,6 +462,11 @@ SELECT
     nxw.currency_code AS win_currency_code,
     COALESCE(sa.future_count, 0) AS future_session_count,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
+    sa.max_observed_at AS sessions_observed_at,
+    COALESCE(ipj.is_enabled, false) AS ice_job_enabled,
+    ipj.last_ok_at AS ice_last_ok_at,
+    ipj.config AS ice_job_config,
+    ipj.created_at AS ice_job_created_at,
     COALESCE(tc.trainer_count, 0) AS trainer_count,
     COALESCE(fs.free_slots, 0) AS free_slots,
     COALESCE(og.open_groups, 0) AS open_groups_count,
@@ -492,11 +499,15 @@ LEFT JOIN LATERAL (
 LEFT JOIN (
     SELECT s.arena_id,
            COUNT(*)::int AS future_count,
-           COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h
+           COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h,
+           MAX(s.observed_at) AS max_observed_at
     FROM ice_sessions s
     WHERE {_CURRENT_SESSION_SQL}
     GROUP BY s.arena_id
 ) sa ON sa.arena_id = a.id
+-- TASK-146: источник расписания арены (одно задание на арену) — для честного
+-- флага schedule_stale: парсер есть, но давно не читал сайт успешно.
+LEFT JOIN ice_parser_jobs ipj ON ipj.arena_id = a.id
 LEFT JOIN (
     -- ta.is_public matters: the catalog's arena filter requires it (list_active_with_details),
     -- so counting hidden links here promised trainers the filter would never show (TASK-140).
@@ -1156,6 +1167,30 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
     return rows[0] if rows else None
 
 
+def _schedule_freshness(
+    row: Mapping[str, Any], *, sessions_observed_at: datetime | None = None
+) -> dict[str, Any]:
+    """TASK-146: schedule_observed_at / schedule_auto / schedule_stale из ice_parser_jobs.
+
+    Контракт полей — docs/ops/ice-freshness-and-alerts.md.
+    """
+    # Локальный импорт: пакет src.ingestion при импорте тянет health → этот модуль.
+    from src.ingestion.freshness import schedule_freshness_fields
+
+    observed = sessions_observed_at
+    if observed is None:
+        observed = row.get("sessions_observed_at")
+    config = row.get("ice_job_config")
+    return schedule_freshness_fields(
+        has_enabled_job=bool(row.get("ice_job_enabled")),
+        last_ok_at=row.get("ice_last_ok_at"),
+        sessions_observed_at=observed,
+        config=config if isinstance(config, Mapping) else None,
+        now=datetime.now(timezone.utc),
+        created_at=row.get("ice_job_created_at"),
+    )
+
+
 def _freshness_payload(
     row: Mapping[str, Any], *, observed_at: datetime | None, valid_until: datetime | None
 ) -> dict[str, Any]:
@@ -1163,7 +1198,8 @@ def _freshness_payload(
     # «сайт катка» на зале — та же зашитая ледовость, что и в остальном копирайте.
     source_label = venue_site_label(row.get("venue_type")).lower() if website else None
     return {
-        "schedule_observed_at": _iso(observed_at),
+        # schedule_observed_at / schedule_auto / schedule_stale (TASK-146)
+        **_schedule_freshness(row, sessions_observed_at=observed_at),
         "schedule_valid_until": _iso(valid_until),
         "source_kind": "rink_website" if website else None,
         "source_label": source_label,
@@ -1318,6 +1354,8 @@ async def list_public_arena_sessions(
         "to": end.isoformat(),
         "days": days,
         "kinds": list(CLIENT_ICE_SESSION_KINDS),
+        # TASK-146: насколько свежо это расписание (schedule_stale и др.).
+        "freshness": _schedule_freshness(row),
     }
 
 

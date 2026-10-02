@@ -37,6 +37,7 @@ async def run_ice_ingest_scheduler_loop() -> None:
                     registry=default_registry(),
                     publisher=SqlAlchemyIceSessionPublisher(session),
                     by_egress_configured=bool(get_settings().by_egress_proxy_url),
+                    checkpoint=session.commit,
                 )
                 outcomes = await scheduler.run_due(datetime.now(timezone.utc))
                 await session.commit()
