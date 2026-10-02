@@ -1,0 +1,113 @@
+{
+  "_source": "Катки Минска, которых не было в базе или у которых пустая карточка. Проверено по открытым источникам 2026-10-02: f1katok.by, bycard.by/objects/minsk/49/5250, ctv.by и news.by (открытие мобильного катка у Дворца спорта), 2gis.by (Олимпик Арена). Не названное источником — не пишем. Касса Замка — кнопка «Купить билет» на tczamok.by/entertainments/ice-rink.",
+  "_schema": "src/application/catalog_shops_import.py — ShopRecord (venue_type ice|outdoor); загрузка: scripts/load_catalog_shops.py --file data/catalog/rinks-minsk.json",
+  "city": "Минск",
+  "shops": [
+    {
+      "key": "f1-nemiga",
+      "venue_type": "outdoor",
+      "name": "Каток на Немиге (у Дворца спорта)",
+      "match": [
+        "немиг",
+        "f1"
+      ],
+      "address": "пр-т Победителей, 4а",
+      "address_note": "Мобильный каток у Дворца спорта",
+      "website": "https://f1katok.by",
+      "tickets_url": "https://bycard.by/objects/minsk/49/5250",
+      "description": "Сезонный открытый каток у Дворца спорта: сеансы по 45 минут, инструктор для начинающих, камеры хранения.",
+      "services": [
+        "skate_rental",
+        "skate_sharpening"
+      ],
+      "season": [
+        11,
+        3
+      ],
+      "hours": {
+        "mon": [
+          "10:00",
+          "23:45"
+        ],
+        "tue": [
+          "10:00",
+          "23:45"
+        ],
+        "wed": [
+          "10:00",
+          "23:45"
+        ],
+        "thu": [
+          "10:00",
+          "23:45"
+        ],
+        "fri": [
+          "10:00",
+          "23:45"
+        ],
+        "sat": [
+          "10:00",
+          "23:45"
+        ],
+        "sun": [
+          "10:00",
+          "23:45"
+        ]
+      }
+    },
+    {
+      "key": "olympic-arena",
+      "venue_type": "ice",
+      "name": "Олимпик Арена",
+      "match": [
+        "олимпик"
+      ],
+      "address": "ул. Ратомская, 2",
+      "website": "https://olympicarena.by",
+      "services": [
+        "skate_rental",
+        "skate_sharpening"
+      ],
+      "hours": {
+        "mon": [
+          "07:00",
+          "23:00"
+        ],
+        "tue": [
+          "07:00",
+          "23:00"
+        ],
+        "wed": [
+          "07:00",
+          "23:00"
+        ],
+        "thu": [
+          "07:00",
+          "23:00"
+        ],
+        "fri": [
+          "07:00",
+          "23:00"
+        ],
+        "sat": [
+          "07:00",
+          "23:00"
+        ],
+        "sun": [
+          "07:00",
+          "23:00"
+        ]
+      }
+    },
+    {
+      "key": "tc-zamok",
+      "venue_type": "ice",
+      "name": "ТЦ Замок",
+      "match": [
+        "замок"
+      ],
+      "address": "пр-т Победителей, 65",
+      "tickets_url": "https://koronaticket.by/rink?utm_source=glide&utm_medium=catalog"
+    }
+  ]
+}

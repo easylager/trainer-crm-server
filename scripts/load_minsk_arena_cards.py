@@ -907,6 +907,13 @@ async def apply_card(
             )
         except (ArenaMediaLimitError, InvalidMediaLicenseError, LookupError, ValueError):
             continue
+        except RuntimeError as exc:
+            # Локально S3 обычно не настроен: карточка (часы, цены, телефоны) важнее фото —
+            # грузим её без фото, а не роняем весь прогон.
+            if "S3 not configured" not in str(exc):
+                raise
+            photo_summary = f"photos skipped: S3 not configured; {photo_summary}"
+            break
         photos_uploaded += 1
     if photos_uploaded:
         photo_summary = f"uploaded {photos_uploaded}; {photo_summary}"

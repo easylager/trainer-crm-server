@@ -143,3 +143,80 @@ def test_cyrillic_domain_is_shown_as_typed() -> None:
 
     assert _display_host("https://xn--j1aaid0h.xn--90ais") == "конёк.бел"
     assert _display_host("https://hotice.by/") == "hotice.by"
+
+
+def test_real_rinks_file_parses() -> None:
+    city, records, _ = parse_shops_file(REPO / "data" / "catalog" / "rinks-minsk.json")
+    assert city == "Минск"
+    by_key = {r.key: r for r in records}
+    assert by_key["f1-nemiga"].venue_type == "outdoor"
+    assert by_key["f1-nemiga"].season == (11, 3)
+    assert by_key["olympic-arena"].match == ["олимпик"]
+
+
+def test_rink_record_rejects_shop_only_services(tmp_path: Path) -> None:
+    bad = {"city": "Минск", "shops": [{"name": "Каток", "venue_type": "ice", "services": ["retail"]}]}
+    path = tmp_path / "rinks.json"
+    path.write_text(json.dumps(bad, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ShopImportError):
+        parse_shops_file(path)
+
+
+@pytest.mark.asyncio
+async def test_rink_import_creates_missing_and_enriches_existing_without_wiping(
+    db_session, tmp_path: Path
+) -> None:
+    """Пропущенный каток — создаётся; существующий (из досье) — дополняется, но не затирается."""
+    city_name = f"Городрк-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    olymp = await _insert_arena(
+        db_session, city_id, name="Олимпик-арена", phone="+375 17 000-00-00", website_url="https://old.example"
+    )
+    await db_session.execute(
+        text("UPDATE arena_profiles SET amenities = CAST(:a AS jsonb) WHERE arena_id = :id"),
+        {"a": json.dumps({"parking": True}), "id": olymp},
+    )
+    await db_session.commit()
+    data = {
+        "city": city_name,
+        "shops": [
+            {"name": "Олимпик Арена", "venue_type": "ice", "match": ["олимпик"],
+             "website": "https://new.example", "services": ["skate_sharpening"],
+             "hours": {d: ["07:00", "23:00"] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}},
+            {"name": "Каток на площади", "venue_type": "outdoor", "address": "пл. Ледовая, 1",
+             "season": [11, 3], "services": ["skate_rental"]},
+        ],
+    }
+    path = tmp_path / "rinks.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+    assert [rec.name for rec in plan.creates] == ["Каток на площади"]
+    assert [(aid, rec.name) for aid, rec in plan.updates] == [(olymp, "Олимпик Арена")]
+    await apply_plan(db_session, plan)
+    await db_session.commit()
+
+    row = (
+        await db_session.execute(
+            text("SELECT a.name, p.phone, p.website_url, p.amenities, p.opening_hours "
+                 "FROM arenas a JOIN arena_profiles p ON p.arena_id = a.id WHERE a.id = :id"),
+            {"id": olymp},
+        )
+    ).first()
+    assert row[0] == "Олимпик-арена"  # имя из базы не переименовываем
+    assert row[1] == "+375 17 000-00-00"
+    assert row[2] == "https://old.example"  # уже заполненное — не перезаписываем
+    assert row[3] == {"parking": True, "skate_sharpening": True}
+    assert row[4]["weekly"]["mon"] == ["07:00", "23:00"]
+
+    created = (
+        await db_session.execute(
+            text("SELECT a.venue_type, p.season_start_month, p.season_end_month, p.amenities "
+                 "FROM arenas a JOIN arena_profiles p ON p.arena_id = a.id "
+                 "WHERE a.city_id = :c AND a.name = 'Каток на площади'"),
+            {"c": city_id},
+        )
+    ).first()
+    assert created[0] == "outdoor"
+    assert (created[1], created[2]) == (11, 3)
+    assert created[3] == {"skate_rental": True}

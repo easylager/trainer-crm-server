@@ -92,6 +92,11 @@ async def main() -> int:
     parser.add_argument("--file", type=Path, default=DEFAULT_FILE)
     parser.add_argument("--apply", action="store_true", help="Записать в БД (иначе — только план).")
     parser.add_argument("--geocode", action="store_true", help="Координаты по адресу через Nominatim.")
+    parser.add_argument(
+        "--allow-local-dev-db",
+        action="store_true",
+        help="Разрешить --apply в локальную базу trainer_crm (облако по-прежнему запрещено).",
+    )
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
 
@@ -102,7 +107,12 @@ async def main() -> int:
         return 2
 
     db_url = resolve_database_url()
-    assert_local_database_url(db_url, apply=args.apply, allow_prod=args.i_know_this_is_prod)
+    assert_local_database_url(
+        db_url,
+        apply=args.apply,
+        allow_local_dev=args.allow_local_dev_db,
+        allow_prod=args.i_know_this_is_prod,
+    )
     if args.i_know_this_is_prod:
         warn_prod_ack()
 

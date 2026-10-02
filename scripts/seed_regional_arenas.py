@@ -115,7 +115,10 @@ def run(*, apply: bool, allow_prod: bool = False) -> None:
         for cid, name in row.fetchall():
             city_ids[name] = cid
 
-        for name, sort_order in NEW_CITIES:
+        # Свежая локальная база: «уже заведённых» Гомеля и прочих может не быть — заводим всё,
+        # на что ссылаются арены, иначе KeyError на первой же гомельской арене.
+        referenced = [(a[1], 9) for a in ARENAS if a[1] not in dict(NEW_CITIES)]
+        for name, sort_order in NEW_CITIES + referenced:
             if name in city_ids:
                 continue
             result = session.execute(

@@ -14,6 +14,9 @@
   новую карточку: это видно в плане (``create``) до ``--apply``.
 * **Каток с заточкой — только при однозначном совпадении.** «Чижовка» может найти и
   большую, и малую арену — тогда ничего не пишем и говорим об этом в отчёте.
+* **Не только магазины.** ``venue_type`` в записи (``shop`` по умолчанию, ``ice``,
+  ``outdoor``) заводит и пропущенные катки: их ищем по имени и по ``match`` среди
+  всех мест города, чтобы «Олимпик Арена» из файла не задвоила «Олимпик-арену» в базе.
 * **Координаты не выдумываем.** Геокодер — снаружи (Nominatim в скрипте); нет ответа —
   место есть в списке и на своей странице, но не на карте.
 """
@@ -29,12 +32,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_profile import (
-    SHOP_AMENITY_KEYS,
+    amenity_keys_for_venue,
     WEEKDAY_KEYS,
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
     normalize_hhmm,
 )
+
+#: Что можно завести из файла. Зал и прочее — руками в админке: там нет общих полей.
+IMPORT_VENUE_TYPES = frozenset({"shop", "ice", "outdoor"})
 
 DISCIPLINE_KEYS = {"hockey": "discipline_hockey", "figure": "discipline_figure", "roller": "discipline_roller"}
 
@@ -57,6 +63,10 @@ class ShopRecord:
     description: str | None
     amenities: dict[str, bool]
     hours: dict[str, list[str]] | None
+    venue_type: str = "shop"
+    match: list[str] = field(default_factory=list)
+    season: tuple[int, int] | None = None
+    tickets_url: str | None = None
 
     @property
     def display_address(self) -> str | None:
@@ -109,14 +119,18 @@ def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
     name = str(raw.get("name") or "").strip()
     if not name:
         raise ShopImportError(f"shop without name: {raw.get('key')}")
+    venue_type = str(raw.get("venue_type") or "shop").strip()
+    if venue_type not in IMPORT_VENUE_TYPES:
+        raise ShopImportError(f"{name}: venue_type must be one of {sorted(IMPORT_VENUE_TYPES)}")
+    allowed = amenity_keys_for_venue(venue_type)
     amenities: dict[str, bool] = {}
     for service in raw.get("services") or []:
-        if service not in SHOP_AMENITY_KEYS:
+        if service not in allowed:
             raise ShopImportError(f"{name}: unknown service {service!r}")
         amenities[service] = True
     for discipline in raw.get("disciplines") or []:
         key = DISCIPLINE_KEYS.get(discipline)
-        if key is None:
+        if key is None or key not in allowed:
             raise ShopImportError(f"{name}: unknown discipline {discipline!r}")
         amenities[key] = True
     hours = raw.get("hours")
@@ -130,6 +144,14 @@ def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
     if website and not website.lower().startswith(("https://", "http://")):
         raise ShopImportError(f"{name}: website must be http(s): {website}")
     instagram = (raw.get("instagram") or "").strip().lstrip("@") or None
+    season = raw.get("season")
+    if season is not None:
+        if not (isinstance(season, list) and len(season) == 2 and all(isinstance(m, int) and 1 <= m <= 12 for m in season)):
+            raise ShopImportError(f"{name}: season must be [start_month, end_month]")
+        season = (season[0], season[1])
+    tickets = (raw.get("tickets_url") or "").strip() or None
+    if tickets and not tickets.lower().startswith(("https://", "http://")):
+        raise ShopImportError(f"{name}: tickets_url must be http(s): {tickets}")
     return ShopRecord(
         key=str(raw.get("key") or name),
         name=name,
@@ -141,6 +163,10 @@ def _parse_record(raw: Mapping[str, Any]) -> ShopRecord:
         description=(raw.get("description") or "").strip() or None,
         amenities=amenities,
         hours=hours,
+        venue_type=venue_type,
+        match=[str(m).strip().lower() for m in raw.get("match") or [] if str(m).strip()],
+        season=season,
+        tickets_url=tickets,
     )
 
 
@@ -162,21 +188,23 @@ async def build_plan(
         raise ShopImportError(f"city not found: {city_name}")
     plan = ImportPlan(city_id=int(city[0]), city_name=str(city[1]))
 
-    existing = {
-        str(r[1]).strip().lower(): int(r[0])
-        for r in (
-            await session.execute(
-                text("SELECT id, name FROM arenas WHERE city_id = :c AND venue_type = 'shop'"),
-                {"c": plan.city_id},
-            )
-        ).fetchall()
-    }
+    city_rows = (
+        await session.execute(
+            text("SELECT id, name, venue_type FROM arenas WHERE city_id = :c ORDER BY id"),
+            {"c": plan.city_id},
+        )
+    ).fetchall()
     for rec in records:
-        arena_id = existing.get(rec.name.lower())
-        if arena_id is None:
+        same_kind = [r for r in city_rows if (r[2] == "shop") == (rec.venue_type == "shop")]
+        exact = [r for r in same_kind if str(r[1]).strip().lower() == rec.name.lower()]
+        hits = exact or [r for r in same_kind if rec.match and any(m in str(r[1]).lower() for m in rec.match)]
+        if len(hits) == 1:
+            plan.updates.append((int(hits[0][0]), rec))
+        elif not hits:
             plan.creates.append(rec)
         else:
-            plan.updates.append((arena_id, rec))
+            names = ", ".join(f"#{r[0]} {r[1]}" for r in hits)
+            plan.rink_problems.append(f"{rec.name}: несколько совпадений ({names}) — уточните match в файле")
 
     rinks = (
         await session.execute(
@@ -214,9 +242,44 @@ def _profile_fields(rec: ShopRecord) -> dict[str, Any]:
         "amenities": rec.amenities,
         "status": "published",
     }
+    if rec.tickets_url:
+        fields["tickets_url"] = rec.tickets_url
+    if rec.season is not None:
+        fields["season_start_month"], fields["season_end_month"] = rec.season
     if rec.hours is not None:
         fields["opening_hours"] = {"weekly": {d: rec.hours.get(d) for d in WEEKDAY_KEYS}}
     return fields
+
+
+async def _enrich_existing_place(session: AsyncSession, arena_id: int, rec: ShopRecord) -> None:
+    city_id = (await session.execute(text("SELECT city_id FROM arenas WHERE id = :id"), {"id": arena_id})).scalar()
+    await ensure_arena_profile(session, arena_id, city_id=int(city_id), name=rec.name)
+    current = (
+        await session.execute(
+            text("SELECT phone, website_url, short_description, amenities, opening_hours, tickets_url, social_urls "
+                 "FROM arena_profiles WHERE arena_id = :id"),
+            {"id": arena_id},
+        )
+    ).mappings().first() or {}
+    wanted = _profile_fields(rec)
+    patch: dict[str, Any] = {}
+    for key in ("phone", "website_url", "short_description", "opening_hours", "tickets_url"):
+        if wanted.get(key) and not current.get(key):
+            patch[key] = wanted[key]
+    if rec.season is not None:
+        patch["season_start_month"], patch["season_end_month"] = rec.season
+    merged = dict(current.get("amenities") or {})
+    for key, value in rec.amenities.items():
+        merged.setdefault(key, value)
+    if merged != dict(current.get("amenities") or {}):
+        patch["amenities"] = merged
+    socials = dict(current.get("social_urls") or {})
+    for key, value in (wanted.get("social_urls") or {}).items():
+        socials.setdefault(key, value)
+    if socials != dict(current.get("social_urls") or {}):
+        patch["social_urls"] = socials
+    if patch:
+        await apply_admin_arena_profile_patch(session, arena_id, patch)
 
 
 async def apply_plan(
@@ -240,7 +303,7 @@ async def apply_plan(
                 text("""
                     INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active,
                                         is_confirmed, venue_type)
-                    VALUES (:c, :n, :a, :lat, :lon, true, true, 'shop')
+                    VALUES (:c, :n, :a, :lat, :lon, true, true, :vt)
                     RETURNING id
                     """),
                 {
@@ -249,6 +312,7 @@ async def apply_plan(
                     "a": rec.display_address,
                     "lat": point[0] if point else None,
                     "lon": point[1] if point else None,
+                    "vt": rec.venue_type,
                 },
             )
         ).scalar_one()
@@ -260,6 +324,12 @@ async def apply_plan(
             report["not_on_map"].append(rec.name)
 
     for arena_id, rec in plan.updates:
+        if rec.venue_type != "shop":
+            # Каток уже есть (досье, админка): дополняем тем, что есть в файле, и ничего
+            # не стираем — пустое поле в файле значит «не знаем», а не «удалить».
+            await _enrich_existing_place(session, arena_id, rec)
+            report["updated"].append(f"#{arena_id} {rec.name} (дополнено)")
+            continue
         point = await coords(rec)
         sets = ["address = :a", "is_active = true"]
         params: dict[str, Any] = {"id": arena_id, "a": rec.display_address}
