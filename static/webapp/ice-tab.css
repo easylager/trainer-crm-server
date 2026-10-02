@@ -988,6 +988,26 @@ body.ice-view-map .ice-map-offmap {
   min-height: 0;
 }
 
+/* Тап по кластеру: места кластера лентой, листаются пальцем, карточка цепляется к краю. */
+.ice-map-rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -12px;
+  padding: 0 12px;
+}
+
+.ice-map-rail::-webkit-scrollbar {
+  height: 0;
+}
+
+.ice-map-rail > .ice-acard {
+  flex: 0 0 86%;
+  scroll-snap-align: center;
+}
+
 .ice-acard--sheet {
   box-shadow: 0 2px 4px rgba(15, 26, 34, 0.04), 0 24px 48px -28px rgba(15, 26, 34, 0.45);
 }

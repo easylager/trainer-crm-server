@@ -506,7 +506,46 @@
     return Object.assign({}, best, { sheetMeta: formatSheetMeta(best, { nearest: true }) });
   }
 
+
+  /**
+   * Тап по кластеру. Стандартный зум Яндекса вписывает в экран сами точки и не знает,
+   * что над точкой висит ярлык «Название · 19:30» (~140px), а поверх карты — «Рядом со
+   * мной» и +/−. Поэтому крайние места кластера уезжали за край или под кнопки.
+   *
+   * Решение: вписываем с полями под ярлыки и кнопки и не зумим глубже `maxZoom`.
+   * Если места стоят почти в одной точке (ТЦ, один комплекс), зум их всё равно не
+   * разведёт: возвращаем `list` — показать места карточками, камеру не трогать.
+   */
+  var CLUSTER_SAME_SPOT_DEG = 0.0006; // ≈ 60 м: один комплекс, зумом не развести
+  var CLUSTER_MAX_ZOOM = 16;
+
+  function clusterFocus(points, opts) {
+    opts = opts || {};
+    var pts = (points || []).filter(function (p) {
+      return p && isFinite(Number(p[0])) && isFinite(Number(p[1]));
+    });
+    if (!pts.length) return { mode: 'none' };
+    var lats = pts.map(function (p) { return Number(p[0]); });
+    var lons = pts.map(function (p) { return Number(p[1]); });
+    var minLat = Math.min.apply(null, lats);
+    var maxLat = Math.max.apply(null, lats);
+    var minLon = Math.min.apply(null, lons);
+    var maxLon = Math.max.apply(null, lons);
+    if (maxLat - minLat < CLUSTER_SAME_SPOT_DEG && maxLon - minLon < CLUSTER_SAME_SPOT_DEG) {
+      return { mode: 'list' };
+    }
+    var cap = Number(opts.maxZoom);
+    return {
+      mode: 'zoom',
+      bounds: [[minLat, minLon], [maxLat, maxLon]],
+      // [top, right, bottom, left]: сверху ярлык пина и «Рядом со мной», справа +/−.
+      margin: [110, 80, 48, 80],
+      maxZoom: isFinite(cap) && cap > 0 ? Math.min(cap, CLUSTER_MAX_ZOOM) : CLUSTER_MAX_ZOOM,
+    };
+  }
+
   return {
+    clusterFocus: clusterFocus,
     PLACEHOLDER_API_KEY: PLACEHOLDER_API_KEY,
     nearMePolicy: nearMePolicy,
     resolveApiKey: resolveApiKey,

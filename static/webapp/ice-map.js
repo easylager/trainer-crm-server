@@ -104,7 +104,9 @@
         '</span>'
       : '';
     return (
-      '<button type="button" class="ice-acard ice-acard--sheet" data-href="' +
+      '<button type="button" class="ice-acard ice-acard--sheet" data-id="' +
+      esc(item.id) +
+      '" data-href="' +
       esc(href || '') +
       '"><span class="' +
       phClass +
@@ -149,6 +151,7 @@
     var missingKey = false;
     var keyResolved = '';
     var userPlacemark = null;
+    var clusterIds = null; // id мест в открытой карусели кластера
 
     function getIntent() {
       return opts.getIntent ? opts.getIntent() : 'skate';
@@ -223,6 +226,7 @@
     }
 
     function paintSheet(item, asNearest) {
+      clusterIds = null;
       selected = item || null;
       nearestMode = !!asNearest;
       if (!sheetEl) return;
@@ -243,7 +247,73 @@
       }
     }
 
+    /* Кластер под картой — карусель карточек: видно все места кластера, даже те,
+       что зум не развёл (ТЦ и комплексы, где катки в одном здании). */
+    function paintCluster(items) {
+      clusterIds = items.map(function (it) {
+        return it.id;
+      });
+      selected = null;
+      nearestMode = false;
+      if (!sheetEl) return;
+      sheetEl.innerHTML =
+        '<div class="ice-map-rail" role="list">' +
+        items
+          .map(function (item) {
+            var meta = MM.formatSheetMeta(item, { nearest: false });
+            if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
+            return sheetHtml(item, meta, arenaHref(item));
+          })
+          .join('') +
+        '</div>';
+      if (map && map.container && typeof map.container.fitToViewport === 'function') {
+        try {
+          map.container.fitToViewport();
+        } catch (err) {
+          /* ignore */
+        }
+      }
+    }
+
+    function onClusterClick(ev) {
+      var target = ev && ev.get && ev.get('target');
+      if (!target || typeof target.getGeoObjects !== 'function') return;
+      var objs = target.getGeoObjects();
+      var points = objs.map(function (o) {
+        return o.geometry.getCoordinates();
+      });
+      var ids = objs.map(function (o) {
+        return o.properties.get('arenaId');
+      });
+      var items = mapItems.filter(function (it) {
+        return ids.indexOf(it.id) >= 0;
+      });
+      var focus = MM.clusterFocus(points, { maxZoom: map.options.get('maxZoom') });
+      if (focus.mode === 'none') return;
+      paintCluster(items);
+      if (focus.mode !== 'zoom') return;
+      map
+        .setBounds(focus.bounds, { checkZoomRange: true, zoomMargin: focus.margin, duration: 300 })
+        .then(function () {
+          if (map.getZoom() > focus.maxZoom) map.setZoom(focus.maxZoom, { duration: 150 });
+        });
+    }
+
     function defaultSheet() {
+      /* Зум после тапа по кластеру перезапрашивает объекты — карусель должна это пережить. */
+      if (clusterIds) {
+        var still = mapItems.filter(function (it) {
+          return clusterIds.indexOf(it.id) >= 0;
+        });
+        if (still.length > 1) {
+          paintCluster(still);
+          return;
+        }
+        if (still.length === 1) {
+          paintSheet(still[0], false);
+          return;
+        }
+      }
       if (selected && mapItems.some(function (it) { return it.id === selected.id; })) {
         paintSheet(selected, nearestMode);
         return;
@@ -412,7 +482,8 @@
       clusterer = new ymaps.Clusterer({
         minClusterSize: 2,
         gridSize: 64,
-        clusterDisableClickZoom: false,
+        // Свой зум по тапу (onClusterClick): стандартный не учитывает ярлыки и кнопки.
+        clusterDisableClickZoom: true,
         clusterOpenBalloonOnClick: false,
         hasBalloon: false,
         clusterHasBalloon: false,
@@ -423,6 +494,7 @@
       });
       clusterer.options.set({ hasBalloon: false, clusterOpenBalloonOnClick: false });
       map.geoObjects.add(clusterer);
+      clusterer.events.add('click', onClusterClick);
       map.events.add('boundschange', onBoundsChange);
     }
 
@@ -622,8 +694,13 @@
         if (!card) return;
         var href = card.getAttribute('data-href') || '';
         if (!href) return;
+        var id = card.getAttribute('data-id');
+        var item =
+          mapItems.filter(function (it) {
+            return String(it.id) === id;
+          })[0] || selected;
         if (typeof opts.onOpenArena === 'function') {
-          opts.onOpenArena(selected, href);
+          opts.onOpenArena(item, href);
         }
       });
     }

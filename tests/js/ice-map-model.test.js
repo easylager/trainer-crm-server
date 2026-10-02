@@ -458,3 +458,29 @@ describe('map start without key or arenas (TASK-075 AC-004 + EDGE)', () => {
     assert.equal(ready.provider, 'yandex');
   });
 });
+
+describe('clusterFocus (тап по кластеру)', () => {
+  it('разнесённые места: вписать с полями под ярлыки и не глубже 16', () => {
+    const { clusterFocus } = loadModel();
+    const f = clusterFocus([[53.90, 27.55], [53.92, 27.58]], { maxZoom: 19 });
+    assert.equal(f.mode, 'zoom');
+    assert.deepEqual(f.bounds, [[53.90, 27.55], [53.92, 27.58]]);
+    assert.equal(f.maxZoom, 16);
+    assert.ok(f.margin[0] >= 100, 'сверху поле под ярлык пина');
+  });
+
+  it('места в одном комплексе: не зумить, показать списком', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([[53.9, 27.55], [53.9002, 27.5501]]).mode, 'list');
+  });
+
+  it('уважает более строгий maxZoom карты', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([[53.9, 27.5], [53.95, 27.6]], { maxZoom: 14 }).maxZoom, 14);
+  });
+
+  it('пустой кластер — ничего не делать', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([]).mode, 'none');
+  });
+});
