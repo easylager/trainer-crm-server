@@ -149,6 +149,10 @@ body.ar-pilot--ice .client-app-header {
   -webkit-overflow-scrolling: touch;
 }
 
+.ice-chips[hidden] {
+  display: none;
+}
+
 .ice-chips::-webkit-scrollbar {
   height: 0;
 }
@@ -173,10 +177,6 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chips--svc {
   padding-top: 2px;
-}
-
-.ice-chips--svc[hidden] {
-  display: none;
 }
 
 .ice-chips--svc .ice-chip {
