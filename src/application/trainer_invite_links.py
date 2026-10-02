@@ -4,6 +4,7 @@ Shareable links for trainers to onboard clients from DMs into the client bot + c
 Deep link payload matches client_handlers:
   /start client_{city_id}_{service_id_or_0}_{trainer_id}  — trainer onboarding
   /start share_ref_{trainer_id}                            — client→friend recommendation share
+  /start preview_{trainer_id}                              — trainer previews their own card
 """
 from __future__ import annotations
 
@@ -80,6 +81,37 @@ def build_trainer_share_link(
         return None, "invalid_trainer_id"
     payload = build_share_ref_payload(int(trainer_id))
     return TrainerShareLink(bot_deep_link=f"https://t.me/{u}?start={payload}"), None
+
+
+# --- Preview: trainer looks at the client-facing catalog exactly as a client would ---
+
+TRAINER_PREVIEW_PREFIX = "preview_"
+
+
+def build_trainer_preview_payload(trainer_id: int) -> str:
+    """Produces the /start payload for a trainer previewing their own card: preview_{trainer_id}."""
+    return f"{TRAINER_PREVIEW_PREFIX}{int(trainer_id)}"
+
+
+def build_trainer_preview_link(
+    *,
+    client_bot_username: str | None,
+    trainer_id: int,
+) -> tuple[str | None, str | None]:
+    """
+    Deep link for a trainer to see their own catalog card (or the general catalog, if not yet
+    published) through the real client Mini App — not a lookalike rendered inside the trainer
+    app. No client record is created and no roster/primary-trainer/analytics side effects fire;
+    this is the trainer looking at themselves, not a client discovering them.
+    Returns (https t.me URL, error) where error is missing_username or invalid_trainer_id.
+    """
+    u = normalize_client_bot_username(client_bot_username)
+    if not u:
+        return None, "missing_username"
+    if int(trainer_id) <= 0:
+        return None, "invalid_trainer_id"
+    payload = build_trainer_preview_payload(int(trainer_id))
+    return f"https://t.me/{u}?start={payload}", None
 
 
 def build_client_start_payload(

@@ -40,6 +40,17 @@ async def _insert_city(db_session, *, name: str, country: str = "BY") -> int:
     return int(ins.scalar_one())
 
 
+async def _insert_bare_trainer(db_session) -> int:
+    """Just enough of a ``trainers`` row to satisfy ``arenas.created_by_trainer_id``'s FK."""
+    tr = await db_session.execute(
+        text(
+            "INSERT INTO trainers (status, is_catalog_visible, catalog_state) "
+            "VALUES ('active', true, 'published') RETURNING id"
+        )
+    )
+    return int(tr.scalar_one())
+
+
 async def _insert_arena(
     db_session,
     city_id: int,
@@ -52,12 +63,16 @@ async def _insert_arena(
     phone: str | None = None,
     website_url: str | None = None,
     opening_hours: dict | None = None,
+    has_photo: bool = True,
+    created_by_trainer_id: int | None = None,
 ) -> int:
     ins = await db_session.execute(
         text(
             """
-            INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active, is_confirmed)
-            VALUES (:cid, :name, :addr, :lat, :lon, true, true)
+            INSERT INTO arenas
+                (city_id, name, address, latitude, longitude, is_active, is_confirmed,
+                 created_by_trainer_id)
+            VALUES (:cid, :name, :addr, :lat, :lon, true, true, :created_by)
             RETURNING id
             """
         ),
@@ -67,6 +82,7 @@ async def _insert_arena(
             "addr": address,
             "lat": latitude,
             "lon": longitude,
+            "created_by": created_by_trainer_id,
         },
     )
     arena_id = int(ins.scalar_one())
@@ -93,6 +109,16 @@ async def _insert_arena(
         },
     )
     del slug
+    if has_photo:
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO media (owner_type, owner_id, storage_key, license, status)
+                VALUES ('arena', :id, :key, 'own', 'published')
+                """
+            ),
+            {"id": arena_id, "key": f"test/arena/{arena_id}.jpg"},
+        )
     await db_session.flush()
     return arena_id
 
@@ -283,14 +309,26 @@ async def test_skate_intent_lists_every_arena_tier_a_first(
     app_use_test_db, db_session
 ) -> None:
     """Owner rule reversed 2026-09-17: intent=skate shows every arena, not just ones with a
-    future public_skate|open_ice slot — Tier A (live slot) ranks above B (profile only) above
-    C (bare). Coach/group intents were already tier-agnostic; this brings skate in line."""
+    future public_skate|open_ice slot — Tier A (live slot) ranks above B (profile only).
+    Coach/group intents were already tier-agnostic; this brings skate in line.
+
+    A bare, trainer-created arena — no phone/website/hours and, critically, no photo — is
+    Tier C by ``compute_data_tier``, but Tier C is unreachable through the public endpoint
+    for arenas a trainer added themselves: #201 ("Lifestyle") went live with just a name
+    and nothing else, so a photo became a listing requirement for that path, not just a
+    completeness signal. The seeded/imported catalog (``created_by_trainer_id IS NULL``)
+    is unaffected — it never had `media` rows either and losing it would be a much bigger
+    regression than the bug being fixed. ``bare`` here exercises the trainer-created gate
+    directly — it must not appear in any intent list."""
     cid = await _insert_city(db_session, name=f"IceIntent-{uuid.uuid4().hex[:6]}")
     skate = await _insert_arena(db_session, cid, name="Лёд с сеансом", phone="+375 17 1")
     profile_only = await _insert_arena(
         db_session, cid, name="Лёд без сеанса", phone="+375 17 2", website_url="https://x.example"
     )
-    bare = await _insert_arena(db_session, cid, name="Лёд без данных")
+    bare_owner = await _insert_bare_trainer(db_session)
+    bare = await _insert_arena(
+        db_session, cid, name="Лёд без данных", has_photo=False, created_by_trainer_id=bare_owner
+    )
     await _add_future_session(db_session, skate)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         skate_list = await client.get(
@@ -306,11 +344,13 @@ async def test_skate_intent_lists_every_arena_tier_a_first(
     skate_ids = [it["id"] for it in skate_items]
     coach_ids = {it["id"] for it in coach_list.json()["items"]}
     group_ids = {it["id"] for it in group_list.json()["items"]}
-    assert skate_ids == [skate, profile_only, bare]
+    assert skate_ids == [skate, profile_only]
+    assert bare not in skate_ids
+    assert bare not in coach_ids
+    assert bare not in group_ids
     by_id = {it["id"]: it for it in skate_items}
     assert by_id[skate]["tier"] == "A"
     assert by_id[profile_only]["tier"] == "B"
-    assert by_id[bare]["tier"] == "C"
     assert by_id[profile_only]["live"]["kind"] == "unknown"
     assert profile_only in coach_ids
     assert profile_only in group_ids
@@ -626,19 +666,27 @@ async def test_ice_discovery_countries_env_widens_scope(
 
 
 @pytest.mark.asyncio
-async def test_tier_outranks_distance_and_nearby_c_stays_visible(
+async def test_tier_outranks_distance_and_bare_nearby_stays_hidden(
     app_use_test_db, db_session
 ) -> None:
-    """EDGE-003: A at 8 km ranks above C at 100 m; C remains in the coach list."""
+    """EDGE-003: A at 8 km ranks above a closer arena. The closer one used to be Tier C
+    ("100 m beats a live session") and stayed visible; since #201 ("Lifestyle") went live
+    as a bare, trainer-created name-only card, a trainer-created Tier C — no phone/website/
+    hours *and no photo* — is excluded from the public list entirely, proximity
+    notwithstanding. The seeded/imported catalog keeps the old behavior (see
+    ``created_by_trainer_id IS NULL`` in ``arena_public_use_cases.py``)."""
     cid = await _insert_city(db_session, name=f"IceRank-{uuid.uuid4().hex[:6]}")
-    near_c = await _insert_arena(
+    near_bare_owner = await _insert_bare_trainer(db_session)
+    near_bare = await _insert_arena(
         db_session,
         cid,
-        name="Ближний C",
+        name="Ближний без фото",
         latitude=53.9001,
         longitude=27.5601,
         phone=None,
         website_url=None,
+        has_photo=False,
+        created_by_trainer_id=near_bare_owner,
     )
     far_a = await _insert_arena(
         db_session,
@@ -656,10 +704,9 @@ async def test_tier_outranks_distance_and_nearby_c_stays_visible(
         )
     assert resp.status_code == 200, resp.text
     ids = [it["id"] for it in resp.json()["items"]]
-    assert ids.index(far_a) < ids.index(near_c)
-    assert near_c in ids
+    assert far_a in ids
+    assert near_bare not in ids
     assert {it["id"]: it["tier"] for it in resp.json()["items"]}[far_a] == "A"
-    assert {it["id"]: it["tier"] for it in resp.json()["items"]}[near_c] == "C"
 
 
 @pytest.mark.asyncio

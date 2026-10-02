@@ -101,7 +101,9 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
-from src.application.trainer_invite_links import SHARE_REF_PREFIX
+from src.application.trainer_invite_links import SHARE_REF_PREFIX, TRAINER_PREVIEW_PREFIX
+from src.shared.catalog_visibility import trainer_is_listed
+from src.shared.catalog_entry import client_discovery_webapp_url
 from src.application.support_use_cases import create_support_message
 from src.application.group_attendance_use_cases import (
     attendance_rsvp_verify,
@@ -563,6 +565,17 @@ def _parse_share_ref(payload: str) -> int | None:
         return None
 
 
+def _parse_trainer_preview(payload: str) -> int | None:
+    """Parse preview_<trainer_id>. Returns trainer_id or None."""
+    if not payload or not payload.startswith(TRAINER_PREVIEW_PREFIX):
+        return None
+    try:
+        tid = int(payload[len(TRAINER_PREVIEW_PREFIX) :].strip())
+        return tid if tid > 0 else None
+    except ValueError:
+        return None
+
+
 def _parse_pass_start(payload: str) -> tuple[int | None, int | None]:
     """Parse pass_<product_id>_ref_<trainer_id>. Returns (pass_product_id, trainer_id) or (None, None)."""
     if not payload or not payload.startswith(PASS_START_PREFIX):
@@ -974,6 +987,47 @@ async def cmd_start(message: Message) -> None:
                 base, trainer_id_share, city_id=city_id, service_id=book_url_share
             ),
         )
+        return
+
+    # Trainer preview: preview_<trainer_id> — a trainer looking at themselves through the real
+    # client Mini App, not a lookalike rendered inside the trainer app. Pure read: no
+    # get_or_create_client, no roster/primary-trainer binding, no profile_view analytics —
+    # this is not a client visit and must not be counted or acted on as one.
+    trainer_id_preview = _parse_trainer_preview(payload)
+    if trainer_id_preview is not None:
+        async with async_session_factory() as db_session:
+            trainer = await get_trainer(db_session, trainer_id_preview)
+        if not trainer:
+            await message.answer(msg.CLIENT_TRAINER_PREVIEW_NOT_FOUND)
+            return
+        base = (Settings().webapp_base_url or "").rstrip("/")
+        city_id = (trainer.get("profile") or {}).get("city_id")
+        if trainer_is_listed(trainer):
+            markup = InlineKeyboardMarkup(
+                inline_keyboard=_trainer_catalog_card_rows(
+                    base,
+                    trainer_id_preview,
+                    city_id=city_id,
+                    button_text=msg.CLIENT_BUTTON_TRAINER_PREVIEW_CARD,
+                )
+            )
+            body = msg.CLIENT_TRAINER_PREVIEW_PUBLISHED
+        else:
+            markup = None
+            if base.startswith("https://"):
+                url = client_discovery_webapp_url(base, city_id=city_id)
+                markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_BUTTON_TRAINER_PREVIEW_BROWSE,
+                                web_app=WebAppInfo(url=url),
+                            )
+                        ]
+                    ]
+                )
+            body = msg.CLIENT_TRAINER_PREVIEW_NOT_PUBLISHED
+        await message.answer(body, parse_mode=ParseMode.HTML, reply_markup=markup)
         return
 
     # Generic invite: welcome_ref_<trainer_id> — universal entry point.

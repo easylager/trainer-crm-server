@@ -9,13 +9,13 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609287"></script>
+  <script src="client-mini-app-theme.js?v=202609290"></script>
   <link rel="stylesheet" href="theme.css?v=202610024" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
-  <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <script src="client-profile-switcher.js?v=202609287"></script>
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <script src="mini-app-empty-state.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <script src="client-profile-switcher.js?v=202609290"></script>
   <style>
     body {
       font-family: var(--app-font-sans);
@@ -522,15 +522,37 @@
     .pass-order-modal-root[hidden] {
       display: none !important;
     }
+    /*
+     * Оверлей обязан прокручиваться сам, а лист — помещаться в то, что осталось от экрана.
+     *
+     * Было: `inset: 0` + `align-items: center` и ни одного `overflow`. Пока клавиатура закрыта,
+     * лист влезает и всё выглядит правильно. Клавиатура открывается — видимая высота падает
+     * почти вдвое, лист выше неё, а центрирование срезает его с обоих концов: кнопки «Отмена»
+     * и «Отправить тренеру» уезжают под клавиатуру, и добраться до них нечем — прокручивать
+     * нечего, overflow не объявлен.
+     *
+     * Правило то же, что у общего `.modal-overlay` (mini-app-components.css): прижать к верху,
+     * разрешить прокрутку оверлея. `100dvh` вместо `inset: 0` — потому что position:fixed на
+     * iOS меряется от layout viewport, который под клавиатуру не сжимается, а dvh сжимается.
+     */
     .pass-order-modal-root:not([hidden]) {
       position: fixed;
       inset: 0;
+      height: 100dvh;
       z-index: 10000;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
       box-sizing: border-box;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    /* Пока лист ниже экрана, он остаётся по центру — как было. Как только выше, прижимается
+       к верху и доезжает прокруткой: `auto` по обеим осям даёт ровно это поведение. */
+    .pass-order-modal-root:not([hidden]) > .pass-order-modal-sheet {
+      margin: auto;
     }
     .pass-order-modal-backdrop {
       position: absolute;
@@ -546,6 +568,8 @@
       z-index: 1;
       width: 100%;
       max-width: 400px;
+      /* Лист не тянется за пределы оверлея: иначе прокрутка оверлея ничего не даст. */
+      flex: 0 0 auto;
       padding: 22px 20px 18px;
       border-radius: 20px;
       background: var(--tg-theme-bg-color);
@@ -679,8 +703,8 @@
       opacity: 0.92;
     }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609290" />
 </head>
 <body class="ar-pilot ar-pilot--client-passes-certificates">
   <div class="header">
@@ -758,7 +782,7 @@
         <input type="email" id="cert-orderEmail" class="cert-order-input" placeholder="name@example.com" autocomplete="email">
       </div>
       <div class="cert-order-field">
-        <label for="cert-orderName">Имя получателя</label>
+        <label for="cert-orderName">Имя получателя (необязательно)</label>
         <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Как указать в сертификате" autocomplete="name">
       </div>
       <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
@@ -1340,7 +1364,7 @@
           if (certOrderState.anyAmount) {
             lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в BYN в поле ниже.</span>');
           }
-          lines.push('<span style="font-size:14px;">Укажите email и имя получателя — тренер увидит их в заявке.</span>');
+          lines.push('<span style="font-size:14px;">Укажите email — тренер увидит его в заявке. Имя получателя можно не указывать.</span>');
           t.innerHTML = lines.join('<br>');
         }
         var em = document.getElementById('cert-orderEmail');
@@ -1368,10 +1392,6 @@
             var name = (document.getElementById('cert-orderName').value || '').trim();
             if (!email || email.indexOf('@') < 1) {
               alert('Укажите корректный email');
-              return;
-            }
-            if (!name) {
-              alert('Укажите имя получателя');
               return;
             }
             var nominalByn = null;
@@ -1625,6 +1645,6 @@
       loadCertsPanel();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202609287"></script>
+  <script src="mini-app-client-home.js?v=202609290"></script>
 </body>
 </html>

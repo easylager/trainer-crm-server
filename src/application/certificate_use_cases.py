@@ -1,8 +1,10 @@
 """
-Trainer certificate products: fixed amount (e.g. 100 BYN) or "any amount".
+Trainer certificate products: always a fixed amount (e.g. 100 BYN) — the old
+"any amount" (NULL) product is gone (TASK-142/AC-001, AC-005).
 Info only — clients see what certificates trainer offers; no platform payment.
 Issue: trainer issues certificate instance with code; client redeems with trainer.
 """
+import logging
 import random
 import string
 
@@ -10,13 +12,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
+logger = logging.getLogger(__name__)
+
 DESCRIPTION_UNSET = object()
 
 
-def default_certificate_product_name(amount_cents: int | None) -> str:
+def default_certificate_product_name(amount_cents: int) -> str:
     """Fallback label when trainer leaves «Название» empty."""
-    if amount_cents is None:
-        return "Подарочный сертификат"
     byn = int(amount_cents) // 100
     return f"Сертификат {byn} BYN" if byn > 0 else "Подарочный сертификат"
 
@@ -63,11 +65,18 @@ async def create_certificate_product(
     *,
     name: str | None = None,
     description: str | None = None,
-    amount_cents: int | None,
+    amount_cents: int,
     sort_order: int = 0,
     expires_in_days: int | None = None,
 ) -> int:
-    """Create certificate product. amount_cents=None means 'any amount'. Returns id."""
+    """
+    Create certificate product. amount_cents is required and must be positive —
+    the old "any amount" (NULL) product is gone (TASK-142/AC-001): it let a trainer
+    issue a certificate that silently stored amount_cents=0 and could never be
+    redeemed (AC-005).
+    """
+    if amount_cents is None or int(amount_cents) <= 0:
+        raise ValueError("amount_cents must be a positive integer")
     name_val = (name or "").strip() or default_certificate_product_name(amount_cents)
     desc_val = _normalize_certificate_description(description)
     r = await session.execute(
@@ -131,12 +140,14 @@ async def update_certificate_product(
     *,
     name: str | None = None,
     description: str | None | object = DESCRIPTION_UNSET,
-    amount_cents: int | None = _UNSET,  # None = "any amount"; _UNSET = do not change
+    amount_cents: int | None = _UNSET,  # _UNSET = do not change; None is rejected
     expires_in_days: int | None = None,
     is_active: bool | None = None,
     sort_order: int | None = None,
 ) -> bool:
-    """Update certificate product. amount_cents=None means 'any amount'; _UNSET = do not change. Returns True if updated."""
+    """Update certificate product. amount_cents=_UNSET = do not change; a positive
+    int changes it; None/<=0 raises — "any amount" is no longer a valid state
+    (TASK-142/AC-001). Returns True if updated."""
     updates = []
     params: dict = {"id": product_id, "tid": trainer_id}
     if name is not None:
@@ -151,6 +162,8 @@ async def update_certificate_product(
             description if isinstance(description, str) else None
         )
     if amount_cents is not _UNSET:
+        if amount_cents is None or int(amount_cents) <= 0:
+            raise ValueError("amount_cents must be a positive integer")
         updates.append("amount_cents = :amount_cents")
         params["amount_cents"] = amount_cents
     if expires_in_days is not None:
@@ -245,7 +258,7 @@ async def issue_certificate(
 ) -> dict:
     """
     Issue a certificate: create instance with unique code. Product must belong to trainer and be active.
-    amount_cents from product (0 if product is "any amount"). Returns instance with code for trainer to send.
+    amount_cents comes from the product. Returns instance with code for trainer to send.
     recipient_email: optional; when set, caller can send link by email.
     recipient_phone: optional; stored for welcome-link onboarding (prefill client profile when they open link).
     requester_client_id: CRM client this purchase is attributed to, if any (see
@@ -256,8 +269,14 @@ async def issue_certificate(
         raise ValueError("Certificate product not found or not yours")
     if not product.get("is_active"):
         raise ValueError("Certificate product is inactive")
-    # Use product amount; for "any amount" (NULL) store 0
-    amount_cents = product["amount_cents"] if product["amount_cents"] is not None else 0
+    amount_cents = product["amount_cents"]
+    if amount_cents is None or int(amount_cents) <= 0:
+        # Defense-in-depth (TASK-142/AC-005): a "any amount" product used to silently
+        # issue amount_cents=0 here, which certificate_use_cases' redeem query
+        # (`amount_remaining_cents > 0`) can never match — an unredeemable certificate.
+        # Migration 0208 deactivates every pre-existing NULL-amount product; this guards
+        # against one somehow surviving or being reintroduced.
+        raise ValueError("Certificate product has no valid amount — cannot issue")
     name = (recipient_name or "").strip() or "—"
     purchaser = (purchased_by_name or "").strip() or None
     email = (recipient_email or "").strip() or None
@@ -356,6 +375,152 @@ async def get_certificate_file_key(
     )
     row = r.fetchone()
     return (row[0] or "").strip() or None if row else None
+
+
+# --- Background file generation (TASK-142/AC-002) ---
+# issue_certificate() only inserts the row; PDF render + S3 upload + email are done
+# here, off the request path, by run_certificate_file_generation_loop. The trainer's
+# screen polls get_certificate_file_status() instead of waiting on the POST.
+
+async def get_certificate_file_status(
+    session: AsyncSession, certificate_id: int, trainer_id: int
+) -> dict | None:
+    """Polling target for the issue screen: {file_status, file_url, file_error}."""
+    r = await session.execute(
+        text("""
+            SELECT file_status, file_url, file_error
+            FROM certificate_instances
+            WHERE id = :id AND trainer_id = :tid
+        """),
+        {"id": certificate_id, "tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {"file_status": row[0], "file_url": row[1], "file_error": row[2]}
+
+
+async def retry_certificate_file_generation(
+    session: AsyncSession, certificate_id: int, trainer_id: int
+) -> bool:
+    """«Повторить» button: requeue a failed generation. Returns True if it was failed and is now pending."""
+    r = await session.execute(
+        text("""
+            UPDATE certificate_instances
+            SET file_status = 'pending', file_error = NULL
+            WHERE id = :id AND trainer_id = :tid AND file_status = 'failed'
+        """),
+        {"id": certificate_id, "tid": trainer_id},
+    )
+    ok = r.rowcount > 0
+    if ok:
+        await session.commit()
+    return ok
+
+
+async def process_pending_certificate_files_batch(session: AsyncSession, limit: int = 10) -> int:
+    """
+    Render PDF, upload to S3, attempt email for certificates with file_status='pending'.
+    Same PDF/S3/email steps that POST /trainer/certificate-issue used to run inline
+    (moved here so that request no longer blocks on them). Call from a periodic loop.
+    Returns number of rows processed (ready or failed — both count).
+    """
+    from datetime import datetime
+
+    from src.application.certificate_pdf import build_certificate_pdf
+    from src.application.collective_use_cases import resolve_certificate_brand_for_trainer
+    from src.application.trainer_use_cases import get_trainer
+    from src.infrastructure.s3 import upload_certificate_file
+    from src.shared.config import Settings
+    from src.shared.email_sender import send_certificate_pdf_email
+
+    r = await session.execute(
+        text("""
+            SELECT ci.id, ci.trainer_id, ci.certificate_product_id, ci.recipient_name,
+                   ci.recipient_email, ci.purchased_by_name, ci.amount_cents, ci.code,
+                   ci.issued_at, ci.expires_at, p.name AS product_name
+            FROM certificate_instances ci
+            LEFT JOIN trainer_certificate_products p ON p.id = ci.certificate_product_id
+            WHERE ci.file_status = 'pending'
+            ORDER BY ci.id
+            LIMIT :limit
+        """),
+        {"limit": limit},
+    )
+    rows = r.fetchall()
+    processed = 0
+    for row in rows:
+        (cert_id, trainer_id, product_id, recipient_name, recipient_email,
+         purchased_by_name, amount_cents, code, issued_at, expires_at, product_name) = row
+        try:
+            trainer = await get_trainer(session, trainer_id)
+            profile = (trainer or {}).get("profile") or {}
+            trainer_name = (
+                (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
+            ).strip() or "Тренер"
+
+            issued_date = issued_at.date() if hasattr(issued_at, "date") else issued_at
+            expires_date = expires_at.date() if hasattr(expires_at, "date") else expires_at
+
+            s = Settings()
+            un = (s.client_bot_username or "").strip().lstrip("@")
+            activation_url = f"https://t.me/{un}?start=cert_{code}" if un and code else None
+
+            cert_brand = await resolve_certificate_brand_for_trainer(session, trainer_id)
+
+            pdf_bytes = build_certificate_pdf(
+                trainer_name=trainer_name,
+                product_name=product_name or "Сертификат",
+                amount_cents=amount_cents or 0,
+                code=code or "",
+                recipient_name=recipient_name or "—",
+                purchased_by_name=purchased_by_name,
+                issued_at=issued_date,
+                expires_at=expires_date,
+                activation_url=activation_url,
+                client_bot_display_name=f"@{un}" if un else None,
+                brand_display=str(cert_brand.get("display_name") or ""),
+                brand_tagline=str(cert_brand.get("tagline") or ""),
+                brand_powered_by=cert_brand.get("powered_by"),
+            )
+            file_key = upload_certificate_file(pdf_bytes, trainer_id, cert_id)
+            await session.execute(
+                text("""
+                    UPDATE certificate_instances
+                    SET file_url = :file_key, file_status = 'ready', file_error = NULL
+                    WHERE id = :id
+                """),
+                {"file_key": file_key, "id": cert_id},
+            )
+            await session.commit()
+
+            to_email = (recipient_email or "").strip()
+            if to_email:
+                sent = await send_certificate_pdf_email(
+                    to_email, pdf_bytes, trainer_name=trainer_name, code=code or ""
+                )
+                if sent:
+                    await update_certificate_email_sent_at(session, cert_id)
+                else:
+                    logger.warning(
+                        "Certificate email not sent to %s (instance id=%s), adding to outbox",
+                        to_email, cert_id,
+                    )
+                    await insert_certificate_email_outbox(session, cert_id, to_email)
+        except Exception as e:  # noqa: BLE001 — one bad row must not stop the batch
+            logger.exception("Certificate file generation failed for instance %s: %s", cert_id, e)
+            await session.rollback()
+            await session.execute(
+                text("""
+                    UPDATE certificate_instances
+                    SET file_status = 'failed', file_error = :err
+                    WHERE id = :id
+                """),
+                {"id": cert_id, "err": str(e)[:2000]},
+            )
+            await session.commit()
+        processed += 1
+    return processed
 
 
 # --- Idempotency (24h TTL) ---

@@ -12,13 +12,13 @@
     шерили только тренера и «Лёд сегодня» по городу; ``arena_id`` в таблице уже есть.
 
 Revision ID: 0208_shops_place_shares
-Revises: 0207_collective_operators
+Revises: 0208_certificate_fixed_amount
 """
 
 from alembic import op
 
 revision = "0208_shops_place_shares"
-down_revision = "0207_collective_operators"
+down_revision = "0208_certificate_fixed_amount"
 branch_labels = None
 depends_on = None
 

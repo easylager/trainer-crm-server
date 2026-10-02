@@ -222,11 +222,23 @@
       show(el('tcRevisionCard'), false);
       show(el('tcCancelRevision'), false);
     }
-    /* Кнопки «Открыть как клиент» здесь нет и быть не может: клиентский Mini App проверяет
-       initData токеном КЛИЕНТСКОГО бота, а это приложение живёт в тренерском — любой переход
-       на `catalog` отдавал 401 и экран «Что-то пошло не так». Публичной веб-страницы тренера в
-       продукте тоже нет. На вопрос «как меня видят» отвечает превью выше: оно собрано из тех же
-       фактов, что и карточка клиентского списка. */
+    /* «Открыть как клиент» не может быть прямым переходом на `catalog` этого же Mini App:
+       клиентский экран проверяет initData токеном КЛИЕНТСКОГО бота, а это приложение живёт в
+       тренерском — такой переход отдавал бы 401. preview_link — deep-link в реальный
+       клиентский бот (`preview_<trainer_id>`, см. client_handlers.py); там бот сам пришлёт
+       настоящую WebApp-кнопку, и откроется подлинный клиентский Mini App, а не пересказ. */
+    var openBtn = el('tcOpenAsClient');
+    if (openBtn) {
+      show(openBtn, !!p.preview_link);
+      openBtn.onclick = function () {
+        if (!p.preview_link) return;
+        if (tg && typeof tg.openTelegramLink === 'function') {
+          tg.openTelegramLink(p.preview_link);
+        } else {
+          window.open(p.preview_link, '_blank');
+        }
+      };
+    }
   }
 
   function mergeForCard(preview, version) {

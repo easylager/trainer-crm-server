@@ -2,6 +2,8 @@
 
 from src.application.trainer_invite_links import (
     build_trainer_invite_links,
+    build_trainer_preview_link,
+    build_trainer_preview_payload,
     build_trainer_universal_invite_link,
     build_client_start_payload,
     normalize_client_bot_username,
@@ -104,3 +106,25 @@ def test_build_universal_invite_link_missing_username() -> None:
     )
     assert link is None
     assert err == "missing_username"
+
+
+def test_build_trainer_preview_payload_matches_client_bot() -> None:
+    assert build_trainer_preview_payload(42) == "preview_42"
+
+
+def test_build_trainer_preview_link_returns_tme_deep_link() -> None:
+    link, err = build_trainer_preview_link(client_bot_username="@ClientBot", trainer_id=42)
+    assert err is None
+    assert link == "https://t.me/ClientBot?start=preview_42"
+
+
+def test_build_trainer_preview_link_missing_username() -> None:
+    link, err = build_trainer_preview_link(client_bot_username=None, trainer_id=42)
+    assert link is None
+    assert err == "missing_username"
+
+
+def test_build_trainer_preview_link_invalid_trainer_id() -> None:
+    link, err = build_trainer_preview_link(client_bot_username="B", trainer_id=0)
+    assert link is None
+    assert err == "invalid_trainer_id"

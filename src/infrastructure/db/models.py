@@ -1357,6 +1357,10 @@ class CertificateInstance(Base):
     recipient_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     recipient_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     file_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    #: pending|ready|failed — PDF/S3/email happen in the background (TASK-142/AC-002),
+    #: not inline in POST /trainer/certificate-issue. See certificate_use_cases.process_pending_certificate_files_batch.
+    file_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    file_error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
 
 
 # --- Trainer subscription to platform (billing: trial + paid plans) ---

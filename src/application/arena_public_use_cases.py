@@ -532,6 +532,16 @@ LEFT JOIN (
 WHERE a.is_active AND a.is_confirmed
   AND c.country = ANY(:ice_countries)
   AND (p.status IS NULL OR p.status = :published)
+  -- A bare name with no photo reads as an admin task-in-progress, not a place to
+  -- book: a trainer's new arena exists (and works in their own schedule) the moment
+  -- they create it, but stays out of client search until someone adds a photo.
+  -- Scoped to trainer-created arenas only — the seeded/imported catalog (Moscow
+  -- expansion and the like) went through its own curation and has no `media` rows
+  -- yet either; hiding it would be a much bigger regression than the bug being fixed.
+  AND (a.created_by_trainer_id IS NULL OR EXISTS (
+      SELECT 1 FROM media m
+      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+  ))
 """
 
 
@@ -643,6 +653,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS map_rink_count,
                        (
                            -- TASK-146: город, где пока есть только магазины без координат
@@ -663,6 +678,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS latitude,
                        (
                            SELECT AVG(a.longitude)
@@ -672,6 +692,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS longitude,
                        (
                            SELECT MIN(a.latitude)
@@ -681,6 +706,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS min_latitude,
                        (
                            SELECT MAX(a.latitude)
@@ -690,6 +720,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS max_latitude,
                        (
                            SELECT MIN(a.longitude)
@@ -699,6 +734,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS min_longitude,
                        (
                            SELECT MAX(a.longitude)
@@ -708,6 +748,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                              AND a.is_active AND a.is_confirmed
                              AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS max_longitude
                 FROM cities c
                 WHERE c.is_active AND c.country = ANY(:ice_countries)
@@ -1031,6 +1076,10 @@ JOIN LATERAL (
 WHERE a.is_active AND a.is_confirmed
   AND c.country = ANY(:ice_countries)
 {city_filter}  AND (p.status IS NULL OR p.status = :published)
+  AND (a.created_by_trainer_id IS NULL OR EXISTS (
+      SELECT 1 FROM media m
+      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+  ))
 ORDER BY nxt.starts_at_utc, a.id
 LIMIT 1
 """
@@ -1358,6 +1407,10 @@ async def search_public_ice(
         WHERE a.is_active AND a.is_confirmed
           AND c.country = ANY(:ice_countries)
           AND (p.status IS NULL OR p.status = :published)
+          AND (a.created_by_trainer_id IS NULL OR EXISTS (
+              SELECT 1 FROM media m
+              WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+          ))
           AND (
             to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
               @@ plainto_tsquery('simple', :q)
@@ -1380,6 +1433,10 @@ async def search_public_ice(
             WHERE a.is_active AND a.is_confirmed
               AND c.country = ANY(:ice_countries)
               AND (p.status IS NULL OR p.status = :published)
+              AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                  SELECT 1 FROM media m
+                  WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+              ))
               AND (
                 to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
                   @@ plainto_tsquery('simple', :q)
@@ -1492,6 +1549,10 @@ LEFT JOIN (
   WHERE a.is_active AND a.is_confirmed
     AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
     AND (p.status IS NULL OR p.status = :published)
+    AND (a.created_by_trainer_id IS NULL OR EXISTS (
+        SELECT 1 FROM media m
+        WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+    ))
 ) rink ON rink.city_id = c.id
 LEFT JOIN (
   SELECT tc.city_id, tc.trainer_id

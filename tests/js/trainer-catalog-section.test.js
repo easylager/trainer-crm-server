@@ -79,13 +79,15 @@ describe('экран «Каталог»', () => {
     assert.match(js, /tcRevisionCard/);
   });
 
-  it('кнопки «Открыть как клиент» нет — из тренерского приложения она невозможна', () => {
+  it('«Открыть как клиент» уходит deep-link\'ом в клиентского бота, не прямым переходом в этом же приложении', () => {
     /* Клиентский Mini App проверяет initData токеном КЛИЕНТСКОГО бота, а этот экран живёт в
-       тренерском: переход на `catalog` отдавал 401 и «Что-то пошло не так». */
-    for (const gone of ['tcOpenAsClient', 'tc-open-as-client']) {
-      assert.equal(html.indexOf(gone), -1, gone);
-      assert.equal(js.indexOf(gone), -1, gone);
-    }
+       тренерском: прямой переход на `catalog?trainer_id=` из ЭТОГО кода отдавал бы 401. Кнопка
+       есть, но URL строит сервер (preview_<trainer_id> deep-link, client_handlers.py) — здесь
+       только openTelegramLink(p.preview_link), ни одного своего `catalog?trainer_id=`. */
+    assert.match(html, /id="tcOpenAsClient"/);
+    assert.match(js, /tcOpenAsClient/);
+    assert.match(js, /preview_link/);
+    assert.match(js, /openTelegramLink/);
     const code = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     assert.equal((code.match(/'catalog\?trainer_id=/g) || []).length, 0);
   });
