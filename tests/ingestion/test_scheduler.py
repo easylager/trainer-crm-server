@@ -356,3 +356,18 @@ async def test_by_egress_proxy_applies_only_to_requires_by_egress_jobs() -> None
 
     assert seen == {1: "http://u:p@198.51.100.1:8000", 2: None}
     assert current_egress_proxy() is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_uses_socks_connector_for_socks_proxy() -> None:
+    from src.ingestion.source_io import _session, egress_proxy
+
+    with egress_proxy("socks5h://u:p@198.51.100.1:8000"):
+        session, proxy = _session(5)
+    async with session:
+        assert proxy is None
+        assert type(session.connector).__name__ == "ProxyConnector"
+    with egress_proxy("http://u:p@198.51.100.1:8000"):
+        session, proxy = _session(5)
+    async with session:
+        assert proxy == "http://u:p@198.51.100.1:8000"

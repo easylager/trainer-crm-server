@@ -13,7 +13,7 @@ from src.ingestion.types import ParserJob
 
 _USER_AGENT = "trainer-crm-ice-ingest/1.0"
 
-# PDEC-004: HTTP proxy with a real BY exit IP, set by the scheduler only around jobs whose
+# PDEC-004: HTTP or SOCKS5 proxy with a real BY exit IP, set by the scheduler only around jobs whose
 # config carries requires_by_egress — every other arena keeps fetching directly.
 _egress_proxy: ContextVar[str | None] = ContextVar("ice_ingest_egress_proxy", default=None)
 
@@ -31,20 +31,35 @@ def current_egress_proxy() -> str | None:
     return _egress_proxy.get()
 
 
-async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, timeout_sec: float = 20) -> bytes:
+def _session(timeout_sec: float) -> tuple[aiohttp.ClientSession, str | None]:
+    """Session plus the per-request ``proxy=`` value: socks5(h):// goes through a connector
+    (aiohttp itself only speaks HTTP proxies), http(s):// is passed to the request."""
     timeout = aiohttp.ClientTimeout(total=timeout_sec)
+    proxy = current_egress_proxy()
+    if proxy and proxy.lower().startswith("socks"):
+        from aiohttp_socks import ProxyConnector
+
+        # python-socks has no "socks5h" scheme; it is socks5 with remote DNS (rdns).
+        rdns = proxy.lower().startswith(("socks5h", "socks4a"))
+        url = proxy.replace("socks5h://", "socks5://", 1).replace("socks4a://", "socks4://", 1)
+        return aiohttp.ClientSession(timeout=timeout, connector=ProxyConnector.from_url(url, rdns=rdns or None)), None
+    return aiohttp.ClientSession(timeout=timeout), proxy
+
+
+async def fetch_http_bytes(url: str, *, headers: dict[str, str] | None = None, timeout_sec: float = 20) -> bytes:
     request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers=request_headers, proxy=current_egress_proxy()) as response:
+    session, proxy = _session(timeout_sec)
+    async with session:
+        async with session.get(url, headers=request_headers, proxy=proxy) as response:
             response.raise_for_status()
             return await response.read()
 
 
 async def fetch_http_text(url: str, *, headers: dict[str, str] | None = None) -> str:
-    timeout = aiohttp.ClientTimeout(total=20)
     request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers=request_headers, proxy=current_egress_proxy()) as response:
+    session, proxy = _session(20)
+    async with session:
+        async with session.get(url, headers=request_headers, proxy=proxy) as response:
             response.raise_for_status()
             return await response.text()
 
