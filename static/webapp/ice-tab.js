@@ -431,6 +431,7 @@
         window: state.window,
       });
     }
+    parkShareButton();
     setShareButton();
     if (!list) return;
     var paint = M.listPaintMode({
@@ -476,7 +477,19 @@
           '</div>'
         : '') +
       parts.rest.map(renderArenaCard).join('');
+    /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
+       а приглушённые места без нужных сеансов идут уже после неё. */
+    var brkEl = brk && list.querySelector('.ice-window-break');
+    var shareBtn = $('iceShareBtn');
+    if (brkEl && shareBtn) list.insertBefore(shareBtn, brkEl);
     showActiveList();
+  }
+
+  /* innerHTML списка стирает всё внутри — возвращаем кнопку на её штатное место под #iceList. */
+  function parkShareButton() {
+    var btn = $('iceShareBtn');
+    var host = $('iceList');
+    if (btn && host && btn.parentNode !== host.parentNode) host.parentNode.insertBefore(btn, host.nextSibling);
   }
 
   function recordIceInterest() {

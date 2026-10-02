@@ -253,7 +253,31 @@ def _render_story(view: Mapping[str, Any], lines: Mapping[str, str], display_url
     for line in _wrap(draw, lines["sub"], f_sub, inner, 2):
         draw.text((x, min(y, stub_y - 120)), line, font=f_sub, fill=_MUTED)
         y += 56
-    if lines.get("extra"):
+    rows = lines.get("rows")
+    if rows:
+        # Подборка: одна площадка — одна строка «название …… время». Раньше это был один
+        # абзац с «…» в конце, и половина мест обрезалась на полуслове.
+        f_row = _font("Inter-SemiBold.ttf", 44)
+        f_row_time = _font("Inter-Bold.ttf", 44)
+        row_h = 84
+        limit = stub_y - 70
+        room = max(1, (limit - y) // row_h)
+        # Всё влезло — рисуем всё; иначе оставляем место под строку «и ещё N».
+        shown = rows if len(rows) <= room else rows[: max(1, (limit - y - 64) // row_h)]
+        draw.line([(x, y), (x + inner, y)], fill=_LINE, width=2)
+        for name, when in shown:
+            tw = int(draw.textlength(when, font=f_row_time)) + 30 if when else 0
+            label = _wrap(draw, name, f_row, inner - tw, 1)[0]
+            draw.text((x, y + 16), label, font=f_row, fill=_INK)
+            if when:
+                draw.text((x + inner - tw + 30, y + 16), when, font=f_row_time, fill=_ACCENT)
+            y += row_h
+            draw.line([(x, y), (x + inner, y)], fill=_LINE, width=2)
+        hidden = len(rows) - len(shown)
+        if hidden > 0:
+            more = f"и ещё {hidden} {plural_ru(hidden, 'место', 'места', 'мест')} — по ссылке"
+            draw.text((x, y + 20), more, font=f_sub, fill=_MUTED)
+    elif lines.get("extra"):
         y += 16
         for line in _wrap(draw, lines["extra"].replace(" · ", "  ·  "), f_sub, inner, 3):
             if y > stub_y - 80:
@@ -303,12 +327,12 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
     fake_view = {"card": {"venue_type": view.get("venue") or "ice"}}
     if story:
         # В середине билета — первые места с ближайшим временем: ради этого и смотрят историю.
-        picks = []
-        for item in (view.get("items") or [])[:4]:
+        rows = []
+        for item in view.get("items") or []:
             slots = (view.get("slots") or {}).get(int(item["id"])) or []
             when = str(slots[0].get("starts_at_local") or "")[:5] if slots else ""
-            picks.append(f"{item.get('name')} {when}".strip())
-        lines = {**lines, "day": "", "time": "", "sub": "", "extra": " · ".join(picks)}
+            rows.append((str(item.get("name") or ""), when))
+        lines = {**lines, "day": "", "time": "", "sub": "", "rows": rows}
         img = _render_story(fake_view, lines, display_url=view.get("display_url") or "")
     else:
         img = _render_og(fake_view, lines)
