@@ -857,6 +857,7 @@
           html += '</div>';
           html += '<div class="field-row">';
           html += '<div class="field"><label>Сайт</label><input data-field="website_url" value="' + escapeHtml(a.website_url || '') + '" placeholder="https://"></div>';
+          html += '<div class="field"><label>Билеты онлайн</label><input data-field="tickets_url" value="' + escapeHtml(a.tickets_url || '') + '" placeholder="https://касса…"></div>';
           html += '<div class="field"><label>Тип места</label>' + venueTypeSelectHtml('data-field="venue_type"', a.venue_type || 'ice') + '</div>';
           html += '<div class="field"><label>Публикация</label><select data-field="status">';
           ['draft','published','archived'].forEach(function(st) {
@@ -946,6 +947,7 @@
               district: ((row.querySelector('[data-field="district"]') || {}).value || '').trim() || null,
               phone: ((row.querySelector('[data-field="phone"]') || {}).value || '').trim() || null,
               website_url: ((row.querySelector('[data-field="website_url"]') || {}).value || '').trim() || null,
+              tickets_url: ((row.querySelector('[data-field="tickets_url"]') || {}).value || '').trim() || null,
               short_description: ((row.querySelector('[data-field="short_description"]') || {}).value || '').trim() || null,
               status: (row.querySelector('[data-field="status"]') || {}).value || 'published',
               venue_type: venueType,

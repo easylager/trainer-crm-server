@@ -152,8 +152,9 @@ describe('buildRibbonForDay', () => {
     assert.equal(rows.length, 2);
     assert.equal(rows[0].nature, 'ice');
     assert.equal(rows[0].stripe, 'ice');
-    assert.equal(rows[0].cta, 'Билет на месте');
-    assert.equal(rows[0].ctaKind, 'ghost');
+    // Ни ссылки сеанса, ни кассы места — кнопки нет: «Билет на месте» было бы выдумкой.
+    assert.equal(rows[0].cta, '');
+    assert.equal(rows[0].href, null);
     assert.equal(rows[1].nature, 'lesson');
     assert.equal(rows[1].stripe, 'lesson');
     assert.equal(rows[1].cta, 'Заявка');
@@ -188,7 +189,7 @@ describe('buildRibbonForDay', () => {
       assert.equal(rows.length, 1);
       assert.equal(rows[0].nature, 'ice');
       assert.equal(rows[0].bookable, false);
-      assert.equal(rows[0].ctaKind, 'ghost');
+      assert.equal(rows[0].ctaKind, 'link');
       assert.notEqual(rows[0].cta, 'Записаться');
       assert.ok(!/запис/i.test(rows[0].cta));
       assert.equal(rows[0].href, 'https://rink.example/tickets');
@@ -335,22 +336,35 @@ describe('heroView', () => {
 });
 
 describe('iceRowCta', () => {
-  it('is informational Билет на месте; external_url is a link, never booking', () => {
+  it('без ссылки — без кнопки; ничего не обещаем «на месте»', () => {
     const { iceRowCta } = loadModel();
-    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), {
-      cta: 'Билет на месте',
-      ctaKind: 'ghost',
-      href: null,
-      bookable: false,
-    });
-    const linked = iceRowCta({
-      kind: 'open_ice',
-      external_url: 'https://chizhovka.example',
-    });
-    assert.equal(linked.cta, 'Билет на месте');
-    assert.equal(linked.ctaKind, 'ghost');
+    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), { cta: '', ctaKind: '', href: null, bookable: false });
+    assert.equal(iceRowCta({ kind: 'public_skate' }, 'javascript:alert(1)').href, null);
+  });
+
+  it('ссылка сеанса важнее общей кассы места; это ссылка, не запись', () => {
+    const { iceRowCta } = loadModel();
+    const linked = iceRowCta({ kind: 'open_ice', external_url: 'https://chizhovka.example/e/1' }, 'https://kassa.example');
+    assert.equal(linked.cta, 'Билеты');
+    assert.equal(linked.ctaKind, 'link');
     assert.equal(linked.bookable, false);
-    assert.equal(linked.href, 'https://chizhovka.example');
+    assert.equal(linked.href, 'https://chizhovka.example/e/1');
+    assert.equal(iceRowCta({ kind: 'public_skate' }, 'https://koronaticket.by/rink').href, 'https://koronaticket.by/rink');
+  });
+
+  it('касса места доходит до каждой строки ленты', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [{ kind: 'public_skate', local_date: '2026-09-06', starts_at_local: '20:15:00',
+        starts_at_utc: '2026-09-06T17:15:00Z', ends_at_utc: '2026-09-06T18:00:00Z' }],
+      groups: [],
+      weekday: 6,
+      now: new Date('2026-09-06T06:00:00Z'),
+      ticketsUrl: 'https://koronaticket.by/rink',
+    });
+    assert.equal(rows[0].cta, 'Билеты');
+    assert.equal(rows[0].href, 'https://koronaticket.by/rink');
   });
 });
 

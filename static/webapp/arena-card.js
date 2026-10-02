@@ -311,7 +311,7 @@
       '<' + tag + ' class="' + cls + '"' + extra + '>' +
       '<span class="arena-row__t">' + esc(row.time || row.weekday) + '</span>' +
       '<span class="arena-row__m"><b>' + esc(row.title) + '</b><span>' + esc(row.meta || '') + '</span></span>' +
-      '<span class="' + ctaCls + '">' + esc(row.cta) + '</span>' +
+      (row.cta ? '<span class="' + ctaCls + '">' + esc(row.cta) + '</span>' : '') +
       '</' + tag + '>'
     );
   }
@@ -324,6 +324,7 @@
       groups: allGroups(),
       weekday: weekdayOf(iso),
       now: new Date(),
+      ticketsUrl: state.card && state.card.tickets_url,
     });
   }
 

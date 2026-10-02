@@ -274,14 +274,25 @@
     return 'Массовое катание';
   }
 
-  function iceRowCta(session) {
-    var href = String((session && session.external_url) || '').trim() || null;
-    return {
-      cta: 'Билет на месте',
-      ctaKind: 'ghost',
-      href: href,
-      bookable: false,
-    };
+  /**
+   * Кнопка строки сеанса. Раньше на каждом сеансе стояло «Билет на месте» — даже у Замка,
+   * где билеты продаются онлайн с остатком мест: приложение врало. Теперь только факт:
+   * ссылка на сеанс (касса или страница события) или общая касса места — «Билеты»;
+   * нет ни того ни другого — кнопки нет, строка говорит временем и ценой.
+   */
+  function iceRowCta(session, ticketsUrl) {
+    var href = safeHttpUrl(session && session.external_url) || safeHttpUrl(ticketsUrl);
+    if (!href) return { cta: '', ctaKind: '', href: null, bookable: false };
+    // Не 'solid': заливка у нас — своя запись («Заявка»), а это уход во внешнюю кассу.
+    return { cta: 'Билеты', ctaKind: 'link', href: href, bookable: false };
+  }
+
+  function safeHttpUrl(value) {
+    var href = String(value || '').trim();
+    var lower = href.toLowerCase();
+    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
+    if (/\s/.test(href)) return null;
+    return href;
   }
 
   function hhmm(value) {
@@ -300,7 +311,7 @@
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
       if (nowState !== 'upcoming') continue;
-      var cta = iceRowCta(s);
+      var cta = iceRowCta(s, opts.ticketsUrl);
       rows.push({
         nature: 'ice',
         stripe: 'ice',
@@ -458,11 +469,8 @@
   }
 
   function ticketCta(card) {
-    var href = String((card && card.tickets_url) || '').trim();
+    var href = safeHttpUrl(card && card.tickets_url);
     if (!href) return null;
-    var lower = href.toLowerCase();
-    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
-    if (/\s/.test(href)) return null;
     return { href: href, label: 'Купить билет' };
   }
 

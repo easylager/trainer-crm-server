@@ -295,6 +295,14 @@ a.arena-row {
   color: var(--app-cta-text);
 }
 
+/* Внешняя касса: акцент без заливки и стрелка «ушли с сайта» — не путать со своей записью. */
+.arena-cta--link {
+  border: 1px solid var(--app-cta-fill);
+  color: var(--app-cta-fill);
+  background: transparent;
+}
+.arena-cta--link::after { content: " ↗"; }
+
 .arena-legend {
   display: flex;
   flex-wrap: wrap;

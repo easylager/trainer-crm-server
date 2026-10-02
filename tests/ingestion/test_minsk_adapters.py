@@ -235,6 +235,8 @@ async def test_zamok_and_chizhovka_html_adapters_match_expected() -> None:
     assert sample.price_adult_minor == 1100
     assert sample.price_child_minor == 900
     assert sample.price_rental_minor == 900
+    # Касса онлайн — со страницы ТЦ, с нашими utm вместо чужих: карточка ведёт покупать, а не «на месте».
+    assert sample.external_url == "https://koronaticket.by/rink?utm_source=glide&utm_medium=catalog"
 
     chiz_ext = await ChizhovkaHtmlParser().extract(chizhovka_job)
     chiz_ok = IceSessionValidator().validate(
