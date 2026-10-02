@@ -13,10 +13,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.types import (
+    ALERT_STATE_OK,
     CADENCE_DAILY,
     CADENCE_HOURLY,
     CADENCE_WEEKLY,
     ParserJob,
+    SourceState,
 )
 
 _CADENCE_DELTA = {
@@ -34,6 +36,23 @@ def advance_next_run_at(cadence: str, from_dt: datetime) -> datetime:
     return from_dt + cadence_timedelta(cadence)
 
 
+def state_from_row(row: Any) -> SourceState:
+    """Колонки состояния 0211; строка без них (старый SELECT) — пустое состояние."""
+    def _get(name: str, default: Any = None) -> Any:
+        return getattr(row, name, default)
+
+    return SourceState(
+        last_ok_at=_get("last_ok_at"),
+        last_ok_slot_count=_get("last_ok_slot_count"),
+        failing_since=_get("failing_since"),
+        failure_streak=int(_get("failure_streak", 0) or 0),
+        last_error_code=_get("last_error_code"),
+        last_error_summary=_get("last_error_summary"),
+        alert_state=str(_get("alert_state", ALERT_STATE_OK) or ALERT_STATE_OK),
+        alert_sent_at=_get("alert_sent_at"),
+    )
+
+
 def job_from_row(row: Any) -> ParserJob:
     config = row.config if isinstance(getattr(row, "config", None), dict) else {}
     if not config and isinstance(row, dict):
@@ -48,12 +67,23 @@ def job_from_row(row: Any) -> ParserJob:
         last_run_at=row.last_run_at,
         config=dict(config or {}),
         notes=row.notes,
+        state=state_from_row(row),
     )
 
 
 class InMemoryParserJobStore:
-    def __init__(self, jobs: Sequence[ParserJob]) -> None:
+    def __init__(
+        self,
+        jobs: Sequence[ParserJob],
+        *,
+        shown_sessions: dict[int, int] | None = None,
+    ) -> None:
         self._jobs = {job.id: job for job in jobs}
+        # arena_id → сколько будущих сеансов парсера сейчас видит пользователь.
+        self.shown_sessions = dict(shown_sessions or {})
+
+    async def count_shown_sessions(self, arena_id: int, now: datetime) -> int:
+        return int(self.shown_sessions.get(arena_id, 0))
 
     def get(self, job_id: int) -> ParserJob:
         return self._jobs[job_id]
@@ -73,9 +103,15 @@ class InMemoryParserJobStore:
         *,
         last_run_at: datetime,
         next_run_at: datetime,
+        state: SourceState | None = None,
     ) -> None:
         current = self._jobs[job_id]
-        self._jobs[job_id] = replace(current, last_run_at=last_run_at, next_run_at=next_run_at)
+        self._jobs[job_id] = replace(
+            current,
+            last_run_at=last_run_at,
+            next_run_at=next_run_at,
+            state=state if state is not None else current.state,
+        )
 
 
 class SqlAlchemyParserJobStore:
@@ -87,7 +123,9 @@ class SqlAlchemyParserJobStore:
             text(
                 """
                 SELECT id, arena_id, parser_key, is_enabled, cadence,
-                       next_run_at, last_run_at, config, notes
+                       next_run_at, last_run_at, config, notes,
+                       last_ok_at, last_ok_slot_count, failing_since, failure_streak,
+                       last_error_code, last_error_summary, alert_state, alert_sent_at
                 FROM ice_parser_jobs
                 WHERE is_enabled = true AND next_run_at <= :now
                 ORDER BY next_run_at, id
@@ -103,17 +141,72 @@ class SqlAlchemyParserJobStore:
         *,
         last_run_at: datetime,
         next_run_at: datetime,
+        state: SourceState | None = None,
     ) -> None:
+        if state is None:
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE ice_parser_jobs
+                    SET last_run_at = :last_run_at, next_run_at = :next_run_at
+                    WHERE id = :job_id
+                    """
+                ),
+                {"job_id": job_id, "last_run_at": last_run_at, "next_run_at": next_run_at},
+            )
+            return
+        # Алертные поля (alert_state / alert_sent_at) здесь не пишем: их ведёт тик
+        # алертов в своей транзакции, и планировщик не должен их перетирать.
         await self._session.execute(
             text(
                 """
                 UPDATE ice_parser_jobs
-                SET last_run_at = :last_run_at, next_run_at = :next_run_at
+                SET last_run_at = :last_run_at,
+                    next_run_at = :next_run_at,
+                    last_ok_at = :last_ok_at,
+                    last_ok_slot_count = :last_ok_slot_count,
+                    failing_since = :failing_since,
+                    failure_streak = :failure_streak,
+                    last_error_code = :last_error_code,
+                    last_error_summary = :last_error_summary
                 WHERE id = :job_id
                 """
             ),
-            {"job_id": job_id, "last_run_at": last_run_at, "next_run_at": next_run_at},
+            {
+                "job_id": job_id,
+                "last_run_at": last_run_at,
+                "next_run_at": next_run_at,
+                "last_ok_at": state.last_ok_at,
+                "last_ok_slot_count": state.last_ok_slot_count,
+                "failing_since": state.failing_since,
+                "failure_streak": state.failure_streak,
+                "last_error_code": state.last_error_code,
+                "last_error_summary": state.last_error_summary,
+            },
         )
+
+    async def count_shown_sessions(self, arena_id: int, now: datetime) -> int:
+        """Будущие сеансы арены из парсера, которые сейчас видит пользователь.
+
+        Ручные (admin) и эталонные (etalon_*) сеансы парсер не трогает — не считаем.
+        """
+        result = await self._session.execute(
+            text(
+                """
+                SELECT COUNT(*)::int
+                FROM ice_sessions AS s
+                WHERE s.arena_id = :arena_id
+                  AND s.status = 'active'
+                  AND s.kind IN ('public_skate', 'open_ice')
+                  AND s.starts_at_utc > :now
+                  AND (s.valid_until IS NULL OR s.valid_until >= :now)
+                  AND (s.source_id IS NULL OR s.source_id NOT LIKE 'etalon_%')
+                  AND (s.source_id IS NULL OR s.source_id <> 'admin')
+                """
+            ),
+            {"arena_id": arena_id, "now": now},
+        )
+        return int(result.scalar() or 0)
 
 
 def config_requires_by_egress(config: dict[str, Any]) -> bool:

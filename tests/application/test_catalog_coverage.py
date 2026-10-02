@@ -1,0 +1,210 @@
+"""TASK-146: отчёт о полноте каталога — пробелы карточек, парсеры, data/-катки, магазины."""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy import text
+
+from src.application.arena_profile import ensure_arena_profile
+from src.application.catalog_coverage import (
+    address_key,
+    build_coverage_report,
+    format_coverage_report,
+    name_tokens,
+)
+
+_NOW = datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc)
+
+
+def test_name_and_address_normalization() -> None:
+    assert name_tokens('Каток хк "Юность"') == {"юность"}
+    assert name_tokens("Юность (парк Горького)") == {"юность", "горького"}
+    assert name_tokens("Ледовая арена") == set()
+    assert address_key("Минск, ул. Притыцкого, 27") == ("притыцкого", "27")
+    assert address_key("ул. Притыцкого 27, Минск, Минская область") == ("притыцкого", "27")
+
+
+async def _arena(
+    db_session,
+    city_id: int,
+    name: str,
+    *,
+    venue_type: str = "ice",
+    coords: bool = True,
+    photo: bool = False,
+    phone: str | None = None,
+    hours: dict | None = None,
+    tickets: str | None = None,
+    website: str | None = None,
+    amenities: dict | None = None,
+    active: bool = True,
+) -> int:
+    arena_id = int(
+        (
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO arenas (city_id, name, address, latitude, longitude, is_active,
+                                        is_confirmed, venue_type)
+                    VALUES (:cid, :name, 'ул. Тестовая, 1', :lat, :lon, :active, true, :vt)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "cid": city_id,
+                    "name": name,
+                    "lat": 53.9 if coords else None,
+                    "lon": 27.5 if coords else None,
+                    "active": active,
+                    "vt": venue_type,
+                },
+            )
+        ).scalar_one()
+    )
+    await ensure_arena_profile(db_session, arena_id, city_id=city_id, name=name)
+    await db_session.execute(
+        text(
+            """
+            UPDATE arena_profiles
+            SET phone = :phone, website_url = :web, tickets_url = :tix,
+                opening_hours = CAST(:hours AS jsonb), amenities = CAST(:amen AS jsonb)
+            WHERE arena_id = :id
+            """
+        ),
+        {
+            "id": arena_id,
+            "phone": phone,
+            "web": website,
+            "tix": tickets,
+            "hours": json.dumps(hours) if hours else None,
+            "amen": json.dumps(amenities or {}),
+        },
+    )
+    if photo:
+        await db_session.execute(
+            text(
+                "INSERT INTO media (owner_type, owner_id, storage_key, license, status) "
+                "VALUES ('arena', :id, :key, 'own', 'published')"
+            ),
+            {"id": arena_id, "key": f"test/cov/{arena_id}.jpg"},
+        )
+    return arena_id
+
+
+async def _job(db_session, arena_id: int, *, last_ok_at: datetime | None, streak: int = 0) -> None:
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at, config,
+                                         created_at, last_ok_at, failure_streak, last_error_code)
+            VALUES (:aid, 'cov_test_v1', true, 'daily', :now, '{}'::jsonb, :created, :ok, :streak, :code)
+            """
+        ),
+        {
+            "aid": arena_id,
+            "now": _NOW,
+            "created": _NOW - timedelta(days=30),
+            "ok": last_ok_at,
+            "streak": streak,
+            "code": "extract_error" if streak else None,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_coverage_report_lists_what_a_human_must_fill(db_session, tmp_path) -> None:
+    city_id = int(
+        (
+            await db_session.execute(
+                text(
+                    "INSERT INTO cities (name, country, price_group, is_active, sort_order) "
+                    "VALUES ('Покрытоград', 'BY', 'BY_BASE', true, 9400) RETURNING id"
+                )
+            )
+        ).scalar_one()
+    )
+    full_hours = {"mon": ["10:00", "22:00"]}
+    complete = await _arena(
+        db_session,
+        city_id,
+        "Каток Полный",
+        photo=True,
+        phone="+375 17 000",
+        hours=full_hours,
+        tickets="https://tickets.example/ice",
+        website="https://full.example",
+    )
+    await _job(db_session, complete, last_ok_at=_NOW - timedelta(minutes=30))
+    bare = await _arena(db_session, city_id, "Ледовая арена Голая", coords=False)
+    broken = await _arena(db_session, city_id, "Каток Сломанный", photo=True, phone="+375", hours=full_hours)
+    await _job(db_session, broken, last_ok_at=_NOW - timedelta(days=2), streak=5)
+    gym = await _arena(db_session, city_id, "Зал Силы", venue_type="gym", photo=True, hours=full_hours)
+    shop = await _arena(db_session, city_id, "Точилка", venue_type="shop", coords=False, phone="+375 29")
+    await _arena(db_session, city_id, "Каток Скрытый", active=False)
+
+    sources = tmp_path / "test-sources.csv"
+    sources.write_text(
+        "arena_name,address,kind,is_primary,update_cadence\n"
+        '"Полный каток (центр)","Покрытоград, ул. Другая, 5",site,true,weekly\n'
+        '"Каток Новый","Покрытоград, ул. Новая, 7",site,true,weekly\n'
+        '"Каток Новый","Покрытоград, ул. Новая, 7",directory,false,daily\n'
+        '"Тренировочный","Покрытоград, ул. Т, 1",site,true,skip_training_only\n',
+        encoding="utf-8",
+    )
+    shops = tmp_path / "shops-test.json"
+    shops.write_text(
+        json.dumps(
+            {
+                "city": "Покрытоград",
+                "shops": [
+                    {"key": "t", "name": "Точилка", "address": "ул. Острая, 1", "phones": ["+375 29"],
+                     "hours": {"mon": ["10:00", "19:00"]}, "website": "https://t.example"},
+                    {"key": "n", "name": "Новая мастерская", "address": None, "phones": [], "hours": None},
+                ],
+                "rink_sharpening": [{"match": ["сломанн"], "note": "Сломанный каток"}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    report = await build_coverage_report(
+        db_session,
+        now=_NOW,
+        city="Покрытоград",
+        known_rink_files=[sources],
+        shop_files=[shops],
+    )
+    [cov] = report.cities
+    assert cov.published_by_type == {"ice": 3, "gym": 1, "shop": 1}
+    assert cov.unpublished == 1
+
+    gaps = {a.id: a.gaps for a in cov.arenas_with_gaps}
+    assert complete not in gaps
+    assert set(gaps[bare]) >= {"координаты", "фото", "часы работы", "телефон", "касса (tickets_url)", "сайт"}
+    assert "касса (tickets_url)" not in gaps[gym]  # у зала кассы сеансов нет
+    assert "телефон" in gaps[gym]
+
+    assert [a.id for a in cov.rinks_without_parser] == [bare]
+    [problem] = cov.rinks_parser_problem
+    assert problem.id == broken and "падает" in (problem.parser_state or "")
+
+    # «Полный каток (центр)» совпал с «Каток Полный» по токену; вторичный и skip_* — не пробел.
+    assert [r.name for r in cov.known_missing_in_db] == ["Каток Новый"]
+
+    by_name = {s.name: s for s in cov.shops}
+    assert by_name["Точилка"].db_arena_id == shop
+    assert by_name["Точилка"].missing_in_file == []
+    assert set(by_name["Точилка"].missing_in_db) == {"координаты", "фото", "часы работы"}
+    assert by_name["Новая мастерская"].db_arena_id is None
+    assert set(by_name["Новая мастерская"].missing_in_file) == {"адрес", "часы работы", "телефон", "сайт/инстаграм"}
+    assert cov.rink_sharpening_problems == [f"Сломанный каток: #{broken} без отметки «заточка» в карточке"]
+
+    body = format_coverage_report(report)
+    assert "=== Покрытоград (BY) ===" in body
+    assert f"#{bare} Ледовая арена Голая [Лёд] — нет: координаты" in body
+    assert "Каток Новый, Покрытоград, ул. Новая, 7 [weekly] ← test-sources.csv" in body
+    assert "Новая мастерская — в файле нет: адрес" in body
+    print(body)  # pytest -s: живой пример отчёта

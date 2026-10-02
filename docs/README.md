@@ -107,6 +107,7 @@
 | [BACKUPS.md](ops/BACKUPS.md) | Off-site резервные копии Postgres |
 | [DISASTER_RECOVERY.md](ops/DISASTER_RECOVERY.md) | Восстановление после аварии |
 | [onboard-collective-formats.md](ops/onboard-collective-formats.md) | Runbook подключения коллектива |
+| [ice-freshness-and-alerts.md](ops/ice-freshness-and-alerts.md) | Лёд: как часто опрашиваем катки, флаг `schedule_stale` в API, алерты в админ-бот, отчёт о полноте каталога |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное

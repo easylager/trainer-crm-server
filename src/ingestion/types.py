@@ -25,6 +25,26 @@ PARSER_KIND_PUBLIC_SKATE = "public_skate"
 PARSER_KIND_OPEN_ICE = "open_ice"
 PARSER_KINDS = (PARSER_KIND_PUBLIC_SKATE, PARSER_KIND_OPEN_ICE)
 
+ALERT_STATE_OK = "ok"
+ALERT_STATE_FAILING = "failing"
+
+
+@dataclass(frozen=True)
+class SourceState:
+    """Состояние источника арены — колонки ice_parser_jobs из миграции 0211 (TASK-146).
+
+    Правила переходов — в src/ingestion/freshness.py, алертные поля ведёт alerts.
+    """
+
+    last_ok_at: datetime | None = None
+    last_ok_slot_count: int | None = None
+    failing_since: datetime | None = None
+    failure_streak: int = 0
+    last_error_code: str | None = None
+    last_error_summary: str | None = None
+    alert_state: str = ALERT_STATE_OK
+    alert_sent_at: datetime | None = None
+
 
 @dataclass
 class ParserJob:
@@ -39,6 +59,7 @@ class ParserJob:
     last_run_at: datetime | None
     config: dict[str, Any]
     notes: str | None = None
+    state: SourceState = field(default_factory=SourceState)
 
 
 @dataclass

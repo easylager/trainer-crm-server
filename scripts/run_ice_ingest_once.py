@@ -99,6 +99,8 @@ async def _run_once() -> None:
             recorder=SqlAlchemyScrapeRunRecorder(session),
             registry=default_registry(),
             publisher=SqlAlchemyIceSessionPublisher(session),
+            # Разовый прогон — все сделанные due задания, без потолка тика воркера.
+            max_jobs_per_tick=None,
         )
         outcomes = await scheduler.run_due(now)
         await session.commit()
