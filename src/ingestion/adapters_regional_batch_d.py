@@ -10,8 +10,6 @@ import subprocess
 from datetime import date, timedelta
 from pathlib import Path
 
-import aiohttp
-
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -21,7 +19,7 @@ from src.ingestion.seed_config_regional_batch_d import (
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
 )
-from src.ingestion.source_io import fetch_http_text, load_source_text
+from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _MONTHS = {
@@ -80,11 +78,7 @@ def _detag_lines(fragment: str) -> list[str]:
 
 
 async def _fetch_bytes(url: str) -> bytes:
-    timeout = aiohttp.ClientTimeout(total=25)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers={"User-Agent": "trainer-crm-ice-ingest/1.0"}) as response:
-            response.raise_for_status()
-            return await response.read()
+    return await fetch_http_bytes(url, timeout_sec=25)
 
 
 # --------------------------------------------------------------------------

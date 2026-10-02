@@ -12,7 +12,7 @@ from src.ingestion.parsers import MinskArenaSaleframeParser, ParserRegistry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import InMemoryScrapeRunRecorder
 from src.ingestion.seed_config import MINSK_ARENA_SALEFRAME_CONFIG, PARSER_KEY_MINSK_ARENA
-from src.ingestion.types import ParserJob, RUN_STATUS_EMPTY, RUN_STATUS_ERROR
+from src.ingestion.types import Extraction, ParserJob, RUN_STATUS_EMPTY, RUN_STATUS_ERROR
 from tests.ingestion.fakes import RecordingParser
 
 _NOW = datetime(2026, 9, 6, 10, 0, tzinfo=timezone.utc)
@@ -325,3 +325,34 @@ def test_minsk_arena_seed_config_matches_spec() -> None:
     assert cfg["default_duration_minutes"] == 45
     assert cfg["requires_by_egress"] is False
     assert PARSER_KEY_MINSK_ARENA == "minskarena_saleframe_v1"
+
+
+@pytest.mark.asyncio
+async def test_by_egress_proxy_applies_only_to_requires_by_egress_jobs() -> None:
+    """BY_EGRESS_PROXY_URL is routed into fetches of requires_by_egress jobs only."""
+    from src.ingestion.source_io import current_egress_proxy
+
+    seen: dict[int, str | None] = {}
+
+    class _ProxyProbeParser:
+        parser_key = "proxy_probe_v1"
+
+        async def extract(self, job: ParserJob) -> Extraction:
+            seen[job.id] = current_egress_proxy()
+            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot={}, slots=[])
+
+    by_job = _job(arena_id=4, parser_key="proxy_probe_v1", config={"requires_by_egress": True})
+    plain_job = _job(id=2, arena_id=5, parser_key="proxy_probe_v1", config={})
+    registry = ParserRegistry()
+    registry.register(_ProxyProbeParser())
+    sched = IceIngestScheduler(
+        store=InMemoryParserJobStore([by_job, plain_job]),
+        recorder=InMemoryScrapeRunRecorder(),
+        registry=registry,
+        by_egress_proxy_url="http://u:p@198.51.100.1:8000",
+    )
+
+    await sched.run_due(_NOW)
+
+    assert seen == {1: "http://u:p@198.51.100.1:8000", 2: None}
+    assert current_egress_proxy() is None

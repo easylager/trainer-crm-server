@@ -11,6 +11,7 @@ from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.publish import IceSessionPublisher
 from src.ingestion.scrape_runs import IceScrapeRunRecorder, LoggingScrapeRunRecorder
+from src.ingestion.source_io import egress_proxy
 from src.ingestion.types import (
     RUN_STATUS_BLOCKED,
     RUN_STATUS_EMPTY,
@@ -34,6 +35,7 @@ class IceIngestScheduler:
         validator: IceSessionValidator | None = None,
         publisher: IceSessionPublisher | None = None,
         by_egress_configured: bool = False,
+        by_egress_proxy_url: str | None = None,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -44,7 +46,9 @@ class IceIngestScheduler:
         # TASK-083 / PDEC-004: worker-level proof a real BY egress path (VPS tunnel) is
         # wired up. job.config["requires_by_egress"] stays True forever once set — this
         # only says the flag is now satisfied on *this* worker, never mutate the flag.
-        self._by_egress_configured = by_egress_configured
+        self._by_egress_configured = by_egress_configured or bool(by_egress_proxy_url)
+        # HTTP proxy with a BY exit IP; applied only to requires_by_egress jobs.
+        self._by_egress_proxy_url = by_egress_proxy_url
 
     async def run_due(self, now: datetime) -> list[ScrapeRunRecord]:
         if now.tzinfo is None:
@@ -116,7 +120,9 @@ class IceIngestScheduler:
                 empty,
             )
         try:
-            extraction = await parser.extract(job)
+            proxy = self._by_egress_proxy_url if config_requires_by_egress(job.config) else None
+            with egress_proxy(proxy):
+                extraction = await parser.extract(job)
             drafts = self._normalizer.normalize(extraction, job, now=now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:
