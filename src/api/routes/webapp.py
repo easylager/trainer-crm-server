@@ -819,29 +819,21 @@ async def get_trainer_access_for_webapp(
     }
 
 
-@router.get("/schedule")
-async def get_schedule(
-    from_date: date | None = Query(None, description="YYYY-MM-DD"),
-    to_date: date | None = Query(None, description="YYYY-MM-DD"),
-    arena_id: int | None = Query(
-        None,
-        description="When set, schedule_grid matches this trainer-linked arena (quick book / multi-venue).",
-    ),
-    view: Literal["list"] | None = Query(
-        None,
-        description="view=list: slots only (compact JSON for read-only schedule screen; omits schedule_grid).",
-    ),
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """
-    Return trainer's slots for date range. Requires Telegram Web App initData
-    in header X-Telegram-Init-Data or in query param init_data (proxy-safe).
-    """
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+async def build_trainer_schedule_payload(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    arena_id: int | None = None,
+    view: Literal["list"] | None = None,
+) -> dict[str, Any]:
+    """Slots + center duties + schedule grid for one trainer over a date range.
 
+    Shared by the trainer's own ``GET /schedule`` and the org cabinet's per-trainer
+    schedule screen (TASK-141 S6) — same payload either way, caller only differs in how
+    ``trainer_id`` is authorized (own principal vs. operator + collective membership).
+    """
     today = date.today()
     if from_date is None:
         # Monday of current week
@@ -959,6 +951,39 @@ async def get_schedule(
     }
 
 
+@router.get("/schedule")
+async def get_schedule(
+    from_date: date | None = Query(None, description="YYYY-MM-DD"),
+    to_date: date | None = Query(None, description="YYYY-MM-DD"),
+    arena_id: int | None = Query(
+        None,
+        description="When set, schedule_grid matches this trainer-linked arena (quick book / multi-venue).",
+    ),
+    view: Literal["list"] | None = Query(
+        None,
+        description="view=list: slots only (compact JSON for read-only schedule screen; omits schedule_grid).",
+    ),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Return trainer's slots for date range. Requires Telegram Web App initData
+    in header X-Telegram-Init-Data or in query param init_data (proxy-safe).
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+
+    return await build_trainer_schedule_payload(
+        session,
+        trainer_id,
+        from_date=from_date,
+        to_date=to_date,
+        arena_id=arena_id,
+        view=view,
+    )
+
+
 # --- Schedule editor Mini App (trainer): templates, slots, apply week, delete slot ---
 
 @router.get("/schedule/templates")
@@ -1024,17 +1049,18 @@ class ScheduleTemplateDayBody(BaseModel):
         return self
 
 
-@router.put("/schedule/templates/day")
-async def put_schedule_templates_day(
+async def apply_trainer_schedule_template_day(
+    session: AsyncSession,
+    trainer_id: int,
     body: ScheduleTemplateDayBody,
-    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Set template for one week day: replace template rows for that weekday (per-hour capacity). Auth: trainer."""
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
-    if not trainer_id:
-        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    # Require CRM tier to edit templates
+) -> None:
+    """Validate and replace one weekday's template for ``trainer_id``.
+
+    Shared by the trainer's own ``PUT /schedule/templates/day`` and the org cabinet's
+    per-trainer template screen (TASK-141 S6) — same validation (group slots need a
+    service + arena, CRM tier required) either way; callers differ only in how
+    ``trainer_id`` is authorized. Raises ``HTTPException`` on any validation failure.
+    """
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     if body.day_of_week < 0 or body.day_of_week > 6:
@@ -1111,6 +1137,19 @@ async def put_schedule_templates_day(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.put("/schedule/templates/day")
+async def put_schedule_templates_day(
+    body: ScheduleTemplateDayBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set template for one week day: replace template rows for that weekday (per-hour capacity). Auth: trainer."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    await apply_trainer_schedule_template_day(session, trainer_id, body)
     return {"ok": True}
 
 
