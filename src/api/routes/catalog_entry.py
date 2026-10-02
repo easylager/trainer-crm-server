@@ -65,6 +65,7 @@ async def _go(request: Request, session: AsyncSession, source: str | None, city_
     link = telegram_open_link(
         client_bot_username=settings.client_bot_username,
         mini_app_short_name=settings.client_mini_app_short_name,
+        main_mini_app=settings.client_bot_main_mini_app,
         start_param=start,
     )
     if link:

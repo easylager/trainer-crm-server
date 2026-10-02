@@ -199,6 +199,10 @@ class Settings(BaseSettings):
     # Задано → публичные страницы мест ведут в t.me/<bot>/<app>?startapp=arena_<id> и мини-апп
     # открывается сразу на карточке. Пусто → t.me/<bot>?start=arena_<id>, бот отвечает кнопкой.
     client_mini_app_short_name: str | None = None
+    # У клиентского бота настроено основное мини-приложение (BotFather → Main Mini App):
+    # ссылки вида t.me/<bot>?startapp=… открывают мини-апп сразу на нужном экране.
+    # false — ссылки идут через /start, и бот отвечает кнопкой.
+    client_bot_main_mini_app: bool = True
     # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
     certificate_pdf_brand_display_name: str = "GLIDE"
     # Одна строка под названием бренда — не абзац: в PDF она стоит над номиналом, и всё,

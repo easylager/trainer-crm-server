@@ -156,6 +156,7 @@ async def place_page(
         cta_url=telegram_open_link(
             client_bot_username=settings.client_bot_username,
             mini_app_short_name=settings.client_mini_app_short_name,
+            main_mini_app=settings.client_bot_main_mini_app,
             start_param=place_start_param(int(card["id"])),
         ),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
@@ -316,6 +317,7 @@ async def selection_page(
         cta_url=telegram_open_link(
             client_bot_username=settings.client_bot_username,
             mini_app_short_name=settings.client_mini_app_short_name,
+            main_mini_app=settings.client_bot_main_mini_app,
             start_param=catalog_start_param(int(city["id"]), intent),
         ),
         share=compose_selection_share(view, page_url=base + path),

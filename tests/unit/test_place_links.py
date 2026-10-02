@@ -52,5 +52,11 @@ def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:
         telegram_open_link(client_bot_username="glide_bot", mini_app_short_name=None, start_param="arena_1")
         == "https://t.me/glide_bot?start=arena_1"
     )
+    assert (
+        telegram_open_link(
+            client_bot_username="glide_bot", mini_app_short_name=None, start_param="arena_1", main_mini_app=True
+        )
+        == "https://t.me/glide_bot?startapp=arena_1"
+    )
     assert telegram_open_link(client_bot_username=None, mini_app_short_name="app", start_param="arena_1") is None
     assert telegram_open_link(client_bot_username="b", mini_app_short_name=None, start_param="bad param") is None

@@ -129,14 +129,16 @@ def telegram_open_link(
     client_bot_username: str | None,
     mini_app_short_name: str | None,
     start_param: str,
+    main_mini_app: bool = False,
 ) -> str | None:
     """
     Ссылка «Открыть в Telegram» с параметром.
 
-    С коротким именем мини-аппа (BotFather → /newapp) — ``t.me/<bot>/<app>?startapp=…``:
-    мини-апп открывается сразу на нужном экране, без сообщения от бота. Без него —
-    ``t.me/<bot>?start=…``: бот отвечает одной кнопкой на тот же экран (``cmd_start``).
-    Худший случай — один лишний тап, а не блуждание по хабу.
+    * Основное мини-приложение бота (BotFather → Main Mini App) — ``t.me/<bot>?startapp=…``:
+      мини-апп открывается сразу на нужном экране, без сообщения от бота;
+    * отдельный мини-апп с коротким именем (BotFather → /newapp) — ``t.me/<bot>/<app>?startapp=…``;
+    * ни того ни другого — ``t.me/<bot>?start=…``: бот отвечает одной кнопкой на тот же
+      экран (``cmd_start``). Худший случай — один лишний тап, а не блуждание по хабу.
     """
     bot = normalize_client_bot_username(client_bot_username)
     if not bot or not is_valid_start_param(start_param):
@@ -144,4 +146,6 @@ def telegram_open_link(
     app = (mini_app_short_name or "").strip().strip("/")
     if app and re.match(r"^[A-Za-z0-9_]{3,64}$", app):
         return f"https://t.me/{bot}/{app}?startapp={start_param}"
+    if main_mini_app:
+        return f"https://t.me/{bot}?startapp={start_param}"
     return f"https://t.me/{bot}?start={start_param}"

@@ -41,6 +41,8 @@ async def test_go_with_city_and_without_short_name_lands_on_the_bot_button(
 ) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
     monkeypatch.delenv("CLIENT_MINI_APP_SHORT_NAME", raising=False)
+    # Основное мини-приложение бота выключено — ссылка идёт через /start и кнопку бота.
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "false")
     name = f"Гоусск {uuid.uuid4().hex[:6]}"
     city_id = await _insert_city(db_session, name=name)
     await db_session.commit()
@@ -67,3 +69,14 @@ async def test_go_never_dead_ends(app_use_test_db, db_session, monkeypatch) -> N
         await db_session.execute(text("SELECT source, target FROM catalog_entry_clicks ORDER BY id DESC LIMIT 1"))
     ).one()
     assert last == ("other", "web")
+
+
+@pytest.mark.asyncio
+async def test_main_mini_app_opens_the_catalog_directly(app_use_test_db, db_session, monkeypatch) -> None:
+    """У бота есть основное мини-приложение: t.me/<bot>?startapp=… — сразу в каталог, без сообщения бота."""
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    monkeypatch.delenv("CLIENT_MINI_APP_SHORT_NAME", raising=False)
+    monkeypatch.delenv("CLIENT_BOT_MAIN_MINI_APP", raising=False)
+    async with _client() as client:
+        resp = await client.get("/go/insta")
+    assert resp.headers["location"] == "https://t.me/glide_bot?startapp=catalog"
