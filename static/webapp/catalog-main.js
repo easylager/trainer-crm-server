@@ -1411,6 +1411,11 @@
 
       function collectiveLocationLine(brand) {
         if (!brand) return '';
+        var arenaName = brand.primary_arena_name ? String(brand.primary_arena_name).trim() : '';
+        if (arenaName) {
+          var arenaAddress = brand.primary_arena_address ? String(brand.primary_arena_address).trim() : '';
+          return arenaAddress ? (arenaName + ', ' + arenaAddress) : arenaName;
+        }
         var contacts = brand.contacts || {};
         var address = (contacts.address || '').trim();
         if (address) return address;
