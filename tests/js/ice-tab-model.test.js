@@ -362,6 +362,14 @@ describe('rankServiceChips (2026-09-07 Тренеры service filter)', () => {
     assert.deepEqual(ranked.map((s) => s.id), [2, 9]);
   });
 
+  it('buildTrainersUrl sends several services as service_ids (any-of)', () => {
+    const { buildTrainersUrl } = loadModel();
+    const url = buildTrainersUrl({ cityId: 2, serviceIds: [3, 5] });
+    assert.match(url, /service_ids=3,5/);
+    assert.doesNotMatch(url, /[?&]service_id=/);
+    assert.doesNotMatch(buildTrainersUrl({ cityId: 2, serviceIds: [] }), /service_ids?=/);
+  });
+
   it('buildTrainersUrl carries service_id only when set', () => {
     const { buildTrainersUrl } = loadModel();
     assert.match(buildTrainersUrl({ cityId: 2, serviceId: 3 }), /service_id=3/);

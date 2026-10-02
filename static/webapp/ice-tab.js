@@ -13,7 +13,8 @@
     view: 'list',
     cityId: null,
     cityName: '',
-    serviceId: null,
+    /* Мультивыбор услуг у «Тренеров»: пусто = «Все». */
+    serviceIds: [],
     services: [],
     /* Выбранные типы площадок (ключи venue_type) и фасеты последнего ответа.
        Фасеты живут в state, а не выводятся из items: сервер считает их ДО
@@ -76,7 +77,7 @@
         intent: state.intent,
         cityId: state.cityId,
         cityName: state.cityName,
-        serviceId: state.serviceId,
+        serviceIds: state.serviceIds,
         scrollY: global.scrollY || 0,
         view: state.view,
       },
@@ -96,11 +97,15 @@
   }
 
   function currentServiceLabel() {
-    if (!state.serviceId) return '';
-    var found = (state.services || []).filter(function (s) {
-      return Number(s.id) === Number(state.serviceId);
-    })[0];
-    return found ? M.serviceChipLabel(found.name) : '';
+    if (!state.serviceIds.length) return '';
+    return (state.services || [])
+      .filter(function (s) {
+        return state.serviceIds.indexOf(Number(s.id)) >= 0;
+      })
+      .map(function (s) {
+        return M.serviceChipLabel(s.name);
+      })
+      .join(', ');
   }
 
   function setChips() {
@@ -112,6 +117,7 @@
       }
     });
     renderServiceChips();
+    renderVenueChips();
     renderWhenChips();
   }
 
@@ -443,7 +449,7 @@
     if (paint === 'empty') {
       var city = cityFromState(state.cityId) || {};
       var empty = M.formatEmptyList(state.intent, {
-        serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
+        serviceName: state.intent === 'coach' && state.serviceIds.length ? currentServiceLabel() : '',
         trainerCount: city.trainer_count,
         mapRinkCount: city.map_rink_count,
         hasSkate: M.shouldShowSkateChip(state.skateCount),
@@ -590,7 +596,7 @@
     }
     if (kind === 'clear-service') {
       return function () {
-        state.serviceId = null;
+        state.serviceIds = [];
         renderServiceChips();
         persist();
         loadTrainers();
@@ -849,7 +855,7 @@
     var gen = beginListFetch('coach');
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
-      serviceId: state.serviceId,
+      serviceIds: state.serviceIds,
       limit: 50,
     });
     return fetchJson(url)
@@ -889,11 +895,11 @@
     box.hidden = false;
     var html =
       '<button type="button" class="ice-chip" data-service-id="" aria-pressed="' +
-      (state.serviceId ? 'false' : 'true') +
+      (state.serviceIds.length ? 'false' : 'true') +
       '">Все</button>';
     (state.services || []).forEach(function (s) {
       var id = String(s.id);
-      var pressed = String(state.serviceId || '') === id;
+      var pressed = state.serviceIds.indexOf(Number(id)) >= 0;
       html +=
         '<button type="button" class="ice-chip" data-service-id="' +
         esc(id) +
@@ -949,12 +955,15 @@
         state.services = items.filter(function (s) {
           return Number(s.trainer_count) > 0;
         });
-        if (state.serviceId) {
-          var still = state.services.some(function (s) {
-            return Number(s.id) === Number(state.serviceId);
+        if (state.serviceIds.length) {
+          var present = state.services.map(function (s) {
+            return Number(s.id);
           });
-          if (!still) {
-            state.serviceId = null;
+          var kept = state.serviceIds.filter(function (id) {
+            return present.indexOf(id) >= 0;
+          });
+          if (kept.length !== state.serviceIds.length) {
+            state.serviceIds = kept;
             persist();
             loadTrainers();
           }
@@ -1362,8 +1371,15 @@
         var chip = ev.target.closest('[data-service-id]');
         if (!chip) return;
         var raw = chip.getAttribute('data-service-id');
-        state.serviceId = raw ? Number(raw) : null;
-        if (state.serviceId && isNaN(state.serviceId)) state.serviceId = null;
+        var id = raw ? Number(raw) : null;
+        if (id == null || isNaN(id)) {
+          state.serviceIds = [];
+        } else {
+          /* Тоггл: повторный тап снимает услугу, пустой набор = «Все». */
+          var at = state.serviceIds.indexOf(id);
+          if (at >= 0) state.serviceIds.splice(at, 1);
+          else state.serviceIds.push(id);
+        }
         renderServiceChips();
         persist();
         loadTrainers();
@@ -1515,7 +1531,11 @@
     bind();
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
-    if (saved && saved.serviceId) state.serviceId = Number(saved.serviceId) || null;
+    if (saved && saved.serviceIds && saved.serviceIds.length) {
+      state.serviceIds = saved.serviceIds.map(Number).filter(function (n) { return n > 0; });
+    } else if (saved && saved.serviceId) {
+      state.serviceIds = Number(saved.serviceId) > 0 ? [Number(saved.serviceId)] : [];
+    }
     /*
      * TASK-103 AC-001: список — всегда стартовое состояние.
      *

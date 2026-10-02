@@ -115,7 +115,11 @@
     if (opts.cityId != null && opts.cityId !== '') {
       params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
     }
-    if (opts.serviceId != null && opts.serviceId !== '') {
+    var ids = (opts.serviceIds || []).filter(function (x) { return x != null && x !== ''; });
+    if (ids.length) {
+      // Несколько услуг — «любая из»: тренер подходит, если ведёт хотя бы одну.
+      params.push('service_ids=' + ids.map(encodeURIComponent).join(','));
+    } else if (opts.serviceId != null && opts.serviceId !== '') {
       params.push('service_id=' + encodeURIComponent(String(opts.serviceId)));
     }
     params.push('limit=' + encodeURIComponent(String(opts.limit || 50)));
@@ -996,6 +1000,7 @@
           cityId: state.cityId || null,
           cityName: state.cityName || '',
           serviceId: state.serviceId || null,
+          serviceIds: state.serviceIds || [],
           scrollY: state.scrollY || 0,
           view: state.view || 'list',
         })

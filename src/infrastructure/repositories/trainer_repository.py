@@ -1318,6 +1318,7 @@ class TrainerRepository:
         # Time-based filters
         filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
         filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
+        service_ids: list[int] | None = None,  # логическое ИЛИ; дополняет service_id
         trainer_ids: list[int] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
@@ -1361,6 +1362,15 @@ class TrainerRepository:
         if service_id is not None:
             base += " INNER JOIN trainer_services ts ON ts.trainer_id = t.id AND ts.service_id = :service_id"
             params["service_id"] = service_id
+        if service_ids:
+            # EXISTS, а не JOIN: тренер с двумя выбранными услугами не должен дублироваться.
+            svc_phs = ", ".join(f":svc_id_{i}" for i in range(len(service_ids)))
+            where += (
+                " AND EXISTS (SELECT 1 FROM trainer_services tsm"
+                f" WHERE tsm.trainer_id = t.id AND tsm.service_id IN ({svc_phs}))"
+            )
+            for i, sid in enumerate(service_ids):
+                params[f"svc_id_{i}"] = int(sid)
         if city_id is not None:
             # EXISTS (not JOIN) so DISTINCT on the already-heavy catalog query does not fan out.
             where += (
