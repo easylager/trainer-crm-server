@@ -327,7 +327,7 @@
       scrim +
       '</span>' +
       (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
-      '<span class="ice-board__depth">' +
+      '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
       esc(v.depth) +
       '<span class="ice-board__go" aria-hidden="true">→</span>' +
       '</span>' +

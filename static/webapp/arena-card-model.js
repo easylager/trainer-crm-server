@@ -224,6 +224,24 @@
   }
 
   /**
+   * TASK-146: парсер давно не читал сайт катка (schedule_stale с сервера). Сеансы
+   * показываем — чаще всего они верны, — но прямо говорим, от какого они числа.
+   */
+  function staleScheduleNote(freshness) {
+    freshness = freshness || {};
+    if (!freshness.schedule_stale) return null;
+    var at = freshness.schedule_observed_at ? new Date(freshness.schedule_observed_at) : null;
+    if (!at || isNaN(at.getTime())) return 'Расписание могло измениться — уточните на сайте или по телефону';
+    var hh = at.getHours();
+    var mm = at.getMinutes();
+    return (
+      'Расписание от ' + at.getDate() + ' ' + MONTHS_GEN[at.getMonth()] + ', ' +
+      (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm +
+      ' — могло измениться, уточните на сайте или по телефону'
+    );
+  }
+
+  /**
    * TASK-146 (DEC-014): откуда данные карточки и насколько они свежие — для мест без
    * владельца-аккаунта (магазин, зал). Расписание льда говорит само за себя
    * (formatFreshness); здесь — карточка: проверка, последняя правка, погода.
@@ -847,6 +865,7 @@
     trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
+    staleScheduleNote: staleScheduleNote,
     parseScheduleFocus: parseScheduleFocus,
     defaultScheduleDay: defaultScheduleDay,
     showtimesForDay: showtimesForDay,

@@ -459,6 +459,9 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
+      (M.staleScheduleNote(state.card.freshness)
+        ? '<p class="arena-stale">' + esc(M.staleScheduleNote(state.card.freshness)) + '</p>'
+        : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'

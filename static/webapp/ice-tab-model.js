@@ -757,7 +757,11 @@
          площадке. Фолбэк — для ответов старого API без поля. */
       depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
+    // TASK-146: парсер давно не читал сайт катка — время показываем, но не выдаём за свежее.
+    var stale = isSession && !!(item.freshness && item.freshness.schedule_stale);
+    if (stale) depth = 'Расписание могло измениться';
     return {
+      stale: stale,
       href: arenaHref(item),
       photo: item.card || item.thumb || '',
       initial: initialOf(name),

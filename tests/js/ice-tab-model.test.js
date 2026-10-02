@@ -984,3 +984,15 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
     assert.deepEqual(asServer.hits.map((i) => i.id), [4, 1], 'без «Рядом» — порядок сервера');
   });
 });
+
+describe('TASK-146: устаревшее расписание в ленте', () => {
+  it('schedule_stale на сеансе — подпись «могло измениться» вместо «ещё N сеансов»', () => {
+    const { boardCardView } = loadModel();
+    const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
+    const now = new Date('2026-10-02T10:00:00Z');
+    assert.equal(boardCardView(item, now, {}).stale, false);
+    const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
+    assert.equal(v.stale, true);
+    assert.equal(v.depth, 'Расписание могло измениться');
+  });
+});

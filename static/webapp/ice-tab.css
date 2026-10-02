@@ -1245,3 +1245,6 @@ body.ice-view-map .ice-map-offmap {
   background: var(--app-ok);
   box-shadow: 0 0 0 4px var(--app-ok-wash);
 }
+
+/* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */
+.ice-board__depth--stale { color: var(--app-warning); }

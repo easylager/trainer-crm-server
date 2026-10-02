@@ -843,3 +843,14 @@ a.arena-info b { color: var(--glide-ink-teal); }
   padding: 12px 14px;
   border-top: 1px solid var(--glide-line);
 }
+
+/* Парсер давно не читал сайт катка: сеансы показываем, но честно говорим, от какого они числа. */
+.arena-stale {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--glide-line);
+  border-left: 3px solid var(--app-warning);
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-caption);
+  color: var(--glide-text);
+}

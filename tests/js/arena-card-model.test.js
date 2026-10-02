@@ -690,3 +690,13 @@ describe('TASK-146: карточка открывается на дне и се�
     assert.equal(w.groups[0].times[0].next, true);
   });
 });
+
+describe('TASK-146: устаревшее расписание', () => {
+  it('флаг schedule_stale даёт честную плашку с датой; без флага — ничего', () => {
+    const { staleScheduleNote } = loadModel();
+    assert.equal(staleScheduleNote({ schedule_stale: false }), null);
+    assert.equal(staleScheduleNote(null), null);
+    const note = staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' });
+    assert.match(note, /^Расписание от 1 октября, \d{2}:00 — могло измениться/);
+  });
+});
