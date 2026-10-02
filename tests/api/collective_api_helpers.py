@@ -25,11 +25,12 @@ async def seed_active_collective_owner(
             INSERT INTO collectives (
                 slug, display_name, status, seat_limit, owner_trainer_id,
                 schedule_mode, organization_format, owner_studio_access_mode,
+                catalog_state, catalog_state_changed_at,
                 created_at, updated_at
             )
             VALUES (
                 :slug, 'API Studio', 'active', :seats, :tid,
-                :mode, :org_fmt, :owner_mode, :now, :now
+                :mode, :org_fmt, :owner_mode, 'published', :now, :now, :now
             )
             RETURNING id
             """

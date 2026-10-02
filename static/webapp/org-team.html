@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Команда</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="mini-app-full-height.js?v=202609290"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <link rel="stylesheet" href="theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
+</head>
+<body>
+  <header class="org-back-header">
+    <button type="button" class="org-back-header__btn" id="orgTeamBack" aria-label="Назад">‹</button>
+    <span class="org-back-header__title">Команда</span>
+  </header>
+
+  <main>
+    <div class="org-home-state org-home-state--loading" id="orgTeamLoading">
+      <p>Загрузка</p>
+    </div>
+
+    <section id="orgTeamRoot" hidden>
+      <div class="org-home-status" id="orgTeamStatus">
+        <span class="org-home-status__dot org-home-status__dot--ok" aria-hidden="true"></span>
+        <span id="orgTeamStatusText"></span>
+      </div>
+
+      <div id="orgTeamList" class="org-team-list"></div>
+      <p class="org-team-empty" id="orgTeamEmpty" hidden>Тренеров пока нет — пригласите первого.</p>
+
+      <p class="org-team-pending" id="orgTeamPending" hidden></p>
+
+      <button type="button" class="btn-primary" id="orgTeamInvite">Пригласить тренера</button>
+      <p class="org-team-invite-note" id="orgTeamInviteNote" hidden></p>
+    </section>
+
+    <div class="org-home-state org-home-state--error" id="orgTeamError" hidden>
+      <p id="orgTeamErrorText">Не удалось загрузить раздел</p>
+      <button type="button" class="btn-secondary" id="orgTeamRetry">Повторить</button>
+    </div>
+  </main>
+
+  <script defer src="org-team-main.js?v=202609290"></script>
+</body>
+</html>

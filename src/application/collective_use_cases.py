@@ -770,135 +770,6 @@ async def issue_collective_claim_token(
     }
 
 
-async def consume_collective_claim_token(
-    session: AsyncSession,
-    token: str,
-    trainer_id: int,
-) -> ConsumeCollectiveClaimResult:
-    """
-    Assign owner to draft collective and activate studio.
-
-    Caller must ensure trainer_id is linked to the Telegram user opening the link.
-    """
-    now = datetime.now(timezone.utc)
-    tok = (token or "").strip()
-    if not tok:
-        return ConsumeCollectiveClaimResult(error="invalid_token")
-
-    result = await session.execute(
-        text(
-            """
-            SELECT ct.collective_id, c.slug, c.display_name, c.status,
-                   c.owner_studio_access_mode
-            FROM collective_tokens ct
-            INNER JOIN collectives c ON c.id = ct.collective_id
-            WHERE ct.token = :token
-              AND ct.kind = :kind
-              AND ct.used_at IS NULL
-              AND ct.expires_at > :now
-            FOR UPDATE OF ct
-            """
-        ),
-        {"token": tok, "kind": TOKEN_KIND_CLAIM, "now": now},
-    )
-    row = result.fetchone()
-    if row is None:
-        return ConsumeCollectiveClaimResult(error="invalid_token")
-
-    collective_id = int(row[0])
-    slug = str(row[1])
-    display_name = str(row[2])
-    status = str(row[3])
-    owner_access_mode = str(row[4] or STUDIO_ACCESS_MODE_FULL).strip()
-    if owner_access_mode not in (STUDIO_ACCESS_MODE_FULL, STUDIO_ACCESS_MODE_ADMIN_ONLY):
-        owner_access_mode = STUDIO_ACCESS_MODE_FULL
-    if status != COLLECTIVE_STATUS_DRAFT:
-        return ConsumeCollectiveClaimResult(error="collective_not_draft")
-
-    dup_member = await session.execute(
-        text(
-            """
-            SELECT 1 FROM collective_members
-            WHERE collective_id = :cid AND trainer_id = :tid AND status = :active
-            """
-        ),
-        {"cid": collective_id, "tid": trainer_id, "active": MEMBER_STATUS_ACTIVE},
-    )
-    if dup_member.fetchone():
-        return ConsumeCollectiveClaimResult(error="already_in_collective")
-
-    owner_check = await session.execute(
-        text("SELECT owner_trainer_id FROM collectives WHERE id = :id FOR UPDATE"),
-        {"id": collective_id},
-    )
-    owner_row = owner_check.fetchone()
-    if owner_row is None:
-        return ConsumeCollectiveClaimResult(error="collective_missing")
-    if owner_row[0] is not None and int(owner_row[0]) != trainer_id:
-        return ConsumeCollectiveClaimResult(error="already_claimed")
-
-    await session.execute(
-        text(
-            """
-            UPDATE collectives
-            SET owner_trainer_id = :tid,
-                status = :active,
-                updated_at = :now
-            WHERE id = :cid
-            """
-        ),
-        {
-            "tid": trainer_id,
-            "active": COLLECTIVE_STATUS_ACTIVE,
-            "now": now,
-            "cid": collective_id,
-        },
-    )
-    await session.execute(
-        text(
-            """
-            INSERT INTO collective_members (
-                collective_id, trainer_id, role, status, joined_at
-            )
-            VALUES (:cid, :tid, :role, :status, :now)
-            ON CONFLICT (collective_id, trainer_id)
-            DO UPDATE SET
-                role = EXCLUDED.role,
-                status = EXCLUDED.status,
-                joined_at = EXCLUDED.joined_at,
-                left_at = NULL
-            """
-        ),
-        {
-            "cid": collective_id,
-            "tid": trainer_id,
-            "role": MEMBER_ROLE_OWNER,
-            "status": MEMBER_STATUS_ACTIVE,
-            "now": now,
-        },
-    )
-    await session.execute(
-        text(
-            """
-            UPDATE trainers
-            SET studio_access_mode = :mode
-            WHERE id = :tid
-            """
-        ),
-        {"mode": owner_access_mode, "tid": int(trainer_id)},
-    )
-    await session.execute(
-        text("UPDATE collective_tokens SET used_at = :now WHERE token = :token"),
-        {"now": now, "token": tok},
-    )
-    await session.commit()
-    return ConsumeCollectiveClaimResult(
-        collective_id=collective_id,
-        slug=slug,
-        display_name=display_name,
-    )
-
-
 async def consume_collective_claim_token_for_operator(
     session: AsyncSession,
     token: str,
@@ -908,8 +779,11 @@ async def consume_collective_claim_token_for_operator(
     Org bot claim: assign operator to draft collective and activate it.
 
     Never touches `trainers` or `collective_members` — operator is a distinct identity axis
-    from coach (PDEC-007/008). `owner_trainer_id` is left null for org-bot claims; only
-    legacy trainer-bot claims (`consume_collective_claim_token`) still write it.
+    from coach (PDEC-007/008). `owner_trainer_id` stays null for org-bot claims — the legacy
+    trainer-bot claim path that used to write it (`consume_collective_claim_token`) was
+    removed: a trainer must never become a school "owner" through the trainer bot (TASK-141).
+    A `center`-format collective's `owner_trainer_id` now has no live assignment path; that's
+    an accepted, deferred gap, not an oversight.
     """
     now = datetime.now(timezone.utc)
     tok = (token or "").strip()
@@ -1113,6 +987,24 @@ async def get_org_collective_profile_payload(
     }
 
 
+async def _public_catalog_arena_exists(session: AsyncSession, arena_id: int) -> bool:
+    """Same "public catalog" criteria as ``CatalogRepository.list_arenas(include_unconfirmed=False)``."""
+    result = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM arenas a
+            LEFT JOIN arena_profiles p ON p.arena_id = a.id
+            WHERE a.id = :aid AND a.is_active AND a.is_confirmed
+              AND (p.status IS NULL OR p.status = 'published')
+            LIMIT 1
+            """
+        ),
+        {"aid": arena_id},
+    )
+    return result.fetchone() is not None
+
+
 async def update_org_collective_profile_for_operator(
     session: AsyncSession,
     *,
@@ -1122,8 +1014,10 @@ async def update_org_collective_profile_for_operator(
     about: str | None = None,
     clear_about: bool = False,
     contacts: dict[str, str] | None = None,
+    primary_arena_id: int | None = None,
+    primary_arena_id_set: bool = False,
 ) -> dict[str, Any]:
-    """Owner-only profile edit (TASK-141 S3) — name/about/contact only, see scope note above."""
+    """Owner-only profile edit (TASK-141 S3 + TASK-143 площадка) — see scope note above."""
     membership = await resolve_operator_membership(session, telegram_id, collective_slug=None)
     if membership is None or membership.collective_id != int(collective_id):
         return {"error": "not_operator"}
@@ -1153,6 +1047,15 @@ async def update_org_collective_profile_for_operator(
     elif about is not None:
         updates.append("about = :about")
         params["about"] = about.strip()[:4000] or None
+
+    if primary_arena_id_set:
+        if primary_arena_id is None:
+            updates.append("primary_arena_id = NULL")
+        else:
+            if not await _public_catalog_arena_exists(session, primary_arena_id):
+                return {"error": "invalid_primary_arena"}
+            updates.append("primary_arena_id = :primary_arena_id")
+            params["primary_arena_id"] = primary_arena_id
 
     tokens_changed = False
     next_tokens = dict(current_tokens)
@@ -1199,6 +1102,26 @@ async def count_active_collective_members(session: AsyncSession, collective_id: 
     )
     row = result.fetchone()
     return int(row[0]) if row and row[0] is not None else 0
+
+
+async def is_trainer_in_collective(
+    session: AsyncSession,
+    collective_id: int,
+    trainer_id: int,
+) -> bool:
+    """Check if trainer is an active member of the collective."""
+    result = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM collective_members
+            WHERE collective_id = :cid AND trainer_id = :tid AND status = :active
+            LIMIT 1
+            """
+        ),
+        {"cid": collective_id, "tid": trainer_id, "active": MEMBER_STATUS_ACTIVE},
+    )
+    return result.fetchone() is not None
 
 
 def collective_storage_key_allowed(collective_id: int, file_key: str | None) -> bool:
@@ -1276,13 +1199,14 @@ async def collective_location_payload(
 
     primary_arena_id = row.get("primary_arena_id")
     primary_arena_name: str | None = None
+    primary_arena_address: str | None = None
     primary_arena_city_name: str | None = None
     primary_arena_city_id: int | None = None
     if primary_arena_id is not None:
         arena_row = await session.execute(
             text(
                 """
-                SELECT a.name, c.name, c.id
+                SELECT a.name, a.address, c.name, c.id
                 FROM arenas a
                 LEFT JOIN cities c ON c.id = a.city_id
                 WHERE a.id = :aid AND a.is_active
@@ -1296,8 +1220,9 @@ async def collective_location_payload(
             primary_arena_id = None
         else:
             primary_arena_name = (str(arena_val[0]).strip() if arena_val[0] else None) or None
-            primary_arena_city_name = (str(arena_val[1]).strip() if arena_val[1] else None) or None
-            primary_arena_city_id = int(arena_val[2]) if arena_val[2] is not None else None
+            primary_arena_address = (str(arena_val[1]).strip() if arena_val[1] else None) or None
+            primary_arena_city_name = (str(arena_val[2]).strip() if arena_val[2] else None) or None
+            primary_arena_city_id = int(arena_val[3]) if arena_val[3] is not None else None
 
     slug = (row.get("slug") or "").strip()
     return {
@@ -1305,6 +1230,7 @@ async def collective_location_payload(
         "default_city_name": default_city_name,
         "primary_arena_id": primary_arena_id,
         "primary_arena_name": primary_arena_name,
+        "primary_arena_address": primary_arena_address,
         "primary_arena_city_name": primary_arena_city_name,
         "primary_arena_city_id": primary_arena_city_id,
         "catalog_webapp_url": build_collective_catalog_webapp_url(
@@ -1585,18 +1511,14 @@ async def promote_collective_member_to_admin(
     return {"promoted_trainer_id": int(target_trainer_id), "role": MEMBER_ROLE_ADMIN}
 
 
-async def issue_collective_invite_token(
+async def _create_collective_invite_token_row(
     session: AsyncSession,
     collective_id: int,
-    issuer_trainer_id: int,
     *,
-    expire_days: int = DEFAULT_COLLECTIVE_INVITE_EXPIRE_DAYS,
+    expire_days: int,
 ) -> dict[str, Any] | None:
-    """Owner-only one-time invite for a new studio member."""
-    owner_err = await _assert_collective_owner(session, collective_id, issuer_trainer_id)
-    if owner_err:
-        return None
-
+    """Shared token-issuance core: seat check + insert. No ownership check — callers
+    (trainer-owner path or operator path) authorize before calling this."""
     seat_row = await session.execute(
         text("SELECT seat_limit FROM collectives WHERE id = :id"),
         {"id": collective_id},
@@ -1641,6 +1563,33 @@ async def issue_collective_invite_token(
         "seat_limit": seat_limit,
         "active_count": active_count,
     }
+
+
+async def issue_collective_invite_token(
+    session: AsyncSession,
+    collective_id: int,
+    issuer_trainer_id: int,
+    *,
+    expire_days: int = DEFAULT_COLLECTIVE_INVITE_EXPIRE_DAYS,
+) -> dict[str, Any] | None:
+    """Owner-only one-time invite for a new studio member (trainer-side overlay path)."""
+    owner_err = await _assert_collective_owner(session, collective_id, issuer_trainer_id)
+    if owner_err:
+        return None
+    return await _create_collective_invite_token_row(session, collective_id, expire_days=expire_days)
+
+
+async def issue_collective_invite_token_for_operator(
+    session: AsyncSession,
+    collective_id: int,
+    *,
+    expire_days: int = DEFAULT_COLLECTIVE_INVITE_EXPIRE_DAYS,
+) -> dict[str, Any] | None:
+    """One-time invite for a new studio member, issued by an org-bot operator
+    (TASK-141 S4). Operator identity lives in collective_operators, not
+    collective_members/trainers — caller (org_webapp route) already authorized
+    the operator's role before calling this."""
+    return await _create_collective_invite_token_row(session, collective_id, expire_days=expire_days)
 
 
 async def count_pending_collective_invite_tokens(
@@ -2984,10 +2933,44 @@ async def upload_collective_asset_from_bytes(
     content_type: str,
     kind: str,
 ) -> dict[str, Any]:
-    """Owner uploads logo, cover, or gallery image; persists key on collective row."""
+    """Owner (trainer studio) uploads logo, cover, or gallery image; persists key on collective row."""
     owner_err = await _assert_collective_owner(session, collective_id, trainer_id)
     if owner_err:
         return {"error": owner_err}
+    return await _upload_collective_asset_core(
+        session, collective_id=collective_id, body=body, content_type=content_type, kind=kind
+    )
+
+
+async def upload_collective_asset_for_operator(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    telegram_id: int,
+    body: bytes,
+    content_type: str,
+    kind: str,
+) -> dict[str, Any]:
+    """Owner (org webapp operator, TASK-143) uploads logo, cover, or gallery image."""
+    membership = await resolve_operator_membership(session, telegram_id, collective_slug=None)
+    if membership is None or membership.collective_id != int(collective_id):
+        return {"error": "not_operator"}
+    if membership.role != OPERATOR_ROLE_OWNER:
+        return {"error": "owner_only"}
+    return await _upload_collective_asset_core(
+        session, collective_id=collective_id, body=body, content_type=content_type, kind=kind
+    )
+
+
+async def _upload_collective_asset_core(
+    session: AsyncSession,
+    *,
+    collective_id: int,
+    body: bytes,
+    content_type: str,
+    kind: str,
+) -> dict[str, Any]:
+    """Shared validation + S3 upload + collective row update — no ownership check (caller's job)."""
     if len(body) > MAX_TRAINER_PHOTO_BYTES:
         return {"error": "too_large"}
     if not trainer_photo_bytes_look_like_image(body):
@@ -3179,3 +3162,52 @@ async def get_trainer_collective_studio_payload(
         **kit,
         **location,
     }
+
+
+async def list_collective_clients(
+    session: AsyncSession,
+    collective_id: int,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Aggregate clients across all active trainers in the collective.
+
+    Returns deduplicated client list without billing/pricing fields (AC-004).
+    """
+    from src.application.booking_use_cases import list_trainer_clients
+
+    members = await list_collective_members_for_studio(session, collective_id)
+    if not members:
+        return []
+
+    trainer_ids = [m["trainer_id"] for m in members if m["status"] == "active"]
+    if not trainer_ids:
+        return []
+
+    seen_ids: set[int] = set()
+    out: list[dict[str, Any]] = []
+
+    for tid in trainer_ids:
+        clients = await list_trainer_clients(session, tid, limit=limit)
+        for c in clients:
+            cid = c.get("id")
+            if cid is None or cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            out.append({
+                "client_id": cid,
+                "first_name": c.get("first_name"),
+                "last_name": c.get("last_name"),
+                "middle_name": c.get("middle_name"),
+                "phone": c.get("phone"),
+                "telegram_username": c.get("telegram_username"),
+                "in_bot": c.get("in_bot"),
+                "bookings_count": c.get("bookings_count"),
+                "last_date": c.get("last_date"),
+                "last_start": c.get("last_start"),
+                "first_date": c.get("first_date"),
+                "is_sandbox": c.get("is_sandbox"),
+            })
+            if len(out) >= limit:
+                return out
+
+    return out

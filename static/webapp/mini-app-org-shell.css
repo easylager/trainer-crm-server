@@ -294,6 +294,159 @@
   color: var(--app-danger, #C4342A);
 }
 
+/* Фото школы (TASK-143) */
+.org-photo-section {
+  margin: 24px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.org-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--glide-text);
+}
+
+.org-photo-row {
+  display: flex;
+  gap: 10px;
+}
+
+.org-photo-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.org-photo-preview {
+  height: 72px;
+  border-radius: 10px;
+  border: 1px dashed var(--glide-line);
+  background: var(--glide-surface) center/cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.org-photo-preview--wide {
+  height: 96px;
+}
+
+.org-photo-preview__empty {
+  font-size: 12px;
+  color: var(--glide-hint);
+}
+
+.org-photo-btn {
+  text-align: center;
+  cursor: pointer;
+}
+
+.org-photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.org-photo-gallery__item {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background-color: var(--glide-surface);
+  background-size: cover;
+  background-position: center;
+}
+
+/* Площадка (TASK-143) */
+.org-arena-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: 10px;
+  background: var(--glide-surface);
+}
+
+.org-arena-current__text {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--glide-text);
+}
+
+.org-arena-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--glide-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.org-arena-picker__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.org-arena-picker select,
+.org-arena-picker input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--glide-text);
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: 10px;
+  background: var(--glide-surface);
+}
+
+.org-arena-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.org-arena-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: 10px;
+  background: var(--glide-surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.org-arena-row--selected {
+  border-color: var(--glide-brand);
+  background: var(--glide-brand-soft, var(--glide-surface));
+}
+
+.org-arena-row__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--glide-text);
+}
+
+.org-arena-row__address {
+  font-size: 12.5px;
+  color: var(--glide-hint);
+}
+
+.org-arena-list__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--glide-hint);
+  text-align: center;
+}
+
 /* Главная (S1) — минимальный набор, до того как появятся снимок дня / ссылки */
 .org-home-state {
   padding: 40px 16px;
@@ -363,4 +516,118 @@
   color: var(--glide-hint);
   box-shadow: inset 0 0 0 1px var(--glide-line);
   border-radius: 3px;
+}
+
+/* Команда (S4) — ростер тренеров + приглашение */
+.org-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.org-team-row {
+  margin: 0 16px;
+}
+
+.org-team-empty {
+  margin: 16px;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.org-team-pending {
+  margin: 0 16px 16px;
+  font-size: 12.5px;
+  color: var(--glide-hint);
+}
+
+#orgTeamInvite {
+  margin: 8px 16px 0;
+}
+
+.org-team-invite-note {
+  margin: 10px 16px 0;
+  font-size: 12.5px;
+  color: var(--glide-hint);
+}
+
+/* Каталог (S5) — статус, preview, чек-лист, история */
+.org-catalog-body {
+  margin: 0 16px 8px;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.org-catalog-preview__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--glide-hint);
+  margin: 0 0 8px;
+}
+
+.org-catalog-why {
+  margin: 16px;
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.org-catalog-why summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--glide-ink-teal);
+}
+
+.org-catalog-why p {
+  margin: 8px 0 0;
+}
+
+#orgCatalogPublish,
+#orgCatalogHide {
+  margin: 8px 16px 0;
+}
+
+.org-catalog-public-link {
+  display: block;
+  margin: 12px 16px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--glide-ink-teal);
+  text-decoration: none;
+}
+
+.org-catalog-action-error {
+  margin: 10px 16px 0;
+  font-size: 12.5px;
+  color: var(--glide-danger, #c0392b);
+}
+
+.org-catalog-history-title {
+  margin: 24px 16px 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.org-catalog-history {
+  margin: 0 16px;
+}
+
+.org-catalog-history__empty {
+  font-size: 13px;
+  color: var(--glide-hint);
+}
+
+.org-catalog-history__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--glide-line);
+  font-size: 12.5px;
+}
+
+.org-catalog-history__d {
+  color: var(--glide-hint);
+  flex: 0 0 auto;
 }

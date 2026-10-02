@@ -617,6 +617,90 @@ def webapp_org_subscription_main_js(request: Request):
     )
 
 
+@app.api_route("/webapp/org-team", methods=["GET", "HEAD"])
+def webapp_org_team_page():
+    """Org cabinet (TASK-141 S4): coach roster + invite."""
+    path = _WEBAPP_DIR / "org-team.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-team-main.js")
+def webapp_org_team_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-team-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.api_route("/webapp/org-catalog", methods=["GET", "HEAD"])
+def webapp_org_catalog_page():
+    """Org cabinet (TASK-141 S5): catalog publication screen."""
+    path = _WEBAPP_DIR / "org-catalog.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-catalog-main.js")
+def webapp_org_catalog_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-catalog-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.api_route("/webapp/org-schedule", methods=["GET", "HEAD"])
+def webapp_org_schedule_page():
+    """Org cabinet (TASK-141 S6): multi-trainer schedule management."""
+    path = _WEBAPP_DIR / "org-schedule.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-schedule-main.js")
+def webapp_org_schedule_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-schedule-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.api_route("/webapp/org-clients", methods=["GET", "HEAD"])
+def webapp_org_clients_page():
+    """Org cabinet (TASK-141 S7): aggregated client list."""
+    path = _WEBAPP_DIR / "org-clients.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/org-clients-main.js")
+def webapp_org_clients_main_js(request: Request):
+    path = _WEBAPP_DIR / "org-clients-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/trainer-groups")
 def webapp_trainer_groups_page():
     """Trainer cohorts: groups, roster, catalog recruitment."""

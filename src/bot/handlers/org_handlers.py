@@ -4,8 +4,10 @@ Org bot handlers (TASK-141/EPIC5 TASK-105/106) — school director/operator entr
 Separate bot/process from trainer_handlers.py: an operator is not a coach (PDEC-007/008).
 `/start col_claim_<token>` activates a draft collective's operator, then opens the org Mini App.
 
-S1 scope: always opens org-home (Главная) — the onboarding-vs-edit split (org-onboarding vs
-org-edit) lands with S3 (Профиль школы), once that screen exists.
+Fresh claim opens straight into org-profile (the checklist screen, S3) — the button already
+said "Заполнить профиль"; it used to land on org-home regardless, costing the director an
+extra tap on the one screen this flow exists to get them to. The persistent chat menu button
+(``org_app.py::setup_org_menu``) still opens org-home — that one isn't tied to a fresh claim.
 """
 import html
 
@@ -23,8 +25,8 @@ from src.shared.mini_app_https import mini_app_https_base
 router = Router(name="org")
 
 
-def org_cabinet_webapp_url() -> str | None:
-    """HTTPS (prod) or configured base (tests/dev) + org-home path."""
+def org_cabinet_webapp_url(*, path: str = "org-home") -> str | None:
+    """HTTPS (prod) or configured base (tests/dev) + the given webapp screen."""
     settings = Settings()
     org = (settings.org_webapp_base_url or "").strip().rstrip("/")
     if org:
@@ -34,11 +36,11 @@ def org_cabinet_webapp_url() -> str | None:
         base = https or (settings.webapp_base_url or "").strip().rstrip("/")
     if not base:
         return None
-    return f"{base}/webapp/org-home"
+    return f"{base}/webapp/{path}"
 
 
 def _org_webapp_markup(*, fill_profile: bool):
-    url = org_cabinet_webapp_url()
+    url = org_cabinet_webapp_url(path="org-profile" if fill_profile else "org-home")
     if not url:
         return None
     return msg.build_org_webapp_reply_markup(url=url, fill_profile=fill_profile)

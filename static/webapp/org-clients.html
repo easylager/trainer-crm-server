@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Клиенты</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
+  <script src="mini-app-full-height.js?v=202609290"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-trainer-theme.js?v=202609290"></script>
+  <script src="mini-app-telegram-chrome.js?v=202609290"></script>
+  <link rel="stylesheet" href="theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202609290" />
+  <link rel="stylesheet" href="mini-app-org-shell.css?v=202609300" />
+  <link rel="preload" href="org-clients-main.js?v=202609290" as="script" />
+  <link rel="preload" href="mini-app-org-shell.js?v=202609290" as="script" />
+  <style>
+    .org-clients-search {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 14px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+    .org-clients-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .org-clients-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+    }
+    .org-clients-row__name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .org-clients-row__meta {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .org-clients-row__count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+    .org-clients-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body data-org-shell="tabs" data-org-active="clients">
+  <main class="org-page" id="orgClientsPage">
+    <div class="org-home-state org-home-state--loading" id="orgClientsLoading">
+      <p>Загрузка</p>
+    </div>
+
+    <section id="orgClientsRoot" hidden>
+      <header class="org-home-header">
+        <h1>Клиенты</h1>
+      </header>
+
+      <input type="search" class="org-clients-search" id="orgClientsSearch" placeholder="Поиск по имени или телефону" />
+      <div class="org-clients-list" id="orgClientsList"></div>
+      <p class="org-clients-empty" id="orgClientsEmpty" hidden>Клиентов пока нет</p>
+    </section>
+
+    <div class="org-home-state org-home-state--error" id="orgClientsError" hidden>
+      <p id="orgClientsErrorText">Не удалось загрузить клиентов</p>
+      <button type="button" class="btn-secondary" id="orgClientsRetry">Повторить</button>
+    </div>
+  </main>
+
+  <script defer src="org-clients-main.js?v=202609290"></script>
+  <script defer src="mini-app-org-shell.js?v=202609290"></script>
+</body>
+</html>

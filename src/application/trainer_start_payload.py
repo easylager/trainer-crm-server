@@ -9,6 +9,9 @@ START_LINK_PREFIX = "link_"
 START_REF_PREFIX = "ref_"
 START_JOIN_PAYLOAD = "join"
 START_JOIN_REF_PREFIX = "join_ref_"
+# Not parsed below — school ownership claims go through the org bot now (org_handlers.py,
+# which imports this constant), not the trainer bot. A trainer is a coach, never a school
+# owner (TASK-141): trainer_start_payload deliberately has no COLLECTIVE_CLAIM kind.
 START_COLLECTIVE_CLAIM_PREFIX = "col_claim_"
 START_COLLECTIVE_INVITE_PREFIX = "col_inv_"
 START_COLLECTIVE_OPEN_PREFIX = "col_"
@@ -18,7 +21,6 @@ class TrainerStartKind(StrEnum):
     LINK = "link"
     REF = "ref"
     JOIN = "join"
-    COLLECTIVE_CLAIM = "col_claim"
     COLLECTIVE_INVITE = "col_inv"
     COLLECTIVE_OPEN = "col_open"
     EMPTY = "empty"
@@ -39,14 +41,6 @@ def parse_trainer_start_payload(payload: str | None) -> ParsedTrainerStart:
     raw = (payload or "").strip()
     if not raw:
         return ParsedTrainerStart(kind=TrainerStartKind.EMPTY, raw_payload="")
-
-    if raw.startswith(START_COLLECTIVE_CLAIM_PREFIX):
-        token = raw.removeprefix(START_COLLECTIVE_CLAIM_PREFIX).strip()
-        return ParsedTrainerStart(
-            kind=TrainerStartKind.COLLECTIVE_CLAIM,
-            raw_payload=raw,
-            collective_token=token or None,
-        )
 
     if raw.startswith(START_COLLECTIVE_INVITE_PREFIX):
         token = raw.removeprefix(START_COLLECTIVE_INVITE_PREFIX).strip()
