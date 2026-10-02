@@ -10,6 +10,7 @@ from typing import Awaitable, Callable
 from src.application.ice_session_use_cases import IceSessionValidationError
 from src.ingestion.freshness import next_poll_at, next_source_state
 from src.ingestion.jobs import config_requires_by_egress
+from src.ingestion.source_io import egress_proxy
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.publish import IceSessionPublisher
@@ -41,6 +42,7 @@ class IceIngestScheduler:
         validator: IceSessionValidator | None = None,
         publisher: IceSessionPublisher | None = None,
         by_egress_configured: bool = False,
+        by_egress_proxy_url: str | None = None,
         rng: random.Random | None = None,
         max_jobs_per_tick: int | None = MAX_JOBS_PER_TICK,
         checkpoint: Callable[[], Awaitable[None]] | None = None,
@@ -54,7 +56,9 @@ class IceIngestScheduler:
         # TASK-083 / PDEC-004: worker-level proof a real BY egress path (VPS tunnel) is
         # wired up. job.config["requires_by_egress"] stays True forever once set — this
         # only says the flag is now satisfied on *this* worker, never mutate the flag.
-        self._by_egress_configured = by_egress_configured
+        self._by_egress_configured = by_egress_configured or bool(by_egress_proxy_url)
+        # Сам адрес прокси: им ходят только задания с requires_by_egress, остальные — напрямую.
+        self._by_egress_proxy_url = by_egress_proxy_url
         self._rng = rng
         self._max_jobs_per_tick = max_jobs_per_tick
         # Коммит после каждого задания: новое расписание видно пользователю сразу после
@@ -151,8 +155,10 @@ class IceIngestScheduler:
                 ),
                 empty,
             )
+        proxy = self._by_egress_proxy_url if config_requires_by_egress(job.config) else None
         try:
-            extraction = await parser.extract(job)
+            with egress_proxy(proxy):
+                extraction = await parser.extract(job)
             drafts = self._normalizer.normalize(extraction, job, now=now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:

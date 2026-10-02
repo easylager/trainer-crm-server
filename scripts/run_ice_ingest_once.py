@@ -101,6 +101,8 @@ async def _run_once() -> None:
             publisher=SqlAlchemyIceSessionPublisher(session),
             # Разовый прогон — все сделанные due задания, без потолка тика воркера.
             max_jobs_per_tick=None,
+            # Юность, СДЮШОР и др. отвечают 403 небелорусским IP: им — через BY-прокси, если задан.
+            by_egress_proxy_url=Settings().by_egress_proxy_url,
         )
         outcomes = await scheduler.run_due(now)
         await session.commit()

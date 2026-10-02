@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import aiohttp
 
 from src.ingestion.htmlutil import parse_tables, price_from_label, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
@@ -29,7 +28,7 @@ from src.ingestion.seed_config_regional_batch_c import (
     PARSER_KEY_OSTROVETS_LDS,
     PARSER_KEY_VITEBSK_DS,
 )
-from src.ingestion.source_io import load_source_text
+from src.ingestion.source_io import fetch_http_bytes, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _MONTHS = {
@@ -92,11 +91,7 @@ async def _load_bytes(job: ParserJob, *, filename: str, url: str) -> bytes:
     fixture_dir = job.config.get("fixture_dir")
     if fixture_dir:
         return (Path(str(fixture_dir)) / filename).read_bytes()
-    timeout = aiohttp.ClientTimeout(total=20)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, headers={"User-Agent": _USER_AGENT}) as response:
-            response.raise_for_status()
-            return await response.read()
+    return await fetch_http_bytes(url, headers={"User-Agent": _USER_AGENT})
 
 
 # ---------------------------------------------------------------------------
