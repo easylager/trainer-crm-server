@@ -65,7 +65,7 @@ def test_dry_run_parses_minsk_and_regional_dossiers(cards, loader) -> None:
     assert cards["minsk-diamond"].publishable_photo_count == 2
     assert cards["minsk-junost"].publishable_photo_count == 0
     assert cards["minsk-ledlife"].publishable_photo_count == 0
-    assert cards["konkobezhnaya-arena"].publishable_photo_count == 2
+    assert cards["konkobezhnaya-arena"].publishable_photo_count == 3
 
 
 def test_zamok_is_the_fullest_card(cards) -> None:
