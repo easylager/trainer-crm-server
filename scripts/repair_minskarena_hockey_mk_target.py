@@ -27,6 +27,7 @@ from src.shared.ops_db_guard import (
     add_i_know_this_is_prod_argument,
     assert_database_url,
     assert_railway_target_database,
+    async_database_url,
     warn_prod_ack,
 )
 
@@ -38,7 +39,7 @@ HOCKEY_LABEL = "%хоккейн%"
 
 
 async def run(*, apply: bool) -> None:
-    url = Settings().database_url
+    url = async_database_url(Settings().database_url)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:

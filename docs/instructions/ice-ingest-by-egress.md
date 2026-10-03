@@ -59,7 +59,8 @@
 После деплоя `master` с repair-скриптами:
 
 ```bash
-export DATABASE_URL='<Railway → Postgres → Connect → Public URL, asyncpg>'
+export DATABASE_URL='<Railway → Postgres → Connect → Public URL>'
+# подойдёт postgresql:// или postgresql+psycopg:// — скрипты сами переведут в +asyncpg
 bash scripts/local_by_egress_proxy.sh start   # отдельный терминал
 bash scripts/prod_minsk_ice_rollout.sh
 ```

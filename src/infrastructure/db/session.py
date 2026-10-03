@@ -6,14 +6,12 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.shared.config import Settings
+from src.shared.ops_db_guard import async_database_url
 
 from .models import Base
 
 _settings = Settings()
-# Async URL: Railway gives postgresql://, we need postgresql+asyncpg
-_db_url = _settings.database_url
-if _db_url.startswith("postgresql://") and "+asyncpg" not in _db_url:
-    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+_db_url = async_database_url(_settings.database_url)
 # Fail fast when Postgres is down (hardware outage) instead of hanging Mini Apps
 # until the reverse-proxy timeout. pool_pre_ping drops stale connections after failover.
 engine = create_async_engine(

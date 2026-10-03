@@ -53,6 +53,14 @@ def test_refuses_cloud_and_non_local_database(runner) -> None:
     )
 
 
+def test_async_database_url_accepts_railway_psycopg_scheme() -> None:
+    from src.shared.ops_db_guard import async_database_url
+
+    assert async_database_url(
+        "postgresql+psycopg://u:p@postgres.railway.app:5432/railway"
+    ).startswith("postgresql+asyncpg://")
+
+
 def test_prod_ack_refuses_localhost_target(runner) -> None:
     from src.shared.ops_db_guard import assert_railway_target_database, ProdDatabaseError
 

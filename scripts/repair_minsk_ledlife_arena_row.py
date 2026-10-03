@@ -28,6 +28,8 @@ from src.shared.config import Settings
 from src.shared.ops_db_guard import (
     add_i_know_this_is_prod_argument,
     assert_database_url,
+    assert_railway_target_database,
+    async_database_url,
     warn_prod_ack,
 )
 
@@ -61,7 +63,7 @@ async def _inspect(session) -> dict:
 
 
 async def run(*, apply: bool) -> None:
-    url = Settings().database_url
+    url = async_database_url(Settings().database_url)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
@@ -125,8 +127,10 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
-    assert_database_url(Settings().database_url, apply=args.apply, allow_prod=args.i_know_this_is_prod)
-    if args.apply and args.i_know_this_is_prod:
+    url = Settings().database_url
+    assert_database_url(url, apply=args.apply, allow_prod=args.i_know_this_is_prod)
+    if args.i_know_this_is_prod:
+        assert_railway_target_database(url)
         warn_prod_ack()
     asyncio.run(run(apply=args.apply))
 

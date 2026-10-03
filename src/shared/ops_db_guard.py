@@ -45,6 +45,16 @@ def normalize_db_url(url: str) -> str:
     return raw
 
 
+def async_database_url(url: str) -> str:
+    """``create_async_engine`` needs ``postgresql+asyncpg://`` (not psycopg/psycopg2)."""
+    base = normalize_db_url(url)
+    if base.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + base[len("postgresql://") :]
+    if "+asyncpg" in url:
+        return url.strip()
+    raise ProdDatabaseError(f"Unsupported DATABASE_URL scheme for async SQLAlchemy: {url!r}")
+
+
 def add_i_know_this_is_prod_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         I_KNOW_THIS_IS_PROD,
