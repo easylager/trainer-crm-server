@@ -284,6 +284,45 @@ body{
 .pod .p-t{padding:8px 9px 9px}
 .pod b{display:block;font-size:11px;line-height:1.3}
 .pod span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:3px}
+/* v6: светлые плитки — светлый холст везде, тёмное только в экспортных картинках */
+.pod-l{width:122px;flex:none;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.pod-l .pl-top{height:54px;display:flex;align-items:center;justify-content:center;background:var(--wash)}
+.pod-l .pl-ic{width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff}
+.pod-l .pl-ic .ic{width:16px;height:16px}
+.pl-ic.eve{background:var(--brand-ink)}
+.pl-ic.ice{background:var(--brand)}
+.pl-ic.out{background:var(--track)}
+.pl-ic.shop{background:var(--shop)}
+.pod-l .pl-t{padding:8px 10px 10px}
+.pod-l .pl-nm{display:flex;align-items:center;gap:5px}
+.pod-l b{display:block;font-size:11px;line-height:1.3;flex:1}
+.pod-l .pl-cnt{font-family:'Unbounded',sans-serif;font-weight:700;font-size:10px;color:var(--brand-ink);background:var(--wash);border-radius:8px;padding:2px 6px;flex:none}
+.pod-l span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:4px}
+/* v7: хаб — единый блок «На льду сейчас» и навигация по рынку одной сеткой */
+.ice-now{margin:12px 16px 0}
+.ice-now .in-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.ice-now .in-head .kick{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand-ink);font-weight:800}
+.ice-now .in-head a{font-size:10.5px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.ice-now .hero{margin:0}
+.ice-now .ice-today{margin:8px 0 0}
+.cg{margin:14px 16px 0}
+.cg-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.cg-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:12.5px}
+.cg-head a{font-size:11px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.cg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cg-tile{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:10px 11px;display:flex;align-items:center;gap:9px}
+.cg-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.cg-ic .ic{width:17px;height:17px}
+.cg-ic.ice{background:var(--brand)}
+.cg-ic.coach{background:var(--brand-ink)}
+.cg-ic.shop{background:var(--shop)}
+.cg-ic.svc{background:var(--service)}
+.cg-t{flex:1;min-width:0}
+.cg-t b{display:flex;align-items:center;gap:5px;font-size:11.5px}
+.cg-t .cnt{font-family:'Unbounded',sans-serif;font-weight:700;font-size:10px;color:var(--brand-ink)}
+.cg-t span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:2px}
+.cg-tile .chev{margin-left:2px;color:#C3CBC9;flex:none}
+.cg-tile .chev .ic{width:13px;height:13px}
 
 .weekly{margin:14px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:11px;display:flex;gap:11px;align-items:center}
 .weekly .w-art{width:96px;height:84px;border-radius:12px;overflow:hidden;flex:none}
@@ -548,14 +587,14 @@ body{
 
   <!-- ============ ШАПКА ============ -->
   <header class="head">
-    <div class="kicker">GLIDE · Клиентский мини-апп · Дизайн v5</div>
+    <div class="kicker">GLIDE · Клиентский мини-апп · Дизайн v6</div>
     <h1>Единый ансамбль <em>рынка катания</em></h1>
-    <p>Один каталог: катки, тренеры, магазины, сервис — тип места читается цветом и значком. Защита от пустоты: чип, блок и карточка рендерятся только при данных; нет фото — нет фото-блока. Подборки — живые фильтры поверх существующих данных, «сегодня на льду» — из расписаний.</p>
+    <p>Один каталог: катки, тренеры, магазины, сервис — тип места читается цветом и значком. Защита от пустоты: чип, блок и карточка рендерятся только при данных; нет фото — нет фото-блока. Светлый холст — везде, включая хаб: тёмное живёт только в экспортных картинках. Подборки — живые фильтры с ценностью в каждой карточке.</p>
     <div class="meta">
-      <span>3 октября 2026 · v5</span>
+      <span>3 октября 2026 · v6</span>
+      <span>Светлый холст везде — тёмные плитки убраны</span>
       <span>Чипы рендерятся только с данными</span>
       <span>Нет фото — нет фото-блока</span>
-      <span>Палитра theme.css + 4 токена на утверждение</span>
     </div>
   </header>
 
@@ -567,9 +606,8 @@ body{
     <div class="principle" data-n="3"><b>Подборки только из данных</b><p>Шесть пресетов поверх того, что уже есть в системе: окно вечера, крытые, открытые, бесплатно, заточка, магазины. Каждый ведёт в каталог с применённым фильтром и рендерится только при счётчике больше нуля.</p></div>
     <div class="principle" data-n="4"><b>Изолированность без каши</b><p>Каждый тип и каждый экран живёт сам по себе: пустой город, пустая категория, карта, фильтры. Вместе — одно полотно, по отдельности — рабочий продукт.</p></div>
     <div class="principle" data-n="5"><b>Стиль не переделываем</b><p>Те же токены theme.css, та же сетка карточек и тени, что в тренерском приложении и B2B. Новое — только 4 токена типов мест, продолжение существующей палитры, а не её слом.</p></div>
+    <div class="principle" data-n="6"><b>Светлый холст — везде</b><p>Мрачные тёмные плитки в светлом хабе — чуждо, как белое пятно карты в тёмной теме. Секции хаба — светлые, с иконкой типа на цветной плашке. Тёмное — только в экспортных картинках шеринга.</p></div>
   </section>
-
-  <!-- ============ ТОКЕНЫ ============ -->
   <div class="section-title"><span class="num">02</span><h2>Токены типов</h2><span class="sub">существующие из theme.css + 4 новых — на утверждение</span></div>
   <section class="tokens">
     <div class="token"><div class="sw" style="background:#45B9BB"></div><div class="name">Лёд / каток</div><div class="val">#45B9BB · glide-500 · есть</div></div>
@@ -963,7 +1001,7 @@ body{
 
     <!-- 05 · ХАБ ГОСТЬ -->
     <figure class="phone">
-      <figcaption><b>05 · Хаб — гость</b><span>Никакого ручного контента: живой сеанс, подборки-фильтры со счётчиками, «сегодня на льду» из расписаний. «Свежее в каталоге» убрано — его нечем честно наполнять.</span></figcaption>
+      <figcaption><b>05 · Хаб — гость</b><span>Одна история на входе: «На льду сейчас» — единый блок (герой ближайшего сеанса + две строки расписания, раньше это были два блока с одним смыслом) → поиск → «Куда катимся» — рынок одной сеткой (катки, тренеры, магазины, сервис; раньше — две навигации: «Места и тренеры» и «Подборки») → каток недели.</span></figcaption>
       <div class="viewport"><div class="frame"><div class="screen">
 
         <div class="hub-top">
@@ -977,32 +1015,58 @@ body{
 
         <div class="hub-chips">
           <span class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>лёд держит</span>
-          <span class="chip-mini">7 катков открыто</span>
+          <span class="chip-mini">23 сеанса сегодня</span>
         </div>
 
-        <div class="hero">
-          <div class="t">
-            <div class="live-row"><span class="live"></span>Прямо сейчас</div>
-            <b>Ледовый дворец Спорта</b>
-            <div class="m">сеанс до 22:00 · 18 мин от вас</div>
-            <button>Открыть каток</button>
+        <div class="ice-now">
+          <div class="in-head">
+            <span class="kick">На льду сейчас · Минск</span>
+            <a href="#">весь лёд →</a>
           </div>
-          <div class="h-art"><div class="art art-palace" style="width:100%;height:100%"></div></div>
+          <div class="hero">
+            <div class="t">
+              <div class="live-row"><span class="live"></span>Прямо сейчас</div>
+              <b>Ледовый дворец Спорта</b>
+              <div class="m">сеанс до 22:00 · 18 мин от вас</div>
+              <button>Открыть каток</button>
+            </div>
+            <div class="h-art"><div class="art art-palace" style="width:100%;height:100%"></div></div>
+          </div>
+          <div class="ice-today">
+            <div class="it-row"><span class="it-dot"></span><span class="it-time">18:15</span><span class="it-place">Парк Горького · открытый</span><span class="it-price">5 ₽</span></div>
+            <div class="it-row"><span class="it-dot"></span><span class="it-time">19:30</span><span class="it-place">Дворец Спорта · крытый</span><span class="it-price">8 ₽</span></div>
+          </div>
         </div>
 
-        <div class="pod-head"><b>Подборки</b><a href="#">настроить →</a></div>
-        <div class="pods">
-          <div class="pod">
-            <div class="p-art"><div class="art art-night" style="width:100%;height:100%"></div></div>
-            <div class="p-t"><b>Ночной лёд</b><span>4 катка · с 21:00</span></div>
-          </div>
-          <div class="pod">
-            <div class="p-art"><div class="art art-workshop" style="width:100%;height:100%"></div></div>
-            <div class="p-t"><b>Заточка</b><span>2 сервиса · от 10 BYN</span></div>
-          </div>
-          <div class="pod">
-            <div class="p-art"><div class="art art-sunset" style="width:100%;height:100%"></div></div>
-            <div class="p-t"><b>Открытые</b><span>3 катка под небом</span></div>
+        <div class="sc-search" style="margin-top:12px">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">каток, тренер, заточка…</span>
+          <span class="chip-mini" style="border:none;background:#E7ECEA">Минск <i style="font-style:normal;font-size:9px">▾</i></span>
+        </div>
+
+        <div class="cg">
+          <div class="cg-head"><b>Куда катимся</b><a href="#">все места →</a></div>
+          <div class="cg-grid">
+            <div class="cg-tile">
+              <div class="cg-ic ice"><svg class="ic"><use href="#i-snow"/></svg></div>
+              <div class="cg-t"><b>Катки <span class="cnt">37</span></b><span>лёд рядом</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic coach"><svg class="ic"><use href="#i-user"/></svg></div>
+              <div class="cg-t"><b>Тренеры <span class="cnt">14</span></b><span>занятия и школы</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic shop"><svg class="ic"><use href="#i-bag"/></svg></div>
+              <div class="cg-t"><b>Магазины <span class="cnt">13</span></b><span>экипировка</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic svc"><svg class="ic"><use href="#i-wrench"/></svg></div>
+              <div class="cg-t"><b>Сервис <span class="cnt">2</span></b><span>заточка · ремонт</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
           </div>
         </div>
 
@@ -1014,21 +1078,6 @@ body{
             <div class="m"><svg class="ic"><use href="#i-star"/></svg>4.8 · открытый · с 18:15</div>
             <a href="#">Позвать с собой →</a>
           </div>
-        </div>
-
-        <div class="ice-today">
-          <div class="it-head"><b>Сегодня на льду</b><a href="#">все сеансы →</a></div>
-          <div class="it-row"><span class="it-dot"></span><span class="it-time">18:15</span><span class="it-place">Парк Горького · открытый</span><span class="it-price">5 ₽</span></div>
-          <div class="it-row"><span class="it-dot"></span><span class="it-time">19:30</span><span class="it-place">Дворец Спорта · крытый</span><span class="it-price">8 ₽</span></div>
-        </div>
-
-        <div class="first-trip">
-          <svg class="ic"><use href="#i-ticket"/></svg>
-          <div class="t">
-            <b>Хочешь заниматься с тренером?</b>
-            <span>Рядом с твоим катком — 14 тренеров</span>
-          </div>
-          <a href="#">Найти →</a>
         </div>
 
         <div class="tabs">
@@ -1043,7 +1092,7 @@ body{
 
     <!-- 06 · ХАБ СВОЙ -->
     <figure class="phone">
-      <figcaption><b>06 · Хаб — свой клиент</b><span>Те же блоки, но собранные из данных клиента: запись, тренер, абонемент, сертификат, серия. Нет данных — нет блока.</span></figcaption>
+      <figcaption><b>06 · Хаб — свой клиент</b><span>Своё — сверху: запись, тренер, абонемент, сертификат, серия. Рынок никуда не девается — «Куда катимся» внизу. Нет данных — нет блока.</span></figcaption>
       <div class="viewport"><div class="frame"><div class="screen">
 
         <div class="hub-top">
@@ -1107,6 +1156,32 @@ body{
           <div>
             <b>Твоя серия</b>
             <div class="s">до бейджа <b>«Хранитель льда»</b> — 1 неделя</div>
+          </div>
+        </div>
+
+        <div class="cg">
+          <div class="cg-head"><b>Куда катимся</b><a href="#">все места →</a></div>
+          <div class="cg-grid">
+            <div class="cg-tile">
+              <div class="cg-ic ice"><svg class="ic"><use href="#i-snow"/></svg></div>
+              <div class="cg-t"><b>Катки <span class="cnt">37</span></b><span>лёд рядом</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic coach"><svg class="ic"><use href="#i-user"/></svg></div>
+              <div class="cg-t"><b>Тренеры <span class="cnt">14</span></b><span>занятия и школы</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic shop"><svg class="ic"><use href="#i-bag"/></svg></div>
+              <div class="cg-t"><b>Магазины <span class="cnt">13</span></b><span>экипировка</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic svc"><svg class="ic"><use href="#i-wrench"/></svg></div>
+              <div class="cg-t"><b>Сервис <span class="cnt">2</span></b><span>заточка · ремонт</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
           </div>
         </div>
 
@@ -1402,6 +1477,26 @@ body{
       <div class="now"><svg class="ic"><use href="#i-check"/></svg>Лента категорий со счётчиками: тренеры, школы, катки, магазины, сервис — рынок виден целиком, ноль не скрыт</div>
     </div>
     <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Два блока «Сегодня на льду» (тизер сверху + блок внизу) — один смысл дважды, каша</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Единый блок «На льду сейчас»: герой ближайшего сеанса + две строки расписания + «весь лёд»</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>«Места и тренеры» и «Подборки» — две навигации об одном рынке, у второй мелкий шрифт</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>«Куда катимся» — одна сетка: катки, тренеры, магазины, сервис со счётчиками и строкой ценности</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>«Рады вас видеть» — пустое приветствие, ничего не сообщает о дне и городе</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>«Вечер, Максим» + погода и живой счётчик дня: первая строка уже отвечает на вопрос</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Тёмные плитки «Подборок» в светлом хабе — мрачно и чуждо, как чужая вставка</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Светлые плитки «Куда катимся»: иконка типа на цветной плашке, счётчик, строка ценности. Тёмное — только в экспортных картинках</div>
+    </div>
+    <div class="fix-row">
       <div class="was"><svg class="ic"><use href="#i-x"/></svg>Чипы-нули («Школы · 0») и пустые блоки — обещание без наполнения</div>
       <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
       <div class="now"><svg class="ic"><use href="#i-check"/></svg>Чип рендерится только при данных; пустой результат фильтра — честный экран со сбросом</div>
@@ -1456,13 +1551,13 @@ body{
 
   <!-- ============ ФУТЕР ============ -->
   <footer class="foot">
-    <b>Самокритика v4 → v5:</b>
+    <b>Самокритика v6 → v7:</b>
     <ul>
-      <li><b>Чипы-нули убраны.</b> В v4 я показывал «Школы · 0» как честный ноль — владелец решил жёстче: чип без данных не рендерится. Рынок показываем только там, где он уже есть; пустой результат фильтра — экран со сбросом.</li>
-      <li><b>Защита от пустых состояний — правило по умолчанию.</b> Чип, блок, карточка рендерятся только при данных. Нет фото — нет фото-блока: бесфотошный вариант карточки с иконкой типа на плашке (экран 01, «Юность»).</li>
-      <li><b>Подборки сверил с системой.</b> В ней уже есть: типы площадок ice/outdoor/gym/choreo/pool/shop, удобства skate_rental/skate_sharpening/retail/repair, подборки-ссылки /c/{город}?t=&w=, окна времени, тиры данных A/B/C. Финальный контент — шесть пресетов: «Сегодня вечером», «Крытые», «Открытые», «Бесплатно», «Заточка», «Магазины». Каждый — ссылка в каталог с применённым фильтром, рендерится при счётчике больше нуля. Ничего рукописного.</li>
-      <li><b>Найденный факт системы:</b> арены, созданные тренером без опубликованного фото, уже исключены из клиентского поиска (arena_public_use_cases.py) — правило «нет фото» для импортированного каталога это продолжение, а не новшество.</li>
-      <li><b>Что по-прежнему не делаю:</b> тёмную тему приложения, выдуманную загруженность катков, «скоро» без данных, контент-блоки, которые некому вести.</li>
+      <li><b>Хаб пересобран как история, а не список блоков.</b> Гость на входе получает один ответ за раз: «На льду сейчас» (герой ближайшего сеанса + две строки расписания — раньше это были два разнесённых блока с одним смыслом) → поиск → «Куда катимся» (рынок одной сеткой: катки, тренеры, магазины, сервис — раньше две навигации: «Места и тренеры» + «Подборки» мелким шрифтом) → каток недели.</li>
+      <li><b>Первая строка несёт ценность.</b> «Рады вас видеть» заменено на «Вечер, Максим» + «−3° · лёд держит» + живой счётчик дня. Приветствие отвечает на вопрос, а не заполняет место.</li>
+      <li><b>У своего клиента своё сверху, рынок — всегда под рукой.</b> Запись, тренер, абонемент, сертификат, серия — первыми; «Куда катимся» — ниже. Один и тот же блок, одна ментальная модель.</li>
+      <li><b>Карта для реализации:</b> hubIceZone + hubIceToday → один блок «На льду сейчас»; hubDiscovery + hubCollections → одна сетка «Куда катимся»; hubGreeting → «Вечер, имя» + чипы. Существующие персональные блоки (запись, тренер, абонемент, upcoming, streak, saved) — только порядок, без переписывания.</li>
+      <li><b>Что по-прежнему не делаю:</b> тёмную тему приложения, выдуманные данные, «скоро» без фактов, контент-блоки, которые некому вести.</li>
     </ul>
   </footer>
 
