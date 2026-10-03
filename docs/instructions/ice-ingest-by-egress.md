@@ -54,6 +54,20 @@
    Появятся `.local/tinyproxy-by.conf`, пароль в `.local/by-egress-proxy.env` (в git не
    попадает) и строка `BY_EGRESS_PROXY_URL=...` в `.env`.
 
+## Полный прогон на прод (СДЮШОР + конькобежный + ремонт арен)
+
+После деплоя `master` с repair-скриптами:
+
+```bash
+export DATABASE_URL='<Railway → Postgres → Connect → Public URL, asyncpg>'
+bash scripts/local_by_egress_proxy.sh start   # отдельный терминал
+bash scripts/prod_minsk_ice_rollout.sh
+```
+
+Скрипт по порядку: `repair_minsk_ledlife_arena_row` → `repair_minskarena_hockey_mk_target` → `seed_ice_parser_jobs` → `local_by_egress_proxy.sh ingest`.
+
+Только БД без ingest: `bash scripts/prod_minsk_ice_rollout.sh --skip-ingest`.
+
 ## Каждый запуск ingest
 
 ### Терминал 1 — прокси (держать открытым)
