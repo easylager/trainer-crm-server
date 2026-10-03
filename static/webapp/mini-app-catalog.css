@@ -2493,6 +2493,10 @@
       gap: 12px;
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
+    /* Без emoji в заголовке — не сдвигаем «Выберите время» относительно контекста и списка. */
+    #screenSlotPick .step-title {
+      margin-left: 0;
+    }
     /* Чьи слоты и где — строка под заголовком «Выберите время». */
     .slot-pick-context {
       margin: -4px 0 14px;
