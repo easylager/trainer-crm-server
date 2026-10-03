@@ -318,11 +318,13 @@
    */
   function renderArenaCard(item) {
     var v = M.boardCardView(item, undefined, { window: state.window });
+    /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
+       с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
       ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
-        esc(v.initial) +
+        esc(v.venueIcon || v.initial) +
         '</span>';
     var scrim =
       '<span class="ice-board__scrim">' +
@@ -932,6 +934,14 @@
     var box = $('iceServiceChips');
     if (!box) return;
     if (state.intent !== 'coach') {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    /* TASK-148 (AC-1): чип рендерится только при данных. Услуги уже отфильтрованы
+       по trainer_count > 0 (loadServices); пустой список = в городе нет тренеров,
+       и лента «Все» из одного чипа — обещание без наполнения. */
+    if (!state.services.length) {
       box.hidden = true;
       box.innerHTML = '';
       return;

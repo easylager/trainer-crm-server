@@ -153,6 +153,13 @@
   --app-venue-gym: #D9822B;
   --app-venue-shop: #7A5AF5;
   --app-venue-pool: #2A7FD4;
+  /*
+   * TASK-148. Продолжение рейки типов места (DEC-006 → каталог v4):
+   * тренер — тёмный тил, трасса/ролики — синий, сервис — графит.
+   */
+  --app-venue-trainer: #0B6E70;
+  --app-venue-track: #2A7FD4;
+  --app-venue-service: #47535E;
   /* Кнопка «Telegram» в шите «Поделиться» — фирменный цвет канала, узнаваемый с полувзгляда. */
   --app-brand-telegram: #229ED9;
   --app-brand-telegram-on: #FFFFFF;
