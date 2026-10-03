@@ -156,6 +156,21 @@
       </div>
     </div>
 
+    <!--
+      TASK-148 (AC-3): «Подборки» — живые фильтры-пресеты поверх данных каталога.
+      Монтируется только при данных: карточка при счётчике > 0, секция при >= 2
+      карточках. Размещена после существующих блоков и не участвует в переносе
+      зоны льда (placeIceZone) — порядок первого экрана не меняется.
+    -->
+    <section id="hubCollections" class="hub-collections" hidden aria-label="Подборки"></section>
+
+    <!--
+      TASK-148 (AC-4): «Сегодня на льду» — ближайшие сеансы из live-данных тизера
+      (ice_teaser.sessions). Дополняет ice teaser, не заменяя его: нет сеансов —
+      блока нет.
+    -->
+    <section id="hubIceToday" class="hub-ice-today" hidden aria-label="Сегодня на льду"></section>
+
     <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
       <p class="hub-footer-aside__kicker">Наше комьюнити</p>
       <div class="hub-footnote hub-footnote--collapsible" id="hubFootnote">
@@ -212,6 +227,8 @@
 
   <script src="ru-text.js?v=202609287"></script>
   <script src="ice-teaser-model.js?v=202610023"></script>
+  <script src="hub-collections-model.js?v=202610028"></script>
+  <script src="hub-ice-today-model.js?v=202610028"></script>
   <script src="catalog-geo-model.js?v=202609287"></script>
   <script defer src="client-home-main.js?v=202610028"></script>
 </body>

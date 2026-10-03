@@ -195,6 +195,101 @@
       }
 
       /**
+       * TASK-148 (AC-4). Блок «Сегодня на льду» — дополняет ice teaser, не заменяя
+       * его: строки строятся из ice_teaser.sessions (те же live-данные, что и
+       * тизер, никаких новых запросов). Тизерный сеанс из строк исключается,
+       * начавшиеся — пропускаются. Нет сеансов — блока нет.
+       */
+      function renderIceTodaySessions(teaser) {
+        var section = document.getElementById('hubIceToday');
+        if (!section) return;
+        var model = window.HubIceTodayModel;
+        var rows = model ? model.rowsFromTeaser(teaser, new Date()) : [];
+        if (!rows.length) {
+          section.hidden = true;
+          section.innerHTML = '';
+          return;
+        }
+        var cityId = teaser && teaser.city_id != null ? String(teaser.city_id) : '';
+        var catalogHref = cityId ? 'ice?city_id=' + esc(cityId) : 'ice';
+        section.hidden = false;
+        section.innerHTML =
+          '<div class="hub-sec-head">' +
+            '<p class="hub-kicker">Сегодня на льду</p>' +
+            '<a class="hub-sec-link" href="' + esc(catalogHref) + '">Все сеансы</a>' +
+          '</div>' +
+          '<div class="hub-ice-today__card">' + model.renderRowsHtml(rows) + '</div>';
+        wireHubSectionLinks(section);
+      }
+
+      /**
+       * TASK-148 (AC-3). Секция «Подборки»: шесть пресетов-фильтров, каждый —
+       * карточка со счётчиком и ссылкой в каталог. Счётчики — из публичных
+       * запросов, которые уже существуют (фасеты типов и window.hits ленты
+       * /api/public/ice/arenas); новых эндпоинтов нет. Любой сбой запроса —
+       * секция не рендерится (что без данных — то не рендерится).
+       */
+      function renderHubCollections(cityId) {
+        var section = document.getElementById('hubCollections');
+        if (!section) return Promise.resolve();
+        var model = window.HubCollectionsModel;
+        if (!model || !cityId) {
+          section.hidden = true;
+          section.innerHTML = '';
+          return Promise.resolve();
+        }
+        var base =
+          '/api/public/ice/arenas?intent=skate&city_id=' + encodeURIComponent(String(cityId));
+        var fetchJson = function (url) {
+          return fetch(url, { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; });
+        };
+        return Promise.all([
+          fetchJson(base + '&limit=1'),
+          fetchJson(base + '&venue_type=ice,outdoor&when=today_evening&limit=1'),
+          fetchJson(base + '&venue_type=outdoor&limit=1'),
+        ]).then(function (parts) {
+          var facets = (parts[0] && parts[0].venue_type_facets) || [];
+          var evening = parts[1] && parts[1].window ? Number(parts[1].window.hits) || 0 : null;
+          var outdoorLive = ((parts[2] && parts[2].items) || []).some(function (i) {
+            return i && i.live && String(i.live.kind) === 'session';
+          });
+          var pods = model.buildPods(
+            { facets: facets, eveningHits: evening, outdoorLive: outdoorLive },
+            String(cityId)
+          );
+          if (!model.sectionVisible(pods)) {
+            section.hidden = true;
+            section.innerHTML = '';
+            return;
+          }
+          var catalogHref = 'ice?city_id=' + esc(String(cityId));
+          section.hidden = false;
+          section.innerHTML =
+            '<div class="hub-sec-head">' +
+              '<p class="hub-kicker">Подборки</p>' +
+              '<a class="hub-sec-link" href="' + catalogHref + '">Весь каталог</a>' +
+            '</div>' +
+            '<div class="hub-pods">' + model.renderPodsHtml(pods) + '</div>';
+          wireHubSectionLinks(section);
+        });
+      }
+
+      function wireHubSectionLinks(section) {
+        if (!section) return;
+        var nodes = section.querySelectorAll('a[href]');
+        Array.prototype.forEach.call(nodes, function (link) {
+          link.addEventListener('click', function (ev) {
+            var href = link.getAttribute('href');
+            if (!href) return;
+            ev.preventDefault();
+            navigateTo(href);
+          });
+        });
+      }
+
+      /**
        * Порядок первого экрана. Intent Engine не переписан: он по-прежнему
        * решает, что главное. Меняется только место зоны льда — у клиента с
        * основным тренером его панель важнее городского катания, поэтому лёд
@@ -1683,10 +1778,14 @@
         var cs = (hubMeta && hubMeta.client_session) || {};
         var iceTeaser = hubMeta && hubMeta.ice_teaser;
         renderIceTeaser(iceTeaser);
+        /* TASK-148 (AC-4): блок «Сегодня на льду» — из тех же live-данных тизера. */
+        renderIceTodaySessions(iceTeaser);
         teaserArenaId = iceTeaser && iceTeaser.arena_id != null ? Number(iceTeaser.arena_id) : null;
         discoveryCityId =
           (cs.city_id != null && cs.city_id !== '' ? Number(cs.city_id) : null) ||
           (iceTeaser && !iceTeaser.is_country_fallback && iceTeaser.city_id ? Number(iceTeaser.city_id) : null);
+        /* TASK-148 (AC-3): «Подборки» — монтируется по данным, после существующих блоков. */
+        renderHubCollections(discoveryCityId);
         // far_confirmed means IP-country (src/shared/ip_geo.py) already told us this visitor
         // is outside every served market — the honest card is already showing, GPS would
         // only ask for a permission we don't need.
@@ -1821,6 +1920,8 @@
           clearNextBookingBlock();
           // Без initData данных нет, но поиск обязан остаться доступным.
           renderIceTeaser(null);
+          renderIceTodaySessions(null);
+          renderHubCollections(null);
           renderStreakRibbon(null);
           return loadAndRenderDiscovery().then(finishHubInitialLoading, finishHubInitialLoading);
         }
@@ -1873,6 +1974,8 @@
             clearNextBookingBlock();
             hideMyTrainerBlock();
             hideUpcomingSection();
+            renderIceTodaySessions(null);
+            renderHubCollections(null);
             renderStreakRibbon(null);
             hubPrimaryTrainerCanBook = false;
             syncClientHubBookFab();

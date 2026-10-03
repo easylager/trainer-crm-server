@@ -1061,6 +1061,10 @@ async def get_hub_ice_teaser(
     if city_id is not None:
         params["city_id"] = int(city_id)
         city_filter = "  AND a.city_id = :city_id\n"
+    # TASK-148 (AC-4): «Сегодня на льду» — вместе с тизером отдаём до 4 ближайших
+    # сеансов (тизер — первый), чтобы хаб рисовал блок без нового эндпоинта и без
+    # второго раунд-трипа. Раньше был LATERAL LIMIT 1 по аренам + внешний LIMIT 1:
+    # теперь те же фильтры, но по сеансам и с лимитом 4.
     sql = f"""
 SELECT
     a.id AS arena_id,
@@ -1071,36 +1075,33 @@ SELECT
     c.name AS city_name,
     a.latitude AS arena_latitude,
     a.longitude AS arena_longitude,
-    nxt.kind,
-    nxt.starts_at_utc,
-    nxt.local_date,
-    nxt.starts_at_local,
-    nxt.price_adult_minor,
-    nxt.currency_code
-FROM arenas a
+    a.venue_type AS venue_type,
+    s.id AS session_id,
+    s.kind,
+    s.starts_at_utc,
+    s.local_date,
+    s.starts_at_local,
+    s.price_adult_minor,
+    s.currency_code
+FROM ice_sessions s
+JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
-JOIN LATERAL (
-    SELECT s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.currency_code
-    FROM ice_sessions s
-    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
-    ORDER BY s.starts_at_utc
-    LIMIT 1
-) nxt ON true
-WHERE a.is_active AND a.is_confirmed
+WHERE {_CURRENT_SESSION_SQL}
+  AND a.is_active AND a.is_confirmed
   AND c.country = ANY(:ice_countries)
 {city_filter}  AND (p.status IS NULL OR p.status = :published)
   AND (a.created_by_trainer_id IS NULL OR EXISTS (
       SELECT 1 FROM media m
       WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
   ))
-ORDER BY nxt.starts_at_utc, a.id
-LIMIT 1
+ORDER BY s.starts_at_utc, a.id
+LIMIT 4
 """
-    row = (await session.execute(text(sql), params)).mappings().first()
-    if not row:
+    rows = (await session.execute(text(sql), params)).mappings().all()
+    if not rows:
         return None
+    row = rows[0]
     local_date = row["local_date"]
     starts_utc = row["starts_at_utc"]
     media_holder: dict[str, Any] = {"id": int(row["arena_id"])}
@@ -1119,6 +1120,30 @@ LIMIT 1
         if alat is not None and alon is not None:
             nlat, nlon = near
             distance_km = haversine_km(nlat, nlon, float(alat), float(alon))
+    sessions = [
+        {
+            "session_id": int(r["session_id"]),
+            "arena_id": int(r["arena_id"]),
+            "arena_slug": r["arena_slug"],
+            "arena_name": r["arena_name"],
+            "venue_type": normalize_venue_type(r["venue_type"]),
+            "kind": r["kind"],
+            "starts_at_utc": (
+                r["starts_at_utc"].isoformat()
+                if hasattr(r["starts_at_utc"], "isoformat")
+                else str(r["starts_at_utc"])
+            ),
+            "local_date": (
+                r["local_date"].isoformat()
+                if hasattr(r["local_date"], "isoformat")
+                else str(r["local_date"])
+            ),
+            "starts_at_local": _hhmm(r["starts_at_local"]),
+            "price_adult_minor": r["price_adult_minor"],
+            "currency_code": r["currency_code"],
+        }
+        for r in rows
+    ]
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
@@ -1135,6 +1160,10 @@ LIMIT 1
         "thumb": thumb,
         "card": card,
         "distance_km": distance_km,
+        # TASK-148 (AC-4): id сеанса тизера + ближайшие сеансы (включая тизерный),
+        # чтобы блок «Сегодня на льду» строил свои 2–3 строки из тех же live-данных.
+        "session_id": int(row["session_id"]),
+        "sessions": sessions,
         # True when the caller passed no client city_id at all (country-wide fallback,
         # not a real match) — the frontend uses this to decide whether it's worth asking
         # for geolocation to refine an honest distance (see GET /client/hub/ice-teaser).
