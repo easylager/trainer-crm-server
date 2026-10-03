@@ -25,7 +25,7 @@ def test_real_partner_file_parses_and_names_only_stated_services() -> None:
     city, records, rinks = parse_shops_file(REPO / "data" / "catalog" / "shops-minsk.json")
     assert city == "Минск"
     assert len(records) == 13
-    assert sum(1 for r in records if r.photo) == 12  # у Sport-Ice в парке Горького фото нет
+    assert sum(1 for r in records if r.photo) == 13
     # Часы у магазина обязательны; единственный долг — явный и с причиной.
     assert [r.key for r in records if r.hours is None] == ["hockey-service"]
     assert "228-57-70" in by_key_pending(records)["hockey-service"]

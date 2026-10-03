@@ -24,6 +24,7 @@
 | `epics/` | Полное описание крупной линии работ |
 | `reviews/` | Аудит существующего поведения по подсистемам |
 | `ops/` | Как эксплуатировать и восстанавливать |
+| `instructions/` | Короткие runbook’и «сделай руками по шагам» |
 | `agents/` | Системные промпты ревьюеров и агентов |
 | `release-comms/` | Что говорим пользователям на релизе |
 | `archive/` | Устаревшее, но удалять жалко |
@@ -113,6 +114,7 @@
 | [DISASTER_RECOVERY.md](ops/DISASTER_RECOVERY.md) | Восстановление после аварии |
 | [onboard-collective-formats.md](ops/onboard-collective-formats.md) | Runbook подключения коллектива |
 | [ice-freshness-and-alerts.md](ops/ice-freshness-and-alerts.md) | Лёд: как часто опрашиваем катки, флаг `schedule_stale` в API, алерты в админ-бот, отчёт о полноте каталога |
+| [ice-ingest-by-egress.md](instructions/ice-ingest-by-egress.md) | Ingest СДЮШОР/Юность с ноутбука в РБ: tinyproxy, Railway `DATABASE_URL`, как часто гонять |
 | [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
