@@ -158,7 +158,9 @@ async def clear_pending_request_id(telegram_id: int, session: AsyncSession) -> N
         return
     payload = dict(row.get("payload") or {})
     payload.pop("pending_request_id", None)
-    await repo.upsert(telegram_id, payload=payload if payload else None)
+    # {} is falsy. Passing None tells upsert to leave payload untouched, so a
+    # flag that was the only key would survive the clear.
+    await repo.upsert(telegram_id, payload=payload)
     await session.commit()
 
 
@@ -196,5 +198,8 @@ async def clear_pending_referral(telegram_id: int, session: AsyncSession) -> Non
         return
     payload = dict(row.get("payload") or {})
     payload.pop("pending_referral_trainer_id", None)
-    await repo.upsert(telegram_id, payload=payload if payload else None)
+    # {} is falsy. Passing None tells upsert to leave payload untouched, so a
+    # welcome_ref flag that was the only key would survive registration and the
+    # client hub would keep showing the invite gate.
+    await repo.upsert(telegram_id, payload=payload)
     await session.commit()
