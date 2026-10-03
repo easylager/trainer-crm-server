@@ -71,6 +71,23 @@
     global.location.href = path;
   }
 
+  /* Тот же ключ, что arena-card.js: шапка рисует кадр мини-карточки, не ждущая hero. */
+  function rememberArenaHero(item) {
+    if (!item) return;
+    var url = item.card || item.thumb || '';
+    if (!url) return;
+    try {
+      sessionStorage.setItem(
+        'glideArenaHero',
+        JSON.stringify({
+          id: item.id != null ? item.id : null,
+          slug: item.slug || '',
+          url: url,
+        })
+      );
+    } catch (e) { /* private mode */ }
+  }
+
   function persist() {
     M.saveIceState(
       {
@@ -282,6 +299,8 @@
         },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
+          /* Шторка рисует thumb — его и кладём в prefetch, не card. */
+          if (item) rememberArenaHero({ id: item.id, slug: item.slug, card: '', thumb: item.thumb || item.card });
           if (href) shellNav(href);
         },
         onNearList: function (data) {
@@ -1384,6 +1403,14 @@
     }
     if (href) {
       markHeroForTransition(card);
+      var m = /[?&]ref=([^&]+)/.exec(href);
+      var ref = m ? decodeURIComponent(m[1]) : '';
+      var item = ref
+        ? state.items.filter(function (it) {
+            return String(it.id) === ref || String(it.slug || '') === ref;
+          })[0]
+        : null;
+      rememberArenaHero(item);
       shellNav(href);
     }
   }
@@ -1617,6 +1644,12 @@
         state.intent = 'skate';
         state.venueTypes = [urlVenue];
       }
+      /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
+         venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
+         окна нет — параметр молча игнорируем, как и раньше. Окно не пишется в
+         sessionStorage (см. persist), поэтому восстановление его не перетрёт. */
+      var urlWhen = M.whenFromSearch(global.location.search || '');
+      if (urlWhen && M.whenChipsVisible(state.intent, state.venueTypes)) state.when = urlWhen;
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {
         global.setTimeout(function () {

@@ -415,6 +415,12 @@ def test_hero_photo_is_used_when_published_and_skipped_otherwise() -> None:
         "/api/public/photos/arenas/1/h.jpg"
     )
     assert _hero_photo_url({"hero": {"variants": {"card": "https://cdn.example/a.jpg"}}}) == "https://cdn.example/a.jpg"
+    assert _hero_photo_url({"hero": {"variants": {"thumb": "/api/public/photos/arenas/1/t.jpg"}}}) == (
+        "/api/public/photos/arenas/1/t.jpg"
+    )
+    assert _hero_photo_url(
+        {"hero": {"variants": {"hero": "/h.jpg", "card": "/c.jpg", "thumb": "/t.jpg"}}}
+    ) == "/c.jpg"
     assert _hero_photo_url({"hero": {"variants": {"hero": "javascript:alert(1)"}}}) is None
     assert _hero_photo_url({"hero": None}) is None
 

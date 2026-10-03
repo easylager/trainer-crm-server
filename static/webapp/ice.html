@@ -17,14 +17,14 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610051" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610054" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
   <script src="mini-app-client-shell.js?v=202610027"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
   <script src="ice-tab-model.js?v=202610051"></script>
   <script src="mini-app-share-sheet.js?v=202610027"></script>
-  <script src="ice-map-model.js?v=202610041"></script>
+  <script src="ice-map-model.js?v=202610052"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -86,6 +86,11 @@
       <div class="ice-chips ice-chips--venue" id="iceVenueChips" hidden role="group" aria-label="Тип площадки"></div>
       <!-- TASK-146 (Q-006): когда. По умолчанию сервер сам выбирает окно по дню и часу. -->
       <div class="ice-chips ice-chips--when" id="iceWhenChips" hidden role="group" aria-label="Когда"></div>
+      <!--
+        TASK-147 (макет 02): легенда типов мест под чипами окна. Живёт только в режиме карты
+        (CSS), наполняет ice-map.js из текущей выдачи; типов меньше двух — блока нет.
+      -->
+      <div class="ice-map-legend" id="iceMapLegend" hidden role="group" aria-label="Типы мест на карте"></div>
       <!--
         TASK-103: карта вернулась, но переключатель сюда — нет.
         Сегмент «Список / Карта» стоял здесь и стоил ~46px над сгибом; это и было
@@ -174,7 +179,7 @@
   </button>
 
   <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-map.js?v=202610051"></script>
-  <script src="ice-tab.js?v=202610051"></script>
+  <script src="ice-map.js?v=202610054"></script>
+  <script src="ice-tab.js?v=202610055"></script>
 </body>
 </html>

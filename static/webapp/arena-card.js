@@ -158,23 +158,81 @@
     return '?';
   }
 
+  var HERO_PREFETCH_KEY = 'glideArenaHero';
+
+  function readHeroPrefetch() {
+    try {
+      var raw = sessionStorage.getItem(HERO_PREFETCH_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applyPrefetchHero(ref) {
+    var rec = readHeroPrefetch();
+    if (!M.heroPrefetchMatches(rec, ref)) return;
+    var boot = document.getElementById('arenaBoot');
+    if (!boot) return;
+    boot.classList.add('arena-hero--photo');
+    boot.style.backgroundImage = "url('" + String(rec.url).replace(/'/g, '%27') + "')";
+  }
+
+  function bindHeroFallbacks(scope) {
+    var img = scope && scope.querySelector('.arena-hero__img');
+    if (!img || img.__heroBound) return;
+    img.__heroBound = true;
+    img.addEventListener('error', function () {
+      var rest = String(img.getAttribute('data-fallbacks') || '')
+        .split('\n')
+        .filter(Boolean);
+      if (!rest.length) {
+        var box = img.closest('.arena-hero');
+        if (box) {
+          box.classList.remove('arena-hero--photo');
+          box.classList.add('arena-hero--placeholder');
+        }
+        img.remove();
+        return;
+      }
+      img.setAttribute('data-fallbacks', rest.slice(1).join('\n'));
+      img.src = rest[0];
+    });
+  }
+
+  function prefetchUrlFor(card) {
+    var rec = readHeroPrefetch();
+    if (!card || !rec) return '';
+    if (M.heroPrefetchMatches(rec, card.id) || M.heroPrefetchMatches(rec, card.slug)) {
+      return rec.url;
+    }
+    return '';
+  }
+
   function renderHero() {
     var card = state.card;
-    var hero = M.heroView(card);
+    var hero = M.heroView(card, prefetchUrlFor(card));
     var url = hero.url;
+    var rest = (hero.urls || []).slice(1);
     var gallery = card.gallery || [];
     var n = gallery.length || (hero.mode === 'photo' ? 1 : 0);
     var cls = 'arena-hero' + (hero.mode === 'photo' ? ' arena-hero--photo' : ' arena-hero--placeholder');
-    var style = url ? ' style="background-image:url(\'' + esc(url).replace(/'/g, '%27') + '\')"' : '';
     var galleryHtml = n === 1
       ? '<span class="arena-hero__gallery">Фото</span>'
+      : '';
+    var imgHtml = url
+      ? '<img class="arena-hero__img" alt="" src="' +
+        esc(url) +
+        '"' +
+        (rest.length ? ' data-fallbacks="' + esc(rest.join('\n')) + '"' : '') +
+        '>'
       : '';
     return (
       '<div class="' +
       cls +
-      '"' +
-      style +
-      '>' +
+      '">' +
+      imgHtml +
       (hero.mode === 'photo' ? '<span class="arena-hero__shade"></span>' : '<span class="arena-hero__glare"></span>') +
       '<span class="arena-hero__txt">' +
       '<h1>' +
@@ -610,6 +668,7 @@
       renderGroups() +
       renderInfo() +
       renderFreshness();
+    bindHeroFallbacks(root);
   }
 
   function capitalize(text) {
@@ -794,6 +853,7 @@
       showError('Не указана арена. Откройте карточку по ссылке из каталога или бота.');
       return;
     }
+    applyPrefetchHero(state.ref);
     var base = '/api/public/arenas/' + encodeURIComponent(state.ref);
     var today = todayIso();
     var to = addDaysIso(today, 13);

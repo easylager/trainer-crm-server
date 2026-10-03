@@ -144,6 +144,10 @@
     var stageEl = opts.stageEl;
     var loaderEl = opts.loaderEl;
     var attribEl = opts.attribEl;
+    /* TASK-147: легенда типов под чипами окна. ice-tab.js опцию не передаёт —
+       берём узел из разметки по id. */
+    var legendEl = opts.legendEl || (global.document && global.document.getElementById('iceMapLegend'));
+    var stageOn = false;      // сцена карты показана: без неё легенде нечего объяснять
     var listItems = [];
     var mapItems = [];
     var selected = null;
@@ -216,9 +220,34 @@
     }
 
     function showStage(on) {
+      stageOn = !!on;
       if (stageEl) stageEl.hidden = !on;
       if (nearBtn) nearBtn.hidden = !on;
       setLoading(false);
+      paintLegend();
+    }
+
+    /* Легенда: типы мест из текущей выдачи карты (те же места, что пины).
+       Меньше двух типов или нет сцены — блока нет вообще. Цвет точки задаёт
+       CSS по ключу типа (токены --app-venue-*), здесь только разметка. */
+    function paintLegend() {
+      if (!legendEl) return;
+      var view = stageOn ? MM.legendView(mapItems) : { show: false, entries: [] };
+      if (!view.show) {
+        legendEl.hidden = true;
+        legendEl.innerHTML = '';
+        return;
+      }
+      legendEl.innerHTML = view.entries
+        .map(function (e) {
+          return (
+            '<span class="ice-map-legend__item ice-map-legend__item--' + esc(e.key) + '">' +
+            '<i class="ice-map-legend__dot" aria-hidden="true"></i>' + esc(e.label) +
+            '</span>'
+          );
+        })
+        .join('');
+      legendEl.hidden = false;
     }
 
     function setOffMapNote() {
@@ -275,11 +304,13 @@
       syncChromeBottom();
     }
 
-    /* FAB «Где я» и копирайт едут вместе со шторкой. */
+    /* FAB «Где я» и копирайт едут вместе со шторкой. FAB лежит внутри сцены (она уже
+       поднята над таб-баром), а копирайт — fixed от низа окна, как и шторка, поэтому ему
+       нужен тот же отступ таб-бара. Без него копирайт оказывался ПОД шторкой (TASK-147). */
     function syncChromeBottom() {
       var h = sheetVisiblePx();
       if (nearBtn) nearBtn.style.bottom = (h + 12) + 'px';
-      if (attribEl) attribEl.style.bottom = (h + 8) + 'px';
+      if (attribEl) attribEl.style.bottom = 'calc(var(--client-shell-tab-inset, 80px) + ' + (h + 8) + 'px)';
     }
 
     function showSheet(on) {
@@ -416,7 +447,9 @@
       setPinSelection(item);
       if (sheetEl && sheetEl.hidden) showSheet(true);
       applyRailSelection();
-      if (snap === 'peek') setSnap('half');
+      /* peek→half только по жесту человека (пин / явный expand).
+         Пан и зум карты зовут defaultSheet → select без expand — шторку не трогаем. */
+      if ((o.expand || o.fromPin) && snap === 'peek') setSnap('half');
       if (o.fromPin) scrollToCard(item);
       if (o.pan) panToItem(item);
     }
@@ -521,7 +554,7 @@
       showSheet(true);
       renderSheet();
       nearestMode = !!asNearest;
-      select(item, {});
+      select(item, { expand: true });
     }
 
     /* ─── Слои карты ─── */
@@ -565,6 +598,7 @@
         return pm;
       });
       clusterer.add(marks);
+      paintLegend();
     }
 
     function showCoachEmpty() {
@@ -681,13 +715,10 @@
           },
         }
       );
-      /* Кластер с содержимым: «N · с 18:15» / «нет сеансов». Свойства считают
-         в build() по фактическим geoObjects — как в прототипе. */
+      /* Кластер — только круг с числом. Подпись («с 18:15» / «нет сеансов»)
+         жила вторым овалом и читалась как чужая метка; время — в шторке. */
       ClusterLayout = ymaps.templateLayoutFactory.createClass(
-        '<div class="ice-ycluster">' +
-          '<span class="ice-ycluster__n"></span>' +
-          '<span class="ice-ycluster__t"></span>' +
-        '</div>',
+        '<div class="ice-ycluster"></div>',
         {
           build: function () {
             ClusterLayout.superclass.build.call(this);
@@ -701,10 +732,8 @@
               if (it) items.push(it);
             });
             var s = MM.clusterSummary(items);
-            var n = root.querySelector('.ice-ycluster__n');
-            var t = root.querySelector('.ice-ycluster__t');
-            if (n) n.textContent = String(s.count);
-            if (t) t.textContent = s.label;
+            root.textContent = String(s.count);
+            root.setAttribute('aria-label', s.count + ' · ' + s.label);
             var sel = objs.some(function (o) {
               return o.properties.get('sel');
             });
@@ -747,11 +776,9 @@
         groupByCoordinates: false,
         clusterIconLayout: ClusterLayout,
         clusterIconShape: {
-          type: 'Rectangle',
-          coordinates: [
-            [-70, -18],
-            [70, 18],
-          ],
+          type: 'Circle',
+          coordinates: [0, 0],
+          radius: 18,
         },
       });
       clusterer.options.set({ hasBalloon: false, clusterOpenBalloonOnClick: false });

@@ -64,6 +64,31 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(js, /ice-ycluster--quiet/);
   });
 
+  it('пан и зум карты не поднимают свёрнутую шторку', () => {
+    const js = read('ice-map.js');
+    const fetch = js.slice(js.indexOf('function fetchViewport'), js.indexOf('function applyCityCamera'));
+    assert.match(fetch, /defaultSheet\(\)/, 'после смены viewport шторку пересобираем');
+    const selectFn = js.slice(js.indexOf('function select(item, o)'), js.indexOf('function openClusterRail'));
+    assert.match(selectFn, /o\.expand \|\| o\.fromPin/, 'peek→half только по пину или явному expand');
+    assert.doesNotMatch(selectFn, /if \(snap === 'peek'\) setSnap\('half'\)/);
+    const def = js.slice(js.indexOf('function defaultSheet()'), js.indexOf('function paintSheet'));
+    assert.doesNotMatch(def, /expand:\s*true/);
+    assert.doesNotMatch(def, /setSnap\('half'\)/);
+  });
+
+  it('кластер на карте — только круг с числом, без овальной подписи', () => {
+    const js = read('ice-map.js');
+    const css = read('ice-tab.css');
+    assert.match(js, /<div class="ice-ycluster"><\/div>/);
+    assert.doesNotMatch(js, /ice-ycluster__t/);
+    assert.doesNotMatch(js, /ice-ycluster__n/);
+    assert.match(js, /type: 'Circle'/);
+    const block = css.slice(css.indexOf('.ice-ycluster {'), css.indexOf('.ice-ycluster--quiet'));
+    assert.match(block, /border-radius:\s*50%/);
+    assert.match(block, /width:\s*36px/);
+    assert.doesNotMatch(block, /app-radius-pill/);
+  });
+
   it('zoomMargin кластера учитывает шторку и плавающий верх', () => {
     const js = read('ice-map.js');
     assert.match(js, /sheetVisiblePx\(\) \+ 24/);
@@ -121,5 +146,20 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     const js = read('ice-tab.js');
     assert.match(js, /disableVerticalSwipes/);
     assert.match(js, /enableVerticalSwipes/);
+  });
+
+  it('легенда типов (TASK-147): в hero под чипами, только режим карты, копирайт не тронут', () => {
+    const html = read('ice.html');
+    const hero = html.slice(html.indexOf('ice-sec--hero'), html.indexOf('id="iceListSec"'));
+    assert.ok(hero.indexOf('id="iceWhenChips"') < hero.indexOf('id="iceMapLegend"'), 'легенда после чипов окна');
+    assert.match(html, /id="iceMapLegend"[^>]*\shidden/, 'по умолчанию скрыта');
+    assert.match(html, /<p class="ice-map-attrib" id="iceMapAttrib">© Яндекс · <a /, 'копирайт Яндекса на месте');
+    const css = read('ice-tab.css');
+    assert.match(css, /\.ice-map-legend\s*{\s*display:\s*none/, 'вне режима карты легенды нет');
+    assert.match(css, /body\.ice-view-map \.ice-map-legend:not\(\[hidden\]\)\s*{\s*display:\s*flex/);
+    assert.match(css, /body\.ice-view-map \.ice-map-legend:not\(\[hidden\]\)[\s\S]*?pointer-events:\s*none/, 'легенда не перехватывает карту');
+    const js = read('ice-map.js');
+    assert.match(js, /MM\.legendView\(mapItems\)/, 'состав легенды — из чистой функции модели');
+    assert.match(js, /legendEl\.hidden = true/, 'нет сцены или < 2 типов — скрыта');
   });
 });

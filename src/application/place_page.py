@@ -644,7 +644,7 @@ def _hero_photo_url(card: Mapping[str, Any]) -> str | None:
     variants = hero.get("variants") if isinstance(hero, Mapping) else None
     if not isinstance(variants, Mapping):
         return None
-    url = str(variants.get("hero") or variants.get("card") or "").strip()
+    url = str(variants.get("card") or variants.get("thumb") or variants.get("hero") or "").strip()
     return url if url.lower().startswith(("https://", "http://", "/")) else None
 
 

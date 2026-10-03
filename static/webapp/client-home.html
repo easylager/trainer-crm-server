@@ -14,9 +14,9 @@
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202610024" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
   <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <link rel="preload" href="client-home-main.js?v=202610028" as="script" />
+  <link rel="preload" href="client-home-main.js?v=202610055" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202609287" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202610032" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
@@ -39,10 +39,19 @@
       скелетон живёт ВНУТРИ неё, а не под ней. Раньше переключатель профиля
       монтировался асинхронно, строка вырастала с 0 до 38px и уносила вниз весь
       экран — это давало 0.0138 CLS из измеренных 0.0218.
+
+      TASK-149 (S1). Приветствие — «{Утро|День|Вечер|Ночь}, {Имя}» + подпись из
+      фактов (город, «N катков вечером»). Подпись живёт ВНУТРИ той же строки:
+      имя + одна строка подписи укладываются в её 38px (min-height), поэтому
+      появление подписи высоту строки не меняет. Погоды и оценок («лёд держит»)
+      нет — таких данных у нас нет.
     -->
     <div class="hub-hero" id="hubHero">
       <div class="hub-hero-top">
-        <div class="hub-hero-greeting" id="hubGreeting">Рады вас видеть</div>
+        <div class="hub-hero-greeting" id="hubGreeting">
+          <span class="hub-hero-greeting__hello" id="hubGreetingHello">Рады вас видеть</span>
+          <span class="hub-hero-greeting__sub" id="hubGreetingSub" hidden></span>
+        </div>
         <div class="hub-hero-skel" aria-hidden="true">
           <div class="hub-skel-line hub-skel-line--hero-greeting hub-skel-shimmer"></div>
         </div>
@@ -73,18 +82,11 @@
         </div>
       </div>
       <div class="hub-skel-search hub-skel-shimmer"></div>
+      <!-- TASK-149: вместо карусели тренеров — сетка плиток «Куда катимся». -->
       <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
-      <div class="hub-skel-cards">
-        <div class="hub-skel-tcard">
-          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
-        </div>
-        <div class="hub-skel-tcard">
-          <div class="hub-skel-tcard__media hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
-          <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
-        </div>
+      <div class="hub-skel-tiles">
+        <div class="hub-skel-tile hub-skel-shimmer"></div>
+        <div class="hub-skel-tile hub-skel-shimmer"></div>
       </div>
     </div>
 
@@ -97,12 +99,20 @@
       тренером зона уезжает ниже панели тренера (placeIceZone в client-home-main.js):
       порядок Intent Engine не меняется, меняется только то, что показано первым.
     -->
+    <!--
+      TASK-149 (S2). ОДИН блок льда: кикер («На льду · Город» — текст отдаёт
+      IceTeaserModel, слово «сейчас» там нет: герой-сеанс по данным ещё не начался),
+      герой-тизер, 2–3 строки ближайших сеансов (#hubIceSessions, HubIceTodayModel),
+      ссылка «Весь лёд», затем поиск. Прежняя отдельная секция «Сегодня на льду» внизу
+      страницы убрана — это был второй блок с тем же смыслом.
+    -->
     <div id="hubIceZone" class="hub-ice-zone" hidden>
       <div class="hub-sec-head">
-        <p class="hub-kicker" id="hubIceKicker">Сегодня на льду</p>
+        <p class="hub-kicker" id="hubIceKicker">На льду</p>
         <a class="hub-sec-link" id="hubIceAll" href="ice">Весь лёд</a>
       </div>
       <div id="hubIceTeaser" class="hub-ice-teaser-wrap"></div>
+      <div id="hubIceSessions" class="hub-ice-today__card" hidden aria-label="Ближайшие сеансы"></div>
       <!--
         AC-003: поиск остаётся доступным, но перестаёт быть главным объектом
         первого экрана — строка вместо кнопки на 15% высоты.
@@ -119,7 +129,11 @@
     <!-- Living panel under primary trainer: nearest slots + pass remainder + history line -->
     <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
 
-    <!-- Discovery for new clients without primary trainer: real trainers carousel -->
+    <!--
+      Discovery for new clients without primary trainer: real trainers carousel.
+      TASK-149 (DEC-004): НЕ вторая навигация по рынку. Карусель показывается только
+      когда «Куда катимся» нечего показать (нет города / пустой рынок) — иначе скрыта.
+    -->
     <section id="hubDiscovery" class="hub-discovery" hidden></section>
 
     <!-- ── CONTEXTUAL QUICK PILLS (rebook only — no tab duplicates) ─── -->
@@ -157,19 +171,13 @@
     </div>
 
     <!--
-      TASK-148 (AC-3): «Подборки» — живые фильтры-пресеты поверх данных каталога.
-      Монтируется только при данных: карточка при счётчике > 0, секция при >= 2
-      карточках. Размещена после существующих блоков и не участвует в переносе
-      зоны льда (placeIceZone) — порядок первого экрана не меняется.
+      TASK-149 (S3). «Куда катимся» — ЕДИНСТВЕННАЯ навигация по рынку; заменила
+      и секцию-подборки (TASK-148), и карусель «Места и тренеры» в роли второй навигации.
+      Монтируется только при данных: плитка — при честном счётчике > 0, секция —
+      при >= 1 плитке. Стоит после персональных блоков и не участвует в переносе
+      зоны льда (placeIceZone): у своего клиента рынок ниже записи.
     -->
-    <section id="hubCollections" class="hub-collections" hidden aria-label="Подборки"></section>
-
-    <!--
-      TASK-148 (AC-4): «Сегодня на льду» — ближайшие сеансы из live-данных тизера
-      (ice_teaser.sessions). Дополняет ice teaser, не заменяя его: нет сеансов —
-      блока нет.
-    -->
-    <section id="hubIceToday" class="hub-ice-today" hidden aria-label="Сегодня на льду"></section>
+    <section id="hubExplore" class="hub-explore" hidden aria-label="Куда катимся"></section>
 
     <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
       <p class="hub-footer-aside__kicker">Наше комьюнити</p>
@@ -227,9 +235,9 @@
 
   <script src="ru-text.js?v=202609287"></script>
   <script src="ice-teaser-model.js?v=202610023"></script>
-  <script src="hub-collections-model.js?v=202610028"></script>
+  <script src="hub-collections-model.js?v=202610031"></script>
   <script src="hub-ice-today-model.js?v=202610028"></script>
   <script src="catalog-geo-model.js?v=202609287"></script>
-  <script defer src="client-home-main.js?v=202610028"></script>
+  <script defer src="client-home-main.js?v=202610055"></script>
 </body>
 </html>

@@ -306,13 +306,35 @@ describe('heroPhotoUrl', () => {
     assert.equal(heroPhotoUrl({}), null);
   });
 
-  it('prefers hero variant then card then thumb', () => {
-    const { heroPhotoUrl } = loadModel();
+  it('prefers the list card frame, then thumb, then hero', () => {
+    const { heroPhotoUrl, heroPhotoUrls } = loadModel();
     assert.equal(
       heroPhotoUrl({
         hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } },
       }),
-      '/h.jpg'
+      '/c.jpg'
+    );
+    assert.deepEqual(
+      heroPhotoUrls({
+        hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } },
+      }),
+      ['/c.jpg', '/t.jpg', '/h.jpg']
+    );
+  });
+
+  it('still shows a photo when only the thumb variant exists', () => {
+    const { heroPhotoUrl } = loadModel();
+    assert.equal(heroPhotoUrl({ hero: { variants: { thumb: '/t.jpg' } } }), '/t.jpg');
+  });
+
+  it('puts the mini-card photo first when we already showed it', () => {
+    const { heroPhotoUrls } = loadModel();
+    assert.deepEqual(
+      heroPhotoUrls(
+        { hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } } },
+        '/t.jpg'
+      ),
+      ['/t.jpg', '/c.jpg', '/h.jpg']
     );
   });
 });
@@ -332,6 +354,22 @@ describe('heroView', () => {
     });
     assert.equal(view.mode, 'photo');
     assert.equal(view.url, '/h.jpg');
+    assert.deepEqual(view.urls, ['/h.jpg']);
+  });
+
+  it('prefetch record is the list photo and matches id or slug', () => {
+    const { heroPrefetchRecord, heroPrefetchMatches } = loadModel();
+    const rec = heroPrefetchRecord({
+      id: 3,
+      slug: 'tc-zamok',
+      card: '/c.jpg',
+      thumb: '/t.jpg',
+    });
+    assert.deepEqual(rec, { id: 3, slug: 'tc-zamok', url: '/c.jpg' });
+    assert.equal(heroPrefetchMatches(rec, '3'), true);
+    assert.equal(heroPrefetchMatches(rec, 'tc-zamok'), true);
+    assert.equal(heroPrefetchMatches(rec, '9'), false);
+    assert.equal(heroPrefetchRecord({ id: 1 }), null);
   });
 });
 

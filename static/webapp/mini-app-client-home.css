@@ -56,6 +56,33 @@ body.hub-body {
   margin: 0;
 }
 
+/*
+ * TASK-149 (S1). Приветствие — две строки в той же коробке: имя + подпись из фактов.
+ * 14px × 1.3 + 2px + 12px × 1.3 ≈ 36px укладываются в min-height 38px у .hub-hero-top,
+ * поэтому появление подписи высоту строки не меняет (TASK-091/095: ни пикселя CLS).
+ * Подпись в одну строку без переноса: перенос выпихнул бы строку за зарезервированные 38px.
+ */
+.hub-hero-greeting__hello {
+  display: block;
+}
+
+.hub-hero-greeting__sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-regular);
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: var(--tg-theme-hint-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-hero-greeting__sub[hidden] {
+  display: none;
+}
+
 .hub-hero-profile-switcher {
   flex-shrink: 0;
   max-width: min(46vw, 168px);
@@ -1318,123 +1345,6 @@ body.hub-body {
   border-color: transparent;
 }
 
-/* ─── Explore grid (2-col cards) ─────────────────────────────────────── */
-
-.hub-explore-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 0 16px;
-  margin-bottom: 24px;
-}
-
-.hub-explore-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-height: 110px;
-  padding: 18px 16px 16px;
-  border-radius: var(--app-radius-lg);
-  overflow: hidden;
-  border: 1.5px solid rgba(var(--accent-rgb), 0.18);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.07);
-  background: var(--tg-theme-secondary-bg-color);
-  color: var(--tg-theme-text-color);
-  -webkit-tap-highlight-color: transparent;
-}
-
-html:not(.hub-is-dark) .hub-explore-tile {
-  background: var(--tg-theme-secondary-bg-color);
-}
-
-.hub-is-dark .hub-explore-tile {
-  background: var(--tg-theme-secondary-bg-color);
-  color: var(--glide-text);
-  border-color: rgba(var(--accent-rgb), 0.35);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-}
-
-.hub-explore-tile::after {
-  content: '';
-  position: absolute;
-  top: -25%;
-  right: -15%;
-  width: 55%;
-  height: 85%;
-  background: none;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-}
-
-.hub-explore-tile:hover {
-  transform: translateY(-3px) scale(1.015);
-  border-color: rgba(var(--accent-rgb), 0.45);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
-}
-
-.hub-is-dark .hub-explore-tile:hover { box-shadow: 0 14px 44px rgba(0, 0, 0, 0.38); }
-
-.hub-explore-tile:active { transform: translateY(-1px) scale(0.97); }
-
-.hub-explore-icon {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  margin-bottom: 10px;
-  color: var(--app-cta-fill);
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  position: relative;
-  z-index: 1;
-}
-
-.hub-is-dark .hub-explore-icon { color: var(--app-cta-fill); }
-
-.hub-explore-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-bold);
-  padding: 3px 7px;
-  border-radius: var(--app-radius-sm);
-  background: rgba(var(--accent-rgb), 0.2);
-  color: var(--app-cta-fill);
-  line-height: 1;
-  z-index: 2;
-}
-
-.hub-is-dark .hub-explore-badge { color: var(--app-cta-fill); }
-
-.hub-explore-label {
-  font-weight: var(--app-weight-bold);
-  font-size: var(--app-text-body);
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  margin-bottom: 4px;
-  position: relative;
-  z-index: 1;
-}
-
-.hub-explore-hint {
-  font-size: var(--app-text-caption);
-  line-height: 1.4;
-  opacity: 0.72;
-  position: relative;
-  z-index: 1;
-}
-
-.hub-is-dark .hub-explore-hint { color: var(--glide-hint); opacity: 1; }
-html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); opacity: 1; }
-
 /* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
 
 .hub-acq-hero {
@@ -1890,29 +1800,16 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   border-radius: var(--app-radius-md);
 }
 
-/* Коробка карточки тренера: ширина и aspect-ratio из TASK-092. */
-.hub-skel-cards {
-  display: flex;
-  gap: var(--app-space-3);
-  overflow: hidden;
-}
-
-.hub-skel-tcard {
-  flex: 0 0 auto;
-  width: 216px;
-  padding: var(--app-space-3);
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-card-bg);
-  display: flex;
-  flex-direction: column;
+/* TASK-149: вместо карусели тренеров — сетка плиток «Куда катимся» (та же геометрия, что .hub-cg). */
+.hub-skel-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--app-space-2);
-  box-sizing: border-box;
 }
 
-.hub-skel-tcard__media {
-  aspect-ratio: 4 / 5;
-  border-radius: var(--app-radius-md);
+.hub-skel-tile {
+  height: 58px;
+  border-radius: var(--app-radius-lg);
 }
 
 /* Loading-state: skeleton on, real blocks + footnote off until fully ready. */
@@ -1927,6 +1824,7 @@ body.hub-body--loading #nextBookingBlock,
 body.hub-body--loading #myTrainerBlock,
 body.hub-body--loading #hubPrimaryPanel,
 body.hub-body--loading #hubDiscovery,
+body.hub-body--loading #hubExplore,
 body.hub-body--loading #quickStrip,
 body.hub-body--loading #upcomingSection,
 body.hub-body--loading #hubStreakRibbon,
@@ -1946,6 +1844,7 @@ body.hub-body--revealed #nextBookingBlock,
 body.hub-body--revealed #myTrainerBlock,
 body.hub-body--revealed #hubPrimaryPanel,
 body.hub-body--revealed #hubDiscovery,
+body.hub-body--revealed #hubExplore,
 body.hub-body--revealed #quickStrip,
 body.hub-body--revealed #upcomingSection,
 body.hub-body--revealed #hubStreakRibbon,
@@ -1959,6 +1858,7 @@ body.hub-body--revealed #hubPrimaryPanel      { animation-delay: 0.06s; }
 body.hub-body--revealed #nextBookingBlock    { animation-delay: 0.02s; }
 body.hub-body--revealed #upcomingSection     { animation-delay: 0.1s; }
 body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
+body.hub-body--revealed #hubExplore          { animation-delay: 0.12s; }
 
 @media (prefers-reduced-motion: reduce) {
   body.hub-body--revealed .hub-hero-greeting,
@@ -1967,6 +1867,7 @@ body.hub-body--revealed #hubDiscovery        { animation-delay: 0.08s; }
   body.hub-body--revealed #myTrainerBlock,
   body.hub-body--revealed #hubPrimaryPanel,
   body.hub-body--revealed #hubDiscovery,
+  body.hub-body--revealed #hubExplore,
   body.hub-body--revealed #quickStrip,
   body.hub-body--revealed #upcomingSection,
   body.hub-body--revealed #hubStreakRibbon,
@@ -2370,153 +2271,146 @@ a.hub-ice-card {
   flex: 0 0 auto;
 }
 
-/* ─── TASK-148 (AC-3): «Подборки» — пресеты-фильтры поверх данных каталога ─── */
+/* ─── TASK-149 (S3): «Куда катимся» — одна навигация по рынку ─── */
+/* Светлые плитки: иконка типа на цветной плашке (--app-venue-*), название,
+ * живой счётчик, строка ценности, шеврон. Сетка 2 колонки; при нечётном числе
+ * плиток первая (--wide) занимает всю ширину. Новых цветов нет — только токены. */
 
-.hub-collections {
-  margin: 0 0 20px;
+.hub-explore {
+  margin: 0 16px 20px;
   padding: 0;
 }
 
-.hub-collections[hidden] {
+.hub-explore[hidden] {
   display: none !important;
   margin: 0;
 }
 
-.hub-collections .hub-sec-head,
-.hub-ice-today .hub-sec-head {
-  padding: 0 16px;
-  margin-bottom: 10px;
-}
-
-.hub-pods {
+.hub-explore__head {
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  scroll-snap-type: x mandatory;
-  padding: 4px 16px;
-  scroll-padding-inline: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-2);
 }
 
-.hub-pods::-webkit-scrollbar {
-  display: none;
-}
-
-.hub-pod {
-  flex: 0 0 118px;
-  width: 118px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  text-decoration: none;
-  color: inherit;
-  border: 1px solid var(--app-card-line);
-  border-radius: var(--app-radius-md);
-  background: var(--app-card-bg);
-  box-shadow: var(--app-card-shadow);
-  scroll-snap-align: start;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-pod:active {
-  opacity: 0.8;
-}
-
-/* Арт-плашка типа места: градиенты только из role-токенов бренда и типов
- * (AURORA-токены на рабочих экранах запрещены гейтом G-P1). */
-.hub-pod__art {
-  display: block;
-  width: 100%;
-  height: 52px;
-  position: relative;
-  overflow: hidden;
-}
-
-.hub-pod__art::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    102deg,
-    rgba(255, 255, 255, 0.06) 0 2px,
-    transparent 2px 24px
-  );
-}
-
-.hub-pod__art--evening {
-  background:
-    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 58%),
-    linear-gradient(170deg, var(--glide-deep), var(--glide-on-fill));
-}
-
-.hub-pod__art--ice {
-  background:
-    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
-    linear-gradient(165deg, var(--glide-brand), var(--glide-brand-pressed));
-}
-
-.hub-pod__art--outdoor {
-  background:
-    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--glide-brand) 32%, var(--glide-card)),
-      var(--glide-brand)
-    );
-}
-
-.hub-pod__art--shop {
-  background:
-    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
-    linear-gradient(
-      165deg,
-      var(--app-venue-shop),
-      color-mix(in srgb, var(--app-venue-shop) 55%, var(--glide-deep))
-    );
-}
-
-.hub-pod__body {
-  display: block;
-  padding: 8px 9px 10px;
-}
-
-.hub-pod__title {
-  display: block;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1.3;
+.hub-explore__title {
+  margin: 0;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
   color: var(--tg-theme-text-color);
 }
 
-.hub-pod__sub {
-  display: block;
-  margin-top: 3px;
+.hub-cg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-2);
+}
+
+.hub-cg__tile {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px var(--app-space-3);
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-cg__tile:active {
+  opacity: 0.8;
+}
+
+.hub-cg__tile--wide {
+  grid-column: 1 / -1;
+}
+
+.hub-cg__ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--app-radius-md);
+  color: var(--app-on-media);
+}
+
+.hub-cg__ic--ice {
+  background: var(--app-venue-ice);
+}
+
+.hub-cg__ic--trainer {
+  background: var(--app-venue-trainer);
+}
+
+.hub-cg__ic--shop {
+  background: var(--app-venue-shop);
+}
+
+.hub-cg__svg {
+  width: var(--app-icon-sm);
+  height: var(--app-icon-sm);
+}
+
+.hub-cg__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.hub-cg__name {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.25;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-cg__cnt {
+  margin-left: 2px;
   font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
+  font-weight: var(--app-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glide-ink-teal);
+}
+
+.hub-cg__sub {
+  font-size: var(--app-text-caption);
+  line-height: 1.3;
   color: var(--tg-theme-hint-color);
 }
 
-/* ─── TASK-148 (AC-4): «Сегодня на льду» — ближайшие сеансы ─── */
-
-.hub-ice-today {
-  margin: 0 0 20px;
-  padding: 0;
+.hub-cg__chev {
+  flex: none;
+  font-size: var(--app-text-body);
+  line-height: 1;
+  color: var(--tg-theme-hint-color);
 }
 
-.hub-ice-today[hidden] {
-  display: none !important;
-  margin: 0;
-}
+/* ─── TASK-148 (AC-4) → TASK-149 (S2): строки ближайших сеансов внутри блока льда ─── */
 
+/* Карточка строк живёт в .hub-ice-zone (у зоны уже есть горизонтальные поля 16px и gap 12px),
+ * поэтому собственных полей нет; отрицательный отступ придвигает её к герою (8px вместо 12px):
+ * строки — продолжение героя, а не третий блок. */
 .hub-ice-today__card {
-  margin: 0 16px;
+  margin: calc(var(--app-space-2) - var(--app-space-3)) 0 0;
   background: var(--app-card-bg);
   border: 1px solid var(--app-card-line);
   border-radius: var(--app-radius-lg);
   box-shadow: var(--app-card-shadow);
   overflow: hidden;
+}
+
+.hub-ice-today__card[hidden] {
+  display: none;
 }
 
 .hub-ice-today__row {

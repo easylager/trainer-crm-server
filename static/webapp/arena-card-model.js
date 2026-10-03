@@ -451,17 +451,64 @@
     return out;
   }
 
-  function heroPhotoUrl(card) {
-    card = card || {};
-    var hero = card.hero;
-    if (!hero || !hero.variants) return null;
-    var v = hero.variants;
-    return v.hero || v.card || v.thumb || null;
+  function isPublicPhotoUrl(url) {
+    var u = String(url || '').trim();
+    if (!u) return false;
+    var low = u.toLowerCase();
+    if (low.indexOf('javascript:') === 0 || low.indexOf('data:') === 0) return false;
+    return low.charAt(0) === '/' || low.indexOf('https://') === 0 || low.indexOf('http://') === 0;
   }
 
-  function heroView(card) {
-    var url = heroPhotoUrl(card);
-    return { mode: url ? 'photo' : 'placeholder', url: url };
+  function heroPhotoUrls(card, preferUrl) {
+    /* Карточка списка уже показала card/thumb — тот кадр в кэше. hero (1600px)
+       часто 404, и шапка остаётся пустой при живой мини-карточке. */
+    card = card || {};
+    var hero = card.hero;
+    var v = hero && hero.variants ? hero.variants : {};
+    var out = [];
+    var seen = {};
+    [v.card, v.thumb, v.hero].forEach(function (raw) {
+      if (!isPublicPhotoUrl(raw) || seen[raw]) return;
+      seen[raw] = true;
+      out.push(raw);
+    });
+    if (isPublicPhotoUrl(preferUrl)) {
+      out = [preferUrl].concat(out.filter(function (u) { return u !== preferUrl; }));
+    }
+    return out;
+  }
+
+  function heroPhotoUrl(card, preferUrl) {
+    var urls = heroPhotoUrls(card, preferUrl);
+    return urls.length ? urls[0] : null;
+  }
+
+  function heroView(card, preferUrl) {
+    var urls = heroPhotoUrls(card, preferUrl);
+    return {
+      mode: urls.length ? 'photo' : 'placeholder',
+      url: urls.length ? urls[0] : null,
+      urls: urls,
+    };
+  }
+
+  function heroPrefetchRecord(item) {
+    if (!item) return null;
+    var url = item.card || item.thumb || '';
+    if (!isPublicPhotoUrl(url)) return null;
+    return {
+      id: item.id != null ? item.id : null,
+      slug: item.slug || item.arena_slug || '',
+      url: url,
+    };
+  }
+
+  function heroPrefetchMatches(record, ref) {
+    if (!record || !isPublicPhotoUrl(record.url) || ref == null || ref === '') return false;
+    var r = String(ref);
+    if (record.id != null && String(record.id) === r) return true;
+    if (record.slug && String(record.slug) === r) return true;
+    return false;
   }
 
   function ribbonLegend() {
@@ -839,6 +886,9 @@
     buildRibbonForDay: buildRibbonForDay,
     buildWeekSummaries: buildWeekSummaries,
     heroPhotoUrl: heroPhotoUrl,
+    heroPhotoUrls: heroPhotoUrls,
+    heroPrefetchRecord: heroPrefetchRecord,
+    heroPrefetchMatches: heroPrefetchMatches,
     heroView: heroView,
     ribbonLegend: ribbonLegend,
     trainerCta: trainerCta,

@@ -354,6 +354,73 @@
     });
   }
 
+  /*
+   * TASK-147 (хвост к макету 02): тип места = цвет пина и точка легенды.
+   * Ключи и подписи — словарь сервера (src/shared/venue_types.py); подпись
+   * с сервера (item.venue_chip) важнее, таблица — запас для старого ответа API.
+   * Цвета — только токены theme.css: новых hex нет. Улица (outdoor) — это ЛЁД
+   * (SKATING_VENUE_TYPES на сервере: «уличный каток — тоже лёд»), поэтому цвет льда,
+   * а в легенде она сводится с льдом в одну запись «Лёд»: две одинаковые точки
+   * ничего не объясняют. Хореозал делит цвет с залом, «другое» — графит.
+   * «Трассы» отдельным типом в данных нет — её нет и в легенде.
+   */
+  var VENUE_ORDER = ['ice', 'gym', 'choreo', 'pool', 'shop', 'other'];
+  var VENUE_LABEL = {
+    ice: 'Лёд',
+    outdoor: 'Улица',
+    gym: 'Зал',
+    choreo: 'Хореография',
+    pool: 'Бассейн',
+    shop: 'Магазин',
+    other: 'Другое',
+  };
+  var VENUE_TOKEN = {
+    ice: '--app-venue-ice',
+    outdoor: '--app-venue-ice',
+    gym: '--app-venue-gym',
+    choreo: '--app-venue-gym',
+    pool: '--app-venue-pool',
+    shop: '--app-venue-shop',
+    other: '--app-venue-service',
+  };
+  // Где бывают публичные сеансы льда (SKATING_VENUE_TYPES на сервере).
+  var SESSION_VENUES = ['ice', 'outdoor'];
+
+  /* Неизвестный или пустой тип — лёд, как на сервере (normalize_venue_type). */
+  function venueKey(item) {
+    var raw = trimStr(item && item.venue_type).toLowerCase();
+    return VENUE_LABEL.hasOwnProperty(raw) ? raw : 'ice';
+  }
+
+  /* Запись легенды: улица сводится ко льду (тот же цвет — одна точка на оба типа). */
+  function legendKey(item) {
+    var key = venueKey(item);
+    return key === 'outdoor' ? 'ice' : key;
+  }
+
+  /*
+   * Легенда карты: только типы, что реально есть среди нарисованных пинов.
+   * Меньше двух записей — легенда не нужна (одна точка ничего не объясняет), поэтому
+   * show=false. Порядок фиксированный, чтобы легенда не прыгала от пана к пану.
+   * Подпись записи «Лёд» берётся у настоящего льда, а не у улицы («Улица» ≠ «Лёд»).
+   */
+  function legendView(items) {
+    var seen = {};
+    splitMapAndList(items).onMap.forEach(function (item) {
+      var key = legendKey(item);
+      var own = venueKey(item) === key ? trimStr(item.venue_chip) : '';
+      if (!seen.hasOwnProperty(key) || (own && seen[key] === VENUE_LABEL[key])) {
+        seen[key] = own || VENUE_LABEL[key];
+      }
+    });
+    var entries = VENUE_ORDER.filter(function (key) {
+      return seen.hasOwnProperty(key);
+    }).map(function (key) {
+      return { key: key, label: seen[key], token: VENUE_TOKEN[key] };
+    });
+    return { show: entries.length >= 2, entries: entries };
+  }
+
   function shortArenaName(name) {
     var s = trimStr(name);
     var quoted = s.match(/[«"]([^»"]+)[»"]/);
@@ -377,6 +444,10 @@
    */
   function liveTime(item) {
     if (item && item.live && item.live.outside_window) return '';
+    // TASK-147: время — только у льда. У зала/магазина live.text — часы работы
+    // («10:00–20:00»), а не сеанс; вытащенное регэкспом «10:00» выдавало бы
+    // график за расписание.
+    if (SESSION_VENUES.indexOf(venueKey(item)) < 0) return '';
     return sessionTime(item);
   }
 
@@ -393,7 +464,7 @@
     var off = !!(item && item.live && item.live.outside_window);
     var time = liveTime(item);
     var shortName = shortArenaName(item && item.name);
-    var venue = String((item && item.venue_type) || 'ice');
+    var venue = venueKey(item);
     // TASK-147: пин = время ближайшего сеанса. Tier A/B с сеансом в окне — пилюля
     // с временем; tier C и outside_window — полая точка без текста.
     var kind = (tone === 'a' || tone === 'b') && time ? 'time' : 'dot';
@@ -664,6 +735,9 @@
     clusterArenas: clusterArenas,
     shortArenaName: shortArenaName,
     pinView: pinView,
+    venueKey: venueKey,
+    legendView: legendView,
+    VENUE_TOKEN: VENUE_TOKEN,
     clusterSummary: clusterSummary,
     railOrder: railOrder,
     sheetSummary: sheetSummary,

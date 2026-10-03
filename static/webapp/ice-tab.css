@@ -1024,7 +1024,8 @@ html.client-mini-dark [class*="ground-pane"] {
 .ice-map-attrib {
   position: fixed;
   left: 12px;
-  bottom: 104px;
+  /* От низа окна, как шторка: над таб-баром + высота шторки (JS переставляет на peek/half). */
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 104px);
   z-index: 14;
   font-size: var(--app-text-kicker);
   color: var(--glide-hint);
@@ -1239,12 +1240,12 @@ html.client-mini-dark [class*="ground-pane"] {
   border-bottom: 1.5px solid var(--glide-line-strong);
 }
 
-/* Цветная точка-маркер внутри пилюли: лёд — тил, улица — светлый, магазин — фиолетовый. */
+/* Цветная точка-маркер внутри пилюли: цвет = тип места (--map-venue, см. «Тип места» ниже). */
 .ice-ypin__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--glide-brand);
+  background: var(--map-venue, var(--glide-brand));
   flex: 0 0 auto;
 }
 
@@ -1313,6 +1314,7 @@ html.client-mini-dark [class*="ground-pane"] {
   height: 14px;
   border-radius: 50%;
   background: var(--glide-card);
+  /* Обод серый, как .pin-hollow макета 02: полая точка = «приглушено / без сеанса», цвета типа у неё нет. */
   border: 1.5px solid var(--glide-line-strong);
   box-sizing: border-box;
 }
@@ -1326,19 +1328,96 @@ html.client-mini-dark [class*="ground-pane"] {
   border-color: var(--app-cta-fill);
 }
 
-.ice-ypin--shop .ice-ypin__dot,
-.ice-ypin--shop.ice-ypin--sel .ice-ypin__dot {
-  background: var(--app-venue-shop);
+/*
+ * TASK-147 (хвост к макету 02). Тип места — цвет точки пина и точки легенды.
+ * Одна переменная --map-venue на оба; значения — только токены theme.css:
+ * лёд и улица (уличный каток — тоже лёд) — тил, зал и хореография — тёплый,
+ * бассейн — синий, магазин — фиолетовый, другое — графит. Цвет типа несут пилюли
+ * пинов и легенда; полые точки (без сеанса) остаются серыми.
+ */
+.ice-ypin--ice,
+.ice-map-legend__item--ice {
+  --map-venue: var(--app-venue-ice);
 }
 
-.ice-ypin--outdoor .ice-ypin__dot,
-.ice-ypin--outdoor.ice-ypin--sel .ice-ypin__dot {
-  background: var(--app-venue-ice);
+.ice-ypin--outdoor,
+.ice-map-legend__item--outdoor {
+  --map-venue: var(--app-venue-ice);
 }
 
-.ice-ypin--gym .ice-ypin__dot,
-.ice-ypin--gym.ice-ypin--sel .ice-ypin__dot {
-  background: var(--app-venue-gym, var(--glide-brand));
+.ice-ypin--gym,
+.ice-ypin--choreo,
+.ice-map-legend__item--gym,
+.ice-map-legend__item--choreo {
+  --map-venue: var(--app-venue-gym);
+}
+
+.ice-ypin--pool,
+.ice-map-legend__item--pool {
+  --map-venue: var(--app-venue-pool);
+}
+
+.ice-ypin--shop,
+.ice-map-legend__item--shop {
+  --map-venue: var(--app-venue-shop);
+}
+
+.ice-ypin--other,
+.ice-map-legend__item--other {
+  --map-venue: var(--app-venue-service);
+}
+
+/* Выбранный пин: у льда точка на заливке — цвет текста CTA (как раньше); у улицы, как и до
+   хвоста 02, — цвет льда; у остальных типов — свой цвет. */
+.ice-ypin--sel:not(.ice-ypin--ice) .ice-ypin__dot {
+  background: var(--map-venue);
+}
+
+/*
+ * Легенда типов (TASK-147). Только режим карты и только когда JS показал блок
+ * (≥2 типов в выдаче). Лежит в плавающем hero → pointer-events: none, карта под
+ * ней остаётся живой. Фон и текст — токены карточки, поэтому в тёмной теме
+ * легенда читается без отдельных правил.
+ */
+.ice-map-legend {
+  display: none;
+}
+
+body.ice-view-map .ice-map-legend:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-3);
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--app-space-2);
+  padding: var(--app-space-1) var(--app-space-3);
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  /* Своё none, не только наследование с hero: карта под легендой остаётся живой. */
+  pointer-events: none;
+}
+
+.ice-map-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.3;
+  color: var(--glide-text);
+  white-space: nowrap;
+}
+
+.ice-map-legend__dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--map-venue, var(--glide-brand));
+  flex: 0 0 auto;
 }
 
 /* TASK-146: сеанс вне выбранного окна — пин бледный, время на нём не живёт (kind=dot). */
@@ -1347,52 +1426,31 @@ html.client-mini-dark [class*="ground-pane"] {
 }
 
 .ice-ycluster {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  width: 36px;
   height: 36px;
-  padding: 0 12px 0 4px;
-  border-radius: var(--app-radius-pill);
-  background: var(--glide-card);
-  border: 1.5px solid var(--glide-brand);
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-bold);
-  color: var(--glide-text);
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-}
-
-.ice-ycluster__n {
-  width: 28px;
-  height: 28px;
   border-radius: 50%;
   background: var(--glide-brand);
   color: var(--glide-on-fill);
+  border: 1.5px solid var(--glide-brand);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-bold);
-  flex: 0 0 auto;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
 }
 
 .ice-ycluster--quiet {
-  border-color: var(--glide-line-strong);
-}
-
-.ice-ycluster--quiet .ice-ycluster__n {
   background: var(--glide-hint);
+  border-color: var(--glide-line-strong);
+  color: var(--glide-on-fill);
 }
 
 .ice-ycluster--sel {
-  background: var(--glide-brand);
-  color: var(--glide-on-fill);
-  border-color: var(--glide-brand);
-}
-
-.ice-ycluster--sel .ice-ycluster__n {
-  background: var(--glide-on-fill);
-  color: var(--glide-brand);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  border-color: var(--app-cta-fill);
 }
 
 /*

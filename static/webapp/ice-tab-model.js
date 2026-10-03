@@ -335,6 +335,26 @@
     });
   }
 
+  /**
+   * TASK-149: окно времени из ссылки — ?when=<ключ>. Допустимы ровно ключи сервера
+   * (WHEN_KEYS в src/application/ice_time_windows.py); сервер так же обрезает пробелы и
+   * приводит к нижнему регистру. Мусор, пустое и неизвестное — null: молча, поведение
+   * как без параметра (state.when остаётся 'auto'). Применимость к режиму («Тренеры»
+   * окна не имеют) проверяет вызывающий через whenChipsVisible, не эта функция.
+   */
+  var WHEN_KEYS = ['auto', 'today_evening', 'today', 'tomorrow', 'weekend', 'any'];
+
+  function whenFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var value = String(new URLSearchParams(raw).get('when') || '').trim().toLowerCase();
+      return WHEN_KEYS.indexOf(value) >= 0 ? value : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /** Окно времени — только про лёд: у магазина и зала сеансов нет. */
   function whenChipsVisible(intent, venueTypes) {
     if (coerceIntent(intent) !== INTENTS.skate) return false;
@@ -1068,6 +1088,7 @@
     whenChipsView: whenChipsView,
     whenChipsVisible: whenChipsVisible,
     venueFromSearch: venueFromSearch,
+    whenFromSearch: whenFromSearch,
     mapHref: mapHref,
     trainerHref: trainerHref,
     arenaHref: arenaHref,

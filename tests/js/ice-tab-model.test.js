@@ -925,6 +925,54 @@ describe('TASK-146 (Q-006): окно времени', () => {
     assert.equal(whenChipsVisible('coach', []), false);
   });
 
+  it('TASK-149: whenFromSearch — ровно ключи сервера (WHEN_KEYS в ice_time_windows.py)', () => {
+    const { whenFromSearch } = loadModel();
+    for (const key of ['auto', 'today_evening', 'today', 'tomorrow', 'weekend', 'any']) {
+      assert.equal(whenFromSearch('?when=' + key), key);
+    }
+  });
+
+  it('TASK-149: whenFromSearch — мусор, пустое и неизвестное дают null, не ошибку', () => {
+    const { whenFromSearch } = loadModel();
+    assert.equal(whenFromSearch(''), null);
+    assert.equal(whenFromSearch(null), null);
+    assert.equal(whenFromSearch(undefined), null);
+    assert.equal(whenFromSearch('?'), null);
+    assert.equal(whenFromSearch('?when='), null);
+    assert.equal(whenFromSearch('?when=%20%20'), null);
+    assert.equal(whenFromSearch('?when=junk'), null);
+    assert.equal(whenFromSearch('?when=tonight'), null);
+    assert.equal(whenFromSearch('?when=today_evening;drop'), null);
+    assert.equal(whenFromSearch('?when=%E0%A4%A'), null);
+    assert.equal(whenFromSearch('?intent=coach'), null);
+  });
+
+  it('TASK-149: whenFromSearch — регистр и пробелы нормализуются, как на сервере', () => {
+    const { whenFromSearch } = loadModel();
+    assert.equal(whenFromSearch('?when=TODAY_EVENING'), 'today_evening');
+    assert.equal(whenFromSearch('?when=Weekend'), 'weekend');
+    assert.equal(whenFromSearch('?when=%20tomorrow%20'), 'tomorrow');
+    assert.equal(whenFromSearch('when=any'), 'any');
+  });
+
+  it('TASK-149: whenFromSearch читает своё поле независимо от intent/venue/city_id', () => {
+    const { whenFromSearch, intentFromSearch, venueFromSearch, cityIdFromSearch } = loadModel();
+    const s = '?city_id=7&intent=skate&venue=ice&when=today_evening';
+    assert.equal(whenFromSearch(s), 'today_evening');
+    assert.equal(intentFromSearch(s), 'skate');
+    assert.equal(venueFromSearch(s), 'ice');
+    assert.equal(cityIdFromSearch(s), 7);
+    assert.equal(whenFromSearch('?city_id=7&intent=coach&venue=shop'), null);
+  });
+
+  it('TASK-149: применённое из ссылки окно подсвечивает свой чип; чипа «Сегодня» нет — не подсвечено ничего', () => {
+    const { whenChipsView, whenFromSearch } = loadModel();
+    const evening = whenChipsView(whenFromSearch('?when=today_evening'), 'tomorrow');
+    assert.deepEqual(evening.filter((c) => c.active).map((c) => c.key), ['today_evening']);
+    const today = whenChipsView(whenFromSearch('?when=today'), 'today');
+    assert.deepEqual(today.filter((c) => c.active).map((c) => c.key), []);
+  });
+
   it('подпись честна, когда в окне пусто', () => {
     const { formatSortCaption, buildListUrl } = loadModel();
     const items = [{ venue_type: 'ice', tier: 'A' }, { venue_type: 'ice', tier: 'A' }];

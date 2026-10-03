@@ -189,57 +189,124 @@
             var href = link.getAttribute('href');
             if (!href) return;
             ev.preventDefault();
+            try {
+              if (payload && (payload.card || payload.thumb)) {
+                sessionStorage.setItem('glideArenaHero', JSON.stringify({
+                  id: payload.arena_id != null ? payload.arena_id : null,
+                  slug: payload.arena_slug || '',
+                  url: payload.card || payload.thumb,
+                }));
+              }
+            } catch (e) { /* private mode */ }
             navigateTo(href);
           });
         }
       }
 
       /**
-       * TASK-148 (AC-4). Блок «Сегодня на льду» — дополняет ice teaser, не заменяя
-       * его: строки строятся из ice_teaser.sessions (те же live-данные, что и
-       * тизер, никаких новых запросов). Тизерный сеанс из строк исключается,
-       * начавшиеся — пропускаются. Нет сеансов — блока нет.
+       * TASK-148 (AC-4) → TASK-149 (S2). Строки ближайших сеансов — НЕ отдельная
+       * секция, а продолжение героя внутри #hubIceZone (под тизером, над поиском):
+       * строятся из ice_teaser.sessions (те же live-данные, никаких новых запросов).
+       * Тизерный сеанс из строк исключается, начавшиеся — пропускаются.
+       * Строки показываются только вместе с героем: нет героя (тизер скрыт) или это
+       * «далёкая» карточка «Скоро и у вас» — сеансы другого города под ней не
+       * выдаём за «лёд рядом». Нет строк — блока нет.
        */
       function renderIceTodaySessions(teaser) {
-        var section = document.getElementById('hubIceToday');
-        if (!section) return;
+        var mount = document.getElementById('hubIceSessions');
+        if (!mount) return;
         var model = window.HubIceTodayModel;
-        var rows = model ? model.rowsFromTeaser(teaser, new Date()) : [];
+        var teaserModel = window.IceTeaserModel;
+        var now = new Date();
+        var view = teaser && teaserModel && typeof teaserModel.formatIceCard === 'function'
+          ? teaserModel.formatIceCard(teaser, now)
+          : null;
+        var rows = model && view && !view.hidden && !view.isFar ? model.rowsFromTeaser(teaser, now) : [];
         if (!rows.length) {
-          section.hidden = true;
-          section.innerHTML = '';
+          mount.hidden = true;
+          mount.innerHTML = '';
           return;
         }
-        var cityId = teaser && teaser.city_id != null ? String(teaser.city_id) : '';
-        var catalogHref = cityId ? 'ice?city_id=' + esc(cityId) : 'ice';
-        section.hidden = false;
-        section.innerHTML =
-          '<div class="hub-sec-head">' +
-            '<p class="hub-kicker">Сегодня на льду</p>' +
-            '<a class="hub-sec-link" href="' + esc(catalogHref) + '">Все сеансы</a>' +
-          '</div>' +
-          '<div class="hub-ice-today__card">' + model.renderRowsHtml(rows) + '</div>';
-        wireHubSectionLinks(section);
+        mount.innerHTML = model.renderRowsHtml(rows);
+        mount.hidden = false;
+        wireHubSectionLinks(mount);
       }
 
       /**
-       * TASK-148 (AC-3). Секция «Подборки»: шесть пресетов-фильтров, каждый —
-       * карточка со счётчиком и ссылкой в каталог. Счётчики — из публичных
-       * запросов, которые уже существуют (фасеты типов и window.hits ленты
-       * /api/public/ice/arenas); новых эндпоинтов нет. Любой сбой запроса —
-       * секция не рендерится (что без данных — то не рендерится).
+       * Ждём не дольше этого рынок до решения «показывать ли карусель-фолбэк».
+       * Публичные запросы быстрые; предел нужен, чтобы зависший запрос не держал
+       * весь хаб под скелетоном.
        */
-      function renderHubCollections(cityId) {
-        var section = document.getElementById('hubCollections');
-        if (!section) return Promise.resolve();
+      var HUB_MARKET_WAIT_MS = 2500;
+
+      /** Promise<boolean>: «Куда катимся» показала хотя бы одну плитку. */
+      var hubMarketPromise = Promise.resolve(false);
+
+      /** Факты для подписи под приветствием (S1). Число приходит позже города. */
+      var hubGreetingFacts = { cityName: null, isCountryFallback: false, eveningHits: null };
+
+      function withTimeout(promise, ms, fallback) {
+        return new Promise(function (resolve) {
+          var done = false;
+          var timer = setTimeout(function () {
+            if (!done) { done = true; resolve(fallback); }
+          }, ms);
+          var settle = function (value) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(value);
+          };
+          promise.then(settle, function () { settle(fallback); });
+        });
+      }
+
+      /**
+       * TASK-149 (S1). Подпись под приветствием — только факты данных (город, число
+       * катков с вечерним сеансом); собирает её чистая HubCollectionsModel.greetingSub.
+       * Строка подписи лежит в зарезервированной высоте строки приветствия, поэтому
+       * появление текста не двигает макет (TASK-091/095).
+       */
+      function paintHubGreetingSub() {
+        var el = document.getElementById('hubGreetingSub');
+        if (!el) return;
         var model = window.HubCollectionsModel;
-        if (!model || !cityId) {
+        var text = model && typeof model.greetingSub === 'function' ? model.greetingSub(hubGreetingFacts) : '';
+        el.textContent = text;
+        el.hidden = !text;
+      }
+
+      function setHubGreetingFacts(teaser) {
+        hubGreetingFacts = {
+          cityName: teaser && teaser.city_name != null ? teaser.city_name : null,
+          isCountryFallback: !!(teaser && teaser.is_country_fallback),
+          eveningHits: null,
+        };
+        paintHubGreetingSub();
+      }
+
+      /**
+       * TASK-149 (S3). Секция «Куда катимся» — единственная навигация по рынку
+       * (заменила секцию-подборки и карусель «Места и тренеры» в роли второй навигации).
+       * Плитки Катки / Тренеры / Магазины — каждая только при честном счётчике > 0;
+       * нет ни одной — секции нет. Счётчики — из публичных запросов, которые уже
+       * есть (фасеты и window.hits /api/public/ice/arenas, total /api/public/trainers
+       * с city_id — тот же список, что «Тренеры» во вкладке «Поиск»); новых
+       * эндпоинтов нет. Сбой любого запроса — соответствующей плитки нет.
+       * Возвращает Promise<boolean>: показана ли хотя бы одна плитка.
+       */
+      function renderHubExplore(cityId) {
+        var section = document.getElementById('hubExplore');
+        if (!section) return Promise.resolve(false);
+        var model = window.HubCollectionsModel;
+        var hide = function () {
           section.hidden = true;
           section.innerHTML = '';
-          return Promise.resolve();
-        }
-        var base =
-          '/api/public/ice/arenas?intent=skate&city_id=' + encodeURIComponent(String(cityId));
+          return false;
+        };
+        if (!model || !cityId) return Promise.resolve(hide());
+        var cityParam = encodeURIComponent(String(cityId));
+        var base = '/api/public/ice/arenas?intent=skate&city_id=' + cityParam;
         var fetchJson = function (url) {
           return fetch(url, { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
@@ -249,30 +316,52 @@
           fetchJson(base + '&limit=1'),
           fetchJson(base + '&venue_type=ice,outdoor&when=today_evening&limit=1'),
           fetchJson(base + '&venue_type=outdoor&limit=1'),
+          fetchJson('/api/public/trainers?order_by=rating&limit=1&city_id=' + cityParam),
         ]).then(function (parts) {
           var facets = (parts[0] && parts[0].venue_type_facets) || [];
           var evening = parts[1] && parts[1].window ? Number(parts[1].window.hits) || 0 : null;
           var outdoorLive = ((parts[2] && parts[2].items) || []).some(function (i) {
             return i && i.live && String(i.live.kind) === 'session';
           });
-          var pods = model.buildPods(
-            { facets: facets, eveningHits: evening, outdoorLive: outdoorLive },
+          var trainersTotal = parts[3] && parts[3].total != null ? Number(parts[3].total) : null;
+          hubGreetingFacts.eveningHits = evening;
+          paintHubGreetingSub();
+          var tiles = model.buildTiles(
+            {
+              facets: facets,
+              eveningHits: evening,
+              outdoorLive: outdoorLive,
+              trainersTotal: trainersTotal,
+            },
             String(cityId)
           );
-          if (!model.sectionVisible(pods)) {
-            section.hidden = true;
-            section.innerHTML = '';
+          if (!model.tilesVisible(tiles)) return hide();
+          section.innerHTML =
+            '<div class="hub-explore__head">' +
+              '<h2 class="hub-explore__title">Куда катимся</h2>' +
+              '<a class="hub-sec-link" href="ice?city_id=' + cityParam + '">Все места</a>' +
+            '</div>' +
+            '<div class="hub-cg">' + model.renderTilesHtml(tiles) + '</div>';
+          section.hidden = false;
+          wireHubSectionLinks(section);
+          // Рынок уже показан плитками — карусель не должна быть вторым входом в него.
+          hideDiscovery();
+          return true;
+        });
+      }
+
+      /**
+       * Карусель лиц тренеров/мест — фолбэк, а не вторая навигация: рисуется, только
+       * если «Куда катимся» плиток не показала (нет города, пустой рынок, сбой
+       * запросов). Иначе скрыта — рынок один раз и в одном месте (DEC-004).
+       */
+      function loadDiscoveryUnlessMarket() {
+        return withTimeout(hubMarketPromise, HUB_MARKET_WAIT_MS, false).then(function (hasTiles) {
+          if (hasTiles) {
+            hideDiscovery();
             return;
           }
-          var catalogHref = 'ice?city_id=' + esc(String(cityId));
-          section.hidden = false;
-          section.innerHTML =
-            '<div class="hub-sec-head">' +
-              '<p class="hub-kicker">Подборки</p>' +
-              '<a class="hub-sec-link" href="' + catalogHref + '">Весь каталог</a>' +
-            '</div>' +
-            '<div class="hub-pods">' + model.renderPodsHtml(pods) + '</div>';
-          wireHubSectionLinks(section);
+          return loadAndRenderDiscovery();
         });
       }
 
@@ -441,13 +530,23 @@
         return name || null;
       }
 
+      /**
+       * TASK-149 (S1). «{Утро|День|Вечер|Ночь}, {Имя}» по часу УСТРОЙСТВА; нет имени —
+       * «Добрый вечер» и т.п. Логика — в чистой HubCollectionsModel.greetingText
+       * (тесты в tests/js/hub-collections-model.test.js). Фолбэк на старый текст —
+       * только если модель по какой-то причине не загрузилась.
+       */
       function defaultHubGreeting() {
         var name = getTelegramFirstName();
+        var model = window.HubCollectionsModel;
+        if (model && typeof model.greetingText === 'function') {
+          return model.greetingText(new Date().getHours(), name);
+        }
         return name ? 'Рады видеть вас, ' + name : 'Рады вас видеть';
       }
 
       function setHubGreeting(text) {
-        var el = document.getElementById('hubGreeting');
+        var el = document.getElementById('hubGreetingHello');
         if (el) el.textContent = text;
       }
 
@@ -1244,7 +1343,7 @@
           autoDebitNote: !!opts.autoDebitNote,
           rowHead: opts.passRowHead || '',
         });
-        if (opts.showDiscovery) return loadAndRenderDiscovery();
+        if (opts.showDiscovery) return loadDiscoveryUnlessMarket();
         return Promise.resolve();
       }
 
@@ -1473,6 +1572,11 @@
           .catch(function() { return []; });
       }
 
+      /**
+       * Карусель лиц. TASK-149 (DEC-004): вызывается только через loadDiscoveryUnlessMarket —
+       * как фолбэк, когда «Куда катимся» нечего показать. Заголовки «Места и тренеры» /
+       * «Где заниматься» остаются только в этом фолбэке, где другой навигации по рынку нет.
+       */
       function loadAndRenderDiscovery() {
         var el = document.getElementById('hubDiscovery');
         if (!el) return Promise.resolve();
@@ -1482,6 +1586,12 @@
           .catch(function() { return { items: [] }; });
         return Promise.all([trainersP, fetchDiscoveryPlaces()])
           .then(function(parts) {
+            // Плитки успели появиться, пока грузилась карусель, — она больше не нужна.
+            var explore = document.getElementById('hubExplore');
+            if (explore && !explore.hidden) {
+              hideDiscovery();
+              return;
+            }
             var payload = parts[0];
             var places = (parts[1] || []).slice(0, 3);
             var items = (payload && (payload.items || payload.trainers)) || [];
@@ -1761,6 +1871,8 @@
               .then(function (r) { return r.json(); })
               .then(function (data) {
                 renderIceTeaser(data && data.ice_teaser);
+                // TASK-149: строки сеансов зависят от героя (далёкая карточка их прячет).
+                renderIceTodaySessions(data && data.ice_teaser);
               })
               .catch(function () { /* keep the plain fallback card already on screen */ });
           },
@@ -1778,14 +1890,15 @@
         var cs = (hubMeta && hubMeta.client_session) || {};
         var iceTeaser = hubMeta && hubMeta.ice_teaser;
         renderIceTeaser(iceTeaser);
-        /* TASK-148 (AC-4): блок «Сегодня на льду» — из тех же live-данных тизера. */
+        /* TASK-149 (S2): строки сеансов — внутри блока льда, из тех же live-данных тизера. */
         renderIceTodaySessions(iceTeaser);
+        setHubGreetingFacts(iceTeaser);
         teaserArenaId = iceTeaser && iceTeaser.arena_id != null ? Number(iceTeaser.arena_id) : null;
         discoveryCityId =
           (cs.city_id != null && cs.city_id !== '' ? Number(cs.city_id) : null) ||
           (iceTeaser && !iceTeaser.is_country_fallback && iceTeaser.city_id ? Number(iceTeaser.city_id) : null);
-        /* TASK-148 (AC-3): «Подборки» — монтируется по данным, после существующих блоков. */
-        renderHubCollections(discoveryCityId);
+        /* TASK-149 (S3): «Куда катимся» — монтируется по данным, ниже персональных блоков. */
+        hubMarketPromise = renderHubExplore(discoveryCityId);
         // far_confirmed means IP-country (src/shared/ip_geo.py) already told us this visitor
         // is outside every served market — the honest card is already showing, GPS would
         // only ask for a permission we don't need.
@@ -1890,7 +2003,7 @@
         resetHubHeroLayout();
         clearNextBookingBlock();
         hideMyTrainerBlock();
-        return finishHubApply(loadAndRenderDiscovery());
+        return finishHubApply(loadDiscoveryUnlessMarket());
       }
 
       function hideMyTrainerBlock() {
@@ -1913,6 +2026,8 @@
 
       function loadAll() {
         hubLoadStartedAt = Date.now();
+        // TASK-149 (S1): приветствие по часу устройства сразу — не ждём bootstrap.
+        setHubGreeting(defaultHubGreeting());
         wireAllBookingsLink();
         if (!initData) {
           setStateMessage('', '');
@@ -1921,9 +2036,9 @@
           // Без initData данных нет, но поиск обязан остаться доступным.
           renderIceTeaser(null);
           renderIceTodaySessions(null);
-          renderHubCollections(null);
+          hubMarketPromise = renderHubExplore(null);
           renderStreakRibbon(null);
-          return loadAndRenderDiscovery().then(finishHubInitialLoading, finishHubInitialLoading);
+          return loadDiscoveryUnlessMarket().then(finishHubInitialLoading, finishHubInitialLoading);
         }
 
         /* Bootstrap API: wait for acting profile so X-Profile-Id is set (default child ≠ self). */
@@ -1975,7 +2090,7 @@
             hideMyTrainerBlock();
             hideUpcomingSection();
             renderIceTodaySessions(null);
-            renderHubCollections(null);
+            renderHubExplore(null);
             renderStreakRibbon(null);
             hubPrimaryTrainerCanBook = false;
             syncClientHubBookFab();
