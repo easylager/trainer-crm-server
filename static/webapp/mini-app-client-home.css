@@ -2370,3 +2370,206 @@ a.hub-ice-card {
   flex: 0 0 auto;
 }
 
+/* ─── TASK-148 (AC-3): «Подборки» — пресеты-фильтры поверх данных каталога ─── */
+
+.hub-collections {
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.hub-collections[hidden] {
+  display: none !important;
+  margin: 0;
+}
+
+.hub-collections .hub-sec-head,
+.hub-ice-today .hub-sec-head {
+  padding: 0 16px;
+  margin-bottom: 10px;
+}
+
+.hub-pods {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  padding: 4px 16px;
+  scroll-padding-inline: 16px;
+}
+
+.hub-pods::-webkit-scrollbar {
+  display: none;
+}
+
+.hub-pod {
+  flex: 0 0 118px;
+  width: 118px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  scroll-snap-align: start;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-pod:active {
+  opacity: 0.8;
+}
+
+/* Арт-плашка типа места: градиенты только из role-токенов бренда и типов
+ * (AURORA-токены на рабочих экранах запрещены гейтом G-P1). */
+.hub-pod__art {
+  display: block;
+  width: 100%;
+  height: 52px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hub-pod__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    102deg,
+    rgba(255, 255, 255, 0.06) 0 2px,
+    transparent 2px 24px
+  );
+}
+
+.hub-pod__art--evening {
+  background:
+    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 58%),
+    linear-gradient(170deg, var(--glide-deep), var(--glide-on-fill));
+}
+
+.hub-pod__art--ice {
+  background:
+    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
+    linear-gradient(165deg, var(--glide-brand), var(--glide-brand-pressed));
+}
+
+.hub-pod__art--outdoor {
+  background:
+    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--glide-brand) 32%, var(--glide-card)),
+      var(--glide-brand)
+    );
+}
+
+.hub-pod__art--shop {
+  background:
+    radial-gradient(120% 100% at 80% 110%, var(--glide-brand-wash), transparent 60%),
+    linear-gradient(
+      165deg,
+      var(--app-venue-shop),
+      color-mix(in srgb, var(--app-venue-shop) 55%, var(--glide-deep))
+    );
+}
+
+.hub-pod__body {
+  display: block;
+  padding: 8px 9px 10px;
+}
+
+.hub-pod__title {
+  display: block;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.3;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-pod__sub {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-hint-color);
+}
+
+/* ─── TASK-148 (AC-4): «Сегодня на льду» — ближайшие сеансы ─── */
+
+.hub-ice-today {
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.hub-ice-today[hidden] {
+  display: none !important;
+  margin: 0;
+}
+
+.hub-ice-today__card {
+  margin: 0 16px;
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-card-shadow);
+  overflow: hidden;
+}
+
+.hub-ice-today__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  text-decoration: none;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-ice-today__row:active {
+  background: var(--app-card-bg-solid);
+}
+
+.hub-ice-today__row + .hub-ice-today__row {
+  border-top: 1px solid var(--app-card-line);
+}
+
+.hub-ice-today__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-cta-fill);
+  flex: none;
+}
+
+.hub-ice-today__time {
+  flex: none;
+  width: 44px;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glide-ink-teal);
+}
+
+.hub-ice-today__place {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--tg-theme-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-ice-today__price {
+  flex: none;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: var(--tg-theme-text-color);
+}
+
+
