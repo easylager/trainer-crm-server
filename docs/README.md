@@ -99,6 +99,7 @@
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
 | [2026-10-02-ice-map-fullscreen.md](plans/2026-10-02-ice-map-fullscreen.md) | TASK-147: карта мест на весь экран — план, AC, риски (дизайн в `design/ice-map-fullscreen.md`) |
+| [2026-10-03-catalog-hub-v4-design.md](plans/2026-10-03-catalog-hub-v4-design.md) | TASK-148: подборки из данных, чипы без нулей, бесфотошные карточки (макет в `design/client-hub-catalog-final-v2.html`) |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 
 ## ops — эксплуатация
