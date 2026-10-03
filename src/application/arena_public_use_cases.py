@@ -20,7 +20,10 @@ from src.application.arena_profile import (
     AMENITY_LABELS_RU,
     ARENA_PROFILE_STATUS_PUBLISHED,
     hours_for_weekday,
+    format_intervals_ru,
     hours_groups,
+    intervals_for_weekday,
+    normalize_hhmm,
     SHOP_SERVICE_KEYS,
     is_in_season,
     public_http_url,
@@ -310,8 +313,19 @@ def _place_line(item: Mapping[str, Any]) -> str:
     if len(groups) == 1 and groups[0][1]:
         bits.append(f"ежедневно {groups[0][1][0]}–{groups[0][1][1]}")
     elif groups:
-        today_pair = hours_for_weekday(hours, _today_minsk().weekday())
-        bits.append(f"сегодня {today_pair[0]}–{today_pair[1]}" if today_pair else "сегодня выходной")
+        today_intervals = intervals_for_weekday(hours, _today_minsk().weekday())
+        if today_intervals:
+            bits.append(f"сегодня {format_intervals_ru(today_intervals)}")
+        else:
+            bits.append("сегодня выходной")
+    rental_close = normalize_hhmm(hours.get("rental_close"))
+    if rental_close:
+        bits.append(f"прокат до {rental_close}")
+    if hours.get("free_entry") is True:
+        bits.append("вход бесплатно")
+    amenities = _as_mapping(item.get("amenities"))
+    if amenities.get("skate_rental") is True and not rental_close:
+        bits.append("прокат на месте")
     if not bits:
         bits.append("часы работы уточняйте по телефону" if item.get("phone") else "часы работы уточняются")
     line = " · ".join(bits)
