@@ -2342,7 +2342,7 @@
 
         return profilesReady
           .then(function () {
-            return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson() });
+            return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson(), cache: 'no-store' });
           })
           .then(jsonOrThrow)
           .then(function(hub) {
@@ -2362,7 +2362,7 @@
             return Promise.all([
               fetch(apiUrl('/client/bookings'), { headers: headersJson() }).then(jsonOrThrow),
               fetch(apiUrl('/client/requests'), { headers: headersJson() }).then(jsonOrThrow),
-              fetch(apiUrl('/client/session'), { headers: headersJson() }).then(jsonOrThrow).catch(function() { return {}; }),
+              fetch(apiUrl('/client/session'), { headers: headersJson(), cache: 'no-store' }).then(jsonOrThrow).catch(function() { return {}; }),
             ]).then(function(results) {
               var sess = results[2] || {};
               if (renderPendingReferralGate(sess.pending_referral)) {

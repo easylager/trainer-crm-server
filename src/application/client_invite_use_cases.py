@@ -12,6 +12,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_session_use_cases import (
     clear_pending_referral,
+    get_pending_referral,
     save_catalog_filters,
 )
 from src.application.client_trainer_edge_use_cases import set_primary_trainer
@@ -26,6 +27,27 @@ from src.application.trainer_client_registration_notify import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def pending_referral_for_hub(
+    session: AsyncSession,
+    telegram_id: int,
+) -> int | None:
+    """
+    Trainer id for the client-hub invite gate, or None when the hub should open.
+
+    welcome_ref stores the trainer until the registration form is finished.
+    A client who already has a phone and a name must not stay on that gate:
+    the flag used to stick after a successful save, and the hub then bounced
+    between «Вас пригласил тренер» and «Профиль уже сохранён».
+    """
+    trainer_id = await get_pending_referral(telegram_id, session)
+    if trainer_id is None:
+        return None
+    if await client_invite_needs_registration_form(session, telegram_id):
+        return int(trainer_id)
+    await clear_pending_referral(telegram_id, session)
+    return None
 
 
 async def client_invite_needs_registration_form(

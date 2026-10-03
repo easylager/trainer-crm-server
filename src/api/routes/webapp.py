@@ -191,7 +191,6 @@ from src.application.client_cert_order_use_cases import (
 from src.application.client_session_use_cases import (
     clear_pending_referral,
     get_or_create_session as get_client_session,
-    get_pending_referral,
     get_session as read_client_bot_session,
     save_catalog_filters,
     set_arena,
@@ -2709,7 +2708,9 @@ async def _pending_referral_payload(
     a real client out of their own hub, so any error is swallowed as "no pending referral".
     """
     try:
-        trainer_id = await get_pending_referral(telegram_id, session)
+        from src.application.client_invite_use_cases import pending_referral_for_hub
+
+        trainer_id = await pending_referral_for_hub(session, telegram_id)
         if trainer_id is None:
             return None
         hints = await trainer_display_hints_by_ids(session, [trainer_id])
@@ -2723,6 +2724,7 @@ async def _pending_referral_payload(
 @router.get("/client/hub/bootstrap")
 async def get_client_hub_bootstrap(
     request: Request,
+    response: Response,
     x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -2738,6 +2740,9 @@ async def get_client_hub_bootstrap(
     """
     telegram_id = client_catalog_telegram_key(principal)
     requested_profile_id = _parse_profile_id_header(x_profile_id)
+    # Personalized, and it decides whether the invite gate covers the hub.
+    # A cached copy would keep «Вас пригласил тренер» after registration.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
 
     async def _bookings() -> dict:
         async with async_session_factory() as s:
