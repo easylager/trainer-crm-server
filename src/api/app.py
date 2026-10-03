@@ -1279,6 +1279,32 @@ def webapp_ice_teaser_model_js(request: Request):
     )
 
 
+@app.get("/webapp/hub-collections-model.js")
+def webapp_hub_collections_model_js(request: Request):
+    """TASK-148 (AC-3) hub «Подборки» view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-collections-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/hub-ice-today-model.js")
+def webapp_hub_ice_today_model_js(request: Request):
+    """TASK-148 (AC-4) hub «Сегодня на льду» view-model (pure). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-ice-today-model.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/trainer-arena-chips-model.js")
 def webapp_trainer_arena_chips_model_js(request: Request):
     """TASK-055 trainer-card arena chips view-model (pure). Use ``?v=…`` for long cache."""
