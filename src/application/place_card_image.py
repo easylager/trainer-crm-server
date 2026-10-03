@@ -312,15 +312,20 @@ def render_place_card(
 
 def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> bytes:
     """og.png / story.png подборки (/c/{город}): что за подборка, сколько мест и сеансов, первые места."""
-    from src.application.selection_page import selection_description, selection_title
+    from src.application.selection_page import (
+        absolute_window_phrase,
+        selection_share_description,
+        selection_share_title,
+    )
 
     window = view.get("window")
-    kicker = f"Карта льда · {window['label']}" if window and view.get("skating") else "Карта льда"
+    phrase = absolute_window_phrase(window) if window and view.get("skating") else ""
+    kicker = f"Карта льда · {phrase}" if phrase else "Карта льда"
     names = [str(i.get("name") or "") for i in (view.get("items") or [])[:3]]
     lines = {
         "kicker": kicker.upper(),
-        "title": selection_title(view),
-        "big": selection_description(view),
+        "title": selection_share_title(view),
+        "big": selection_share_description(view),
         "sub": " · ".join(n for n in names if n),
         "foot": "Расписание, цены и адреса — по ссылке",
     }

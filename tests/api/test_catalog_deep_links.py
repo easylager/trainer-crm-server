@@ -19,6 +19,11 @@ async def test_place_payload_opens_that_card(app_use_test_db, db_session) -> Non
     reply = await build_catalog_deep_link_reply(db_session, f"arena_{arena_id}", webapp_base_url=BASE)
     assert reply is not None
     assert reply["url"] == f"{BASE}/webapp/arena?ref={arena_id}"
+    focused = await build_catalog_deep_link_reply(
+        db_session, f"arena_{arena_id}_s_77", webapp_base_url=BASE
+    )
+    assert focused is not None
+    assert focused["url"] == f"{BASE}/webapp/arena?ref={arena_id}&s=77"
     assert reply["button_text"] == "Открыть карточку катка"
     assert "&lt;Север&gt;" in reply["text"], "имя экранируется: ответ уходит с parse_mode=HTML"
 
@@ -37,6 +42,11 @@ async def test_catalog_payload_keeps_city_and_filter(app_use_test_db, db_session
     assert shops["url"] == f"{BASE}/webapp/ice?city_id={city_id}&venue=shop"
     assert shops["button_text"] == "Магазины и заточка"
     assert coaches["url"] == f"{BASE}/webapp/ice?city_id={city_id}&intent=coach"
+    weekend = await build_catalog_deep_link_reply(
+        db_session, f"catalog_{city_id}_skate_weekend", webapp_base_url=BASE
+    )
+    assert weekend["url"] == f"{BASE}/webapp/ice?city_id={city_id}&intent=skate&when=weekend"
+    assert weekend["button_text"] == "Где покататься"
     unknown_city = await build_catalog_deep_link_reply(db_session, "catalog_999999999", webapp_base_url=BASE)
     assert unknown_city["url"] == f"{BASE}/webapp/ice"
 

@@ -75,3 +75,39 @@ async def test_shop_selection_and_share_api(app_use_test_db, db_session) -> None
         .all()
     )
     assert len(rows) == 1 and rows[0]["channel"] == "copy" and rows[0]["venue_type"] == "shop"
+
+
+def _og(html: str, prop: str) -> str:
+    import re
+
+    match = re.search(rf'<meta property="{prop}" content="([^"]*)"', html)
+    assert match, prop
+    return match.group(1)
+
+
+@pytest.mark.asyncio
+async def test_selection_preview_and_telegram_keep_the_window(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """Превью не говорит «сегодня», а «Открыть в Telegram» открывает то же окно."""
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "")
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "true")
+    name = f"Окноград {uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=name)
+    await db_session.commit()
+    slug = city_slug(name)
+    async with _client() as client:
+        page = await client.get(f"/c/{slug}", params={"w": "weekend"})
+        share = await client.get(
+            "/api/public/ice/selection/share",
+            params={"city_id": city_id, "when": "weekend", "record": "false"},
+        )
+    assert page.status_code == 200
+    og_title = _og(page.text, "og:title").lower()
+    for stale in ("сегодня", "завтра", "выходн"):
+        assert stale not in og_title
+        assert stale not in share.json()["share_body"].lower()
+    assert _og(page.text, "og:image").startswith("http")
+    assert f"startapp=catalog_{city_id}_skate_weekend" in page.text
+    assert "Выходные" in page.text, "живая страница может говорить «выходные»"

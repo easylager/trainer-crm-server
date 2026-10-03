@@ -15,8 +15,8 @@
       var RuText = window.RuText;
       var genitiveCountRu = RuText && RuText.genitiveCountRu;
 
-      /** Max upcoming bookings shown below the hero card. */
-      var HUB_UPCOMING_MAX = 5;
+      /** Сколько следующих записей держит карточка слота. Дальше — «Смотреть все». */
+      var HUB_REST_MAX = 2;
 
       /* ── SVG icon library ─────────────────────────────────────────── */
       var ICONS = {
@@ -54,7 +54,16 @@
       var hubPrimaryTrainerCanBook = false;
       /** Nearest upcoming booking on hub — rebook strip replaces bottom FAB. */
       var hubHasUpcomingBooking = false;
+      /** Окно уже стоит кнопкой «Записаться на …» — плавающая кнопка её повторяет. */
+      var hubOpenWindowShown = false;
       var clientHubBookFabWired = false;
+      /**
+       * Слот первого экрана занят своим временем (запись или ближайшее окно).
+       * Фото льда тогда не второй герой: в зоне остаётся поиск.
+       */
+      var hubPersonalSlot = false;
+      /** Контакт основного тренера — чтобы окно собралось, когда придут слоты. */
+      var hubPrimaryTrainer = null;
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -182,6 +191,7 @@
         }
         var head = zone.querySelector('.hub-sec-head');
         if (head) head.hidden = !html;
+        applyIceHeroVisibility();
         wireHubIceZoneLinks();
         var link = mount.querySelector('a.hub-ice-card');
         if (link) {
@@ -229,7 +239,31 @@
         }
         mount.innerHTML = model.renderRowsHtml(rows);
         mount.hidden = false;
+        applyIceHeroVisibility();
         wireHubSectionLinks(mount);
+      }
+
+      /**
+       * Прячет фото льда и строки сеансов, когда слот занят своим временем.
+       * Поиск в той же зоне остаётся. Снятие флага возвращает героя, если он есть в DOM.
+       */
+      function applyIceHeroVisibility() {
+        var zone = document.getElementById('hubIceZone');
+        if (!zone) return;
+        zone.classList.toggle('hub-ice-zone--personal', hubPersonalSlot);
+        var head = zone.querySelector('.hub-sec-head');
+        var teaser = document.getElementById('hubIceTeaser');
+        var sessions = document.getElementById('hubIceSessions');
+        if (hubPersonalSlot) {
+          if (head) head.hidden = true;
+          if (teaser) teaser.hidden = true;
+          if (sessions) sessions.hidden = true;
+          return;
+        }
+        var hasCard = !!(teaser && teaser.querySelector('a.hub-ice-card'));
+        if (head) head.hidden = !hasCard;
+        if (teaser) teaser.hidden = !hasCard;
+        if (sessions) sessions.hidden = !sessions.querySelector('.hub-ice-today__row');
       }
 
       /**
@@ -393,6 +427,24 @@
             ? document.getElementById('hubDiscovery')
             : document.getElementById('myTrainerBlock');
         if (anchor && anchor.parentNode === shell) shell.insertBefore(zone, anchor);
+      }
+
+      /**
+       * У своего клиента с записью «Ещё занятие» стоит сразу под слотом,
+       * а поиск (зона льда) — после своего. В остальных состояниях полоска
+       * возвращается на место в разметке, перед списком записей.
+       */
+      function placeQuickStrip(mode) {
+        var shell = document.getElementById('hubShell');
+        var strip = document.getElementById('quickStrip');
+        if (!shell || !strip) return;
+        if (mode === 'after-slot') {
+          var zone = document.getElementById('hubIceZone');
+          if (zone && zone.parentNode === shell) shell.insertBefore(strip, zone);
+          return;
+        }
+        var upcoming = document.getElementById('upcomingSection');
+        if (upcoming && upcoming.parentNode === shell) shell.insertBefore(strip, upcoming);
       }
 
       /** Hub streak ribbon hidden for now — copy felt odd and said little to the client. */
@@ -572,113 +624,289 @@
         setHeroLayout('booking-led');
       }
 
-      /* ── Next booking hero card ─────────────────────────────────────── */
+      /* ── Next booking hero card (вариант B: время — герой, глагол один) ─ */
+
+      var HUB_SOON_MS = 3 * 60 * 60 * 1000;
+
+      function soonWhenPrefix(ms) {
+        var mins = Math.max(1, Math.round(ms / 60000));
+        if (mins < 60) {
+          return 'через ' + mins + ' ' + pluralRuHub(mins, 'минуту', 'минуты', 'минут');
+        }
+        var h = Math.round(mins / 60);
+        if (h <= 1) return 'через час';
+        return 'через ' + h + ' ' + pluralRuHub(h, 'час', 'часа', 'часов');
+      }
+
+      /** Штамп справа от даты. Ожидание важнее «скоро»: ответ тренера — действие. */
+      function nextCardStamp(b, start) {
+        var st = String((b && b.status) || '').toLowerCase();
+        if (st === 'pending') return { kind: 'wait', label: 'ждём ответ' };
+        if (b && b.hub_in_session) return { kind: 'soon', label: 'сейчас' };
+        if (start) {
+          var left = start.getTime() - Date.now();
+          if (left > 0 && left <= HUB_SOON_MS) return { kind: 'soon', label: 'скоро' };
+        }
+        return { kind: 'ok', label: 'подтверждено' };
+      }
+
+      function nextCardWhenText(dateLabel, dur, stamp, start) {
+        var tail = dur ? (' · ' + dur + ' мин') : '';
+        if (stamp.kind === 'soon' && stamp.label === 'скоро' && start) {
+          return soonWhenPrefix(start.getTime() - Date.now()) + tail;
+        }
+        return dateLabel + tail;
+      }
+
+      function slotDurationMin(slot) {
+        if (!slot) return 0;
+        var given = Number(slot.duration_minutes || 0);
+        if (given > 0) return given;
+        var a = String(slot.start_time || '');
+        var b = String(slot.end_time || '');
+        if (a.length < 5 || b.length < 5) return 0;
+        var am = parseInt(a.slice(0, 2), 10) * 60 + parseInt(a.slice(3, 5), 10);
+        var bm = parseInt(b.slice(0, 2), 10) * 60 + parseInt(b.slice(3, 5), 10);
+        return bm > am ? bm - am : 0;
+      }
+
+      function trainerAvatarHtml(name, photoKey) {
+        var src = trainerHubThumb(photoKey || '');
+        if (src) {
+          return '<span class="hub-next-card-trainer-avatar hub-next-card-trainer-avatar--photo"><img src="' + esc(src) + '" alt=""/></span>';
+        }
+        return '<span class="hub-next-card-trainer-avatar" aria-hidden="true">' + esc(initials(name)) + '</span>';
+      }
+
+      /** Аватар и имя. Тап открывает полную карточку тренера, не запись. */
+      function trainerWhoLinkHtml(name, photoKey, placeHtml, trainerId) {
+        var inner =
+          trainerAvatarHtml(name, photoKey) +
+          '<span class="hub-next-card-who-text">' +
+            '<span class="hub-next-card-trainer-name">' + esc(name) + '</span>' +
+            placeHtml +
+          '</span>';
+        var tid = trainerId != null && String(trainerId).trim() !== '' ? String(trainerId) : '';
+        if (!tid) return '<div class="hub-next-card-who-link">' + inner + '</div>';
+        return (
+          '<button type="button" class="hub-next-card-who-link" data-hub-action="open-trainer"' +
+          ' data-trainer-id="' + esc(tid) + '"' +
+          ' aria-label="Карточка тренера, ' + esc(name) + '">' +
+          inner +
+          '</button>'
+        );
+      }
+
+      /** Строка абонемента внутри карточки. Нет остатка — строки нет. */
+      function buildNextCardMeterHtml(passInfo) {
+        if (!passInfo) return '';
+        var remaining = Number(passInfo.sessions_remaining || 0);
+        if (!remaining || remaining <= 0) return '';
+        var total = Number(passInfo.sessions_total || 0);
+        var expiry = passInfo.expires_at ? formatHistoryDate(passInfo.expires_at) : '';
+        var num = total > 0 ? (remaining + ' из ' + total) : String(remaining);
+        var meta = expiry ? ('до ' + expiry) : '';
+        var bar = '';
+        if (total > 0) {
+          var pct = Math.max(4, Math.min(100, Math.round((remaining / total) * 100)));
+          bar = '<span class="hub-next-card-meter-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>';
+        }
+        var aria = total > 0
+          ? ('Осталось ' + remaining + ' из ' + total)
+          : ('Осталось ' + remaining);
+        return (
+          '<button type="button" class="hub-next-card-meter" data-hub-action="open-pass" aria-label="' + esc(aria) + '">' +
+            '<span class="hub-next-card-meter-top">' +
+              '<span class="hub-next-card-meter-num">' + esc(num) + '</span>' +
+              (meta ? '<span class="hub-next-card-meter-meta">' + esc(meta) + '</span>' : '') +
+            '</span>' +
+            bar +
+          '</button>'
+        );
+      }
+
+      function stopHubCardControl(ev) {
+        ev.stopPropagation();
+        if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
+          window.ClientShell.hapticSelection();
+        }
+      }
 
       /**
-       * Renders the amber hero card for the nearest upcoming booking.
-       * This is the primary content for Scenario 3.
+       * Ближайшая запись. Время первое, штамп у даты.
+       * Глагол один и только в ожидании: «Написать тренеру».
+       * Подтверждённая запись открывается тапом по карточке.
        */
-      function renderNextBookingCard(item) {
+      function renderNextBookingCard(item, passInfo) {
         var b = item.b;
         var day = item.day;
-        var st = String(b.status || '').toLowerCase();
-        var isPending = st === 'pending';
-        var statusLabel = isPending ? 'Ожидает подтверждения ⏳' : 'Подтверждено ✅';
-        var statusClass = isPending ? 'hub-next-card-status-line--pending' : 'hub-next-card-status-line--confirmed';
         var time = (b.start_time || '').slice(0, 5);
         var dateLabel = relativeDate(day.date, day.day_label);
         var trainerName = b.trainer_name || 'Тренер';
         var place = ((b.arena_name || b.place_display || '') + '').trim();
         var dur = b.duration_minutes || 45;
+        var stamp = nextCardStamp(b, item.start);
+        var when = nextCardWhenText(dateLabel, dur, stamp, item.start);
+        var isPending = stamp.kind === 'wait';
 
         var placeHtml = place
-          ? '<div class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></div>'
+          ? '<span class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></span>'
           : '';
 
-        var toolbarParts = [];
-        if (canWriteTrainer(b)) {
-          toolbarParts.push(
-            '<button type="button" class="hub-next-card-tool" data-hub-dm="next"' +
+        var verbHtml = '';
+        if (isPending && canWriteTrainer(b)) {
+          verbHtml =
+            '<button type="button" class="hub-next-card-fill" data-hub-dm="next"' +
             ' data-dm-un="' + esc((b.trainer_telegram_username || '').replace(/^@/, '')) + '"' +
             ' data-dm-tid="' + esc(b.trainer_telegram_id != null ? String(b.trainer_telegram_id) : '') + '">' +
-            ICONS.msg + '<span>Написать</span></button>'
-          );
+            'Написать тренеру</button>';
         }
-        if (b.trainer_id != null && String(b.trainer_id).trim() !== '') {
-          toolbarParts.push(
-            '<button type="button" class="hub-next-card-tool" data-hub-action="share-trainer"' +
-            ' data-share-tid="' + esc(String(b.trainer_id)) + '"' +
-            ' data-share-context="next_booking">' +
-            ICONS.share + '<span>Поделиться</span></button>'
-          );
-        }
-        var toolbarHtml = toolbarParts.length
-          ? '<div class="hub-next-card-toolbar" role="group" aria-label="Действия с записью">' +
-            toolbarParts.join('') +
-            '</div>'
-          : '';
 
-        var cardMod = isPending ? 'hub-next-card--pending' : 'hub-next-card--confirmed';
+        var cardMod = isPending ? 'hub-next-card--pending' : (stamp.kind === 'soon' ? 'hub-next-card--soon' : 'hub-next-card--confirmed');
         var html =
           '<div class="hub-next-card ' + cardMod + '" id="nextCard" data-bid="' + esc(String(b.id)) + '" tabindex="0" role="button"' +
-          ' aria-label="Ближайшая запись, ' + esc(dateLabel) + ' в ' + esc(time) + '">' +
-            '<span class="hub-next-card-go" aria-hidden="true">' +
-              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">' +
-              '<path d="M9 6l6 6-6 6"/></svg>' +
-            '</span>' +
+          ' aria-label="Ближайшая запись, ' + esc(when) + '">' +
             '<div class="hub-next-card-inner">' +
-              '<div class="hub-next-card-kicker">' +
-                '<span class="hub-next-card-status-line ' + statusClass + '">' +
-                  '<span class="hub-next-card-status-dot" aria-hidden="true"></span>' +
-                  esc(statusLabel) +
+              '<div class="hub-next-card-time">' + esc(time) + '</div>' +
+              '<div class="hub-next-card-when">' +
+                '<span class="hub-next-card-date">' + esc(when) + '</span>' +
+                '<span class="hub-next-card-pill hub-next-card-pill--' + stamp.kind + '">' +
+                  '<i class="hub-next-card-status-dot" aria-hidden="true"></i>' +
+                  esc(stamp.label) +
                 '</span>' +
               '</div>' +
-              '<div class="hub-next-card-time-row">' +
-                '<div class="hub-next-card-time">' + esc(time) + '</div>' +
-                hubSessionNowPillHtml(b) +
-              '</div>' +
-              '<div class="hub-next-card-date">' + esc(dateLabel) + ' · ' + esc(String(dur)) + ' мин</div>' +
               '<div class="hub-next-card-who">' +
-                '<div class="hub-next-card-trainer-avatar" aria-hidden="true">' + esc(initials(trainerName)) + '</div>' +
-                '<div class="hub-next-card-who-text">' +
-                  '<div class="hub-next-card-trainer-name">' + esc(trainerName) + '</div>' +
-                  placeHtml +
-                '</div>' +
+                trainerWhoLinkHtml(trainerName, b.trainer_list_photo_key, placeHtml, b.trainer_id) +
               '</div>' +
-              toolbarHtml +
+              verbHtml +
+              buildNextCardMeterHtml(passInfo) +
             '</div>' +
           '</div>';
 
         var block = document.getElementById('nextBookingBlock');
         block.innerHTML = html;
 
-        /* Wire interactions */
         var card = document.getElementById('nextCard');
         if (!card) return;
         card.addEventListener('click', function(ev) {
+          var line = ev.target && ev.target.closest && ev.target.closest('.hub-next-card-line[data-bid]');
+          if (line) {
+            stopHubCardControl(ev);
+            var lineBid = line.getAttribute('data-bid');
+            if (lineBid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(lineBid) + '&from=hub');
+            return;
+          }
+          var moreBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="all-bookings"]');
+          if (moreBtn) {
+            stopHubCardControl(ev);
+            navigateTo('client-bookings');
+            return;
+          }
+          var passBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-pass"]');
+          if (passBtn) {
+            stopHubCardControl(ev);
+            navigateTo('client-passes-certificates');
+            return;
+          }
           var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="next"]');
           if (dmBtn) {
-            ev.stopPropagation();
-            if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
-              window.ClientShell.hapticSelection();
-            }
+            stopHubCardControl(ev);
             openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), b.trainer_id);
             return;
           }
-          var shareNext = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="share-trainer"]');
-          if (shareNext) {
-            ev.stopPropagation();
-            if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
-              window.ClientShell.hapticSelection();
+          var trainerBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-trainer"]');
+          if (trainerBtn) {
+            stopHubCardControl(ev);
+            var openTid = trainerBtn.getAttribute('data-trainer-id');
+            if (openTid) {
+              navigateTo('catalog?trainer_id=' + encodeURIComponent(openTid) + catalogPrimaryServiceQuery() + '&from=hub');
             }
-            shareTrainer(
-              shareNext.getAttribute('data-share-tid'),
-              shareNext.getAttribute('data-share-context') || 'next_booking'
-            );
             return;
           }
           var bid = card.getAttribute('data-bid');
           if (bid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(bid) + '&from=hub');
+        });
+      }
+
+      /**
+       * Нет записи, есть окно. Ближайшее время — герой, второе — текстовая ссылка.
+       * Карточка тренера в этом состоянии не рисуется: человек — строка внутри.
+       */
+      function renderOpenWindowCard(trainer, slots) {
+        var hero = slots[0];
+        var alt = slots.length > 1 ? slots[1] : null;
+        var time = String(hero.start_time || '').slice(0, 5);
+        var dur = slotDurationMin(hero);
+        var dateLabel = relativeDate(hero.slot_date, '');
+        var when = dur ? (dateLabel + ' · ' + dur + ' мин') : dateLabel;
+        var name = ((trainer.name || '') + '').trim() || 'Тренер';
+        var place = ((hero.arena_name || hero.arena_city_name || '') + '').trim() || 'ваш тренер';
+        var un = (trainer.username || '').replace(/^@/, '').trim();
+        var tid = trainer.telegramId != null ? String(trainer.telegramId) : '';
+        var quiet = (un || tid)
+          ? '<button type="button" class="hub-next-card-quiet" data-hub-dm="window"' +
+            ' data-dm-un="' + esc(un) + '" data-dm-tid="' + esc(tid) + '">написать</button>'
+          : '';
+        var altHtml = '';
+        if (alt) {
+          var altTime = String(alt.start_time || '').slice(0, 5);
+          var altDay = relativeDate(alt.slot_date, '').toLowerCase();
+          altHtml =
+            '<button type="button" class="hub-next-card-alt" data-slot-id="' + esc(String(alt.id || '')) + '"' +
+            (alt.service_id != null ? ' data-service-id="' + esc(String(alt.service_id)) + '"' : '') +
+            (alt.arena_id != null ? ' data-arena-id="' + esc(String(alt.arena_id)) + '"' : '') + '>' +
+            esc(altDay + ' в ' + altTime) + '</button>';
+        }
+        var block = document.getElementById('nextBookingBlock');
+        if (!block) return;
+        hubOpenWindowShown = true;
+        syncClientHubBookFab();
+        block.innerHTML =
+          '<div class="hub-next-card hub-next-card--open" id="nextCard" tabindex="0"' +
+          ' aria-label="Ближайшее окно, ' + esc(when) + '">' +
+            '<div class="hub-next-card-inner">' +
+              '<div class="hub-next-card-time hub-next-card-time--offer">' + esc(time) + '</div>' +
+              '<div class="hub-next-card-when"><span class="hub-next-card-date">' + esc(when) + '</span></div>' +
+              '<div class="hub-next-card-who">' +
+                trainerWhoLinkHtml(
+                  name,
+                  trainer.photo,
+                  '<span class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></span>',
+                  trainer.id
+                ) +
+                quiet +
+              '</div>' +
+              '<button type="button" class="hub-next-card-fill" data-slot-id="' + esc(String(hero.id || '')) + '"' +
+              (hero.service_id != null ? ' data-service-id="' + esc(String(hero.service_id)) + '"' : '') +
+              (hero.arena_id != null ? ' data-arena-id="' + esc(String(hero.arena_id)) + '"' : '') + '>' +
+              'Записаться на ' + esc(time) + '</button>' +
+              altHtml +
+            '</div>' +
+          '</div>';
+        hideMyTrainerBlock();
+        var card = document.getElementById('nextCard');
+        if (!card) return;
+        card.addEventListener('click', function(ev) {
+          var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="window"]');
+          if (dmBtn) {
+            stopHubCardControl(ev);
+            openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), trainer.id);
+            return;
+          }
+          var slotBtn = ev.target && ev.target.closest && ev.target.closest('[data-slot-id]');
+          if (slotBtn) {
+            stopHubCardControl(ev);
+            navigateTo(buildBookPathFromHubContext(trainer.id, {
+              serviceId: slotBtn.getAttribute('data-service-id'),
+              slotId: slotBtn.getAttribute('data-slot-id'),
+              arenaId: slotBtn.getAttribute('data-arena-id'),
+              fallbackServiceQuery: catalogPrimaryServiceQuery(),
+            }));
+            return;
+          }
+          navigateTo(
+            'catalog?trainer_id=' + encodeURIComponent(String(trainer.id)) + catalogPrimaryServiceQuery() + '&from=hub'
+          );
         });
       }
 
@@ -768,7 +996,7 @@
       /** Sticky FAB: primary trainer + online booking; hidden when «Записаться снова» strip is shown. */
       function shouldShowClientHubBookFab() {
         if (!initData) return false;
-        if (hubHasUpcomingBooking) return false;
+        if (hubHasUpcomingBooking || hubOpenWindowShown) return false;
         if (selectedTrainerId == null || String(selectedTrainerId).trim() === '') return false;
         return hubPrimaryTrainerCanBook === true;
       }
@@ -1050,6 +1278,7 @@
         if (!strip) return;
         strip.innerHTML = '';
         strip.setAttribute('hidden', 'hidden');
+        strip.classList.remove('hub-quick-strip--quiet');
       }
 
       function mountQuickStripPills(pills) {
@@ -1059,14 +1288,20 @@
           hideQuickStrip();
           return;
         }
+        var quiet = pills.every(function(p) { return p.quiet; });
+        strip.classList.toggle('hub-quick-strip--quiet', quiet);
         strip.removeAttribute('hidden');
         strip.innerHTML = pills.map(function(p, i) {
+          if (p.quiet) {
+            return '<button type="button" class="hub-quick-link" data-pill-idx="' + i + '">' +
+              esc(p.label) + '</button>';
+          }
           var primaryClass = p.primary ? ' hub-quick-pill--primary' : '';
           return '<button type="button" class="hub-quick-pill' + primaryClass + '" data-pill-idx="' + i + '">' +
             (ICONS[p.icon] || '') + esc(p.label) +
             '</button>';
         }).join('');
-        strip.querySelectorAll('.hub-quick-pill').forEach(function(btn) {
+        strip.querySelectorAll('.hub-quick-pill, .hub-quick-link').forEach(function(btn) {
           var idx = parseInt(btn.getAttribute('data-pill-idx'), 10);
           btn.addEventListener('click', function() { pills[idx].action(); });
         });
@@ -1093,11 +1328,37 @@
         }];
       }
 
+      /**
+       * Пока запись уже есть, «снова» — тихая строка, не вторая кнопка экрана.
+       * Без ближайшей записи (были занятия) полоска остаётся действием.
+       */
+      function rebookQuietItems(nextBooking, targets) {
+        var multi = orderedRebookPills(nextBooking, targets);
+        if (multi.length >= 2) {
+          return multi.slice(0, 2).map(function(t) {
+            return {
+              label: 'Ещё занятие · ' + trainerFirstNameForPill(t.trainer_display_name),
+              quiet: true,
+              action: function() { navigateToRebookTarget(t); },
+            };
+          });
+        }
+        var single = multi.length === 1 ? multi[0] : null;
+        return [{
+          label: 'Ещё занятие',
+          quiet: true,
+          action: function() {
+            if (single) navigateToRebookTarget(single);
+            else navigateToHubBookLikePrimaryFab(nextBooking);
+          },
+        }];
+      }
+
       /** Rebook-only pills — bottom tabs cover catalog, bookings, and «Ещё». */
       function renderQuickStrip(scenario, nextBooking) {
         var pills = [];
         if (scenario === 'has-booking') {
-          pills = rebookPillItems(nextBooking, rebookTargets, 2);
+          pills = rebookQuietItems(nextBooking, rebookTargets);
         } else if (scenario === 'has-past') {
           pills = rebookPillItems(null, rebookTargets, 2);
         }
@@ -1114,6 +1375,7 @@
         hideQuickStrip();
         hidePrimaryPanel();
         hideDiscovery();
+        placeQuickStrip('home');
         if (!opts.keepHeroLayout) resetHubHeroLayout();
       }
 
@@ -1379,11 +1641,43 @@
         return slotsPromise.then(function(slotsData) {
           if (!slotsData) return; // aborted navigation
           _primaryPanelAbort = null;
-          var slots = slotsData.slots || [];
+          var slots = (slotsData.slots || []).filter(function(s) {
+            return s && String(s.start_time || '').trim();
+          });
+          slots.sort(function(a, b) {
+            return parseDateTime(a.slot_date, a.start_time) - parseDateTime(b.slot_date, b.start_time);
+          });
           var passInfo = selectPrimaryPassForTrainer(passes, trainerId);
-          var slotsHtml = buildPrimarySlotsHtml(slots);
           var passHtml = buildPrimaryPassHtml(passInfo, {});
           var histHtml = buildPrimaryHistoryHtml(history);
+          var trainer = hubPrimaryTrainer;
+          var canBook = !!(trainer && trainer.canBook && String(trainer.id) === String(trainerId));
+          if (canBook && slots.length) {
+            renderOpenWindowCard(trainer, slots);
+            hubPersonalSlot = true;
+            applyIceHeroVisibility();
+            placeIceZone('top');
+            var windowInner = passHtml + histHtml;
+            if (!windowInner) {
+              hidePrimaryPanel();
+              return;
+            }
+            el.innerHTML = windowInner;
+            el.removeAttribute('hidden');
+            wirePrimaryPanelClicks(el, trainerId);
+            return;
+          }
+          if (canBook && trainer && !document.getElementById('trainerCard')) {
+            renderMyTrainerCard(
+              trainer.id, trainer.name, trainer.username, trainer.telegramId, trainer.photo, true
+            );
+          }
+          if (canBook) {
+            hubPersonalSlot = false;
+            applyIceHeroVisibility();
+            placeIceZone('below-trainer');
+          }
+          var slotsHtml = buildPrimarySlotsHtml(slots);
           var inner = slotsHtml + passHtml + histHtml;
           if (!inner) {
             hidePrimaryPanel();
@@ -1683,84 +1977,65 @@
       }
 
       /**
-       * Renders the secondary bookings list (up to HUB_UPCOMING_MAX items)
-       * shown below the hero card. Skips the first booking if it's already
-       * shown in the hero card.
+       * Следующие записи — продолжение той же карточки, что и герой.
+       * Тот же штамп, без кнопки сообщения и без отдельной секции.
+       * Строка открывает свою запись. Больше HUB_REST_MAX на хаб не выносится.
        */
       function renderUpcomingList(days, heroBookingId) {
         var section = document.getElementById('upcomingSection');
-        var flat = flattenBookings(days);
-        /* Skip the booking already featured in the hero card */
-        var items = flat.filter(function(item) {
-          return String(item.b.id) !== String(heroBookingId);
-        }).slice(0, HUB_UPCOMING_MAX);
-
-        if (!items.length) {
-          if (section) section.style.display = 'none';
-          return;
+        if (section) section.style.display = 'none';
+        var card = document.getElementById('nextCard');
+        if (card) {
+          var prev = card.querySelector('.hub-next-card-rest');
+          if (prev) prev.remove();
         }
-        if (section) section.style.display = '';
+        var rest = flattenBookings(days).filter(function(item) {
+          return String(item.b.id) !== String(heroBookingId);
+        });
+        var items = rest.slice(0, HUB_REST_MAX);
+        if (!items.length || !card) return;
 
-        /* Group by date for day chips */
         var byDate = {};
         var dateOrder = [];
         items.forEach(function(item) {
           var ds = item.day.date || '';
-          if (!byDate[ds]) { byDate[ds] = { day: item.day, bookings: [] }; dateOrder.push(ds); }
-          byDate[ds].bookings.push(item.b);
+          if (!byDate[ds]) { byDate[ds] = { day: item.day, rows: [] }; dateOrder.push(ds); }
+          byDate[ds].rows.push(item);
         });
 
-        var parts = [];
+        var parts = ['<div class="hub-next-card-rest">'];
         dateOrder.forEach(function(ds) {
           var group = byDate[ds];
-          var chipLabel = relativeDate(ds, group.day.day_label);
-          parts.push('<div class="hub-day-chip">' + esc(chipLabel) + '</div>');
-          parts.push('<div class="hub-bookings-stack">');
-          group.bookings.forEach(function(b) {
-            var st = String(b.status || '').toLowerCase();
-            var isPending = st === 'pending';
-            var rowClass = isPending ? 'hub-booking-row--pending' : 'hub-booking-row--confirmed';
-            var statusClass = isPending ? 'hub-booking-status--pending' : 'hub-booking-status--confirmed';
-            var statusLabel = isPending ? 'Ожидает ⏳' : 'Подтверждено ✅';
+          parts.push('<div class="hub-next-card-day">' + esc(relativeDate(ds, group.day.day_label)) + '</div>');
+          group.rows.forEach(function(item) {
+            var b = item.b;
+            var stamp = nextCardStamp(b, item.start);
             var time = (b.start_time || '').slice(0, 5);
             var dur = b.duration_minutes || 45;
             var trainerName = b.trainer_name || 'Тренер';
-            var place = ((b.arena_name || b.place_display || '') + '').trim() || '';
-
-            var msgBtnHtml = '';
-            if (canWriteTrainer(b)) {
-              msgBtnHtml =
-                '<button type="button" class="hub-booking-msg-btn" data-hub-dm="list"' +
-                ' data-dm-un="' + esc((b.trainer_telegram_username || '').replace(/^@/, '')) + '"' +
-                ' data-dm-tid="' + esc(b.trainer_telegram_id != null ? String(b.trainer_telegram_id) : '') + '"' +
-                ' data-trainer-id="' + esc(b.trainer_id != null ? String(b.trainer_id) : '') + '"' +
-                ' aria-label="Написать тренеру">' + ICONS.msg + '</button>';
-            }
-
+            var place = ((b.arena_name || b.place_display || '') + '').trim();
             parts.push(
-              '<div class="hub-booking-row ' + rowClass + '" data-bid="' + esc(String(b.id)) + '">' +
-                '<div class="hub-booking-time-col">' +
-                  '<div class="hub-booking-time-block">' +
-                    '<div class="hub-booking-time">' + esc(time) + '</div>' +
-                    hubSessionNowPillHtml(b) +
-                  '</div>' +
-                  '<div class="hub-booking-dur">' + esc(String(dur)) + ' мин</div>' +
-                '</div>' +
-                '<div class="hub-booking-divider"></div>' +
-                '<div class="hub-booking-info">' +
-                  '<div class="hub-booking-trainer">' + esc(trainerName) + '</div>' +
-                  (place ? '<div class="hub-booking-place">' + esc(place) + '</div>' : '') +
-                  '<span class="hub-booking-status hub-booking-status--inline ' + statusClass + '">' + statusLabel + '</span>' +
-                '</div>' +
-                (msgBtnHtml ? '<div class="hub-booking-row-end">' + msgBtnHtml + '</div>' : '') +
-              '</div>'
+              '<button type="button" class="hub-next-card-line" data-bid="' + esc(String(b.id)) + '">' +
+                '<span class="hub-next-card-line-when">' +
+                  '<span class="hub-next-card-line-clock">' + esc(time) + '</span>' +
+                  '<span class="hub-next-card-line-dur">' + esc(String(dur)) + ' мин</span>' +
+                '</span>' +
+                '<span class="hub-next-card-line-who">' +
+                  '<span class="hub-next-card-line-name">' + esc(trainerName) + '</span>' +
+                  (place ? '<span class="hub-next-card-line-place">' + esc(place) + '</span>' : '') +
+                '</span>' +
+                '<span class="hub-next-card-pill hub-next-card-pill--' + stamp.kind + '">' +
+                  '<i class="hub-next-card-status-dot" aria-hidden="true"></i>' + esc(stamp.label) +
+                '</span>' +
+              '</button>'
             );
           });
-          parts.push('</div>');
         });
-
-        revealBookingsBlock(parts.join(''));
-        wireUpcomingBookingsBlock();
+        if (rest.length > items.length) {
+          parts.push('<button type="button" class="hub-next-card-more" data-hub-action="all-bookings">Смотреть все</button>');
+        }
+        parts.push('</div>');
+        card.insertAdjacentHTML('beforeend', parts.join(''));
       }
 
 
@@ -1884,6 +2159,9 @@
       }
 
       function applyHubState(bookingDays, requestItems, hubMeta) {
+        hubPersonalSlot = false;
+        hubPrimaryTrainer = null;
+        hubOpenWindowShown = false;
         if (window.ClientShell && typeof window.ClientShell.writeBookingsWarmCache === 'function') {
           window.ClientShell.writeBookingsWarmCache({ days: bookingDays || [] });
         }
@@ -1952,15 +2230,15 @@
           resetHubChromeForState({ keepHeroLayout: true });
           configureHeroForUpcomingBooking();
           placeIceZone('top');
-          renderNextBookingCard(nextItem);
+          hubPersonalSlot = true;
+          applyIceHeroVisibility();
+          var bookingTrainerId = nextItem.b && nextItem.b.trainer_id;
+          var passInfo = selectPrimaryPassForTrainer(hubBootstrapPasses(hubMeta), bookingTrainerId);
+          renderNextBookingCard(nextItem, passInfo);
           hideMyTrainerBlock();
           renderQuickStrip('has-booking', nextItem);
           renderUpcomingList(bookingDays, nextItem.b.id);
-          var bookingTrainerId = nextItem.b && nextItem.b.trainer_id;
-          renderPrimaryPassPanel(bookingTrainerId, hubBootstrapPasses(hubMeta), {
-            autoDebitNote: true,
-            rowHead: 'Абонемент',
-          });
+          placeQuickStrip('after-slot');
           return finishHubApply(Promise.resolve());
         }
 
@@ -1972,13 +2250,28 @@
         /* ── Priority 2: Has primary trainer ── */
         if (primaryTrainerId != null) {
           resetHubHeroLayout();
-          placeIceZone('below-trainer');
           var pname = (cs.primary_trainer_name || '').trim();
           var pphoto = cs.primary_trainer_list_photo_key || null;
           var ptgUn = cs.primary_trainer_telegram_username || null;
           var ptgId = cs.primary_trainer_telegram_id != null ? cs.primary_trainer_telegram_id : null;
           var pCanBook = cs.primary_trainer_can_book === true;
-          renderMyTrainerCard(primaryTrainerId, pname || null, ptgUn, ptgId, pphoto, pCanBook);
+          hubPrimaryTrainer = {
+            id: primaryTrainerId,
+            name: pname || null,
+            username: ptgUn,
+            telegramId: ptgId,
+            photo: pphoto,
+            canBook: pCanBook,
+          };
+          if (pCanBook) {
+            hideMyTrainerBlock();
+            placeIceZone('top');
+            hubPersonalSlot = true;
+            applyIceHeroVisibility();
+          } else {
+            renderMyTrainerCard(primaryTrainerId, pname || null, ptgUn, ptgId, pphoto, pCanBook);
+            placeIceZone('below-trainer');
+          }
           return finishHubApply(
             loadAndRenderPrimaryPanel(primaryTrainerId, cs.primary_history || null, hubBootstrapPasses(hubMeta))
           );

@@ -186,7 +186,7 @@ async def get_ice_city_day_share(
         "day_label": day.get("day_label"),
         "arena_count": day.get("arena_count"),
         "session_count": day.get("session_count"),
-        "summary": summary_line(day, city_name=city_name),
+        "summary": summary_line(day, city_name=city_name, absolute=True),
         "share_context": ctx,
     }
 

@@ -4,7 +4,13 @@
  *
  * Сценарии (390×844, таймзона Europe/Minsk, «сейчас» зафиксировано на 19:30):
  *   а) гость: тизер + сеансы + фасеты → приветствие, ОДИН блок льда, поиск, «Куда катимся»;
- *   б) клиент с ближайшей записью: запись выше льда, рынок ниже;
+ *   б) клиент с ближайшей записью: карточка B (время — герой), фото льда спрятано, поиск и рынок на месте;
+ *   б2) ожидание: штамп «ждём ответ», один глагол «Написать тренеру», без «Поделиться»;
+ *   б3) скоро: штамп «скоро», строка «через …»;
+ *   б4) идёт сейчас: штамп «сейчас»; абонемент в б) — строка внутри карточки;
+ *   д2) окно без записи: время героя, «Записаться», второе время ссылкой, фото льда спрятано;
+ *   ж) сохранённые тренеры: фото льда остаётся;
+ *   з) прошлые занятия без записи: фото льда остаётся;
  *   в) пустой рынок: ни плиток, ни сетки, ни карусели, ни блока льда — только поиск;
  *   в2) пустой рынок, но на платформе есть тренеры: карусель-фолбэк, плиток нет;
  *   г) льда нет, рынок есть: поиск виден, блока льда нет;
@@ -113,7 +119,7 @@ async function openHub(browser, cfg) {
   await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: TELEGRAM_MOCK }));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   // Переходы из хаба (тап по плитке): запоминаем адрес и не грузим чужие страницы.
-  await page.route((u) => /\/(ice|arena|catalog|client-bookings)$/.test(u.pathname), (r) => {
+  await page.route((u) => /\/(ice|arena|catalog|client-bookings|client-passes-certificates)$/.test(u.pathname), (r) => {
     navigations.push(r.request().url());
     return r.fulfill({ contentType: 'text/html', body: '<html><body>stub</body></html>' });
   });
@@ -125,7 +131,7 @@ async function openHub(browser, cfg) {
     const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (p === '/api/webapp/client/hub/bootstrap') return json(cfg.bootstrap);
     if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
-    if (p === '/api/webapp/client/slots') return json({ slots: [] });
+    if (p === '/api/webapp/client/slots') return json({ slots: cfg.slots || [] });
     if (p === '/api/public/ice/arenas') {
       if (q.includes('when=today_evening')) return json({ items: [], window: { key: 'today_evening', hits: market.eveningHits } });
       if (q.includes('venue_type=outdoor')) return json({ items: market.outdoorLive ? [{ id: 12, live: { kind: 'session' } }] : [] });
@@ -185,8 +191,30 @@ async function snapshot(page) {
       discovery: top('#hubDiscovery'),
       discoveryTitle: (document.querySelector('.hub-discovery__title') || {}).textContent || '',
       nextCard: top('#nextCard'),
+      cardText: ((document.getElementById('nextCard') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+      cardHtml: (document.getElementById('nextCard') || {}).innerHTML || '',
+      cardFill: ((document.querySelector('#nextCard .hub-next-card-fill') || {}).textContent || '').trim(),
+      cardAlt: ((document.querySelector('#nextCard .hub-next-card-alt') || {}).textContent || '').trim(),
+      cardQuiet: ((document.querySelector('#nextCard .hub-next-card-quiet') || {}).textContent || '').trim(),
+      cardPill: ((document.querySelector('#nextCard .hub-next-card-pill') || {}).textContent || '').trim(),
+      cardShare: document.querySelectorAll('#nextCard [data-hub-action="share-trainer"], #nextCard .hub-next-card-toolbar, #nextCard .hub-next-card-go').length,
+      meter: ((document.querySelector('#nextCard .hub-next-card-meter') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+      passPanel: top('.hub-primary-panel__pass'),
       myTrainer: top('#trainerCard'),
+      saved: top('.hub-saved-section'),
+      bookFab: (() => {
+        const el = document.getElementById('hubBookFab');
+        if (!el || el.hasAttribute('hidden')) return null;
+        const r = el.getBoundingClientRect();
+        return r.height > 0 ? Math.round(r.top + window.scrollY) : null;
+      })(),
       upcoming: top('#upcomingSection'),
+      rebook: top('#quickStrip'),
+      rebookText: ((document.querySelector('#quickStrip') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+      primaryRebook: document.querySelectorAll('.hub-quick-pill--primary').length,
+      restLines: visibleAll('.hub-next-card-line').map((el) => el.innerText.replace(/\s+/g, ' ').trim()),
+      restMore: ((document.querySelector('.hub-next-card-more') || {}).textContent || '').trim(),
+      msgBtns: document.querySelectorAll('.hub-booking-msg-btn').length,
       footer: top('#hubFooterAside'),
       bodyText,
       scrollW: document.documentElement.scrollWidth,
@@ -259,19 +287,212 @@ try {
 
   /* ---------- б) клиент с ближайшей записью ---------- */
   {
-    const { page, ctx, errors } = await openHub(browser, {
-      bootstrap: { bookings: { days: BOOKING_DAYS }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+    const { page, ctx, errors, navigations } = await openHub(browser, {
+      bootstrap: {
+        bookings: { days: BOOKING_DAYS }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(),
+        passes: [{ id: 3, status: 'active', trainer_id: 7, sessions_remaining: 4, sessions_total: 8, expires_at: '2026-10-15', product_name: '8 занятий' }],
+      },
       market: RICH_MARKET,
     });
     const s = await snapshot(page);
+    const timeBeforePill = s.cardHtml.indexOf('hub-next-card-time') < s.cardHtml.indexOf('hub-next-card-pill');
     check('б) приветствие остаётся: «Вечер, Максим»', s.greetingText === 'Вечер, Максим', s.greetingText);
-    check('б) порядок: приветствие → запись → блок льда (не выкинут) → поиск → рынок',
-      increasing(s.greeting, s.nextCard, s.iceZone, s.search, s.explore), JSON.stringify({ g: s.greeting, n: s.nextCard, z: s.iceZone, q: s.search, e: s.explore }));
-    check('б) лёд клиента с записью на месте: герой + строки сеансов (как сегодня)', s.teaser != null && s.sessionRows === 3);
-    check('б) «Куда катимся» ниже записи и льда, до футера', increasing(s.nextCard, s.explore, s.footer));
+    check('б) порядок: приветствие → запись → поиск → рынок; фото льда не герой',
+      increasing(s.greeting, s.nextCard, s.search, s.explore) && s.teaser == null && s.kicker == null && s.sessions == null,
+      JSON.stringify({ g: s.greeting, n: s.nextCard, t: s.teaser, q: s.search, e: s.explore }));
+    check('б) «Ещё занятие» — тихая строка между карточкой и поиском',
+      s.rebookText === 'Ещё занятие' && s.primaryRebook === 0 && increasing(s.nextCard, s.rebook, s.search),
+      JSON.stringify({ text: s.rebookText, primary: s.primaryRebook, n: s.nextCard, r: s.rebook, q: s.search }));
+    check('б) отдельного списка записей нет', s.upcoming == null && s.restLines.length === 0 && s.msgBtns === 0);
+    check('б) время раньше штампа, штамп «подтверждено», кнопки и шеринга нет',
+      timeBeforePill && s.cardPill === 'подтверждено' && s.cardFill === '' && s.cardShare === 0 && /18:15/.test(s.cardText),
+      s.cardText);
+    check('б) абонемент — строка внутри карточки, отдельной панели нет',
+      /4 из 8/.test(s.meter) && /до 15 окт/.test(s.meter) && s.passPanel == null, s.meter);
+    check('б) «Куда катимся» ниже записи, до футера', increasing(s.nextCard, s.explore, s.footer));
     check('б) плитки на месте', s.tiles.length === 3);
     commonChecks('б)', s, errors);
     await page.screenshot({ path: path.join(shots, '02-client-booking-full.png'), fullPage: true });
+    await page.screenshot({ path: path.join(shots, '02-client-booking-viewport.png') });
+    await page.evaluate(() => document.documentElement.classList.add('hub-is-dark'));
+    await page.screenshot({ path: path.join(shots, '02b-client-booking-dark.png') });
+    await page.evaluate(() => document.documentElement.classList.remove('hub-is-dark'));
+    await page.click('#nextCard .hub-next-card-time');
+    await page.waitForTimeout(300);
+    check('б) тап по времени открывает запись', navigations.some((u) => /open_booking=501/.test(u)), navigations.join(' | '));
+    await ctx.close();
+  }
+
+  /* ---------- б2) ожидание ---------- */
+  {
+    const pendingDays = [{
+      date: tomorrow, day_label: 'вс',
+      bookings: [{
+        id: 502, status: 'pending', start_time: '16:00', duration_minutes: 60,
+        trainer_id: 7, trainer_name: 'Анна Коваль', place_display: 'Уточните у тренера',
+        trainer_telegram_username: 'anna',
+      }],
+    }];
+    const { page, ctx, errors, navigations } = await openHub(browser, {
+      bootstrap: { bookings: { days: pendingDays }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('б2) штамп «ждём ответ», глагол один — «Написать тренеру»',
+      s.cardPill === 'ждём ответ' && s.cardFill === 'Написать тренеру' && s.cardShare === 0 && /Уточните у тренера/.test(s.cardText),
+      s.cardText);
+    check('б2) фото льда спрятано, поиск на месте', s.teaser == null && s.search != null);
+    check('б2) абонемента нет — строки баланса нет', s.meter === '' && s.passPanel == null);
+    commonChecks('б2)', s, errors);
+    await page.screenshot({ path: path.join(shots, '02c-pending.png'), fullPage: true });
+    await page.click('.hub-next-card-who-link');
+    await page.waitForTimeout(300);
+    check('б2) тап по тренеру открывает его карточку', navigations.some((u) => /\/catalog\?trainer_id=7/.test(u)) && !navigations.some((u) => /open_booking=/.test(u)), navigations.join(' | '));
+    await ctx.close();
+  }
+  {
+    const pendingDays = [{
+      date: tomorrow, day_label: 'вс',
+      bookings: [{
+        id: 502, status: 'pending', start_time: '16:00', duration_minutes: 60,
+        trainer_id: 7, trainer_name: 'Анна Коваль', place_display: 'Уточните у тренера',
+        trainer_telegram_username: 'anna',
+      }],
+    }];
+    const { page, ctx, navigations } = await openHub(browser, {
+      bootstrap: { bookings: { days: pendingDays }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    await page.click('.hub-next-card-fill');
+    await page.waitForTimeout(200);
+    check('б2) «Написать» не открывает запись', navigations.length === 0, navigations.join(' | '));
+    await ctx.close();
+  }
+
+  /* ---------- б3) скоро ---------- */
+  {
+    const today = minskParts(NOW).date;
+    const soonDays = [{
+      date: today, day_label: 'сб',
+      bookings: [{ id: 503, status: 'confirmed', start_time: '21:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Анна Коваль', arena_name: 'Чижовка-арена' }],
+    }];
+    const { page, ctx, errors } = await openHub(browser, {
+      bootstrap: { bookings: { days: soonDays }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('б3) «скоро»: штамп и «через …», без кнопки',
+      s.cardPill === 'скоро' && /через 2 часа · 60 мин/.test(s.cardText) && s.cardFill === '' && /21:00/.test(s.cardText),
+      s.cardText);
+    commonChecks('б3)', s, errors);
+    await page.screenshot({ path: path.join(shots, '02d-soon.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ---------- б4) занятие уже идёт ---------- */
+  {
+    const today = minskParts(NOW).date;
+    const liveDays = [{
+      date: today, day_label: 'сб',
+      bookings: [{ id: 504, status: 'confirmed', start_time: '19:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Анна Коваль', arena_name: 'Чижовка-арена', hub_in_session: true }],
+    }];
+    const { page, ctx, errors } = await openHub(browser, {
+      bootstrap: { bookings: { days: liveDays }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('б4) идёт занятие: штамп «сейчас», дата остаётся «Сегодня»',
+      s.cardPill === 'сейчас' && /Сегодня · 60 мин/.test(s.cardText) && s.cardFill === '', s.cardText);
+    commonChecks('б4)', s, errors);
+    await page.screenshot({ path: path.join(shots, '02e-now.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ---------- б5) две свои записи: одна карточка, город ниже ---------- */
+  {
+    const today = minskParts(NOW).date;
+    const dayAfter = minskParts(new Date(NOW.getTime() + 2 * 24 * 3600 * 1000)).date;
+    const later = minskParts(new Date(NOW.getTime() + 3 * 24 * 3600 * 1000)).date;
+    const days = [
+      { date: today, day_label: 'сб', bookings: [{ id: 601, status: 'confirmed', start_time: '21:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Максим', place_display: 'Уточните у тренера' }] },
+      { date: tomorrow, day_label: 'вс', bookings: [{ id: 602, status: 'confirmed', start_time: '16:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Максим', place_display: 'Уточните у тренера' }] },
+      { date: dayAfter, day_label: 'пн', bookings: [{ id: 603, status: 'confirmed', start_time: '18:30', duration_minutes: 45, trainer_id: 7, trainer_name: 'Максим', arena_name: 'Чижовка-арена' }] },
+      { date: later, day_label: 'вт', bookings: [{ id: 604, status: 'pending', start_time: '07:40', duration_minutes: 45, trainer_id: 7, trainer_name: 'Максим', arena_name: 'Чижовка-арена', trainer_telegram_username: 'max' }] },
+    ];
+    const { page, ctx, errors, navigations } = await openHub(browser, {
+      bootstrap: { bookings: { days }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('б5) слот и следующие — одна карточка, поиск и «Ещё занятие» ниже своего',
+      s.cardPill === 'скоро' && /21:00/.test(s.cardText) && s.restLines.length === 2
+      && /16:00/.test(s.restLines[0]) && /подтверждено/.test(s.restLines[0]) && !/✓|✅/.test(s.restLines[0])
+      && /18:30/.test(s.restLines[1]) && !/07:40/.test(s.cardText)
+      && s.restMore === 'Смотреть все' && s.upcoming == null && s.msgBtns === 0 && s.primaryRebook === 0
+      && s.rebookText === 'Ещё занятие'
+      && increasing(s.nextCard, s.rebook, s.search, s.explore),
+      JSON.stringify({ pill: s.cardPill, lines: s.restLines, more: s.restMore, rebook: s.rebookText, order: [s.nextCard, s.rebook, s.search, s.explore] }));
+    commonChecks('б5)', s, errors);
+    await page.screenshot({ path: path.join(shots, '02f-two-bookings.png'), fullPage: true });
+    await page.click('.hub-next-card-line');
+    await page.waitForTimeout(300);
+    check('б5) тап по строке открывает эту запись, не героя',
+      navigations.some((u) => /open_booking=602/.test(u)) && !navigations.some((u) => /open_booking=601/.test(u)),
+      navigations.join(' | '));
+    await ctx.close();
+  }
+  {
+    const today = minskParts(NOW).date;
+    const dayAfter = minskParts(new Date(NOW.getTime() + 2 * 24 * 3600 * 1000)).date;
+    const later = minskParts(new Date(NOW.getTime() + 3 * 24 * 3600 * 1000)).date;
+    const days = [
+      { date: today, day_label: 'сб', bookings: [{ id: 601, status: 'confirmed', start_time: '21:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Максим', place_display: 'Уточните у тренера' }] },
+      { date: tomorrow, day_label: 'вс', bookings: [{ id: 602, status: 'confirmed', start_time: '16:00', duration_minutes: 60, trainer_id: 7, trainer_name: 'Максим', place_display: 'Уточните у тренера' }] },
+      { date: dayAfter, day_label: 'пн', bookings: [{ id: 603, status: 'confirmed', start_time: '18:30', duration_minutes: 45, trainer_id: 7, trainer_name: 'Максим', arena_name: 'Чижовка-арена' }] },
+      { date: later, day_label: 'вт', bookings: [{ id: 604, status: 'pending', start_time: '07:40', duration_minutes: 45, trainer_id: 7, trainer_name: 'Максим', arena_name: 'Чижовка-арена' }] },
+    ];
+    const { page, ctx, navigations } = await openHub(browser, {
+      bootstrap: { bookings: { days }, requests: { items: [] }, client_session: { city_id: 2 }, ice_teaser: teaser(), passes: [] },
+      market: RICH_MARKET,
+    });
+    await page.click('.hub-next-card-more');
+    await page.waitForTimeout(300);
+    check('б5) «Смотреть все» открывает список, не конкретную запись',
+      navigations.some((u) => /\/client-bookings/.test(u)) && !navigations.some((u) => /open_booking=/.test(u)),
+      navigations.join(' | '));
+    await ctx.close();
+  }
+
+  /* ---------- д2) окно без записи ---------- */
+  {
+    const dayAfter = minskParts(new Date(NOW.getTime() + 2 * 24 * 3600 * 1000)).date;
+    const { page, ctx, errors, navigations } = await openHub(browser, {
+      bootstrap: {
+        bookings: { days: [] }, requests: { items: [] }, ice_teaser: teaser(), passes: [],
+        client_session: {
+          city_id: 2, primary_trainer_id: 7, primary_trainer_name: 'Анна Коваль',
+          primary_trainer_can_book: true, primary_trainer_telegram_username: 'anna',
+        },
+      },
+      market: RICH_MARKET,
+      slots: [
+        { id: 9, start_time: '21:00', end_time: '22:00', slot_date: tomorrow, arena_name: 'Чижовка-арена', service_id: 3, arena_id: 11 },
+        { id: 10, start_time: '16:00', end_time: '17:00', slot_date: dayAfter, arena_name: 'Парк Горького', service_id: 3, arena_id: 12 },
+      ],
+    });
+    const s = await snapshot(page);
+    check('д2) окно: время героя, «Записаться на 21:00», второе время ссылкой, «написать» тихое',
+      /21:00/.test(s.cardText) && s.cardFill === 'Записаться на 21:00' && s.cardAlt === '05.10 в 16:00' && s.cardQuiet === 'написать' && s.myTrainer == null,
+      JSON.stringify({ fill: s.cardFill, alt: s.cardAlt, quiet: s.cardQuiet, text: s.cardText }));
+    check('д2) фото льда спрятано, поиск и рынок ниже карточки',
+      s.teaser == null && increasing(s.nextCard, s.search, s.explore));
+    check('д2) карточки «Основной» нет, плавающая «Записаться» не дублирует кнопку карточки',
+      s.myTrainer == null && !/Основной/.test(s.cardText) && s.bookFab == null);
+    commonChecks('д2)', s, errors);
+    await page.screenshot({ path: path.join(shots, '06b-open-window.png'), fullPage: true });
+    await page.click('.hub-next-card-fill');
+    await page.waitForTimeout(300);
+    check('д2) «Записаться» ведёт на слот', navigations.some((u) => /slot_id=9/.test(u) && /trainer_id=7/.test(u)), navigations.join(' | '));
     await ctx.close();
   }
 
@@ -360,6 +581,44 @@ try {
     check('е) страновой фолбэк без города: рынка и плиток нет, поиск виден', s.tiles.length === 0 && s.search != null);
     commonChecks('е)', s, errors);
     await page.screenshot({ path: path.join(shots, '07-country-fallback.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ---------- ж) сохранённые тренеры, записи нет ---------- */
+  {
+    const { page, ctx, errors } = await openHub(browser, {
+      bootstrap: {
+        bookings: { days: [] }, requests: { items: [] }, ice_teaser: teaser(), passes: [],
+        client_session: {
+          city_id: 2,
+          saved_trainers: [{ trainer_id: 8, trainer_display_name: 'Пётр Лис', trainer_list_photo_key: null }],
+        },
+      },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('ж) сохранённые: фото льда на месте, карточки записи нет',
+      s.teaser != null && s.sessionRows === 3 && s.nextCard == null && s.saved != null && /Сохранённые тренеры/.test(s.bodyText));
+    check('ж) лёд выше сохранённых и рынка', increasing(s.teaser, s.saved, s.explore));
+    commonChecks('ж)', s, errors);
+    await page.screenshot({ path: path.join(shots, '08-saved-trainers.png'), fullPage: true });
+    await ctx.close();
+  }
+
+  /* ---------- з) были занятия, ближайшей записи нет ---------- */
+  {
+    const { page, ctx, errors } = await openHub(browser, {
+      bootstrap: {
+        bookings: { days: [] }, requests: { items: [] }, ice_teaser: teaser(), passes: [],
+        client_session: { city_id: 2, has_past_sessions: true },
+      },
+      market: RICH_MARKET,
+    });
+    const s = await snapshot(page);
+    check('з) прошлые занятия: фото льда на месте, слот записи пуст',
+      s.teaser != null && s.nextCard == null && s.myTrainer == null && s.search != null);
+    commonChecks('з)', s, errors);
+    await page.screenshot({ path: path.join(shots, '09-past-sessions.png'), fullPage: true });
     await ctx.close();
   }
 

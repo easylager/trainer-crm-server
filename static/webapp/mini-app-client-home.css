@@ -101,6 +101,11 @@ body.hub-body {
   margin-top: 0;
 }
 
+/* Своё уже сказано: поиск (зона льда без фото) отступает от тихой строки «Ещё занятие». */
+.hub-body--booking-led .hub-ice-zone {
+  margin-top: 22px;
+}
+
 /* Week streak ribbon hidden for now (copy felt odd; revisit later). */
 .hub-streak-ribbon {
   display: none !important;
@@ -182,23 +187,8 @@ body.hub-body {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.hub-is-dark .hub-next-card-date,
-.hub-is-dark .hub-next-card-status-line {
+.hub-is-dark .hub-next-card-date {
   color: rgba(255, 252, 245, 0.72);
-}
-
-.hub-is-dark .hub-next-card-toolbar {
-  background: rgba(0, 0, 0, 0.18);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.hub-is-dark .hub-next-card-tool {
-  color: rgba(255, 252, 245, 0.92);
-}
-
-.hub-is-dark .hub-next-card-go {
-  color: rgba(255, 252, 245, 0.72);
-  background: rgba(0, 0, 0, 0.2);
 }
 
 .hub-is-dark .hub-next-card-trainer-avatar {
@@ -208,12 +198,6 @@ body.hub-body {
 
 .hub-is-dark .hub-next-card-place-line {
   color: rgba(255, 252, 245, 0.72);
-}
-
-.hub-is-dark .hub-next-card-time-row .hub-session-now-pill {
-  color: rgba(255, 252, 245, 0.95);
-  background: rgba(0, 0, 0, 0.22);
-  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .hub-next-card::before,
@@ -226,45 +210,63 @@ body.hub-body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
-.hub-next-card-go {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: color-mix(in srgb, var(--tg-theme-hint-color) 75%, var(--tg-theme-text-color));
-  background: rgba(255, 255, 255, 0.55);
-  pointer-events: none;
-}
-
-.hub-next-card-go svg {
-  width: 16px;
-  height: 16px;
-}
-
 .hub-next-card-inner {
-  padding: 16px 16px 14px;
+  padding: var(--app-space-4);
   position: relative;
   z-index: 1;
 }
 
-.hub-next-card-kicker {
-  margin-bottom: 6px;
-  padding-right: 36px;
+.hub-next-card-time {
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  margin: 0;
 }
 
-.hub-next-card-status-line {
+.hub-next-card-time--offer {
+  color: var(--glide-ink-teal);
+}
+
+.hub-next-card-when {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  margin-top: var(--app-space-2);
+}
+
+.hub-next-card-date {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  margin: 0;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-next-card-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: none;
+  border-radius: 999px;
+  padding: 4px 9px;
   font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
+  font-weight: var(--app-weight-semibold);
+}
+
+.hub-next-card-pill--ok {
+  background: var(--app-ok-wash);
+  color: var(--app-ok-ink);
+}
+
+.hub-next-card-pill--wait {
+  background: var(--app-attention-wash);
+  color: var(--app-attention-ink);
+}
+
+.hub-next-card-pill--soon {
+  background: color-mix(in srgb, var(--app-cta-fill) 16%, transparent);
+  color: var(--glide-ink-teal);
 }
 
 .hub-next-card-status-dot {
@@ -272,59 +274,21 @@ body.hub-body {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+  background: currentColor;
 }
 
-.hub-next-card-status-line--confirmed .hub-next-card-status-dot {
-  background: var(--app-ok);
-  box-shadow: 0 0 0 2px rgba(82, 196, 122, 0.22);
-}
-
-.hub-next-card-status-line--pending .hub-next-card-status-dot {
-  background: var(--app-attention);
-  box-shadow: 0 0 0 2px rgba(232, 160, 48, 0.22);
+.hub-next-card-pill--wait .hub-next-card-status-dot,
+.hub-next-card-pill--soon .hub-next-card-status-dot {
   animation: hub-pulse 2.8s ease-in-out infinite;
-}
-
-.hub-next-card-time-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  margin-bottom: 6px;
-}
-
-.hub-next-card-time-row .hub-next-card-time {
-  margin-bottom: 0;
-}
-
-.hub-next-card-time-row .hub-session-now-pill {
-  border-color: color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
-  color: color-mix(in srgb, var(--app-cta-fill) 88%, var(--tg-theme-text-color));
-  background: rgba(255, 255, 255, 0.65);
-  box-shadow: none;
-}
-
-.hub-next-card-time {
-  font-size: var(--app-text-headline);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: -0.04em;
-  line-height: 1;
-  margin-bottom: 6px;
-}
-
-.hub-next-card-date {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-medium);
-  margin-bottom: 10px;
-  color: var(--tg-theme-hint-color);
 }
 
 .hub-next-card-who {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-top: var(--app-space-4);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-card-line);
 }
 
 .hub-next-card-trainer-avatar {
@@ -343,10 +307,43 @@ body.hub-body {
   box-shadow: 0 2px 8px rgba(200, 160, 80, 0.08);
 }
 
-.hub-next-card-who-text {
+.hub-next-card-who-link {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
   flex: 1;
   min-width: 0;
-  padding-top: 2px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.hub-next-card-who-link:active {
+  opacity: 0.72;
+}
+
+.hub-next-card-who-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.hub-next-card-trainer-avatar--photo {
+  padding: 0;
+  overflow: hidden;
+}
+
+.hub-next-card-trainer-avatar--photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .hub-next-card-trainer-name {
@@ -379,53 +376,181 @@ body.hub-body {
   min-width: 0;
 }
 
-/* Single glass strip — secondary actions without chunky white buttons */
-.hub-next-card-toolbar {
-  display: flex;
-  margin-top: 12px;
-  border-radius: var(--app-radius-md);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  overflow: hidden;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.hub-next-card-tool {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 44px;
-  padding: 6px 8px;
+.hub-next-card-quiet {
   border: none;
-  background: transparent;
-  color: var(--tg-theme-text-color);
+  background: none;
+  color: var(--glide-ink-teal);
   font: inherit;
   font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  padding: var(--app-space-2) 0 var(--app-space-2) var(--app-space-2);
+  flex: none;
+  cursor: pointer;
+}
+
+.hub-next-card-fill {
+  display: block;
+  width: 100%;
+  margin-top: var(--app-space-4);
+  padding: 14px var(--app-space-4);
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font: inherit;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+
+.hub-next-card-fill:active {
+  transform: translateY(1px);
+}
+
+.hub-next-card-alt {
+  display: block;
+  width: 100%;
+  margin-top: var(--app-space-1);
+  padding: var(--app-space-2);
+  border: none;
+  background: none;
+  color: var(--glide-ink-teal);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+
+.hub-next-card-meter {
+  display: block;
+  width: 100%;
+  margin-top: var(--app-space-4);
+  padding: var(--app-space-3) 0 0;
+  border: none;
+  border-top: 1px solid var(--app-card-line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hub-next-card-meter-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+}
+
+.hub-next-card-meter-num {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
+}
+
+.hub-next-card-meter-meta {
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-medium);
-  letter-spacing: 0.01em;
+  color: var(--tg-theme-hint-color);
+  text-align: right;
+}
+
+.hub-next-card-meter-bar {
+  display: block;
+  height: 4px;
+  margin-top: var(--app-space-2);
+  border-radius: 999px;
+  background: var(--app-card-line);
+  overflow: hidden;
+}
+
+.hub-next-card-meter-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--app-cta-fill);
+}
+
+/* Следующие записи — та же карточка, тот же штамп. Отдельной карточки списка нет. */
+.hub-next-card-rest {
+  border-top: 1px solid var(--app-card-line);
+  padding: 4px 8px 8px;
+}
+
+.hub-next-card-day {
+  margin: 10px 8px 0;
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-next-card-line {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 8px;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  text-shadow: none;
-  transition: background 0.18s ease;
 }
 
-.hub-next-card-tool + .hub-next-card-tool {
-  border-left: 1px solid rgba(200, 170, 120, 0.18);
+.hub-next-card-line:active {
+  background: color-mix(in srgb, var(--tg-theme-text-color) 6%, transparent);
 }
 
-.hub-next-card-tool svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  opacity: 0.92;
+.hub-next-card-line-clock {
+  display: block;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
-.hub-next-card-tool:active {
-  background: rgba(255, 255, 255, 0.75);
+.hub-next-card-line-dur,
+.hub-next-card-line-place {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-medium);
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-next-card-line-name {
+  display: block;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.25;
+}
+
+.hub-next-card-line-name,
+.hub-next-card-line-place {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-next-card-more {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 0 8px 6px;
+  padding: 4px 8px 8px;
+  border: none;
+  background: none;
+  color: var(--glide-ink-teal);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  text-align: left;
+  cursor: pointer;
 }
 
 @keyframes hub-pulse {
@@ -1345,6 +1470,35 @@ body.hub-body {
   border-color: transparent;
 }
 
+/* Пока слот занят, «снова» — строка, не залитая кнопка. */
+.hub-quick-strip--quiet {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  overflow: visible;
+  margin: -4px 20px 0;
+  padding: 0;
+}
+
+.hub-quick-link {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--glide-ink-teal);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-quick-link:active {
+  opacity: 0.7;
+}
+
 /* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
 
 .hub-acq-hero {
@@ -2090,6 +2244,13 @@ body.hub-body--book-fab-visible[data-client-shell="tabs"] {
 }
 
 .hub-ice-zone[hidden] {
+  display: none;
+}
+
+/* Слот занят записью или окном: фото льда не второй герой, поиск остаётся. */
+.hub-ice-zone--personal > .hub-sec-head,
+.hub-ice-zone--personal > #hubIceTeaser,
+.hub-ice-zone--personal > #hubIceSessions {
   display: none;
 }
 

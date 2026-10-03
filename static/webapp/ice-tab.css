@@ -46,29 +46,198 @@ body.ar-pilot--ice .client-app-header {
   gap: 12px;
 }
 
-.ice-kicker {
-  margin: 0;
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--glide-ink-teal);
-}
-
-/* TASK-090: имя экрана и город — одна строка, минус ~45px до первой карточки. */
-.ice-hero-top {
+/* Намерение и город в одной строке: город меняет каталог, не поле поиска. */
+.ice-intent-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--app-space-3);
+  gap: 8px;
+  min-width: 0;
 }
 
-.ice-masthead {
-  margin: 0;
-  font-size: var(--app-text-display);
+.ice-intent-row .ice-seg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ice-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 3px;
+  gap: 2px;
+  background: var(--glide-surface);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+}
+
+.ice-seg[hidden] {
+  display: none;
+}
+
+.ice-seg--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.ice-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-bold);
-  letter-spacing: -0.045em;
-  line-height: 1.05;
+  height: 32px;
+  border-radius: var(--app-radius-pill);
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.ice-seg button[aria-pressed='true'] {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
+
+.ice-seg--quiet {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--glide-line);
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.ice-seg--quiet.ice-seg--n3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ice-seg--quiet.ice-seg--n4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.ice-seg--quiet button {
+  height: 36px;
+  border-radius: 0;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+
+.ice-seg--quiet button[aria-pressed='true'] {
+  background: transparent;
+  color: var(--glide-text);
+  box-shadow: inset 0 -2px 0 var(--app-cta-fill);
+}
+
+.ice-catalog-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ice-catalog-tools[hidden] {
+  display: none;
+}
+
+.ice-tools {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ice-tools--one .ice-tool {
+  flex: 0 1 auto;
+}
+
+.ice-tool {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ice-tool span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ice-tool::after {
+  content: '';
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--glide-hint);
+  margin-top: 2px;
+}
+
+.ice-tool[aria-expanded='true'] {
+  border-color: var(--app-cta-fill);
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-menu {
+  display: none;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--glide-card, var(--glide-surface));
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+}
+
+.ice-menu:not([hidden]) {
+  display: flex;
+}
+
+.ice-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: var(--app-radius-sm, 8px);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.ice-menu button[aria-pressed='true'] {
+  background: var(--glide-brand-wash, rgba(69, 185, 187, 0.13));
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-menu b {
+  font-weight: var(--app-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glide-hint);
+  font-size: var(--app-text-caption);
+}
+
+.ice-menu button[aria-pressed='true'] b {
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-intent-row .ice-chips--intent {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .ice-citypill {
@@ -160,18 +329,13 @@ body.ice-view-map .ice-citypill--insearch {
 
 .ice-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
 }
 
 .ice-chips[hidden] {
   display: none;
-}
-
-.ice-chips::-webkit-scrollbar {
-  height: 0;
 }
 
 .ice-chip {
@@ -322,7 +486,17 @@ body.ice-view-map .ice-citypill--insearch {
   }
 }
 
+.ice-listhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .ice-eyebrow {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--app-text-kicker);
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -963,17 +1137,14 @@ body.ice-view-map .ice-sec--hero {
 
 /* Контролы кликабельны, остальное — стекло для пинов под ним. */
 body.ice-view-map .ice-sec--hero .ice-search,
-body.ice-view-map .ice-sec--hero #iceWhenChips {
+body.ice-view-map .ice-sec--hero #iceCatalogTools {
   pointer-events: auto;
 }
 
-/* TASK-147: над картой плавают только поиск и чипы времени. */
-body.ice-view-map .ice-sec--hero .ice-kicker,
-body.ice-view-map .ice-sec--hero .ice-hero-top,
-body.ice-view-map .ice-sec--hero #iceIntentChips,
+/* Над картой плавают только поиск (с городом внутри) и окно времени. */
+body.ice-view-map .ice-sec--hero .ice-intent-row,
 body.ice-view-map .ice-sec--hero #iceServiceChips,
-body.ice-view-map .ice-sec--hero #iceVenueChips,
-body.ice-view-map .ice-sec--hero #iceNearestBtn {
+body.ice-view-map .ice-sec--hero #icePlaceTabs {
   display: none;
 }
 
@@ -1594,19 +1765,17 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
   font-weight: var(--app-weight-semibold);
 }
 
-/* TASK-146: «Рядом» — переключатель сортировки ленты по расстоянию. */
+/* «Ближе» — сортировка ленты. Выключена выглядит как текст, включена — как выбранный чип. */
 .ice-search input { min-width: 0; }
 .ice-nearest {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
-  margin: -3px -4px -3px 0;
-  padding: 6px 10px;
-  border: 1px solid var(--app-cta-fill);
+  padding: 6px 12px;
+  border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-pill);
-  background: var(--glide-brand-wash);
-  color: var(--glide-ink-teal);
+  background: transparent;
+  color: var(--glide-hint);
   font: inherit;
   font-size: var(--app-text-body);
   font-weight: var(--app-weight-semibold);
@@ -1615,14 +1784,8 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 .ice-nearest:disabled { opacity: 0.6; }
 .ice-nearest[aria-pressed="true"] {
   background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
   color: var(--app-cta-text);
-}
-.ice-nearest__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--app-radius-pill);
-  background: var(--app-ok);
-  box-shadow: 0 0 0 4px var(--app-ok-wash);
 }
 
 /* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */

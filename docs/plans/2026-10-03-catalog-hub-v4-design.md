@@ -1,7 +1,8 @@
 # Каталог и хаб v4 — подборки из данных, защита от пустых состояний
 
 Дата: 2026-10-03 · Задача: TASK-148 · Статус: реализовано с согласованными обрезами; композиция хаба — [`2026-10-03-hub-composition-05-06.md`](2026-10-03-hub-composition-05-06.md)
-Макет: [`design/client-hub-catalog-final-v2.html`](../../design/client-hub-catalog-final-v2.html) (v5)
+Макет: [`design/client-hub-catalog-final-v2.html`](../../design/client-hub-catalog-final-v2.html) (v5)  
+Шапка вкладки «Поиск»: [`catalog-search-header.md`](../product-knowledge/catalog-search-header.md), прототип A′ в [`design/prototypes/2026-10-03-catalog-header-chrome.html`](../../design/prototypes/2026-10-03-catalog-header-chrome.html).
 
 ## Зачем
 

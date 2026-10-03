@@ -838,17 +838,17 @@
     state.card = null;
   }
 
-  function resolveRef() {
+  function load() {
     var tg = global.Telegram && global.Telegram.WebApp;
     var start =
       (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) ||
       M.startParamFromLocation(global.location);
-    return M.parseArenaRef(global.location.search || '', start);
-  }
-
-  function load() {
-    state.ref = resolveRef();
+    state.ref = M.parseArenaRef(global.location.search || '', start);
     state.focus = M.parseScheduleFocus(global.location.search || '');
+    if (state.focus && !state.focus.sessionId) {
+      var fromStart = M.sessionIdFromStartParam(start);
+      if (fromStart) state.focus.sessionId = fromStart;
+    }
     if (!state.ref) {
       showError('Не указана арена. Откройте карточку по ссылке из каталога или бота.');
       return;
@@ -870,6 +870,10 @@
         state.card = parts[0];
         state.sessions = parts[1] || { days: [] };
         state.trainers = parts[2] || { items: [], groups: [] };
+        if (state.focus && state.focus.sessionId && !state.focus.day) {
+          var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
+          if (found) state.focus.day = found;
+        }
         paint();
       })
       .catch(function () {

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.application.ice_city_day import (
+    cacheable_day_label,
     city_slug,
     plural_ru,
     price_range_line,
@@ -100,7 +101,10 @@ def render_ice_city_day_page(
     day_label = str(day.get("day_label") or "сегодня")
     arenas = list(day.get("arenas") or [])
     description = summary_line(day, city_name=city_name)
-    title = f"Лёд в городе {city_name} — расписание на {day_label}"
+    # og и <title> кэширует мессенджер. Живой lede ниже по-прежнему говорит «сегодня».
+    og_label = cacheable_day_label(day) or day_label
+    og_title = f"Лёд в городе {city_name} — расписание на {og_label}"
+    og_description = summary_line(day, city_name=city_name, absolute=True)
 
     if arenas:
         body = "".join(_arena_html(a, city_name=city_name) for a in arenas)
@@ -119,8 +123,9 @@ def render_ice_city_day_page(
         footer = "Расписание обновляется по данным катков."
 
     html = template
-    html = html.replace("__TITLE__", _esc(title))
     html = html.replace("__DESCRIPTION__", _esc(description))
+    html = html.replace("__OG_TITLE__", _esc(og_title))
+    html = html.replace("__OG_DESCRIPTION__", _esc(og_description))
     html = html.replace("__CANONICAL__", _esc(canonical_url))
     html = html.replace("__OG_IMAGE__", _esc(og_image_url))
     html = html.replace("__DAY_LABEL_UPPER__", _esc(day_label.upper()))

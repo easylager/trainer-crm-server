@@ -22,7 +22,6 @@ from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card
 from src.application.place_links import (
-    catalog_start_param,
     place_image_url,
     place_page_url,
     place_path,
@@ -158,7 +157,10 @@ async def place_page(
             client_bot_username=settings.client_bot_username,
             mini_app_short_name=settings.client_mini_app_short_name,
             main_mini_app=settings.client_bot_main_mini_app,
-            start_param=place_start_param(int(card["id"])),
+            start_param=place_start_param(
+                int(card["id"]),
+                int(view["focus"]["id"]) if view.get("focus") is not None else None,
+            ),
         ),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         share=share_payload(view, page_url=share_url, invite=False),
@@ -297,6 +299,7 @@ async def selection_page(
         render_selection_page,
         selection_image_path,
         selection_path,
+        selection_start_param,
     )
 
     base = _base()
@@ -309,7 +312,6 @@ async def selection_page(
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
     view = await load_selection_view(session, city=city, venue=venue, when=when)
-    intent = "shop" if venue == "shop" else ("gym" if venue == "gym" else ("skate" if when else None))
     settings = Settings()
     html = render_selection_page(
         view,
@@ -319,7 +321,7 @@ async def selection_page(
             client_bot_username=settings.client_bot_username,
             mini_app_short_name=settings.client_mini_app_short_name,
             main_mini_app=settings.client_bot_main_mini_app,
-            start_param=catalog_start_param(int(city["id"]), intent),
+            start_param=selection_start_param(city_id=int(city["id"]), venue=venue, when=when),
         ),
         share=compose_selection_share(view, page_url=base + path),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),

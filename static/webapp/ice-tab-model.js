@@ -96,6 +96,186 @@
     return out;
   }
 
+  var PLACE_TAB_KEYS = ['ice', 'gym', 'outdoor'];
+  var PLACE_MENU_KEYS = ['ice', 'gym', 'outdoor', 'choreo', 'pool', 'other'];
+
+  function facetCount(facets, key) {
+    facets = facets || [];
+    for (var i = 0; i < facets.length; i++) {
+      if (String((facets[i] || {}).key) === key) return Math.max(0, Number(facets[i].count) || 0);
+    }
+    return 0;
+  }
+
+  function liveFacetsForKeys(facets, keys) {
+    facets = facets || [];
+    keys = keys || [];
+    var out = [];
+    for (var i = 0; i < facets.length; i++) {
+      var f = facets[i] || {};
+      var key = String(f.key || '');
+      if (keys.indexOf(key) < 0) continue;
+      if (Number(f.count) > 0) out.push(f);
+    }
+    return out;
+  }
+
+  /** Род каталога в шапке: места (смешанная лента), тренеры или только магазины. */
+  function catalogScope(intent, venueTypes) {
+    if (coerceIntent(intent) === INTENTS.coach) return 'coach';
+    var v = venueTypes || [];
+    if (v.length === 1 && v[0] === 'shop') return 'shop';
+    return 'places';
+  }
+
+  function sumFacetCounts(facets, keys) {
+    var n = 0;
+    for (var i = 0; i < keys.length; i++) n += facetCount(facets, keys[i]);
+    return n;
+  }
+
+  /**
+   * Верхний сегмент «Места · Тренеры · Магазины». До первого ответа arenas — подсказки
+   * из объекта города (skate_count, trainer_count, place_count).
+   */
+  function catalogModesView(opts) {
+    opts = opts || {};
+    var facets = opts.facets || [];
+    var scope = catalogScope(opts.intent, opts.venueTypes);
+    var modes = [];
+    var placesN = sumFacetCounts(facets, PLACE_MENU_KEYS);
+    if (!facets.length) {
+      placesN =
+        (Number(opts.skateCount) || 0) +
+        (Number(opts.placeCountHint) || 0);
+    }
+    if (placesN > 0) {
+      modes.push({ id: 'places', label: 'Места', active: scope === 'places' });
+    }
+    var trainers = Number(opts.trainerCount);
+    if (isNaN(trainers)) trainers = 0;
+    if (trainers > 0) {
+      modes.push({ id: 'coach', label: 'Тренеры', active: scope === 'coach' });
+    }
+    if (facetCount(facets, 'shop') > 0) {
+      modes.push({ id: 'shop', label: 'Магазины', active: scope === 'shop' });
+    }
+    return modes;
+  }
+
+  /** Хореография/бассейн — в меню, не в underline-ряду из трёх типов. */
+  function placeMenuNeeded(facets) {
+    var menu = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
+    if (menu.length < 2) return false;
+    for (var i = 0; i < menu.length; i++) {
+      if (PLACE_TAB_KEYS.indexOf(String(menu[i].key || '')) < 0) return true;
+    }
+    return false;
+  }
+
+  function selectionVenueKey(selected) {
+    selected = selected || [];
+    return selected.length === 1 ? String(selected[0] || '') : '';
+  }
+
+  function placeTabsView(facets, selected) {
+    if (placeMenuNeeded(facets)) return [];
+    facets = facets || [];
+    selected = selected || [];
+    var live = liveFacetsForKeys(facets, PLACE_TAB_KEYS);
+    if (live.length < 2) return [];
+    var key = selectionVenueKey(selected);
+    var out = [{ key: '', label: 'Все', active: !key }];
+    for (var j = 0; j < live.length; j++) {
+      var f2 = live[j];
+      var k = String(f2.key || '');
+      out.push({
+        key: k,
+        label: String(f2.chip || k),
+        count: Number(f2.count) || 0,
+        active: key === k,
+      });
+    }
+    return out;
+  }
+
+  function placeMenuView(facets, selected) {
+    if (!placeMenuNeeded(facets)) return [];
+    facets = facets || [];
+    selected = selected || [];
+    var live = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
+    if (live.length < 2) return [];
+    var key = selectionVenueKey(selected);
+    var total = sumFacetCounts(facets, PLACE_MENU_KEYS);
+    var out = [{ key: '', label: 'Все места', count: total, active: !key }];
+    for (var j = 0; j < live.length; j++) {
+      var f2 = live[j];
+      var k = String(f2.key || '');
+      out.push({
+        key: k,
+        label: String(f2.chip || k),
+        count: Number(f2.count) || 0,
+        active: key === k,
+      });
+    }
+    return out;
+  }
+
+  function placeMenuLabel(facets, selected) {
+    var key = selectionVenueKey(selected);
+    if (!key) return 'Все места';
+    var live = liveFacetsForKeys(facets, PLACE_MENU_KEYS);
+    for (var i = 0; i < live.length; i++) {
+      if (String(live[i].key) === key) return String(live[i].chip || key);
+    }
+    return 'Все места';
+  }
+
+  function applyCatalogMode(mode) {
+    if (mode === 'coach') return { intent: INTENTS.coach, venueTypes: [] };
+    if (mode === 'shop') return { intent: INTENTS.skate, venueTypes: ['shop'] };
+    return { intent: INTENTS.skate, venueTypes: [] };
+  }
+
+  function catalogSearchPlaceholder(scope) {
+    if (scope === 'coach') return 'Имя тренера';
+    if (scope === 'shop') return 'Магазин или заточка';
+    return 'Каток, зал или трасса';
+  }
+
+  /** Сообщение, когда «Ближе» не получило геолокацию. reason: unsupported | denied */
+  function formatNearGeoBlockedMessage(opts) {
+    opts = opts || {};
+    var hasCity = opts.cityId != null && opts.cityId !== '';
+    var city = String(opts.cityName || '').trim();
+    var cityBit = city ? ' Город «' + city + '» уже выбран — менять его не нужно.' : '';
+    var reason = opts.reason === 'unsupported' ? 'unsupported' : 'denied';
+    if (hasCity) {
+      if (reason === 'unsupported') {
+        return (
+          '«Ближе» ставит сверху места, которые ближе к вам. На этом устройстве геолокация недоступна, порядок списка не изменится.' +
+          cityBit
+        );
+      }
+      return (
+        '«Ближе» ставит сверху места, которые ближе к вам. Разрешите геолокацию для Telegram в настройках телефона и нажмите снова.' +
+        cityBit
+      );
+    }
+    if (reason === 'unsupported') {
+      return 'Не получилось определить, где вы. Выберите город — покажем места в нём.';
+    }
+    return 'Разрешите доступ к геолокации — или выберите город вручную.';
+  }
+
+  function whenPickerLabel(selected, resolvedKey) {
+    var chips = whenChipsView(selected, resolvedKey);
+    for (var i = 0; i < chips.length; i++) {
+      if (chips[i].active) return chips[i].label;
+    }
+    return 'Любое время';
+  }
+
   function mapShowsArenas(intent) {
     return intent !== INTENTS.coach;
   }
@@ -355,11 +535,19 @@
     }
   }
 
-  /** Окно времени — только про лёд: у магазина и зала сеансов нет. */
-  function whenChipsVisible(intent, venueTypes) {
+  /** Окно времени — только когда в выборе есть лёд с сеансами. */
+  function whenPickerVisible(intent, venueTypes, facets) {
     if (coerceIntent(intent) !== INTENTS.skate) return false;
     var v = venueTypes || [];
-    return !v.length || v.indexOf('ice') >= 0 || v.indexOf('outdoor') >= 0;
+    if (v.length === 1 && v[0] === 'shop') return false;
+    if (v.length === 1 && v[0] !== 'ice') return false;
+    if (v.length > 1 && v.indexOf('ice') < 0) return false;
+    if (facets && facets.length) return facetCount(facets, 'ice') > 0;
+    return true;
+  }
+
+  function whenChipsVisible(intent, venueTypes, facets) {
+    return whenPickerVisible(intent, venueTypes, facets);
   }
 
   function mapHref() {
@@ -1063,6 +1251,20 @@
     buildMapListUrl: buildMapListUrl,
     venueTypeParam: venueTypeParam,
     venueChipsView: venueChipsView,
+    PLACE_TAB_KEYS: PLACE_TAB_KEYS,
+    PLACE_MENU_KEYS: PLACE_MENU_KEYS,
+    facetCount: facetCount,
+    catalogScope: catalogScope,
+    catalogModesView: catalogModesView,
+    placeMenuNeeded: placeMenuNeeded,
+    placeTabsView: placeTabsView,
+    placeMenuView: placeMenuView,
+    placeMenuLabel: placeMenuLabel,
+    applyCatalogMode: applyCatalogMode,
+    catalogSearchPlaceholder: catalogSearchPlaceholder,
+    formatNearGeoBlockedMessage: formatNearGeoBlockedMessage,
+    whenPickerVisible: whenPickerVisible,
+    whenPickerLabel: whenPickerLabel,
     mapShowsArenas: mapShowsArenas,
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,

@@ -85,6 +85,76 @@ describe('фильтр по типу площадки', () => {
   });
 });
 
+describe('catalog header (A′)', () => {
+  it('catalogScope: shop filter is its own segment', () => {
+    const { catalogScope } = loadModel();
+    assert.equal(catalogScope('skate', ['shop']), 'shop');
+    assert.equal(catalogScope('skate', []), 'places');
+    assert.equal(catalogScope('coach', []), 'coach');
+  });
+
+  it('placeTabsView: choreo forces menu, not underline row', () => {
+    const { placeTabsView, placeMenuNeeded } = loadModel();
+    const facets = [
+      { key: 'ice', chip: 'Лёд', count: 8 },
+      { key: 'gym', chip: 'Зал', count: 1 },
+      { key: 'choreo', chip: 'Хореография', count: 1 },
+    ];
+    assert.equal(placeMenuNeeded(facets), true);
+    assert.deepEqual(placeTabsView(facets, []), []);
+    const tabs = placeTabsView(
+      [
+        { key: 'ice', chip: 'Лёд', count: 8 },
+        { key: 'gym', chip: 'Зал', count: 1 },
+      ],
+      []
+    );
+    assert.deepEqual(
+      tabs.map((t) => t.label),
+      ['Все', 'Лёд', 'Зал']
+    );
+  });
+
+  it('whenPickerVisible: gym-only hides window; ice facet required for mixed', () => {
+    const { whenPickerVisible } = loadModel();
+    const facets = [
+      { key: 'ice', chip: 'Лёд', count: 3 },
+      { key: 'gym', chip: 'Зал', count: 1 },
+    ];
+    assert.equal(whenPickerVisible('skate', [], facets), true);
+    assert.equal(whenPickerVisible('skate', ['gym'], facets), false);
+    assert.equal(whenPickerVisible('skate', ['shop'], facets), false);
+    assert.equal(whenPickerVisible('skate', [], [{ key: 'gym', chip: 'Зал', count: 2 }]), false);
+  });
+
+  it('applyCatalogMode maps segments to intent and venueTypes', () => {
+    const { applyCatalogMode } = loadModel();
+    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'] });
+    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
+    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
+  });
+});
+
+describe('«Ближе» без геолокации', () => {
+  it('при выбранном городе не зовёт менять город', () => {
+    const { formatNearGeoBlockedMessage } = loadModel();
+    const msg = formatNearGeoBlockedMessage({
+      cityId: 1,
+      cityName: 'Минск',
+      reason: 'denied',
+    });
+    assert.match(msg, /Минск/);
+    assert.match(msg, /менять его не нужно/);
+    assert.ok(!/Выберите город/.test(msg));
+  });
+
+  it('без города предлагает выбрать город', () => {
+    const { formatNearGeoBlockedMessage } = loadModel();
+    const msg = formatNearGeoBlockedMessage({ reason: 'unsupported' });
+    assert.match(msg, /Выберите город/);
+  });
+});
+
 describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
   it('«Где заниматься» asks the API for intent=skate; does not invent tiers', () => {
     const { buildListUrl } = loadModel();

@@ -20,7 +20,7 @@ from src.application.ice_city_day import (
 )
 from src.application.ice_city_day_og import render_ice_city_day_og
 from src.application.ice_city_day_page import ice_city_day_paths, render_ice_city_day_page
-from src.application.trainer_invite_links import normalize_client_bot_username
+from src.application.place_links import catalog_start_param, telegram_open_link
 from src.shared.config import Settings
 
 router = APIRouter(tags=["public-ice-share"])
@@ -36,9 +36,15 @@ def _public_base() -> str:
     return (Settings().webapp_base_url or "").strip().rstrip("/")
 
 
-def _cta_url() -> str | None:
-    username = normalize_client_bot_username(Settings().client_bot_username)
-    return f"https://t.me/{username}" if username else None
+def _cta_url(city_id: int) -> str | None:
+    """В каталог этого города на сегодня, с теми же фильтрами, что у страницы."""
+    settings = Settings()
+    return telegram_open_link(
+        client_bot_username=settings.client_bot_username,
+        mini_app_short_name=settings.client_mini_app_short_name,
+        main_mini_app=settings.client_bot_main_mini_app,
+        start_param=catalog_start_param(int(city_id), "skate", "today"),
+    )
 
 
 async def _load(session: AsyncSession, city_ref: str):
@@ -70,7 +76,7 @@ async def ice_city_day_page(
         day=day,
         canonical_url=f"{base}{canonical_path}" if base else canonical_path,
         og_image_url=f"{base}{og_path}" if base else og_path,
-        cta_url=_cta_url(),
+        cta_url=_cta_url(int(city["id"])),
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 

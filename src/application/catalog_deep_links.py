@@ -19,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import get_public_arena_card
-from src.application.place_links import parse_catalog_start_param, parse_place_start_param
+from src.application.place_links import parse_catalog_start_param, parse_place_deep_link
 from src.shared.venue_types import venue_card_cta
 
 _CATALOG_BUTTONS = {
@@ -28,11 +28,14 @@ _CATALOG_BUTTONS = {
     "coach": "Тренеры города",
     "shop": "Магазины и заточка",
     "gym": "Залы ОФП",
+    "ice": "Где покататься",
+    "outdoor": "Уличный лёд",
 }
+_VENUE_FILTERS = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "other"})
 
 
 def is_catalog_deep_link(payload: str | None) -> bool:
-    return parse_place_start_param(payload) is not None or parse_catalog_start_param(payload) is not None
+    return parse_place_deep_link(payload) is not None or parse_catalog_start_param(payload) is not None
 
 
 async def build_catalog_deep_link_reply(
@@ -46,8 +49,9 @@ async def build_catalog_deep_link_reply(
     if not base.lower().startswith("https://"):
         return None
 
-    place_id = parse_place_start_param(payload)
-    if place_id is not None:
+    place = parse_place_deep_link(payload)
+    if place is not None:
+        place_id, session_id = place
         card = await get_public_arena_card(session, str(place_id))
         if card is None:
             return {
@@ -57,16 +61,19 @@ async def build_catalog_deep_link_reply(
             }
         name = html.escape(str(card.get("name") or ""))
         noun = html.escape(str(card.get("venue_noun") or ""))
+        query = {"ref": str(place_id)}
+        if session_id is not None:
+            query["s"] = str(session_id)
         return {
             "text": f"{noun}: <b>{name}</b>\nРасписание, цены и как добраться — по кнопке ниже.",
             "button_text": venue_card_cta(card.get("venue_type")),
-            "url": f"{base}/webapp/arena?" + urlencode({"ref": str(place_id)}),
+            "url": f"{base}/webapp/arena?" + urlencode(query),
         }
 
     target = parse_catalog_start_param(payload)
     if target is None:
         return None
-    city_id, intent = target
+    city_id, intent, when = target
     row = (
         (await session.execute(text("SELECT name FROM cities WHERE id = :id AND is_active"), {"id": int(city_id)})).first()
         if city_id is not None
@@ -75,10 +82,15 @@ async def build_catalog_deep_link_reply(
     params: dict[str, str] = {}
     if row is not None:
         params["city_id"] = str(int(city_id))
-    if intent in ("shop", "gym"):
+    if intent in _VENUE_FILTERS:
         params["venue"] = intent
     elif intent:
         params["intent"] = intent
+    elif when:
+        # Окно без токена — это лёд. Иначе сохранённая вкладка «Тренеры» его перекроет.
+        params["intent"] = "skate"
+    if when:
+        params["when"] = when
     city_name = html.escape(str(row[0])) if row is not None else ""
     head = f"Каталог: <b>{city_name}</b>" if city_name else "<b>Карта льда</b>"
     lede = (
@@ -86,8 +98,9 @@ async def build_catalog_deep_link_reply(
         if city_name
         else "Где покататься сегодня, тренеры, магазины и заточка. Откройте — покажем, что рядом."
     )
+    button_key = intent or ("skate" if when else None)
     return {
         "text": f"{head}\n{lede}",
-        "button_text": _CATALOG_BUTTONS.get(intent, "Открыть каталог"),
+        "button_text": _CATALOG_BUTTONS.get(button_key, "Открыть каталог"),
         "url": f"{base}/webapp/ice" + (("?" + urlencode(params)) if params else ""),
     }

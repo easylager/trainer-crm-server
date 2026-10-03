@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Хаб · одно своё, потом город</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#45B9BB;
+  --ink:#57D0D2;
+  --deep:#E6E9EA;
+  --night:#04262A;
+  --paper:#0B0C0E;
+  --surface:#141618;
+  --card:#1A1D20;
+  --line:#262A2E;
+  --hint:#868D93;
+  --ok:#5FCF94;
+  --ok-wash:rgba(79,201,138,.16);
+  --wait:#F0A24B;
+  --wait-wash:rgba(240,162,75,.16);
+  --soon-wash:rgba(69,185,187,.16);
+  --shop:#7A5AF5;
+}
+*{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{
+  margin:0;
+  font-family:"Golos Text",system-ui,sans-serif;
+  color:var(--deep);
+  background:#0B0C0E;
+}
+button,a{font-family:inherit}
+button{cursor:pointer}
+.studio{
+  max-width:1080px;
+  margin:0 auto;
+  padding:36px 28px 120px;
+  display:grid;
+  grid-template-columns:minmax(280px,1fr) 414px;
+  gap:48px;
+  align-items:start;
+}
+.thesis h1{
+  font-weight:700;
+  font-size:28px;
+  line-height:1.2;
+  letter-spacing:-.03em;
+  margin:0;
+}
+.thesis h1 em{font-style:normal;color:var(--ink)}
+.lede{margin:14px 0 0;font-size:15px;line-height:1.55;max-width:460px}
+.lede strong{font-weight:700}
+.rules{list-style:none;margin:22px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.rules li{
+  display:grid;
+  grid-template-columns:88px 1fr;
+  gap:12px;
+  align-items:baseline;
+  font-size:14px;
+  line-height:1.45;
+}
+.rules b{
+  font-size:11px;
+  font-weight:700;
+  color:var(--ink);
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.cuts{margin:22px 0 0;padding:0;list-style:none;color:var(--hint);font-size:13px;line-height:1.5}
+.cuts li{padding:3px 0 3px 14px;position:relative}
+.cuts li::before{content:"";position:absolute;left:0;top:.7em;width:5px;height:5px;border-radius:99px;background:#3A4044}
+.note{margin:18px 0 0;font-size:12px;color:var(--hint);line-height:1.5;max-width:440px}
+.states{display:flex;flex-wrap:wrap;gap:6px;margin-top:26px}
+.states button{
+  border:1px solid var(--line);
+  background:var(--surface);
+  color:var(--hint);
+  border-radius:99px;
+  padding:8px 12px;
+  font-weight:700;
+  font-size:13px;
+}
+.states button.on{background:var(--soon-wash);border-color:transparent;color:var(--ink)}
+.read{margin:14px 0 0;min-height:44px;font-size:14px;line-height:1.45;max-width:460px}
+.stage{position:sticky;top:24px}
+.bezel{
+  width:390px;
+  padding:12px;
+  border-radius:48px;
+  background:linear-gradient(160deg,#17191B,#0B0C0E);
+  box-shadow:0 30px 70px -28px rgba(0,0,0,.55);
+}
+.device{
+  position:relative;
+  height:min(820px, calc(100vh - 72px));
+  min-height:680px;
+  background:var(--paper);
+  border-radius:36px;
+  overflow:hidden;
+}
+.scroll{height:100%;overflow:auto;padding-bottom:92px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.scroll.in{animation:rise .28s ease}
+@keyframes rise{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.top{display:flex;justify-content:space-between;align-items:center;padding:22px 20px 0;gap:12px}
+.hello{font-size:20px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
+.sub{margin-top:2px;font-size:13px;font-weight:500;color:var(--hint)}
+.profile{
+  display:flex;align-items:center;gap:8px;
+  border:none;background:var(--surface);color:inherit;
+  border-radius:99px;padding:4px 10px 4px 4px;
+  font-weight:700;font-size:14px;
+}
+.profile i{
+  width:32px;height:32px;border-radius:99px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--brand);color:var(--night);font-weight:700;font-size:14px;
+}
+.profile s{text-decoration:none;color:var(--hint);font-size:10px}
+
+.slot{
+  margin:16px 16px 0;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:22px;
+}
+.hero{padding:16px 16px 14px}
+.time{
+  font-weight:700;
+  font-size:40px;
+  letter-spacing:-.045em;
+  line-height:.95;
+}
+.time.offer{color:var(--ink)}
+.when{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:8px;
+}
+.when span{font-size:15px;font-weight:500;color:var(--hint)}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  border-radius:99px;padding:4px 10px;
+  font-size:13px;font-weight:600;flex:none;
+}
+.pill i{width:6px;height:6px;border-radius:99px;background:currentColor}
+.pill.ok{background:var(--ok-wash);color:var(--ok)}
+.pill.wait{background:var(--wait-wash);color:var(--wait)}
+.pill.soon{background:var(--soon-wash);color:var(--ink)}
+.who{
+  display:flex;align-items:center;gap:12px;
+  width:100%;margin-top:14px;padding:12px 0 0;
+  border:none;border-top:1px solid var(--line);
+  background:none;color:inherit;text-align:left;
+}
+.av{
+  width:40px;height:40px;border-radius:99px;flex:none;
+  display:flex;align-items:center;justify-content:center;
+  background:#2A2E32;font-size:13px;font-weight:700;
+}
+.who b{display:block;font-size:16px;font-weight:700}
+.who small{display:flex;align-items:center;gap:4px;margin-top:2px;color:var(--hint);font-size:13px;font-weight:500}
+.fill{
+  width:100%;height:48px;margin-top:14px;
+  border:none;border-radius:14px;
+  background:var(--brand);color:var(--night);
+  font-weight:700;font-size:16px;
+}
+.alt{
+  display:block;width:100%;margin-top:4px;
+  border:none;background:none;color:var(--ink);
+  font-weight:700;font-size:14px;padding:8px;
+}
+
+.rest{border-top:1px solid var(--line);padding:4px 8px 8px}
+.day{
+  margin:10px 8px 0;
+  font-size:11px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--hint);
+}
+.line{
+  display:grid;
+  grid-template-columns:64px 1fr auto;
+  gap:8px;align-items:center;
+  width:100%;
+  padding:10px 8px;
+  border:none;border-radius:14px;
+  background:none;color:inherit;text-align:left;
+}
+.line:active{background:rgba(255,255,255,.04)}
+.line .t{font-size:20px;font-weight:700;letter-spacing:-.03em}
+.line .m{font-size:12px;font-weight:500;color:var(--hint);margin-top:1px}
+.line .n{font-size:14px;font-weight:700}
+.line .p{font-size:13px;font-weight:500;color:var(--hint);margin-top:1px}
+.more{
+  display:block;width:calc(100% - 16px);margin:0 8px 6px;
+  border:none;background:none;color:var(--ink);
+  font-weight:700;font-size:13px;text-align:left;padding:4px 8px 8px;
+}
+
+.again{
+  display:block;
+  margin:18px 20px 0;
+  padding:0;
+  border:none;background:none;
+  color:var(--ink);
+  font-weight:700;font-size:15px;
+  text-align:left;
+}
+.city{margin-top:26px}
+.search{
+  margin:0 16px;
+  height:48px;width:calc(100% - 32px);
+  display:flex;align-items:center;gap:10px;
+  padding:0 14px;
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  color:var(--hint);font-size:15px;font-weight:500;text-align:left;
+}
+.sec{padding:22px 16px 0}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.sec-h b{font-size:16px;font-weight:700}
+.sec-h button{border:none;background:none;color:var(--ink);font-weight:700;font-size:14px;padding:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  padding:12px;text-align:left;color:inherit;
+}
+.tile.wide{grid-column:1 / -1}
+.tile b{display:block;font-size:14px;font-weight:700}
+.tile em{font-style:normal;color:var(--ink);font-weight:700}
+.tile small{display:block;margin-top:2px;color:var(--hint);font-size:12px;font-weight:500}
+
+.ice{
+  margin:16px 16px 0;border-radius:18px;overflow:hidden;
+  border:1px solid var(--line);background:var(--card);
+}
+.ice .toprow{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 0}
+.kicker{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--hint)}
+.ice .toprow button{border:none;background:none;color:var(--ink);font-weight:700;font-size:14px}
+.ice h2{margin:8px 14px 0;font-size:18px;font-weight:700;letter-spacing:-.02em}
+.ice p{margin:4px 14px 12px;color:var(--hint);font-size:13px;font-weight:500}
+.ice-row{
+  display:flex;gap:12px;align-items:center;
+  width:100%;padding:12px 14px;
+  border:none;border-top:1px solid var(--line);
+  background:none;color:inherit;text-align:left;
+}
+.ice-row b{width:54px;flex:none;color:var(--ink);font-size:14px}
+.ice-row span{font-size:14px;font-weight:600}
+
+/* как сейчас — для сравнения */
+.chaos-search{margin:14px 16px 0}
+.rebook{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin:14px 16px 0;height:48px;width:calc(100% - 32px);
+  border:none;border-radius:16px;
+  background:var(--brand);color:var(--night);
+  font-weight:700;font-size:16px;
+}
+.head{display:flex;justify-content:space-between;align-items:baseline;padding:22px 16px 8px}
+.head b{font-size:16px}
+.head button{border:none;background:none;color:var(--ink);font-weight:700;font-size:14px}
+.old{
+  display:grid;
+  grid-template-columns:72px 1fr auto;
+  gap:8px;align-items:center;
+  margin:0 16px;
+  padding:12px;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  color:inherit;text-align:left;
+}
+.old .t{font-size:20px;font-weight:700}
+.old .d{font-size:12px;color:var(--hint)}
+.old .n{font-size:15px;font-weight:700}
+.old .p{font-size:13px;color:var(--hint);margin-top:2px}
+.chip{
+  display:inline-flex;margin-top:6px;
+  background:#14352A;color:#5FCF94;
+  border-radius:99px;padding:3px 8px;font-size:12px;font-weight:700;
+}
+.msg{
+  width:36px;height:36px;border-radius:12px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  font-size:16px;
+}
+.dayold{padding:8px 16px 6px;font-size:11px;letter-spacing:.14em;font-weight:700;color:var(--hint)}
+
+.tabs{
+  position:absolute;left:0;right:0;bottom:0;height:74px;
+  display:flex;padding:8px 6px 12px;
+  background:rgba(11,12,14,.94);
+  border-top:1px solid var(--line);
+}
+.tab{
+  flex:1;border:none;background:none;color:#8A9491;
+  font-size:10px;font-weight:700;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.tab.on{color:var(--ink)}
+.toast{
+  position:absolute;left:50%;bottom:86px;transform:translateX(-50%) translateY(8px);
+  background:#E6E9EA;color:#0B0C0E;
+  font-size:13px;font-weight:700;
+  padding:8px 14px;border-radius:99px;
+  opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;
+  white-space:nowrap;z-index:5;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (max-width:860px){
+  .studio{grid-template-columns:1fr;justify-items:center;padding:24px 16px 120px}
+  .thesis{max-width:460px}
+  .stage{position:static}
+}
+@media (prefers-reduced-motion:reduce){
+  .scroll.in{animation:none}
+}
+</style>
+</head>
+<body>
+<div class="studio">
+  <div class="thesis">
+    <h1>Сначала своё.<br><em>Потом город.</em></h1>
+    <p class="lede">Один предмет — занятия этого человека. Ближайшее крупно, остальные тем же языком внутри той же карточки. Город начинается с поиска. «Снова» — строка, не кнопка.</p>
+    <ul class="rules">
+      <li><b>Одно</b><span>Карточка держит ближайшее и следующие. Второго дизайна записи нет.</span></li>
+      <li><b>Тихо</b><span>«Ещё занятие» — текст под карточкой. Заливка только у глагола слота: написать или записаться.</span></li>
+      <li><b>Город</b><span>Поиск и «Куда катимся» после своего. У гостя город и есть слот, поэтому поиск сразу под льдом.</span></li>
+    </ul>
+    <ul class="cuts">
+      <li>С карточки списка уходит отдельная кнопка «написать» и галочка в статусе.</li>
+      <li>Строка списка открывает запись. Тренера открывает строка человека в герое.</li>
+      <li>Больше двух следующих на хаб не выносится: дальше «смотреть все».</li>
+    </ul>
+    <div class="states" id="states"></div>
+    <p class="read" id="read"></p>
+    <p class="note">Прототип, не экран приложения. Первая кнопка — тот же вечер, что на скриншоте, как он собран сейчас. Остальные — предложенный порядок. Клавиши 1–6.</p>
+  </div>
+  <div class="stage">
+    <div class="bezel">
+      <div class="device" id="device">
+        <div class="scroll" id="scroll"></div>
+        <nav class="tabs" aria-label="Навигация">
+          <button class="tab on" type="button" data-act="toast" data-msg="Хаб">Хаб</button>
+          <button class="tab" type="button" data-act="toast" data-msg="Поиск">Поиск</button>
+          <button class="tab" type="button" data-act="toast" data-msg="Записи">Записи</button>
+          <button class="tab" type="button" data-act="toast" data-msg="Ещё">Ещё</button>
+        </nav>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var STATES = [
+    { id: 'chaos', n: '1', label: 'Как сейчас' },
+    { id: 'two', n: '2', label: 'Две записи' },
+    { id: 'one', n: '3', label: 'Одна' },
+    { id: 'wait', n: '4', label: 'Ждём' },
+    { id: 'open', n: '5', label: 'Окно' },
+    { id: 'guest', n: '6', label: 'Гость' }
+  ];
+  var READ = {
+    chaos: 'Скриншот. Поиск разрезает свои записи. «Записаться снова» громче, чем занятие через 3 часа. Завтра — другая карточка, с галочкой и кнопкой сообщения.',
+    two: 'Тот же вечер. 21:00 и завтрашние 16:00 — одна карточка. «Ещё занятие» — строка. Поиск начинает город.',
+    one: 'Следующих нет — список не рисуется. Под карточкой тихая строка, потом город.',
+    wait: 'Глагол один и принадлежит ближайшему: «Написать тренеру». Завтра остаётся строкой под чертой, не второй историей.',
+    open: 'Слот — окно, не личность тренера. Второго времени нет отдельной секцией: оно строка под кнопкой. Город следом.',
+    guest: 'Своего нет. Слот — лёд города, поиск сразу под ним, как и раньше.'
+  };
+
+  var params = new URLSearchParams(location.search);
+  var state = params.get('state') || 'two';
+  if (!STATES.some(function (s) { return s.id === state; })) state = 'two';
+
+  var scroll = document.getElementById('scroll');
+  var read = document.getElementById('read');
+  var statesEl = document.getElementById('states');
+  var toast = document.getElementById('toast');
+  var toastTimer = 0;
+
+  function persist() {
+    history.replaceState(null, '', '?state=' + state);
+  }
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('on'); }, 1400);
+  }
+  function pill(kind, text) {
+    return '<span class="pill ' + kind + '"><i></i>' + text + '</span>';
+  }
+  function header() {
+    return '<div class="top"><div><div class="hello">Вечер, Максим</div><div class="sub">Минск · 4 катка вечером</div></div>' +
+      '<button class="profile" type="button" data-act="toast" data-msg="Профиль Анна"><i>А</i>Анна <s>▾</s></button></div>';
+  }
+  function who(name, place, msg) {
+    return '<button class="who" type="button" data-act="toast" data-msg="' + msg + '">' +
+      '<span class="av">МА</span><span><b>' + name + '</b><small>⌖ ' + place + '</small></span></button>';
+  }
+  function restRow() {
+    return '<div class="rest"><div class="day">Завтра</div>' +
+      '<button class="line" type="button" data-act="toast" data-msg="Запись завтра в 16:00">' +
+        '<span><span class="t">16:00</span><div class="m">60 мин</div></span>' +
+        '<span><span class="n">Максим</span><div class="p">Уточните у тренера</div></span>' +
+        pill('ok', 'подтверждено') +
+      '</button></div>';
+  }
+  function again() {
+    return '<button class="again" type="button" data-act="toast" data-msg="Ещё занятие с Максимом">Ещё занятие с Максимом</button>';
+  }
+  function city() {
+    return '<div class="city"><button class="search" type="button" data-act="toast" data-msg="Поиск">⌕  Найти тренера или каток</button>' +
+      '<div class="sec"><div class="sec-h"><b>Куда катимся</b><button type="button" data-act="toast" data-msg="Все места">Все места</button></div>' +
+      '<div class="grid">' +
+        '<button class="tile wide" type="button" data-act="toast" data-msg="Катки"><b>Катки <em>8</em></b><small>4 катка вечером</small></button>' +
+        '<button class="tile" type="button" data-act="toast" data-msg="Тренеры"><b>Тренеры <em>14</em></b><small>найти тренера</small></button>' +
+        '<button class="tile" type="button" data-act="toast" data-msg="Магазины"><b>Магазины <em>2</em></b><small>экипировка</small></button>' +
+      '</div></div></div>';
+  }
+  function hero(opts) {
+    var verb = opts.verb
+      ? '<button class="fill" type="button" data-act="toast" data-msg="' + opts.verb + '">' + opts.verb + '</button>'
+      : '';
+    var alt = opts.alt
+      ? '<button class="alt" type="button" data-act="toast" data-msg="' + opts.alt + '">' + opts.alt + '</button>'
+      : '';
+    return '<article class="slot"><div class="hero">' +
+      '<div class="time' + (opts.offer ? ' offer' : '') + '">' + opts.time + '</div>' +
+      '<div class="when"><span>' + opts.when + '</span>' + (opts.stamp || '') + '</div>' +
+      who(opts.name, opts.place, 'Карточка тренера') +
+      verb + alt +
+      '</div>' + (opts.rest || '') + '</article>';
+  }
+
+  function renderChaos() {
+    return header() +
+      '<article class="slot"><div class="hero">' +
+        '<div class="time">21:00</div>' +
+        '<div class="when"><span>через 3 часа · 60 мин</span>' + pill('soon', 'скоро') + '</div>' +
+        who('Максим', 'Уточните у тренера', 'Карточка тренера') +
+      '</div></article>' +
+      '<button class="search chaos-search" type="button" data-act="toast" data-msg="Поиск">⌕  Найти тренера или каток</button>' +
+      '<button class="rebook" type="button" data-act="toast" data-msg="Записаться снова">↻  Записаться снова</button>' +
+      '<div class="head"><b>Все записи</b><button type="button" data-act="toast" data-msg="Все записи">Смотреть все</button></div>' +
+      '<div class="dayold">ЗАВТРА</div>' +
+      '<button class="old" type="button" data-act="toast" data-msg="Запись завтра">' +
+        '<span><span class="t">16:00</span><div class="d">60 мин</div></span>' +
+        '<span><span class="n">Максим</span><div class="p">Уточните у тренера</div><span class="chip">Подтверждено ✓</span></span>' +
+        '<span class="msg" aria-hidden="true">💬</span>' +
+      '</button>';
+  }
+
+  function render() {
+    if (state === 'chaos') return renderChaos();
+    if (state === 'guest') {
+      return header() +
+        '<article class="ice">' +
+          '<div class="toprow"><span class="kicker">На льду · Минск</span><button type="button" data-act="toast" data-msg="Весь лёд">Весь лёд</button></div>' +
+          '<h2>Чижовка-арена</h2><p>сеанс до 22:00</p>' +
+          '<button class="ice-row" type="button" data-act="toast" data-msg="Парк Горького"><b>21:05</b><span>Парк Горького · открытый</span></button>' +
+          '<button class="ice-row" type="button" data-act="toast" data-msg="Ледовый дворец"><b>21:50</b><span>Ледовый дворец · крытый</span></button>' +
+        '</article>' + city();
+    }
+    if (state === 'open') {
+      return header() + hero({
+        offer: true, time: '21:00', when: 'Завтра · 60 мин',
+        name: 'Анна Коваль', place: 'Чижовка-арена',
+        verb: 'Записаться на 21:00', alt: '05.10 в 16:00'
+      }) + city();
+    }
+    if (state === 'one') {
+      return header() + hero({
+        time: '21:00', when: 'через 3 часа · 60 мин', stamp: pill('soon', 'скоро'),
+        name: 'Максим', place: 'Уточните у тренера'
+      }) + again() + city();
+    }
+    if (state === 'wait') {
+      return header() + hero({
+        time: '21:00', when: 'Сегодня · 60 мин', stamp: pill('wait', 'ждём ответ'),
+        name: 'Максим', place: 'Уточните у тренера',
+        verb: 'Написать тренеру', rest: restRow()
+      }) + again() + city();
+    }
+    return header() + hero({
+      time: '21:00', when: 'через 3 часа · 60 мин', stamp: pill('soon', 'скоро'),
+      name: 'Максим', place: 'Уточните у тренера',
+      rest: restRow()
+    }) + again() + city();
+  }
+
+  function paint() {
+    scroll.innerHTML = render();
+    scroll.classList.remove('in');
+    void scroll.offsetWidth;
+    scroll.classList.add('in');
+    scroll.scrollTop = 0;
+    read.textContent = READ[state] || '';
+    Array.prototype.forEach.call(statesEl.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-state') === state);
+    });
+  }
+
+  STATES.forEach(function (s) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = s.n + '  ' + s.label;
+    b.setAttribute('data-state', s.id);
+    b.addEventListener('click', function () {
+      state = s.id;
+      persist();
+      paint();
+    });
+    statesEl.appendChild(b);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var n = parseInt(e.key, 10);
+    if (n >= 1 && n <= STATES.length) {
+      state = STATES[n - 1].id;
+      persist();
+      paint();
+    }
+  });
+  document.getElementById('device').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-act="toast"]');
+    if (!el) return;
+    showToast(el.getAttribute('data-msg'));
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>

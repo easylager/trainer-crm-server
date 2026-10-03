@@ -4,7 +4,8 @@
 То, чем делятся прямо из каталога: «Минск · где покататься на выходных», «Минск ·
 магазины и заточка». Получатель видит ровно эту выборку — места, сеансы в окне с
 ценами, ссылки на страницы мест — без Telegram и без установки. Кнопка «Открыть в
-Telegram» ведёт в каталог с теми же фильтрами (``catalog_<город>_<тип>``).
+Telegram» ведёт в каталог с теми же фильтрами (``catalog_<город>_skate_<окно>``
+или тип места). В чат и og уходят абсолютные даты, на странице — живая подпись окна.
 
 Данные — те же, что в ленте мини-аппа (``list_public_ice_arenas``): одна правда для
 приложения, страницы и картинки. Рендер — в общий шаблон страницы места
@@ -15,10 +16,11 @@ from __future__ import annotations
 
 import html as html_lib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +32,9 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.ice_time_windows import WHEN_KEYS
-from src.application.place_links import place_path, place_query
+from src.application.place_links import catalog_start_param, place_path, place_query
+from src.application.place_page import absolute_day_label
+from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import VENUE_TYPE_KEYS, has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -153,6 +157,36 @@ def selection_title(view: Mapping[str, Any]) -> str:
     return f"{city} · {topic.lower()}"
 
 
+def absolute_window_phrase(window: Mapping[str, Any] | None) -> str:
+    """«Пт, 3 окт, вечер» / «Сб, 4 окт – Вс, 5 окт». Без «сегодня»: превью живёт в чате сутками."""
+    if not window or not window.get("from") or not window.get("to"):
+        return ""
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    start = datetime.fromisoformat(str(window["from"])).astimezone(tz).date()
+    end = datetime.fromisoformat(str(window["to"])).astimezone(tz).date() - timedelta(days=1)
+    if end < start:
+        end = start
+    key = str(window.get("key") or "")
+    if key == "weekend" and end != start:
+        return f"{absolute_day_label(start)} – {absolute_day_label(end)}"
+    phrase = absolute_day_label(start)
+    if key == "today_evening":
+        return f"{phrase}, вечер"
+    return phrase
+
+
+def selection_share_title(view: Mapping[str, Any]) -> str:
+    """Заголовок для og и текста в чате: те же факты, что на странице, но даты абсолютные."""
+    city = str(view["city"]["name"])
+    topic = _TOPIC.get(view.get("venue"), "Места")
+    window = view.get("window")
+    if window and view.get("skating"):
+        phrase = absolute_window_phrase(window)
+        if phrase:
+            return f"{city} · {topic.lower()} — {phrase}"
+    return f"{city} · {topic.lower()}"
+
+
 def selection_description(view: Mapping[str, Any]) -> str:
     items = view.get("items") or []
     n = len(items)
@@ -167,8 +201,45 @@ def selection_description(view: Mapping[str, Any]) -> str:
     return " · ".join(bits)
 
 
+def selection_share_description(view: Mapping[str, Any]) -> str:
+    """og:description. Пустое окно называет даты, а не «сегодня вечером»."""
+    text = selection_description(view)
+    window = view.get("window")
+    if view.get("window_empty") and window:
+        live = f"{str(window['label']).lower()} сеансов нет — ближайшие"
+        phrase = absolute_window_phrase(window)
+        if phrase and live in text:
+            text = text.replace(live, f"{phrase}: сеансов нет — ближайшие")
+    return text
+
+
+_LINK_VENUES = frozenset({"shop", "gym", "ice", "outdoor", "choreo", "pool", "other"})
+_LINK_SKATING = frozenset({"skate", "ice", "outdoor"})
+
+
+def selection_start_param(*, city_id: int, venue: str | None, when: str | None) -> str:
+    """startapp с тем же типом места и окном, что на странице подборки."""
+    if venue in _LINK_VENUES:
+        token: str | None = venue
+    elif venue is None or has_public_skating(venue):
+        token = "skate"
+    else:
+        token = None
+    link_when = when if token in _LINK_SKATING else None
+    return catalog_start_param(int(city_id), token, link_when)
+
+
 def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
+
+
+def _place_photo_url(item: Mapping[str, Any]) -> str | None:
+    """Тот же кадр, что в мини-карточке каталога. Нет URL — нет фото-блока."""
+    for key in ("card", "thumb"):
+        url = str(item.get(key) or "").strip()
+        if url.lower().startswith(("https://", "http://", "/")):
+            return url
+    return None
 
 
 def _place_html(item: Mapping[str, Any], *, city_name: str, slots: list[dict[str, Any]]) -> str:
@@ -193,10 +264,24 @@ def _place_html(item: Mapping[str, Any], *, city_name: str, slots: list[dict[str
     if rest > 0:
         chips += f'<a class="slot slot--more" href="{_esc(href)}#schedule">ещё {rest}</a>'
     line = "" if chips else f'<p class="muted">{_esc(item.get("live_line") or "")}</p>'
+    photo = _place_photo_url(item)
+    icon = str(item.get("venue_icon") or "").strip()
+    if photo:
+        media = (
+            f'<a class="pick__media" href="{_esc(href)}" data-icon="{_esc(icon)}">'
+            f'<img class="pick__photo" src="{_esc(photo)}" alt="" loading="lazy" decoding="async" />'
+            f"</a>"
+        )
+    else:
+        media = f'<span class="pick__icon" aria-hidden="true">{_esc(icon)}</span>' if icon else ""
     return (
-        '<section class="sec">'
-        f'<h2 class="pick__name"><a href="{_esc(href)}">{_esc(item.get("name"))}</a></h2>'
+        '<section class="sec pick">'
+        '<div class="pick__head">'
+        + media
+        + '<div class="pick__titles">'
+        + f'<h2 class="pick__name"><a href="{_esc(href)}">{_esc(item.get("name"))}</a></h2>'
         + (f'<p class="pick__where">{_esc(where)}</p>' if where else "")
+        + "</div></div>"
         + (f'<div class="slots">{chips}</div>' if chips else line)
         + "</section>"
     )
@@ -216,7 +301,9 @@ def render_selection_page(
 
     city_name = str(view["city"]["name"])
     title = selection_title(view)
+    share_title = selection_share_title(view)
     description = selection_description(view)
+    share_description = selection_share_description(view)
     note = (
         f'<p class="plan__note pick__note">{_esc(view["window"]["label"])}: сеансов нет — показываем ближайшие.</p>'
         if view.get("window_empty")
@@ -240,7 +327,7 @@ def render_selection_page(
         {
             "@context": "https://schema.org",
             "@type": "ItemList",
-            "name": title,
+            "name": share_title,
             "itemListElement": [
                 {"@type": "ListItem", "position": n + 1, "name": i.get("name")} for n, i in enumerate(view["items"])
             ],
@@ -250,8 +337,8 @@ def render_selection_page(
     page = _TEMPLATE_PATH.read_text(encoding="utf-8")
     city_link = f'<a href="{_esc(city_page_url)}">Весь лёд: {_esc(city_name)} сегодня</a>' if city_page_url else ""
     for key, value in {
-        "__TITLE__": _esc(title),
-        "__DESCRIPTION__": _esc(description),
+        "__OG_TITLE__": _esc(share_title),
+        "__OG_DESCRIPTION__": _esc(share_description),
         "__CANONICAL__": _esc(canonical_url),
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),
@@ -270,7 +357,7 @@ def render_selection_page(
 def compose_selection_share(view: Mapping[str, Any], *, page_url: str) -> dict[str, str]:
     from src.application.client_share_message import share_body_for_native_share_dialog
 
-    lines = [selection_title(view), selection_description(view)]
+    lines = [selection_share_title(view), selection_share_description(view)]
     for item in (view.get("items") or [])[:3]:
         slots = view["slots"].get(int(item["id"])) or []
         if slots:

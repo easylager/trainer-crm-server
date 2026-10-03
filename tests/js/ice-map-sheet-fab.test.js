@@ -95,27 +95,26 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(js, /margin:\s*\[150, 70,/);
   });
 
-  it('город: в списке пилюля у masthead, в карте — внутри поиска', () => {
+  it('город: в списке пилюля у намерения, в карте — внутри поиска', () => {
     const css = read('ice-tab.css');
     const html = read('ice.html');
     assert.match(css, /\.ice-citypill--insearch\s*{\s*display:\s*none/);
     assert.match(css, /body\.ice-view-map \.ice-citypill--insearch\s*{\s*display:\s*inline-flex/);
     assert.match(html, /id="iceCityChange"/);
     assert.match(html, /ice-citypill--insearch/);
-    // В hero-top город на месте (список не пострадал)
-    assert.match(html, /ice-hero-top[\s\S]{0,200}ice-citypill/);
+    assert.match(html, /ice-intent-row[\s\S]{0,400}id="iceCityChange"/);
   });
 
-  it('режим карты скрывает masthead, интент- и сервис- и вью-чипы, «Рядом» в поиске', () => {
+  it('режим карты скрывает намерение, услуги и типы площадок', () => {
     const css = read('ice-tab.css');
     const block = css.slice(
-      css.indexOf('body.ice-view-map .ice-sec--hero .ice-kicker'),
-      css.indexOf('}', css.indexOf('body.ice-view-map .ice-sec--hero .ice-kicker'))
+      css.indexOf('body.ice-view-map .ice-sec--hero .ice-intent-row'),
+      css.indexOf('}', css.indexOf('body.ice-view-map .ice-sec--hero .ice-intent-row'))
     );
-    assert.match(block, /\.ice-hero-top/);
-    assert.match(block, /#iceIntentChips/);
-    assert.match(block, /#iceVenueChips/);
-    assert.match(block, /#iceNearestBtn/);
+    assert.match(block, /\.ice-intent-row/);
+    assert.match(block, /#iceServiceChips/);
+    assert.match(block, /#icePlaceTabs/);
+    assert.match(css, /body\.ice-view-map #iceListSec/);
   });
 
   it('кнопка «Где я» — круглая FAB над шторкой, копирайт следует за шторкой', () => {
@@ -151,7 +150,7 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
   it('легенда типов (TASK-147): в hero под чипами, только режим карты, копирайт не тронут', () => {
     const html = read('ice.html');
     const hero = html.slice(html.indexOf('ice-sec--hero'), html.indexOf('id="iceListSec"'));
-    assert.ok(hero.indexOf('id="iceWhenChips"') < hero.indexOf('id="iceMapLegend"'), 'легенда после чипов окна');
+    assert.ok(hero.indexOf('id="iceCatalogTools"') < hero.indexOf('id="iceMapLegend"'), 'легенда после окна времени');
     assert.match(html, /id="iceMapLegend"[^>]*\shidden/, 'по умолчанию скрыта');
     assert.match(html, /<p class="ice-map-attrib" id="iceMapAttrib">© Яндекс · <a /, 'копирайт Яндекса на месте');
     const css = read('ice-tab.css');

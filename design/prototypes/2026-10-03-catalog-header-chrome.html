@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Шапка каталога — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    Прототип шапки вкладки «Поиск», 2026-10-03.
+    Вопрос: сегмент A нравится, но зал, улица (лыжероллер) и пустой выбор
+    «показать всё» в него не влезают. Чипы не возвращаем.
+
+    Принципы, не оттенки:
+      A — один сегмент на род объекта. Длинный хвост типов не существует.
+      E — два вопроса одним языком: род, потом вид площадки. Хвост отрезан.
+      F — высота шапки фиксирована, таксономия живёт в меню.
+      G — пустой выбор и есть страница: секции, не смешанная лента.
+
+    Стрелки и ← →. Город в поиске: Минск ↔ Витебск.
+    Токены — тёмная тема static/webapp/theme.css (html.client-mini-dark).
+  */
+  :root{
+    --glide-500:#45B9BB; --glide-brand:var(--glide-500); --glide-on-fill:#04262A;
+    --glide-paper:#0B0C0E; --glide-surface:#141618; --glide-card:#1A1D20;
+    --glide-line:#262A2E; --glide-line-strong:#33383D;
+    --glide-text:#E6E9EA; --glide-hint:#868D93; --glide-ink-teal:#57D0D2;
+    --glide-brand-wash:rgba(69,185,187,.13);
+    --app-ok:#4FC98A; --app-venue-shop:#A48BFF; --app-venue-gym:#F0A24B;
+    --app-venue-ice:#2E9A9C; --app-on-media:#F4F7F7; --app-on-media-dim:#C5D0D2;
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
+    --t-kicker:10px; --t-caption:12px; --t-body:14px; --t-title:20px;
+    --font:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--font); background:#050607; color:var(--glide-text);
+    min-height:100vh; display:flex; gap:40px; justify-content:center; align-items:flex-start;
+    padding:32px 16px 108px; flex-wrap:wrap;
+  }
+  button,input{font:inherit;color:inherit}
+  button{cursor:pointer}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--glide-ink-teal);outline-offset:2px}
+
+  .thesis{width:min(420px,100%); padding-top:12px}
+  .thesis h1{font-size:26px;line-height:1.2;letter-spacing:-.03em;margin:0;font-weight:700}
+  .thesis h1 em{font-style:normal;color:var(--glide-ink-teal)}
+  .lede{margin:12px 0 0;font-size:15px;line-height:1.5;color:var(--glide-text)}
+  .rules{list-style:none;margin:22px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+  .rules li{
+    display:grid; grid-template-columns:72px 1fr; gap:12px; align-items:baseline;
+    font-size:14px; line-height:1.45;
+  }
+  .rules b{font-size:11px;font-weight:700;color:var(--glide-ink-teal);letter-spacing:.04em;text-transform:uppercase}
+  .cuts{margin:20px 0 0;padding:0;list-style:none;color:var(--glide-hint);font-size:13px;line-height:1.5}
+  .cuts li{padding:3px 0 3px 14px;position:relative}
+  .cuts li::before{content:"";position:absolute;left:0;top:.7em;width:5px;height:5px;border-radius:99px;background:#3A4044}
+  .state{
+    margin-top:22px; padding:12px 14px; border:1px solid var(--glide-line); border-radius:12px;
+    background:var(--glide-card); font-size:12px; line-height:1.45; color:var(--glide-hint);
+    font-variant-numeric:tabular-nums;
+  }
+  .state b{color:var(--glide-text);font-weight:700}
+  .state code{color:var(--glide-ink-teal)}
+
+  .phone{
+    width:390px; max-width:100%; height:844px; position:relative; overflow:hidden;
+    border-radius:44px; background:var(--glide-paper);
+    box-shadow:0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.9);
+  }
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:118px;height:30px;background:#000;border-radius:16px;z-index:8;pointer-events:none}
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;padding-top:44px;padding-bottom:72px;overflow:hidden}
+
+  .hero{padding:14px 16px 12px; display:flex; flex-direction:column; gap:10px; flex:none}
+  .search{
+    display:flex; align-items:center; gap:8px;
+    background:var(--glide-paper); border:1px solid var(--glide-line);
+    border-radius:var(--r-md); padding:9px 11px;
+  }
+  .search svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;color:var(--glide-hint)}
+  .search input{
+    flex:1; min-width:0; border:0; background:transparent; font-size:14px; outline:none;
+  }
+  .search input::placeholder{color:var(--glide-hint)}
+  .city-in{
+    flex:none; max-width:40%; height:28px; padding:0 10px; border:0; border-radius:var(--r-pill);
+    background:var(--glide-surface); font-size:12px; font-weight:700;
+    display:inline-flex; align-items:center; gap:5px;
+  }
+  .city-in::after,.citypill::after,.sent__tok::after{
+    content:""; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent;
+    border-top:5px solid var(--glide-hint); margin-top:2px;
+  }
+
+  .intent-row{display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0}
+  .chips{display:flex; flex-wrap:wrap; gap:7px; min-width:0}
+  .chip{
+    flex:none; font-size:14px; font-weight:600; padding:8px 13px; border-radius:var(--r-pill);
+    border:1px solid var(--glide-line); color:var(--glide-hint); background:var(--glide-paper);
+  }
+  .chip[aria-pressed="true"]{background:var(--glide-brand); border-color:var(--glide-brand); color:var(--glide-on-fill)}
+  .citypill{
+    flex:none; padding:7px 12px; border-radius:var(--r-pill); border:1px solid var(--glide-line);
+    background:var(--glide-paper); font-size:14px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+
+  .seg{
+    display:grid; grid-template-columns:1fr 1fr 1fr; padding:3px; gap:2px;
+    background:var(--glide-surface); border:1px solid var(--glide-line); border-radius:var(--r-pill);
+  }
+  .seg button{
+    border:0; background:transparent; color:var(--glide-hint); font-size:13px; font-weight:700;
+    height:32px; border-radius:var(--r-pill); padding:0 6px;
+  }
+  .seg button[aria-pressed="true"]{background:var(--glide-brand); color:var(--glide-on-fill)}
+  .seg--mode{grid-template-columns:1fr 1fr}
+  .seg--mode button{height:36px; font-size:14px}
+  .seg--2{grid-template-columns:1fr 1fr}
+  .seg--3{grid-template-columns:1fr 1fr 1fr}
+  .seg--4{grid-template-columns:1fr 1fr 1fr 1fr}
+  .seg--quiet{
+    background:transparent; border:0; border-bottom:1px solid var(--glide-line);
+    border-radius:0; padding:0; gap:0;
+  }
+  .seg--quiet button{
+    height:36px; border-radius:0; font-size:13px; font-weight:600; color:var(--glide-hint);
+  }
+  .seg--quiet button[aria-pressed="true"]{
+    background:transparent; color:var(--glide-text);
+    box-shadow:inset 0 -2px 0 var(--glide-brand);
+  }
+
+  .tools{display:flex; gap:8px; align-items:flex-start}
+  .tool{
+    flex:1; min-width:0; height:36px; padding:0 12px;
+    border-radius:var(--r-md); border:1px solid var(--glide-line); background:var(--glide-surface);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:14px; font-weight:600;
+  }
+  .tool::after{
+    content:""; flex:none; width:0; height:0;
+    border-left:4px solid transparent; border-right:4px solid transparent;
+    border-top:5px solid var(--glide-hint); margin-top:2px;
+  }
+  .tool span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tool[aria-expanded="true"]{border-color:var(--glide-brand); color:var(--glide-ink-teal)}
+  .tools--one .tool{flex:0 1 auto}
+  .menu{
+    display:none; flex-direction:column; padding:6px;
+    background:var(--glide-card); border:1px solid var(--glide-line); border-radius:12px;
+  }
+  .menu.is-open{display:flex}
+  .menu button{
+    border:0; background:transparent; text-align:left; padding:10px 10px; border-radius:8px;
+    font-size:15px; font-weight:600; color:var(--glide-text);
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  }
+  .menu button[aria-pressed="true"]{background:var(--glide-brand-wash); color:var(--glide-ink-teal)}
+  .menu b{font-weight:600; font-variant-numeric:tabular-nums; color:var(--glide-hint); font-size:13px}
+  .menu button[aria-pressed="true"] b{color:var(--glide-ink-teal)}
+
+  .crumb{display:flex; align-items:center; gap:8px; min-width:0; font-size:16px; font-weight:700}
+  .crumb button{
+    border:0; background:none; padding:0; color:var(--glide-ink-teal); font-weight:600; font-size:16px;
+  }
+  .crumb em{font-style:normal; color:var(--glide-hint); font-weight:500}
+
+  .bunch{display:flex; flex-direction:column; gap:8px}
+  .bunch__head{
+    width:100%; border:0; background:none; padding:14px 0 0;
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    font-size:18px; font-weight:700; letter-spacing:-.02em; text-align:left;
+  }
+  .bunch:first-child .bunch__head{padding-top:2px}
+  .bunch__n{font-size:13px; font-weight:600; color:var(--glide-hint); font-variant-numeric:tabular-nums}
+  .board--place .board__name{font-size:22px; font-weight:700; letter-spacing:-.02em}
+
+  .chips--line{flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none}
+  .chips--line::-webkit-scrollbar{display:none}
+  .chip--f{
+    display:inline-flex; align-items:center; height:36px; padding:0 14px;
+    background:var(--glide-surface); color:var(--glide-text); border-color:var(--glide-line);
+  }
+  .chip.chip--f[aria-pressed="true"]{
+    background:var(--glide-brand-wash); border-color:rgba(69,185,187,.5); color:var(--glide-ink-teal);
+  }
+  .chip--shop{margin-left:8px}
+
+  .tabs{
+    display:flex; gap:18px; padding:0 2px; border-bottom:1px solid var(--glide-line);
+  }
+  .tabs button{
+    border:0; background:none; padding:8px 0 10px; font-size:14px; font-weight:700;
+    color:var(--glide-hint); position:relative;
+  }
+  .tabs button[aria-pressed="true"]{color:var(--glide-text)}
+  .tabs button[aria-pressed="true"]::after{
+    content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px;
+    background:var(--glide-brand); border-radius:2px;
+  }
+  .when-one{
+    align-self:flex-start; height:34px; padding:0 12px; border-radius:var(--r-pill);
+    border:1px solid var(--glide-line); background:var(--glide-surface);
+    font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px;
+  }
+  .when-one::after{
+    content:""; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent;
+    border-top:5px solid var(--glide-hint); margin-top:2px;
+  }
+  .when-one[aria-expanded="true"]{border-color:var(--glide-brand); color:var(--glide-ink-teal)}
+  .picker{
+    display:none; flex-direction:column; gap:4px; padding:6px;
+    background:var(--glide-card); border:1px solid var(--glide-line); border-radius:12px;
+  }
+  .picker.is-open{display:flex}
+  .picker button{
+    border:0; background:transparent; text-align:left; padding:9px 10px; border-radius:8px;
+    font-size:14px; font-weight:600; color:var(--glide-text);
+  }
+  .picker button[aria-pressed="true"]{background:var(--glide-brand-wash); color:var(--glide-ink-teal)}
+
+  .sent{
+    display:flex; flex-wrap:wrap; align-items:center; gap:6px 4px;
+    padding:4px 2px; font-size:15px; font-weight:600; line-height:1.35;
+  }
+  .sent__tok{
+    border:0; background:var(--glide-surface); color:var(--glide-text);
+    padding:6px 10px; border-radius:var(--r-pill); display:inline-flex; align-items:center; gap:6px;
+  }
+  .sent__quiet{color:var(--glide-hint); font-weight:500; padding:0 2px}
+
+  .list{flex:1; min-height:0; overflow:auto; padding:0 16px 16px; display:flex; flex-direction:column; gap:10px}
+  .list::-webkit-scrollbar{width:0}
+  .listhead{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:2px 0 4px}
+  .eyebrow{margin:0; font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--glide-hint)}
+  .near{
+    border:1px solid var(--glide-line); background:transparent; color:var(--glide-hint);
+    border-radius:var(--r-pill); padding:5px 10px; font-size:12px; font-weight:600;
+  }
+
+  .board{
+    display:block; border:1px solid var(--glide-line); border-radius:var(--r-lg);
+    background:var(--glide-card); overflow:hidden; color:inherit; text-decoration:none;
+  }
+  .board__photo{
+    position:relative; aspect-ratio:2/1; display:flex; align-items:flex-end;
+    background:linear-gradient(160deg,#1a4a4c,#0d2a2c 55%,#16333a);
+  }
+  .board--shop .board__photo{background:linear-gradient(160deg,#3a2a68,#241844)}
+  .board__scrim{width:100%; padding:18px 14px 12px; background:linear-gradient(180deg,transparent,rgba(4,8,10,.72))}
+  .board__day{display:block; font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--app-on-media-dim)}
+  .board__time{display:block; font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-.03em; line-height:1; color:var(--app-on-media)}
+  .board__name{display:block; margin-top:6px; font-size:18px; font-weight:600; letter-spacing:-.01em; color:var(--app-on-media)}
+  .board__where{display:block; margin-top:2px; font-size:12px; color:var(--app-on-media-dim)}
+  .board__facts{display:block; padding:10px 14px; font-size:12px; color:var(--glide-hint)}
+  .board__depth{
+    display:flex; justify-content:space-between; padding:10px 14px 12px;
+    border-top:1px solid var(--glide-line); font-size:14px; font-weight:500; color:var(--glide-ink-teal);
+  }
+  .row{
+    display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--glide-line);
+    border-radius:var(--r-lg); background:var(--glide-card);
+  }
+  .av{
+    width:44px; height:44px; border-radius:50%; display:grid; place-items:center;
+    background:#2A3338; color:var(--glide-ink-teal); font-weight:700; flex:none;
+  }
+  .row div{min-width:0}
+  .row b{display:block; font-size:15px; font-weight:700}
+  .row span{display:block; font-size:12px; color:var(--glide-hint); margin-top:2px}
+  .board--out .board__photo{background:linear-gradient(160deg,#1a3c2c,#0e2418 55%,#163028)}
+  .board--gym .board__photo{background:linear-gradient(160deg,#3a2c16,#24180c 60%,#2a2014)}
+  .board__name{line-height:1.25}
+
+  .tabbar{
+    position:absolute; left:0; right:0; bottom:0; height:72px;
+    display:grid; grid-template-columns:repeat(4,1fr);
+    background:rgba(11,12,14,.94); border-top:1px solid var(--glide-line);
+    backdrop-filter:blur(16px);
+  }
+  .tabbar button{
+    border:0; background:none; color:var(--glide-hint); font-size:10px; font-weight:600;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  }
+  .tabbar button.on{color:var(--glide-ink-teal)}
+  .tabbar svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9}
+
+  .switcher{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:40;
+    display:flex; align-items:center; gap:10px; padding:8px 10px 8px 8px;
+    background:#F4F6F6; color:#111; border-radius:999px;
+    box-shadow:0 10px 30px -12px rgba(0,0,0,.7);
+    font-size:13px; font-weight:700; white-space:nowrap;
+  }
+  .switcher button{
+    width:36px; height:36px; border:0; border-radius:50%; background:#111; color:#fff; font-size:16px;
+  }
+  .switcher .lab{min-width:168px; text-align:center}
+  .switcher .lab small{display:block; font-size:10px; font-weight:600; color:#666; margin-top:1px}
+
+  @media (max-width:820px){
+    body{padding:16px 12px 108px}
+    .thesis{width:100%}
+  }
+</style>
+</head>
+<body>
+  <aside class="thesis">
+    <h1>Шапка, которая <em>не растёт</em> списком типов</h1>
+    <p class="lede">A остаётся. Стрелки — три способа поставить рядом зал и лыжероллер, не возвращая чипы. Город в строке поиска переключается: Минск, потом Витебск.</p>
+    <ul class="rules">
+      <li><b>Пусто</b><span>Верхний выбор всегда занят: места, тренеры или магазины. Пустой выбор есть этажом ниже и значит все площадки — лёд, зал, улица. Магазин и тренер в эту ленту не входят.</span></li>
+      <li><b>A′</b><span>Сегмент A (Места · Тренеры · Магазины) + тихий ряд «Все · Лёд · Зал · Улица» + окно времени одной кнопкой. Пустой тип = смешанная лента мест.</span></li>
+      <li><b>A</b><span>Сегмент, который нравится. Три слова. Зала и улицы в нём нет, «все сразу» тоже нет.</span></li>
+      <li><b>E</b><span>Тот же сегмент, только «Катки» стали «Места». Под ним тихий ряд: Все, Лёд, Зал, Улица. Хореография в ряд не влезает — её здесь нет.</span></li>
+      <li><b>F</b><span>Тот же верх. Вид площадки — одна кнопка со списком: лёд, зал, улица, хореография, бассейн. Высота шапки не меняется.</span></li>
+      <li><b>G</b><span>В шапке нет выбора рода. Пустое состояние — обзор секциями. Тап по секции сужает ленту, «Обзор» возвращает.</span></li>
+    </ul>
+    <ul class="cuts">
+      <li>Открытый каток остаётся льдом: у него есть сеанс. «Улица» — площадка без сеанса, как лыжероллер.</li>
+      <li>Окно времени только у льда. На зале, улице, у тренера и магазина его нет.</li>
+      <li>Тип с нулём не рисуется. В Витебске второй ряд E пропадает: там только лёд.</li>
+      <li>Смешанная лента «магазины + тренеры + катки» без секций — не делаем.</li>
+    </ul>
+    <div class="state" id="stateOut"></div>
+  </aside>
+
+  <div class="phone" id="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="hero" id="hero"></div>
+      <div class="list" id="list"></div>
+    </div>
+    <nav class="tabbar" aria-label="Разделы">
+      <button type="button">
+        <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>
+        Хаб
+      </button>
+      <button type="button" class="on">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Поиск
+      </button>
+      <button type="button">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>
+        Записи
+      </button>
+      <button type="button">
+        <svg viewBox="0 0 24 24"><path d="M8 7h8M8 12h8M8 17h5"/></svg>
+        Ещё
+      </button>
+    </nav>
+  </div>
+
+  <div class="switcher" id="switcher">
+    <button type="button" id="prevBtn" aria-label="Предыдущий вариант">←</button>
+    <div class="lab" id="switchLab"></div>
+    <button type="button" id="nextBtn" aria-label="Следующий вариант">→</button>
+  </div>
+
+<script>
+(function () {
+  var VARIANTS = [
+    { id: 'Aprime', name: 'A′ целевой', sub: 'сегмент + тип + when' },
+    { id: 'A', name: 'Сегмент', sub: 'три слова, без зала' },
+    { id: 'E', name: 'Два уровня', sub: 'вид площадки рядом' },
+    { id: 'F', name: 'Меню', sub: 'шапка не растёт' },
+    { id: 'G', name: 'Обзор', sub: 'пустое = секции' },
+    { id: 'D', name: 'Два голоса', sub: 'чипы типа' },
+    { id: 'now', name: 'Сейчас', sub: 'хаос из чипов' },
+    { id: 'B', name: 'Фраза', sub: 'ноль чипов' },
+    { id: 'C', name: 'Вкладки', sub: 'одно окно' }
+  ];
+  var VENUES = [
+    { id: 'ice', label: 'Лёд' },
+    { id: 'gym', label: 'Зал' },
+    { id: 'outdoor', label: 'Улица' },
+    { id: 'shop', label: 'Магазин', shop: true }
+  ];
+  var WHEN_SHORT = [
+    { id: 'today_evening', label: 'Вечером' },
+    { id: 'tomorrow', label: 'Завтра' },
+    { id: 'weekend', label: 'Выходные' }
+  ];
+  var SCOPES = [
+    { id: 'skate', label: 'Катки', intent: 'Где заниматься', ph: 'Название катка или зала' },
+    { id: 'coach', label: 'Тренеры', intent: 'Тренеры', ph: 'Имя тренера' },
+    { id: 'shop', label: 'Магазины', intent: 'Магазины', ph: 'Магазин или заточка' }
+  ];
+  var WHENS = [
+    { id: 'today_evening', label: 'Сегодня вечером', short: 'сегодня вечером' },
+    { id: 'tomorrow', label: 'Завтра', short: 'завтра' },
+    { id: 'weekend', label: 'Выходные', short: 'выходные' }
+  ];
+  var MODES = [
+    { id: 'places', label: 'Места', ph: 'Каток, зал или трасса' },
+    { id: 'coach', label: 'Тренеры', ph: 'Имя тренера' },
+    { id: 'shop', label: 'Магазины', ph: 'Магазин или заточка' }
+  ];
+  var SEG_PLACES = [
+    { id: 'ice', label: 'Лёд' },
+    { id: 'gym', label: 'Зал' },
+    { id: 'outdoor', label: 'Улица' }
+  ];
+  var MENU_PLACES = [
+    { id: 'ice', label: 'Лёд' },
+    { id: 'gym', label: 'Зал' },
+    { id: 'outdoor', label: 'Улица' },
+    { id: 'choreo', label: 'Хореография' },
+    { id: 'pool', label: 'Бассейн' }
+  ];
+  var FOCUS_LABEL = {
+    ice: 'Лёд', gym: 'Зал', outdoor: 'Улица', choreo: 'Хореография', pool: 'Бассейн',
+    coach: 'Тренеры', shop: 'Магазины'
+  };
+  var NOUN = {
+    ice: ['каток', 'катка', 'катков'],
+    gym: ['зал', 'зала', 'залов'],
+    outdoor: ['площадка', 'площадки', 'площадок'],
+    choreo: ['зал', 'зала', 'залов'],
+    pool: ['бассейн', 'бассейна', 'бассейнов'],
+    coach: ['тренер', 'тренера', 'тренеров'],
+    shop: ['магазин', 'магазина', 'магазинов'],
+    places: ['площадка', 'площадки', 'площадок']
+  };
+  var CITIES = ['Минск', 'Витебск'];
+  var INV = {
+    'Минск': { ice: 7, gym: 4, outdoor: 3, choreo: 2, pool: 1, shop: 6, coach: 14 },
+    'Витебск': { ice: 2, gym: 0, outdoor: 0, choreo: 0, pool: 0, shop: 0, coach: 1 }
+  };
+  var ICONS = {
+    search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
+  };
+
+  var state = {
+    variant: 'Aprime',
+    scope: 'places',
+    venue: '',
+    place: '',
+    focus: '',
+    when: 'weekend',
+    city: 'Минск',
+    picker: false
+  };
+
+  function params() { return new URLSearchParams(location.search); }
+  function isWide(id) { return id === 'Aprime' || id === 'E' || id === 'F' || id === 'G'; }
+  function readVariant() {
+    var v = params().get('variant') || 'Aprime';
+    return VARIANTS.some(function (x) { return x.id === v; }) ? v : 'Aprime';
+  }
+  function setVariant(id) {
+    if (isWide(id) && state.scope === 'skate') state.scope = 'places';
+    if (!isWide(id) && state.scope === 'places') state.scope = 'skate';
+    state.variant = id;
+    state.picker = false;
+    state.focus = '';
+    if (id === 'D' && state.scope === 'shop') {
+      state.scope = 'skate';
+      state.venue = 'shop';
+    }
+    reconcile();
+    var u = new URL(location.href);
+    u.searchParams.set('variant', id);
+    history.replaceState(null, '', u);
+    render();
+  }
+  function cycle(dir) {
+    var i = VARIANTS.findIndex(function (x) { return x.id === state.variant; });
+    var n = (i + dir + VARIANTS.length) % VARIANTS.length;
+    setVariant(VARIANTS[n].id);
+  }
+  function inv() { return INV[state.city]; }
+  function countOf(id) { return inv()[id] || 0; }
+  function plural(n, forms) {
+    var n10 = n % 10, n100 = n % 100;
+    if (n10 === 1 && n100 !== 11) return forms[0];
+    if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) return forms[1];
+    return forms[2];
+  }
+  function countPhrase(n, key) { return n + ' ' + plural(n, NOUN[key]); }
+  function cityIn() { return state.city === 'Витебск' ? 'Витебске' : 'Минске'; }
+  function sumPlaces(list) {
+    return list.reduce(function (s, t) { return s + countOf(t.id); }, 0);
+  }
+  function alive(list) {
+    return list.filter(function (t) { return countOf(t.id) > 0; });
+  }
+  function scopeOf() {
+    return SCOPES.filter(function (s) { return s.id === state.scope; })[0] || SCOPES[0];
+  }
+  function whenOf() {
+    return WHENS.filter(function (w) { return w.id === state.when; })[0] || null;
+  }
+  function modesOn() {
+    return MODES.filter(function (m) {
+      if (m.id === 'places') return sumPlaces(MENU_PLACES) > 0;
+      return countOf(m.id) > 0;
+    });
+  }
+  function reconcile() {
+    if ((state.variant === 'E' || state.variant === 'Aprime') && state.place) {
+      var inSeg = SEG_PLACES.some(function (t) { return t.id === state.place && countOf(t.id) > 0; });
+      if (!inSeg) state.place = '';
+    } else if (state.place && countOf(state.place) === 0) {
+      state.place = '';
+    }
+    if (state.focus && countOf(state.focus) === 0) state.focus = '';
+    if (isWide(state.variant)) {
+      var ids = modesOn().map(function (m) { return m.id; });
+      if (ids.indexOf(state.scope) < 0 && ids.length) state.scope = ids[0];
+    }
+  }
+  function setScope(id) {
+    state.scope = id;
+    state.picker = false;
+    if (id !== 'places' && id !== 'skate') state.place = '';
+    render();
+  }
+  function setPlace(id) {
+    state.place = id || '';
+    state.picker = false;
+    render();
+  }
+  function cycleCity() {
+    var i = CITIES.indexOf(state.city);
+    state.city = CITIES[(i + 1) % CITIES.length];
+    reconcile();
+    render();
+  }
+  function whenApplies() {
+    if (countOf('ice') === 0) return false;
+    if (state.variant === 'G') return !state.focus || state.focus === 'ice';
+    if (state.scope !== 'places' && state.scope !== 'skate') return false;
+    if (isWide(state.variant) && state.place && state.place !== 'ice') return false;
+    return true;
+  }
+  function phFor() {
+    if (state.variant === 'G') return 'Каток, зал, тренер, магазин';
+    if (isWide(state.variant)) {
+      var m = MODES.filter(function (x) { return x.id === state.scope; })[0];
+      return m ? m.ph : 'Каток, зал или трасса';
+    }
+    return scopeOf().ph;
+  }
+  function placeLabel() {
+    if (!state.place) return 'Все места';
+    return FOCUS_LABEL[state.place] || 'Все места';
+  }
+  function setVenue(id) {
+    state.venue = state.venue === id ? '' : id;
+    render();
+  }
+  function whenRowVisible() {
+    if (state.scope === 'coach') return false;
+    if (state.variant === 'D') {
+      return !state.venue || state.venue === 'ice' || state.venue === 'outdoor';
+    }
+    return state.scope === 'skate';
+  }
+  function setWhen(id) {
+    state.when = state.when === id ? '' : id;
+    state.picker = false;
+    render();
+  }
+
+  function chip(label, pressed, attrs, quiet, extra) {
+    var cls = 'chip' + (quiet ? ' chip--f' : '') + (extra ? ' ' + extra : '');
+    return '<button type="button" class="' + cls + '" aria-pressed="' + (pressed ? 'true' : 'false') + '" ' + attrs + '>' + label + '</button>';
+  }
+  function searchBar(withCity, ph) {
+    return '<div class="search">' + ICONS.search +
+      '<input type="search" placeholder="' + ph + '" />' +
+      (withCity ? '<button type="button" class="city-in" data-act="city">' + state.city + '</button>' : '') +
+      '</div>';
+  }
+  function seg() {
+    return '<div class="seg" role="tablist">' + SCOPES.map(function (s) {
+      return '<button type="button" role="tab" aria-pressed="' + (state.scope === s.id) + '" data-act="scope" data-id="' + s.id + '">' + s.label + '</button>';
+    }).join('') + '</div>';
+  }
+  function whenChips() {
+    if (state.scope !== 'skate') return '';
+    return '<div class="chips" role="group" aria-label="Когда">' + WHENS.map(function (w) {
+      return chip(w.label, state.when === w.id, 'data-act="when" data-id="' + w.id + '"');
+    }).join('') + '</div>';
+  }
+  function textTabs() {
+    return '<div class="tabs" role="tablist">' + SCOPES.map(function (s) {
+      return '<button type="button" aria-pressed="' + (state.scope === s.id) + '" data-act="scope" data-id="' + s.id + '">' + s.label + '</button>';
+    }).join('') + '</div>';
+  }
+  function whenOne() {
+    if (state.scope !== 'skate') return '';
+    var w = whenOf();
+    var label = w ? w.label : 'Любое время';
+    var picker = '<div class="picker' + (state.picker === 'c' ? ' is-open' : '') + '">' +
+      '<button type="button" aria-pressed="' + (!state.when) + '" data-act="when" data-id="">Любое время</button>' +
+      WHENS.map(function (x) {
+        return '<button type="button" aria-pressed="' + (state.when === x.id) + '" data-act="when" data-id="' + x.id + '">' + x.label + '</button>';
+      }).join('') + '</div>';
+    return '<button type="button" class="when-one" aria-expanded="' + (state.picker === 'c') + '" data-act="menu" data-id="c">' + label + '</button>' + picker;
+  }
+  function sentence() {
+    var s = scopeOf();
+    var w = whenOf();
+    var whenTok = state.scope === 'skate'
+      ? '<span class="sent__quiet">·</span><button type="button" class="sent__tok" data-act="when-cycle">' + (w ? w.short : 'любое время') + '</button>'
+      : '';
+    return '<div class="sent">' +
+      '<button type="button" class="sent__tok" data-act="scope-cycle">' + s.label + '</button>' +
+      '<span class="sent__quiet">в</span>' +
+      '<button type="button" class="sent__tok" data-act="city">' + state.city + '</button>' +
+      whenTok +
+      '</div>';
+  }
+
+  function headerNow() {
+    var s = scopeOf();
+    var ph = s.id === 'coach' ? s.ph : 'Название катка или зала';
+    var intentSkate = s.id !== 'coach';
+    var venue = intentSkate
+      ? '<div class="chips">' +
+        chip('Все', s.id === 'skate', 'data-act="scope" data-id="skate"') +
+        chip('Лёд', false, '') +
+        chip('Зал', false, '') +
+        chip('Улица', false, '') +
+        chip('Магазин', s.id === 'shop', 'data-act="scope" data-id="shop"') +
+        '</div>'
+      : '';
+    var when = intentSkate
+      ? '<div class="chips">' +
+        chip('Сегодня вечером', state.when === 'today_evening', 'data-act="when" data-id="today_evening"') +
+        chip('Завтра', state.when === 'tomorrow', 'data-act="when" data-id="tomorrow"') +
+        chip('Выходные', state.when === 'weekend', 'data-act="when" data-id="weekend"') +
+        chip('Любое время', !state.when, 'data-act="when" data-id=""') +
+        '</div>'
+      : '';
+    return searchBar(false, ph) +
+      '<div class="intent-row">' +
+        '<div class="chips">' +
+          chip('Где заниматься', intentSkate, 'data-act="scope" data-id="skate"') +
+          chip('Тренеры', s.id === 'coach', 'data-act="scope" data-id="coach"') +
+        '</div>' +
+        '<button type="button" class="citypill" data-act="city">' + state.city + '</button>' +
+      '</div>' + venue + when;
+  }
+
+  function modeSeg() {
+    var places = state.scope !== 'coach';
+    return '<div class="seg seg--mode" role="tablist">' +
+      '<button type="button" role="tab" aria-pressed="' + places + '" data-act="scope" data-id="skate">Где заниматься</button>' +
+      '<button type="button" role="tab" aria-pressed="' + (!places) + '" data-act="scope" data-id="coach">Тренеры</button>' +
+      '</div>';
+  }
+  function headerD() {
+    var ph = state.scope === 'coach' ? 'Имя тренера' : 'Название катка или зала';
+    if (state.scope === 'coach') return searchBar(true, ph) + modeSeg();
+    var venueRow = '<div class="chips chips--line" role="group" aria-label="Тип места">' +
+      VENUES.map(function (v) {
+        return chip(v.label, state.venue === v.id, 'data-act="venue" data-id="' + v.id + '"', true, v.shop ? 'chip--shop' : '');
+      }).join('') + '</div>';
+    var whenRow = '';
+    if (whenRowVisible()) {
+      whenRow = '<div class="chips chips--line" role="group" aria-label="Когда">' +
+        WHEN_SHORT.map(function (w) {
+          return chip(w.label, state.when === w.id, 'data-act="when" data-id="' + w.id + '"', true);
+        }).join('') + '</div>';
+    }
+    return searchBar(true, ph) + modeSeg() + venueRow + whenRow;
+  }
+
+  function modeBar() {
+    var modes = modesOn();
+    if (modes.length < 2) return '';
+    return '<div class="seg seg--' + modes.length + '" role="tablist">' + modes.map(function (m) {
+      return '<button type="button" role="tab" aria-pressed="' + (state.scope === m.id) + '" data-act="scope" data-id="' + m.id + '">' + m.label + '</button>';
+    }).join('') + '</div>';
+  }
+  function placeBar() {
+    if (state.scope !== 'places') return '';
+    var types = alive(SEG_PLACES);
+    if (types.length < 2) return '';
+    var all = '<button type="button" role="tab" aria-pressed="' + (!state.place) + '" data-act="place" data-id="">Все</button>';
+    var rest = types.map(function (t) {
+      return '<button type="button" role="tab" aria-pressed="' + (state.place === t.id) + '" data-act="place" data-id="' + t.id + '">' + t.label + '</button>';
+    }).join('');
+    return '<div class="seg seg--quiet seg--' + (types.length + 1) + '" role="tablist" aria-label="Вид площадки">' + all + rest + '</div>';
+  }
+  function menuBox(open, rows) {
+    return '<div class="menu' + (open ? ' is-open' : '') + '">' + rows + '</div>';
+  }
+  function toolsBlock(opts) {
+    var buttons = '';
+    var menus = '';
+    if (opts.place) {
+      var placeOpen = state.picker === 'place';
+      buttons += '<button type="button" class="tool" aria-expanded="' + placeOpen + '" data-act="menu" data-id="place"><span>' + placeLabel() + '</span></button>';
+      var rows = '<button type="button" aria-pressed="' + (!state.place) + '" data-act="place" data-id="">Все места<b>' + sumPlaces(MENU_PLACES) + '</b></button>';
+      rows += alive(MENU_PLACES).map(function (t) {
+        return '<button type="button" aria-pressed="' + (state.place === t.id) + '" data-act="place" data-id="' + t.id + '">' + t.label + '<b>' + countOf(t.id) + '</b></button>';
+      }).join('');
+      menus += menuBox(placeOpen, rows);
+    }
+    if (opts.when) {
+      var w = whenOf();
+      var whenOpen = state.picker === 'when';
+      buttons += '<button type="button" class="tool" aria-expanded="' + whenOpen + '" data-act="menu" data-id="when"><span>' + (w ? w.label : 'Любое время') + '</span></button>';
+      var wrows = '<button type="button" aria-pressed="' + (!state.when) + '" data-act="when" data-id="">Любое время</button>' +
+        WHENS.map(function (x) {
+          return '<button type="button" aria-pressed="' + (state.when === x.id) + '" data-act="when" data-id="' + x.id + '">' + x.label + '</button>';
+        }).join('');
+      menus += menuBox(whenOpen, wrows);
+    }
+    var n = (opts.place ? 1 : 0) + (opts.when ? 1 : 0);
+    if (!n) return '';
+    return '<div class="tools' + (n === 1 ? ' tools--one' : '') + '">' + buttons + '</div>' + menus;
+  }
+  function headerAprime() {
+    var when = whenApplies() ? toolsBlock({ place: false, when: true }) : '';
+    return searchBar(true, phFor()) + modeBar() + placeBar() + when;
+  }
+  function headerE() {
+    var when = whenApplies() ? toolsBlock({ place: false, when: true }) : '';
+    return searchBar(true, phFor()) + modeBar() + placeBar() + when;
+  }
+  function headerF() {
+    var showPlace = state.scope === 'places' && alive(MENU_PLACES).length >= 2;
+    var showWhen = whenApplies();
+    return searchBar(true, phFor()) + modeBar() + toolsBlock({ place: showPlace, when: showWhen });
+  }
+  function headerG() {
+    var top = searchBar(true, phFor());
+    var when = whenApplies() ? toolsBlock({ place: false, when: true }) : '';
+    if (!state.focus) return top + when;
+    var crumb = '<div class="crumb"><button type="button" data-act="unfocus">Обзор</button><em>/</em><span>' +
+      (FOCUS_LABEL[state.focus] || '') + '</span></div>';
+    return top + crumb + when;
+  }
+  function header() {
+    var ph = phFor();
+    if (state.variant === 'now') return headerNow();
+    if (state.variant === 'D') return headerD();
+    if (state.variant === 'A') return searchBar(true, ph) + seg() + whenChips();
+    if (state.variant === 'B') return searchBar(false, ph) + sentence();
+    if (state.variant === 'C') return searchBar(true, ph) + textTabs() + whenOne();
+    if (state.variant === 'G') return headerG();
+    if (state.variant === 'F') return headerF();
+    if (state.variant === 'Aprime') return headerAprime();
+    return headerE();
+  }
+
+  function viewKind() {
+    if (state.scope === 'coach') return 'coach';
+    if (state.variant === 'D') return state.venue === 'shop' ? 'shop' : 'skate';
+    if (state.scope === 'shop') return 'shop';
+    return 'skate';
+  }
+
+  function iceCaption() {
+    var w = whenOf();
+    return countPhrase(countOf('ice'), 'ice') + (w ? ' · ' + w.short : ' в ' + cityIn());
+  }
+  function caption() {
+    if (isWide(state.variant)) {
+      if (state.scope === 'coach') return countPhrase(countOf('coach'), 'coach') + ' в ' + cityIn();
+      if (state.scope === 'shop') return countPhrase(countOf('shop'), 'shop');
+      if (state.place === 'ice') return iceCaption();
+      if (state.place === 'gym') return countPhrase(countOf('gym'), 'gym') + ' в ' + cityIn();
+      if (state.place === 'outdoor') return countPhrase(countOf('outdoor'), 'outdoor') + ' в ' + cityIn();
+      if (state.place === 'choreo') return countPhrase(countOf('choreo'), 'choreo') + ' · хореография';
+      if (state.place === 'pool') return countPhrase(countOf('pool'), 'pool') + ' в ' + cityIn();
+      if (state.variant === 'F') return countPhrase(sumPlaces(MENU_PLACES), 'places') + ' в ' + cityIn();
+      return countPhrase(sumPlaces(SEG_PLACES), 'places') + ' в ' + cityIn();
+    }
+    var kind = viewKind();
+    if (kind === 'coach') return countPhrase(countOf('coach'), 'coach') + ' в ' + cityIn();
+    if (kind === 'shop') return countPhrase(countOf('shop'), 'shop');
+    if (state.variant === 'D' && state.venue === 'gym') return countPhrase(countOf('gym'), 'gym') + ' в ' + cityIn();
+    var w = whenOf();
+    if (state.variant === 'D' && state.venue === 'outdoor') {
+      return w ? countPhrase(countOf('outdoor'), 'outdoor') + ' · ' + w.short : countPhrase(countOf('outdoor'), 'outdoor') + ' в ' + cityIn();
+    }
+    if (state.variant === 'D' && state.venue === 'ice') return iceCaption();
+    return w ? countPhrase(countOf('ice'), 'ice') + ' · ' + w.short : countPhrase(sumPlaces(SEG_PLACES), 'places') + ' в ' + cityIn();
+  }
+
+  function take(list, n) {
+    var cap = Math.max(1, Math.min(n || list.length, list.length));
+    return list.slice(0, cap).join('');
+  }
+  function coachRows(n) {
+    return take([
+      row('АН', 'Анна Новикова', 'фигурное · Юность'),
+      row('ДК', 'Дмитрий Козлов', 'хоккей · Минск-Арена'),
+      row('ЕС', 'Елена Савчук', 'с нуля · Чижовка')
+    ], n);
+  }
+  function gymRows(n) {
+    return take([
+      row('ОФ', 'Зал ОФП на Сурганова', 'общая подготовка · 8 мин'),
+      row('СН', 'Студия на Немиге', 'растяжка · 14 мин')
+    ], n);
+  }
+  function choreoRows(n) {
+    return take([
+      row('ХК', 'Хореографический зал на Кальварийской', 'станок · зеркала · 11 мин')
+    ], n);
+  }
+  function poolRows(n) {
+    return take([row('БС', 'Бассейн «Олимпийский»', 'дорожки · 20 мин')], n);
+  }
+  function shopBoards(n) {
+    return take([
+      shopBoard('ProSkate', 'заточка · Немига', 'коньки · заточка при вас'),
+      shopBoard('ЛёдМаркет', 'экипировка · Уручье', 'прокат · заточка')
+    ], n);
+  }
+  function outBoards(n) {
+    return take([
+      placeBoard('Лыжероллерная трасса в Раубичах', '5,2 км · асфальт · 24 мин', 'круг · освещение до 22:00'),
+      placeBoard('Роллер-петля в Дроздах', '1,8 км · 16 мин', 'асфальт · раздевалки нет')
+    ], n);
+  }
+  function iceBoards(n) {
+    return take([
+      board('18:15', 'Каток в парке Горького', 'открытый лёд · 12 мин', '18:15 · 5 BYN · 19:45 · 5 BYN'),
+      board('19:30', 'Ледовый дворец спорта', 'крытый · 18 мин', '19:30 · 8 BYN · 21:00 · 8 BYN'),
+      board('21:00', 'Чижовка-Арена', 'крытый · прокат', '21:00 · 7 BYN')
+    ], n);
+  }
+  function cardsFor(id, preview) {
+    var n = preview ? 1 : Math.min(3, countOf(id) || 1);
+    if (id === 'ice') return iceBoards(n);
+    if (id === 'outdoor') return outBoards(n);
+    if (id === 'gym') return gymRows(n);
+    if (id === 'choreo') return choreoRows(n);
+    if (id === 'pool') return poolRows(n);
+    if (id === 'coach') return coachRows(n);
+    if (id === 'shop') return shopBoards(n);
+    return '';
+  }
+  function wideBoards() {
+    if (state.scope === 'coach') return coachRows(countOf('coach'));
+    if (state.scope === 'shop') return shopBoards(countOf('shop'));
+    if (state.place) return cardsFor(state.place, false);
+    if (state.variant === 'F') {
+      return alive(MENU_PLACES).map(function (t) { return cardsFor(t.id, true); }).join('');
+    }
+    return iceBoards(1) + outBoards(1) + gymRows(1);
+  }
+  function boards() {
+    if (state.variant === 'Aprime' || state.variant === 'E' || state.variant === 'F') return wideBoards();
+    var kind = viewKind();
+    if (kind === 'coach') return coachRows(countOf('coach'));
+    if (state.variant === 'D' && state.venue === 'gym') return gymRows(countOf('gym'));
+    if (kind === 'shop') return shopBoards(countOf('shop'));
+    if (state.variant === 'D' && state.venue === 'outdoor') return outBoards(countOf('outdoor'));
+    return iceBoards(3);
+  }
+  function board(time, name, where, facts) {
+    var day = state.when === 'tomorrow' ? 'завтра' : (state.when === 'weekend' ? 'сб' : 'сегодня');
+    return '<article class="board"><div class="board__photo"><div class="board__scrim">' +
+      '<span class="board__day">' + day + '</span>' +
+      '<span class="board__time">' + time + '</span>' +
+      '<span class="board__name">' + name + '</span>' +
+      '<span class="board__where">' + where + '</span>' +
+      '</div></div><span class="board__facts">' + facts + '</span>' +
+      '<span class="board__depth">Массовое катание<span>→</span></span></article>';
+  }
+  function placeBoard(name, where, facts) {
+    return '<article class="board board--place board--out"><div class="board__photo"><div class="board__scrim">' +
+      '<span class="board__day">улица</span>' +
+      '<span class="board__name">' + name + '</span>' +
+      '<span class="board__where">' + where + '</span>' +
+      '</div></div><span class="board__facts">' + facts + '</span>' +
+      '<span class="board__depth">Площадка<span>→</span></span></article>';
+  }
+  function shopBoard(name, where, facts) {
+    return '<article class="board board--shop"><div class="board__photo"><div class="board__scrim">' +
+      '<b class="board__name">' + name + '</b><span class="board__where">' + where + '</span>' +
+      '</div></div><span class="board__facts">' + facts + '</span>' +
+      '<span class="board__depth">Магазин<span>→</span></span></article>';
+  }
+  function row(ini, name, meta) {
+    return '<article class="row"><span class="av">' + ini + '</span><div><b>' + name + '</b><span>' + meta + '</span></div></article>';
+  }
+  function sections() {
+    var spec = [
+      { id: 'ice', title: 'Лёд' },
+      { id: 'outdoor', title: 'Улица' },
+      { id: 'gym', title: 'Зал' },
+      { id: 'choreo', title: 'Хореография' },
+      { id: 'pool', title: 'Бассейн' },
+      { id: 'coach', title: 'Тренеры' },
+      { id: 'shop', title: 'Магазины' }
+    ];
+    return spec.filter(function (s) { return countOf(s.id) > 0; }).map(function (s) {
+      return '<section class="bunch"><button type="button" class="bunch__head" data-act="focus" data-id="' + s.id + '">' +
+        '<span>' + s.title + '</span><span class="bunch__n">' + countOf(s.id) + '</span></button>' +
+        cardsFor(s.id, true) + '</section>';
+    }).join('');
+  }
+  function listHead(text) {
+    return '<div class="listhead"><p class="eyebrow">' + text + '</p><button type="button" class="near">Ближе</button></div>';
+  }
+  function explain() {
+    if (state.variant === 'G' && !state.focus) {
+      return 'Пустой выбор — обзор секциями. Магазин, тренер и каток не свалены в одну ленту.';
+    }
+    if (state.variant === 'G') return 'Секция «' + (FOCUS_LABEL[state.focus] || '') + '». «Обзор» возвращает пустое состояние.';
+    if (state.variant === 'E' && state.scope === 'places' && !state.place) {
+      if (alive(SEG_PLACES).length < 2) return 'Второй ряд скрыт: в ' + cityIn() + ' из площадок есть только лёд.';
+      return 'Пустой вид площадки: лёд, зал и улица вместе. Тренеры и магазины — другие сегменты. Хореография в этот ряд не влезла.';
+    }
+    if (state.variant === 'F' && state.scope === 'places' && !state.place) {
+      if (alive(MENU_PLACES).length < 2) return 'Меню типа скрыто: в городе один вид площадок.';
+      return '«Все места» включает хореографию и бассейн. Высота шапки та же, что при одном типе.';
+    }
+    if ((state.variant === 'E' || state.variant === 'F') && state.place === 'outdoor') {
+      return 'Улица — площадка без сеанса. Открытый каток остаётся во «Льде».';
+    }
+    if ((state.variant === 'E' || state.variant === 'F') && state.place && state.place !== 'ice') {
+      return 'Окно времени спрятано: у этого вида нет сеансов массового катания.';
+    }
+    if (state.variant === 'Aprime') {
+      if (state.scope === 'places' && !state.place) {
+        return 'A′: сегмент как A, пустой тип — все площадки в одной ленте. Тренеры и магазины — другие сегменты.';
+      }
+      return 'A′: зал и улица — второй ряд; окно времени только для льда.';
+    }
+    if (state.variant === 'A') return 'Сегмент A: зал, улица и «все сразу» в шапку не входят.';
+    return 'Город в поиске переключает Минск и Витебск.';
+  }
+
+  function render() {
+    document.getElementById('hero').innerHTML = header();
+    var body = '';
+    if (state.variant === 'G' && !state.focus) body = sections();
+    else if (state.variant === 'G') body = listHead(captionForFocus()) + cardsFor(state.focus, false);
+    else body = listHead(caption()) + boards();
+    document.getElementById('list').innerHTML = body;
+    var v = VARIANTS.filter(function (x) { return x.id === state.variant; })[0];
+    document.getElementById('switchLab').innerHTML = v.id + ' · ' + v.name + '<small>' + v.sub + '</small>';
+    document.getElementById('stateOut').innerHTML =
+      '<b>' + explain() + '</b><br>вариант <code>' + state.variant + '</code> · ' +
+      'scope <code>' + state.scope + '</code> · place <code>' + (state.place || 'all') + '</code> · ' +
+      'focus <code>' + (state.focus || '—') + '</code> · when <code>' + (state.when || 'any') + '</code> · ' +
+      state.city;
+  }
+  function captionForFocus() {
+    if (state.focus === 'ice') return iceCaption();
+    if (state.focus === 'coach') return countPhrase(countOf('coach'), 'coach') + ' в ' + cityIn();
+    if (state.focus === 'shop') return countPhrase(countOf('shop'), 'shop');
+    if (state.focus === 'choreo') return countPhrase(countOf('choreo'), 'choreo') + ' · хореография';
+    if (NOUN[state.focus]) return countPhrase(countOf(state.focus), state.focus) + ' в ' + cityIn();
+    return state.city;
+  }
+
+  document.getElementById('phone').addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t) return;
+    var act = t.getAttribute('data-act');
+    if (act === 'scope') setScope(t.getAttribute('data-id'));
+    else if (act === 'venue') setVenue(t.getAttribute('data-id'));
+    else if (act === 'when') setWhen(t.getAttribute('data-id'));
+    else if (act === 'place') setPlace(t.getAttribute('data-id'));
+    else if (act === 'menu') {
+      var which = t.getAttribute('data-id');
+      state.picker = state.picker === which ? false : which;
+      render();
+    } else if (act === 'focus') {
+      state.focus = t.getAttribute('data-id');
+      state.picker = false;
+      render();
+    } else if (act === 'unfocus') {
+      state.focus = '';
+      state.picker = false;
+      render();
+    } else if (act === 'city') cycleCity();
+    else if (act === 'scope-cycle') {
+      var i = SCOPES.findIndex(function (s) { return s.id === state.scope; });
+      setScope(SCOPES[(i + 1) % SCOPES.length].id);
+    } else if (act === 'when-cycle') {
+      var keys = [''].concat(WHENS.map(function (w) { return w.id; }));
+      var j = keys.indexOf(state.when);
+      state.when = keys[(j + 1) % keys.length];
+      render();
+    }
+  });
+  document.getElementById('prevBtn').addEventListener('click', function () { cycle(-1); });
+  document.getElementById('nextBtn').addEventListener('click', function () { cycle(1); });
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  state.variant = readVariant();
+  if (isWide(state.variant) && state.scope === 'skate') state.scope = 'places';
+  reconcile();
+  render();
+})();
+</script>
+</body>
+</html>

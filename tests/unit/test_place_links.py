@@ -6,6 +6,7 @@ from src.application.place_links import (
     catalog_start_param,
     is_valid_start_param,
     parse_catalog_start_param,
+    parse_place_deep_link,
     parse_place_start_param,
     place_image_url,
     place_page_url,
@@ -27,19 +28,33 @@ def test_place_url_is_city_scoped_and_readable() -> None:
 
 
 def test_start_params_fit_telegram_limits() -> None:
-    for value in (place_start_param(123456789), catalog_start_param(12, "coach"), catalog_start_param(9)):
+    for value in (
+        place_start_param(123456789),
+        place_start_param(123456789, 987654321),
+        catalog_start_param(12, "coach"),
+        catalog_start_param(9),
+        catalog_start_param(12, "skate", "today_evening"),
+        catalog_start_param(12, "outdoor", "weekend"),
+    ):
         assert is_valid_start_param(value)
     assert catalog_start_param(12, "sauna") == "catalog_12"
+    assert catalog_start_param(12, "shop", "weekend") == "catalog_12_shop", "у магазина окна нет"
 
 
 def test_start_params_round_trip() -> None:
     assert parse_place_start_param("arena_42") == 42
+    assert parse_place_start_param("arena_42_s_7") == 42
+    assert parse_place_deep_link("arena_42_s_7") == (42, 7)
+    assert parse_place_deep_link("arena_42") == (42, None)
     assert parse_place_start_param("arena_minsk-arena") is None, "slug неоднозначен между городами"
-    assert parse_catalog_start_param("catalog_12_shop") == (12, "shop")
-    assert parse_catalog_start_param("catalog_12") == (12, None)
-    assert parse_catalog_start_param("catalog_12_sauna") == (12, None)
+    assert parse_catalog_start_param("catalog_12_shop") == (12, "shop", None)
+    assert parse_catalog_start_param("catalog_12") == (12, None, None)
+    assert parse_catalog_start_param("catalog_12_sauna") == (12, None, None)
+    assert parse_catalog_start_param("catalog_12_skate_weekend") == (12, "skate", "weekend")
+    assert parse_catalog_start_param("catalog_12_skate_today_evening") == (12, "skate", "today_evening")
+    assert parse_catalog_start_param("catalog_12_outdoor_tomorrow") == (12, "outdoor", "tomorrow")
     assert parse_catalog_start_param("catalog_x") is None
-    assert parse_catalog_start_param("catalog") == (None, None), "маркетинговый вход /go"
+    assert parse_catalog_start_param("catalog") == (None, None, None), "маркетинговый вход /go"
     assert parse_catalog_start_param("cert_ABC") is None
 
 

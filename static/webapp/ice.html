@@ -17,12 +17,12 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610054" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610057" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
   <script src="mini-app-client-shell.js?v=202610027"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
-  <script src="ice-tab-model.js?v=202610051"></script>
+  <script src="ice-tab-model.js?v=202610058"></script>
   <script src="mini-app-share-sheet.js?v=202610027"></script>
   <script src="ice-map-model.js?v=202610052"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
@@ -39,20 +39,13 @@
 
   <div id="iceRoot" class="ice-tab">
     <div class="ice-sec ice-sec--hero">
-      <p class="ice-kicker">Где и с кем заниматься</p>
-      <!-- TASK-090: masthead и город в одной строке — первый экран отдан карточкам. -->
-      <div class="ice-hero-top">
-        <h1 class="ice-masthead">Поиск</h1>
-        <button type="button" class="ice-citypill" id="iceCityChange">
-          <span class="ice-citypill__name" id="iceCityName">Город</span>
-        </button>
-      </div>
+      <!-- Поле ищет по названию. Подпись меняет setSearchPlaceholder вместе с намерением. -->
       <div class="ice-search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input
           type="search"
           id="iceSearchInput"
-          placeholder="Каток, тренер, заточка"
+          placeholder="Каток, зал или трасса"
           autocomplete="off"
           enterkeyhint="search"
           autocorrect="off"
@@ -60,32 +53,26 @@
           spellcheck="false"
         />
         <!--
-          TASK-146: «Рядом» — переключатель: текущая лента (тип места, окно времени) по расстоянию.
-          Было «Лёд рядом» — но в поиске не только лёд: залы, заточка, роллеры.
-          Внутри строки поиска, а не в прокручиваемом ряду чипов: там его не долистают (DEC-012),
-          а отдельная строка съела бы первый экран (G-P3).
-        -->
-        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-pressed="false" aria-label="Сначала ближайшие" title="Сначала ближайшие">
-          <span class="ice-nearest__dot" aria-hidden="true"></span>Рядом
-        </button>
-        <!--
-          TASK-147: дубль пилюли города ВНУТРИ строки поиска — для плавающего верха карты
-          (дизайн: «строка поиска с городом внутри»). В списке скрыта CSS-ом, в карте
-          скрывается hero-top; метки городов обновляет setCityLabel по классу.
+          Город внутри строки — только на карте: заголовок там скрыт, и пилюля
+          остаётся на плавающем верхе. В списке город стоит у чипов намерения.
         -->
         <button type="button" class="ice-citypill ice-citypill--insearch" id="iceCityChangeMap">
           <span class="ice-citypill__name">Город</span>
         </button>
       </div>
-      <div class="ice-chips ice-chips--intent" id="iceIntentChips" role="group" aria-label="Намерение">
-        <button type="button" class="ice-chip" data-intent="skate" aria-pressed="true">Где заниматься</button>
-        <button type="button" class="ice-chip" data-intent="coach" aria-pressed="false">Тренеры</button>
+      <div class="ice-intent-row">
+        <div class="ice-seg" id="iceModeSeg" role="tablist" aria-label="Раздел каталога" hidden></div>
+        <button type="button" class="ice-citypill" id="iceCityChange">
+          <span class="ice-citypill__name" id="iceCityName">Город</span>
+        </button>
       </div>
       <div class="ice-chips ice-chips--svc" id="iceServiceChips" hidden role="group" aria-label="Услуга"></div>
-      <!-- Типы площадок: рисуются только по фасетам города, чтобы не было чипа, за которым пусто. -->
-      <div class="ice-chips ice-chips--venue" id="iceVenueChips" hidden role="group" aria-label="Тип площадки"></div>
-      <!-- TASK-146 (Q-006): когда. По умолчанию сервер сам выбирает окно по дню и часу. -->
-      <div class="ice-chips ice-chips--when" id="iceWhenChips" hidden role="group" aria-label="Когда"></div>
+      <div class="ice-seg ice-seg--quiet" id="icePlaceTabs" role="tablist" aria-label="Вид площадки" hidden></div>
+      <div class="ice-catalog-tools" id="iceCatalogTools" hidden>
+        <div class="ice-tools" id="iceToolsRow"></div>
+        <div class="ice-menu" id="icePlaceMenu" hidden></div>
+        <div class="ice-menu" id="iceWhenMenu" hidden></div>
+      </div>
       <!--
         TASK-147 (макет 02): легенда типов мест под чипами окна. Живёт только в режиме карты
         (CSS), наполняет ice-map.js из текущей выдачи; типов меньше двух — блока нет.
@@ -100,7 +87,15 @@
       -->
     </div>
     <div class="ice-sec" id="iceListSec">
-      <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
+      <div class="ice-listhead">
+        <p class="ice-eyebrow" id="iceCaption">Ищем катки…</p>
+        <!--
+          «Ближе» сортирует уже открытую ленту по расстоянию. Это не поиск и не смена
+          города, поэтому кнопка стоит у результата, а не в поле. На карте секция
+          списка скрыта: камеру двигает «Где я».
+        -->
+        <button type="button" class="ice-nearest" id="iceNearestBtn" aria-pressed="false" aria-label="Сначала ближайшие ко мне (нужна геолокация)">Ближе</button>
+      </div>
       <div id="iceList">
         <div class="ice-list" id="iceListSkate"></div>
         <div class="ice-list" id="iceListCoach" hidden></div>
@@ -180,6 +175,6 @@
 
   <script src="ru-text.js?v=202609287"></script>
   <script src="ice-map.js?v=202610054"></script>
-  <script src="ice-tab.js?v=202610055"></script>
+  <script src="ice-tab.js?v=202610058"></script>
 </body>
 </html>

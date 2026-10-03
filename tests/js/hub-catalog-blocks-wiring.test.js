@@ -231,6 +231,17 @@ describe('порядок для своего клиента: placeIceZone и Int
       assert.match(homeMain, new RegExp('function ' + fn + '\\('));
     }
   });
+
+  it('карточка ближайшей записи: время — герой, шеринга на ней нет, абонемент строкой', () => {
+    const body = fnBody('renderNextBookingCard');
+    assert.match(body, /hub-next-card-time/);
+    assert.match(body, /hub-next-card-pill/);
+    assert.match(body, /Написать тренеру/);
+    assert.match(body, /buildNextCardMeterHtml/);
+    assert.ok(!body.includes('share-trainer'), 'шеринг ушёл с карточки записи');
+    assert.ok(!body.includes('hub-next-card-toolbar'));
+    assert.match(fnBody('applyHubState'), /hubPersonalSlot = true/);
+  });
 });
 
 describe('приветствие (S1): факты, без погоды, без сдвига макета', () => {
@@ -290,5 +301,36 @@ describe('стили композиции только на токенах (AC-0
   it('старая сетка .hub-explore-tile не конкурирует с .hub-cg', () => {
     assert.doesNotMatch(homeCss, /\.hub-explore-tile\b/);
     assert.doesNotMatch(homeCss, /\.hub-explore-grid\b/);
+  });
+});
+
+describe('своё одним куском: слот, остальные записи, потом город', () => {
+  it('следующие записи живут в карточке слота тем же штампом, без кнопки сообщения', () => {
+    const body = fnBody('renderUpcomingList');
+    assert.match(body, /hub-next-card-line/);
+    assert.match(body, /nextCardStamp\(b, item\.start\)/);
+    assert.match(body, /HUB_REST_MAX/);
+    assert.match(body, /data-hub-action="all-bookings"/);
+    assert.ok(!body.includes('hub-booking-msg-btn'), 'кнопка сообщения ушла со строки');
+    assert.ok(!body.includes('Подтверждено'), 'статус без галочки и отдельного чипа');
+    assert.match(body, /section\.style\.display = 'none'/);
+  });
+
+  it('при записи «Ещё занятие» — тихая строка сразу под слотом, поиск после', () => {
+    const quiet = fnBody('rebookQuietItems');
+    assert.match(quiet, /Ещё занятие/);
+    assert.match(quiet, /quiet: true/);
+    assert.ok(!quiet.includes('hub-quick-pill--primary'));
+    const apply = fnBody('applyHubState');
+    const booking = apply.indexOf('Priority 1: Has upcoming booking');
+    const nextPri = apply.indexOf('Priority 2: Has primary trainer');
+    const slice = apply.slice(booking, nextPri);
+    assert.ok(slice.includes("renderQuickStrip('has-booking'"));
+    assert.ok(slice.includes("placeQuickStrip('after-slot')"));
+    assert.ok(slice.indexOf('renderUpcomingList') < slice.indexOf("placeQuickStrip('after-slot')"));
+    const place = fnBody('placeQuickStrip');
+    assert.match(place, /mode === 'after-slot'/);
+    assert.match(place, /getElementById\('hubIceZone'\)/);
+    assert.match(place, /insertBefore\(strip, zone\)/);
   });
 });

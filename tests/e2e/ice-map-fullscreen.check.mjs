@@ -248,9 +248,9 @@ try {
   await page.goto(base + '/ice.html');
   await page.waitForSelector('#iceViewSwitch', { timeout: 8000 });
 
-  /* Список не пострадал: город у masthead, пилюля «Карта» на месте. */
-  const heroCity = await page.$eval('.ice-hero-top .ice-citypill__name', el => el.textContent);
-  check('список: город у masthead = «Минск»', heroCity === 'Минск');
+  /* Список: город у чипов намерения, пилюля «Карта» на месте. */
+  const heroCity = await page.$eval('#iceCityChange .ice-citypill__name', el => el.textContent);
+  check('список: город у намерения = «Минск»', heroCity === 'Минск');
   const listVisible = await page.$eval('#iceListSkate', el => el.children.length > 0);
   check('список: карточки на месте', listVisible);
 
@@ -268,11 +268,10 @@ try {
   const heroPos = await page.$eval('.ice-sec--hero', el => getComputedStyle(el).position);
   check('AC-1: hero плавает над картой (fixed)', heroPos === 'fixed');
 
-  const mastheadHidden = await page.$eval('.ice-masthead', el => el.offsetParent === null);
-  const kickerHidden = await page.$eval('.ice-kicker', el => el.offsetParent === null);
+  const intentHidden = await page.$eval('.ice-intent-row', el => el.offsetParent === null);
   const nearestHidden = await page.$eval('#iceNearestBtn', el => el.offsetParent === null);
   const cityInSearchVisible = await page.$eval('#iceCityChangeMap', el => getComputedStyle(el).display !== 'none');
-  check('AC-1: masthead/kicker/Рядом скрыты', mastheadHidden && kickerHidden && nearestHidden);
+  check('AC-1: намерение и «Ближе» скрыты на карте', intentHidden && nearestHidden);
   check('AC-1: город внутри строки поиска в режиме карты', cityInSearchVisible);
 
   /* --- Шторка half: каркас + карусель + сводка --- */

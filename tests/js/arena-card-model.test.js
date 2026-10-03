@@ -449,7 +449,22 @@ describe('parseArenaRef', () => {
     const { parseArenaRef } = loadModel();
     assert.equal(parseArenaRef('?ref=chizhovka', null), 'chizhovka');
     assert.equal(parseArenaRef('', 'arena_88'), '88');
+    assert.equal(parseArenaRef('', 'arena_88_s_15'), '88');
     assert.equal(parseArenaRef('?arena_id=12', 'arena_other'), '12');
+  });
+
+  it('сеанс из start_param и день этого сеанса в ленте', () => {
+    const { sessionIdFromStartParam, dayForSession } = loadModel();
+    assert.equal(sessionIdFromStartParam('arena_88_s_15'), '15');
+    assert.equal(sessionIdFromStartParam('arena_88'), null);
+    assert.equal(
+      dayForSession(
+        [{ local_date: '2026-10-04', sessions: [{ id: 15 }] }, { local_date: '2026-10-05', sessions: [] }],
+        '15'
+      ),
+      '2026-10-04'
+    );
+    assert.equal(dayForSession([{ local_date: '2026-10-04', sessions: [{ id: 1 }] }], '15'), null);
   });
 });
 

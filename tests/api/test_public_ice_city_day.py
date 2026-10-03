@@ -14,6 +14,7 @@ TASK-096 S3 — шеринг-артефакт «Лёд сегодня в гор�
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -318,3 +319,34 @@ def test_summary_line_never_invents_urgency() -> None:
     assert line == "Минск, сегодня: 7 сеансов на 3 катках, от 8 BYN до 12 BYN."
     for forbidden in ("осталось", "смотрят", "успей", "только сегодня", "мест"):
         assert forbidden not in line.lower()
+    cached = summary_line(
+        {**day, "local_date": "2026-10-03"},
+        city_name="Минск",
+        absolute=True,
+    )
+    assert "сегодня" not in cached.lower()
+    assert "3 окт" in cached
+
+
+@pytest.mark.asyncio
+async def test_ice_today_og_is_absolute_and_the_page_stays_light(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "")
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "true")
+    name = f"Свет{uuid.uuid4().hex[:6]}"
+    cid = await _insert_city(db_session, name=name)
+    arena = await _insert_arena(db_session, cid, name="Каток света")
+    await _add_today_session(db_session, arena)
+    async with _client() as client:
+        page = await client.get(f"/ice/{city_slug(name)}/today")
+        share = await client.get(f"/api/public/ice/share/{cid}")
+    assert page.status_code == 200
+    assert "prefers-color-scheme: dark" not in page.text
+    og = re.search(r'<meta property="og:title" content="([^"]*)"', page.text)
+    assert og and "сегодня" not in og.group(1).lower() and "завтра" not in og.group(1).lower()
+    assert "сегодня" not in share.json()["share_text"].lower()
+    assert "завтра" not in share.json()["share_text"].lower()
+    assert f"startapp=catalog_{cid}_skate_today" in page.text
+    assert "Лёд · " in page.text

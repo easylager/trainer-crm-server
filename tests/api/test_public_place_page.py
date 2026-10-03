@@ -80,6 +80,8 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert _meta(html, "og:image").endswith(place["path"] + "/og.png")
     assert _meta(html, "robots") == "index, follow"
     assert "19:30" in html and "8.50 BYN" in html
+    assert "сегодня" not in _meta(html, "og:description").lower()
+    assert "завтра" not in _meta(html, "og:description").lower()
     # Шеринг дальше — во все мессенджеры, без Telegram у получателя.
     assert "https://t.me/share/url?url=" in html
     assert "https://wa.me/?text=" in html
@@ -91,7 +93,10 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
 
 
 @pytest.mark.asyncio
-async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_db, db_session) -> None:
+async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "")
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "true")
     place = await _place(db_session)
     sid = await _add_future_session(db_session, place["arena_id"], days_ahead=2, starts_at_local="20:30")
     await db_session.commit()
@@ -102,6 +107,9 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     html = resp.text
     assert 'id="plan"' in html and "Выбранный сеанс" in html
     assert _meta(html, "og:title").endswith("20:30 · " + place["name"])
+    assert "сегодня" not in _meta(html, "og:title").lower()
+    assert "завтра" not in _meta(html, "og:description").lower()
+    assert f"startapp=arena_{place['arena_id']}_s_{sid}" in html
     assert _meta(html, "robots") == "noindex, follow"
     assert f"og.png?s={sid}" in _meta(html, "og:image")
     assert f"?s={sid}" in _meta(html, "og:url")

@@ -30,7 +30,21 @@ CATALOG_START_PREFIX = "catalog_"
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-CATALOG_INTENTS = ("skate", "coach", "shop", "gym")
+#: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки.
+CATALOG_LINK_TOKENS = (
+    "skate",
+    "coach",
+    "shop",
+    "gym",
+    "ice",
+    "outdoor",
+    "choreo",
+    "pool",
+    "other",
+)
+#: Окно, которое умеет унести диплинк. ``any`` и ``auto`` в ссылку не кладём.
+CATALOG_WHEN_TOKENS = ("today_evening", "today", "tomorrow", "weekend")
+_WHEN_WITH = frozenset({"skate", "ice", "outdoor"})
 
 
 def place_path(*, city_name: str, slug: str) -> str:
@@ -83,15 +97,33 @@ def is_valid_start_param(value: str) -> bool:
     return bool(_START_PARAM_RE.match(value or ""))
 
 
-def place_start_param(arena_id: int) -> str:
-    return f"{PLACE_START_PREFIX}{int(arena_id)}"
+def place_start_param(arena_id: int, session_id: int | None = None) -> str:
+    """``arena_42`` или ``arena_42_s_9001`` — карточка на конкретном сеансе."""
+    param = f"{PLACE_START_PREFIX}{int(arena_id)}"
+    if session_id is not None and int(session_id) > 0:
+        param += f"_s_{int(session_id)}"
+    return param
 
 
-def catalog_start_param(city_id: int, intent: str | None = None) -> str:
-    """``catalog_12`` / ``catalog_12_coach``. Неизвестный intent не попадает в ссылку."""
+def catalog_start_param(city_id: int, intent: str | None = None, when: str | None = None) -> str:
+    """``catalog_12`` / ``catalog_12_coach`` / ``catalog_12_skate_weekend``.
+
+    Неизвестный токен не попадает в ссылку. Окно времени — только у льда
+    (``skate`` / ``ice`` / ``outdoor``): без ``intent=skate`` сохранённая вкладка
+    «Тренеры» съедает окно. У магазина и зала окна нет, ``when`` отбрасывается.
+    """
+    token = intent if intent in CATALOG_LINK_TOKENS else None
+    when_ok = when if when in CATALOG_WHEN_TOKENS else None
+    if when_ok and token not in _WHEN_WITH:
+        if token is None:
+            token = "skate"
+        else:
+            when_ok = None
     param = f"{CATALOG_START_PREFIX}{int(city_id)}"
-    if intent and intent in CATALOG_INTENTS:
-        param += f"_{intent}"
+    if token:
+        param += f"_{token}"
+    if when_ok:
+        param += f"_{when_ok}"
     return param
 
 
@@ -99,29 +131,52 @@ def catalog_start_param(city_id: int, intent: str | None = None) -> str:
 CATALOG_START_ANY = "catalog"
 
 
-def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None] | None:
-    """``catalog_12_coach`` → ``(12, "coach")``; ``catalog`` → ``(None, None)``; прочее → ``None``."""
+def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None, str | None] | None:
+    """``catalog_12_skate_weekend`` → ``(12, "skate", "weekend")``.
+
+    ``catalog`` → ``(None, None, None)`` (маркетинговый вход). Чужой payload → ``None``.
+    Неизвестный токен после города отбрасывается, город остаётся: ``catalog_12_sauna`` → ``(12, None, None)``.
+    """
     raw = (value or "").strip()
     if raw == CATALOG_START_ANY:
-        return None, None
+        return None, None, None
     if not raw.startswith(CATALOG_START_PREFIX):
         return None
     rest = raw[len(CATALOG_START_PREFIX) :]
-    city_part, _, intent = rest.partition("_")
+    when: str | None = None
+    for key in ("today_evening", "tomorrow", "weekend", "today"):
+        suffix = "_" + key
+        if rest.endswith(suffix):
+            when = key
+            rest = rest[: -len(suffix)]
+            break
+    city_part, _, token = rest.partition("_")
     if not city_part.isdigit() or int(city_part) <= 0:
         return None
-    if intent and intent not in CATALOG_INTENTS:
-        intent = ""
-    return int(city_part), (intent or None)
+    if token and token not in CATALOG_LINK_TOKENS:
+        token = ""
+        when = None
+    if when and token and token not in _WHEN_WITH:
+        when = None
+    return int(city_part), (token or None), when
+
+
+_PLACE_DEEP_RE = re.compile(r"^arena_([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$")
+
+
+def parse_place_deep_link(value: str | None) -> tuple[int, int | None] | None:
+    """``arena_42`` → ``(42, None)``; ``arena_42_s_7`` → ``(42, 7)``. Slug не принимаем."""
+    match = _PLACE_DEEP_RE.match((value or "").strip())
+    if match is None:
+        return None
+    session_id = int(match.group(2)) if match.group(2) else None
+    return int(match.group(1)), session_id
 
 
 def parse_place_start_param(value: str | None) -> int | None:
-    """``arena_42`` → ``42``. Slug здесь не принимаем: он неоднозначен между городами."""
-    raw = (value or "").strip()
-    if not raw.startswith(PLACE_START_PREFIX):
-        return None
-    rest = raw[len(PLACE_START_PREFIX) :]
-    return int(rest) if rest.isdigit() and int(rest) > 0 else None
+    """``arena_42`` / ``arena_42_s_7`` → id места. Slug здесь не принимаем."""
+    parsed = parse_place_deep_link(value)
+    return parsed[0] if parsed is not None else None
 
 
 def telegram_open_link(

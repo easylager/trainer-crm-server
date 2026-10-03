@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>__TITLE__</title>
-  <meta name="description" content="__DESCRIPTION__" />
+  <title>__OG_TITLE__</title>
+  <meta name="description" content="__OG_DESCRIPTION__" />
   <link rel="canonical" href="__CANONICAL__" />
   <meta name="robots" content="index, follow" />
 
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="ru_RU" />
   <meta property="og:site_name" content="Glide" />
-  <meta property="og:title" content="__TITLE__" />
-  <meta property="og:description" content="__DESCRIPTION__" />
+  <meta property="og:title" content="__OG_TITLE__" />
+  <meta property="og:description" content="__OG_DESCRIPTION__" />
   <meta property="og:url" content="__CANONICAL__" />
   <meta property="og:image" content="__OG_IMAGE__" />
   <meta property="og:image:width" content="1200" />
@@ -29,7 +29,7 @@
       round-trip здесь стоит дороже, чем экономия на дублировании стилей.
     */
     :root {
-      color-scheme: light dark;
+      color-scheme: light;
       --ic-bg: #f6f8fa;
       --ic-surface: #ffffff;
       --ic-ink: #0d1b26;
@@ -38,18 +38,6 @@
       --ic-accent: #0f8f8a;
       --ic-accent-ink: #ffffff;
       --ic-chip: #eef4f6;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --ic-bg: #0a1620;
-        --ic-surface: #101f2b;
-        --ic-ink: #f2f7fa;
-        --ic-muted: #90a7b8;
-        --ic-line: #1d3040;
-        --ic-accent: #5ed6d2;
-        --ic-accent-ink: #06222a;
-        --ic-chip: #162835;
-      }
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }

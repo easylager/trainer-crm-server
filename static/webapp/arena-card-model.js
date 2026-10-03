@@ -566,9 +566,34 @@
     if (ref) return String(ref).trim();
     var sp = startParam != null ? String(startParam).trim() : '';
     if (!sp) return null;
+    var withSession = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    if (withSession) return withSession[1];
     var m = /^arena[_-](.+)$/i.exec(sp);
     if (m) return m[1];
     return sp || null;
+  }
+
+  /** ``arena_42_s_7`` → ``"7"``. Сеанс в диплинке, когда в query его ещё нет. */
+  function sessionIdFromStartParam(startParam) {
+    var m = /^arena[_-][1-9][0-9]*_s_([1-9][0-9]*)$/i.exec(String(startParam || '').trim());
+    return m ? m[1] : null;
+  }
+
+  /** День сеанса в ленте карточки, если ссылка принесла только id. */
+  function dayForSession(days, sessionId) {
+    var want = String(sessionId || '');
+    if (!want) return null;
+    var list = days || [];
+    var i;
+    var j;
+    for (i = 0; i < list.length; i++) {
+      var sessions = list[i].sessions || [];
+      for (j = 0; j < sessions.length; j++) {
+        var id = sessions[j] && sessions[j].id;
+        if (id != null && String(id) === want) return String(list[i].local_date || '') || null;
+      }
+    }
+    return null;
   }
 
   function iceSectionMode(opts) {
@@ -895,6 +920,8 @@
     ticketCta: ticketCta,
     buildBookingHref: buildBookingHref,
     parseArenaRef: parseArenaRef,
+    sessionIdFromStartParam: sessionIdFromStartParam,
+    dayForSession: dayForSession,
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,

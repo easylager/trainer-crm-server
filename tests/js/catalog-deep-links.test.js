@@ -46,6 +46,19 @@ describe('deepLinkTarget', () => {
     assert.equal(target('catalog_7_gym').path, 'ice?city_id=7&venue=gym');
   });
 
+  it('окно времени и сеанс доезжают до мини-аппа', () => {
+    assert.equal(
+      target('catalog_7_skate_weekend').path,
+      'ice?city_id=7&intent=skate&when=weekend'
+    );
+    assert.equal(
+      target('catalog_7_skate_today_evening').path,
+      'ice?city_id=7&intent=skate&when=today_evening'
+    );
+    assert.equal(target('catalog_7_outdoor_tomorrow').path, 'ice?city_id=7&venue=outdoor&when=tomorrow');
+    assert.deepEqual(target('arena_42_s_9001'), { key: 'arena', path: 'arena?ref=42&s=9001' });
+  });
+
   it('чужие и кривые payload не трогаем', () => {
     assert.equal(target(''), null);
     assert.equal(target('cert_ABC'), null);

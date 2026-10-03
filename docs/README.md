@@ -44,6 +44,7 @@
 | [client-booking-url-contract.md](product-knowledge/client-booking-url-contract.md) | Контракт ссылок записи клиента |
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
 | [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, шеринг, /go, диплинки, окна времени, магазины |
+| [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
 
 ## strategy — куда идём
 
@@ -112,6 +113,7 @@
 | [DISASTER_RECOVERY.md](ops/DISASTER_RECOVERY.md) | Восстановление после аварии |
 | [onboard-collective-formats.md](ops/onboard-collective-formats.md) | Runbook подключения коллектива |
 | [ice-freshness-and-alerts.md](ops/ice-freshness-and-alerts.md) | Лёд: как часто опрашиваем катки, флаг `schedule_stale` в API, алерты в админ-бот, отчёт о полноте каталога |
+| [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, прогрев og, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное

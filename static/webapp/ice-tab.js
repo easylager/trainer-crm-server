@@ -35,6 +35,8 @@
     cursor: null,
     loading: false,
     loadedIntent: null,
+    /* Открытое выпадающее меню шапки: place | when | false */
+    uiPicker: false,
   };
   var searchTimer = null;
   var fetchGen = 0;
@@ -108,10 +110,185 @@
     return document.getElementById(id);
   }
 
+  function setSearchPlaceholder() {
+    var input = $('iceSearchInput');
+    if (!input) return;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    input.placeholder = M.catalogSearchPlaceholder(scope);
+  }
+
+  function cityCountsForModes() {
+    var city = cityFromState(state.cityId);
+    return {
+      skateCount: city != null ? city.skate_count : state.skateCount,
+      trainerCount: city != null ? city.trainer_count : 0,
+      placeCountHint: city != null ? city.place_count : 0,
+    };
+  }
+
+  function closeUiPicker() {
+    state.uiPicker = false;
+  }
+
+  function renderCatalogHeader() {
+    var counts = cityCountsForModes();
+    var modes = M.catalogModesView({
+      facets: state.venueFacets,
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      skateCount: counts.skateCount,
+      trainerCount: counts.trainerCount,
+      placeCountHint: counts.placeCountHint,
+    });
+    var modeSeg = $('iceModeSeg');
+    if (modeSeg) {
+      if (modes.length < 2) {
+        modeSeg.hidden = true;
+        modeSeg.innerHTML = '';
+      } else {
+        modeSeg.hidden = false;
+        modeSeg.className = 'ice-seg ice-seg--' + modes.length;
+        modeSeg.innerHTML = modes
+          .map(function (m) {
+            return (
+              '<button type="button" role="tab" data-catalog-mode="' +
+              esc(m.id) +
+              '" aria-pressed="' +
+              (m.active ? 'true' : 'false') +
+              '">' +
+              esc(m.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+    }
+
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    renderServiceChips();
+
+    var tabs = $('icePlaceTabs');
+    var tabItems = scope === 'places' ? M.placeTabsView(state.venueFacets, state.venueTypes) : [];
+    if (tabs) {
+      if (tabItems.length) {
+        tabs.hidden = false;
+        tabs.className = 'ice-seg ice-seg--quiet ice-seg--n' + tabItems.length;
+        tabs.innerHTML = tabItems
+          .map(function (c) {
+            return (
+              '<button type="button" role="tab" data-place-type="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      } else {
+        tabs.hidden = true;
+        tabs.innerHTML = '';
+      }
+    }
+
+    var toolsHost = $('iceCatalogTools');
+    var toolsRow = $('iceToolsRow');
+    var placeMenu = $('icePlaceMenu');
+    var whenMenu = $('iceWhenMenu');
+    var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
+    var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets);
+    if (!toolsHost || !toolsRow) return;
+
+    if (!needPlaceTool && !needWhen) {
+      toolsHost.hidden = true;
+      toolsRow.innerHTML = '';
+      if (placeMenu) placeMenu.hidden = true;
+      if (whenMenu) whenMenu.hidden = true;
+      closeUiPicker();
+      setSearchPlaceholder();
+      return;
+    }
+
+    toolsHost.hidden = false;
+    var toolHtml = '';
+    if (needPlaceTool) {
+      var placeOpen = state.uiPicker === 'place';
+      toolHtml +=
+        '<button type="button" class="ice-tool" data-ui-picker="place" aria-expanded="' +
+        (placeOpen ? 'true' : 'false') +
+        '"><span>' +
+        esc(M.placeMenuLabel(state.venueFacets, state.venueTypes)) +
+        '</span></button>';
+      if (placeMenu) {
+        var menuItems = M.placeMenuView(state.venueFacets, state.venueTypes);
+        placeMenu.hidden = !placeOpen;
+        placeMenu.innerHTML = menuItems
+          .map(function (c) {
+            return (
+              '<button type="button" data-place-type="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '<b>' +
+              esc(String(c.count != null ? c.count : '')) +
+              '</b></button>'
+            );
+          })
+          .join('');
+      }
+    } else if (placeMenu) {
+      placeMenu.hidden = true;
+      placeMenu.innerHTML = '';
+    }
+
+    if (needWhen) {
+      var resolved = state.window ? state.window.key : 'any';
+      var whenOpen = state.uiPicker === 'when';
+      toolHtml +=
+        '<button type="button" class="ice-tool" data-ui-picker="when" aria-expanded="' +
+        (whenOpen ? 'true' : 'false') +
+        '"><span>' +
+        esc(M.whenPickerLabel(state.when, resolved)) +
+        '</span></button>';
+      if (whenMenu) {
+        whenMenu.hidden = !whenOpen;
+        whenMenu.innerHTML = M.whenChipsView(state.when, resolved)
+          .map(function (c) {
+            return (
+              '<button type="button" data-when="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+    } else if (whenMenu) {
+      whenMenu.hidden = true;
+      whenMenu.innerHTML = '';
+      if (state.uiPicker === 'when') closeUiPicker();
+    }
+
+    toolsRow.className = 'ice-tools' + (toolHtml.indexOf('</button>') >= 0 && toolHtml.indexOf('</button>') !== toolHtml.lastIndexOf('</button>') ? '' : ' ice-tools--one');
+    var toolCount = (needPlaceTool ? 1 : 0) + (needWhen ? 1 : 0);
+    toolsRow.className = 'ice-tools' + (toolCount === 1 ? ' ice-tools--one' : '');
+    toolsRow.innerHTML = toolHtml;
+    setSearchPlaceholder();
+  }
+
+  function setChips() {
+    renderCatalogHeader();
+  }
+
   function setCityLabel() {
     var name = state.cityName || 'Город';
-    /* TASK-147: город живёт в двух местах — у masthead (список) и внутри
-       строки поиска (карта); обновляем обе пилюли по классу. */
+    /* Город в двух местах: у чипов намерения (список) и внутри строки поиска (карта). */
     var els = document.querySelectorAll('.ice-citypill__name');
     Array.prototype.forEach.call(els, function (el) {
       el.textContent = name;
@@ -128,19 +305,6 @@
         return M.serviceChipLabel(s.name);
       })
       .join(', ');
-  }
-
-  function setChips() {
-    document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      var intent = btn.getAttribute('data-intent');
-      btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
-      if (intent === 'skate') {
-        btn.hidden = !M.shouldShowSkateChip(state.skateCount);
-      }
-    });
-    renderServiceChips();
-    renderVenueChips();
-    renderWhenChips();
   }
 
   /*
@@ -265,7 +429,7 @@
             venueTypes: state.venueTypes,
             limit: extra.limit || 50,
             /* Окно времени — и на карту: иначе пин «19:30» под чипом «Завтра» — сегодняшний. */
-            when: M.whenChipsVisible(state.intent, state.venueTypes) ? state.when : '',
+            when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
           };
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
@@ -614,7 +778,7 @@
       var q = ['city_id=' + encodeURIComponent(state.cityId)];
       if (state.venueTypes && state.venueTypes.length === 1) q.push('venue_type=' + encodeURIComponent(state.venueTypes[0]));
       var key = state.window && state.window.key;
-      if (key && M.whenChipsVisible(state.intent, state.venueTypes)) q.push('when=' + encodeURIComponent(key));
+      if (key && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) q.push('when=' + encodeURIComponent(key));
       global.GlideShareSheet.open({ endpoint: '/api/public/ice/selection/share?' + q.join('&'), context: 'ice_list' });
       return;
     }
@@ -733,50 +897,70 @@
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
     state.window = (data && data.window) || null;
-    renderVenueChips();
-    renderWhenChips();
+    renderCatalogHeader();
   }
 
   function renderWhenChips() {
-    var box = $('iceWhenChips');
-    if (!box) return;
-    if (!M.whenChipsVisible(state.intent, state.venueTypes)) {
-      box.hidden = true;
-      box.innerHTML = '';
-      return;
-    }
-    var resolved = state.window ? state.window.key : 'any';
-    box.hidden = false;
-    box.innerHTML = M.whenChipsView(state.when, resolved)
-      .map(function (c) {
-        return (
-          '<button type="button" class="ice-chip" data-when="' + esc(c.key) + '" aria-pressed="' +
-          (c.active ? 'true' : 'false') + '">' + esc(c.label) + '</button>'
-        );
-      })
-      .join('');
+    renderCatalogHeader();
   }
 
   /**
    * TASK-146: «Рядом». Было «Лёд рядом сейчас» — один каток со льдом сегодня. Но в поиске
    * не только лёд: зал, магазин заточки, роллеры. Поэтому кнопка не уводит на один каток,
    * а переставляет текущую ленту по расстоянию — с теми же типом места и окном времени.
-   * Второй тап выключает. Отказ в геолокации — не тупик с одной кнопкой «Close», а
-   * выбор: открыть города или закрыть.
+   * Второй тап выключает. Город в шапке задаёт каталог; «Ближе» только сортирует
+   * по GPS. Если геолокации нет — не зовём в выбор города, когда город уже выбран.
    */
   function setNearButton() {
     var btn = $('iceNearestBtn');
     if (!btn) return;
     btn.setAttribute('aria-pressed', state.nearOn ? 'true' : 'false');
+    btn.setAttribute(
+      'aria-label',
+      state.nearOn
+        ? 'Выключить сортировку по расстоянию'
+        : 'Сначала ближайшие ко мне (нужна геолокация)'
+    );
   }
 
-  function geoDeniedPopup(text) {
+  function showNearGeoBlocked(reason) {
+    var message = M.formatNearGeoBlockedMessage({
+      cityId: state.cityId,
+      cityName: state.cityName,
+      reason: reason,
+    });
+    var hasCity = !!(state.cityId);
     var tg = global.Telegram && global.Telegram.WebApp;
+
+    if (hasCity) {
+      if (tg && typeof tg.showAlert === 'function') {
+        try {
+          tg.showAlert(message);
+          return;
+        } catch (e) {
+          /* fallback */
+        }
+      }
+      if (tg && typeof tg.showPopup === 'function') {
+        try {
+          tg.showPopup({
+            message: message,
+            buttons: [{ id: 'close', type: 'close', text: 'Понятно' }],
+          });
+          return;
+        } catch (e) {
+          /* fallback */
+        }
+      }
+      global.alert(message);
+      return;
+    }
+
     if (tg && typeof tg.showPopup === 'function') {
       try {
         tg.showPopup(
           {
-            message: text,
+            message: message,
             buttons: [
               { id: 'city', type: 'default', text: 'Выбрать город' },
               { id: 'close', type: 'cancel' },
@@ -791,7 +975,7 @@
         /* старый клиент Telegram без showPopup с кнопками — ниже обычный confirm */
       }
     }
-    if (global.confirm(text + '\n\nОткрыть выбор города?')) openCityPicker(true);
+    if (global.confirm(message + '\n\nОткрыть выбор города?')) openCityPicker(true);
   }
 
   function toggleNear() {
@@ -803,7 +987,7 @@
       return;
     }
     if (!(global.navigator && global.navigator.geolocation)) {
-      geoDeniedPopup('Не получилось определить, где вы. Выберите город — покажем места в нём.');
+      showNearGeoBlocked('unsupported');
       return;
     }
     if (btn) btn.disabled = true;
@@ -818,7 +1002,7 @@
       },
       function () {
         if (btn) btn.disabled = false;
-        geoDeniedPopup('Разрешите доступ к геолокации в настройках — или выберите город, покажем места в нём.');
+        showNearGeoBlocked('denied');
       },
       { timeout: 8000, maximumAge: 120000 }
     );
@@ -893,7 +1077,7 @@
       intent: state.intent,
       venueTypes: state.venueTypes,
       limit: 50,
-      when: M.whenChipsVisible(state.intent, state.venueTypes) ? state.when : '',
+      when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
     });
@@ -992,28 +1176,7 @@
    * Для чипа «Тренеры» скрыты: там в списке люди, а не площадки.
    */
   function renderVenueChips() {
-    var box = $('iceVenueChips');
-    if (!box) return;
-    var chips = state.intent === 'coach' ? [] : M.venueChipsView(state.venueFacets, state.venueTypes);
-    if (!chips.length) {
-      box.hidden = true;
-      box.innerHTML = '';
-      return;
-    }
-    box.hidden = false;
-    box.innerHTML = chips
-      .map(function (c) {
-        return (
-          '<button type="button" class="ice-chip" data-venue-type="' +
-          esc(c.key) +
-          '" aria-pressed="' +
-          (c.active ? 'true' : 'false') +
-          '">' +
-          esc(c.label) +
-          '</button>'
-        );
-      })
-      .join('');
+    renderCatalogHeader();
   }
 
   function loadServices() {
@@ -1432,19 +1595,68 @@
   }
 
   function bind() {
-    document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var intent = btn.getAttribute('data-intent');
-        var action = M.intentChipAction(intent);
-        if (action.type !== 'list') return;
-        state.intent = M.coerceIntent(action.intent);
+    var modeSeg = $('iceModeSeg');
+    if (modeSeg) {
+      modeSeg.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-catalog-mode]');
+        if (!btn) return;
+        var mode = btn.getAttribute('data-catalog-mode') || 'places';
+        var patch = M.applyCatalogMode(mode);
+        state.intent = M.coerceIntent(patch.intent);
+        state.venueTypes = patch.venueTypes.slice();
+        closeUiPicker();
+        if (mode === 'coach') state.view = 'list';
         renderList();
         setChips();
         setViewToggle();
         persist();
         loadList();
       });
-    });
+    }
+
+    var placeTabs = $('icePlaceTabs');
+    if (placeTabs) {
+      placeTabs.addEventListener('click', function (ev) {
+        var tab = ev.target.closest('[data-place-type]');
+        if (!tab) return;
+        var key = tab.getAttribute('data-place-type') || '';
+        state.venueTypes = key ? [key] : [];
+        closeUiPicker();
+        if (mapCtl && mapViewActive()) mapCtl.refresh();
+        renderCatalogHeader();
+        loadArenas();
+      });
+    }
+
+    var toolsHost = $('iceCatalogTools');
+    if (toolsHost) {
+      toolsHost.addEventListener('click', function (ev) {
+        var pickerBtn = ev.target.closest('[data-ui-picker]');
+        if (pickerBtn) {
+          var which = pickerBtn.getAttribute('data-ui-picker') || '';
+          state.uiPicker = state.uiPicker === which ? false : which;
+          renderCatalogHeader();
+          return;
+        }
+        var placeBtn = ev.target.closest('[data-place-type]');
+        if (placeBtn && placeBtn.closest('#icePlaceMenu')) {
+          var pkey = placeBtn.getAttribute('data-place-type') || '';
+          state.venueTypes = pkey ? [pkey] : [];
+          closeUiPicker();
+          if (mapCtl && mapViewActive()) mapCtl.refresh();
+          renderCatalogHeader();
+          loadArenas();
+          return;
+        }
+        var whenBtn = ev.target.closest('[data-when]');
+        if (whenBtn && whenBtn.closest('#iceWhenMenu')) {
+          state.when = whenBtn.getAttribute('data-when') || 'any';
+          closeUiPicker();
+          renderCatalogHeader();
+          loadArenas();
+        }
+      });
+    }
 
     var svcBox = $('iceServiceChips');
     if (svcBox) {
@@ -1467,35 +1679,8 @@
       });
     }
 
-    var whenBox = $('iceWhenChips');
-    if (whenBox) {
-      whenBox.addEventListener('click', function (ev) {
-        var chip = ev.target.closest('[data-when]');
-        if (!chip) return;
-        state.when = chip.getAttribute('data-when') || 'any';
-        renderWhenChips();
-        loadArenas();
-      });
-    }
     var nearestBtn = $('iceNearestBtn');
     if (nearestBtn) nearestBtn.addEventListener('click', toggleNear);
-
-    var venueBox = $('iceVenueChips');
-    if (venueBox) {
-      venueBox.addEventListener('click', function (ev) {
-        var chip = ev.target.closest('[data-venue-type]');
-        if (!chip) return;
-        var key = chip.getAttribute('data-venue-type') || '';
-        /* Одиночный выбор, а не мультиселект: «Все» или один тип. Множественный
-           выбор здесь никому не нужен, а пустое пересечение выглядит как поломка. */
-        state.venueTypes = key ? [key] : [];
-        renderVenueChips();
-        /* Пины на карте строятся из своего запроса и не обновятся сами по факту
-           перерисовки списка — на активной карте её надо дёрнуть явно. */
-        if (mapCtl && mapViewActive()) mapCtl.refresh();
-        loadArenas();
-      });
-    }
 
     var viewSwitch = $('iceViewSwitch');
     if (viewSwitch) {
@@ -1649,7 +1834,7 @@
          окна нет — параметр молча игнорируем, как и раньше. Окно не пишется в
          sessionStorage (см. persist), поэтому восстановление его не перетрёт. */
       var urlWhen = M.whenFromSearch(global.location.search || '');
-      if (urlWhen && M.whenChipsVisible(state.intent, state.venueTypes)) state.when = urlWhen;
+      if (urlWhen && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) state.when = urlWhen;
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {
         global.setTimeout(function () {

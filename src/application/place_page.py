@@ -396,8 +396,8 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     return f"{name}, {city} — {noun.lower()}" if city and noun else name
 
 
-def page_description(view: Mapping[str, Any]) -> str:
-    """Одна строка фактов для og:description и lede. Ничего, чего нет в данных."""
+def og_description(view: Mapping[str, Any]) -> str:
+    """Факты для og:description. «Сегодня» сюда не попадает: превью кэширует мессенджер."""
     card = view["card"]
     bits: list[str] = []
     focus = view.get("focus")
@@ -405,15 +405,16 @@ def page_description(view: Mapping[str, Any]) -> str:
         price = slot_price(focus)
         if price:
             bits.append(price)
-    elif _skating(card) and view.get("session_count"):
-        n = int(view["session_count"])
-        bits.append(f"{n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')} массового катания на неделе")
+    elif _skating(card):
+        nxt = view.get("next_slot")
+        if nxt is not None:
+            bits.append(slot_when(nxt, today=view["today"], absolute=True))
+        elif view.get("session_count"):
+            n = int(view["session_count"])
+            bits.append(f"{n} {plural_ru(n, 'сеанс', 'сеанса', 'сеансов')} массового катания на неделе")
     services = _services(card) if card.get("venue_type") == "shop" else []
     if services:
         bits.append(" · ".join(services))
-    badge = status_badge(view)
-    if badge and badge[0] in ("closed", "open"):
-        bits.append(badge[1])
     where = _where(card)
     if where:
         bits.append(where)
@@ -825,7 +826,6 @@ def render_place_page(
 ) -> str:
     card = view["card"]
     title = page_title(view, invite=invite)
-    description = page_description(view)
     badge = status_badge(view)
     vt = str(card.get("venue_type") or "ice")
     icon = {"ice": "❄️", "gym": "🏋️", "choreo": "🩰", "pool": "🏊", "outdoor": "🌳", "shop": "🧰"}.get(vt, "📍")
@@ -888,8 +888,8 @@ def render_place_page(
 
     html = _TEMPLATE_PATH.read_text(encoding="utf-8")
     replacements = {
-        "__TITLE__": _esc(title),
-        "__DESCRIPTION__": _esc(description),
+        "__OG_TITLE__": _esc(title),
+        "__OG_DESCRIPTION__": _esc(og_description(view)),
         "__CANONICAL__": _esc(canonical_url),
         "__OG_URL__": _esc(share["share_url"]),
         "__OG_IMAGE__": _esc(og_image_url),

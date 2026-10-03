@@ -14,9 +14,9 @@
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202610024" />
   <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
   <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <link rel="preload" href="client-home-main.js?v=202610055" as="script" />
+  <link rel="preload" href="client-home-main.js?v=202610058" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202610032" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202610058" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
 <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
@@ -142,7 +142,10 @@
     <!-- Удержание, а не товар: серия недель уехала под контент (решение владельца 2026-09-08) -->
     <button type="button" id="hubStreakRibbon" class="hub-streak-ribbon" style="display:none;" aria-label="Ваша активность и серия недель"></button>
 
-    <!-- ── UPCOMING BOOKINGS LIST (secondary, below hero) ─────────────── -->
+    <!--
+      Следующие записи рисуются внутри карточки слота (renderUpcomingList).
+      Секция остаётся якорем для полоски «снова» в состояниях без записи.
+    -->
     <div id="upcomingSection" style="display:none;">
       <div class="hub-section-wrap">
         <div class="hub-section-head">
@@ -238,6 +241,6 @@
   <script src="hub-collections-model.js?v=202610031"></script>
   <script src="hub-ice-today-model.js?v=202610028"></script>
   <script src="catalog-geo-model.js?v=202609287"></script>
-  <script defer src="client-home-main.js?v=202610055"></script>
+  <script defer src="client-home-main.js?v=202610058"></script>
 </body>
 </html>
