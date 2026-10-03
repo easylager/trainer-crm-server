@@ -2,6 +2,7 @@
 
 Скрыть (``arena_profiles.status = 'archived'``, обратимо через явный список ID в ``--show``):
 - 13 «JUSTSKATE», 14 «Финт» — пока не показываем;
+- 203 «Каток F1» — сезонный малый каток у Дворца спорта, не держим в каталоге;
 - каток у Дворца спорта на Немиге — работает только зимой, летом не показываем;
 - все площадки ``venue_type = 'gym'`` — залы пока вне каталога.
 
@@ -57,8 +58,19 @@ from src.shared.ops_db_guard import (
 PHOTOS_DIR = ROOT / "data" / "arena-cards" / "photos"
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
-HIDE_IDS: tuple[int, ...] = (13, 14)
+HIDE_IDS: tuple[int, ...] = (13, 14, 203)
 SHOW_IDS: tuple[int, ...] = (12,)
+
+# Минимальный профиль при публикации (фото — отдельно из photos/arena-<id>/).
+SHOWCASE_PATCHES: dict[int, dict[str, object]] = {
+    12: {
+        "short_description": (
+            "Асфальтированная лыжероллерная трасса (Победителей, 20/3). "
+            "Для роликов и лыжероллеров, не массовый ледовый каток — сеансов льда в каталоге нет."
+        ),
+    },
+}
+SHOWCASE_VENUE_TYPE: dict[int, str] = {12: "outdoor"}
 #: Немигу ловим по названию/адресу: её id в выгрузке data/minsk-arenas-prod.csv нет.
 HIDE_NAME_PATTERNS: tuple[str, ...] = ("%немиг%",)
 HIDE_VENUE_TYPES: tuple[str, ...] = ("gym",)
@@ -85,6 +97,24 @@ async def _arenas_to_hide(session: AsyncSession) -> dict[int, str]:
         )
         found.update({int(r[0]): str(r[1]) for r in rows.fetchall()})
     return found
+
+
+async def _prepare_showcase(session: AsyncSession, arena_id: int, apply: bool) -> None:
+    patch = SHOWCASE_PATCHES.get(arena_id)
+    venue_type = SHOWCASE_VENUE_TYPE.get(arena_id)
+    if not patch and not venue_type:
+        return
+    if venue_type:
+        print(f"  [{'apply' if apply else 'dry-run'}] arena_id={arena_id} venue_type -> {venue_type!r}")
+        if apply:
+            await session.execute(
+                text("UPDATE arenas SET venue_type = :vt WHERE id = :id"),
+                {"vt": venue_type, "id": arena_id},
+            )
+    if patch:
+        print(f"  [{'apply' if apply else 'dry-run'}] arena_id={arena_id} profile patch: {list(patch)}")
+        if apply:
+            await apply_admin_arena_profile_patch(session, arena_id, patch)
 
 
 async def _set_status(session: AsyncSession, arena_id: int, name: str, status: str, apply: bool) -> None:
@@ -177,6 +207,7 @@ async def run(*, apply: bool, show: bool, show_ids: tuple[int, ...], i_know_this
                     print(f"  [skip] arena_id={arena_id} нет в БД")
                     continue
                 await _set_status(session, arena_id, row[0], ARENA_PROFILE_STATUS_PUBLISHED, apply)
+                await _prepare_showcase(session, arena_id, apply)
             print("Фото:")
             await _upload_photos(session, apply)
         if apply:

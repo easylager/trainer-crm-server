@@ -1052,7 +1052,7 @@ describe('TASK-146 (Q-006): окно времени', () => {
     );
     assert.equal(
       formatSortCaption({ total: 2, items, intent: 'skate', window: { label: 'Выходные', hits: 1 } }),
-      '1 каток · выходные'
+      '2 катка · выходные'
     );
     assert.match(buildListUrl({ cityId: 1, intent: 'skate', when: 'auto' }), /when=auto/);
   });
@@ -1067,11 +1067,11 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
     live: { kind: 'session', outside_window: true, local_date: '2026-10-02', starts_at_local: '16:15', session_id: 22 } };
   const unknown = { id: 3, name: 'Юность', venue_type: 'ice', distance_km: 1, live: { kind: 'unknown' } };
 
-  it('в окне — только сеанс без outside_window; места без сеанса — вне окна', () => {
+  it('в окне — сеанс без outside_window; без сеанса (unknown) — в основной ленте', () => {
     const { splitByWindow } = loadModel();
     const parts = splitByWindow([off, hit, unknown], win);
-    assert.deepEqual(parts.hits.map((i) => i.id), [1]);
-    assert.deepEqual(parts.rest.map((i) => i.id), [2, 3]);
+    assert.deepEqual(parts.hits.map((i) => i.id), [1, 3]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [2]);
     assert.equal(splitByWindow([off, unknown], null).rest.length, 0, 'без окна делить нечего');
   });
 
@@ -1087,9 +1087,9 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
 
   it('разделитель называет окно и число мест ниже', () => {
     const { windowBreakView } = loadModel();
-    assert.deepEqual(windowBreakView({ key: 'weekend', label: 'Выходные' }, [off, unknown]), {
+    assert.deepEqual(windowBreakView({ key: 'weekend', label: 'Выходные' }, [off]), {
       title: 'На выходных нет',
-      sub: '2 катка · их ближайшее время',
+      sub: '1 каток · их ближайшее время',
     });
     assert.equal(windowBreakView(win, []), null);
   });
@@ -1104,10 +1104,10 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
     const { orderForFeed } = loadModel();
     const far = Object.assign({}, hit, { id: 4, distance_km: 20 });
     const parts = orderForFeed([far, off, unknown, hit], win, true);
-    assert.deepEqual(parts.hits.map((i) => i.id), [1, 4]);
-    assert.deepEqual(parts.rest.map((i) => i.id), [3, 2]);
+    assert.deepEqual(parts.hits.map((i) => i.id), [3, 1, 4]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [2]);
     const asServer = orderForFeed([far, off, unknown, hit], win, false);
-    assert.deepEqual(asServer.hits.map((i) => i.id), [4, 1], 'без «Рядом» — порядок сервера');
+    assert.deepEqual(asServer.hits.map((i) => i.id), [4, 3, 1], 'без «Рядом» — порядок сервера');
   });
 });
 

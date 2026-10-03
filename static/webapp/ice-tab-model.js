@@ -846,7 +846,11 @@
   function inWindow(item, win) {
     if (!win) return true;
     var live = (item && item.live) || {};
-    return String(live.kind || '') === 'session' && !live.outside_window;
+    var kind = String(live.kind || '');
+    /* Окно — про сеансы льда. Улица без расписания, магазин, «уточняется» — не
+       ответ на чип «Сегодня вечером»; на «Все» они остаются в основной ленте. */
+    if (kind !== 'session') return true;
+    return !live.outside_window;
   }
 
   /**
@@ -1132,7 +1136,9 @@
       if (!Number(win.hits)) return winLabel + ' сеансов нет · показываем ближайшие';
       var wn = venueNoun(opts.items || [], opts.venueTypes);
       var hits = Number(win.hits);
-      return hits + ' ' + pluralRu(hits, wn[0], wn[1], wn[2]) + ' · ' + winLabel.toLowerCase();
+      var filtered = opts.venueTypes && opts.venueTypes.length;
+      var count = filtered ? hits : total;
+      return count + ' ' + pluralRu(count, wn[0], wn[1], wn[2]) + ' · ' + winLabel.toLowerCase();
     }
     if (opts.intent === INTENTS.coach) {
       var coachWord = pluralRu(total, 'тренер', 'тренера', 'тренеров');
