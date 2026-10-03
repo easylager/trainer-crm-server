@@ -1858,6 +1858,9 @@
           global.scrollTo(0, saved.scrollY);
         }, 0);
       }
+      if (global.ClientShell && global.ClientShell.reportCatalogPresence && state.cityId) {
+        global.ClientShell.reportCatalogPresence('miniapp_ice', null, { city_id: state.cityId });
+      }
     });
   }
 

@@ -31,6 +31,7 @@ from src.api.routes.public_arenas import router as public_arenas_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.catalog_entry import router as catalog_entry_router
+from src.api.routes.catalog_consumer_telemetry import router as catalog_consumer_telemetry_router
 from src.api.routes.webapp_trainer_catalog import router as webapp_trainer_catalog_router
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.api.routes.public import issue_trainer_join_redirect
@@ -1851,6 +1852,7 @@ app.include_router(public_arenas_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(catalog_entry_router)
+app.include_router(catalog_consumer_telemetry_router)
 app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)

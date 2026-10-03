@@ -21,12 +21,13 @@ from starlette.concurrency import run_in_threadpool
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card
+from src.application.catalog_consumer_events import record_public_page_view
 from src.application.place_links import (
     place_image_url,
     place_page_url,
     place_path,
     place_start_param,
-    telegram_open_link,
+    public_telegram_cta_url,
 )
 from src.application.place_page import load_place_view, render_place_page, share_payload
 from src.shared.config import Settings
@@ -153,18 +154,26 @@ async def place_page(
         base_path=place_path(city_name=city_name, slug=str(card["slug"])),
         og_image_url=place_image_url(**image_kwargs),
         story_image_url=place_image_url(**image_kwargs, story=True),
-        cta_url=telegram_open_link(
-            client_bot_username=settings.client_bot_username,
-            mini_app_short_name=settings.client_mini_app_short_name,
-            main_mini_app=settings.client_bot_main_mini_app,
+        cta_url=public_telegram_cta_url(
+            base,
             start_param=place_start_param(
                 int(card["id"]),
                 int(view["focus"]["id"]) if view.get("focus") is not None else None,
             ),
+            surface="place_page",
+            city_id=int(city["id"]),
+            arena_id=int(card["id"]),
         ),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         share=share_payload(view, page_url=share_url, invite=False),
         invite=invite,
+    )
+    await record_public_page_view(
+        session,
+        request,
+        surface="place_page",
+        city_id=int(city["id"]),
+        arena_id=int(card["id"]),
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 
@@ -312,21 +321,26 @@ async def selection_page(
     if city_ref != city_slug(city_name):
         return RedirectResponse(url=path, status_code=301)
     view = await load_selection_view(session, city=city, venue=venue, when=when)
-    settings = Settings()
     html = render_selection_page(
         view,
         canonical_url=base + path,
         og_image_url=base + selection_image_path(city_name=city_name, venue=venue, when=when),
-        cta_url=telegram_open_link(
-            client_bot_username=settings.client_bot_username,
-            mini_app_short_name=settings.client_mini_app_short_name,
-            main_mini_app=settings.client_bot_main_mini_app,
+        cta_url=public_telegram_cta_url(
+            base,
             start_param=selection_start_param(city_id=int(city["id"]), venue=venue, when=when),
+            surface="selection_page",
+            city_id=int(city["id"]),
         ),
         share=compose_selection_share(view, page_url=base + path),
         city_page_url=ice_city_day_page_url(base_url=base, city_name=city_name),
         story_image_url=base
         + selection_image_path(city_name=city_name, venue=venue, when=when).replace("/og.png", "/story.png"),
+    )
+    await record_public_page_view(
+        session,
+        request,
+        surface="selection_page",
+        city_id=int(city["id"]),
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 

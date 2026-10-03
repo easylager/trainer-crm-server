@@ -916,6 +916,8 @@
     writeBookingsWarmCache: writeBookingsWarmCache,
     maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
     deepLinkTarget: deepLinkTarget,
+    reportCatalogPresence: reportCatalogPresence,
+    readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
   };
 
@@ -946,6 +948,33 @@
    * открыт WebView, и без защёлки «Назад» с карточки снова уводил бы на неё же.
    */
   var DEEP_LINK_FLAG = 'glide_start_param_used_v1';
+  var CATALOG_PRESENCE_PREFIX = 'glide_cat_presence_v1_';
+
+  /**
+   * Учёт входа в мини-апп каталога (WAU, startapp после шаринга). Один раз на surface/день/start_param.
+   */
+  function reportCatalogPresence(surface, startParam, extra) {
+    var tg = getTg();
+    if (!tg || !tg.initData) return;
+    var sp = startParam != null ? String(startParam).trim() : '';
+    var day = new Date().toISOString().slice(0, 10);
+    var dedupeKey = CATALOG_PRESENCE_PREFIX + surface + '_' + day + '_' + sp;
+    try {
+      if (global.sessionStorage.getItem(dedupeKey)) return;
+      global.sessionStorage.setItem(dedupeKey, '1');
+    } catch (e) { /* */ }
+    var body = { surface: surface, start_param: sp || null };
+    if (extra && extra.city_id) body.city_id = Number(extra.city_id);
+    if (extra && extra.arena_id) body.arena_id = Number(extra.arena_id);
+    global.fetch('/api/webapp/client/catalog/presence', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': tg.initData,
+      },
+      body: JSON.stringify(body),
+    }).catch(function () {});
+  }
 
   function deepLinkTarget(sp) {
     sp = String(sp || '').trim();
@@ -990,6 +1019,7 @@
 
   function boot() {
     init();
+    reportCatalogPresence('miniapp_shell', readStartParam());
     if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
       scheduleCatalogNavigationPrefetch();

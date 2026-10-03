@@ -110,4 +110,5 @@ async def test_selection_preview_and_telegram_keep_the_window(
         assert stale not in share.json()["share_body"].lower()
     assert _og(page.text, "og:image").startswith("http")
     assert f"startapp=catalog_{city_id}_skate_weekend" in page.text
+    assert "/api/public/catalog/open-telegram" in page.text
     assert "Выходные" in page.text, "живая страница может говорить «выходные»"

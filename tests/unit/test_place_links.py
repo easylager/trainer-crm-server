@@ -11,6 +11,7 @@ from src.application.place_links import (
     place_image_url,
     place_page_url,
     place_start_param,
+    public_telegram_cta_url,
     telegram_open_link,
 )
 
@@ -75,3 +76,17 @@ def test_open_link_prefers_startapp_and_falls_back_to_bot() -> None:
     )
     assert telegram_open_link(client_bot_username=None, mini_app_short_name="app", start_param="arena_1") is None
     assert telegram_open_link(client_bot_username="b", mini_app_short_name=None, start_param="bad param") is None
+
+
+def test_public_telegram_cta_proxy_url() -> None:
+    url = public_telegram_cta_url(
+        "https://glide.by",
+        start_param="arena_9",
+        surface="place_page",
+        city_id=1,
+        arena_id=9,
+    )
+    assert url is not None
+    assert url.startswith("https://glide.by/api/public/catalog/open-telegram?")
+    assert "startapp=arena_9" in url
+    assert "surface=place_page" in url

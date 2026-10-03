@@ -179,6 +179,30 @@ def parse_place_start_param(value: str | None) -> int | None:
     return parsed[0] if parsed is not None else None
 
 
+def public_telegram_cta_url(
+    base_url: str,
+    *,
+    start_param: str,
+    surface: str,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+) -> str | None:
+    """
+    HTTPS-прокси перед ``t.me``: логируем клик «Открыть в Telegram», затем 302 в Telegram.
+    """
+    if not is_valid_start_param(start_param):
+        return None
+    base = (base_url or "").strip().rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    params: dict[str, str] = {"startapp": start_param, "surface": surface}
+    if city_id is not None and int(city_id) > 0:
+        params["city_id"] = str(int(city_id))
+    if arena_id is not None and int(arena_id) > 0:
+        params["arena_id"] = str(int(arena_id))
+    return f"{base}/api/public/catalog/open-telegram?{urlencode(params)}"
+
+
 def telegram_open_link(
     *,
     client_bot_username: str | None,

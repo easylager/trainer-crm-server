@@ -391,7 +391,13 @@ from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
 )
+from src.application.catalog_consumer_events import (
+    KIND_MINIAPP_CATALOG_ENTRY,
+    record_catalog_consumer_event,
+    telegram_actor_hash,
+)
 from src.application.client_delight_metrics import record_client_share
+from src.application.place_links import is_valid_start_param
 from src.application.client_first_success import build_first_booking_success
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
@@ -3067,6 +3073,49 @@ async def get_client_share_trainer(
         "trainer_city": city_name,
         "share_context": raw_ctx or "catalog",
     }
+
+
+_MINIAPP_CATALOG_SURFACES = frozenset({"miniapp_ice", "miniapp_arena", "miniapp_shell"})
+
+
+class CatalogPresenceBody(BaseModel):
+    surface: str = Field(..., max_length=40)
+    start_param: str | None = Field(None, max_length=64)
+    city_id: int | None = None
+    arena_id: int | None = None
+
+
+@router.post("/client/catalog/presence")
+async def post_client_catalog_presence(
+    body: CatalogPresenceBody,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """
+    Успешный вход в мини-апп каталога (вкладка Поиск, карточка места, startapp после шаринга).
+    Один раз на surface + день на пользователя (дедуп на сервере).
+    """
+    response.headers["Cache-Control"] = "no-store"
+    surface = (body.surface or "").strip().lower()
+    if surface not in _MINIAPP_CATALOG_SURFACES:
+        raise HTTPException(status_code=400, detail="Unknown catalog surface")
+    sp = (body.start_param or "").strip() or None
+    if sp and not is_valid_start_param(sp):
+        sp = None
+    day = datetime.now(timezone.utc).date()
+    actor = telegram_actor_hash(client_catalog_telegram_key(principal), day)
+    inserted = await record_catalog_consumer_event(
+        session,
+        kind=KIND_MINIAPP_CATALOG_ENTRY,
+        surface=surface,
+        actor_hash=actor,
+        city_id=body.city_id,
+        arena_id=body.arena_id,
+        start_param=sp,
+        payload={"ingress": "miniapp", "platform": principal.platform.value},
+    )
+    return {"ok": True, "recorded": inserted}
 
 
 @router.get("/client/passes")

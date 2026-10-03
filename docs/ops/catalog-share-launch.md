@@ -10,7 +10,7 @@
 2. Клиентский бот: `CLIENT_BOT_USERNAME`. Основное мини-приложение включено (`CLIENT_BOT_MAIN_MINI_APP=true`, BotFather → Main Mini App на тот же домен). Иначе «Открыть в Telegram» падает в `t.me/<bot>?start=…`, и бот отвечает одной кнопкой. `CLIENT_MINI_APP_SHORT_NAME` — только если мини-апп заведён отдельным коротким именем.
 3. Фото мест: ключи в БД и объекты в бакете (или на диске процесса API) должны совпадать. Локально `GET /api/public/photos/arenas/…` часто 404 — страница дыру убирает (на `/p/` нет пустого 16:9, на `/c/` остаётся иконка типа), но в чате друг видит постер без кадра катка. Перед выкатом открыть 3–4 минских `/p/` и `/c/minsk` и убедиться, что герой и карточки грузятся, а не только иконка.
 4. Магазины: `data/catalog/shops-<город>.json` сам на прод не уезжает. Если в шаринге обещаем магазины — отдельный прогон `scripts/load_catalog_shops.py` (сначала без `--apply`, потом `--apply` и явный флаг прода). Без импорта страница `/c/<город>?t=shop` честно пустая.
-5. Миграции уже в линейке: `0200` заводит `client_share_events`, `0208` добавляет kind `place`, `0210` — `selection`. На проде после мержа: `alembic upgrade head`, затем проверка ограничения (это не enum):
+5. Миграции уже в линейке: `0200` — `client_share_events`, `0208` — kind `place`, `0210` — `selection`, **0212** — `catalog_consumer_events`. На проде после мержа: `alembic upgrade head`, затем проверка ограничения share (это не enum):
    ```sql
    SELECT pg_get_constraintdef(oid)
    FROM pg_constraint
@@ -34,7 +34,26 @@
     ```
     У подборки `kind=selection`, у места `kind=place`, в `payload.channel` канал. Пока шит только открывали — новых строк нет.
 12. `/sitemap.xml` содержит `/c/<город>` и `/p/…`. `/robots.txt` указывает на sitemap и закрывает `/webapp/` и `/api/`.
+13. Телеметрия каталога (после шагов 7–10): открыть `/c/…` в браузере → в БД появляется `public_page_view`. Нажать «Открыть в Telegram» → `public_telegram_cta` (URL в адресной строке на секунду — `/api/public/catalog/open-telegram?…`). Открыть мини-апп с той же подборки → в течение минуты `miniapp_catalog_entry` с тем же `start_param` в колонке.
+    ```sql
+    SELECT kind, surface, start_param, occurred_at
+    FROM catalog_consumer_events
+    WHERE occurred_at > now() - interval '1 hour'
+    ORDER BY id DESC LIMIT 30;
+    ```
+14. Сводка для гейта (read-only, с прод-`DATABASE_URL`):
+    ```bash
+    python scripts/report_catalog_gate_metrics.py --days 7
+    ```
 
-## Чего этот выкат ещё не измеряет
+## Метрики после выката (0212)
 
-Просмотр `/p/` и `/c/`, клик «Открыть в Telegram» и открытие мини-аппа из шаринга в лог не пишутся. `client_share_events` — намерение отправить, не факт, что друг открыл. Порог C-B (доля открытий, шары на WAU) до этих событий не считается. Минимум — в ревью шаринга, не в этом чеклисте как уже сделанное.
+Таблица `catalog_consumer_events`:
+
+| kind | Когда |
+|---|---|
+| `public_page_view` | GET `/p/…`, `/c/…`, `/ice/…/today` (HTML, не og.png) |
+| `public_telegram_cta` | Клик «Открыть в Telegram» → `/api/public/catalog/open-telegram` → 302 в Telegram |
+| `miniapp_catalog_entry` | POST `/api/webapp/client/catalog/presence` из мини-аппа (shell / Поиск / карточка места) |
+
+WAU каталога: `COUNT(DISTINCT actor_hash)` за 7 дней по `public_page_view` + `miniapp_catalog_entry`. C-B прокси: `get_catalog_virality_cb_metrics` (shares/WAU, share→deeplink-open по `start_param` arena_/catalog_). `client_share_events` по-прежнему только намерение отправить.

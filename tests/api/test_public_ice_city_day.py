@@ -349,4 +349,5 @@ async def test_ice_today_og_is_absolute_and_the_page_stays_light(
     assert "сегодня" not in share.json()["share_text"].lower()
     assert "завтра" not in share.json()["share_text"].lower()
     assert f"startapp=catalog_{cid}_skate_today" in page.text
+    assert "/api/public/catalog/open-telegram" in page.text
     assert "Лёд · " in page.text

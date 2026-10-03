@@ -875,6 +875,9 @@
           if (found) state.focus.day = found;
         }
         paint();
+        if (global.ClientShell && global.ClientShell.reportCatalogPresence) {
+          global.ClientShell.reportCatalogPresence('miniapp_arena', start, { arena_id: Number(state.ref) });
+        }
       })
       .catch(function () {
         showError('Не удалось загрузить карточку. Попробуйте ещё раз.');
