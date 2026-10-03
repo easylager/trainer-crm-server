@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA, PARSER_KEY_MINSK_SPEED_OVAL
+from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA, PARSER_KEY_MINSK_MAIN_ARENA, PARSER_KEY_MINSK_SPEED_OVAL
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -239,6 +239,12 @@ class MinskArenaSaleframeParser(IceParser):
             snapshot=snapshot,
             slots=slots,
         )
+
+
+class MinskMainArenaSaleframeParser(MinskArenaSaleframeParser):
+    """ABWS saleframe/62 — «Массовое катание на главной арене» (object «Арена»)."""
+
+    parser_key = PARSER_KEY_MINSK_MAIN_ARENA
 
 
 class MinskSpeedOvalParser(MinskArenaSaleframeParser):

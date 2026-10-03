@@ -74,6 +74,7 @@ def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
     }
     assert runner.MINSK_MK_PARSER_KEYS == {
         "minskarena_saleframe_v1",
+        "minskarena_main_saleframe_v1",
         "zamok_html_v1",
         "chizhovka_html_v1",
         "brest_lds_v1",

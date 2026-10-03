@@ -58,7 +58,7 @@ def _job(*, arena_id: int, parser_key: str, config: dict, job_id: int = 1) -> Pa
     )
 
 
-def _minsk_arena_job(arena_id: int = 2, job_id: int = 1) -> ParserJob:
+def _minsk_arena_job(arena_id: int = 115, job_id: int = 1) -> ParserJob:
     cfg = dict(MINSK_ARENA_SALEFRAME_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "minsk-arena")
     return _job(arena_id=arena_id, parser_key=PARSER_KEY_MINSK_ARENA, config=cfg, job_id=job_id)

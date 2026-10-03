@@ -1,6 +1,8 @@
-# Parser spec: Минск Арена
+# Parser spec: Хоккейная площадка (Конькобежный стадион)
 
-- arena_id: 2
+ABWS `object.id=4` «Конькобежный стадион», не здание главной «Арены» (service/62 → arena_id 2).
+
+- arena_id: 115
 - parser_key: minskarena_saleframe_v1
 - cadence: daily
 - requires_by_egress: false

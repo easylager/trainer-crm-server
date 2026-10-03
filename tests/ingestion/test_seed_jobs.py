@@ -221,6 +221,12 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     assert "schedule_url" in by_key["chizhovka_html_v1"].config
     assert by_key["ledby_html_v1"].is_enabled is True
 
+    hockey_mk = by_key["minskarena_saleframe_v1"]
+    main_mk = by_key["minskarena_main_saleframe_v1"]
+    assert hockey_mk.arena_id == 115
+    assert main_mk.arena_id == 2
+    assert hockey_mk.is_enabled is True
+
     junost = by_key["junost_origin_html_v1"]
     ledlife = by_key["ledlife_origin_html_v1"]
     assert junost.is_enabled is True

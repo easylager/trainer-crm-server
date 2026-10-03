@@ -32,6 +32,7 @@ def default_registry() -> ParserRegistry:
         JunostHtmlParser,
         LedByHtmlParser,
         MinskArenaSaleframeParser,
+        MinskMainArenaSaleframeParser,
         MinskSpeedOvalParser,
         ZamokHtmlParser,
     )
@@ -83,6 +84,7 @@ def default_registry() -> ParserRegistry:
     registry = ParserRegistry()
     for parser in (
         MinskArenaSaleframeParser(),
+        MinskMainArenaSaleframeParser(),
         MinskSpeedOvalParser(),
         ZamokHtmlParser(),
         ChizhovkaHtmlParser(),

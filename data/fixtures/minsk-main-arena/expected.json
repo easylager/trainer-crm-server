@@ -1,0 +1,10 @@
+{
+  "schema_version": "canonical-slot-v1",
+  "arena_id": 2,
+  "parser_key": "minskarena_main_saleframe_v1",
+  "timezone": "Europe/Minsk",
+  "currency_code": "BYN",
+  "captured_at": "2026-10-04T00:00:00+03:00",
+  "notes": "ABWS service/62 calendar often empty; sessions=[] is honest until a live capture exists.",
+  "sessions": []
+}

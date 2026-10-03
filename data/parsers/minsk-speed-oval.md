@@ -6,7 +6,7 @@
 - cadence: daily
 - requires_by_egress: false
 
-Это **другая площадка**, не хоккейная «Минск Арена» (`minskarena_saleframe_v1` / service 55 / arena_id 2). Слоты oval не писать на arena 2.
+Тот же комплекс ABWS object id=4 «Конькобежный стадион»: овал — service/139 (`minskarena_speed_oval_v1`), хоккейная площадка внутри здания — service/55 (`minskarena_saleframe_v1`, arena_id 115). Главная «Арена» (большой лёд) — arena_id 2, service/62.
 
 ## Sources
 

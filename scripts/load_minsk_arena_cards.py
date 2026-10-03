@@ -131,8 +131,8 @@ SLUG_FIXTURE_DIRS = {
     "minsk-diamond": ("minsk-diamond",),
     "minsk-junost": ("minsk-junost",),
     "minsk-ledlife": ("minsk-ledlife",),
-    "konkobezhnaya-arena": ("minsk-speed-oval",),
-    "minsk-speed-oval": ("minsk-speed-oval",),
+    "konkobezhnaya-arena": ("minsk-speed-oval", "minsk-arena"),
+    "minsk-speed-oval": ("minsk-speed-oval", "minsk-arena"),
 }
 
 

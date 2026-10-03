@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 PARSER_KEY_MINSK_ARENA = "minskarena_saleframe_v1"
+PARSER_KEY_MINSK_MAIN_ARENA = "minskarena_main_saleframe_v1"
 PARSER_KEY_MINSK_SPEED_OVAL = "minskarena_speed_oval_v1"
 
 MINSK_ARENA_SALEFRAME_CONFIG: dict = {
@@ -24,6 +25,33 @@ MINSK_ARENA_SALEFRAME_CONFIG: dict = {
     "prices_already_minor": True,
     "adult_zone_id": 970,
     "child_zone_id": 971,
+    "kind": "public_skate",
+    "kind_allow_substrings": ["массовое катание"],
+    "drop_item_name_substrings": ["заточка"],
+    "requires_by_egress": False,
+    "requires_auth": False,
+}
+
+MINSK_MAIN_ARENA_SALEFRAME_CONFIG: dict = {
+    "url": "https://saleframe.minskarena.by/service/62",
+    "api_host": "https://abws.minskarena.by",
+    "service_id": 62,
+    "init_path": "/api/v3/frame/init",
+    "init_query": {"seid": 62, "target": "saleframe", "lang": "ru"},
+    "calendar_path": "/api/v1/frame/service/{service_id}/calendar",
+    "events_path": "/api/v1/frame/service/{service_id}/events",
+    "events_query": {
+        "sort": "start",
+        "expand": "prices",
+        "fields": "id,start,end,quota",
+        "target": "saleframe",
+        "lang": "ru",
+    },
+    "timezone": "Europe/Minsk",
+    "default_duration_minutes": 45,
+    "prices_already_minor": True,
+    "adult_zone_id": 991,
+    "child_zone_id": 992,
     "kind": "public_skate",
     "kind_allow_substrings": ["массовое катание"],
     "drop_item_name_substrings": ["заточка"],
@@ -62,6 +90,7 @@ MINSK_SPEED_OVAL_SALEFRAME_CONFIG: dict = {
 
 _SALEFRAME_DEFAULTS = {
     PARSER_KEY_MINSK_ARENA: MINSK_ARENA_SALEFRAME_CONFIG,
+    PARSER_KEY_MINSK_MAIN_ARENA: MINSK_MAIN_ARENA_SALEFRAME_CONFIG,
     PARSER_KEY_MINSK_SPEED_OVAL: MINSK_SPEED_OVAL_SALEFRAME_CONFIG,
 }
 
