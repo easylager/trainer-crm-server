@@ -18,9 +18,11 @@
 ```json
 {
   "url": "https://ledlife.by/massovye_kataniya/",
+  "prices_url": "https://ledlife.by/stoimost_uslug/",
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
   "requires_by_egress": true,
+  "prices_already_minor": false,
   "use_fallback_if_schedule_blocked": false,
   "blocked_http_statuses": [403],
   "egress": "by_ip_required"

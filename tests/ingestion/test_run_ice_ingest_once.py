@@ -53,9 +53,25 @@ def test_refuses_cloud_and_non_local_database(runner) -> None:
     )
 
 
+def test_prod_ack_refuses_localhost_target(runner) -> None:
+    from src.shared.ops_db_guard import assert_railway_target_database, ProdDatabaseError
+
+    with pytest.raises(ProdDatabaseError):
+        assert_railway_target_database(
+            "postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm"
+        )
+    assert_railway_target_database(
+        "postgresql://u:p@postgres.railway.app:5432/railway",
+    )
+
+
 def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
-    assert "junost_origin_html_v1" not in runner.MINSK_MK_PARSER_KEYS
-    assert "ledlife_origin_html_v1" not in runner.MINSK_MK_PARSER_KEYS
+    assert "junost_origin_html_v1" in runner.MINSK_MK_PARSER_KEYS
+    assert "ledlife_origin_html_v1" in runner.MINSK_MK_PARSER_KEYS
+    assert runner.BY_EGRESS_PARSER_KEYS == {
+        "junost_origin_html_v1",
+        "ledlife_origin_html_v1",
+    }
     assert runner.MINSK_MK_PARSER_KEYS == {
         "minskarena_saleframe_v1",
         "zamok_html_v1",
@@ -83,4 +99,6 @@ def test_one_shot_bumps_minsk_and_regional_mk_keys(runner) -> None:
         "ldsokolniki_html_v1",
         "ledovyydvorets_html_v1",
         "yubileyny_afisha_html_v1",
+        "junost_origin_html_v1",
+        "ledlife_origin_html_v1",
     }

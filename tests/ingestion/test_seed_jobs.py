@@ -223,8 +223,8 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
 
     junost = by_key["junost_origin_html_v1"]
     ledlife = by_key["ledlife_origin_html_v1"]
-    assert junost.is_enabled is False
-    assert ledlife.is_enabled is False
+    assert junost.is_enabled is True
+    assert ledlife.is_enabled is True
     assert junost.config["requires_by_egress"] is True
     assert ledlife.config["requires_by_egress"] is True
 

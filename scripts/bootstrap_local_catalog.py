@@ -95,7 +95,7 @@ def minsk_rows() -> list[dict[str, object]]:
                     "lat": float(raw["latitude"]) if raw["latitude"] else None,
                     "lon": float(raw["longitude"]) if raw["longitude"] else None,
                     # Лыжероллерная трасса — не лёд (реестр парсеров: target=not_ice).
-                    "venue_type": "outdoor" if "лыжероллер" in raw["name"].lower() else "ice",
+                    "venue_type": "other" if "лыжероллер" in raw["name"].lower() else "ice",
                 }
             )
     rows.append(

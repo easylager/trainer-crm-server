@@ -35,6 +35,7 @@ def default_registry() -> ParserRegistry:
         MinskSpeedOvalParser,
         ZamokHtmlParser,
     )
+    from src.ingestion.adapters_minsk_by_egress import LedlifeOriginHtmlParser
     from src.ingestion.adapters_regional_batch_a import (
         BaranovichiLdsParser,
         BrestLdsParser,
@@ -88,6 +89,7 @@ def default_registry() -> ParserRegistry:
         LedByHtmlParser(),
         DiamondHtmlParser(),
         JunostHtmlParser(),
+        LedlifeOriginHtmlParser(),
         BrestLdsParser(),
         BaranovichiLdsParser(),
         KobrinLdsParser(),

@@ -146,5 +146,11 @@ IP. Задания таких катков помечены `requires_by_egress`
 Объём — десятки запросов в сутки, так что подходит самый дешёвый белорусский IPv4-прокси или VPS в РБ
 с tinyproxy/squid под паролем.
 
+**Ноутбук в РБ (без VPS):** на Railway `BY_EGRESS_PROXY_URL` не задавать; с Mac в Беларуси (VPN выкл.)
+`bash scripts/local_by_egress_proxy.sh setup` → в отдельном терминале `start`, затем `check` / `ingest`
+(прод-БД: `ingest` = `run_ice_ingest_once.py --i-know-this-is-prod`). Прокси слушает только `127.0.0.1`.
+`ingest` включает `ledlife_origin_html_v1` и `junost_origin_html_v1` (СДЮШОР / Юность). Свежие HTML:
+`bash scripts/fetch_minsk_by_origin_fixtures.sh` (VPN выкл., tinyproxy запущен).
+
 TLS-доверие — по хранилищу ОС через `truststore` (на Mac за VPN/антивирусом встроенный набор
 корней Python даёт «self-signed certificate in certificate chain», хотя браузер сайт открывает).

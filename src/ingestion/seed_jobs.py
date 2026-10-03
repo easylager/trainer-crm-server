@@ -252,7 +252,16 @@ def _fixture_expected(fixtures_dir: Path, stem: str) -> bool:
 
 def _job_enabled(spec: _SpecDraft, entry: dict[str, Any] | None, *, fixture_ok: bool) -> bool:
     if spec.requires_by_egress or config_requires_by_egress(spec.config):
-        return False
+        if not fixture_ok:
+            return False
+        expected_path = DEFAULT_FIXTURES_DIR / spec.stem / "expected.json"
+        if expected_path.is_file():
+            payload = json.loads(expected_path.read_text(encoding="utf-8"))
+            if payload.get("blocked_without_by_egress"):
+                return False
+            if not payload.get("sessions"):
+                return False
+        return True
     if not fixture_ok:
         return False
     if entry is None:

@@ -66,6 +66,19 @@ def warn_prod_ack() -> None:
     )
 
 
+def assert_railway_target_database(url: str) -> None:
+    """``--i-know-this-is-prod`` must target cloud Postgres, not dev localhost."""
+    parsed = urlparse(normalize_db_url(url))
+    host = (parsed.hostname or "").lower()
+    local_ok = host in LOCAL_DB_HOSTS or (host.startswith("127.") and host.count(".") == 3)
+    if local_ok:
+        raise ProdDatabaseError(
+            "DATABASE_URL points at localhost, but --i-know-this-is-prod expects Railway/cloud "
+            "Postgres. Copy DATABASE_PUBLIC_URL from Railway into DATABASE_URL for this run "
+            "(or prefix the ingest command with DATABASE_URL=...); do not commit the URL."
+        )
+
+
 def assert_database_url(
     url: str,
     *,

@@ -1,17 +1,112 @@
 {
   "schema_version": "canonical-slot-v1",
   "arena_id": 4,
-  "city": "Минск",
   "parser_key": "ledlife_origin_html_v1",
   "timezone": "Europe/Minsk",
   "currency_code": "BYN",
-  "captured_at": "2026-09-05T23:55:00+03:00",
+  "captured_at": "2025-04-21T12:00:00+03:00",
   "requires_by_egress": true,
-  "blocked_without_by_egress": true,
+  "blocked_without_by_egress": false,
   "source_files": [
-    "massovye_kataniya-403.html"
+    "massovye_kataniya.html",
+    "stoimost_uslug.html"
   ],
-  "http_status": 403,
-  "notes": "Non-BY fetch is nginx 1.10.3 403. Header spoof does not work. Re-probe 2026-09-06 Globalping BY/Minsk still HTTP 200 truncated=true 10KB chrome — no MK grid. Closed for V1 without BY VPS. Do not invent a weekend grid. sessions=[] is the terminal golden.",
-  "sessions": []
+  "sessions": [
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-22",
+      "starts_at_local": "12:00",
+      "ends_at_local": "12:45",
+      "price_adult_minor": 650,
+      "price_child_minor": 450,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-23",
+      "starts_at_local": "12:00",
+      "ends_at_local": "12:45",
+      "price_adult_minor": 650,
+      "price_child_minor": 450,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-24",
+      "starts_at_local": "12:00",
+      "ends_at_local": "12:45",
+      "price_adult_minor": 650,
+      "price_child_minor": 450,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-25",
+      "starts_at_local": "12:00",
+      "ends_at_local": "12:45",
+      "price_adult_minor": 650,
+      "price_child_minor": 450,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-26",
+      "starts_at_local": "18:00",
+      "ends_at_local": "18:45",
+      "price_adult_minor": 750,
+      "price_child_minor": 550,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-26",
+      "starts_at_local": "19:00",
+      "ends_at_local": "19:45",
+      "price_adult_minor": 750,
+      "price_child_minor": 550,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-27",
+      "starts_at_local": "15:00",
+      "ends_at_local": "15:45",
+      "price_adult_minor": 750,
+      "price_child_minor": 550,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    },
+    {
+      "kind": "public_skate",
+      "currency_code": "BYN",
+      "local_date": "2025-04-27",
+      "starts_at_local": "16:00",
+      "ends_at_local": "16:45",
+      "price_adult_minor": 750,
+      "price_child_minor": 550,
+      "price_rental_minor": null,
+      "session_label": "Трен.",
+      "age_note": "детский до 16 лет"
+    }
+  ]
 }

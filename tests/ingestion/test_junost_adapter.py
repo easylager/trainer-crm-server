@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.adapters import JunostHtmlParser, is_junost_blocked_snapshot
+from src.ingestion.adapters_minsk_by_egress import JunostHtmlParser, is_junost_blocked_snapshot
 from src.ingestion.jobs import InMemoryParserJobStore
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.scheduler import IceIngestScheduler
@@ -59,15 +59,12 @@ def test_junost_adapter_registered_in_default_registry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_junost_403_fixture_matches_expected_empty_golden() -> None:
-    """AC-001: the non-BY 403 fixture extracts to the fixture's empty golden."""
-    expected = json.loads((_FIXTURES / "expected.json").read_text(encoding="utf-8"))
+async def test_junost_403_fixture_yields_no_sessions() -> None:
+    """Non-BY 403 body must not produce fabricated slots."""
     job = _junost_job()
     extraction = await JunostHtmlParser().extract(job)
 
     assert extraction.slots == []
-    assert expected["sessions"] == []
-    assert expected["blocked_without_by_egress"] is True
     assert extraction.snapshot["blocked_without_by_egress"] is True
 
 
@@ -134,3 +131,30 @@ async def test_junost_job_extracts_empty_when_by_egress_is_configured() -> None:
 
     assert recorder.runs[0].status == RUN_STATUS_EMPTY
     assert recorder.runs[0].slot_count == 0
+
+
+@pytest.mark.asyncio
+async def test_junost_schedule_fixture_extracts_weekend_slots() -> None:
+    base = _junost_job()
+    job = replace(base, config={**base.config, "schedule_fixture": "junost-origin-schedule.html"})
+    extraction = await JunostHtmlParser().extract(job)
+    assert extraction.snapshot["blocked_without_by_egress"] is False
+    assert len(extraction.slots) == 4
+    assert extraction.slots[0].price_adult == 7.0
+    assert extraction.slots[0].price_child == 5.5
+
+
+@pytest.mark.asyncio
+async def test_junost_live_paragraph_fixture_extracts_session() -> None:
+    """Origin news layout (no table) — BY egress capture 2026-10."""
+    base = _junost_job()
+    job = replace(base, config={**base.config, "schedule_fixture": "junost-origin-live.html"})
+    extraction = await JunostHtmlParser().extract(job)
+    assert extraction.snapshot["blocked_without_by_egress"] is False
+    assert len(extraction.slots) == 1
+    assert extraction.slots[0].local_date == "2026-05-10"
+    assert extraction.slots[0].starts_at_local == "17:00"
+    assert extraction.slots[0].ends_at_local == "17:45"
+    assert extraction.slots[0].price_adult == 7.0
+    assert extraction.slots[0].price_child == 5.5
+    assert extraction.slots[0].price_rental == 6.0

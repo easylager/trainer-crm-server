@@ -98,24 +98,36 @@
       "fixture_dir": "data/fixtures/minsk-junost",
       "gold_file": "expected.json",
       "parser_key": "junost_origin_html_v1",
-      "scoring": "blocked_empty",
-      "now": "2026-09-05T12:00:00+00:00",
+      "scoring": "adapter",
+      "now": "2026-10-04T09:00:00+00:00",
       "source_files": [
         "junost-origin.html",
-        "hockey-skating.html",
+        "junost-origin-schedule.html",
         "globalping-by-truncated.html"
       ],
-      "job_config": {}
+      "job_config": {
+        "url": "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/",
+        "schedule_fixture": "junost-origin-schedule.html",
+        "prices_already_minor": false
+      }
     },
     {
       "source_id": "minsk-ledlife",
       "fixture_dir": "data/fixtures/minsk-ledlife",
       "gold_file": "expected.json",
       "parser_key": "ledlife_origin_html_v1",
-      "scoring": "blocked_empty",
-      "now": "2026-09-05T12:00:00+00:00",
-      "source_files": ["massovye_kataniya-403.html"],
-      "job_config": {}
+      "scoring": "adapter",
+      "now": "2025-04-21T09:00:00+00:00",
+      "source_files": [
+        "massovye_kataniya.html",
+        "massovye_kataniya-403.html",
+        "stoimost_uslug.html"
+      ],
+      "job_config": {
+        "url": "https://ledlife.by/massovye_kataniya/",
+        "prices_url": "https://ledlife.by/stoimost_uslug/",
+        "prices_already_minor": false
+      }
     }
   ]
 }

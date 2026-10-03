@@ -31,6 +31,7 @@ env/
 .env
 .env.local
 .env.*.local
+.local/
 
 # Cursor IDE + Spec Kit — локальные артефакты (slash-команды проекта: .cursor/commands/*.md)
 .cursor/*
