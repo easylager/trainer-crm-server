@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import threading
 import uuid
 
 import pytest
@@ -167,6 +168,63 @@ async def test_og_and_story_images_are_real_pngs(app_use_test_db, db_session) ->
     assert og.status_code == 200 and og.headers["content-type"] == "image/png"
     assert Image.open(io.BytesIO(og.content)).size == (1200, 630)
     assert Image.open(io.BytesIO(story.content)).size == (1080, 1920)
+
+
+@pytest.mark.asyncio
+async def test_place_image_rendering_runs_off_event_loop_thread(monkeypatch) -> None:
+    from src.api.routes import public_place_page
+
+    event_loop_thread_id = threading.get_ident()
+    render_thread_ids = []
+
+    async def resolve(*args, **kwargs):
+        return {"name": "Минск"}, 1
+
+    async def load_view(*args, **kwargs):
+        return {"card": {"city_name": "Минск", "slug": "test-arena"}}
+
+    def render(*args, **kwargs) -> bytes:
+        render_thread_ids.append(threading.get_ident())
+        return b"png"
+
+    monkeypatch.setattr(public_place_page, "_resolve", resolve)
+    monkeypatch.setattr(public_place_page, "load_place_view", load_view)
+    monkeypatch.setattr(public_place_page, "render_place_card", render)
+    response = await public_place_page._image(None, "minsk", "test-arena", None, None, story=False)
+
+    assert response.status_code == 200
+    assert response.body == b"png"
+    assert render_thread_ids
+    assert render_thread_ids[0] != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_selection_image_rendering_runs_off_event_loop_thread(monkeypatch) -> None:
+    from src.api.routes import public_place_page
+    from src.application import place_card_image
+
+    event_loop_thread_id = threading.get_ident()
+    render_thread_ids = []
+
+    async def resolve_city(*args, **kwargs):
+        return {"name": "Минск"}
+
+    async def load_view(*args, **kwargs):
+        return {"places": []}
+
+    def render(*args, **kwargs) -> bytes:
+        render_thread_ids.append(threading.get_ident())
+        return b"png"
+
+    monkeypatch.setattr(public_place_page, "resolve_city_by_ref", resolve_city)
+    monkeypatch.setattr(place_card_image, "render_selection_card", render)
+    monkeypatch.setattr("src.application.selection_page.load_selection_view", load_view)
+    response = await public_place_page._selection_image(None, "minsk", None, None, story=False)
+
+    assert response.status_code == 200
+    assert response.body == b"png"
+    assert render_thread_ids
+    assert render_thread_ids[0] != event_loop_thread_id
 
 
 @pytest.mark.asyncio

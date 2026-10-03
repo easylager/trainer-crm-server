@@ -75,7 +75,8 @@ async def _go(request: Request, session: AsyncSession, source: str | None, city_
         base = (settings.webapp_base_url or "").rstrip("/")
         link = f"{base}/webapp/ice" + (f"?city_id={city_id}" if city_id else "")
         target = "web"
-    await _record(session, source=src, city_id=city_id, target=target, referer=request.headers.get("referer"))
+    if src in settings.catalog_entry_source_keys:
+        await _record(session, source=src, city_id=city_id, target=target, referer=request.headers.get("referer"))
     # 302, а не 301: каждый переход должен дойти до сервера и попасть в учёт.
     return RedirectResponse(url=link, status_code=302, headers={"Cache-Control": "no-store"})
 

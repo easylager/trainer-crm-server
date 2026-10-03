@@ -92,8 +92,13 @@
   }
 
   function setCityLabel() {
-    var el = $('iceCityName');
-    if (el) el.textContent = state.cityName || 'Город';
+    var name = state.cityName || 'Город';
+    /* TASK-147: город живёт в двух местах — у masthead (список) и внутри
+       строки поиска (карта); обновляем обе пилюли по классу. */
+    var els = document.querySelectorAll('.ice-citypill__name');
+    Array.prototype.forEach.call(els, function (el) {
+      el.textContent = name;
+    });
   }
 
   function currentServiceLabel() {
@@ -158,7 +163,8 @@
 
     var sw = $('iceViewSwitch');
     if (sw) {
-      sw.hidden = !allowed;
+      // TASK-147: в режиме карты пилюля скрыта — её роль у шторки.
+      sw.hidden = !allowed || showMapView;
       // aria-pressed отвечает на «карта включена?», а подпись зовёт в другое
       // состояние — иначе кнопка называлась бы тем, что уже видно на экране.
       sw.setAttribute('aria-pressed', showMapView ? 'true' : 'false');
@@ -186,9 +192,25 @@
     state.view = wanted;
     setViewToggle();
     persist();
+    setTelegramSwipes(wanted === 'map');
     if (wanted === 'list') {
       // Возврат в список — наверх: иначе после карты полотно открывается с середины.
       global.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }
+
+  /*
+   * TASK-147: свайп шторки в режиме карты конфликтует со свайпом закрытия
+   * мини-аппа. Отключаем вертикальные свайпы на карте и возвращаем в списке.
+   */
+  function setTelegramSwipes(on) {
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (!tg) return;
+    try {
+      if (on && typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
+      if (!on && typeof tg.enableVerticalSwipes === 'function') tg.enableVerticalSwipes();
+    } catch (e) {
+      /* старый клиент Telegram — свайп остаётся как есть */
     }
   }
 
@@ -215,6 +237,7 @@
         offMapEl: $('iceMapOffMap'),
         stageEl: $('iceMapStage'),
         loaderEl: $('iceMapLoader'),
+        attribEl: $('iceMapAttrib'),
         listUrl: function (extra) {
           extra = extra || {};
           var opts = {
@@ -265,6 +288,14 @@
           if (state.intent === 'coach') return;
           applyArenaPayload(data);
           renderList();
+        },
+        // TASK-147: full-положение шторки = списочный вид вкладки.
+        onSheetFull: function () {
+          setView('list');
+        },
+        // Шапка шторки: «7 мест сегодня вечером …» — метка текущего окна.
+        getWindow: function () {
+          return state.window;
         },
       });
     }
@@ -1459,6 +1490,12 @@
 
     var change = $('iceCityChange');
     if (change) change.addEventListener('click', function () {
+      openCityPicker(true);
+    });
+
+    /* TASK-147: дубль пилюли города внутри строки поиска (режим карты). */
+    var changeMap = $('iceCityChangeMap');
+    if (changeMap) changeMap.addEventListener('click', function () {
       openCityPicker(true);
     });
 

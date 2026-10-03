@@ -136,13 +136,20 @@ describe('clusters (AC-001)', () => {
   });
 });
 
-describe('pin chrome (A label, muted C)', () => {
-  it('labels A-pins with short name and next session time; C pins stay mute', () => {
+describe('pin chrome (TASK-147: пин = время)', () => {
+  it('A/B с сеансом в окне — пилюля с временем; C и outside_window — полая точка', () => {
     const { pinView } = loadModel();
     const a = pinView(rink());
     assert.equal(a.tone, 'a');
     assert.equal(a.muted, false);
-    assert.equal(a.label, 'Чижовка · 11:00');
+    assert.equal(a.kind, 'time');
+    assert.equal(a.time, '11:00');
+    assert.equal(a.shortName, 'Чижовка');
+    assert.equal(a.venue, 'ice');
+    assert.equal(a.selected, false);
+    const b = pinView(rink({ id: 3, tier: 'B', live: { kind: 'session', starts_at_local: '15:00' } }));
+    assert.equal(b.kind, 'time');
+    assert.equal(b.time, '15:00');
     const c = pinView(
       rink({
         id: 2,
@@ -153,6 +160,8 @@ describe('pin chrome (A label, muted C)', () => {
     );
     assert.equal(c.tone, 'c');
     assert.equal(c.muted, true);
+    assert.equal(c.kind, 'dot');
+    assert.equal(c.time, '');
     assert.equal(c.label, '');
   });
 
@@ -162,8 +171,83 @@ describe('pin chrome (A label, muted C)', () => {
     const off = pinView(rink({ live: Object.assign({}, base.live, { outside_window: true }) }));
     assert.equal(off.when, 'off');
     assert.equal(off.muted, true);
-    assert.equal(off.label, 'Чижовка');
+    assert.equal(off.kind, 'dot');
+    assert.equal(off.time, '');
     assert.equal(pinView(base).when, 'in');
+  });
+
+  it('selected флаг пробрасывается', () => {
+    const { pinView } = loadModel();
+    const sel = pinView(rink(), { selected: true });
+    assert.equal(sel.selected, true);
+    const unsel = pinView(rink());
+    assert.equal(unsel.selected, false);
+  });
+});
+
+describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () => {
+  it('clusterSummary считает количество, минимальное время и ярлык', () => {
+    const { clusterSummary } = loadModel();
+    const items = [
+      rink({ id: 1, live: { kind: 'session', starts_at_local: '19:30' } }),
+      rink({ id: 2, live: { kind: 'session', starts_at_local: '18:15' } }),
+      rink({ id: 3, tier: 'C', live: { kind: 'unknown' } }),
+    ];
+    const s = clusterSummary(items);
+    assert.equal(s.count, 3);
+    assert.equal(s.hasHits, true);
+    assert.equal(s.minTime, '18:15');
+    assert.equal(s.label, 'с 18:15');
+  });
+
+  it('clusterSummary без сеансов — «нет сеансов»', () => {
+    const { clusterSummary } = loadModel();
+    const s = clusterSummary([
+      rink({ id: 1, tier: 'C', live: { kind: 'unknown' } }),
+      rink({ id: 2, tier: 'C', live: { kind: 'unknown' } }),
+    ]);
+    assert.equal(s.hasHits, false);
+    assert.equal(s.label, 'нет сеансов');
+  });
+
+  it('railOrder — сначала места с сеансом по времени, потом остальные', () => {
+    const { railOrder } = loadModel();
+    const items = [
+      rink({ id: 1, live: { kind: 'session', starts_at_local: '19:30' } }),
+      rink({ id: 2, tier: 'C', live: { kind: 'unknown' } }),
+      rink({ id: 3, live: { kind: 'session', starts_at_local: '18:15' } }),
+      rink({ id: 4, tier: 'C', live: { kind: 'unknown' } }),
+    ];
+    const ordered = railOrder(items);
+    assert.deepEqual(
+      ordered.map((it) => it.id),
+      [3, 1, 2, 4]
+    );
+  });
+
+  it('sheetSummary — «7 мест сегодня вечером · 11 сеансов · ещё 2 без сеансов»', () => {
+    const { sheetSummary } = loadModel();
+    const items = [];
+    for (let i = 0; i < 7; i++) {
+      items.push(rink({ id: i + 1, live: { kind: 'session', starts_at_local: '19:00' } }));
+    }
+    items.push(rink({ id: 100, venue_type: 'shop', live: { kind: 'unknown' } }));
+    items.push(rink({ id: 101, venue_type: 'shop', live: { kind: 'unknown' } }));
+    const s = sheetSummary(items, { key: 'evening', label: 'сегодня вечером' });
+    assert.match(s, /7 мест/);
+    assert.match(s, /сегодня вечером/);
+    assert.match(s, /7 сеансов/);
+    assert.match(s, /ещё 2 без сеансов/);
+  });
+
+  it('snapFor — ближайшее положение шторки', () => {
+    const { snapFor } = loadModel();
+    const snaps = { peek: 96, half: 222, full: 600 };
+    assert.equal(snapFor(90, snaps), 'peek');
+    assert.equal(snapFor(150, snaps), 'peek'); // 150 ближе к 96, чем к 222
+    assert.equal(snapFor(400, snaps), 'half'); // 400 ближе к 222, чем к 600
+    assert.equal(snapFor(160, snaps), 'half'); // 160 ближе к 222, чем к 96
+    assert.equal(snapFor(500, snaps), 'full'); // 500 ближе к 600, чем к 222
   });
 });
 

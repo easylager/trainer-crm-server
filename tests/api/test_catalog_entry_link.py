@@ -22,7 +22,7 @@ def _client() -> AsyncClient:
 async def test_go_opens_the_catalog_in_telegram_and_counts_the_source(app_use_test_db, db_session, monkeypatch) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
     monkeypatch.setenv("CLIENT_MINI_APP_SHORT_NAME", "app")
-    source = f"flyer-{uuid.uuid4().hex[:6]}"
+    source = "flyer-olimpik"
     async with _client() as client:
         resp = await client.get(f"/go/{source}", headers={"referer": "https://instagram.com/p/1"})
     assert resp.status_code == 302
@@ -59,7 +59,7 @@ async def test_go_with_city_and_without_short_name_lands_on_the_bot_button(
 
 @pytest.mark.asyncio
 async def test_go_never_dead_ends(app_use_test_db, db_session, monkeypatch) -> None:
-    monkeypatch.delenv("CLIENT_BOT_USERNAME", raising=False)
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "")
     async with _client() as client:
         web = await client.get("/go")
         junk = await client.get("/go/%3Cscript%3E")
@@ -69,6 +69,52 @@ async def test_go_never_dead_ends(app_use_test_db, db_session, monkeypatch) -> N
         await db_session.execute(text("SELECT source, target FROM catalog_entry_clicks ORDER BY id DESC LIMIT 1"))
     ).one()
     assert last == ("other", "web")
+
+
+@pytest.mark.asyncio
+async def test_go_records_documented_sources(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "")
+    async with _client() as client:
+        for path in ("/go/insta", "/go/flyer-olimpik", "/go", "/go/%3Cscript%3E"):
+            response = await client.get(path)
+            assert response.status_code == 302
+
+    rows = (
+        await db_session.execute(text("SELECT source FROM catalog_entry_clicks ORDER BY id"))
+    ).scalars().all()
+    assert rows == ["insta", "flyer-olimpik", "direct", "other"]
+
+
+@pytest.mark.asyncio
+async def test_go_redirects_unprovisioned_source_without_recording_it(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
+    async with _client() as client:
+        response = await client.get("/go/unprovisioned-campaign")
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "https://t.me/glide_bot?startapp=catalog"
+    count = (
+        await db_session.execute(
+            text("SELECT count(*) FROM catalog_entry_clicks WHERE source = 'unprovisioned-campaign'")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_go_records_campaign_key_provisioned_in_configuration(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "CATALOG_ENTRY_SOURCE_KEYS",
+        '["insta", "flyer-olimpik", "direct", "other", "test-campaign"]',
+    )
+    async with _client() as client:
+        response = await client.get("/go/test-campaign")
+
+    assert response.status_code == 302
+    source = (
+        await db_session.execute(text("SELECT source FROM catalog_entry_clicks ORDER BY id DESC LIMIT 1"))
+    ).scalar_one()
+    assert source == "test-campaign"
 
 
 @pytest.mark.asyncio

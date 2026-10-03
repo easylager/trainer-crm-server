@@ -62,7 +62,7 @@ _ERROR_LABELS = {
 
 _MONTHS_SHORT_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
-AdminSender = Callable[..., Awaitable[Any]]
+AdminSender = Callable[..., Awaitable[bool | None]]
 
 
 @dataclass(frozen=True)
@@ -248,21 +248,31 @@ def decide_source_alerts(rows: list[SourceHealthRow], *, now: datetime) -> list[
     return alerts
 
 
-def chunk_messages(blocks: list[str], *, limit: int = TELEGRAM_CHUNK_LIMIT) -> list[str]:
-    """Склеить блоки в минимум сообщений, не превышая лимит Telegram."""
-    chunks: list[str] = []
+def _chunk_message_groups(
+    blocks: list[str], *, limit: int = TELEGRAM_CHUNK_LIMIT
+) -> list[tuple[str, list[int]]]:
+    """Сгруппировать блоки по сообщениям, сохранив их исходные индексы."""
+    chunks: list[tuple[str, list[int]]] = []
     current = ""
-    for block in blocks:
+    current_indices: list[int] = []
+    for index, block in enumerate(blocks):
         block = block[:limit]
         candidate = f"{current}\n\n{block}" if current else block
         if len(candidate) > limit and current:
-            chunks.append(current)
+            chunks.append((current, current_indices))
             current = block
+            current_indices = [index]
         else:
             current = candidate
+            current_indices.append(index)
     if current:
-        chunks.append(current)
+        chunks.append((current, current_indices))
     return chunks
+
+
+def chunk_messages(blocks: list[str], *, limit: int = TELEGRAM_CHUNK_LIMIT) -> list[str]:
+    """Склеить блоки в минимум сообщений, не превышая лимит Telegram."""
+    return [message for message, _indices in _chunk_message_groups(blocks, limit=limit)]
 
 
 _ROWS_SQL = """
@@ -356,9 +366,13 @@ async def tick_source_failure_alerts(
         from src.ingestion.alerts import send_ice_health_to_admins
 
         sender = send_ice_health_to_admins
-    for chunk in chunk_messages([a.text for a in alerts]):
-        await sender(chunk, event="ice source alert")
-    await _apply_alert_state(session, alerts, now=now)
+    delivered_alerts: list[SourceAlert] = []
+    for chunk, alert_indices in _chunk_message_groups([a.text for a in alerts]):
+        delivered = await sender(chunk, event="ice source alert")
+        if delivered is not False:
+            delivered_alerts.extend(alerts[index] for index in alert_indices)
+    if delivered_alerts:
+        await _apply_alert_state(session, delivered_alerts, now=now)
     return alerts
 
 

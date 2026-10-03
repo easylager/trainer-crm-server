@@ -25,27 +25,34 @@ ICE_SOURCE_ALERT_INTERVAL_SEC = 120
 
 async def run_ice_ingest_scheduler_loop() -> None:
     """Poll ice_parser_jobs.next_run_at and run due strategies."""
-    from src.infrastructure.db import async_session_factory
+    from src.infrastructure.db.session import async_session_factory, engine
     from src.shared.config import get_settings
+    from src.ingestion.scheduler_lock import run_with_ice_ingest_lock
 
     while True:
         await asyncio.sleep(ICE_INGEST_LOOP_INTERVAL_SEC)
         try:
-            async with async_session_factory() as session:
-                from src.ingestion.publish import SqlAlchemyIceSessionPublisher
+            async def run_tick() -> list:
+                async with async_session_factory() as session:
+                    from src.ingestion.publish import SqlAlchemyIceSessionPublisher
 
-                scheduler = IceIngestScheduler(
-                    store=SqlAlchemyParserJobStore(session),
-                    recorder=SqlAlchemyScrapeRunRecorder(session),
-                    registry=default_registry(),
-                    publisher=SqlAlchemyIceSessionPublisher(session),
-                    by_egress_proxy_url=get_settings().by_egress_proxy_url,
-                    checkpoint=session.commit,
-                )
-                outcomes = await scheduler.run_due(datetime.now(timezone.utc))
-                await session.commit()
-                if outcomes:
-                    logger.info("ice ingest tick recorded %s run(s)", len(outcomes))
+                    scheduler = IceIngestScheduler(
+                        store=SqlAlchemyParserJobStore(session),
+                        recorder=SqlAlchemyScrapeRunRecorder(session),
+                        registry=default_registry(),
+                        publisher=SqlAlchemyIceSessionPublisher(session),
+                        by_egress_proxy_url=get_settings().by_egress_proxy_url,
+                        checkpoint=session.commit,
+                    )
+                    outcomes = await scheduler.run_due(datetime.now(timezone.utc))
+                    await session.commit()
+                    return outcomes
+
+            acquired, outcomes = await run_with_ice_ingest_lock(engine, run_tick)
+            if not acquired:
+                logger.info("ice ingest tick skipped; another runner owns the scheduler lock")
+            elif outcomes:
+                logger.info("ice ingest tick recorded %s run(s)", len(outcomes))
         except asyncio.CancelledError:
             break
         except Exception:

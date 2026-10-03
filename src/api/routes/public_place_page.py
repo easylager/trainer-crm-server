@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
@@ -180,7 +181,7 @@ async def _image(
         base_url=_base(), city_name=str(card.get("city_name") or ""), slug=str(card.get("slug") or "")
     )
     display_url = page.split("://", 1)[-1]
-    png = render_place_card(view, invite=_flag(i), story=story, display_url=display_url)
+    png = await run_in_threadpool(render_place_card, view, invite=_flag(i), story=story, display_url=display_url)
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
@@ -339,7 +340,8 @@ async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, 
     view = await load_selection_view(session, city=city, venue=venue, when=when)
     page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
     view["display_url"] = page.split("://", 1)[-1]
-    return Response(content=render_selection_card(view, story=story), media_type="image/png", headers=_IMAGE_CACHE)
+    png = await run_in_threadpool(render_selection_card, view, story=story)
+    return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
 @router.get("/c/{city_ref}/og.png")

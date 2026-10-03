@@ -225,6 +225,26 @@ def _texts_for(sender: AsyncMock, needle: str) -> list[str]:
     return [c.args[0] for c in sender.await_args_list if needle in c.args[0]]
 
 
+class _FakeAlertStateSession:
+    def __init__(self) -> None:
+        self.alert_state = "ok"
+        self.alert_sent_at = None
+
+    async def execute(self, statement, params) -> None:
+        if "UPDATE ice_parser_jobs" in str(statement):
+            self.alert_state = params["state"]
+            self.alert_sent_at = params["now"]
+
+
+def _mock_source_health_rows(monkeypatch, session: _FakeAlertStateSession) -> None:
+    async def load_rows(_session, *, now):
+        return [_row(alert_state=session.alert_state, alert_sent_at=session.alert_sent_at)]
+
+    from src.ingestion import source_alerts
+
+    monkeypatch.setattr(source_alerts, "load_source_health_rows", load_rows)
+
+
 @pytest.mark.asyncio
 async def test_tick_sends_once_reminds_later_and_reports_recovery(db_session) -> None:
     _arena_id, job_id = await _setup_failing_source(db_session)
@@ -270,6 +290,43 @@ async def test_tick_sends_once_reminds_later_and_reports_recovery(db_session) ->
     assert _texts_for(sender, "Каток Алерт") == []
 
 
+@pytest.mark.asyncio
+async def test_tick_keeps_failed_alert_eligible_for_retry(monkeypatch) -> None:
+    session = _FakeAlertStateSession()
+    _mock_source_health_rows(monkeypatch, session)
+    sender = AsyncMock(return_value=False)
+
+    await tick_source_failure_alerts(session, now=_NOW, sender=sender)
+    await tick_source_failure_alerts(session, now=_NOW + timedelta(minutes=1), sender=sender)
+
+    assert (session.alert_state, session.alert_sent_at) == ("ok", None)
+    assert sender.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_tick_advances_state_for_unconfigured_log_only_sender(monkeypatch, caplog) -> None:
+    session = _FakeAlertStateSession()
+    _mock_source_health_rows(monkeypatch, session)
+    settings = SimpleNamespace(
+        telegram_bot_token_admin=None,
+        admin_telegram_ids=[1],
+        ice_alert_chat_ids=None,
+    )
+
+    async def sender(text: str, *, event: str) -> bool | None:
+        return await send_ice_health_to_admins(
+            text,
+            event=event,
+            settings=settings,
+            bot_factory=lambda _token: _FakeBot(),
+        )
+
+    await tick_source_failure_alerts(session, now=_NOW, sender=sender)
+
+    assert (session.alert_state, session.alert_sent_at) == ("failing", _NOW)
+    assert "log only" in caplog.text
+
+
 # ── Доставка в админ-бот ─────────────────────────────────────────────────
 
 
@@ -307,6 +364,6 @@ async def test_admin_sender_without_bot_only_logs(caplog) -> None:
     settings = SimpleNamespace(telegram_bot_token_admin=None, admin_telegram_ids=[1], ice_alert_chat_ids=None)
     with caplog.at_level(logging.WARNING, logger="src.ingestion.alerts"):
         sent = await send_ice_health_to_admins("🔴 Лёд: тест", event="ice source alert", settings=settings, bot_factory=factory)
-    assert sent is False
+    assert sent is None
     assert factory_calls == []
     assert "🔴 Лёд: тест" in caplog.text

@@ -155,11 +155,12 @@ async def send_ice_health_to_admins(
     event: str,
     settings: Any = None,
     bot_factory: Callable[[str], Any] | None = None,
-) -> bool:
-    """Отправить текст в админ-бот. True — ушло хотя бы в один чат.
+) -> bool | None:
+    """Отправить текст в админ-бот.
 
-    Без токена админ-бота или без получателей — только лог (WARNING с текстом), чтобы
-    алерт не терялся молча. ``settings`` / ``bot_factory`` — для тестов.
+    True — ушло хотя бы в один чат; False — настроенная доставка не удалась;
+    None — без токена или получателей записали только в лог.
+    ``settings`` / ``bot_factory`` — для тестов.
     """
     if bot_factory is None and os.environ.get("PYTEST_CURRENT_TEST"):
         logger.debug("Skipping ice health %s under pytest", event)
@@ -172,7 +173,7 @@ async def send_ice_health_to_admins(
     chat_ids = ice_alert_chat_ids(settings)
     if not token or not chat_ids:
         logger.warning("Admin bot not configured, ice health %s (log only):\n%s", event, text_body)
-        return False
+        return None
     if bot_factory is None:
         from aiogram import Bot
         from aiogram.client.default import DefaultBotProperties

@@ -45,6 +45,11 @@ class _NoJitter:
         return 0.0
 
 
+class _LowestJitter:
+    def uniform(self, a: float, b: float) -> float:
+        return a
+
+
 def _record(status: str, *, at: datetime = _NOW, slots: int = 0, code: str | None = None) -> ScrapeRunRecord:
     return ScrapeRunRecord(
         job_id=1,
@@ -108,6 +113,20 @@ def test_manual_poll_minutes_is_respected_for_polite_sources() -> None:
     assert _poll(RUN_STATUS_OK, config=cfg) == _NOW + timedelta(minutes=240)
     # Ошибка не повторяется чаще, чем сайт разрешил.
     assert _poll(RUN_STATUS_ERROR, streak=1, config=cfg) == _NOW + timedelta(minutes=240)
+
+
+def test_manual_poll_minimum_is_not_reduced_by_lowest_jitter_on_error_retry() -> None:
+    manual_minutes = 240
+    nxt = next_poll_at(
+        job_id=1,
+        config={"poll_minutes": manual_minutes},
+        status=RUN_STATUS_ERROR,
+        state=SourceState(failure_streak=1),
+        now=_NOW,
+        rng=_LowestJitter(),
+    )
+
+    assert nxt >= _NOW + timedelta(minutes=manual_minutes)
 
 
 def test_jitter_stays_within_fifteen_percent() -> None:

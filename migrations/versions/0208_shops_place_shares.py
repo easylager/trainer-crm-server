@@ -15,6 +15,7 @@ Revision ID: 0208_shops_place_shares
 Revises: 0208_certificate_fixed_amount
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "0208_shops_place_shares"
@@ -41,8 +42,18 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Магазины не превращаем в катки молча: откат упадёт на CHECK, пока они есть.
     # Это честнее, чем тихо переписать тип и показать магазин в ленте «где покататься».
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE client_share_events IN ACCESS EXCLUSIVE MODE"))
+    has_place_events = bind.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM client_share_events WHERE kind = 'place')")
+    ).scalar_one()
+    if has_place_events:
+        raise RuntimeError(
+            "Cannot downgrade 0208_shops_place_shares: client_share_events contains "
+            "kind='place' rows; refusing to narrow the check and discard append-only history."
+        )
+
     op.drop_constraint("ck_client_share_events_kind", "client_share_events", type_="check")
-    op.execute("DELETE FROM client_share_events WHERE kind = 'place'")
     op.create_check_constraint("ck_client_share_events_kind", "client_share_events", f"kind IN {_SHARE_KINDS_OLD}")
     op.drop_constraint("ck_arenas_venue_type", "arenas", type_="check")
     op.create_check_constraint("ck_arenas_venue_type", "arenas", f"venue_type IN {_VENUE_TYPES_OLD}")

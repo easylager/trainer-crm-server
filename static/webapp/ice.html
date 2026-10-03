@@ -17,14 +17,14 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610040" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610041" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
   <script src="mini-app-client-shell.js?v=202610027"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
   <script src="ice-tab-model.js?v=202610038"></script>
   <script src="mini-app-share-sheet.js?v=202610027"></script>
-  <script src="ice-map-model.js?v=202610040"></script>
+  <script src="ice-map-model.js?v=202610041"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -67,6 +67,14 @@
         -->
         <button type="button" class="ice-nearest" id="iceNearestBtn" aria-pressed="false" aria-label="Сначала ближайшие" title="Сначала ближайшие">
           <span class="ice-nearest__dot" aria-hidden="true"></span>Рядом
+        </button>
+        <!--
+          TASK-147: дубль пилюли города ВНУТРИ строки поиска — для плавающего верха карты
+          (дизайн: «строка поиска с городом внутри»). В списке скрыта CSS-ом, в карте
+          скрывается hero-top; метки городов обновляет setCityLabel по классу.
+        -->
+        <button type="button" class="ice-citypill ice-citypill--insearch" id="iceCityChangeMap">
+          <span class="ice-citypill__name">Город</span>
         </button>
       </div>
       <div class="ice-chips ice-chips--intent" id="iceIntentChips" role="group" aria-label="Намерение">
@@ -115,9 +123,18 @@
           <span class="ice-map-loader__spinner" aria-hidden="true"></span>
           <span class="ice-map-loader__text">Загружаем карту…</span>
         </div>
-        <button type="button" class="ice-near" id="iceNearBtn">◎ Рядом со мной</button>
+        <!-- TASK-147: кнопка «Где я» — круглая 44px с SVG-иконкой вместо текста. -->
+        <button type="button" class="ice-near" id="iceNearBtn" aria-label="Где я" title="Где я">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="2.4"/>
+            <path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="7.5" stroke-opacity=".45"/>
+          </svg>
+        </button>
       </div>
       <div class="ice-map-sheet" id="iceMapSheet"></div>
+      <!-- TASK-147: копирайт Яндекса — обязательное условие использования их API. -->
+      <p class="ice-map-attrib" id="iceMapAttrib">© Яндекс · <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener">Условия</a></p>
       <p class="ice-map-offmap" id="iceMapOffMap" hidden></p>
     </div>
     <div class="ice-sec" id="iceSearchSec" hidden>
@@ -157,7 +174,7 @@
   </button>
 
   <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-map.js?v=202610040"></script>
-  <script src="ice-tab.js?v=202610039"></script>
+  <script src="ice-map.js?v=202610041"></script>
+  <script src="ice-tab.js?v=202610041"></script>
 </body>
 </html>

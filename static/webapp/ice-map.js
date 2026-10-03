@@ -1,5 +1,9 @@
 /**
  * TASK-054 Ice tab — in-place Yandex Maps (clusters, bbox, near-me, our sheet).
+ * TASK-147: карта на весь экран. Плавающий верх рисует вкладка (ice.html/css);
+ * здесь живут слои карты и шторка: пин = время сеанса, кластер = «N · с HH:MM»,
+ * нижняя шторка peek/half (full = списочный вид через opts.onSheetFull),
+ * карусель синхронна с пинами в обе стороны.
  * Never opens a Yandex org card. OSM/Leaflet are not a fallback.
  */
 (function (global) {
@@ -104,27 +108,22 @@
         '</span>'
       : '';
     return (
-      '<button type="button" class="ice-acard ice-acard--sheet" data-id="' +
-      esc(item.id) +
-      '" data-href="' +
-      esc(href || '') +
-      '"><span class="' +
-      phClass +
-      '"' +
-      thumb +
+      '<button type="button" class="ice-acard ice-acard--sheet' +
+      '" data-id="' + esc(item.id) +
+      '" data-href="' + esc(href || '') +
+      '"><span class="' + phClass + '"' + thumb +
       '></span><span class="ice-acard__body"><span class="ice-acard__name">' +
       esc(item.name) +
-      '<span class="ice-tier ice-tier--' +
-      tone +
-      '">' +
-      esc(tier) +
-      '</span></span><span class="ice-acard__meta">' +
-      esc(meta) +
-      '</span>' +
+      '<span class="ice-tier ice-tier--' + tone + '">' + esc(tier) + '</span></span>' +
+      '<span class="ice-acard__meta">' + esc(meta) + '</span>' +
       liveHtml +
       '</span></button>'
     );
   }
+
+  /* --- Шторка: высоты положений (прототип 2026-10-02) --- */
+  var SHEET_PEEK = 96;
+  var SHEET_HALF = 222;
 
   function mount(opts) {
     opts = opts || {};
@@ -135,6 +134,7 @@
     var offMapEl = opts.offMapEl;
     var stageEl = opts.stageEl;
     var loaderEl = opts.loaderEl;
+    var attribEl = opts.attribEl;
     var listItems = [];
     var mapItems = [];
     var selected = null;
@@ -151,7 +151,16 @@
     var missingKey = false;
     var keyResolved = '';
     var userPlacemark = null;
-    var clusterIds = null; // id мест в открытой карусели кластера
+
+    /* Шторка (TASK-147). full-положения внутри шторки нет: тяга вверх или
+       кнопка «Списком» переключают вкладку в списочный вид (opts.onSheetFull). */
+    var snap = 'half';        // 'peek' | 'half'
+    var railMode = 'all';     // 'all' | 'cluster'
+    var railItems = null;     // места открытой карусели кластера
+    var chrome = null;        // { grab, title, sub, toggle, rail }
+    var railLock = false;     // лок на время программного скролла карусели
+    var railUnlockTimer = null;
+    var railTimer = null;
 
     function getIntent() {
       return opts.getIntent ? opts.getIntent() : 'skate';
@@ -161,15 +170,6 @@
       return opts.getCityId ? opts.getCityId() : null;
     }
 
-    /*
-     * City-wide camera framing (independent of the intent-filtered pin list):
-     * getCityBounds() is the min/max lat/lon over ALL geocoded arenas in the city
-     * (from /api/public/ice/cities, same object the picker already fetches — no
-     * second network call). getCityCenter() (avg lat/lon, same endpoint) is only
-     * the last-resort fallback when even that is unavailable (brand new city).
-     * What renders as pins stays exactly the onMap-filtered list — this only
-     * decides how far the map is allowed to pan/zoom.
-     */
     function getCityBounds() {
       return opts.getCityBounds ? opts.getCityBounds() : null;
     }
@@ -180,6 +180,10 @@
 
     function cameraOpts() {
       return { cityBounds: getCityBounds(), fallbackCenter: getFallbackCenter() };
+    }
+
+    function getWhen() {
+      return opts.getWindow ? opts.getWindow() : null;
     }
 
     function listUrl(extra) {
@@ -198,13 +202,6 @@
       return '';
     }
 
-    /*
-     * TASK-103: лоадер живёт ровно между «начали грузить» и «на сцене что-то есть».
-     * Гасится здесь и в renderEmpty, потому что это два единственных исхода запуска:
-     * либо сцена показана, либо вместо неё пустое состояние. Держать флаг отдельно и
-     * снимать его вручную в каждой ветке start() значило бы однажды забыть ветку и
-     * оставить спиннер поверх готовой карты.
-     */
     function setLoading(on) {
       if (loaderEl) loaderEl.hidden = !on;
     }
@@ -212,8 +209,6 @@
     function showStage(on) {
       if (stageEl) stageEl.hidden = !on;
       if (nearBtn) nearBtn.hidden = !on;
-      // И «карта готова», и «вместо карты пустое состояние» одинаково означают,
-      // что ждать больше нечего. Оба исхода проходят здесь.
       setLoading(false);
     }
 
@@ -225,54 +220,215 @@
       offMapEl.hidden = !note;
     }
 
-    function paintSheet(item, asNearest) {
-      clusterIds = null;
-      selected = item || null;
-      nearestMode = !!asNearest;
+    /* ─── Шторка: каркас собирается один раз и живёт до конца вкладки ───
+       Карусель — единственная динамическая часть: перерисовывается только
+       innerHTML рельсы, поэтому слушатели скролла не умирают при repaint. */
+    function buildChrome() {
+      if (!sheetEl || chrome) return;
+      sheetEl.innerHTML =
+        '<div class="ice-map-sheet__grab">' +
+          '<div class="ice-map-sheet__handle"></div>' +
+          '<div class="ice-map-sheet__head">' +
+            '<div class="ice-map-sheet__titles">' +
+              '<div class="ice-map-sheet__title"></div>' +
+              '<div class="ice-map-sheet__sub"></div>' +
+            '</div>' +
+            '<button type="button" class="ice-map-sheet__toggle">Списком</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ice-map-sheet__body">' +
+          '<div class="ice-map-rail" role="list"></div>' +
+        '</div>';
+      chrome = {
+        grab: sheetEl.querySelector('.ice-map-sheet__grab'),
+        title: sheetEl.querySelector('.ice-map-sheet__title'),
+        sub: sheetEl.querySelector('.ice-map-sheet__sub'),
+        toggle: sheetEl.querySelector('.ice-map-sheet__toggle'),
+        rail: sheetEl.querySelector('.ice-map-rail'),
+      };
+      chrome.toggle.addEventListener('click', function () {
+        if (typeof opts.onSheetFull === 'function') opts.onSheetFull();
+      });
+      bindSheetDrag();
+      bindRail();
+      setSnap(snap);
+    }
+
+    function sheetVisiblePx() {
+      return snap === 'peek' ? SHEET_PEEK : SHEET_HALF;
+    }
+
+    function setSnap(next) {
+      snap = next;
       if (!sheetEl) return;
-      if (!item) {
-        sheetEl.innerHTML = '';
-      } else {
-        var meta = MM.formatSheetMeta(item, { nearest: asNearest });
-        if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
-        sheetEl.innerHTML = sheetHtml(item, meta, arenaHref(item));
+      sheetEl.dataset.snap = snap;
+      sheetEl.style.height = sheetVisiblePx() + 'px';
+      syncChromeBottom();
+    }
+
+    /* FAB «Где я» и копирайт едут вместе со шторкой. */
+    function syncChromeBottom() {
+      var h = sheetVisiblePx();
+      if (nearBtn) nearBtn.style.bottom = (h + 12) + 'px';
+      if (attribEl) attribEl.style.bottom = (h + 8) + 'px';
+    }
+
+    function showSheet(on) {
+      if (!sheetEl) return;
+      buildChrome();
+      sheetEl.hidden = !on;
+    }
+
+    /* ─── Шапка шторки ─── */
+    function renderSummary() {
+      if (!chrome) return;
+      if (railMode === 'cluster' && railItems) {
+        var n = railItems.length;
+        chrome.title.innerHTML =
+          '<b>' + n + ' ' + MM.pluralRu(n, 'место', 'места', 'мест') + '</b> рядом';
+        chrome.sub.textContent = 'Тапните по карте, чтобы вернуться ко всем';
+        return;
       }
-      /* Sheet in-flow changes map stage height — keep Yandex viewport in sync. */
-      if (map && map.container && typeof map.container.fitToViewport === 'function') {
-        try {
-          map.container.fitToViewport();
-        } catch (err) {
-          /* ignore */
-        }
+      var s = MM.sheetSummary(mapItems, getWhen());
+      if (!s) s = 'Места города';
+      var cut = s.indexOf(' · ');
+      if (cut >= 0) {
+        chrome.title.innerHTML = '<b>' + esc(s.slice(0, cut)) + '</b>';
+        chrome.sub.textContent = s.slice(cut + 3);
+      } else {
+        chrome.title.innerHTML = '<b>' + esc(s) + '</b>';
+        chrome.sub.textContent = '';
       }
     }
 
-    /* Кластер под картой — карусель карточек: видно все места кластера, даже те,
-       что зум не развёл (ТЦ и комплексы, где катки в одном здании). */
-    function paintCluster(items) {
-      clusterIds = items.map(function (it) {
-        return it.id;
+    function railCardsHtml(items) {
+      return items
+        .map(function (item) {
+          var meta = MM.formatSheetMeta(item, { nearest: false });
+          if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
+          return sheetHtml(item, meta, arenaHref(item));
+        })
+        .join('');
+    }
+
+    /* Текущий набор карусели: все места карты или подмножество кластера.
+       После перезапроса bbox кластер, который зум развёл, схлопывается сам. */
+    function currentRailSet() {
+      if (railMode === 'cluster' && railItems) {
+        var ids = railItems.map(function (it) {
+          return it.id;
+        });
+        var still = mapItems.filter(function (it) {
+          return ids.indexOf(it.id) >= 0;
+        });
+        if (still.length > 1) return still;
+        if (still.length === 1) railMode = 'all';
+      }
+      railItems = null;
+      railMode = 'all';
+      return MM.splitMapAndList(mapItems).onMap;
+    }
+
+    function renderSheet() {
+      if (!sheetEl) return;
+      buildChrome();
+      var items = MM.railOrder(currentRailSet());
+      chrome.rail.innerHTML = railCardsHtml(items);
+      renderSummary();
+      applyRailSelection();
+      if (selected && items.some(function (it) { return it.id === selected.id; })) {
+        scrollToCard(selected, { instant: true });
+      }
+    }
+
+    /* ─── Выделение: пин ↔ карточка ─── */
+    /* Template-layout 2.1 перестраивает DOM на каждое properties.set —
+       трогаем только плейсмарки, чьё состояние реально поменялось. */
+    function setPinSelection(item) {
+      if (!clusterer) return;
+      var objs = clusterer.getGeoObjects();
+      objs.forEach(function (obj) {
+        var want = !!(item && obj.properties.get('arenaId') === item.id);
+        if (obj.properties.get('sel') !== want) obj.properties.set('sel', want);
       });
+    }
+
+    function applyRailSelection() {
+      if (!chrome || !chrome.rail) return;
+      var selId = selected ? Number(selected.id) : null;
+      Array.prototype.forEach.call(chrome.rail.children, function (card) {
+        card.classList.toggle('is-sel', selId != null && Number(card.getAttribute('data-id')) === selId);
+      });
+    }
+
+    function scrollToCard(item, o) {
+      o = o || {};
+      if (!chrome || !chrome.rail) return;
+      var card = chrome.rail.querySelector('.ice-acard[data-id="' + item.id + '"]');
+      if (!card) return;
+      railLock = true;
+      chrome.rail.scrollTo({
+        left: Math.max(0, card.offsetLeft - 22),
+        behavior: o.instant ? 'auto' : 'smooth',
+      });
+      global.clearTimeout(railUnlockTimer);
+      railUnlockTimer = global.setTimeout(function () {
+        railLock = false;
+      }, o.instant ? 80 : 480);
+    }
+
+    /* Карусель → пин: доводим камеру, если место съехало за плавающий верх
+       или уехало под шторку. На виду — не дёргаем. */
+    function panToItem(item) {
+      if (!map || !stageEl) return;
+      var coords = [Number(item.latitude), Number(item.longitude)];
+      var b = map.getBounds();
+      if (!b) return;
+      var hpx = stageEl.offsetHeight || 1;
+      var topPx = 150;                       // плавающий верх
+      var bottomPx = sheetVisiblePx() + 12;  // шторка
+      var latSpan = b[1][0] - b[0][0];
+      var lonSpan = b[1][1] - b[0][1];
+      var nLat = b[1][0] - latSpan * (topPx / hpx);
+      var sLat = b[0][0] + latSpan * (bottomPx / hpx);
+      var wLon = b[0][1] + lonSpan * 0.08;
+      var eLon = b[1][1] - lonSpan * 0.08;
+      var lat = coords[0];
+      var lon = coords[1];
+      if (lat > sLat && lat < nLat && lon > wLon && lon < eLon) return;
+      map.setCenter(coords, map.getZoom(), { duration: 320 });
+    }
+
+    function select(item, o) {
+      o = o || {};
+      if (!item) return;
+      selected = item;
+      nearestMode = false;
+      setPinSelection(item);
+      if (sheetEl && sheetEl.hidden) showSheet(true);
+      applyRailSelection();
+      if (snap === 'peek') setSnap('half');
+      if (o.fromPin) scrollToCard(item);
+      if (o.pan) panToItem(item);
+    }
+
+    /* ─── Кластер ─── */
+    function openClusterRail(items) {
+      railMode = 'cluster';
+      railItems = items;
       selected = null;
       nearestMode = false;
-      if (!sheetEl) return;
-      sheetEl.innerHTML =
-        '<div class="ice-map-rail" role="list">' +
-        items
-          .map(function (item) {
-            var meta = MM.formatSheetMeta(item, { nearest: false });
-            if (!meta && global.IceTabModel) meta = global.IceTabModel.formatMeta(item);
-            return sheetHtml(item, meta, arenaHref(item));
-          })
-          .join('') +
-        '</div>';
-      if (map && map.container && typeof map.container.fitToViewport === 'function') {
-        try {
-          map.container.fitToViewport();
-        } catch (err) {
-          /* ignore */
-        }
-      }
+      showSheet(true);
+      if (snap === 'peek') setSnap('half');
+      renderSheet();
+    }
+
+    function resetClusterRail() {
+      if (railMode !== 'cluster') return;
+      railMode = 'all';
+      railItems = null;
+      selected = null;
+      renderSheet();
     }
 
     function onClusterClick(ev) {
@@ -288,9 +444,14 @@
       var items = mapItems.filter(function (it) {
         return ids.indexOf(it.id) >= 0;
       });
-      var focus = MM.clusterFocus(points, { maxZoom: map.options.get('maxZoom') });
-      if (focus.mode === 'none') return;
-      paintCluster(items);
+      if (!items.length) return;
+      /* Свой зум по тапу: стандартный вписывает точки без учёта ярлыков (~110px
+         сверху) и шторки (снизу). Поля передаём с текущей высотой шторки. */
+      var focus = MM.clusterFocus(points, {
+        maxZoom: map.options.get('maxZoom'),
+        margin: [150, 70, sheetVisiblePx() + 24, 70],
+      });
+      openClusterRail(items);
       if (focus.mode !== 'zoom') return;
       map
         .setBounds(focus.bounds, { checkZoomRange: true, zoomMargin: focus.margin, duration: 300 })
@@ -299,29 +460,62 @@
         });
     }
 
+    /* ─── Шторка: что показывать по умолчанию ─── */
     function defaultSheet() {
-      /* Зум после тапа по кластеру перезапрашивает объекты — карусель должна это пережить. */
-      if (clusterIds) {
+      if (railMode === 'cluster' && railItems) {
+        var ids = railItems.map(function (it) {
+          return it.id;
+        });
         var still = mapItems.filter(function (it) {
-          return clusterIds.indexOf(it.id) >= 0;
+          return ids.indexOf(it.id) >= 0;
         });
         if (still.length > 1) {
-          paintCluster(still);
+          railItems = still;
+          renderSheet();
           return;
         }
         if (still.length === 1) {
-          paintSheet(still[0], false);
-          return;
+          railMode = 'all';
+          railItems = null;
         }
       }
       if (selected && mapItems.some(function (it) { return it.id === selected.id; })) {
-        paintSheet(selected, nearestMode);
+        showSheet(true);
+        renderSheet();
+        select(selected, {});
         return;
       }
+      selected = null;
       var nearest = MM.pickNearest(mapItems.length ? mapItems : MM.splitMapAndList(listItems).onMap);
-      paintSheet(nearest, !!(nearest && nearest.distance_km != null));
+      if (nearest) {
+        railMode = 'all';
+        railItems = null;
+        showSheet(true);
+        renderSheet();
+        nearestMode = nearest.distance_km != null;
+        select(nearest, {});
+      } else {
+        showSheet(false);
+        selected = null;
+      }
     }
 
+    /* paintSheet(item) = «показать шторку с этим местом»; null = скрыть. */
+    function paintSheet(item, asNearest) {
+      if (!item) {
+        selected = null;
+        showSheet(false);
+        return;
+      }
+      railMode = 'all';
+      railItems = null;
+      showSheet(true);
+      renderSheet();
+      nearestMode = !!asNearest;
+      select(item, {});
+    }
+
+    /* ─── Слои карты ─── */
     function syncObjects() {
       if (!clusterer || !ymaps) return;
       clusterer.removeAll();
@@ -332,18 +526,22 @@
           {
             tone: view.tone,
             label: view.label,
+            shortName: view.shortName,
             muted: view.muted,
             when: view.when,
+            venue: view.venue,
+            kind: view.kind,
+            sel: false,
             arenaId: item.id,
+            item: item,
           },
           {
             iconLayout: PinLayout,
-            iconOffset: [-8, -28],
             iconShape: {
               type: 'Rectangle',
               coordinates: [
-                [-70, -36],
-                [70, 6],
+                [-80, -40],
+                [80, 2],
               ],
             },
             hasBalloon: false,
@@ -353,7 +551,7 @@
         );
         pm.events.add('click', function (ev) {
           if (ev && ev.preventDefault) ev.preventDefault();
-          paintSheet(item, false);
+          select(item, { fromPin: true, pan: true });
         });
         return pm;
       });
@@ -445,13 +643,66 @@
     }
 
     function buildLayouts() {
+      /* Пин собирается в build(): template-engine 2.1 не умеет условные классы,
+         а DOM-управление даёт полный контроль. Перестройка происходит при
+         properties.set — в том числе на выделение. */
       PinLayout = ymaps.templateLayoutFactory.createClass(
-        '<div class="ice-ypin ice-ypin--$[properties.tone] ice-ypin--$[properties.when]">' +
-          '<b class="ice-ypin__label">$[properties.label]</b>' +
-          '<i class="ice-ypin__dot"></i></div>'
+        '<div class="ice-ypin"><span class="ice-ypin__body">' +
+            '<span class="ice-ypin__dot"></span>' +
+            '<span class="ice-ypin__label"></span>' +
+            '<span class="ice-ypin__name"></span>' +
+          '</span><span class="ice-ypin__tail"></span></div>',
+        {
+          build: function () {
+            PinLayout.superclass.build.call(this);
+            var root = this.getParentElement() && this.getParentElement().querySelector('.ice-ypin');
+            if (!root) return;
+            var props = this.getData().properties;
+            root.className =
+              'ice-ypin' +
+              ' ice-ypin--' + String(props.get('tone') || 'c') +
+              ' ice-ypin--' + String(props.get('when') || 'in') +
+              ' ice-ypin--' + String(props.get('venue') || 'ice') +
+              ' ice-ypin--' + String(props.get('kind') || 'dot') +
+              (props.get('sel') ? ' ice-ypin--sel' : '');
+            var label = root.querySelector('.ice-ypin__label');
+            if (label) label.textContent = String(props.get('label') || '');
+            var name = root.querySelector('.ice-ypin__name');
+            if (name) name.textContent = String(props.get('shortName') || '');
+          },
+        }
       );
+      /* Кластер с содержимым: «N · с 18:15» / «нет сеансов». Свойства считают
+         в build() по фактическим geoObjects — как в прототипе. */
       ClusterLayout = ymaps.templateLayoutFactory.createClass(
-        '<div class="ice-ycluster">{{ properties.geoObjects.length }}</div>'
+        '<div class="ice-ycluster">' +
+          '<span class="ice-ycluster__n"></span>' +
+          '<span class="ice-ycluster__t"></span>' +
+        '</div>',
+        {
+          build: function () {
+            ClusterLayout.superclass.build.call(this);
+            var root = this.getParentElement() && this.getParentElement().querySelector('.ice-ycluster');
+            if (!root) return;
+            var data = this.getData();
+            var objs = (data.properties && data.properties.get('geoObjects')) || [];
+            var items = [];
+            objs.forEach(function (o) {
+              var it = o.properties.get('item');
+              if (it) items.push(it);
+            });
+            var s = MM.clusterSummary(items);
+            var n = root.querySelector('.ice-ycluster__n');
+            var t = root.querySelector('.ice-ycluster__t');
+            if (n) n.textContent = String(s.count);
+            if (t) t.textContent = s.label;
+            var sel = objs.some(function (o) {
+              return o.properties.get('sel');
+            });
+            root.classList.toggle('ice-ycluster--sel', sel);
+            root.classList.toggle('ice-ycluster--quiet', !s.hasHits);
+          },
+        }
       );
     }
 
@@ -465,7 +716,7 @@
         {
           center: cam.center,
           zoom: cam.zoom,
-          controls: ['zoomControl'],
+          controls: [],
         },
         {
           yandexMapDisablePoiInteractivity: true,
@@ -476,30 +727,121 @@
           maxZoom: cam.maxZoom,
         }
       );
-      if (map.controls && map.controls.get('zoomControl')) {
-        map.controls.get('zoomControl').options.set({ size: 'small', position: { right: 10, top: 54 } });
-      }
       clusterer = new ymaps.Clusterer({
         minClusterSize: 2,
         gridSize: 64,
-        // Свой зум по тапу (onClusterClick): стандартный не учитывает ярлыки и кнопки.
+        // Свой зум по тапу (onClusterClick): стандартный не учитывает ярлыки и шторку.
         clusterDisableClickZoom: true,
         clusterOpenBalloonOnClick: false,
         hasBalloon: false,
         clusterHasBalloon: false,
         groupByCoordinates: false,
         clusterIconLayout: ClusterLayout,
-        clusterIconOffset: [-19, -19],
-        clusterIconShape: { type: 'Circle', coordinates: [0, 0], radius: 19 },
+        clusterIconShape: {
+          type: 'Rectangle',
+          coordinates: [
+            [-70, -18],
+            [70, 18],
+          ],
+        },
       });
       clusterer.options.set({ hasBalloon: false, clusterOpenBalloonOnClick: false });
       map.geoObjects.add(clusterer);
       clusterer.events.add('click', onClusterClick);
       map.events.add('boundschange', onBoundsChange);
+      // Тап по пустой карте — назад ко всем местам.
+      map.events.add('click', function () {
+        resetClusterRail();
+      });
     }
 
+    /* ─── Взаимодействие шторки ─── */
+    function bindSheetDrag() {
+      if (!sheetEl || sheetEl.__sheetBound) return;
+      sheetEl.__sheetBound = true;
+      var on = false;
+      var y0 = 0;
+      var h0 = 0;
+      var moved = false;
+      var dyMax = 0;
+      sheetEl.addEventListener('pointerdown', function (e) {
+        if (!e.target.closest('.ice-map-sheet__grab')) return;
+        if (e.target.closest('.ice-map-sheet__toggle')) return;
+        on = true;
+        moved = false;
+        dyMax = 0;
+        y0 = e.clientY;
+        h0 = sheetEl.getBoundingClientRect().height || SHEET_HALF;
+        sheetEl.classList.add('ice-map-sheet--drag');
+        try {
+          sheetEl.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* ignore */
+        }
+      });
+      sheetEl.addEventListener('pointermove', function (e) {
+        if (!on) return;
+        var dy = y0 - e.clientY;
+        if (Math.abs(dy) > 5) moved = true;
+        dyMax = Math.max(dyMax, dy);
+        /* Полные пределы не тянут: выше half — это уже «хочу список». */
+        var h = Math.max(64, Math.min(SHEET_HALF, h0 + dy));
+        sheetEl.style.height = h + 'px';
+      });
+      function end() {
+        if (!on) return;
+        on = false;
+        sheetEl.classList.remove('ice-map-sheet--drag');
+        if (!moved) {
+          setSnap(snap === 'peek' ? 'half' : 'peek');
+          return;
+        }
+        if (dyMax > 60 && typeof opts.onSheetFull === 'function') {
+          opts.onSheetFull();
+          return;
+        }
+        setSnap(MM.snapFor(sheetEl.getBoundingClientRect().height, { peek: SHEET_PEEK, half: SHEET_HALF }));
+      }
+      sheetEl.addEventListener('pointerup', end);
+      sheetEl.addEventListener('pointercancel', end);
+    }
+
+    /* Карусель → пин: какая карточка по центру, та и выбрана. */
+    function bindRail() {
+      if (!chrome || !chrome.rail || chrome.rail.__railBound) return;
+      chrome.rail.__railBound = true;
+      chrome.rail.addEventListener('scroll', function () {
+        if (railLock) return;
+        global.clearTimeout(railTimer);
+        railTimer = global.setTimeout(function () {
+          var rail = chrome.rail;
+          var mid = rail.scrollLeft + rail.clientWidth / 2;
+          var best = null;
+          var bestDist = Infinity;
+          Array.prototype.forEach.call(rail.children, function (card) {
+            var m = card.offsetLeft + card.offsetWidth / 2;
+            var d = Math.abs(m - mid);
+            if (d < bestDist) {
+              bestDist = d;
+              best = card;
+            }
+          });
+          if (!best) return;
+          var id = Number(best.getAttribute('data-id'));
+          if (selected && Number(selected.id) === id) return;
+          var source = railMode === 'cluster' && railItems ? railItems : mapItems;
+          var item = source.filter(function (it) {
+            return Number(it.id) === id;
+          })[0];
+          if (item) select(item, { pan: true });
+        }, 140);
+      });
+    }
+
+    /* ─── Запуск ─── */
     function showMissing() {
       showStage(false);
+      showSheet(false);
       renderEmpty(emptyEl, MM.missingKeyState());
     }
 
@@ -545,6 +887,7 @@
         map.container.fitToViewport();
         mapItems = MM.splitMapAndList(listItems).onMap.slice();
         syncObjects();
+        defaultSheet();
         applyCityCamera();
         return Promise.resolve();
       }
@@ -579,7 +922,7 @@
             }
             showStage(false);
             renderEmpty(emptyEl, decision.empty);
-            if (sheetEl) sheetEl.innerHTML = '';
+            showSheet(false);
             return;
           }
           // Единственная по-настоящему долгая ветка: тянем SDK Яндекса по сети.
@@ -595,6 +938,7 @@
             }
             mapItems = MM.splitMapAndList(listItems).onMap.slice();
             syncObjects();
+            defaultSheet();
             fitCity();
           });
         })
@@ -668,20 +1012,20 @@
         sheetOpen: !!selected,
       });
       if (outcome.keepStage) showStage(true);
-      if (outcome.keepSheet && selected) {
-        if (offMapEl) {
-          offMapEl.hidden = false;
-          offMapEl.textContent = outcome.body;
-        }
-        return;
-      }
+      // Заметка живёт в шапке шторки: карта остаётся полезной (AC geo-denied).
       paintGeoNote(outcome);
     }
 
+    /* Заметки (гео-отказ, пустой near) живут в шапке шторки: отдельного
+       «тела под картой» больше нет. */
     function paintGeoNote(state) {
       if (!sheetEl) return;
-      sheetEl.innerHTML =
-        '<div class="ice-empty"><b>' + esc(state.title) + '</b><p>' + esc(state.body) + '</p></div>';
+      buildChrome();
+      showSheet(true);
+      if (chrome.title) chrome.title.innerHTML = '<b>' + esc(state.title) + '</b>';
+      if (chrome.sub) chrome.sub.textContent = state.body || '';
+      chrome.rail.innerHTML = '';
+      setSnap('half');
     }
 
     if (nearBtn && nearMePolicyOk()) {
@@ -754,6 +1098,7 @@
           showStage(true);
           mapItems = MM.splitMapAndList(listItems).onMap.slice();
           syncObjects();
+          defaultSheet();
           applyCityCamera();
         }
         if (!map && started && !missingKey && listItems.length && getIntent() !== 'coach') {

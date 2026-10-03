@@ -1,5 +1,6 @@
 """
 HTTP rate limiting (per client IP) and Content-Length body caps for /api (Epic D).
+The public per-IP bucket also covers the marketing redirect at /go.
 Webhooks are excluded from rate limit; multipart uploads use a larger cap when Content-Length is present.
 """
 from __future__ import annotations
@@ -40,6 +41,8 @@ def rate_limit_bucket_for_path(path: str) -> str:
     """
     Bucket for sliding-window limiter, or 'skip' when no API rate limit applies.
     """
+    if path == "/go" or path.startswith("/go/"):
+        return "public"
     if not path.startswith("/api/"):
         return "skip"
     if path.startswith("/api/webhooks"):
@@ -67,7 +70,7 @@ def _get_limiters() -> dict[str, RateLimiter]:
 
 
 class ApiRateLimitMiddleware(BaseHTTPMiddleware):
-    """Sliding-window limit per IP for /api/* (except /api/webhooks)."""
+    """Sliding-window limit per IP for /api/* and /go (except /api/webhooks)."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method == "OPTIONS":

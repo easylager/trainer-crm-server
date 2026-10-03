@@ -819,6 +819,44 @@ async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, d
 
 
 @pytest.mark.asyncio
+async def test_ice_cities_hide_bare_trainer_arenas_but_keep_imported_places(
+    app_use_test_db, db_session
+) -> None:
+    trainer_city = await _insert_city(db_session, name=f"IceTrainerBare-{uuid.uuid4().hex[:6]}")
+    imported_city = await _insert_city(db_session, name=f"IceImportedBare-{uuid.uuid4().hex[:6]}")
+    trainer_id = await _insert_bare_trainer(db_session)
+    await _insert_arena(
+        db_session,
+        trainer_city,
+        name="Арена тренера без опубликованного фото",
+        latitude=None,
+        longitude=None,
+        has_photo=False,
+        created_by_trainer_id=trainer_id,
+    )
+    await _insert_arena(
+        db_session,
+        imported_city,
+        name="Импортированное место без фото и координат",
+        latitude=None,
+        longitude=None,
+        has_photo=False,
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/ice/cities")
+
+    assert resp.status_code == 200, resp.text
+    by_id = {int(item["id"]): item for item in resp.json()["items"]}
+    assert trainer_city not in by_id
+    assert imported_city in by_id
+    assert by_id[imported_city]["place_count"] == 1
+    assert by_id[imported_city]["map_rink_count"] == 0
+    assert by_id[imported_city]["latitude"] is None
+    assert by_id[imported_city]["bounds"] is None
+
+
+@pytest.mark.asyncio
 async def test_ice_cities_bounds_span_all_geocoded_arenas_regardless_of_sessions(
     app_use_test_db, db_session
 ) -> None:
@@ -880,4 +918,3 @@ async def test_ice_cities_bounds_null_when_no_geocoded_arenas(
     assert coach_cid in by_id
     assert by_id[coach_cid]["map_rink_count"] == 0
     assert by_id[coach_cid]["bounds"] is None
-

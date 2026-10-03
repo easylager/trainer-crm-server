@@ -1,6 +1,6 @@
 """TASK-146: что показываем в каталоге площадок, а что пока нет (решение владельца 2026-10-02).
 
-Скрыть (``arena_profiles.status = 'archived'``, обратимо — вернуть можно ``--show``):
+Скрыть (``arena_profiles.status = 'archived'``, обратимо через явный список ID в ``--show``):
 - 13 «JUSTSKATE», 14 «Финт» — пока не показываем;
 - каток у Дворца спорта на Немиге — работает только зимой, летом не показываем;
 - все площадки ``venue_type = 'gym'`` — залы пока вне каталога.
@@ -15,12 +15,16 @@
 БД — нет: положи файлы в ``arena-8/`` и ``arena-9/`` и запусти скрипт ещё раз.
 
 По умолчанию dry-run. На прод — только ``--apply --i-know-this-is-prod``.
+Восстановление требует проверенный список ID: ``--show`` никогда не повторяет широкие
+селекторы скрытия по названию или типу площадки.
 
 Usage:
   PYTHONPATH=. python scripts/curate_catalog_visibility.py
   PYTHONPATH=. python scripts/curate_catalog_visibility.py --apply
-  PYTHONPATH=. python scripts/curate_catalog_visibility.py --apply --show   # вернуть скрытое
+  PYTHONPATH=. python scripts/curate_catalog_visibility.py --show --show-ids 42
+  PYTHONPATH=. python scripts/curate_catalog_visibility.py --apply --show --show-ids 42  # заменить на проверенные ID
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,9 +89,7 @@ async def _arenas_to_hide(session: AsyncSession) -> dict[int, str]:
 
 async def _set_status(session: AsyncSession, arena_id: int, name: str, status: str, apply: bool) -> None:
     row = (
-        await session.execute(
-            text("SELECT status FROM arena_profiles WHERE arena_id = :id"), {"id": arena_id}
-        )
+        await session.execute(text("SELECT status FROM arena_profiles WHERE arena_id = :id"), {"id": arena_id})
     ).fetchone()
     current = row[0] if row else None
     if current == status:
@@ -109,9 +111,7 @@ async def _upload_photos(session: AsyncSession, apply: bool) -> None:
         files = sorted(p for p in folder.iterdir() if p.suffix.lower() in PHOTO_EXTS)
         if not files:
             continue
-        exists = (
-            await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
-        ).fetchone()
+        exists = (await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})).fetchone()
         if not exists:
             print(f"  [skip] photos {folder.name}: arena_id={arena_id} нет в БД")
             continue
@@ -138,7 +138,9 @@ async def _upload_photos(session: AsyncSession, apply: bool) -> None:
                 )
 
 
-async def run(*, apply: bool, show: bool, i_know_this_is_prod: bool) -> None:
+async def run(*, apply: bool, show: bool, show_ids: tuple[int, ...], i_know_this_is_prod: bool) -> None:
+    if show and not show_ids:
+        raise SystemExit("--show requires an explicit reviewed list: --show-ids ID [ID ...]")
     url = _db_url()
     assert_database_url(url, apply=apply, allow_prod=i_know_this_is_prod)
     if i_know_this_is_prod:
@@ -150,8 +152,21 @@ async def run(*, apply: bool, show: bool, i_know_this_is_prod: bool) -> None:
     async with Session() as session:
         hide_status = ARENA_PROFILE_STATUS_PUBLISHED if show else ARENA_PROFILE_STATUS_ARCHIVED
         print("Скрыть в каталоге:" if not show else "Вернуть в каталог:")
-        for arena_id, name in sorted((await _arenas_to_hide(session)).items()):
-            await _set_status(session, arena_id, name, hide_status, apply)
+        if show:
+            rows = await session.execute(
+                text("SELECT id, name FROM arenas WHERE id = ANY(:ids)"),
+                {"ids": list(show_ids)},
+            )
+            selected = {int(row[0]): str(row[1]) for row in rows.fetchall()}
+            missing = sorted(set(show_ids) - selected.keys())
+            if missing:
+                missing_ids = ", ".join(str(arena_id) for arena_id in missing)
+                raise SystemExit(f"--show-ids contains unknown arena IDs: {missing_ids}")
+            for arena_id in show_ids:
+                await _set_status(session, arena_id, selected[arena_id], hide_status, apply)
+        else:
+            for arena_id, name in sorted((await _arenas_to_hide(session)).items()):
+                await _set_status(session, arena_id, name, hide_status, apply)
         if not show:
             print("Показать:")
             for arena_id in SHOW_IDS:
@@ -175,10 +190,36 @@ async def run(*, apply: bool, show: bool, i_know_this_is_prod: bool) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Записать в БД (по умолчанию dry-run).")
-    parser.add_argument("--show", action="store_true", help="Вернуть скрытые площадки в каталог.")
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Восстановить только площадки из явного списка --show-ids; широкие селекторы не запускаются.",
+    )
+    parser.add_argument(
+        "--show-ids",
+        type=int,
+        nargs="+",
+        metavar="ID",
+        help="Проверенные ID для --show; каждый ID должен существовать в arenas.",
+    )
     add_i_know_this_is_prod_argument(parser)
     args = parser.parse_args()
-    asyncio.run(run(apply=args.apply, show=args.show, i_know_this_is_prod=args.i_know_this_is_prod))
+    if args.show and not args.show_ids:
+        parser.error("--show requires an explicit reviewed list: --show-ids ID [ID ...]")
+    if args.show_ids and not args.show:
+        parser.error("--show-ids can only be used with --show")
+    if args.show_ids and any(arena_id <= 0 for arena_id in args.show_ids):
+        parser.error("--show-ids accepts positive arena IDs only")
+    if args.show_ids and len(set(args.show_ids)) != len(args.show_ids):
+        parser.error("--show-ids must not contain duplicate IDs")
+    asyncio.run(
+        run(
+            apply=args.apply,
+            show=args.show,
+            show_ids=tuple(args.show_ids or ()),
+            i_know_this_is_prod=args.i_know_this_is_prod,
+        )
+    )
 
 
 if __name__ == "__main__":

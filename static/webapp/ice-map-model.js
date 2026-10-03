@@ -370,6 +370,16 @@
     return m ? m[1] : '';
   }
 
+  /*
+   * TASK-147: время СЕАНСА В ВЫБРАННОМ ОКНЕ. Сеанс вне окна не считается
+   * ответом ни для пина, ни для кластера, ни для карусели — иначе «19:30»
+   * под чипом «Завтра» читается как завтрашние 19:30 (урок TASK-146).
+   */
+  function liveTime(item) {
+    if (item && item.live && item.live.outside_window) return '';
+    return sessionTime(item);
+  }
+
   function pinTone(item) {
     var tier = String((item && item.tier) || 'C').toUpperCase();
     if (tier === 'A') return 'a';
@@ -377,25 +387,111 @@
     return 'c';
   }
 
-  function pinView(item) {
+  function pinView(item, opts) {
+    opts = opts || {};
     var tone = pinTone(item);
-    var label = '';
-    // TASK-146: сеанс вне выбранного окна — пин гаснет и не хвастается временем:
-    // «19:30» на карте под чипом «Завтра» читается как завтрашние 19:30.
     var off = !!(item && item.live && item.live.outside_window);
-    if (tone === 'a') {
-      var short = shortArenaName(item && item.name);
-      var time = off ? '' : sessionTime(item);
-      if (short && time) label = short + ' · ' + time;
-      else label = short;
-    }
+    var time = liveTime(item);
+    var shortName = shortArenaName(item && item.name);
+    var venue = String((item && item.venue_type) || 'ice');
+    // TASK-147: пин = время ближайшего сеанса. Tier A/B с сеансом в окне — пилюля
+    // с временем; tier C и outside_window — полая точка без текста.
+    var kind = (tone === 'a' || tone === 'b') && time ? 'time' : 'dot';
     return {
       tone: tone,
       muted: tone === 'c' || off,
       when: off ? 'off' : 'in',
-      label: label,
-      shortName: shortArenaName(item && item.name),
+      kind: kind,
+      time: time,
+      shortName: shortName,
+      venue: venue,
+      selected: !!opts.selected,
+      label: kind === 'time' ? time : '',
     };
+  }
+
+  function clusterSummary(items) {
+    var list = items || [];
+    var hits = 0;
+    var minTime = '';
+    list.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) {
+        hits++;
+        if (!minTime || t < minTime) minTime = t;
+      }
+    });
+    return {
+      count: list.length,
+      hasHits: hits > 0,
+      minTime: minTime,
+      label: minTime ? 'с ' + minTime : hits ? 'места' : 'нет сеансов',
+    };
+  }
+
+  function railOrder(items) {
+    var list = items || [];
+    var hits = [];
+    var rest = [];
+    list.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) hits.push(item);
+      else rest.push(item);
+    });
+    hits.sort(function (a, b) {
+      return liveTime(a).localeCompare(liveTime(b));
+    });
+    return hits.concat(rest);
+  }
+
+  function sheetSummary(items, window) {
+    var list = items || [];
+    var ice = list.filter(function (item) {
+      return String(item.venue_type || 'ice') !== 'shop';
+    });
+    var sessions = 0;
+    ice.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) sessions++;
+    });
+    var rest = list.length - ice.length;
+    var whenLabel = '';
+    if (window && window.label) whenLabel = window.label;
+    else if (window && window.key) {
+      var labels = {
+        now: 'сейчас',
+        evening: 'сегодня вечером',
+        tomorrow: 'завтра',
+        weekend: 'в выходные',
+      };
+      whenLabel = labels[window.key] || '';
+    }
+    var parts = [];
+    if (ice.length) {
+      var word = pluralRu(ice.length, 'место', 'места', 'мест');
+      parts.push(ice.length + ' ' + word + (whenLabel ? ' ' + whenLabel : ''));
+    }
+    if (sessions) {
+      var word = pluralRu(sessions, 'сеанс', 'сеанса', 'сеансов');
+      parts.push(sessions + ' ' + word);
+    }
+    if (rest) {
+      parts.push('ещё ' + rest + ' без сеансов');
+    }
+    return parts.join(' · ');
+  }
+
+  function snapFor(heightPx, snaps) {
+    var best = null;
+    var bestDist = Infinity;
+    Object.keys(snaps || {}).forEach(function (key) {
+      var dist = Math.abs(snaps[key] - heightPx);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = key;
+      }
+    });
+    return best;
   }
 
   function fmtCoord(n) {
@@ -538,8 +634,9 @@
     return {
       mode: 'zoom',
       bounds: [[minLat, minLon], [maxLat, maxLon]],
-      // [top, right, bottom, left]: сверху ярлык пина и «Рядом со мной», справа +/−.
-      margin: [110, 80, 48, 80],
+      // [top, right, bottom, left]: сверху ярлык пина, снизу — шторка (TASK-147
+      // передаёт свою высоту через opts.margin), справа/слева — края экрана.
+      margin: opts.margin || [110, 80, 48, 80],
       maxZoom: isFinite(cap) && cap > 0 ? Math.min(cap, CLUSTER_MAX_ZOOM) : CLUSTER_MAX_ZOOM,
     };
   }
@@ -567,6 +664,11 @@
     clusterArenas: clusterArenas,
     shortArenaName: shortArenaName,
     pinView: pinView,
+    clusterSummary: clusterSummary,
+    railOrder: railOrder,
+    sheetSummary: sheetSummary,
+    snapFor: snapFor,
+    pluralRu: pluralRu,
     boundsToBbox: boundsToBbox,
     normalizeCityBounds: normalizeCityBounds,
     cityCameraFromItems: cityCameraFromItems,

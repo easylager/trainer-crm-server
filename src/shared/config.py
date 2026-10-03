@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     api_rate_limit_upload_window_sec: float = 60.0
     api_rate_limit_default_max_requests: int = 200
     api_rate_limit_default_window_sec: float = 60.0
+    # /go attribution accepts only provisioned campaign slugs; valid but unconfigured links still redirect.
+    catalog_entry_source_keys: list[str] = ["insta", "flyer-olimpik", "direct", "other"]
     # Client self-booking anti-spam (per Telegram user + pending quotas).
     client_booking_rate_max_requests: int = 8
     client_booking_rate_window_sec: float = 600.0

@@ -39,8 +39,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE client_share_events IN ACCESS EXCLUSIVE MODE"))
+    has_selection_events = bind.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM client_share_events WHERE kind = 'selection')")
+    ).scalar_one()
+    if has_selection_events:
+        raise RuntimeError(
+            "Cannot downgrade 0210_catalog_entry_clicks: client_share_events contains "
+            "kind='selection' rows; refusing to narrow the check and discard append-only history."
+        )
+
     op.drop_index("ix_catalog_entry_clicks_source_occurred", table_name="catalog_entry_clicks")
     op.drop_table("catalog_entry_clicks")
     op.drop_constraint("ck_client_share_events_kind", "client_share_events", type_="check")
-    op.execute("DELETE FROM client_share_events WHERE kind = 'selection'")
     op.create_check_constraint("ck_client_share_events_kind", "client_share_events", f"kind IN {_SHARE_KINDS_OLD}")

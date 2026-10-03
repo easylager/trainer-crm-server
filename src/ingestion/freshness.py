@@ -195,6 +195,8 @@ def next_poll_at(
         delay = base_poll_interval(now, config)
     jitter = 1.0 + rnd.uniform(-JITTER_SHARE, JITTER_SHARE)
     candidate = now + delay * jitter
+    if manual is not None:
+        candidate = max(candidate, now + timedelta(minutes=manual))
     if manual is None and status in (RUN_STATUS_OK, RUN_STATUS_EMPTY):
         local_now = now.astimezone(MINSK_TZ)
         if not _is_daytime(local_now):
