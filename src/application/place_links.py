@@ -192,15 +192,21 @@ def public_telegram_cta_url(
     """
     if not is_valid_start_param(start_param):
         return None
-    base = (base_url or "").strip().rstrip("/")
-    if not base.lower().startswith("https://"):
-        return None
     params: dict[str, str] = {"startapp": start_param, "surface": surface}
     if city_id is not None and int(city_id) > 0:
         params["city_id"] = str(int(city_id))
     if arena_id is not None and int(arena_id) > 0:
         params["arena_id"] = str(int(arena_id))
-    return f"{base}/api/public/catalog/open-telegram?{urlencode(params)}"
+    path = f"/api/public/catalog/open-telegram?{urlencode(params)}"
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return path
+    low = base.lower()
+    if low.startswith("https://"):
+        return f"{base}{path}"
+    if low.startswith("http://") and ("localhost" in low or "127.0.0.1" in low):
+        return f"{base}{path}"
+    return None
 
 
 def telegram_open_link(

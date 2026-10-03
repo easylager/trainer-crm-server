@@ -684,6 +684,11 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                            WHERE a.city_id = c.id
                              AND a.is_active AND a.is_confirmed
                              AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
                        ) AS place_count,
                        (
                            SELECT AVG(a.latitude)
