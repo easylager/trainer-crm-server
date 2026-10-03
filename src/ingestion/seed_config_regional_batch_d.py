@@ -13,8 +13,8 @@ PARSER_KEY_SHKLOV_ARENA = "shklov_arena_v1"
 PARSER_KEY_GOMEL_LDS = "gomel_lds_v1"
 
 BOBRUISK_ARENA_CONFIG: dict = {
-    "schedule_url": "https://bobruiskarena.by/raspisanie",
-    "prices_url": "https://www.bobruiskarena.by/service/sport/massovye-kataniya",
+    "schedule_url": "https://bobruiskarena.by/schedule/ice-rink-schedule/",
+    "prices_url": "https://bobruiskarena.by/services/massovye-kataniya/",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "prices_already_minor": True,
@@ -32,6 +32,7 @@ SOLIGORSK_SZK_CONFIG: dict = {
 
 SHKLOV_ARENA_CONFIG: dict = {
     "index_url": "http://sportshklov.by/category/raspisania/",
+    "fallback_index_url": "http://sportshklov.by/",
     "prices_url": "http://sportshklov.by/uslugi/",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",

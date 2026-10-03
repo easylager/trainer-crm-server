@@ -30,7 +30,7 @@ GRODNO_TRINITI_CONFIG: dict = {
 
 GRODNO_NEMAN_CONFIG: dict = {
     "news_index_url": "https://neman.hockey.by/news/sobytie/",
-    "title_contains": "массовых катаний",
+    "title_contains": "массов",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 60,
@@ -59,7 +59,6 @@ LIDA_LDS_CONFIG: dict = {
     "default_duration_minutes": 45,
     "prices_already_minor": True,
     "age_note": "детский до 16 лет",
-    "week_start": "2026-08-31",
     "horizon_days": 7,
     "weekday_schedule": {
         "0": [],
@@ -73,11 +72,10 @@ LIDA_LDS_CONFIG: dict = {
     "requires_by_egress": False,
     "requires_auth": False,
     "notes": (
-        "V1: session times are transcribed from the weekly JPG on prices_url — "
-        "there is no HTML time grid and this parser does not OCR at runtime. "
-        "weekday_schedule/week_start are fixed to the 2026-08-31..09-06 photo; "
-        "a human must update both by hand each Monday when the photo changes. "
-        "Prices are parsed live from the HTML, not hardcoded."
+        "V1: live runs OCR the weekly schedule JPG embedded on prices_url "
+        "(date lines like '3 октября | 17:45; 20:15'). weekday_schedule is a "
+        "fallback when OCR finds nothing; fixture tests pin week_start explicitly. "
+        "Prices are parsed live from the HTML, not from combo amounts on the photo."
     ),
 }
 

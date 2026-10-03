@@ -8,15 +8,15 @@
 
 ## Sources
 
-- schedule: https://bobruiskarena.by/raspisanie
-- prices: https://www.bobruiskarena.by/service/sport/massovye-kataniya
+- schedule: https://bobruiskarena.by/schedule/ice-rink-schedule/ (старый `/raspisanie` → 404 с 2026-09)
+- prices: https://bobruiskarena.by/services/massovye-kataniya/
 - widget/api: нет
 - job.config JSON (черновик):
 
 ```json
 {
-  "schedule_url": "https://bobruiskarena.by/raspisanie",
-  "prices_url": "https://www.bobruiskarena.by/service/sport/massovye-kataniya",
+  "schedule_url": "https://bobruiskarena.by/schedule/ice-rink-schedule/",
+  "prices_url": "https://bobruiskarena.by/services/massovye-kataniya/",
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
   "schedule_lang_selector": ".post__raspisanie .lang_ru",
@@ -29,7 +29,7 @@
 
 ## How to extract (reverse)
 
-1. GET raspisanie. Парсить **только** `.post__raspisanie .lang_ru` (первый русский столбец). Белорусский `.lang_by` — дубль тех же строк, иначе ×2 слота.
+1. GET `schedule/ice-rink-schedule/`. **Legacy** (до relaunch): `.post__raspisanie .lang_ru`. **Текущий** (WP blocks): заголовок дня в отдельном `<p><strong>Суббота 5 сентября</strong></p>`, слоты в следующем `<p>` с `<br>` (только строки с «массовое катание»).
 2. Заголовок дня: `Суббота 5 сентября` / `Воскресенье 13 сентября` (год с `resule_date` / даты прогона; на снимке 2026). **Дыра снимка:** после «Пятница 11 сентября» идёт блок без заголовка, затем «Воскресенье 13» — это **суббота 12**. Если после закрытого дня идёт сетка без header — следующий календарный день.
 3. **Kind filter (жёстко):** строка содержит `массовое катание` (в `<em>` на снимке) → `public_skate`. Drop ДЮСШ/ДШ/Тайфун/МХЛ/корпоратив (ЧПУП «Сапер-Мебель», ЛХК-Гарнизон), «Семейный час 4+» (другой продукт), раскатка/подготовка льда. Дискотека на льду на прайсе — тот же `public_skate` + `session_label=дискотека`, если так подписана строка расписания (на этом снимке таких строк нет).
 4. Times: `19.00-19.45` / `21.15-22.00`. Точка = двоеточие. **Склеенные `<strong>`:** `2` + `1.30-2` + `2.15` → `21.30-22.15` (пн 7 сен, чт 10 сен). Собрать textContent строки до regex `\d{1,2}\.\d{2}\s*-\s*\d{1,2}\.\d{2}`. `end` с страницы.

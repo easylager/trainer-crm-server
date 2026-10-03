@@ -7,10 +7,12 @@ src/ingestion/adapters.py — new file, that module is untouched.
 """
 from __future__ import annotations
 
+import io
 import re
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
@@ -21,7 +23,7 @@ from src.ingestion.seed_config_regional_batch_b import (
     PARSER_KEY_LIDA_LDS,
     PARSER_KEY_NOVOPOLOTSK_LDS,
 )
-from src.ingestion.source_io import fetch_http_text, load_source_json, load_source_text
+from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _MONTHS_GENITIVE = {
@@ -125,15 +127,20 @@ class GrodnoTrinitiParser(IceParser):
 # documented in GRODNO_NEMAN_CONFIG["notes"].
 # ---------------------------------------------------------------------------
 
-_NEMAN_DATE = re.compile(
-    r"(\d{1,2})\s+(" + "|".join(_MONTHS_GENITIVE) + r")\s*,\s*ур\.",
-    re.IGNORECASE,
+_NEMAN_MONTHS = "|".join(_MONTHS_GENITIVE)
+_NEMAN_ARTICLE_DATE = re.compile(
+    rf'<span\s+class="date"[^>]*>.*?(\d{{1,2}})\s+({_NEMAN_MONTHS})\s+(\d{{4}})',
+    re.IGNORECASE | re.S,
 )
-_NEMAN_POST_DATE = re.compile(
-    r"(\d{1,2})\s+(" + "|".join(_MONTHS_GENITIVE) + r")\s+(\d{4})",
-    re.IGNORECASE,
+_NEMAN_SESSION = re.compile(
+    rf"(\d{{1,2}})\s+({_NEMAN_MONTHS})"
+    rf"(?:\s*\([^)]+\))?"
+    rf"(?P<venue>.*?)"
+    rf"Время:\s*"
+    rf"(?P<times>.*?)"
+    rf"(?=\d{{1,2}}\s+(?:{_NEMAN_MONTHS})|Стоимость|$)",
+    re.IGNORECASE | re.S,
 )
-_NEMAN_TIME_LINE = re.compile(r"Время:\s*(.*?)(?:Стоимость|$)", re.IGNORECASE | re.S)
 _NEMAN_ADULT_PRICE = re.compile(r"Стоимость билета\s*-?\s*(\d+(?:[.,]\d+)?)\s*р", re.IGNORECASE)
 _NEMAN_CHILD_PRICE = re.compile(r"Для детей[^-]*-\s*(\d+(?:[.,]\d+)?)\s*р", re.IGNORECASE)
 _NEMAN_RENTAL_PRICE = re.compile(r"Прокат коньков\s*-\s*(\d+(?:[.,]\d+)?)\s*р", re.IGNORECASE)
@@ -141,19 +148,124 @@ _NEMAN_TITLE = re.compile(r"<h1>([^<]*)</h1>", re.IGNORECASE)
 _NEMAN_POST_LINK = re.compile(r'href="(/news/sobytie/news\d+\.html)"[^>]*>([^<]*)<', re.IGNORECASE)
 
 
-def _neman_title_matches(html: str, title_contains: str) -> bool:
+def _neman_title_needle(config: dict[str, Any]) -> str:
+    return str(config.get("title_contains") or "массов").strip().lower()
+
+
+def _neman_title_matches(html: str, needle: str) -> bool:
     match = _NEMAN_TITLE.search(html)
     title = html_unescape_cell(match.group(1)) if match else strip_tags(html)[:200]
-    return title_contains.strip().lower() in title.lower()
+    return needle in title.lower()
 
 
-def _neman_post_year(html: str) -> int | None:
-    match = _NEMAN_POST_DATE.search(strip_tags(html))
-    return int(match.group(3)) if match else None
+def _neman_article_text(html: str) -> str:
+    """Body copy only — exclude index chrome and the <span class=\"date\"> header."""
+    match = _NEMAN_TITLE.search(html)
+    if not match:
+        return strip_tags(html)
+    start = match.end()
+    cost_idx = html.lower().find("стоимость билета", start)
+    chunk = html[start : cost_idx if cost_idx > start else start + 12_000]
+    return strip_tags(chunk)
 
 
-def _neman_latest_post_url(index_html: str, base_url: str, title_contains: str) -> str | None:
-    needle = title_contains.strip().lower()
+def _neman_publication_date(html: str) -> date | None:
+    match = _NEMAN_ARTICLE_DATE.search(html)
+    if not match:
+        return None
+    month = _MONTHS_GENITIVE.get(match.group(2).lower())
+    if not month:
+        return None
+    try:
+        return date(int(match.group(3)), month, int(match.group(1)))
+    except ValueError:
+        return None
+
+
+def _neman_session_year(pub: date, session_month: int, session_day: int) -> int:
+    try:
+        candidate = date(pub.year, session_month, session_day)
+    except ValueError:
+        return pub.year
+    if candidate < pub - timedelta(days=14):
+        return pub.year + 1
+    return pub.year
+
+
+def _neman_session_label(venue: str, default: str) -> str:
+    lowered = venue.lower()
+    if "пышк" in lowered or "ур." in lowered:
+        return "лёд Пышки"
+    if "коммуналь" in lowered:
+        return "лед Арена"
+    return default
+
+
+def _neman_parse_time_pairs(times_text: str, duration: int) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for match in re.finditer(
+        r"(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})",
+        times_text,
+    ):
+        pairs.append(
+            (
+                _fmt(int(match.group(1)), int(match.group(2))),
+                _fmt(int(match.group(3)), int(match.group(4))),
+            )
+        )
+    if pairs:
+        return pairs
+    starts = sorted({f"{int(h):02d}:{m}" for h, m in _HHMM.findall(times_text)})
+    return [(start, _end_time(start, duration)) for start in starts]
+
+
+def _neman_slots_from_html(html: str, config: dict[str, Any]) -> list[ExtractedSlot]:
+    needle = _neman_title_needle(config)
+    if not _neman_title_matches(html, needle):
+        return []
+
+    pub = _neman_publication_date(html) or date.today()
+    duration = int(config.get("default_duration_minutes") or 60)
+    default_label = str(config.get("session_label") or "лёд Пышки")
+    text = _neman_article_text(html)
+    prices_text = strip_tags(html)
+
+    adult_match = _NEMAN_ADULT_PRICE.search(prices_text)
+    child_match = _NEMAN_CHILD_PRICE.search(prices_text)
+    rental_match = _NEMAN_RENTAL_PRICE.search(prices_text)
+    adult = parse_price_to_minor(adult_match.group(1), already_minor=False) if adult_match else None
+    child = parse_price_to_minor(child_match.group(1), already_minor=False) if child_match else None
+    rental = parse_price_to_minor(rental_match.group(1), already_minor=False) if rental_match else None
+
+    slots: list[ExtractedSlot] = []
+    for match in _NEMAN_SESSION.finditer(text):
+        month = _MONTHS_GENITIVE.get(match.group(2).lower())
+        if not month:
+            continue
+        day_num = int(match.group(1))
+        year = _neman_session_year(pub, month, day_num)
+        try:
+            local_date = date(year, month, day_num)
+        except ValueError:
+            continue
+        label = _neman_session_label(match.group("venue"), default_label)
+        for start, end in _neman_parse_time_pairs(match.group("times"), duration):
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=end,
+                    kind_raw="public_skate",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=rental,
+                    session_label=label,
+                )
+            )
+    return slots
+
+
+def _neman_latest_post_url(index_html: str, base_url: str, needle: str) -> str | None:
     for match in _NEMAN_POST_LINK.finditer(index_html):
         href, title = match.group(1), html_unescape_cell(match.group(2))
         if needle in title.lower():
@@ -166,54 +278,19 @@ class GrodnoNemanParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         config = job.config or {}
-        title_contains = str(config.get("title_contains") or "массов")
+        needle = _neman_title_needle(config)
+        fixture_name = str(config.get("fixture_post_filename") or "news446875.html")
         if config.get("fixture_dir"):
-            html = await load_source_text(job, filename="news446875.html", url_keys=("news_url", "url"))
+            html = await load_source_text(job, filename=fixture_name, url_keys=("news_url", "url"))
         else:
             index_url = str(config["news_index_url"])
             index_html = await fetch_http_text(index_url)
-            post_url = _neman_latest_post_url(index_html, index_url, title_contains)
+            post_url = _neman_latest_post_url(index_html, index_url, needle)
             if not post_url:
                 return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=index_html, slots=[])
             html = await fetch_http_text(post_url)
 
-        if not _neman_title_matches(html, title_contains):
-            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=[])
-
-        year = _neman_post_year(html) or date.today().year
-        duration = int(config.get("default_duration_minutes") or 60)
-        session_label = str(config.get("session_label") or "лёд Пышки")
-        text = strip_tags(html)
-
-        date_match = _NEMAN_DATE.search(text)
-        time_line = _NEMAN_TIME_LINE.search(text)
-        adult_match = _NEMAN_ADULT_PRICE.search(text)
-        child_match = _NEMAN_CHILD_PRICE.search(text)
-        rental_match = _NEMAN_RENTAL_PRICE.search(text)
-
-        slots: list[ExtractedSlot] = []
-        if date_match and time_line:
-            month = _MONTHS_GENITIVE[date_match.group(2).lower()]
-            local_date = date(year, month, int(date_match.group(1))).isoformat()
-            adult = parse_price_to_minor(adult_match.group(1), already_minor=False) if adult_match else None
-            child = parse_price_to_minor(child_match.group(1), already_minor=False) if child_match else None
-            rental = parse_price_to_minor(rental_match.group(1), already_minor=False) if rental_match else None
-            starts = sorted({f"{h}:{m}" for h, m in _HHMM.findall(time_line.group(1))})
-            for start in starts:
-                hour, minute = (int(part) for part in start.split(":"))
-                start_fmt = _fmt(hour, minute)
-                slots.append(
-                    ExtractedSlot(
-                        local_date=local_date,
-                        starts_at_local=start_fmt,
-                        ends_at_local=_end_time(start_fmt, duration),
-                        kind_raw="public_skate",
-                        price_adult=adult,
-                        price_child=child,
-                        price_rental=rental,
-                        session_label=session_label,
-                    )
-                )
+        slots = _neman_slots_from_html(html, config)
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
 
 
@@ -223,6 +300,11 @@ class GrodnoNemanParser(IceParser):
 # ---------------------------------------------------------------------------
 
 _LIDA_AMOUNT_RUB = re.compile(r"(\d+(?:[.,]\d+)?)\s*рубл", re.IGNORECASE)
+_LIDA_IMG_SRC = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']', re.IGNORECASE)
+_LIDA_OCR_DATE_LINE = re.compile(
+    rf"(\d{{1,2}})\s+({_NEMAN_MONTHS})\s*[\]|｜}}\s]*\s*([\d:;,\s]+)",
+    re.IGNORECASE,
+)
 _LIDA_WEEKDAY_SCHEDULE: dict[int, list[str]] = {
     0: [],
     1: ["21:15"],
@@ -259,27 +341,137 @@ def _lida_prices(html: str) -> dict[str, int | None]:
     return result
 
 
+def _lida_monday_on_or_before(day: date) -> date:
+    return day - timedelta(days=day.weekday())
+
+
+def _lida_infer_year(month: int, ref: date) -> int:
+    if month < ref.month - 2:
+        return ref.year + 1
+    return ref.year
+
+
+def _lida_image_urls(html: str, base_url: str) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for match in _LIDA_IMG_SRC.finditer(html):
+        src = match.group(1).strip()
+        lowered = src.lower()
+        if any(token in lowered for token in ("logo", "bpro.jpg", "ico/")):
+            continue
+        if not lowered.endswith((".jpg", ".jpeg", ".png")):
+            continue
+        url = urljoin(base_url, src)
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append(url)
+    return out
+
+
+def _lida_ocr_schedule(image_bytes: bytes) -> list[tuple[date, str]]:
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return []
+
+    img = Image.open(io.BytesIO(image_bytes))
+    text = pytesseract.image_to_string(img, lang="rus", config="--psm 6")
+    ref = date.today()
+    slots: list[tuple[date, str]] = []
+    for match in _LIDA_OCR_DATE_LINE.finditer(text):
+        month = _MONTHS_GENITIVE.get(match.group(2).lower())
+        if not month:
+            continue
+        day_num = int(match.group(1))
+        year = _lida_infer_year(month, ref)
+        try:
+            local_date = date(year, month, day_num)
+        except ValueError:
+            continue
+        for hour, minute in _HHMM.findall(match.group(3)):
+            slots.append((local_date, _fmt(int(hour), int(minute))))
+    return slots
+
+
+async def _lida_load_image_bytes(job: ParserJob, url: str, basename: str) -> bytes:
+    fixture_dir = job.config.get("fixture_dir")
+    if fixture_dir:
+        path = Path(str(fixture_dir)) / basename
+        if path.is_file():
+            return path.read_bytes()
+    return await fetch_http_bytes(url)
+
+
+def _lida_slots_from_weekday_config(
+    job: ParserJob,
+    *,
+    prices: dict[str, int | None],
+    duration: int,
+    age_note: str,
+) -> list[ExtractedSlot]:
+    week_start_raw = job.config.get("week_start")
+    if week_start_raw:
+        week_start = date.fromisoformat(str(week_start_raw))
+    else:
+        week_start = _lida_monday_on_or_before(date.today())
+    horizon = int(job.config.get("horizon_days") or 7)
+    raw_schedule = job.config.get("weekday_schedule")
+    schedule: dict[int, list[str]] = (
+        {int(k): list(v) for k, v in raw_schedule.items()} if raw_schedule else _LIDA_WEEKDAY_SCHEDULE
+    )
+    adult, child, rental = prices["adult"], prices["child"], prices["rental"]
+    slots: list[ExtractedSlot] = []
+    for offset in range(horizon):
+        local_date = week_start + timedelta(days=offset)
+        for start in schedule.get(local_date.weekday(), []):
+            slots.append(
+                ExtractedSlot(
+                    local_date=local_date.isoformat(),
+                    starts_at_local=start,
+                    ends_at_local=_end_time(start, duration),
+                    kind_raw="public_skate",
+                    price_adult=adult,
+                    price_child=child,
+                    price_rental=rental,
+                    age_note=age_note,
+                )
+            )
+    return slots
+
+
 class LidaLdsParser(IceParser):
     parser_key = PARSER_KEY_LIDA_LDS
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="massovoe-katanie.html", url_keys=("prices_url", "url"))
         duration = int(job.config.get("default_duration_minutes") or 45)
-        week_start = date.fromisoformat(str(job.config.get("week_start") or date.today().isoformat()))
-        horizon = int(job.config.get("horizon_days") or 7)
-        raw_schedule = job.config.get("weekday_schedule")
-        schedule: dict[int, list[str]] = (
-            {int(k): list(v) for k, v in raw_schedule.items()} if raw_schedule else _LIDA_WEEKDAY_SCHEDULE
-        )
         age_note = str(job.config.get("age_note") or "детский до 16 лет")
-
         prices = _lida_prices(html)
-        adult, child, rental = prices["adult"], prices["child"], prices["rental"]
+
+        if job.config.get("fixture_dir") and job.config.get("week_start"):
+            slots = _lida_slots_from_weekday_config(
+                job, prices=prices, duration=duration, age_note=age_note
+            )
+            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+
+        base_url = str(job.config.get("prices_url") or "https://hc-lida.by/")
+        best: list[tuple[date, str]] = []
+        for url in _lida_image_urls(html, base_url):
+            basename = urlparse(url).path.rsplit("/", 1)[-1]
+            try:
+                image_bytes = await _lida_load_image_bytes(job, url, basename)
+                parsed = _lida_ocr_schedule(image_bytes)
+            except Exception:
+                continue
+            if len(parsed) > len(best):
+                best = parsed
 
         slots: list[ExtractedSlot] = []
-        for offset in range(horizon):
-            local_date = week_start + timedelta(days=offset)
-            for start in schedule.get(local_date.weekday(), []):
+        if best:
+            adult, child, rental = prices["adult"], prices["child"], prices["rental"]
+            for local_date, start in sorted(set(best)):
                 slots.append(
                     ExtractedSlot(
                         local_date=local_date.isoformat(),
@@ -292,6 +484,10 @@ class LidaLdsParser(IceParser):
                         age_note=age_note,
                     )
                 )
+        else:
+            slots = _lida_slots_from_weekday_config(
+                job, prices=prices, duration=duration, age_note=age_note
+            )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
 
 

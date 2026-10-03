@@ -22,7 +22,7 @@
 ```json
 {
   "news_index_url": "https://neman.hockey.by/news/sobytie/",
-  "title_contains": "массовых катаний",
+  "title_contains": "массов",
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
   "default_duration_minutes": 60,
