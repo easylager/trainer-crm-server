@@ -53,6 +53,7 @@ from src.shared.venue_types import (
     venue_card_cta,
     venue_site_label,
     venue_type_chip,
+    venue_type_icon,
     venue_type_noun,
 )
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -422,6 +423,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         # «Открыть карточку катка» на зале — ровно то, что мы и чиним.
         "venue_type": venue_type,
         "venue_chip": venue_type_chip(venue_type),
+        # TASK-148: иконка типа — плашка бесфотошной карточки. Клиент словаря
+        # типов не держит (см. src/shared/venue_types.py), иконку шлём готовой.
+        "venue_icon": venue_type_icon(venue_type),
         "venue_cta": venue_card_cta(venue_type),
         "tier": item["tier"],
         "thumb": thumb,

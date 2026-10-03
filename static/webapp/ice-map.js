@@ -95,10 +95,19 @@
   function sheetHtml(item, meta, href) {
     var tone = (global.IceTabModel && global.IceTabModel.liveTone(item)) || MM.pinView(item).tone;
     var tier = String(item.tier || 'C').toUpperCase();
+    var venueType = String((item && item.venue_type) || 'ice');
     var thumb = item.thumb
       ? ' style="background-image:url(\'' + esc(item.thumb).replace(/'/g, '%27') + '\')"'
       : '';
     var phClass = 'ice-acard__ph' + (item.thumb ? '' : ' ice-acard__ph--empty');
+    /* TASK-148 (AC-2): нет фото — нет фото-блока и нет серой заглушки.
+       Плашка типа места: иконка приезжает с сервером (venue_icon), фолбэк —
+       первая буква имени. */
+    var phInner = item.thumb
+      ? ''
+      : '<span class="ice-acard__icon" aria-hidden="true">' +
+        esc(item.venue_icon || String(item.name || '').charAt(0).toUpperCase() || '?') +
+        '</span>';
     var live = liveText(item);
     var liveHtml = live
       ? '<span class="ice-live ice-live--' +
@@ -108,11 +117,11 @@
         '</span>'
       : '';
     return (
-      '<button type="button" class="ice-acard ice-acard--sheet' +
+      '<button type="button" class="ice-acard ice-acard--sheet ice-acard--type-' + esc(venueType) +
       '" data-id="' + esc(item.id) +
       '" data-href="' + esc(href || '') +
       '"><span class="' + phClass + '"' + thumb +
-      '></span><span class="ice-acard__body"><span class="ice-acard__name">' +
+      '>' + phInner + '</span><span class="ice-acard__body"><span class="ice-acard__name">' +
       esc(item.name) +
       '<span class="ice-tier ice-tier--' + tone + '">' + esc(tier) + '</span></span>' +
       '<span class="ice-acard__meta">' + esc(meta) + '</span>' +

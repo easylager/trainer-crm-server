@@ -371,17 +371,20 @@ body.ice-view-map .ice-citypill--insearch {
 }
 
 /*
- * AC-006 и Q-001: каток без кадра. Плоский прямоугольник читался как ошибка
- * загрузки; здесь это осознанная плашка — фактура льда под углом и монограмма.
+ * TASK-148 (AC-2): каток без кадра. Плоский серый прямоугольник читался как
+ * ошибка загрузки и запрещён: бесфотошная карточка — это осознанная плашка
+ * цвета типа места с иконкой типа. Фолбэк-монограмма остаётся на случай ответа
+ * без venue_icon, но не серой: по цветной плашке читается белым.
  */
 .ice-board__photo--empty {
-  background-image: repeating-linear-gradient(
-      115deg,
-      transparent 0 22px,
-      rgba(127, 127, 127, 0.06) 22px 24px
-    ),
-    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  background: var(--app-venue-ice);
 }
+.ice-board--type-ice .ice-board__photo--empty,
+.ice-board--type-outdoor .ice-board__photo--empty { background: var(--app-venue-ice); }
+.ice-board--type-gym .ice-board__photo--empty,
+.ice-board--type-choreo .ice-board__photo--empty { background: var(--app-venue-gym); }
+.ice-board--type-shop .ice-board__photo--empty { background: var(--app-venue-shop); }
+.ice-board--type-pool .ice-board__photo--empty { background: var(--app-venue-pool); }
 
 .ice-board__initial {
   position: absolute;
@@ -391,8 +394,7 @@ body.ice-view-map .ice-citypill--insearch {
   justify-content: center;
   font-size: var(--app-text-display);
   font-weight: var(--app-weight-bold);
-  color: var(--glide-hint);
-  opacity: 0.55;
+  color: var(--app-on-media);
   letter-spacing: -0.02em;
 }
 
@@ -560,6 +562,10 @@ body.ice-view-map .ice-citypill--insearch {
 /*
  * AC-006 / F-5: раньше это была плоская заливка — на скрине списка тренеров
  * получался ряд мёртвых прямоугольников. Теперь плашка говорит, чья она.
+ *
+ * TASK-148 (AC-2): для мест (карусель шторки карты) бесфотошная плашка — цвет
+ * типа места с иконкой типа; серых заглушек нет. Правило заскоплено на
+ * .ice-acard--type-* — карточки тренеров (без класса типа) не меняются.
  */
 .ice-acard__ph--empty {
   background: repeating-linear-gradient(
@@ -571,6 +577,31 @@ body.ice-view-map .ice-citypill--insearch {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.ice-acard--type-ice .ice-acard__ph--empty,
+.ice-acard--type-outdoor .ice-acard__ph--empty {
+  background: var(--app-venue-ice);
+  border-color: transparent;
+}
+.ice-acard--type-gym .ice-acard__ph--empty,
+.ice-acard--type-choreo .ice-acard__ph--empty {
+  background: var(--app-venue-gym);
+  border-color: transparent;
+}
+.ice-acard--type-shop .ice-acard__ph--empty {
+  background: var(--app-venue-shop);
+  border-color: transparent;
+}
+.ice-acard--type-pool .ice-acard__ph--empty {
+  background: var(--app-venue-pool);
+  border-color: transparent;
+}
+
+.ice-acard__icon {
+  font-size: var(--app-icon-lg);
+  line-height: 1;
+  color: var(--app-on-media);
 }
 
 .ice-acard__mono {

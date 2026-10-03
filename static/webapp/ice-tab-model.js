@@ -66,20 +66,30 @@
   /**
    * Чипы типов площадок из фасетов ответа. Фасеты считаются ДО фильтра, поэтому
    * выбранный чип остаётся в списке — иначе из фильтра некуда было бы выйти.
+   *
+   * TASK-148 (AC-1): чип рендерится только при данных. Фасет со счётчиком 0 (или
+   * отрицательным — мусор из ответа) не попадает в чипы, а если живых категорий
+   * не осталось — ленты нет вовсе. Сервер и так не шлёт пустые фасеты
+   * (arena_public_use_cases._venue_type_facets), этот фильтр — защита клиента.
    */
   function venueChipsView(facets, selected) {
     facets = facets || [];
     selected = selected || [];
-    if (facets.length < 2) return [];
-    var out = [{ key: '', label: 'Все', active: selected.length === 0 }];
+    var live = [];
     for (var i = 0; i < facets.length; i++) {
       var f = facets[i] || {};
-      var key = String(f.key || '');
+      if (Number(f.count) > 0) live.push(f);
+    }
+    if (live.length < 2) return [];
+    var out = [{ key: '', label: 'Все', active: selected.length === 0 }];
+    for (var j = 0; j < live.length; j++) {
+      var f2 = live[j];
+      var key = String(f2.key || '');
       if (!key) continue;
       out.push({
         key: key,
-        label: String(f.chip || key),
-        count: Number(f.count) || 0,
+        label: String(f2.chip || key),
+        count: Number(f2.count) || 0,
         active: selected.indexOf(key) >= 0,
       });
     }
@@ -769,6 +779,9 @@
       href: arenaHref(item),
       photo: item.card || item.thumb || '',
       initial: initialOf(name),
+      // TASK-148: иконка типа с сервера — содержимое бесфотошной плашки.
+      // Фолбэк на монограмму, если ответ старого API без venue_icon.
+      venueIcon: String(item.venue_icon || ''),
       isSession: isSession,
       day: isSession ? sessionDayLabel(live, now) : '',
       time: isSession ? String(live.starts_at_local || '').slice(0, 5) : '',

@@ -256,6 +256,34 @@ async def test_ice_list_city_bbox_near_keeps_arena_without_coords(
 
 
 @pytest.mark.asyncio
+async def test_ice_list_carries_venue_icon_for_nophoto_plate(
+    app_use_test_db, db_session
+) -> None:
+    """TASK-148 (AC-2): бесфотошную плашку клиент рисует иконкой типа, и иконку
+    шлёт сервер — клиент собственного словаря типов не держит."""
+    cid = await _insert_city(db_session, name=f"IceIcon-{uuid.uuid4().hex[:6]}")
+    gym = await _insert_arena(db_session, cid, name="Зал без фото", has_photo=False)
+    await db_session.execute(
+        text("UPDATE arenas SET venue_type = 'gym' WHERE id = :id"), {"id": gym}
+    )
+    ice = await _insert_arena(db_session, cid, name="Каток без фото", has_photo=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/api/public/ice/arenas",
+            params={"city_id": cid, "intent": "coach", "limit": 50},
+        )
+    assert resp.status_code == 200, resp.text
+    by_id = {it["id"]: it for it in resp.json()["items"]}
+    assert gym in by_id and ice in by_id, "импортированный каталог без фото остаётся в выдаче"
+    assert by_id[gym]["venue_type"] == "gym"
+    assert by_id[gym]["venue_icon"] == "🏋️"
+    assert by_id[gym]["venue_chip"] == "Зал"
+    assert by_id[gym]["thumb"] is None and by_id[gym]["card"] is None
+    assert by_id[ice]["venue_icon"] == "❄️"
+    assert by_id[ice]["venue_chip"] == "Лёд"
+
+
+@pytest.mark.asyncio
 async def test_tier_is_computed_on_read_without_data_tier_column(
     app_use_test_db, db_session
 ) -> None:
