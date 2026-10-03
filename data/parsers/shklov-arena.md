@@ -20,6 +20,7 @@
 ```json
 {
   "index_url": "http://sportshklov.by/category/raspisania/",
+  "fallback_index_url": "http://sportshklov.by/",
   "prices_url": "http://sportshklov.by/uslugi/",
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
@@ -32,7 +33,7 @@
 
 ## How to extract (reverse)
 
-1. GET рубрику `/category/raspisania/` по **http**. Взять свежий пост с «массового катания» в title (дата в permalink). Не брать shklovinfo 2017.
+1. GET рубрику `/category/raspisania/` по **http**; если 404/пусто — `fallback_index_url` (главная). Взять свежий пост с «массового катания» в title. Нет поста → прогон `empty` (weekly). Не брать shklovinfo 2017.
 2. В теле поста `<img>` недели (не favicon/баннеры). Скачать JPG. **OCR**. Заголовок фото «РАСПИСАНИЕ СЕАНСОВ МАССОВОГО КАТАНИЯ».
 3. Kind: вся сетка на фото = МК → `public_skate`. Хоккей/школа — другие URL, drop.
 4. Times: колонка дня `01 сентября (вторник)` + интервалы `13.30-14.15`. Нормализовать точку → `:`. Конец на фото есть — не подставлять 45, если OCR дал оба края. Год из title поста / имени файла.

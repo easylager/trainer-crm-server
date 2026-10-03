@@ -99,7 +99,48 @@ def _bobruisk_lang_ru_fragment(html: str) -> str:
     return html[start:end] if end > start else html[start:]
 
 
+def _bobruisk_is_legacy_schedule(html: str) -> bool:
+    return "post__raspisanie" in html or 'class="col-lg-8 col-md-8 lang_ru"' in html
+
+
+_DAY_HEADER = re.compile(
+    r"^(?:Понедельник|Вторник|Среда|Четверг|Пятница|Суббота|Воскресенье)\s+"
+    r"(\d{1,2})\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)",
+    re.I,
+)
+
+
+def _bobruisk_schedule_slots_modern(html: str, *, year: int) -> list[tuple[date, str, str]]:
+    """WordPress block layout (2026 site relaunch): day header in its own <p>, slots in the next."""
+    results: list[tuple[date, str, str]] = []
+    current_date: date | None = None
+    for match in _P.finditer(html):
+        raw = match.group(1)
+        header_text = _detag_join(raw)
+        if not header_text:
+            continue
+        header = _DAY_HEADER.match(header_text)
+        if header:
+            month = _MONTHS[header.group(2).lower()]
+            current_date = date(year, month, int(header.group(1)))
+            continue
+        if current_date is None:
+            continue
+        for line in _detag_lines(raw):
+            if "массовое катание" not in line.lower():
+                continue
+            tm = _TIME_RANGE_DOT.search(line)
+            if not tm:
+                continue
+            start = _fmt(int(tm.group(1)), int(tm.group(2)))
+            end = _fmt(int(tm.group(3)), int(tm.group(4)))
+            results.append((current_date, start, end))
+    return results
+
+
 def _bobruisk_schedule_slots(html: str, *, year: int) -> list[tuple[date, str, str]]:
+    if not _bobruisk_is_legacy_schedule(html):
+        return _bobruisk_schedule_slots_modern(html, year=year)
     fragment = _bobruisk_lang_ru_fragment(html)
     paragraphs = [_detag_join(m.group(1)) for m in _P.finditer(fragment)]
 
@@ -277,10 +318,24 @@ _OCR_TIME_TOKEN = re.compile(r"^(\d{1,2})[.:](\d{2})-(\d{1,2})[.:](\d{2})$")
 
 
 def _shklov_find_latest_post(index_html: str, title_contains: str) -> str | None:
+    needle = title_contains.lower()
     for href, title in _ENTRY_TITLE_LINK.findall(index_html):
-        if title_contains.lower() in html_unescape_cell(title).lower():
+        if needle in html_unescape_cell(title).lower():
             return href
     return None
+
+
+async def _fetch_shklov_index_html(job: ParserJob) -> str:
+    title_contains = str(job.config.get("title_contains") or "массового катания")
+    html = await fetch_http_text(str(job.config["index_url"]))
+    if _shklov_find_latest_post(html, title_contains):
+        return html
+    fallback = job.config.get("fallback_index_url")
+    if fallback:
+        fallback_html = await fetch_http_text(str(fallback))
+        if _shklov_find_latest_post(fallback_html, title_contains):
+            return fallback_html
+    return html
 
 
 def _shklov_find_image_url(post_html: str) -> str | None:
@@ -288,15 +343,15 @@ def _shklov_find_image_url(post_html: str) -> str | None:
     return m.group(1) if m else None
 
 
-async def _load_shklov_photo(job: ParserJob) -> tuple[bytes, str]:
+async def _load_shklov_photo(job: ParserJob) -> tuple[bytes, str] | None:
     fixture_dir = job.config.get("fixture_dir")
     if fixture_dir:
         filename = str(job.config.get("photo_filename") or "31.08-06.09.2026.jpg")
         return (Path(fixture_dir) / filename).read_bytes(), filename
-    index_html = await fetch_http_text(str(job.config["index_url"]))
+    index_html = await _fetch_shklov_index_html(job)
     href = _shklov_find_latest_post(index_html, str(job.config.get("title_contains") or "массового катания"))
     if not href:
-        raise RuntimeError("Шклов: свежий пост с расписанием не найден в /category/raspisania/")
+        return None
     post_url = href if href.startswith("http") else "http://sportshklov.by" + href
     post_html = await fetch_http_text(post_url)
     image_url = _shklov_find_image_url(post_html)
@@ -407,7 +462,10 @@ class ShklovArenaParser(IceParser):
     parser_key = PARSER_KEY_SHKLOV_ARENA
 
     async def extract(self, job: ParserJob) -> Extraction:
-        image_bytes, filename = await _load_shklov_photo(job)
+        loaded = await _load_shklov_photo(job)
+        if loaded is None:
+            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot="", slots=[])
+        image_bytes, filename = loaded
         prices_html = await load_source_text(job, filename="uslugi.html", url_keys=("prices_url",))
         month, year = _shklov_month_year(filename)
         adult, child, rental = _shklov_prices(prices_html)
@@ -439,10 +497,10 @@ class ShklovArenaParser(IceParser):
 # Гомельский ЛДС (arena_id 33) — weekly news post
 # --------------------------------------------------------------------------
 
-_NEWS_ITEM = re.compile(
-    r'<div class="title"><a href="([^"]+)">([^<]*)</a></div>.*?'
-    r'<div class="date"><i class="i-clock-gray"[^>]*></i>\s*(\d{1,2})\s+([а-яё]+)\'(\d{2})',
-    re.S | re.I,
+_GOMEL_POST_LINK = re.compile(r'<div class="title"><a href="([^"]+)">([^<]*)</a></div>', re.I)
+_GOMEL_ITEM_DATE = re.compile(
+    r'<i class="i-clock-gray"[^>]*></i>\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})',
+    re.I,
 )
 _PUBLISHED_DATE = re.compile(r"i-clock-gray[^>]*></i>\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})", re.I)
 _PUBLISHED_DATE_SHORT = re.compile(r"i-clock-gray[^>]*></i>\s*(\d{1,2})\s+([а-яё]+)'(\d{2})", re.I)
@@ -455,20 +513,25 @@ _TIME_COLON = re.compile(r"(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})")
 
 
 def _gomel_find_latest_post(index_html: str, title_contains: str) -> str | None:
+    needle = title_contains.lower()
     best: tuple[date, str] | None = None
-    for href, title, day_s, month_name, year2 in _NEWS_ITEM.findall(index_html):
-        if title_contains.lower() not in html_unescape_cell(title).lower():
+    for match in _GOMEL_POST_LINK.finditer(index_html):
+        href, title = match.group(1), html_unescape_cell(match.group(2))
+        if needle not in title.lower():
             continue
-        month = _MONTHS.get(month_name.lower())
-        if month is None:
-            continue
-        found_date = date(2000 + int(year2), month, int(day_s))
+        tail = index_html[match.end() : match.end() + 500]
+        dm = _GOMEL_ITEM_DATE.search(tail)
+        found_date = date(2000, 1, 1)
+        if dm:
+            month = _MONTHS.get(dm.group(2).lower())
+            if month is not None:
+                found_date = date(int(dm.group(3)), month, int(dm.group(1)))
         if best is None or found_date > best[0]:
             best = (found_date, href)
     return best[1] if best else None
 
 
-async def _load_gomel_post_html(job: ParserJob) -> str:
+async def _load_gomel_post_html(job: ParserJob) -> str | None:
     fixture_dir = job.config.get("fixture_dir")
     if fixture_dir:
         filename = str(job.config.get("post_filename") or "news445332.html")
@@ -478,7 +541,7 @@ async def _load_gomel_post_html(job: ParserJob) -> str:
         index_html, str(job.config.get("title_contains") or "Расписание массовых катаний")
     )
     if not href:
-        raise RuntimeError("Гомель: свежий пост «Расписание массовых катаний» не найден в ленте")
+        return None
     post_url = href if href.startswith("http") else "https://gomel.hockey.by" + href
     return await fetch_http_text(post_url)
 
@@ -539,6 +602,8 @@ class GomelLdsParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         html = await _load_gomel_post_html(job)
+        if html is None:
+            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot="", slots=[])
         year = _gomel_publish_year(html) or int(job.config.get("run_year") or date.today().year)
         lines = _gomel_schedule_region_lines(html)
         weekday_adult, weekend_adult, rental = _gomel_prices(lines)

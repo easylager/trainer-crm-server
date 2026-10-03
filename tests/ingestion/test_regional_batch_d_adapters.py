@@ -12,6 +12,9 @@ from src.ingestion.adapters_regional_batch_d import (
     GomelLdsParser,
     ShklovArenaParser,
     SoligorskSzkParser,
+    _bobruisk_schedule_slots,
+    _gomel_find_latest_post,
+    _shklov_find_latest_post,
 )
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.seed_config_regional_batch_d import (
@@ -74,6 +77,25 @@ def _gomel_job() -> ParserJob:
 
 def _validated(extraction, job):
     return IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=_NOW))
+
+
+def test_gomel_find_latest_post_parses_four_digit_year_dates() -> None:
+    index_html = (_FIXTURES / "gomel-lds/news-index.html").read_text(encoding="utf-8")
+    href = _gomel_find_latest_post(index_html, "Расписание массовых катаний")
+    assert href == "/news/sobytie/news445332.html"
+
+
+def test_bobruisk_modern_schedule_page_extracts_public_skate_slots() -> None:
+    html = (_FIXTURES / "bobruisk-arena/ice-rink-schedule.html").read_text(encoding="utf-8")
+    slots = _bobruisk_schedule_slots(html, year=2026)
+    assert slots
+    assert all("массовое катание" not in start for _, start, _ in slots)
+    sun27 = [s for s in slots if s[0] == date(2026, 9, 27)]
+    assert {(start, end) for _, start, end in sun27} == {
+        ("18:00", "18:45"),
+        ("19:15", "20:00"),
+        ("20:30", "21:15"),
+    }
 
 
 @pytest.mark.asyncio
@@ -152,6 +174,32 @@ async def test_shklov_arena_ocr_matches_expected_fixture() -> None:
     # Sat/Sun get the 4-session grid, weekdays only 2.
     sat = [s for s in slots if s.local_date == date(2026, 9, 5)]
     assert len(sat) == 4
+
+
+def test_gomel_find_latest_post_missing_returns_none() -> None:
+    html = '<div class="title"><a href="/news/sobytie/news999.html">Кубок Салея</a></div>'
+    assert _gomel_find_latest_post(html, "Расписание массовых катаний") is None
+
+
+def test_shklov_find_latest_post_absent_on_home_fixture() -> None:
+    html = (_FIXTURES / "shklov-arena/home-no-schedule.html").read_text(encoding="utf-8")
+    assert _shklov_find_latest_post(html, "массового катания") is None
+
+
+@pytest.mark.asyncio
+async def test_shklov_returns_empty_when_no_schedule_post(monkeypatch) -> None:
+    html = (_FIXTURES / "shklov-arena/home-no-schedule.html").read_text(encoding="utf-8")
+
+    async def _fake_index(_job):
+        return html
+
+    monkeypatch.setattr(
+        "src.ingestion.adapters_regional_batch_d._fetch_shklov_index_html",
+        _fake_index,
+    )
+    job = _job(arena_id=42, parser_key=PARSER_KEY_SHKLOV_ARENA, config=dict(SHKLOV_ARENA_CONFIG), job_id=203)
+    extraction = await ShklovArenaParser().extract(job)
+    assert extraction.slots == []
 
 
 @pytest.mark.asyncio

@@ -91,6 +91,25 @@ async def test_grodno_triniti_matches_71_gold_sessions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_grodno_neman_october_post_yields_four_sessions() -> None:
+    cfg = dict(GRODNO_NEMAN_CONFIG)
+    cfg["fixture_dir"] = str(_FIXTURES / "grodno-neman")
+    cfg["fixture_post_filename"] = "news446875-october-2026.html"
+    now = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+    job = _job(arena_id=11, parser_key=PARSER_KEY_GRODNO_NEMAN, config=cfg, next_run=now - timedelta(minutes=5))
+
+    extraction = await GrodnoNemanParser().extract(job)
+    slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
+
+    assert len(slots) == 3
+    by_key = {(s.local_date.isoformat(), s.starts_at_local.strftime("%H:%M"), s.session_label): s for s in slots}
+    assert ("2026-10-03", "17:15", "лед Арена") in by_key
+    assert by_key[("2026-10-03", "17:15", "лед Арена")].ends_at_local.strftime("%H:%M") == "18:15"
+    assert ("2026-10-04", "17:00", "лёд Пышки") in by_key
+    assert ("2026-10-04", "18:30", "лёд Пышки") in by_key
+
+
+@pytest.mark.asyncio
 async def test_grodno_neman_news_post_yields_two_gold_sessions() -> None:
     expected = _load_expected("grodno-neman")
     cfg = dict(GRODNO_NEMAN_CONFIG)
@@ -121,6 +140,7 @@ async def test_lida_lds_photo_schedule_matches_10_gold_sessions() -> None:
     expected = _load_expected("lida-lds")
     cfg = dict(LIDA_LDS_CONFIG)
     cfg["fixture_dir"] = str(_FIXTURES / "lida-lds")
+    cfg["week_start"] = "2026-08-31"
     now = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
     job = _job(arena_id=37, parser_key=PARSER_KEY_LIDA_LDS, config=cfg, next_run=now - timedelta(minutes=5))
 
