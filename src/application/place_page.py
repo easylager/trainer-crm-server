@@ -280,7 +280,7 @@ def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
     for open_, close in intervals:
         if _hhmm_in_interval(hhmm, open_, close):
             return f"Открыто до {close}"
-    for open_, close in intervals:
+    for open_, _close in intervals:
         if hhmm < open_:
             return f"Откроется в {open_}"
     return "Сегодня уже закрыто"
