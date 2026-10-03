@@ -3,6 +3,7 @@
 Скрыть (``arena_profiles.status = 'archived'``, обратимо через явный список ID в ``--show``):
 - 13 «JUSTSKATE», 14 «Финт» — пока не показываем;
 - 203 «Каток F1» — сезонный малый каток у Дворца спорта, не держим в каталоге;
+- 34 «Ледовый каток Солнечный» (Гомель, Речицкий пр. 109) — сезонный, без сетки МК;
 - каток у Дворца спорта на Немиге — работает только зимой, летом не показываем;
 - все площадки ``venue_type = 'gym'`` — залы пока вне каталога.
 
@@ -58,19 +59,27 @@ from src.shared.ops_db_guard import (
 PHOTOS_DIR = ROOT / "data" / "arena-cards" / "photos"
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
-HIDE_IDS: tuple[int, ...] = (13, 14, 203)
+HIDE_IDS: tuple[int, ...] = (13, 14, 34, 203)
 SHOW_IDS: tuple[int, ...] = (12,)
 
 # Минимальный профиль при публикации (фото — отдельно из photos/arena-<id>/).
+def _lyzheroller_profile_patch() -> dict[str, object]:
+    import json
+
+    path = ROOT / "data" / "arena-cards" / "lyzheroller-trassa-profile.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "website_url": data["website_url"],
+        "opening_hours": data["opening_hours"],
+        "amenities": data["amenities"],
+        "short_description": data["short_description"],
+    }
+
+
 SHOWCASE_PATCHES: dict[int, dict[str, object]] = {
-    12: {
-        "short_description": (
-            "Асфальтированная лыжероллерная трасса (Победителей, 20/3). "
-            "Для роликов и лыжероллеров, не массовый ледовый каток — сеансов льда в каталоге нет."
-        ),
-    },
+    12: _lyzheroller_profile_patch(),
 }
-SHOWCASE_VENUE_TYPE: dict[int, str] = {12: "outdoor"}
+SHOWCASE_VENUE_TYPE: dict[int, str] = {12: "other"}
 #: Немигу ловим по названию/адресу: её id в выгрузке data/minsk-arenas-prod.csv нет.
 HIDE_NAME_PATTERNS: tuple[str, ...] = ("%немиг%",)
 HIDE_VENUE_TYPES: tuple[str, ...] = ("gym",)

@@ -296,6 +296,75 @@
     );
   }
 
+  /** Окна массового катания и прокат — structured opening_hours, не простыня в описании. */
+  function renderMassAccess() {
+    var mass = M.massAccessView(state.card);
+    if (!mass.enabled) return '';
+    var html = '<div class="arena-sec"><p class="arena-h">Когда можно приехать</p>';
+    if (mass.freeEntry) {
+      html += '<p class="arena-kicker arena-kicker--ok">Вход бесплатно · бронь слотов не нужна</p>';
+    }
+    if (mass.accessNote) {
+      html += '<p class="arena-sub">' + esc(mass.accessNote) + '</p>';
+    }
+    if (mass.week) {
+      var status = mass.week.status ? '<em class="arena-info__open">' + esc(mass.week.status) + '</em>' : '';
+      if (mass.week.uniform) {
+        html +=
+          '<div class="arena-info arena-info--flat"><small>Каждый день</small><b>Ежедневно ' +
+          esc(mass.week.rows[0].value) +
+          '</b>' +
+          status +
+          '</div>';
+      } else {
+        html +=
+          '<div class="arena-info arena-info--flat"><small>Окна для любителей</small>' +
+          status +
+          '<ul class="arena-week">' +
+          mass.week.rows
+            .map(function (r) {
+              return (
+                '<li class="' +
+                (r.today ? 'is-today' : '') +
+                (r.closed ? ' is-closed' : '') +
+                '"><span>' +
+                esc(r.label) +
+                '</span><span>' +
+                esc(r.value) +
+                '</span></li>'
+              );
+            })
+            .join('') +
+          '</ul></div>';
+      }
+    }
+    var foot = [];
+    if (mass.rentalClose) foot.push('Прокат до ' + mass.rentalClose);
+    if (mass.trackClose) foot.push('освещение трассы до ' + mass.trackClose);
+    if (foot.length) {
+      html += '<p class="arena-sub arena-sub--tight">' + esc(foot.join(' · ')) + '</p>';
+    }
+    html += '</div>';
+    if (mass.rentalCatalog.length) {
+      html += '<div class="arena-sec"><p class="arena-h">Прокат инвентаря</p><ul class="arena-price-list">';
+      mass.rentalCatalog.forEach(function (row) {
+        html +=
+          '<li class="arena-price-list__row"><span class="arena-price-list__name">' +
+          esc(row.label || '') +
+          '</span><span class="arena-price-list__price">' +
+          esc(row.price || '') +
+          (row.per ? '<small>/' + esc(row.per) + '</small>' : '') +
+          '</span>';
+        if (row.note) {
+          html += '<span class="arena-price-list__note">' + esc(row.note) + '</span>';
+        }
+        html += '</li>';
+      });
+      html += '<p class="arena-sub">Ориентиры проката ФК «Минск» — на кассе могут отличаться.</p></div>';
+    }
+    return html;
+  }
+
   /** TASK-146: у магазина вместо чипов удобств — плитки услуг и специализация. */
   function renderShopServices() {
     var v = M.shopServicesView(state.card.amenities);
@@ -600,7 +669,8 @@
         '<small>Адрес</small><b>' + esc(card.address) + '</b>' + (card.district ? '<span>' + esc(card.district) + '</span>' : '') +
         '</a>';
     }
-    var week = M.weekHours(card.opening_hours, new Date());
+    var mass = M.massAccessView(card);
+    var week = mass.enabled ? null : M.weekHours(card.opening_hours, new Date());
     if (week) {
       var status = week.status ? '<em class="arena-info__open">' + esc(week.status) + '</em>' : '';
       if (week.uniform) {
@@ -632,10 +702,11 @@
         '<a class="arena-info" href="' + esc(x.href) + '" data-action="external" data-href="' + esc(x.href) + '">' +
         '<small>' + esc(x.label) + '</small><b>' + esc(x.href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')) + '</b></a>';
     });
-    if (!rows && !contacts.shortDescription) return '';
+    var lead = contacts.shortDescription && !mass.enabled ? contacts.shortDescription : null;
+    if (!rows && !lead) return '';
     return (
-      '<div class="arena-sec"><p class="arena-h">Адрес и часы</p>' +
-      (contacts.shortDescription ? '<p class="arena-sub">' + esc(contacts.shortDescription) + '</p>' : '') +
+      '<div class="arena-sec"><p class="arena-h">Адрес и контакты</p>' +
+      (lead ? '<p class="arena-sub">' + esc(lead) + '</p>' : '') +
       '<div class="arena-infos">' + rows + '</div></div>'
     );
   }
@@ -664,6 +735,7 @@
       renderQuickActions() +
       renderIceSection() +
       renderAmenities() +
+      renderMassAccess() +
       renderTrainers() +
       renderGroups() +
       renderInfo() +

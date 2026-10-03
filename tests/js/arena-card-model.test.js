@@ -753,3 +753,34 @@ describe('TASK-146: устаревшее расписание', () => {
     assert.match(note, /^Расписание от 1 октября, \d{2}:00 — могло измениться/);
   });
 });
+
+describe('massAccessView', () => {
+  const lyzhHours = {
+    weekly: {
+      mon: [['11:00', '15:00'], ['19:00', '22:00']],
+      sat: [['11:00', '22:00']],
+      sun: [['08:00', '22:00']],
+    },
+    rental_close: '21:00',
+    track_close: '22:00',
+    free_entry: true,
+    access_note: 'Бронь не нужна.',
+    rental_catalog: [{ label: 'Ролики', price: '8 BYN', per: 'час' }],
+  };
+
+  it('включает окна, прокат и не требует сеансов льда', () => {
+    const { massAccessView } = loadModel();
+    const v = massAccessView({ opening_hours: lyzhHours });
+    assert.equal(v.enabled, true);
+    assert.equal(v.freeEntry, true);
+    assert.equal(v.rentalClose, '21:00');
+    assert.equal(v.rentalCatalog.length, 1);
+    assert.match(v.week.rows[0].value, /11:00/);
+  });
+
+  it('выключен без данных массового доступа', () => {
+    const { massAccessView } = loadModel();
+    assert.equal(massAccessView({ opening_hours: { weekly: { mon: [['10:00', '18:00']] } } }).enabled, false);
+    assert.equal(massAccessView({}).enabled, false);
+  });
+});

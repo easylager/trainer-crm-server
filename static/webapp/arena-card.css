@@ -833,6 +833,57 @@ a.arena-info b { color: var(--glide-ink-teal); }
 .arena-week li.is-today { color: var(--glide-text); font-weight: var(--app-weight-semibold); }
 .arena-week li.is-closed span:last-child { opacity: 0.7; }
 
+.arena-info--flat {
+  border: 0;
+  padding: 0;
+  margin-top: 8px;
+}
+.arena-kicker {
+  margin: 0 0 8px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+.arena-kicker--ok { color: var(--app-ok-ink); }
+.arena-sub--tight { margin-top: 8px; }
+.arena-price-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.arena-price-list__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-card-line);
+  border-radius: var(--app-radius-md);
+  background: var(--app-card-bg);
+}
+.arena-price-list__name {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-price-list__price {
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.arena-price-list__price small {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-regular);
+  color: var(--glide-hint);
+}
+.arena-price-list__note {
+  grid-column: 1 / -1;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
 /* Глобальный сброс tel:-ссылок (mini-app-components.css, с !important) снимал с плитки
    «Позвонить» и строки «Телефон» рамку, фон и отступы. Возвращаем их только здесь. */
 .ar-pilot .arena-card a.arena-qa.arena-qa[href^="tel:"] {

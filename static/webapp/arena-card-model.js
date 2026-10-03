@@ -653,30 +653,59 @@
     return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
   }
 
-  /** Часы на день недели (0 = понедельник) или null — выходной/неизвестно. */
-  function hoursForWeekday(hours, weekday) {
+  function parseDayIntervals(raw) {
+    if (!raw) return [];
+    if (raw.length && Array.isArray(raw[0])) {
+      var out = [];
+      raw.forEach(function (seg) {
+        if (seg && seg.length === 2 && normHhmm(seg[0]) && normHhmm(seg[1])) {
+          out.push([normHhmm(seg[0]), normHhmm(seg[1])]);
+        }
+      });
+      return out;
+    }
+    if (raw.length === 2 && normHhmm(raw[0]) && normHhmm(raw[1])) {
+      return [[normHhmm(raw[0]), normHhmm(raw[1])]];
+    }
+    return [];
+  }
+
+  function intervalsForWeekday(hours, weekday) {
     hours = hours || {};
     if (hours.weekly && typeof hours.weekly === 'object') {
-      var pair = hours.weekly[WEEK_KEYS[((weekday % 7) + 7) % 7]];
-      if (pair && pair.length === 2 && normHhmm(pair[0]) && normHhmm(pair[1])) {
-        return [normHhmm(pair[0]), normHhmm(pair[1])];
-      }
-      return null;
+      return parseDayIntervals(hours.weekly[WEEK_KEYS[((weekday % 7) + 7) % 7]]);
     }
     var daily = hours.daily;
-    if (daily && normHhmm(daily.open) && normHhmm(daily.close)) return [normHhmm(daily.open), normHhmm(daily.close)];
-    return null;
+    if (daily && normHhmm(daily.open) && normHhmm(daily.close)) {
+      return [[normHhmm(daily.open), normHhmm(daily.close)]];
+    }
+    return [];
+  }
+
+  function formatIntervalsRu(intervals) {
+    return (intervals || [])
+      .map(function (p) {
+        return p[0] + '–' + p[1];
+      })
+      .join(' и ');
+  }
+
+  /** Первый интервал дня — для совместимости. */
+  function hoursForWeekday(hours, weekday) {
+    var intervals = intervalsForWeekday(hours, weekday);
+    return intervals.length ? intervals[0] : null;
   }
 
   function formatOpeningHours(hours) {
     var days = [];
     var known = false;
     for (var d = 0; d < 7; d++) {
-      days.push(hoursForWeekday(hours, d));
-      if (days[d]) known = true;
+      var iv = intervalsForWeekday(hours, d);
+      days.push(iv.length ? formatIntervalsRu(iv) : null);
+      if (iv.length) known = true;
     }
     if (!known) return '';
-    var key = function (p) { return p ? p[0] + '–' + p[1] : 'выходной'; };
+    var key = function (p) { return p || 'выходной'; };
     var parts = [];
     var start = 0;
     for (var i = 1; i <= 7; i++) {
@@ -690,15 +719,26 @@
   }
 
   /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
+  function hhmmInInterval(hm, open, close) {
+    if (close > open) return hm >= open && hm < close;
+    return hm >= open || hm < close;
+  }
+
   function openUntilLabel(hours, now) {
     now = now || new Date();
     var weekday = (now.getDay() + 6) % 7;
-    var pair = hoursForWeekday(hours, weekday);
-    if (!pair) return '';
+    var intervals = intervalsForWeekday(hours, weekday);
+    if (!intervals.length) return '';
     var hm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
-    var open = pair[1] > pair[0] ? hm >= pair[0] && hm < pair[1] : hm >= pair[0] || hm < pair[1];
-    if (open) return 'открыт до ' + pair[1];
-    if (hm < pair[0]) return 'откроется в ' + pair[0];
+    var i;
+    for (i = 0; i < intervals.length; i++) {
+      if (hhmmInInterval(hm, intervals[i][0], intervals[i][1])) {
+        return 'открыт до ' + intervals[i][1];
+      }
+    }
+    for (i = 0; i < intervals.length; i++) {
+      if (hm < intervals[i][0]) return 'откроется в ' + intervals[i][0];
+    }
     return '';
   }
 
@@ -813,6 +853,33 @@
     return out;
   }
 
+  /**
+   * Массовый доступ без сеансов льда: окна по дням + прокат из opening_hours.
+   * Не пихаем расписание и прайс в short_description — карточка рисует секции.
+   */
+  function massAccessView(card) {
+    card = card || {};
+    var hours = card.opening_hours;
+    if (!hours || typeof hours !== 'object') return { enabled: false };
+    var catalog = Array.isArray(hours.rental_catalog) ? hours.rental_catalog : [];
+    var week = weekHours(hours, new Date());
+    var enabled =
+      catalog.length > 0 ||
+      hours.free_entry === true ||
+      Boolean(hours.rental_close && week) ||
+      Boolean(hours.access_note && week);
+    if (!enabled) return { enabled: false };
+    return {
+      enabled: true,
+      week: week,
+      freeEntry: hours.free_entry === true,
+      rentalClose: String(hours.rental_close || '').trim(),
+      trackClose: String(hours.track_close || '').trim(),
+      accessNote: String(hours.access_note || '').trim(),
+      rentalCatalog: catalog,
+    };
+  }
+
   /** Часы по дням для списка «Часы работы»: сегодняшний день отмечен. */
   function weekHours(hours, now) {
     now = now || new Date();
@@ -820,9 +887,14 @@
     var known = false;
     var rows = [];
     for (var d = 0; d < 7; d++) {
-      var pair = hoursForWeekday(hours, d);
-      if (pair) known = true;
-      rows.push({ label: WEEK_SHORT[d], value: pair ? pair[0] + '–' + pair[1] : 'выходной', today: d === today, closed: !pair });
+      var iv = intervalsForWeekday(hours, d);
+      if (iv.length) known = true;
+      rows.push({
+        label: WEEK_SHORT[d],
+        value: iv.length ? formatIntervalsRu(iv) : 'выходной',
+        today: d === today,
+        closed: !iv.length,
+      });
     }
     if (!known) return null;
     var uniform = rows.every(function (r) { return r.value === rows[0].value; });
@@ -948,5 +1020,8 @@
     showtimesForDay: showtimesForDay,
     quickActions: quickActions,
     weekHours: weekHours,
+    massAccessView: massAccessView,
+    intervalsForWeekday: intervalsForWeekday,
+    formatIntervalsRu: formatIntervalsRu,
   };
 });

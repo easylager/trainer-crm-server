@@ -41,9 +41,12 @@ from src.application.arena_public_use_cases import (
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
 from src.application.arena_profile import (
+    WEEKDAY_SHORT_RU,
+    format_intervals_ru,
     has_known_hours,
     hours_for_weekday,
     hours_groups,
+    intervals_for_weekday,
     opening_hours_schema_org,
 )
 from src.application.place_links import place_query
@@ -257,24 +260,30 @@ def ago_label(moment: datetime | None, *, now: datetime) -> str:
     return f"обновлено {days} {plural_ru(days, 'день', 'дня', 'дней')} назад"
 
 
+def _hhmm_in_interval(hhmm: str, open_: str, close: str) -> bool:
+    if close > open_:
+        return open_ <= hhmm < close
+    return hhmm >= open_ or hhmm < close
+
+
 def open_now_label(card: Mapping[str, Any], *, now: datetime) -> str:
-    """«Открыто до 22:00» / «Закрыто · откроется в 10:00» / «Сегодня выходной»."""
+    """«Открыто до 22:00» / «Закроется в 19:00» / «Сегодня выходной»."""
     tz = ZoneInfo(str(card.get("timezone") or "Europe/Minsk"))
     local = now.astimezone(tz)
-    if not has_known_hours(card.get("opening_hours")):
+    hours = card.get("opening_hours")
+    if not has_known_hours(hours):
         return ""
-    pair = hours_for_weekday(card.get("opening_hours"), local.weekday())
-    if pair is None:
+    intervals = intervals_for_weekday(hours, local.weekday())
+    if not intervals:
         return "Сегодня выходной"
-    open_, close = pair
     hhmm = local.strftime("%H:%M")
-    if close > open_:
-        is_open = open_ <= hhmm < close
-    else:  # работает за полночь
-        is_open = hhmm >= open_ or hhmm < close
-    if is_open:
-        return f"Открыто до {close}"
-    return f"Закрыто · откроется в {open_}" if hhmm < open_ else "Сегодня уже закрыто"
+    for open_, close in intervals:
+        if _hhmm_in_interval(hhmm, open_, close):
+            return f"Открыто до {close}"
+    for open_, close in intervals:
+        if hhmm < open_:
+            return f"Откроется в {open_}"
+    return "Сегодня уже закрыто"
 
 
 # ---------------------------------------------------------------------------
@@ -616,14 +625,41 @@ def _amenities_html(card: Mapping[str, Any]) -> str:
 
 
 def _hours_html(card: Mapping[str, Any]) -> str:
-    groups = hours_groups(card.get("opening_hours"))
-    if not groups:
+    hours = card.get("opening_hours")
+    if not has_known_hours(hours):
         return ""
     rows = "".join(
-        f'<p class="row"><span>{_esc(label)}</span><b>{_esc(f"{pair[0]}–{pair[1]}" if pair else "выходной")}</b></p>'
-        for label, pair in groups
+        f'<p class="row"><span>{_esc(WEEKDAY_SHORT_RU[d])}</span>'
+        f'<b>{_esc(format_intervals_ru(intervals_for_weekday(hours, d)) if intervals_for_weekday(hours, d) else "выходной")}</b></p>'
+        for d in range(7)
     )
-    return f'<section class="sec"><h2 class="sec__title">Часы работы</h2>{rows}</section>'
+    return f'<section class="sec"><h2 class="sec__title">Когда можно приехать</h2>{rows}</section>'
+
+
+def _rental_catalog_html(card: Mapping[str, Any]) -> str:
+    hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
+    catalog = hours.get("rental_catalog")
+    if not isinstance(catalog, list) or not catalog:
+        return ""
+    items = []
+    for row in catalog:
+        if not isinstance(row, Mapping):
+            continue
+        label = str(row.get("label") or "").strip()
+        price = str(row.get("price") or "").strip()
+        if not label or not price:
+            continue
+        per = str(row.get("per") or "").strip()
+        note = str(row.get("note") or "").strip()
+        price_text = f"{price}/{per}" if per else price
+        items.append(
+            f'<p class="row"><span>{_esc(label)}</span><b>{_esc(price_text)}</b>'
+            + (f'<span class="row__note">{_esc(note)}</span>' if note else "")
+            + "</p>"
+        )
+    if not items:
+        return ""
+    return '<section class="sec"><h2 class="sec__title">Прокат инвентаря</h2>' + "".join(items) + "</section>"
 
 
 def _trainers_html(card: Mapping[str, Any], *, cta_url: str | None) -> str:
@@ -874,6 +910,7 @@ def render_place_page(
             _schedule_html(view, base_path=base_path, invite=invite),
             _services_html(card),
             _hours_html(card),
+            _rental_catalog_html(card),
             _amenities_html(card),
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
