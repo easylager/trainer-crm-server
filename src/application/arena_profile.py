@@ -25,7 +25,9 @@ ARENA_PROFILE_STATUSES = (
 )
 
 # Canonical amenity keys (prototype chips + accessibility). Values are bool.
-AMENITY_KEYS = frozenset(
+# Three states, not two: key absent = unknown, False = known absent, True = present.
+# The Minsk loader relies on that (an unknown amenity stays unset, never False).
+VENUE_AMENITY_KEYS = frozenset(
     {
         "skate_rental",  # прокат
         "skate_sharpening",  # заточка
@@ -36,6 +38,44 @@ AMENITY_KEYS = frozenset(
     }
 )
 
+# TASK-146: магазин описывается тем же полем, но другим набором ключей. Прокат и
+# заточка — те же самые услуги, что «на катке есть прокат», поэтому ключи общие:
+# фильтр «где заточить коньки» найдёт и мастерскую, и каток с заточкой.
+# Розница и ремонт бывают только у магазина — катку их не поставить.
+SHOP_AMENITY_KEYS = frozenset(
+    {
+        "retail",  # розница
+        "skate_sharpening",
+        "skate_rental",
+        "repair",  # ремонт коньков, клюшек, формы
+        "skate_molding",  # формовка (термоформовка ботинка)
+        "blade_profiling",  # профилирование лезвия
+        "foot_scan",  # 3D-скан стопы для подбора коньков
+        # Специализация: заточка хоккейных и фигурных — физически разные работы,
+        # и «хоккейный магазин» фигуристу почти бесполезен. Поэтому явно, а не тегом.
+        "discipline_hockey",
+        "discipline_figure",
+        "discipline_roller",
+        "parking",
+        "accessibility",
+    }
+)
+
+#: Услуги магазина в порядке показа (плитки и строка ленты).
+SHOP_SERVICE_KEYS: tuple[str, ...] = (
+    "retail",
+    "skate_sharpening",
+    "skate_molding",
+    "blade_profiling",
+    "foot_scan",
+    "skate_rental",
+    "repair",
+)
+#: Специализации — отдельной строкой тегов, не плитками.
+SHOP_DISCIPLINE_KEYS: tuple[str, ...] = ("discipline_hockey", "discipline_figure", "discipline_roller")
+
+AMENITY_KEYS = VENUE_AMENITY_KEYS | SHOP_AMENITY_KEYS
+
 AMENITY_LABELS_RU = {
     "skate_rental": "Прокат",
     "skate_sharpening": "Заточка",
@@ -43,7 +83,25 @@ AMENITY_LABELS_RU = {
     "locker_rooms": "Раздевалки",
     "cafe": "Кафе",
     "accessibility": "Доступность",
+    "retail": "Розница",
+    "repair": "Ремонт",
+    "skate_molding": "Формовка",
+    "blade_profiling": "Профилирование",
+    "foot_scan": "3D-скан стопы",
+    "discipline_hockey": "Хоккей",
+    "discipline_figure": "Фигурное",
+    "discipline_roller": "Ролики",
 }
+
+
+def amenity_keys_for_venue(venue_type: str | None) -> frozenset[str]:
+    """Допустимые ключи для типа площадки. Неизвестный тип — как каток."""
+    from src.shared.venue_types import VENUE_TYPE_SHOP, normalize_venue_type
+
+    if normalize_venue_type(venue_type) == VENUE_TYPE_SHOP:
+        return SHOP_AMENITY_KEYS
+    return VENUE_AMENITY_KEYS
+
 
 _CYRILLIC_TO_LATIN = {
     "а": "a",
@@ -127,14 +185,18 @@ def choose_arena_slug(
     return f"{base}-{int(arena_id)}"
 
 
-def validate_amenities(value: Mapping[str, Any] | None) -> dict[str, bool]:
+def validate_amenities(
+    value: Mapping[str, Any] | None, venue_type: str | None = None
+) -> dict[str, bool]:
+    """Ключи сверяются с типом площадки: «розница» у катка — ошибка ввода, а не данные."""
     if value is None:
         return {}
     if not isinstance(value, Mapping):
         raise InvalidAmenitiesError("amenities must be an object")
+    allowed = amenity_keys_for_venue(venue_type)
     out: dict[str, bool] = {}
     for key, raw in value.items():
-        if key not in AMENITY_KEYS:
+        if key not in allowed:
             raise InvalidAmenitiesError(f"unknown amenity key: {key}")
         if not isinstance(raw, bool):
             raise InvalidAmenitiesError(f"amenity {key} must be a boolean")
@@ -369,13 +431,14 @@ async def apply_admin_arena_profile_patch(
     """Upsert vitrine fields. Unknown amenity keys raise InvalidAmenitiesError."""
     arena = (
         await session.execute(
-            text("SELECT id, city_id, name FROM arenas WHERE id = :id"),
+            text("SELECT id, city_id, name, venue_type FROM arenas WHERE id = :id"),
             {"id": arena_id},
         )
     ).fetchone()
     if arena is None:
         raise LookupError("Arena not found")
     _arena_id, city_id, name = int(arena[0]), int(arena[1]), str(arena[2] or "")
+    venue_type = str(arena[3] or "")
     await ensure_arena_profile(session, _arena_id, city_id=city_id, name=name)
 
     assignments: list[str] = []
@@ -408,7 +471,7 @@ async def apply_admin_arena_profile_patch(
         assignments.append("season_end_month = :season_end_month")
         params["season_end_month"] = _optional_month(fields["season_end_month"])
     if "amenities" in fields:
-        amenities = validate_amenities(fields["amenities"])
+        amenities = validate_amenities(fields["amenities"], venue_type)
         assignments.append("amenities = CAST(:amenities AS jsonb)")
         params["amenities"] = json.dumps(amenities)
     if "status" in fields and fields["status"] is not None:
@@ -427,7 +490,96 @@ async def apply_admin_arena_profile_patch(
             params["tickets_url"] = url
     if not assignments:
         return
+    assignments.append("updated_at = now()")
     await session.execute(
         text("UPDATE arena_profiles SET " + ", ".join(assignments) + " WHERE arena_id = :id"),
         params,
     )
+
+
+async def touch_arena_profile(session: AsyncSession, arena_id: int) -> None:
+    """Правка самой арены (имя, адрес, тип) — тоже правка карточки для «обновлено N назад»."""
+    await session.execute(
+        text("UPDATE arena_profiles SET updated_at = now() WHERE arena_id = :id"), {"id": int(arena_id)}
+    )
+
+
+# ---------------------------------------------------------------------------
+# Часы работы (TASK-146). Два формата в opening_hours:
+#   {"daily": {"open": "10:00", "close": "20:00"}}                 — каждый день одинаково;
+#   {"weekly": {"mon": ["10:00", "19:00"], ..., "sun": null}}        — по дням; null/нет — выходной.
+# ---------------------------------------------------------------------------
+
+WEEKDAY_KEYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_SHORT_RU: tuple[str, ...] = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def normalize_hhmm(raw: Any) -> str:
+    """«7:00» / «07.00» / «7» → «07:00». Непонятное — пустая строка.
+
+    Часы вводят руками; сравнивать «7:00» и «10:00» строками нельзя — «7:00»
+    окажется позже, и магазин «закроется» с утра.
+    """
+    text_value = str(raw or "").strip().replace(".", ":")
+    if not text_value:
+        return ""
+    head, _, tail = text_value.partition(":")
+    if not head.isdigit() or (tail and not tail.isdigit()):
+        return ""
+    h, m = int(head), int(tail or 0)
+    if not (0 <= h <= 24 and 0 <= m < 60):
+        return ""
+    return f"{h:02d}:{m:02d}"
+
+
+def hours_for_weekday(opening_hours: Mapping[str, Any] | None, weekday: int) -> tuple[str, str] | None:
+    """Часы на день недели (0 = понедельник). None — выходной или неизвестно."""
+    hours = opening_hours if isinstance(opening_hours, Mapping) else {}
+    weekly = hours.get("weekly")
+    if isinstance(weekly, Mapping):
+        pair = weekly.get(WEEKDAY_KEYS[weekday % 7])
+        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+            o, c = normalize_hhmm(pair[0]), normalize_hhmm(pair[1])
+            return (o, c) if o and c else None
+        return None
+    daily = hours.get("daily")
+    if isinstance(daily, Mapping):
+        o, c = normalize_hhmm(daily.get("open")), normalize_hhmm(daily.get("close"))
+        return (o, c) if o and c else None
+    return None
+
+
+def has_known_hours(opening_hours: Mapping[str, Any] | None) -> bool:
+    return any(hours_for_weekday(opening_hours, d) for d in range(7))
+
+
+def hours_groups(opening_hours: Mapping[str, Any] | None) -> list[tuple[str, tuple[str, str] | None]]:
+    """Соседние дни с одинаковыми часами — одной строкой: [("Пн–Пт", ("10:00","19:00")), ("Вс", None)]."""
+    if not has_known_hours(opening_hours):
+        return []
+    days = [hours_for_weekday(opening_hours, d) for d in range(7)]
+    if all(day == days[0] for day in days):
+        return [("Ежедневно", days[0])]
+    groups: list[tuple[str, tuple[str, str] | None]] = []
+    start = 0
+    for i in range(1, 8):
+        if i == 7 or days[i] != days[start]:
+            label = WEEKDAY_SHORT_RU[start] if i - 1 == start else f"{WEEKDAY_SHORT_RU[start]}–{WEEKDAY_SHORT_RU[i - 1]}"
+            groups.append((label, days[start]))
+            start = i
+    return groups
+
+
+def opening_hours_schema_org(opening_hours: Mapping[str, Any] | None) -> list[str]:
+    """«Mo-Fr 10:00-19:00» — для schema.org openingHours."""
+    codes = ("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
+    out: list[str] = []
+    days = [hours_for_weekday(opening_hours, d) for d in range(7)]
+    start = 0
+    for i in range(1, 8):
+        if i == 7 or days[i] != days[start]:
+            if days[start]:
+                span = codes[start] if i - 1 == start else f"{codes[start]}-{codes[i - 1]}"
+                out.append(f"{span} {days[start][0]}-{days[start][1]}")
+            start = i
+    return out

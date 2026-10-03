@@ -13,13 +13,21 @@
     view: 'list',
     cityId: null,
     cityName: '',
-    serviceId: null,
+    /* Мультивыбор услуг у «Тренеров»: пусто = «Все». */
+    serviceIds: [],
     services: [],
     /* Выбранные типы площадок (ключи venue_type) и фасеты последнего ответа.
        Фасеты живут в state, а не выводятся из items: сервер считает их ДО
        фильтра, иначе выбранный чип исчез бы из собственного списка. */
     venueTypes: [],
     venueFacets: [],
+    /* TASK-146 (Q-006): окно времени. auto — умный дефолт на сервере; window — что применено. */
+    when: 'auto',
+    /* Где человек (lat,lon) — если разрешил геолокацию; ближние места выше. */
+    near: null,
+    /* «Рядом» нажата: лента по расстоянию (внутри групп окна времени). */
+    nearOn: false,
+    window: null,
     cities: [],
     items: [],
     skateCount: null,
@@ -27,6 +35,8 @@
     cursor: null,
     loading: false,
     loadedIntent: null,
+    /* Открытое выпадающее меню шапки: place | when | false */
+    uiPicker: false,
   };
   var searchTimer = null;
   var fetchGen = 0;
@@ -63,13 +73,30 @@
     global.location.href = path;
   }
 
+  /* Тот же ключ, что arena-card.js: шапка рисует кадр мини-карточки, не ждущая hero. */
+  function rememberArenaHero(item) {
+    if (!item) return;
+    var url = item.card || item.thumb || '';
+    if (!url) return;
+    try {
+      sessionStorage.setItem(
+        'glideArenaHero',
+        JSON.stringify({
+          id: item.id != null ? item.id : null,
+          slug: item.slug || '',
+          url: url,
+        })
+      );
+    } catch (e) { /* private mode */ }
+  }
+
   function persist() {
     M.saveIceState(
       {
         intent: state.intent,
         cityId: state.cityId,
         cityName: state.cityName,
-        serviceId: state.serviceId,
+        serviceIds: state.serviceIds,
         scrollY: global.scrollY || 0,
         view: state.view,
       },
@@ -83,28 +110,201 @@
     return document.getElementById(id);
   }
 
-  function setCityLabel() {
-    var el = $('iceCityName');
-    if (el) el.textContent = state.cityName || 'Город';
+  function setSearchPlaceholder() {
+    var input = $('iceSearchInput');
+    if (!input) return;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    input.placeholder = M.catalogSearchPlaceholder(scope);
   }
 
-  function currentServiceLabel() {
-    if (!state.serviceId) return '';
-    var found = (state.services || []).filter(function (s) {
-      return Number(s.id) === Number(state.serviceId);
-    })[0];
-    return found ? M.serviceChipLabel(found.name) : '';
+  function cityCountsForModes() {
+    var city = cityFromState(state.cityId);
+    return {
+      skateCount: city != null ? city.skate_count : state.skateCount,
+      trainerCount: city != null ? city.trainer_count : 0,
+      placeCountHint: city != null ? city.place_count : 0,
+    };
+  }
+
+  function closeUiPicker() {
+    state.uiPicker = false;
+  }
+
+  function renderCatalogHeader() {
+    var counts = cityCountsForModes();
+    var modes = M.catalogModesView({
+      facets: state.venueFacets,
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      skateCount: counts.skateCount,
+      trainerCount: counts.trainerCount,
+      placeCountHint: counts.placeCountHint,
+    });
+    var modeSeg = $('iceModeSeg');
+    if (modeSeg) {
+      if (modes.length < 2) {
+        modeSeg.hidden = true;
+        modeSeg.innerHTML = '';
+      } else {
+        modeSeg.hidden = false;
+        modeSeg.className = 'ice-seg ice-seg--' + modes.length;
+        modeSeg.innerHTML = modes
+          .map(function (m) {
+            return (
+              '<button type="button" role="tab" data-catalog-mode="' +
+              esc(m.id) +
+              '" aria-pressed="' +
+              (m.active ? 'true' : 'false') +
+              '">' +
+              esc(m.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+    }
+
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    renderServiceChips();
+
+    var tabs = $('icePlaceTabs');
+    var tabItems = scope === 'places' ? M.placeTabsView(state.venueFacets, state.venueTypes) : [];
+    if (tabs) {
+      if (tabItems.length) {
+        tabs.hidden = false;
+        tabs.className = 'ice-seg ice-seg--quiet ice-seg--n' + tabItems.length;
+        tabs.innerHTML = tabItems
+          .map(function (c) {
+            return (
+              '<button type="button" role="tab" data-place-type="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      } else {
+        tabs.hidden = true;
+        tabs.innerHTML = '';
+      }
+    }
+
+    var toolsHost = $('iceCatalogTools');
+    var toolsRow = $('iceToolsRow');
+    var placeMenu = $('icePlaceMenu');
+    var whenMenu = $('iceWhenMenu');
+    var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
+    var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets);
+    if (!toolsHost || !toolsRow) return;
+
+    if (!needPlaceTool && !needWhen) {
+      toolsHost.hidden = true;
+      toolsRow.innerHTML = '';
+      if (placeMenu) placeMenu.hidden = true;
+      if (whenMenu) whenMenu.hidden = true;
+      closeUiPicker();
+      setSearchPlaceholder();
+      return;
+    }
+
+    toolsHost.hidden = false;
+    var toolHtml = '';
+    if (needPlaceTool) {
+      var placeOpen = state.uiPicker === 'place';
+      toolHtml +=
+        '<button type="button" class="ice-tool" data-ui-picker="place" aria-expanded="' +
+        (placeOpen ? 'true' : 'false') +
+        '"><span>' +
+        esc(M.placeMenuLabel(state.venueFacets, state.venueTypes)) +
+        '</span></button>';
+      if (placeMenu) {
+        var menuItems = M.placeMenuView(state.venueFacets, state.venueTypes);
+        placeMenu.hidden = !placeOpen;
+        placeMenu.innerHTML = menuItems
+          .map(function (c) {
+            return (
+              '<button type="button" data-place-type="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '<b>' +
+              esc(String(c.count != null ? c.count : '')) +
+              '</b></button>'
+            );
+          })
+          .join('');
+      }
+    } else if (placeMenu) {
+      placeMenu.hidden = true;
+      placeMenu.innerHTML = '';
+    }
+
+    if (needWhen) {
+      var resolved = state.window ? state.window.key : 'any';
+      var whenOpen = state.uiPicker === 'when';
+      toolHtml +=
+        '<button type="button" class="ice-tool" data-ui-picker="when" aria-expanded="' +
+        (whenOpen ? 'true' : 'false') +
+        '"><span>' +
+        esc(M.whenPickerLabel(state.when, resolved)) +
+        '</span></button>';
+      if (whenMenu) {
+        whenMenu.hidden = !whenOpen;
+        whenMenu.innerHTML = M.whenChipsView(state.when, resolved)
+          .map(function (c) {
+            return (
+              '<button type="button" data-when="' +
+              esc(c.key) +
+              '" aria-pressed="' +
+              (c.active ? 'true' : 'false') +
+              '">' +
+              esc(c.label) +
+              '</button>'
+            );
+          })
+          .join('');
+      }
+    } else if (whenMenu) {
+      whenMenu.hidden = true;
+      whenMenu.innerHTML = '';
+      if (state.uiPicker === 'when') closeUiPicker();
+    }
+
+    toolsRow.className = 'ice-tools' + (toolHtml.indexOf('</button>') >= 0 && toolHtml.indexOf('</button>') !== toolHtml.lastIndexOf('</button>') ? '' : ' ice-tools--one');
+    var toolCount = (needPlaceTool ? 1 : 0) + (needWhen ? 1 : 0);
+    toolsRow.className = 'ice-tools' + (toolCount === 1 ? ' ice-tools--one' : '');
+    toolsRow.innerHTML = toolHtml;
+    setSearchPlaceholder();
   }
 
   function setChips() {
-    document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      var intent = btn.getAttribute('data-intent');
-      btn.setAttribute('aria-pressed', intent === state.intent ? 'true' : 'false');
-      if (intent === 'skate') {
-        btn.hidden = !M.shouldShowSkateChip(state.skateCount);
-      }
+    renderCatalogHeader();
+  }
+
+  function setCityLabel() {
+    var name = state.cityName || 'Город';
+    /* Город в двух местах: у чипов намерения (список) и внутри строки поиска (карта). */
+    var els = document.querySelectorAll('.ice-citypill__name');
+    Array.prototype.forEach.call(els, function (el) {
+      el.textContent = name;
     });
-    renderServiceChips();
+  }
+
+  function currentServiceLabel() {
+    if (!state.serviceIds.length) return '';
+    return (state.services || [])
+      .filter(function (s) {
+        return state.serviceIds.indexOf(Number(s.id)) >= 0;
+      })
+      .map(function (s) {
+        return M.serviceChipLabel(s.name);
+      })
+      .join(', ');
   }
 
   /*
@@ -144,7 +344,8 @@
 
     var sw = $('iceViewSwitch');
     if (sw) {
-      sw.hidden = !allowed;
+      // TASK-147: в режиме карты пилюля скрыта — её роль у шторки.
+      sw.hidden = !allowed || showMapView;
       // aria-pressed отвечает на «карта включена?», а подпись зовёт в другое
       // состояние — иначе кнопка называлась бы тем, что уже видно на экране.
       sw.setAttribute('aria-pressed', showMapView ? 'true' : 'false');
@@ -172,9 +373,25 @@
     state.view = wanted;
     setViewToggle();
     persist();
+    setTelegramSwipes(wanted === 'map');
     if (wanted === 'list') {
       // Возврат в список — наверх: иначе после карты полотно открывается с середины.
       global.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }
+
+  /*
+   * TASK-147: свайп шторки в режиме карты конфликтует со свайпом закрытия
+   * мини-аппа. Отключаем вертикальные свайпы на карте и возвращаем в списке.
+   */
+  function setTelegramSwipes(on) {
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (!tg) return;
+    try {
+      if (on && typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes();
+      if (!on && typeof tg.enableVerticalSwipes === 'function') tg.enableVerticalSwipes();
+    } catch (e) {
+      /* старый клиент Telegram — свайп остаётся как есть */
     }
   }
 
@@ -201,6 +418,7 @@
         offMapEl: $('iceMapOffMap'),
         stageEl: $('iceMapStage'),
         loaderEl: $('iceMapLoader'),
+        attribEl: $('iceMapAttrib'),
         listUrl: function (extra) {
           extra = extra || {};
           var opts = {
@@ -210,6 +428,8 @@
                список, а на карте по-прежнему висели все катки города. */
             venueTypes: state.venueTypes,
             limit: extra.limit || 50,
+            /* Окно времени — и на карту: иначе пин «19:30» под чипом «Завтра» — сегодняшний. */
+            when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
           };
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
@@ -243,12 +463,22 @@
         },
         arenaHref: M.arenaHref,
         onOpenArena: function (item, href) {
+          /* Шторка рисует thumb — его и кладём в prefetch, не card. */
+          if (item) rememberArenaHero({ id: item.id, slug: item.slug, card: '', thumb: item.thumb || item.card });
           if (href) shellNav(href);
         },
         onNearList: function (data) {
           if (state.intent === 'coach') return;
           applyArenaPayload(data);
           renderList();
+        },
+        // TASK-147: full-положение шторки = списочный вид вкладки.
+        onSheetFull: function () {
+          setView('list');
+        },
+        // Шапка шторки: «7 мест сегодня вечером …» — метка текущего окна.
+        getWindow: function () {
+          return state.window;
         },
       });
     }
@@ -270,15 +500,18 @@
    * отдельными строками на поверхности карточки, где контраст измерим.
    */
   function renderArenaCard(item) {
-    var v = M.boardCardView(item);
+    var v = M.boardCardView(item, undefined, { window: state.window });
+    /* TASK-148 (AC-2): нет фото — нет фото-блока. Плашка типа места: иконка
+       с сервера (venue_icon), фолбэк — монограмма имени. */
     var photo = v.photo
       ? '<span class="ice-board__photo"' + acardThumbStyle(v.photo) + '>'
       : '<span class="ice-board__photo ice-board__photo--empty">' +
         '<span class="ice-board__initial" aria-hidden="true">' +
-        esc(v.initial) +
+        esc(v.venueIcon || v.initial) +
         '</span>';
     var scrim =
       '<span class="ice-board__scrim">' +
+      (v.offWindow ? '<span class="ice-board__off">' + esc(v.offLabel) + '</span>' : '') +
       (v.isSession
         ? '<span class="ice-board__day">' +
           esc(v.day) +
@@ -296,8 +529,18 @@
         ? '<span class="ice-board__prices">' + esc(v.prices) + '</span>'
         : ''
       : '<span class="ice-board__status">' + esc(v.status) + '</span>';
+    /* «Позвать» — поверх кадра, но вне ссылки карточки: вложенная кнопка в <a> ломает
+       клик на iOS, а тап должен звать друга, а не открывать карточку. */
+    var invite =
+      v.sessionId != null && global.GlideShareSheet
+        ? '<button type="button" class="ice-board__invite" data-invite-arena="' + esc(v.arenaId) +
+          '" data-invite-session="' + esc(v.sessionId) + '" data-invite-label="' + esc(v.inviteLabel) +
+          '">Позвать</button>'
+        : '';
     return (
-      '<a class="ice-board" href="' +
+      '<div class="ice-board-wrap">' +
+      invite +
+      '<a class="ice-board ice-board--type-' + esc(v.venueType) + (v.offWindow ? ' ice-board--off' : '') + '" href="' +
       esc(v.href) +
       '" data-href="' +
       esc(v.href) +
@@ -306,11 +549,12 @@
       scrim +
       '</span>' +
       (facts ? '<span class="ice-board__facts">' + facts + '</span>' : '') +
-      '<span class="ice-board__depth">' +
+      '<span class="ice-board__depth' + (v.stale ? ' ice-board__depth--stale' : '') + '">' +
       esc(v.depth) +
       '<span class="ice-board__go" aria-hidden="true">→</span>' +
       '</span>' +
-      '</a>'
+      '</a>' +
+      '</div>'
     );
   }
 
@@ -399,8 +643,11 @@
         loadedIntent: state.loadedIntent,
         serviceLabel: currentServiceLabel(),
         loading: state.loading,
+        venueTypes: state.venueTypes,
+        window: state.window,
       });
     }
+    parkShareButton();
     setShareButton();
     if (!list) return;
     var paint = M.listPaintMode({
@@ -419,7 +666,7 @@
     if (paint === 'empty') {
       var city = cityFromState(state.cityId) || {};
       var empty = M.formatEmptyList(state.intent, {
-        serviceName: state.intent === 'coach' && state.serviceId ? currentServiceLabel() : '',
+        serviceName: state.intent === 'coach' && state.serviceIds.length ? currentServiceLabel() : '',
         trainerCount: city.trainer_count,
         mapRinkCount: city.map_rink_count,
         hasSkate: M.shouldShowSkateChip(state.skateCount),
@@ -428,12 +675,37 @@
       showActiveList();
       return;
     }
-    list.innerHTML = state.items
-      .map(function (item) {
-        return state.intent === 'coach' ? renderTrainerCard(item) : renderArenaCard(item);
-      })
-      .join('');
+    if (state.intent === 'coach') {
+      list.innerHTML = state.items.map(renderTrainerCard).join('');
+      showActiveList();
+      return;
+    }
+    /* TASK-146: окно сортирует, а не фильтрует. Между «в окне» и «вне окна» — липкая
+       плашка: пока человек листает приглушённые карточки, она висит сверху и не даёт
+       забыть, что это уже не ответ на выбранный чип. */
+    var parts = M.orderForFeed(state.items, state.window, state.nearOn);
+    var brk = parts.hits.length ? M.windowBreakView(state.window, parts.rest, state.venueTypes) : null;
+    list.innerHTML =
+      parts.hits.map(renderArenaCard).join('') +
+      (brk
+        ? '<div class="ice-window-break" role="separator">' +
+          '<span class="ice-window-break__pill"><b>' + esc(brk.title) + '</b> · ' + esc(brk.sub) + '</span>' +
+          '</div>'
+        : '') +
+      parts.rest.map(renderArenaCard).join('');
+    /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
+       а приглушённые места без нужных сеансов идут уже после неё. */
+    var brkEl = brk && list.querySelector('.ice-window-break');
+    var shareBtn = $('iceShareBtn');
+    if (brkEl && shareBtn) list.insertBefore(shareBtn, brkEl);
     showActiveList();
+  }
+
+  /* innerHTML списка стирает всё внутри — возвращаем кнопку на её штатное место под #iceList. */
+  function parkShareButton() {
+    var btn = $('iceShareBtn');
+    var host = $('iceList');
+    if (btn && host && btn.parentNode !== host.parentNode) host.parentNode.insertBefore(btn, host.nextSibling);
   }
 
   function recordIceInterest() {
@@ -472,12 +744,8 @@
    * живёт в четырёх других точках.
    */
   function shareAvailable() {
-    return !!(
-      state.cityId &&
-      state.intent === 'skate' &&
-      !state.loading &&
-      state.items.length
-    );
+    // TASK-146: делимся подборкой — она есть для любого типа места (лёд, магазины, залы).
+    return !!(state.cityId && state.intent === 'skate' && !state.loading && state.items.length);
   }
 
   function setShareButton() {
@@ -488,9 +756,11 @@
     if (!show) return;
     var label = $('iceShareLabel');
     if (label) {
-      label.textContent = state.cityName
-        ? 'Поделиться расписанием — ' + state.cityName
-        : 'Поделиться расписанием';
+      label.textContent = global.GlideShareSheet
+        ? 'Поделиться подборкой'
+        : state.cityName
+          ? 'Поделиться расписанием — ' + state.cityName
+          : 'Поделиться расписанием';
     }
     btn.setAttribute(
       'aria-label',
@@ -502,6 +772,16 @@
 
   function openIceShareDialog() {
     if (!state.cityId) return;
+    /* TASK-146: делимся ровно тем, что на экране — город, тип места, окно времени —
+       страницей подборки /c/{город}. Без шита (старые клиенты) — прежний «Лёд сегодня». */
+    if (global.GlideShareSheet) {
+      var q = ['city_id=' + encodeURIComponent(state.cityId)];
+      if (state.venueTypes && state.venueTypes.length === 1) q.push('venue_type=' + encodeURIComponent(state.venueTypes[0]));
+      var key = state.window && state.window.key;
+      if (key && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) q.push('when=' + encodeURIComponent(key));
+      global.GlideShareSheet.open({ endpoint: '/api/public/ice/selection/share?' + q.join('&'), context: 'ice_list' });
+      return;
+    }
     var btn = $('iceShareBtn');
     if (btn) btn.disabled = true;
     fetchJson('/api/public/ice/share/' + encodeURIComponent(state.cityId) + '?share_context=ice_tab')
@@ -545,7 +825,7 @@
     }
     if (kind === 'clear-service') {
       return function () {
-        state.serviceId = null;
+        state.serviceIds = [];
         renderServiceChips();
         persist();
         loadTrainers();
@@ -616,7 +896,116 @@
     state.total = data && data.total != null ? data.total : incoming.length;
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
-    renderVenueChips();
+    state.window = (data && data.window) || null;
+    renderCatalogHeader();
+  }
+
+  function renderWhenChips() {
+    renderCatalogHeader();
+  }
+
+  /**
+   * TASK-146: «Рядом». Было «Лёд рядом сейчас» — один каток со льдом сегодня. Но в поиске
+   * не только лёд: зал, магазин заточки, роллеры. Поэтому кнопка не уводит на один каток,
+   * а переставляет текущую ленту по расстоянию — с теми же типом места и окном времени.
+   * Второй тап выключает. Город в шапке задаёт каталог; «Ближе» только сортирует
+   * по GPS. Если геолокации нет — не зовём в выбор города, когда город уже выбран.
+   */
+  function setNearButton() {
+    var btn = $('iceNearestBtn');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', state.nearOn ? 'true' : 'false');
+    btn.setAttribute(
+      'aria-label',
+      state.nearOn
+        ? 'Выключить сортировку по расстоянию'
+        : 'Сначала ближайшие ко мне (нужна геолокация)'
+    );
+  }
+
+  function showNearGeoBlocked(reason) {
+    var message = M.formatNearGeoBlockedMessage({
+      cityId: state.cityId,
+      cityName: state.cityName,
+      reason: reason,
+    });
+    var hasCity = !!(state.cityId);
+    var tg = global.Telegram && global.Telegram.WebApp;
+
+    if (hasCity) {
+      if (tg && typeof tg.showAlert === 'function') {
+        try {
+          tg.showAlert(message);
+          return;
+        } catch (e) {
+          /* fallback */
+        }
+      }
+      if (tg && typeof tg.showPopup === 'function') {
+        try {
+          tg.showPopup({
+            message: message,
+            buttons: [{ id: 'close', type: 'close', text: 'Понятно' }],
+          });
+          return;
+        } catch (e) {
+          /* fallback */
+        }
+      }
+      global.alert(message);
+      return;
+    }
+
+    if (tg && typeof tg.showPopup === 'function') {
+      try {
+        tg.showPopup(
+          {
+            message: message,
+            buttons: [
+              { id: 'city', type: 'default', text: 'Выбрать город' },
+              { id: 'close', type: 'cancel' },
+            ],
+          },
+          function (id) {
+            if (id === 'city') openCityPicker(true);
+          }
+        );
+        return;
+      } catch (e) {
+        /* старый клиент Telegram без showPopup с кнопками — ниже обычный confirm */
+      }
+    }
+    if (global.confirm(message + '\n\nОткрыть выбор города?')) openCityPicker(true);
+  }
+
+  function toggleNear() {
+    var btn = $('iceNearestBtn');
+    if (state.nearOn) {
+      state.nearOn = false;
+      setNearButton();
+      renderList();
+      return;
+    }
+    if (!(global.navigator && global.navigator.geolocation)) {
+      showNearGeoBlocked('unsupported');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    global.navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        if (btn) btn.disabled = false;
+        state.near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+        state.nearOn = true;
+        setNearButton();
+        // Сервер считает distance_km только по near — перезапрашиваем ту же ленту с ним.
+        loadArenas();
+      },
+      function () {
+        if (btn) btn.disabled = false;
+        showNearGeoBlocked('denied');
+      },
+      { timeout: 8000, maximumAge: 120000 }
+    );
   }
 
   function applyTrainerPayload(data) {
@@ -688,6 +1077,9 @@
       intent: state.intent,
       venueTypes: state.venueTypes,
       limit: 50,
+      when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
+      // Знаем, где человек, — ближние места выше (сервер считает distance_km).
+      near: state.near || '',
     });
     return fetchJson(url)
       .then(function (data) {
@@ -712,7 +1104,7 @@
     var gen = beginListFetch('coach');
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
-      serviceId: state.serviceId,
+      serviceIds: state.serviceIds,
       limit: 50,
     });
     return fetchJson(url)
@@ -749,14 +1141,22 @@
       box.innerHTML = '';
       return;
     }
+    /* TASK-148 (AC-1): чип рендерится только при данных. Услуги уже отфильтрованы
+       по trainer_count > 0 (loadServices); пустой список = в городе нет тренеров,
+       и лента «Все» из одного чипа — обещание без наполнения. */
+    if (!state.services.length) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
     box.hidden = false;
     var html =
       '<button type="button" class="ice-chip" data-service-id="" aria-pressed="' +
-      (state.serviceId ? 'false' : 'true') +
+      (state.serviceIds.length ? 'false' : 'true') +
       '">Все</button>';
     (state.services || []).forEach(function (s) {
       var id = String(s.id);
-      var pressed = String(state.serviceId || '') === id;
+      var pressed = state.serviceIds.indexOf(Number(id)) >= 0;
       html +=
         '<button type="button" class="ice-chip" data-service-id="' +
         esc(id) +
@@ -776,28 +1176,7 @@
    * Для чипа «Тренеры» скрыты: там в списке люди, а не площадки.
    */
   function renderVenueChips() {
-    var box = $('iceVenueChips');
-    if (!box) return;
-    var chips = state.intent === 'coach' ? [] : M.venueChipsView(state.venueFacets, state.venueTypes);
-    if (!chips.length) {
-      box.hidden = true;
-      box.innerHTML = '';
-      return;
-    }
-    box.hidden = false;
-    box.innerHTML = chips
-      .map(function (c) {
-        return (
-          '<button type="button" class="ice-chip" data-venue-type="' +
-          esc(c.key) +
-          '" aria-pressed="' +
-          (c.active ? 'true' : 'false') +
-          '">' +
-          esc(c.label) +
-          '</button>'
-        );
-      })
-      .join('');
+    renderCatalogHeader();
   }
 
   function loadServices() {
@@ -812,12 +1191,15 @@
         state.services = items.filter(function (s) {
           return Number(s.trainer_count) > 0;
         });
-        if (state.serviceId) {
-          var still = state.services.some(function (s) {
-            return Number(s.id) === Number(state.serviceId);
+        if (state.serviceIds.length) {
+          var present = state.services.map(function (s) {
+            return Number(s.id);
           });
-          if (!still) {
-            state.serviceId = null;
+          var kept = state.serviceIds.filter(function (id) {
+            return present.indexOf(id) >= 0;
+          });
+          if (kept.length !== state.serviceIds.length) {
+            state.serviceIds = kept;
             persist();
             loadTrainers();
           }
@@ -873,7 +1255,11 @@
     state.cityId = city.id;
     state.cityName = city.name || '';
     state.skateCount = city.skate_count;
-    var nextIntent = M.pickCityIntent(city, state.intent);
+    /* Явно выбранный тип места (чип или ссылка ?venue=shop) — это просьба о местах:
+       не перескакиваем на тренеров, даже если массового катания в городе нет. */
+    var nextIntent = state.venueTypes && state.venueTypes.length
+      ? state.intent
+      : M.pickCityIntent(city, state.intent);
     if (nextIntent !== state.intent) state.intent = nextIntent;
     if (state.intent === 'coach') state.view = 'list';
     setCityLabel();
@@ -992,6 +1378,16 @@
     return fetchJson(M.buildIceCitiesUrl())
       .then(function (data) {
         state.cities = M.filterIceCities((data && data.items) || []);
+        var urlCityId = M.cityIdFromSearch(global.location.search || '');
+        if (urlCityId) {
+          var fromUrl = state.cities.filter(function (c) {
+            return Number(c.id) === urlCityId;
+          })[0];
+          if (fromUrl) {
+            applyCity(fromUrl);
+            return;
+          }
+        }
         var saved = M.loadIceState(global.sessionStorage);
         if (saved && saved.cityId) {
           var fromSaved = state.cities.filter(function (c) {
@@ -1014,12 +1410,65 @@
             applyCity(fromSession);
             return;
           }
-          applyCity(M.pickFallbackCity(state.cities));
+          return geolocateOrFallback(session);
         });
       })
       .catch(function () {
         applyCity(M.pickFallbackCity(state.cities));
       });
+  }
+
+  /**
+   * TASK-146: холодный вход (маркетинговая ссылка, первый запуск) — города нет ни в ссылке,
+   * ни в сохранённом, ни в профиле. Спрашиваем геолокацию один раз и берём ближайший город
+   * (CatalogGeoModel: не дальше 150 км — дальний «ближайший» не совпадение). Отказ или
+   * нет совпадения — прежний фолбэк, и больше не спрашиваем.
+   */
+  function geolocateOrFallback(session) {
+    var G = global.CatalogGeoModel;
+    var fallback = function () {
+      applyCity(M.pickFallbackCity(state.cities));
+    };
+    var go =
+      G &&
+      G.shouldAutoGeolocate({
+        cityId: null,
+        hasExplicitQueryCityId: !!M.cityIdFromSearch(global.location.search || ''),
+        hasCollectiveContext: false,
+        hasDeepLinkTrainer: false,
+        hasPrimaryTrainer: false,
+        geolocationSupported: !!(global.navigator && global.navigator.geolocation),
+        previouslyDeclined: G.readDeclinedFlag(global.localStorage),
+        ipSaysUnserved: !!(session && session.ip_country_served === false),
+      });
+    if (!go) {
+      fallback();
+      return;
+    }
+    return new Promise(function (resolve) {
+      global.navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          state.near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
+          fetchJson(G.buildNearUrl(pos.coords.latitude, pos.coords.longitude))
+            .then(function (data) {
+              var cityId = G.pickCityFromNearResponse(data);
+              var city = cityId
+                ? state.cities.filter(function (c) { return Number(c.id) === cityId; })[0]
+                : null;
+              if (city) applyCity(city);
+              else fallback();
+            })
+            .catch(fallback)
+            .then(resolve);
+        },
+        function () {
+          G.writeDeclinedFlag(global.localStorage);
+          fallback();
+          resolve();
+        },
+        { timeout: 8000, maximumAge: 300000 }
+      );
+    });
   }
 
   function showSearch(q) {
@@ -1053,7 +1502,9 @@
           var sub = '';
           if (g.type === 'arena') {
             href = M.arenaHref(it);
-            sub = [it.district, it.city_name, it.address].filter(Boolean).join(' · ');
+            // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
+            var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
+            sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
           } else if (g.type === 'trainer') {
             href = M.trainerHref(it);
             title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
@@ -1085,6 +1536,20 @@
   }
 
   function onRootClick(ev) {
+    var invite = ev.target.closest('[data-invite-arena]');
+    if (invite && global.GlideShareSheet) {
+      ev.preventDefault();
+      global.GlideShareSheet.open({
+        ref: invite.getAttribute('data-invite-arena'),
+        sessionId: invite.getAttribute('data-invite-session'),
+        slots: [
+          { id: invite.getAttribute('data-invite-session'), label: invite.getAttribute('data-invite-label') },
+        ],
+        invite: true,
+        context: 'ice_list',
+      });
+      return;
+    }
     var card = ev.target.closest('[data-href]');
     if (!card) return;
     var href = card.getAttribute('data-href') || card.getAttribute('href') || '';
@@ -1101,6 +1566,14 @@
     }
     if (href) {
       markHeroForTransition(card);
+      var m = /[?&]ref=([^&]+)/.exec(href);
+      var ref = m ? decodeURIComponent(m[1]) : '';
+      var item = ref
+        ? state.items.filter(function (it) {
+            return String(it.id) === ref || String(it.slug || '') === ref;
+          })[0]
+        : null;
+      rememberArenaHero(item);
       shellNav(href);
     }
   }
@@ -1122,19 +1595,68 @@
   }
 
   function bind() {
-    document.querySelectorAll('#iceIntentChips .ice-chip').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var intent = btn.getAttribute('data-intent');
-        var action = M.intentChipAction(intent);
-        if (action.type !== 'list') return;
-        state.intent = M.coerceIntent(action.intent);
+    var modeSeg = $('iceModeSeg');
+    if (modeSeg) {
+      modeSeg.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-catalog-mode]');
+        if (!btn) return;
+        var mode = btn.getAttribute('data-catalog-mode') || 'places';
+        var patch = M.applyCatalogMode(mode);
+        state.intent = M.coerceIntent(patch.intent);
+        state.venueTypes = patch.venueTypes.slice();
+        closeUiPicker();
+        if (mode === 'coach') state.view = 'list';
         renderList();
         setChips();
         setViewToggle();
         persist();
         loadList();
       });
-    });
+    }
+
+    var placeTabs = $('icePlaceTabs');
+    if (placeTabs) {
+      placeTabs.addEventListener('click', function (ev) {
+        var tab = ev.target.closest('[data-place-type]');
+        if (!tab) return;
+        var key = tab.getAttribute('data-place-type') || '';
+        state.venueTypes = key ? [key] : [];
+        closeUiPicker();
+        if (mapCtl && mapViewActive()) mapCtl.refresh();
+        renderCatalogHeader();
+        loadArenas();
+      });
+    }
+
+    var toolsHost = $('iceCatalogTools');
+    if (toolsHost) {
+      toolsHost.addEventListener('click', function (ev) {
+        var pickerBtn = ev.target.closest('[data-ui-picker]');
+        if (pickerBtn) {
+          var which = pickerBtn.getAttribute('data-ui-picker') || '';
+          state.uiPicker = state.uiPicker === which ? false : which;
+          renderCatalogHeader();
+          return;
+        }
+        var placeBtn = ev.target.closest('[data-place-type]');
+        if (placeBtn && placeBtn.closest('#icePlaceMenu')) {
+          var pkey = placeBtn.getAttribute('data-place-type') || '';
+          state.venueTypes = pkey ? [pkey] : [];
+          closeUiPicker();
+          if (mapCtl && mapViewActive()) mapCtl.refresh();
+          renderCatalogHeader();
+          loadArenas();
+          return;
+        }
+        var whenBtn = ev.target.closest('[data-when]');
+        if (whenBtn && whenBtn.closest('#iceWhenMenu')) {
+          state.when = whenBtn.getAttribute('data-when') || 'any';
+          closeUiPicker();
+          renderCatalogHeader();
+          loadArenas();
+        }
+      });
+    }
 
     var svcBox = $('iceServiceChips');
     if (svcBox) {
@@ -1142,30 +1664,23 @@
         var chip = ev.target.closest('[data-service-id]');
         if (!chip) return;
         var raw = chip.getAttribute('data-service-id');
-        state.serviceId = raw ? Number(raw) : null;
-        if (state.serviceId && isNaN(state.serviceId)) state.serviceId = null;
+        var id = raw ? Number(raw) : null;
+        if (id == null || isNaN(id)) {
+          state.serviceIds = [];
+        } else {
+          /* Тоггл: повторный тап снимает услугу, пустой набор = «Все». */
+          var at = state.serviceIds.indexOf(id);
+          if (at >= 0) state.serviceIds.splice(at, 1);
+          else state.serviceIds.push(id);
+        }
         renderServiceChips();
         persist();
         loadTrainers();
       });
     }
 
-    var venueBox = $('iceVenueChips');
-    if (venueBox) {
-      venueBox.addEventListener('click', function (ev) {
-        var chip = ev.target.closest('[data-venue-type]');
-        if (!chip) return;
-        var key = chip.getAttribute('data-venue-type') || '';
-        /* Одиночный выбор, а не мультиселект: «Все» или один тип. Множественный
-           выбор здесь никому не нужен, а пустое пересечение выглядит как поломка. */
-        state.venueTypes = key ? [key] : [];
-        renderVenueChips();
-        /* Пины на карте строятся из своего запроса и не обновятся сами по факту
-           перерисовки списка — на активной карте её надо дёрнуть явно. */
-        if (mapCtl && mapViewActive()) mapCtl.refresh();
-        loadArenas();
-      });
-    }
+    var nearestBtn = $('iceNearestBtn');
+    if (nearestBtn) nearestBtn.addEventListener('click', toggleNear);
 
     var viewSwitch = $('iceViewSwitch');
     if (viewSwitch) {
@@ -1197,6 +1712,12 @@
 
     var change = $('iceCityChange');
     if (change) change.addEventListener('click', function () {
+      openCityPicker(true);
+    });
+
+    /* TASK-147: дубль пилюли города внутри строки поиска (режим карты). */
+    var changeMap = $('iceCityChangeMap');
+    if (changeMap) changeMap.addEventListener('click', function () {
       openCityPicker(true);
     });
 
@@ -1282,7 +1803,11 @@
     bind();
     var saved = M.loadIceState(global.sessionStorage);
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
-    if (saved && saved.serviceId) state.serviceId = Number(saved.serviceId) || null;
+    if (saved && saved.serviceIds && saved.serviceIds.length) {
+      state.serviceIds = saved.serviceIds.map(Number).filter(function (n) { return n > 0; });
+    } else if (saved && saved.serviceId) {
+      state.serviceIds = Number(saved.serviceId) > 0 ? [Number(saved.serviceId)] : [];
+    }
     /*
      * TASK-103 AC-001: список — всегда стартовое состояние.
      *
@@ -1299,6 +1824,17 @@
       var params = new URLSearchParams(global.location.search || '');
       var urlIntent = M.intentFromSearch(global.location.search || '');
       if (urlIntent) state.intent = M.coerceIntent(urlIntent);
+      var urlVenue = M.venueFromSearch(global.location.search || '');
+      if (urlVenue) {
+        state.intent = 'skate';
+        state.venueTypes = [urlVenue];
+      }
+      /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
+         venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
+         окна нет — параметр молча игнорируем, как и раньше. Окно не пишется в
+         sessionStorage (см. persist), поэтому восстановление его не перетрёт. */
+      var urlWhen = M.whenFromSearch(global.location.search || '');
+      if (urlWhen && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) state.when = urlWhen;
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {
         global.setTimeout(function () {
@@ -1321,6 +1857,9 @@
         global.setTimeout(function () {
           global.scrollTo(0, saved.scrollY);
         }, 0);
+      }
+      if (global.ClientShell && global.ClientShell.reportCatalogPresence && state.cityId) {
+        global.ClientShell.reportCatalogPresence('miniapp_ice', null, { city_id: state.cityId });
       }
     });
   }

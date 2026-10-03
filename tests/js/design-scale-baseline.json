@@ -16,7 +16,8 @@
     "mini-app-trainer-card.css": 0,
     "mini-app-arena-ribbon.css": 0,
     "booking-client.css": 0,
-    "mini-app-components.css": 0
+    "mini-app-components.css": 0,
+    "mini-app-share-sheet.css": 0
   },
   "before_epic4": {
     "recorded_at": "2026-09-07",

@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Awaitable, Callable
 
 from src.application.ice_session_use_cases import IceSessionValidationError
-from src.ingestion.jobs import advance_next_run_at, config_requires_by_egress
+from src.ingestion.freshness import next_poll_at, next_source_state
+from src.ingestion.jobs import config_requires_by_egress
+from src.ingestion.source_io import egress_proxy
 from src.ingestion.normalize import IceSessionNormalizer
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.publish import IceSessionPublisher
@@ -23,6 +27,10 @@ from src.ingestion.validate import IceSessionValidator
 
 logger = logging.getLogger(__name__)
 
+# TASK-146: опрос раз в ~45 минут на десятки арен даёт пару заданий в минуту. Потолок
+# на тик гасит залп после простоя воркера: остальное догонит следующий тик (60 с).
+MAX_JOBS_PER_TICK = 20
+
 
 class IceIngestScheduler:
     def __init__(
@@ -34,6 +42,10 @@ class IceIngestScheduler:
         validator: IceSessionValidator | None = None,
         publisher: IceSessionPublisher | None = None,
         by_egress_configured: bool = False,
+        by_egress_proxy_url: str | None = None,
+        rng: random.Random | None = None,
+        max_jobs_per_tick: int | None = MAX_JOBS_PER_TICK,
+        checkpoint: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._store = store
         self._recorder = recorder or LoggingScrapeRunRecorder()
@@ -44,13 +56,22 @@ class IceIngestScheduler:
         # TASK-083 / PDEC-004: worker-level proof a real BY egress path (VPS tunnel) is
         # wired up. job.config["requires_by_egress"] stays True forever once set — this
         # only says the flag is now satisfied on *this* worker, never mutate the flag.
-        self._by_egress_configured = by_egress_configured
+        self._by_egress_configured = by_egress_configured or bool(by_egress_proxy_url)
+        # Сам адрес прокси: им ходят только задания с requires_by_egress, остальные — напрямую.
+        self._by_egress_proxy_url = by_egress_proxy_url
+        self._rng = rng
+        self._max_jobs_per_tick = max_jobs_per_tick
+        # Коммит после каждого задания: новое расписание видно пользователю сразу после
+        # своего прогона, а не в конце тика, где до него может быть ещё 20 сайтов.
+        self._checkpoint = checkpoint
 
     async def run_due(self, now: datetime) -> list[ScrapeRunRecord]:
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
         outcomes: list[ScrapeRunRecord] = []
         due_jobs = await self._store.list_due(now)
+        if self._max_jobs_per_tick is not None:
+            due_jobs = due_jobs[: self._max_jobs_per_tick]
         for job in due_jobs:
             record, drafts = await self._run_one(job, now)
             run_id = await self._recorder.record(record)
@@ -80,12 +101,31 @@ class IceIngestScheduler:
                         run_id, error_code="publish_error", error_message=str(exc)
                     )
             outcomes.append(record)
+            state = await self._next_state(job, record, now)
             await self._store.mark_attempted(
                 job.id,
                 last_run_at=now,
-                next_run_at=advance_next_run_at(job.cadence, now),
+                next_run_at=next_poll_at(
+                    job_id=job.id,
+                    config=job.config,
+                    status=record.status,
+                    state=state,
+                    now=now,
+                    rng=self._rng,
+                ),
+                state=state,
             )
+            if self._checkpoint is not None:
+                await self._checkpoint()
         return outcomes
+
+    async def _next_state(self, job: ParserJob, record: ScrapeRunRecord, now: datetime):
+        """Серия сбоев / last_ok_at. Пустой прогон — сбой, только если витрина не пуста."""
+        shown = 0
+        counter = getattr(self._store, "count_shown_sessions", None)
+        if record.status == RUN_STATUS_EMPTY and counter is not None:
+            shown = await counter(job.arena_id, now)
+        return next_source_state(job.state, record, shown_sessions=shown)
 
     async def _run_one(self, job: ParserJob, now: datetime) -> tuple[ScrapeRunRecord, list]:
         started = now
@@ -115,8 +155,10 @@ class IceIngestScheduler:
                 ),
                 empty,
             )
+        proxy = self._by_egress_proxy_url if config_requires_by_egress(job.config) else None
         try:
-            extraction = await parser.extract(job)
+            with egress_proxy(proxy):
+                extraction = await parser.extract(job)
             drafts = self._normalizer.normalize(extraction, job, now=now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:

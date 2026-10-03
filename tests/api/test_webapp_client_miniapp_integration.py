@@ -1933,6 +1933,8 @@ async def test_client_hub_bootstrap_includes_passes(app_use_test_db, db_session)
     payload = resp.json()
     assert "passes" in payload
     assert isinstance(payload["passes"], list)
+    # TASK-146: карусель «Каталог» на Главной берёт город клиента отсюда.
+    assert "city_id" in payload["client_session"]
 
 
 @pytest.mark.asyncio

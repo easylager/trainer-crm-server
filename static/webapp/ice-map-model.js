@@ -173,7 +173,8 @@
   }
 
   function pinSheetTarget(item) {
-    var ref = (item && (item.slug || item.id)) || '';
+    // id важнее slug: slug уникален только в городе (TASK-146).
+    var ref = (item && (item.id != null ? item.id : item.slug)) || '';
     return {
       href: 'arena?ref=' + encodeURIComponent(String(ref)),
       opens: 'arena-card',
@@ -353,6 +354,73 @@
     });
   }
 
+  /*
+   * TASK-147 (хвост к макету 02): тип места = цвет пина и точка легенды.
+   * Ключи и подписи — словарь сервера (src/shared/venue_types.py); подпись
+   * с сервера (item.venue_chip) важнее, таблица — запас для старого ответа API.
+   * Цвета — только токены theme.css: новых hex нет. Улица (outdoor) — это ЛЁД
+   * (SKATING_VENUE_TYPES на сервере: «уличный каток — тоже лёд»), поэтому цвет льда,
+   * а в легенде она сводится с льдом в одну запись «Лёд»: две одинаковые точки
+   * ничего не объясняют. Хореозал делит цвет с залом, «другое» — графит.
+   * «Трассы» отдельным типом в данных нет — её нет и в легенде.
+   */
+  var VENUE_ORDER = ['ice', 'gym', 'choreo', 'pool', 'shop', 'other'];
+  var VENUE_LABEL = {
+    ice: 'Лёд',
+    outdoor: 'Улица',
+    gym: 'Зал',
+    choreo: 'Хореография',
+    pool: 'Бассейн',
+    shop: 'Магазин',
+    other: 'Другое',
+  };
+  var VENUE_TOKEN = {
+    ice: '--app-venue-ice',
+    outdoor: '--app-venue-ice',
+    gym: '--app-venue-gym',
+    choreo: '--app-venue-gym',
+    pool: '--app-venue-pool',
+    shop: '--app-venue-shop',
+    other: '--app-venue-service',
+  };
+  // Где бывают публичные сеансы льда (SKATING_VENUE_TYPES на сервере).
+  var SESSION_VENUES = ['ice', 'outdoor'];
+
+  /* Неизвестный или пустой тип — лёд, как на сервере (normalize_venue_type). */
+  function venueKey(item) {
+    var raw = trimStr(item && item.venue_type).toLowerCase();
+    return VENUE_LABEL.hasOwnProperty(raw) ? raw : 'ice';
+  }
+
+  /* Запись легенды: улица сводится ко льду (тот же цвет — одна точка на оба типа). */
+  function legendKey(item) {
+    var key = venueKey(item);
+    return key === 'outdoor' ? 'ice' : key;
+  }
+
+  /*
+   * Легенда карты: только типы, что реально есть среди нарисованных пинов.
+   * Меньше двух записей — легенда не нужна (одна точка ничего не объясняет), поэтому
+   * show=false. Порядок фиксированный, чтобы легенда не прыгала от пана к пану.
+   * Подпись записи «Лёд» берётся у настоящего льда, а не у улицы («Улица» ≠ «Лёд»).
+   */
+  function legendView(items) {
+    var seen = {};
+    splitMapAndList(items).onMap.forEach(function (item) {
+      var key = legendKey(item);
+      var own = venueKey(item) === key ? trimStr(item.venue_chip) : '';
+      if (!seen.hasOwnProperty(key) || (own && seen[key] === VENUE_LABEL[key])) {
+        seen[key] = own || VENUE_LABEL[key];
+      }
+    });
+    var entries = VENUE_ORDER.filter(function (key) {
+      return seen.hasOwnProperty(key);
+    }).map(function (key) {
+      return { key: key, label: seen[key], token: VENUE_TOKEN[key] };
+    });
+    return { show: entries.length >= 2, entries: entries };
+  }
+
   function shortArenaName(name) {
     var s = trimStr(name);
     var quoted = s.match(/[«"]([^»"]+)[»"]/);
@@ -369,6 +437,20 @@
     return m ? m[1] : '';
   }
 
+  /*
+   * TASK-147: время СЕАНСА В ВЫБРАННОМ ОКНЕ. Сеанс вне окна не считается
+   * ответом ни для пина, ни для кластера, ни для карусели — иначе «19:30»
+   * под чипом «Завтра» читается как завтрашние 19:30 (урок TASK-146).
+   */
+  function liveTime(item) {
+    if (item && item.live && item.live.outside_window) return '';
+    // TASK-147: время — только у льда. У зала/магазина live.text — часы работы
+    // («10:00–20:00»), а не сеанс; вытащенное регэкспом «10:00» выдавало бы
+    // график за расписание.
+    if (SESSION_VENUES.indexOf(venueKey(item)) < 0) return '';
+    return sessionTime(item);
+  }
+
   function pinTone(item) {
     var tier = String((item && item.tier) || 'C').toUpperCase();
     if (tier === 'A') return 'a';
@@ -376,21 +458,111 @@
     return 'c';
   }
 
-  function pinView(item) {
+  function pinView(item, opts) {
+    opts = opts || {};
     var tone = pinTone(item);
-    var label = '';
-    if (tone === 'a') {
-      var short = shortArenaName(item && item.name);
-      var time = sessionTime(item);
-      if (short && time) label = short + ' · ' + time;
-      else label = short;
-    }
+    var off = !!(item && item.live && item.live.outside_window);
+    var time = liveTime(item);
+    var shortName = shortArenaName(item && item.name);
+    var venue = venueKey(item);
+    // TASK-147: пин = время ближайшего сеанса. Tier A/B с сеансом в окне — пилюля
+    // с временем; tier C и outside_window — полая точка без текста.
+    var kind = (tone === 'a' || tone === 'b') && time ? 'time' : 'dot';
     return {
       tone: tone,
-      muted: tone === 'c',
-      label: label,
-      shortName: shortArenaName(item && item.name),
+      muted: tone === 'c' || off,
+      when: off ? 'off' : 'in',
+      kind: kind,
+      time: time,
+      shortName: shortName,
+      venue: venue,
+      selected: !!opts.selected,
+      label: kind === 'time' ? time : '',
     };
+  }
+
+  function clusterSummary(items) {
+    var list = items || [];
+    var hits = 0;
+    var minTime = '';
+    list.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) {
+        hits++;
+        if (!minTime || t < minTime) minTime = t;
+      }
+    });
+    return {
+      count: list.length,
+      hasHits: hits > 0,
+      minTime: minTime,
+      label: minTime ? 'с ' + minTime : hits ? 'места' : 'нет сеансов',
+    };
+  }
+
+  function railOrder(items) {
+    var list = items || [];
+    var hits = [];
+    var rest = [];
+    list.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) hits.push(item);
+      else rest.push(item);
+    });
+    hits.sort(function (a, b) {
+      return liveTime(a).localeCompare(liveTime(b));
+    });
+    return hits.concat(rest);
+  }
+
+  function sheetSummary(items, window) {
+    var list = items || [];
+    var ice = list.filter(function (item) {
+      return String(item.venue_type || 'ice') !== 'shop';
+    });
+    var sessions = 0;
+    ice.forEach(function (item) {
+      var t = liveTime(item);
+      if (t && /^\d{1,2}:\d{2}$/.test(t)) sessions++;
+    });
+    var rest = list.length - ice.length;
+    var whenLabel = '';
+    if (window && window.label) whenLabel = window.label;
+    else if (window && window.key) {
+      var labels = {
+        now: 'сейчас',
+        evening: 'сегодня вечером',
+        tomorrow: 'завтра',
+        weekend: 'в выходные',
+      };
+      whenLabel = labels[window.key] || '';
+    }
+    var parts = [];
+    if (ice.length) {
+      var word = pluralRu(ice.length, 'место', 'места', 'мест');
+      parts.push(ice.length + ' ' + word + (whenLabel ? ' ' + whenLabel : ''));
+    }
+    if (sessions) {
+      var word = pluralRu(sessions, 'сеанс', 'сеанса', 'сеансов');
+      parts.push(sessions + ' ' + word);
+    }
+    if (rest) {
+      parts.push('ещё ' + rest + ' без сеансов');
+    }
+    return parts.join(' · ');
+  }
+
+  function snapFor(heightPx, snaps) {
+    var best = null;
+    var bestDist = Infinity;
+    Object.keys(snaps || {}).forEach(function (key) {
+      var dist = Math.abs(snaps[key] - heightPx);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = key;
+      }
+    });
+    return best;
   }
 
   function fmtCoord(n) {
@@ -501,7 +673,47 @@
     return Object.assign({}, best, { sheetMeta: formatSheetMeta(best, { nearest: true }) });
   }
 
+
+  /**
+   * Тап по кластеру. Стандартный зум Яндекса вписывает в экран сами точки и не знает,
+   * что над точкой висит ярлык «Название · 19:30» (~140px), а поверх карты — «Рядом со
+   * мной» и +/−. Поэтому крайние места кластера уезжали за край или под кнопки.
+   *
+   * Решение: вписываем с полями под ярлыки и кнопки и не зумим глубже `maxZoom`.
+   * Если места стоят почти в одной точке (ТЦ, один комплекс), зум их всё равно не
+   * разведёт: возвращаем `list` — показать места карточками, камеру не трогать.
+   */
+  var CLUSTER_SAME_SPOT_DEG = 0.0006; // ≈ 60 м: один комплекс, зумом не развести
+  var CLUSTER_MAX_ZOOM = 16;
+
+  function clusterFocus(points, opts) {
+    opts = opts || {};
+    var pts = (points || []).filter(function (p) {
+      return p && isFinite(Number(p[0])) && isFinite(Number(p[1]));
+    });
+    if (!pts.length) return { mode: 'none' };
+    var lats = pts.map(function (p) { return Number(p[0]); });
+    var lons = pts.map(function (p) { return Number(p[1]); });
+    var minLat = Math.min.apply(null, lats);
+    var maxLat = Math.max.apply(null, lats);
+    var minLon = Math.min.apply(null, lons);
+    var maxLon = Math.max.apply(null, lons);
+    if (maxLat - minLat < CLUSTER_SAME_SPOT_DEG && maxLon - minLon < CLUSTER_SAME_SPOT_DEG) {
+      return { mode: 'list' };
+    }
+    var cap = Number(opts.maxZoom);
+    return {
+      mode: 'zoom',
+      bounds: [[minLat, minLon], [maxLat, maxLon]],
+      // [top, right, bottom, left]: сверху ярлык пина, снизу — шторка (TASK-147
+      // передаёт свою высоту через opts.margin), справа/слева — края экрана.
+      margin: opts.margin || [110, 80, 48, 80],
+      maxZoom: isFinite(cap) && cap > 0 ? Math.min(cap, CLUSTER_MAX_ZOOM) : CLUSTER_MAX_ZOOM,
+    };
+  }
+
   return {
+    clusterFocus: clusterFocus,
     PLACEHOLDER_API_KEY: PLACEHOLDER_API_KEY,
     nearMePolicy: nearMePolicy,
     resolveApiKey: resolveApiKey,
@@ -523,6 +735,14 @@
     clusterArenas: clusterArenas,
     shortArenaName: shortArenaName,
     pinView: pinView,
+    venueKey: venueKey,
+    legendView: legendView,
+    VENUE_TOKEN: VENUE_TOKEN,
+    clusterSummary: clusterSummary,
+    railOrder: railOrder,
+    sheetSummary: sheetSummary,
+    snapFor: snapFor,
+    pluralRu: pluralRu,
     boundsToBbox: boundsToBbox,
     normalizeCityBounds: normalizeCityBounds,
     cityCameraFromItems: cityCameraFromItems,

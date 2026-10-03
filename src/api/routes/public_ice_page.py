@@ -8,7 +8,7 @@ Telegram у получателя пересланной ссылки значи�
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,8 @@ from src.application.ice_city_day import (
 )
 from src.application.ice_city_day_og import render_ice_city_day_og
 from src.application.ice_city_day_page import ice_city_day_paths, render_ice_city_day_page
-from src.application.trainer_invite_links import normalize_client_bot_username
+from src.application.catalog_consumer_events import record_public_page_view
+from src.application.place_links import catalog_start_param, public_telegram_cta_url
 from src.shared.config import Settings
 
 router = APIRouter(tags=["public-ice-share"])
@@ -36,9 +37,15 @@ def _public_base() -> str:
     return (Settings().webapp_base_url or "").strip().rstrip("/")
 
 
-def _cta_url() -> str | None:
-    username = normalize_client_bot_username(Settings().client_bot_username)
-    return f"https://t.me/{username}" if username else None
+def _cta_url(city_id: int) -> str | None:
+    """В каталог этого города на сегодня, с теми же фильтрами, что у страницы."""
+    base = _public_base()
+    return public_telegram_cta_url(
+        base,
+        start_param=catalog_start_param(int(city_id), "skate", "today"),
+        surface="ice_city_day",
+        city_id=int(city_id),
+    )
 
 
 async def _load(session: AsyncSession, city_ref: str):
@@ -52,6 +59,7 @@ async def _load(session: AsyncSession, city_ref: str):
 @router.get("/ice/{city_ref}/today", response_class=HTMLResponse)
 async def ice_city_day_page(
     city_ref: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     """Расписание массовых катаний города на день + og-теги для превью в Telegram."""
@@ -70,7 +78,13 @@ async def ice_city_day_page(
         day=day,
         canonical_url=f"{base}{canonical_path}" if base else canonical_path,
         og_image_url=f"{base}{og_path}" if base else og_path,
-        cta_url=_cta_url(),
+        cta_url=_cta_url(int(city["id"])),
+    )
+    await record_public_page_view(
+        session,
+        request,
+        surface="ice_city_day",
+        city_id=int(city["id"]),
     )
     return HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
 

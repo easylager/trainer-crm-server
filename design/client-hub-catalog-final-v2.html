@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLIDE · Каталог рынка катания — дизайн v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#45B9BB;
+  --brand-ink:#0B6E70;
+  --brand-deep:#073C3E;
+  --night:#04262A;
+  --paper:#F1F3F2;
+  --card:#FFFFFF;
+  --line:#E2E6E5;
+  --hint:#5E6B6B;
+  --frost:#D3EFEF;
+  --wash:#EEF9F9;
+  --gym:#D9822B;
+  --shop:#7A5AF5;
+  --track:#2A7FD4;
+  --service:#47535E;
+  --ok:#0F7048;
+  --ok-wash:#E7F6EF;
+  --radius:16px;
+  --shadow:0 1px 2px rgba(16,40,40,.05), 0 10px 26px -16px rgba(16,40,40,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased}
+body{
+  font-family:'Manrope',system-ui,sans-serif;
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(69,185,187,.14), transparent 60%),
+    radial-gradient(800px 480px at 90% 5%, rgba(122,90,245,.08), transparent 60%),
+    #E9EDEC;
+  color:var(--brand-deep);
+  padding:0 0 64px;
+}
+.canvas{max-width:1320px;margin:0 auto;padding:0 28px}
+.head{
+  margin-top:28px;border-radius:28px;overflow:hidden;position:relative;
+  background:
+    radial-gradient(600px 320px at 85% 110%, rgba(69,185,187,.35), transparent 65%),
+    radial-gradient(400px 260px at 8% -20%, rgba(125,211,252,.28), transparent 60%),
+    linear-gradient(165deg, #06313A 0%, var(--night) 55%, #031A1D 100%);
+  color:#E8F7F7;padding:44px 48px 40px;
+}
+.head::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="140" height="140" filter="url(%23n)"/></svg>');
+}
+.head .kicker{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#8CC4C4;font-weight:800}
+.head h1{font-family:'Unbounded',sans-serif;font-weight:900;font-size:clamp(26px,4vw,44px);line-height:1.12;margin:14px 0 10px;max-width:800px}
+.head h1 em{font-style:normal;color:var(--brand)}
+.head p{max-width:700px;color:#A9C9C9;font-size:15px;line-height:1.6}
+.head .meta{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+.head .meta span{font-size:12px;color:#7FB4B4;border:1px solid rgba(127,180,180,.35);border-radius:99px;padding:6px 14px;font-weight:600}
+
+.section-title{display:flex;align-items:baseline;gap:14px;margin:44px 0 18px;flex-wrap:wrap}
+.section-title .num{font-family:'Unbounded',sans-serif;font-size:12px;color:var(--brand-ink);font-weight:700}
+.section-title h2{font-family:'Unbounded',sans-serif;font-weight:700;font-size:20px}
+.section-title .sub{color:var(--hint);font-size:13px}
+
+/* ============ ТОКЕНЫ ============ */
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.token{background:var(--card);border-radius:16px;padding:14px 14px 12px;box-shadow:var(--shadow)}
+.token .sw{height:56px;border-radius:10px;position:relative;border:1px solid rgba(0,0,0,.06)}
+.token .name{font-weight:800;font-size:12px;margin-top:10px;display:flex;align-items:center;gap:6px}
+.token .name .new{font-size:8px;background:var(--wash);color:var(--brand-ink);border-radius:5px;padding:2px 5px;letter-spacing:.06em}
+.token .val{font-size:11px;color:var(--hint);font-family:ui-monospace,monospace;margin-top:2px}
+.token.type .sw{display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-weight:900;font-size:20px;background:var(--paper);color:var(--brand-deep)}
+.token.type .sw.b{background:var(--night);color:#E8F7F7}
+
+/* ============ ПРИНЦИПЫ ============ */
+.principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.principle{background:var(--card);border-radius:18px;padding:20px 20px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.principle::before{content:attr(data-n);position:absolute;top:-18px;right:8px;font-family:'Unbounded',sans-serif;font-weight:900;font-size:72px;color:var(--wash)}
+.principle b{display:block;font-size:14px;font-weight:800;position:relative;z-index:1}
+.principle p{font-size:13px;color:var(--hint);line-height:1.55;margin-top:8px;position:relative;z-index:1}
+
+/* ============ ЭКРАНЫ ============ */
+.phones{display:flex;gap:36px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.phone{width:312px}
+.phone figcaption{margin:0 6px 14px}
+.phone figcaption b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:14px;display:block}
+.phone figcaption span{font-size:12px;color:var(--hint);line-height:1.5;display:block;margin-top:5px;max-width:290px}
+.viewport{
+  width:312px;padding:12px;background:linear-gradient(160deg,#17191B,#0B0C0E);
+  border-radius:48px;box-shadow:0 30px 70px -30px rgba(4,38,42,.5), 0 2px 6px rgba(0,0,0,.2);
+}
+.frame{width:288px;height:650px;overflow:hidden;border-radius:36px;position:relative;background:var(--paper)}
+.screen{width:390px;height:880px;transform:scale(.73846);transform-origin:0 0;background:var(--paper);position:relative;font-size:13px;color:#0E2E30}
+
+/* ---------- общее ---------- */
+.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.f{fill:currentColor;stroke:none}
+.sc-status{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 4px}
+.sc-city{font-weight:800;font-size:13px;display:flex;gap:4px;align-items:center}
+.sc-city i{font-style:normal;font-size:9px;color:var(--hint)}
+.chip-mini{display:inline-flex;align-items:center;gap:5px;background:var(--wash);border:1px solid #D5ECEC;color:var(--brand-ink);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:700}
+.chip-mini .ic{width:12px;height:12px}
+.sc-head{padding:6px 16px 10px}
+.sc-kicker{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand-ink);font-weight:800}
+.sc-h1{font-family:'Unbounded',sans-serif;font-weight:700;font-size:21px;margin-top:3px;letter-spacing:-.01em}
+.sc-sub{font-size:11.5px;color:var(--hint);margin-top:3px}
+
+/* лента категорий */
+.ribbon{display:flex;gap:6px;margin:0 16px;overflow:hidden;white-space:nowrap}
+.r-item{display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:7px 10px;font-size:10.5px;font-weight:800;color:var(--hint);flex:none}
+.r-item .ic{width:14px;height:14px}
+.r-item .cnt{font-size:9px;background:#E7ECEA;border-radius:99px;padding:1px 6px;font-weight:800}
+.r-item.on{background:var(--brand);border-color:var(--brand);color:#04262A}
+.r-item.on .cnt{background:rgba(4,38,42,.14);color:#04262A}
+
+.sc-search{margin:0 16px;height:42px;background:var(--card);border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;padding:0 6px 0 14px;gap:8px;box-shadow:0 2px 10px -6px rgba(16,40,40,.18)}
+.sc-search .ic{width:17px;height:17px;color:var(--hint)}
+.sc-search .ph{flex:1;color:var(--hint);font-size:12.5px;white-space:nowrap;overflow:hidden}
+.sc-near{display:flex;align-items:center;gap:5px;background:var(--brand);color:#04262A;border:none;border-radius:11px;height:30px;padding:0 11px;font-weight:800;font-size:11.5px;font-family:inherit;cursor:pointer}
+.sc-near .ic{width:13px;height:13px;color:#04262A}
+.sc-map-btn{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--line);color:var(--brand-deep);border-radius:11px;height:30px;padding:0 10px;font-weight:800;font-size:11.5px;font-family:inherit;cursor:pointer}
+.sc-map-btn .ic{width:14px;height:14px;color:var(--brand-ink)}
+
+.chips{display:flex;gap:7px;margin:10px 16px 0;overflow:hidden;white-space:nowrap}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:7px 13px;font-size:11.5px;font-weight:700;color:var(--hint)}
+.chip.on{background:var(--brand);border-color:var(--brand);color:#04262A;box-shadow:0 4px 12px -6px rgba(69,185,187,.7)}
+.chip.sep{width:1px;padding:0;margin:4px 2px;border:none;background:var(--line);border-radius:0}
+
+.live{width:8px;height:8px;border-radius:99px;background:var(--brand);flex:none;position:relative}
+.live::after{content:"";position:absolute;inset:-4px;border-radius:99px;border:2px solid rgba(69,185,187,.45);animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.5);opacity:0}}
+
+/* ---------- арты ---------- */
+.art{position:relative;overflow:hidden}
+.art::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(102deg, rgba(255,255,255,.055) 0 2px, transparent 2px 24px)}
+.art::after{content:"";position:absolute;inset:0;opacity:.55;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="140" height="140" filter="url(%23n)"/></svg>')}
+.art-sunset{background:
+  radial-gradient(120% 95% at 82% 112%, rgba(255,138,92,.9), rgba(255,92,138,.35) 46%, transparent 62%),
+  radial-gradient(70% 60% at 14% 8%, rgba(125,211,252,.5), transparent 55%),
+  linear-gradient(160deg, #0B3B4A 0%, #0A2E3C 48%, var(--night) 100%)}
+.art-palace{background:
+  radial-gradient(90% 80% at 20% 0%, rgba(125,211,252,.4), transparent 55%),
+  linear-gradient(168deg, #0E3A55 0%, #0A2A44 55%, #06202F 100%)}
+.art-nemiga{background:
+  radial-gradient(100% 90% at 85% 100%, rgba(69,185,187,.55), transparent 60%),
+  linear-gradient(165deg, #07343C, #052A33 55%, #031F26)}
+.art-night{background:
+  radial-gradient(120% 100% at 80% 110%, rgba(69,185,187,.4), transparent 58%),
+  linear-gradient(170deg, #071F33, #041822 60%, #03131C)}
+.art-frost{background:linear-gradient(140deg,#EAF9F9,#D3EFEF 70%,#BCE4E4)}
+.art-track{background:
+  radial-gradient(80% 70% at 85% 15%, rgba(42,127,212,.35), transparent 55%),
+  linear-gradient(165deg, #55656F, #2E3A42)}
+.art-track::before{background:
+  repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 16px, transparent 16px 34px) top 24% / 100% 3px no-repeat,
+  repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 16px, transparent 16px 34px) top 76% / 100% 3px no-repeat}
+.art-shop{background:
+  radial-gradient(120% 100% at 80% 110%, rgba(122,90,245,.55), transparent 60%),
+  linear-gradient(165deg, #3A2E6E, #241A4A)}
+.art-shop::before{background:
+  repeating-linear-gradient(100deg, rgba(255,255,255,.07) 0 2px, transparent 2px 26px),
+  linear-gradient(180deg, transparent 30%, rgba(125,211,252,.25) 30.5% 31.5%, transparent 32%)}
+.art-workshop{background:
+  radial-gradient(90% 80% at 20% 0%, rgba(125,211,252,.22), transparent 55%),
+  linear-gradient(165deg, #3E4A55, #222C34)}
+.art-workshop::before{background:
+  radial-gradient(1.5px 1.5px at 70% 30%, #FFE9B8, transparent 99%),
+  radial-gradient(1.2px 1.2px at 82% 20%, #FFE9B8, transparent 99%),
+  radial-gradient(1.4px 1.4px at 76% 38%, #fff, transparent 99%)}
+.art-cap{position:absolute;left:0;right:0;bottom:0;padding:24px 12px 9px;color:#fff;
+  background:linear-gradient(transparent, rgba(4,38,42,.82));z-index:2}
+.art-cap .nm{font-weight:800;font-size:13px;line-height:1.25}
+.art-cap .mt{font-size:10px;color:rgba(255,255,255,.78);margin-top:2px;font-weight:600}
+.badge{position:absolute;top:9px;left:9px;z-index:3;display:flex;align-items:center;gap:5px;
+  background:rgba(4,38,42,.72);backdrop-filter:blur(6px);color:#fff;border-radius:99px;padding:4px 10px;font-size:10px;font-weight:700}
+.badge .dot{width:6px;height:6px;border-radius:99px;background:#3FE08A;box-shadow:0 0 6px #3FE08A}
+.heart{position:absolute;top:9px;right:9px;z-index:3;width:30px;height:30px;border-radius:99px;border:none;
+  background:rgba(255,255,255,.86);backdrop-filter:blur(6px);color:#0E2E30;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.heart .ic{width:15px;height:15px}
+
+/* ---------- карточки мест ---------- */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.featured{margin:12px 16px 0}
+.featured .art{height:112px}
+.card-body{display:flex;align-items:center;gap:8px;padding:9px 11px 11px}
+.slots{display:flex;gap:6px;flex:1;flex-wrap:wrap}
+.slot{border:1px solid var(--line);background:#F6F8F7;border-radius:9px;padding:5px 9px;font-size:11px;font-weight:700;color:var(--brand-deep)}
+.slot.on{background:var(--brand);border-color:var(--brand);color:#04262A}
+.share-mini{width:30px;height:30px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--brand-ink);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.share-mini .ic{width:14px;height:14px}
+.card.sm{margin:10px 16px 0}
+.card.sm .art{height:66px}
+.card.sm .art-cap{padding:18px 12px 8px}
+.card.sm .art-cap .nm{font-size:12.5px}
+.card.sm .card-body{padding:8px 11px 10px}
+
+.divider{display:flex;align-items:center;gap:10px;margin:14px 16px 0;color:var(--hint);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.card.muted{margin:10px 16px 0}
+.card.muted .art{height:60px;filter:grayscale(.85);opacity:.6}
+.card.muted .art-cap{padding:14px 12px 7px}
+.card.muted .art-cap .nm{font-size:12px}
+.card.muted .card-body{padding:7px 11px 9px}
+.muted-mark{font-size:10px;color:var(--hint);font-weight:700;display:flex;align-items:center;gap:5px}
+.muted-mark .ic{width:12px;height:12px}
+/* бесфотошный вариант карточки: нет фото — нет фото-блока */
+.np{display:flex;align-items:center;gap:9px;padding:9px 12px;background:linear-gradient(140deg,#EFF5F4,#E3ECEB)}
+.np .np-ic{width:32px;height:32px;border-radius:10px;background:var(--brand);color:#04262A;display:flex;align-items:center;justify-content:center;flex:none}
+.np .np-ic .ic{width:16px;height:16px}
+.np .np-t{flex:1;min-width:0}
+.np .np-t b{font-size:12.5px;display:block}
+.np .np-t span{font-size:10px;color:var(--hint);font-weight:600}
+
+.share-block{margin:14px 16px 0}
+.cta-big{width:100%;background:var(--brand);color:#04262A;border:none;border-radius:14px;height:46px;
+  font-family:inherit;font-weight:800;font-size:13.5px;cursor:pointer;box-shadow:0 8px 20px -8px rgba(69,185,187,.65)}
+.share-block .under{text-align:center;font-size:10.5px;color:var(--hint);margin-top:8px}
+.share-block .under a{color:var(--brand-ink);font-weight:800;text-decoration:none}
+
+/* ---------- карточки тренеров ---------- */
+.tr-card{margin:12px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;display:flex;gap:11px;align-items:flex-start}
+.t-ava{width:52px;height:52px;border-radius:16px;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:'Unbounded',sans-serif;font-weight:900;font-size:15px;color:#04262A}
+.t-ava.a{background:linear-gradient(140deg,#D3EFEF,#45B9BB)}
+.t-ava.b{background:linear-gradient(140deg,#F3E3C8,#D9822B)}
+.t-ava.c{background:linear-gradient(140deg,#E3DCFA,#7A5AF5)}
+.tr-main{flex:1;min-width:0}
+.tr-nm{display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px}
+.tr-nm .rate{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#8A5300;background:#FBF3E0;border-radius:8px;padding:2px 7px;font-weight:800}
+.tr-nm .rate .ic{width:10px;height:10px;color:#D9A113;fill:#D9A113}
+.tr-disc{font-size:10.5px;color:var(--hint);font-weight:600;margin-top:3px}
+.tr-loc{font-size:10px;color:var(--hint);font-weight:600;margin-top:3px;display:flex;gap:4px;align-items:center}
+.tr-loc .ic{width:11px;height:11px}
+.tr-price{font-size:11px;font-weight:800;color:var(--brand-deep);margin-top:7px;display:flex;align-items:center;gap:5px}
+.tr-price .tag{background:var(--wash);border-radius:7px;padding:3px 7px;font-size:9.5px;color:var(--brand-ink)}
+.tr-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.tr-side .heart{position:static;width:28px;height:28px;border:1px solid var(--line);background:var(--card)}
+.tr-cta{background:var(--brand);color:#04262A;border:none;border-radius:11px;height:32px;padding:0 13px;font-weight:800;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.tr-ghost{border:1px solid var(--line);background:var(--card);color:var(--brand-deep);border-radius:11px;height:32px;padding:0 13px;font-weight:800;font-size:11px;font-family:inherit;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.tr-ghost .ic{width:12px;height:12px;color:var(--brand-ink)}
+
+.schools-soon{margin:12px 16px 0;border-radius:var(--radius);border:1.5px dashed #BFD9D8;background:var(--wash);padding:12px 14px;display:flex;align-items:center;gap:11px}
+.schools-soon .ic{width:20px;height:20px;color:var(--brand-ink);flex:none}
+.schools-soon .t{flex:1}
+.schools-soon b{font-size:12px;display:block}
+.schools-soon span{font-size:10.5px;color:var(--hint);font-weight:600;margin-top:2px;display:block}
+.schools-soon a{font-size:10.5px;font-weight:800;color:var(--brand-ink);text-decoration:none;white-space:nowrap}
+
+/* ---------- таб-бар ---------- */
+.tabs{position:absolute;left:0;right:0;bottom:0;height:68px;background:rgba(255,255,255,.94);
+  backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;padding:7px 6px 9px;z-index:10}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#868D93;font-size:9.5px;font-weight:700}
+.tab .ic{width:20px;height:20px}
+.tab.on{color:var(--brand-ink)}
+.tab.on .wrap{background:var(--wash);border-radius:99px;padding:3px 14px;display:flex;align-items:center;justify-content:center}
+.tab .wrap{display:flex;align-items:center;justify-content:center}
+
+/* ---------- ХАБ ---------- */
+.hub-top{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 4px}
+.avatar{width:38px;height:38px;border-radius:14px;background:linear-gradient(140deg,var(--brand),#2E9A9C);
+  color:#04262A;display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-weight:900;font-size:15px;
+  box-shadow:0 4px 12px -4px rgba(69,185,187,.6)}
+.hub-chips{display:flex;gap:6px;margin:8px 16px 0;overflow:hidden;white-space:nowrap}
+.hero{margin:12px 16px 0;border-radius:18px;background:
+  radial-gradient(200px 160px at 90% 110%, rgba(69,185,187,.5), transparent 65%),
+  linear-gradient(160deg,#0A3544,var(--night));color:#E8F7F7;padding:14px 14px 14px 16px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0;opacity:.5;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="140" height="140" filter="url(%23n)"/></svg>')}
+.hero .t{position:relative;z-index:2;flex:1}
+.hero .live-row{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:800;color:#8CC4C4;text-transform:uppercase;letter-spacing:.12em}
+.hero b{display:block;font-size:14px;margin-top:6px;line-height:1.3}
+.hero .m{font-size:11px;color:#A9C9C9;margin-top:3px;font-weight:600}
+.hero button{position:relative;z-index:2;margin-top:10px;background:#E8F7F7;color:var(--night);border:none;border-radius:11px;height:32px;padding:0 13px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer}
+.hero .h-art{position:relative;z-index:2;width:86px;height:86px;border-radius:16px;flex:none;overflow:hidden}
+
+.pod-head{display:flex;justify-content:space-between;align-items:baseline;margin:16px 16px 8px}
+.pod-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:12.5px}
+.pod-head a{font-size:11px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.pods{display:flex;gap:9px;padding:0 16px;overflow:hidden}
+.pod{width:118px;flex:none;background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.pod .p-art{height:52px}
+.pod .p-t{padding:8px 9px 9px}
+.pod b{display:block;font-size:11px;line-height:1.3}
+.pod span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:3px}
+/* v6: светлые плитки — светлый холст везде, тёмное только в экспортных картинках */
+.pod-l{width:122px;flex:none;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.pod-l .pl-top{height:54px;display:flex;align-items:center;justify-content:center;background:var(--wash)}
+.pod-l .pl-ic{width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff}
+.pod-l .pl-ic .ic{width:16px;height:16px}
+.pl-ic.eve{background:var(--brand-ink)}
+.pl-ic.ice{background:var(--brand)}
+.pl-ic.out{background:var(--track)}
+.pl-ic.shop{background:var(--shop)}
+.pod-l .pl-t{padding:8px 10px 10px}
+.pod-l .pl-nm{display:flex;align-items:center;gap:5px}
+.pod-l b{display:block;font-size:11px;line-height:1.3;flex:1}
+.pod-l .pl-cnt{font-family:'Unbounded',sans-serif;font-weight:700;font-size:10px;color:var(--brand-ink);background:var(--wash);border-radius:8px;padding:2px 6px;flex:none}
+.pod-l span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:4px}
+/* v7: хаб — единый блок «На льду сейчас» и навигация по рынку одной сеткой */
+.ice-now{margin:12px 16px 0}
+.ice-now .in-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.ice-now .in-head .kick{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand-ink);font-weight:800}
+.ice-now .in-head a{font-size:10.5px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.ice-now .hero{margin:0}
+.ice-now .ice-today{margin:8px 0 0}
+.cg{margin:14px 16px 0}
+.cg-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.cg-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:12.5px}
+.cg-head a{font-size:11px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.cg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cg-tile{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:10px 11px;display:flex;align-items:center;gap:9px}
+.cg-ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.cg-ic .ic{width:17px;height:17px}
+.cg-ic.ice{background:var(--brand)}
+.cg-ic.coach{background:var(--brand-ink)}
+.cg-ic.shop{background:var(--shop)}
+.cg-ic.svc{background:var(--service)}
+.cg-t{flex:1;min-width:0}
+.cg-t b{display:flex;align-items:center;gap:5px;font-size:11.5px}
+.cg-t .cnt{font-family:'Unbounded',sans-serif;font-weight:700;font-size:10px;color:var(--brand-ink)}
+.cg-t span{display:block;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:2px}
+.cg-tile .chev{margin-left:2px;color:#C3CBC9;flex:none}
+.cg-tile .chev .ic{width:13px;height:13px}
+
+.weekly{margin:14px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:11px;display:flex;gap:11px;align-items:center}
+.weekly .w-art{width:96px;height:84px;border-radius:12px;overflow:hidden;flex:none}
+.weekly .t{flex:1;min-width:0}
+.weekly .kick{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand-ink);font-weight:800}
+.weekly b{display:block;font-size:12.5px;line-height:1.35;margin-top:4px}
+.weekly .m{font-size:10.5px;color:var(--hint);margin-top:3px;font-weight:600;display:flex;align-items:center;gap:4px}
+.weekly .m .ic{width:11px;height:11px;color:#D9A113;fill:#D9A113}
+.weekly a{display:inline-block;margin-top:7px;font-size:11px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+
+.ice-today{margin:14px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px}
+.ice-today .it-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.ice-today .it-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:11.5px}
+.ice-today .it-head a{font-size:10.5px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.it-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line)}
+.it-row .it-time{font-family:'Unbounded',sans-serif;font-weight:700;font-size:11px;color:var(--brand-ink);width:44px;flex:none}
+.it-row .it-place{flex:1;font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it-row .it-price{font-size:11px;font-weight:800;color:var(--brand-deep);flex:none}
+.it-row .it-dot{width:7px;height:7px;border-radius:99px;background:var(--brand);flex:none}
+
+.first-trip{margin:12px 16px 0;border-radius:var(--radius);border:1.5px dashed #BFD9D8;background:var(--wash);
+  padding:14px 16px;display:flex;align-items:center;gap:12px}
+.first-trip .ic{width:22px;height:22px;color:var(--brand-ink)}
+.first-trip .t{flex:1}
+.first-trip b{font-size:12.5px;display:block}
+.first-trip span{font-size:10.5px;color:var(--hint);font-weight:600;margin-top:2px;display:block}
+.first-trip a{font-size:11px;font-weight:800;color:var(--brand-ink);text-decoration:none;white-space:nowrap}
+
+.block-card{margin:12px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;align-items:center;gap:12px}
+.bk-ava{width:44px;height:44px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(140deg,var(--frost),var(--brand));color:var(--brand-deep);font-family:'Unbounded',sans-serif;font-weight:900;font-size:14px}
+.bk-t{flex:1;min-width:0}
+.bk-kick{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-ink);font-weight:800}
+.bk-t b{display:block;font-size:12.5px;line-height:1.3;margin-top:3px}
+.bk-t .m{font-size:10.5px;color:var(--hint);margin-top:2px;font-weight:600}
+.bk-side{flex:none;text-align:right}
+.bk-status{display:inline-flex;align-items:center;gap:5px;background:var(--ok-wash);color:var(--ok);border-radius:99px;padding:4px 9px;font-size:9.5px;font-weight:800}
+.bk-status .dot{width:6px;height:6px;border-radius:99px;background:var(--ok)}
+.bk-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:11px;height:32px;padding:0 12px;font-size:11px;font-weight:800;color:var(--brand-deep);background:var(--card);font-family:inherit;cursor:pointer}
+.bk-btn .ic{width:13px;height:13px;color:var(--brand-ink)}
+.bk-chev{flex:none;color:#B9C2C0}
+.bk-chev .ic{width:16px;height:16px}
+
+.pass{margin:12px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px}
+.pass .p-head{display:flex;justify-content:space-between;align-items:baseline}
+.pass .p-head b{font-size:12.5px}
+.pass .p-head span{font-family:'Unbounded',sans-serif;font-weight:700;font-size:12px;color:var(--brand-ink)}
+.pass .p-bar{height:6px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}
+.pass .p-fill{height:100%;width:50%;border-radius:99px;background:linear-gradient(90deg,var(--brand),#7FD7D8)}
+.pass .p-m{font-size:10.5px;color:var(--hint);margin-top:7px;font-weight:600}
+.cert{margin:8px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:11px 14px;display:flex;align-items:center;gap:11px}
+.cert .ic{width:20px;height:20px;color:var(--brand-ink);flex:none}
+.cert .t{flex:1}
+.cert b{font-size:12px;display:block}
+.cert span{font-size:10.5px;color:var(--hint);font-weight:600;margin-top:2px;display:block}
+.cert .c-count{font-family:'Unbounded',sans-serif;font-weight:700;font-size:12px;color:var(--brand-ink)}
+
+.streak{margin:12px 16px 0;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;align-items:center;gap:14px}
+.ring-svg{flex:none}
+.ring-svg .bgc{stroke:var(--line);fill:none;stroke-width:5}
+.ring-svg .fgc{stroke:var(--brand);fill:none;stroke-width:5;stroke-linecap:round}
+.streak b{font-size:13px}
+.streak .s{font-size:11px;color:var(--hint);margin-top:3px;font-weight:600}
+.streak .s b{color:var(--brand-ink);font-size:11px}
+
+/* ---------- КАРТА ---------- */
+.map-screen{background:#E8EDEA}
+.map-svg{position:absolute;inset:0;width:100%;height:100%}
+.map-scrim{position:absolute;top:0;left:0;right:0;height:190px;z-index:5;pointer-events:none;
+  background:linear-gradient(rgba(233,237,234,.96) 30%, rgba(233,237,234,.72) 62%, transparent)}
+.map-top{position:absolute;top:0;left:0;right:0;z-index:6;padding:12px 16px 0}
+.map-chips{display:flex;gap:7px;margin-top:9px;overflow:hidden;white-space:nowrap}
+.map-chips .chip{background:rgba(255,255,255,.94);box-shadow:0 2px 8px -4px rgba(16,40,40,.25)}
+.map-legend{display:flex;gap:10px;margin-top:8px;background:rgba(255,255,255,.92);border-radius:99px;padding:4px 10px;width:max-content;box-shadow:0 2px 8px -4px rgba(16,40,40,.25)}
+.map-legend span{display:flex;align-items:center;gap:4px;font-size:8.5px;font-weight:800;color:#0E2E30}
+.map-legend .ld{width:7px;height:7px;border-radius:99px}
+.pin-wrap{position:absolute;z-index:7}
+.pin{display:flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--line);border-radius:99px;
+  padding:4px 10px 4px 6px;font-size:10.5px;font-weight:800;color:#0E2E30;box-shadow:0 3px 10px -4px rgba(16,40,40,.35);position:relative}
+.pin .p-dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.pin .p-dot.v{background:var(--shop)}
+.pin .p-dot.w{background:var(--service)}
+.pin .p-dot.t{background:var(--track)}
+.pin .p-dot.r{background:var(--brand-ink)}
+.pin::after{content:"";position:absolute;left:14px;bottom:-5px;width:9px;height:9px;background:inherit;border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg);border-radius:0 0 2px 0}
+.pin.sel{background:var(--brand);border-color:var(--brand);color:#04262A;transform:scale(1.12);box-shadow:0 6px 14px -4px rgba(69,185,187,.65)}
+.pin.sel .p-dot{background:#04262A}
+.pin.sel::after{background:var(--brand);border-color:var(--brand)}
+.pin-hollow{width:14px;height:14px;border-radius:99px;background:#fff;border:2.5px solid #9AA7A4;box-shadow:0 2px 6px -2px rgba(16,40,40,.4)}
+.cluster{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #C9D2D0;border-radius:99px;padding:4px 11px 4px 5px;font-size:10.5px;font-weight:800;color:#0E2E30;box-shadow:0 3px 10px -4px rgba(16,40,40,.35)}
+.cluster .c-n{width:20px;height:20px;border-radius:99px;background:#E4ECEA;color:#0E2E30;display:flex;align-items:center;justify-content:center;font-size:10.5px}
+.map-sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:#fff;border-radius:22px 22px 0 0;
+  box-shadow:0 -12px 30px -18px rgba(16,40,40,.4);padding:8px 0 14px}
+.map-sheet .handle{width:36px;height:4px;border-radius:99px;background:#D3DAD8;margin:2px auto 8px}
+.map-sheet .sh-head{display:flex;justify-content:space-between;align-items:center;padding:0 16px 10px}
+.map-sheet .sh-sum{font-size:11.5px;font-weight:800;color:#0E2E30}
+.map-sheet .sh-sum span{color:var(--hint);font-weight:600}
+.map-sheet .sh-toggle{display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 12px;font-size:11px;font-weight:800;color:var(--brand-deep);cursor:pointer}
+.map-sheet .sh-toggle .ic{width:13px;height:13px;color:var(--brand-ink)}
+.map-car{display:flex;gap:10px;padding:0 16px;overflow:hidden}
+.map-car .mc{width:232px;flex:none;background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.map-car .mc .mc-art{height:76px}
+.map-car .mc .mc-t{padding:9px 11px 10px}
+.map-car .mc b{display:block;font-size:12px}
+.map-car .mc .m{font-size:10px;color:var(--hint);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.map-car .mc .mc-row{display:flex;align-items:center;justify-content:space-between;margin-top:7px}
+.map-car .mc .mc-price{font-weight:800;font-size:11.5px;color:var(--brand-ink)}
+.map-car .mc .mc-chip{background:var(--brand);color:#04262A;border-radius:7px;padding:3px 8px;font-size:9.5px;font-weight:800}
+.map-fab{position:absolute;right:12px;bottom:246px;z-index:9;width:44px;height:44px;border-radius:99px;background:#fff;border:none;
+  box-shadow:0 8px 20px -6px rgba(16,40,40,.4);display:flex;align-items:center;justify-content:center;color:var(--brand-ink);cursor:pointer}
+.map-fab .ic{width:19px;height:19px}
+.map-copy{position:absolute;left:10px;bottom:236px;z-index:9;font-size:8px;color:#8A9491;font-weight:700}
+
+/* ---------- ШЕРИНГ ---------- */
+.sh-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px}
+.sh-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:15px}
+.sh-x{width:32px;height:32px;border-radius:99px;background:var(--card);border:1px solid var(--line);color:var(--hint);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sh-x .ic{width:14px;height:14px}
+.tones{display:flex;gap:6px;margin:4px 16px 12px;background:#E7ECEA;border-radius:12px;padding:4px}
+.tone{flex:1;text-align:center;font-size:11px;font-weight:800;padding:8px 4px;border-radius:9px;color:var(--hint);cursor:pointer}
+.tone.on{background:var(--card);color:var(--brand-deep);box-shadow:0 2px 8px -3px rgba(16,40,40,.25)}
+.story-prev{width:270px;height:440px;margin:0 auto;border-radius:20px;overflow:hidden;position:relative;color:#fff;box-shadow:0 20px 44px -18px rgba(4,38,42,.55)}
+.story-prev .sp-art{position:absolute;inset:0}
+.story-prev .sp-top{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:16px 16px 0}
+.story-prev .logo{font-family:'Unbounded',sans-serif;font-weight:900;font-size:13px;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+.story-prev .logo .lg{width:20px;height:20px;border-radius:7px;background:var(--brand);display:inline-block;position:relative}
+.story-prev .logo .lg::after{content:"";position:absolute;inset:4px;border-radius:4px;background:var(--night)}
+.story-prev .date{font-size:10px;font-weight:800;color:#A9C9C9}
+.story-prev .sp-body{position:absolute;left:0;right:0;bottom:0;z-index:4;padding:18px 16px;background:linear-gradient(transparent, rgba(3,26,29,.88) 34%)}
+.story-prev .sp-body h3{font-family:'Unbounded',sans-serif;font-weight:900;font-size:19px;line-height:1.2;margin-bottom:7px}
+.story-prev .sp-body .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.story-prev .sp-body .line{font-size:11px;font-weight:700;color:#D9ECEC;display:flex;align-items:center;gap:6px}
+.story-prev .sp-body .addr{font-size:10.5px;color:#8CC4C4;font-weight:600;margin-top:8px;display:flex;gap:6px;align-items:center}
+.story-prev .sp-body .addr .ic{width:12px;height:12px}
+.story-prev .sp-foot{display:flex;align-items:center;gap:10px;margin-top:12px}
+.story-prev .price-big{font-family:'Unbounded',sans-serif;font-weight:900;font-size:17px;color:#fff}
+.story-prev .price-sub{font-size:9.5px;color:#A9C9C9;font-weight:700}
+.qr{width:52px;height:52px;background:#fff;border-radius:8px;padding:5px;display:grid;grid-template-columns:repeat(9,1fr);gap:1px;margin-left:auto;flex:none}
+.qr i{background:#04262A;border-radius:1px}
+.qr i.q0{background:transparent}
+.qr-frame{display:flex;flex-direction:column;align-items:center;gap:2px}
+.qr-frame span{font-size:8px;font-weight:800;color:#8CC4C4;letter-spacing:.08em}
+.sess-chips{display:flex;gap:7px;margin:12px 16px 0}
+.sess-chips .chip{padding:7px 14px}
+.channels{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:12px 16px 0}
+.ch{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;height:38px;font-size:10.5px;font-weight:800;color:var(--brand-deep);cursor:pointer;font-family:inherit}
+.ch .ic{width:14px;height:14px;color:var(--hint)}
+.ch.on{background:var(--brand);border-color:var(--brand);color:#04262A}
+.ch.on .ic{color:#04262A}
+.og-prev{margin:12px 16px 0;background:#E7ECEA;border-radius:16px;padding:10px}
+.og-prev .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.14em;font-weight:800;color:var(--hint);margin-bottom:7px}
+.og-card{background:var(--card);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.og-card .og-img{height:74px;position:relative}
+.og-card .og-t{padding:9px 11px 10px}
+.og-card b{font-size:11.5px}
+.og-card .og-u{font-size:9.5px;color:var(--hint);font-weight:700;margin-top:2px}
+.og-card .og-m{font-size:9.5px;color:var(--brand-ink);font-weight:800;margin-top:2px}
+.og-note{font-size:9.5px;color:var(--hint);margin:8px 16px 0;display:flex;gap:5px;align-items:center}
+.og-note .ic{width:11px;height:11px}
+
+/* ---------- ПУСТО ---------- */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px 34px 0}
+.empty .e-art{width:140px;height:140px;border-radius:99px;position:relative;margin-bottom:18px;box-shadow:0 16px 34px -18px rgba(11,110,112,.4)}
+.empty .e-art .ic{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;color:var(--brand-ink);stroke-width:1.4}
+.empty h3{font-family:'Unbounded',sans-serif;font-weight:700;font-size:15px;line-height:1.35}
+.empty p{font-size:12px;color:var(--hint);line-height:1.6;margin-top:9px;max-width:250px}
+.empty .cta-big{width:auto;padding:0 26px;margin-top:18px}
+.empty .alt{margin-top:14px;font-size:11.5px;font-weight:800;color:var(--brand-ink);text-decoration:none}
+.empty .hint-row{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:20px;font-size:10.5px;color:var(--hint);font-weight:700}
+.empty .hint-row .ic{width:13px;height:13px;color:var(--brand-ink)}
+
+/* ---------- ФИЛЬТРЫ ---------- */
+.filters{position:absolute;inset:0;z-index:20}
+.filters .dim{position:absolute;inset:0;background:rgba(4,38,42,.38)}
+.f-sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:14px 16px 16px;box-shadow:0 -14px 40px -18px rgba(4,38,42,.5)}
+.f-sheet .f-handle{width:36px;height:4px;border-radius:99px;background:#D3DAD8;margin:0 auto 10px}
+.f-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.f-head b{font-family:'Unbounded',sans-serif;font-weight:700;font-size:14px}
+.f-head .f-type{font-size:10px;font-weight:800;color:var(--brand-ink);background:var(--wash);border-radius:99px;padding:4px 10px}
+.f-sec{margin-top:12px}
+.f-sec .fs-t{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--hint);font-weight:800;margin-bottom:7px}
+.f-chips{display:flex;flex-wrap:wrap;gap:6px}
+.f-chip{border:1px solid var(--line);border-radius:99px;padding:6px 11px;font-size:10.5px;font-weight:700;color:var(--hint);background:var(--card)}
+.f-chip.on{background:var(--brand);border-color:var(--brand);color:#04262A}
+.f-range{margin-top:4px;position:relative;height:30px}
+.f-range .tr{position:absolute;top:15px;left:0;right:0;height:4px;border-radius:99px;background:var(--line)}
+.f-range .fill{position:absolute;top:15px;left:18%;right:26%;height:4px;border-radius:99px;background:var(--brand)}
+.f-thumb{position:absolute;top:9px;width:16px;height:16px;border-radius:99px;background:#fff;border:2.5px solid var(--brand);box-shadow:0 2px 6px -2px rgba(16,40,40,.4)}
+.f-thumb.a{left:18%}
+.f-thumb.b{right:26%}
+.f-labels{display:flex;justify-content:space-between;font-size:9.5px;color:var(--hint);font-weight:700;margin-top:2px}
+.f-sort{display:flex;gap:6px}
+.f-sort .f-chip{flex:1;text-align:center;padding:7px 4px}
+.f-foot{display:flex;gap:8px;margin-top:16px}
+.f-reset{border:1px solid var(--line);background:var(--card);color:var(--hint);border-radius:13px;height:44px;padding:0 16px;font-weight:800;font-size:12px;font-family:inherit;cursor:pointer}
+.f-apply{flex:1;background:var(--brand);color:#04262A;border:none;border-radius:13px;height:44px;font-weight:800;font-size:12.5px;font-family:inherit;cursor:pointer;box-shadow:0 8px 20px -8px rgba(69,185,187,.65)}
+
+/* ============ ЧТО ЧИНИМ ============ */
+.fix{display:grid;gap:10px}
+.fix-row{background:var(--card);border-radius:16px;box-shadow:var(--shadow);display:grid;grid-template-columns:1fr 34px 1.15fr;align-items:stretch;overflow:hidden}
+.fix-row .was{padding:16px 18px;background:#FBF5F4;color:#8A3B33;font-size:13px;font-weight:700;display:flex;gap:10px;align-items:flex-start}
+.fix-row .was .ic{width:15px;height:15px;margin-top:1px;flex:none}
+.fix-row .mid{display:flex;align-items:center;justify-content:center;color:var(--brand-ink);background:var(--wash)}
+.fix-row .mid .ic{width:16px;height:16px}
+.fix-row .now{padding:16px 18px;font-size:13px;font-weight:700;color:#0E2E30;display:flex;gap:10px;align-items:flex-start;background:linear-gradient(120deg,#F4FBFA, #FFFFFF)}
+.fix-row .now .ic{width:15px;height:15px;margin-top:1px;flex:none;color:var(--ok)}
+
+/* ============ КОПИРАЙТ ============ */
+.copyright{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.copy-card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:18px 20px}
+.copy-card b{font-size:13px;display:flex;align-items:center;gap:8px}
+.copy-card b .ic{width:15px;height:15px;color:var(--brand-ink)}
+.copy-card p{font-size:12.5px;color:var(--hint);line-height:1.6;margin-top:8px}
+.copy-card p code{background:var(--wash);border-radius:6px;padding:1px 6px;font-size:11.5px;color:var(--brand-ink)}
+
+.foot{margin-top:44px;background:var(--card);border-radius:20px;padding:22px 26px;box-shadow:var(--shadow);font-size:13px;color:var(--hint);line-height:1.7}
+.foot b{color:var(--brand-deep)}
+.foot ul{margin:8px 0 0 18px}
+@media (max-width:760px){
+  .fix-row{grid-template-columns:1fr}
+  .fix-row .mid{display:none}
+  .head{padding:32px 26px}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ SVG-СПРАЙТ ============ -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-loc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.2S4.8 15.4 3 10.9c-1.2-3 .4-6.4 3.9-6.4 2.1 0 3.6 1.2 5.1 3 1.5-1.8 3-3 5.1-3 3.5 0 5.1 3.4 3.9 6.4C19.2 15.4 12 20.2 12 20.2z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 14V3M8 7l4-4 4 4"/><path d="M5 12v7.5h14V12"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10.5V20h12v-9.5"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10.5h16"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-snow" viewBox="0 0 24 24"><path d="M12 2.5v19M4.6 7l14.8 10M19.4 7L4.6 17"/><path d="M12 2.5l-2.2 2M12 2.5l2.2 2M12 21.5l-2.2-2M12 21.5l2.2-2M4.6 7l2.8.6M4.6 7l.8 2.7M19.4 7l-2.8.6M19.4 7l-.8 2.7M4.6 17l2.8-.6M4.6 17l.8-2.7M19.4 17l-2.8-.6M19.4 17l-.8-2.7"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c.8 3.2-3.2 4.1-3.2 8a3.2 3.2 0 006.4 0c0-2.3-1.1-3.8-2.2-4.8.6 2.4-1 2.9-1 2.9.3-2.5-.6-4.6 0-6.1z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path class="f" d="M12 2.8l2.5 5.4 5.9.7-4.3 4 1.1 5.8L12 15.9l-5.2 2.8 1.1-5.8-4.3-4 5.9-.7z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3.5 2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M9.5 14.5a4 4 0 005.7 0l2.8-2.8a4 4 0 10-5.7-5.7l-1.2 1.2"/><path d="M14.5 9.5a4 4 0 00-5.7 0L6 12.3a4 4 0 105.7 5.7l1.2-1.2"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4.5 17.5l5-5 3 3 3.5-3.5 3.5 3.5"/></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><path d="M21 3L3 10.5l7 2.5 2.5 7L21 3z"/><path d="M10 13l4-4"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 1112 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 7.6v.2"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4L3 6.5v13L9 17l6 2.5L21 17v-13l-6 2.5L9 4z"/><path d="M9 4v13M15 6.5v13"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L3 10.5l7 2.5 2.5 7L21 3z"/><path d="M10 13l4-4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 000 6v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2a2 2 0 000-6z"/><path d="M13 5v2M13 11v2M13 17v2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.2-3.5 3.8-5 7-5s5.8 1.5 7 5"/></symbol>
+  <symbol id="i-cap" viewBox="0 0 24 24"><path d="M12 4L2.5 9 12 14l9.5-5L12 4z"/><path d="M6.5 11.5V16c0 1.6 2.5 3 5.5 3s5.5-1.4 5.5-3v-4.5"/><path d="M21.5 9v5"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5.5 8h13l1 12h-15l1-12z"/><path d="M9 8V6.5a3 3 0 016 0V8"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a4.2 4.2 0 015.9-2.2L17 7.5l1.7 3.1 3.4-1.1a4.2 4.2 0 01-2.2 5.9c-1.3.6-2.9.5-4.1-.4L5.5 20.5a2 2 0 01-2.8-2.8l5.6-5.6a4.4 4.4 0 016.4-5.8z" transform="scale(.9) translate(1.5 1.5)"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+</svg>
+
+<div class="canvas">
+
+  <!-- ============ ШАПКА ============ -->
+  <header class="head">
+    <div class="kicker">GLIDE · Клиентский мини-апп · Дизайн v6</div>
+    <h1>Единый ансамбль <em>рынка катания</em></h1>
+    <p>Один каталог: катки, тренеры, магазины, сервис — тип места читается цветом и значком. Защита от пустоты: чип, блок и карточка рендерятся только при данных; нет фото — нет фото-блока. Светлый холст — везде, включая хаб: тёмное живёт только в экспортных картинках. Подборки — живые фильтры с ценностью в каждой карточке.</p>
+    <div class="meta">
+      <span>3 октября 2026 · v6</span>
+      <span>Светлый холст везде — тёмные плитки убраны</span>
+      <span>Чипы рендерятся только с данными</span>
+      <span>Нет фото — нет фото-блока</span>
+    </div>
+  </header>
+
+  <!-- ============ ПРИНЦИПЫ ============ -->
+  <div class="section-title"><span class="num">01</span><h2>Принципы</h2><span class="sub">v5 — с учётом заметок специалиста, но без их догм</span></div>
+  <section class="principles">
+    <div class="principle" data-n="1"><b>Рынок катания — один ансамбль</b><p>Пять категорий в одной ленте со счётчиками. Тип места читается цветом и значком: лёд — тил, тренер — тёмный тил, магазин — фиолет, сервис — графит. Одна система карточек — каждый тип отвечает на свой главный вопрос.</p></div>
+    <div class="principle" data-n="2"><b>Пустого не существует</b><p>Чип, блок и карточка рендерятся только при данных: ноль школ — нет чипа школ, ноль категорий — нет ленты. Нет фото — нет фото-блока, вместо него иконка типа на плашке. Пустой результат фильтра — честный экран со сбросом.</p></div>
+    <div class="principle" data-n="3"><b>Подборки только из данных</b><p>Шесть пресетов поверх того, что уже есть в системе: окно вечера, крытые, открытые, бесплатно, заточка, магазины. Каждый ведёт в каталог с применённым фильтром и рендерится только при счётчике больше нуля.</p></div>
+    <div class="principle" data-n="4"><b>Изолированность без каши</b><p>Каждый тип и каждый экран живёт сам по себе: пустой город, пустая категория, карта, фильтры. Вместе — одно полотно, по отдельности — рабочий продукт.</p></div>
+    <div class="principle" data-n="5"><b>Стиль не переделываем</b><p>Те же токены theme.css, та же сетка карточек и тени, что в тренерском приложении и B2B. Новое — только 4 токена типов мест, продолжение существующей палитры, а не её слом.</p></div>
+    <div class="principle" data-n="6"><b>Светлый холст — везде</b><p>Мрачные тёмные плитки в светлом хабе — чуждо, как белое пятно карты в тёмной теме. Секции хаба — светлые, с иконкой типа на цветной плашке. Тёмное — только в экспортных картинках шеринга.</p></div>
+  </section>
+  <div class="section-title"><span class="num">02</span><h2>Токены типов</h2><span class="sub">существующие из theme.css + 4 новых — на утверждение</span></div>
+  <section class="tokens">
+    <div class="token"><div class="sw" style="background:#45B9BB"></div><div class="name">Лёд / каток</div><div class="val">#45B9BB · glide-500 · есть</div></div>
+    <div class="token"><div class="sw" style="background:#7A5AF5"></div><div class="name">Магазин</div><div class="val">#7A5AF5 · есть</div></div>
+    <div class="token"><div class="sw" style="background:#D9822B"></div><div class="name">Зал / школа</div><div class="val">#D9822B · есть · расширяем</div></div>
+    <div class="token"><div class="sw" style="background:#0B6E70"></div><div class="name">Тренер</div><div class="val">#0B6E70 · glide-700 · <span class="new">новый</span></div></div>
+    <div class="token"><div class="sw" style="background:#2A7FD4"></div><div class="name">Трасса / ролики</div><div class="val">#2A7FD4 · <span class="new">новый</span></div></div>
+    <div class="token"><div class="sw" style="background:#47535E"></div><div class="name">Сервис / заточка</div><div class="val">#47535E · <span class="new">новый</span></div></div>
+    <div class="token"><div class="sw" style="background:#F1F3F2"></div><div class="name">Бумага</div><div class="val">#F1F3F2 · холст</div></div>
+    <div class="token"><div class="sw" style="background:#04262A"></div><div class="name">Ночной лёд</div><div class="val">#04262A · артефакты</div></div>
+    <div class="token type"><div class="sw">Аа</div><div class="name">Unbounded</div><div class="val">дисплей · 700/900</div></div>
+    <div class="token type"><div class="sw b">Аа</div><div class="name">Manrope</div><div class="val">интерфейс · 500–800</div></div>
+  </section>
+
+  <!-- ============ ЭКРАНЫ ============ -->
+  <div class="section-title"><span class="num">03</span><h2>Состояния каталога</h2><span class="sub">10 экранов · 390×880</span></div>
+  <section class="phones">
+
+    <!-- 01 · КАТКИ -->
+    <figure class="phone">
+      <figcaption><b>01 · Катки и арены</b><span>Лента категорий только с данными — чипов-нулей не существует. Внутри: живой статус, окно времени, цена, сезонность, трасса, бесфотошная карточка «Юность» и приглушённое «завтра нет».</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Минск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>−3° · лёд держит</div>
+        </div>
+
+        <div class="ribbon">
+          <span class="r-item"><svg class="ic"><use href="#i-user"/></svg>Тренеры<span class="cnt">14</span></span>
+          <span class="r-item on"><svg class="ic"><use href="#i-snow"/></svg>Катки<span class="cnt">7</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-bag"/></svg>Магазины<span class="cnt">6</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-wrench"/></svg>Сервис<span class="cnt">2</span></span>
+        </div>
+
+        <div class="sc-search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">каток, заточка, магазин…</span>
+          <button class="sc-map-btn"><svg class="ic"><use href="#i-map"/></svg>Карта</button>
+          <button class="sc-near"><svg class="ic"><use href="#i-loc"/></svg>Рядом</button>
+        </div>
+
+        <div class="chips">
+          <span class="chip">Сейчас</span>
+          <span class="chip on">Сегодня вечером</span>
+          <span class="chip">Завтра</span>
+          <span class="chip">Выходные</span>
+          <span class="chip sep"></span>
+          <span class="chip" style="display:flex;align-items:center;gap:5px"><svg class="ic" style="width:12px;height:12px"><use href="#i-filter"/></svg>Фильтры</span>
+        </div>
+
+        <div class="card featured">
+          <div class="art art-sunset">
+            <span class="badge"><span class="dot"></span>Открыто до 23:00</span>
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <div class="art-cap">
+              <div class="nm">Каток в парке Горького</div>
+              <div class="mt">открытый · сезон до апреля · −3° · 12 мин</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot on">18:15 · 5 ₽</span>
+              <span class="slot">19:45 · 5 ₽</span>
+              <span class="slot">21:15 · 7 ₽</span>
+            </div>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="card sm">
+          <div class="art art-palace">
+            <span class="badge"><span class="dot"></span>Сеанс идёт</span>
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <div class="art-cap">
+              <div class="nm">Ледовый дворец Спорта</div>
+              <div class="mt">крытый · 18 мин · прокат · заточка</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot on">19:30 · 8 ₽</span>
+              <span class="slot">21:00 · 8 ₽</span>
+            </div>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="card sm">
+          <div class="art art-track">
+            <span class="badge"><span class="dot"></span>Открыто · до 23:00</span>
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <div class="art-cap">
+              <div class="nm">Лыжероллерная трасса</div>
+              <div class="mt">Веснянка · 2,1 км · асфальт</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot">бесплатно</span>
+              <span class="slot">свои ролики</span>
+            </div>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="divider">Завтра нет · ближайшие сеансы</div>
+
+        <div class="card muted">
+          <div class="np">
+            <div class="np-ic"><svg class="ic"><use href="#i-snow"/></svg></div>
+            <div class="np-t"><b>Дворец спорта «Юность»</b><span>крытый · пр. Победителей, 4</span></div>
+          </div>
+          <div class="card-body">
+            <span class="muted-mark"><svg class="ic"><use href="#i-clock"/></svg>Завтра · 10:00 · 3 сеанса</span>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="share-block">
+          <button class="cta-big">Поделиться подборкой</button>
+          <div class="under">7 мест со льдом сегодня вечером · <a href="#">предложить свой каток →</a></div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 02 · КАРТА -->
+    <figure class="phone">
+      <figcaption><b>02 · Карта</b><span>Все типы на одном полотне: цвет пина — тип места (легенда под чипами). У катка — время сеанса, у сервиса — «заточка 15 мин», у магазина — просто точка: не выдумываем то, чего у типа нет.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen map-screen">
+
+        <svg class="map-svg" viewBox="0 0 390 880" preserveAspectRatio="xMidYMid slice">
+          <rect width="390" height="880" fill="#E8EDEA"/>
+          <path d="M-10,300 C90,258 180,338 262,300 C322,272 362,252 400,238" fill="none" stroke="#BBDDE2" stroke-width="26" opacity=".95"/>
+          <path d="M262,300 C290,382 300,444 322,512" fill="none" stroke="#BBDDE2" stroke-width="18" opacity=".9"/>
+          <ellipse cx="142" cy="432" rx="118" ry="64" fill="#CDE5CB"/>
+          <ellipse cx="92" cy="150" rx="66" ry="40" fill="#D9EBD6"/>
+          <ellipse cx="318" cy="392" rx="58" ry="44" fill="#D6E9D4"/>
+          <rect x="8" y="60" width="90" height="66" rx="10" fill="#F0F4F2"/>
+          <rect x="110" y="96" width="120" height="52" rx="10" fill="#EFF3F1"/>
+          <rect x="300" y="70" width="84" height="74" rx="10" fill="#F0F4F2"/>
+          <rect x="24" y="208" width="110" height="58" rx="10" fill="#EFF3F1"/>
+          <rect x="248" y="206" width="120" height="54" rx="10" fill="#F0F4F2"/>
+          <rect x="16" y="522" width="130" height="66" rx="10" fill="#EFF3F1"/>
+          <rect x="252" y="540" width="118" height="60" rx="10" fill="#F0F4F2"/>
+          <path d="M0,150 H390 M0,420 H390 M0,560 H390" stroke="#FFFFFF" stroke-width="9" fill="none"/>
+          <path d="M70,40 V640 M168,60 V640 M296,40 V640" stroke="#FFFFFF" stroke-width="9" fill="none"/>
+          <path d="M40,40 H320" stroke="#F7F9F8" stroke-width="4" fill="none"/>
+        </svg>
+
+        <div class="map-scrim"></div>
+
+        <div class="map-top">
+          <div class="sc-search" style="margin:0;box-shadow:0 4px 14px -6px rgba(16,40,40,.3)">
+            <svg class="ic"><use href="#i-search"/></svg>
+            <span class="ph">каток, заточка, магазин…</span>
+            <span class="chip-mini" style="border:none;background:#E7ECEA">Минск <i style="font-style:normal;font-size:9px">▾</i></span>
+          </div>
+          <div class="map-chips">
+            <span class="chip">Сейчас</span>
+            <span class="chip on">Сегодня вечером</span>
+            <span class="chip">Завтра</span>
+            <span class="chip">Выходные</span>
+          </div>
+          <div class="map-legend">
+            <span><span class="ld" style="background:#45B9BB"></span>Лёд</span>
+            <span><span class="ld" style="background:#0B6E70"></span>Тренер</span>
+            <span><span class="ld" style="background:#7A5AF5"></span>Магазин</span>
+            <span><span class="ld" style="background:#47535E"></span>Сервис</span>
+            <span><span class="ld" style="background:#2A7FD4"></span>Трасса</span>
+          </div>
+        </div>
+
+        <div class="pin-wrap" style="top:238px;left:52px"><div class="pin"><span class="p-dot"></span>19:30</div></div>
+        <div class="pin-wrap" style="top:296px;left:170px"><div class="pin sel"><span class="p-dot"></span>18:15 · Замок</div></div>
+        <div class="pin-wrap" style="top:246px;left:268px"><div class="pin"><span class="p-dot t"></span>Трасса</div></div>
+        <div class="pin-wrap" style="top:368px;left:96px"><div class="pin"><span class="p-dot r"></span>Тренер</div></div>
+        <div class="pin-wrap" style="top:430px;left:262px"><div class="pin"><span class="p-dot v"></span>Магазин</div></div>
+        <div class="pin-wrap" style="top:336px;left:300px"><div class="pin"><span class="p-dot w"></span>Заточка · 15 мин</div></div>
+        <div class="pin-wrap" style="top:222px;left:316px"><div class="cluster"><span class="c-n">3</span>с 18:15</div></div>
+        <div class="pin-wrap" style="top:500px;left:66px"><div class="pin-hollow"></div></div>
+        <div class="pin-wrap" style="top:536px;left:188px"><div class="pin-hollow"></div></div>
+
+        <button class="map-fab"><svg class="ic"><use href="#i-loc"/></svg></button>
+        <div class="map-copy">© Яндекс · Условия использования</div>
+
+        <div class="map-sheet">
+          <div class="handle"></div>
+          <div class="sh-head">
+            <div class="sh-sum">9 мест сегодня вечером <span>· ещё 2 без сеансов</span></div>
+            <button class="sh-toggle"><svg class="ic"><use href="#i-grid"/></svg>Списком</button>
+          </div>
+          <div class="map-car">
+            <div class="mc">
+              <div class="mc-art"><div class="art art-sunset" style="width:100%;height:100%"></div></div>
+              <div class="mc-t">
+                <b>Каток в парке Горького</b>
+                <div class="m">открытый · 12 мин · −3°</div>
+                <div class="mc-row">
+                  <span class="mc-price">от 5 ₽</span>
+                  <span class="mc-chip">18:15 · 5 ₽</span>
+                </div>
+              </div>
+            </div>
+            <div class="mc">
+              <div class="mc-art"><div class="art art-palace" style="width:100%;height:100%"></div></div>
+              <div class="mc-t">
+                <b>Ледовый дворец Спорта</b>
+                <div class="m">крытый · 18 мин</div>
+                <div class="mc-row">
+                  <span class="mc-price">от 8 ₽</span>
+                  <span class="mc-chip">19:30 · 8 ₽</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 03 · ТРЕНЕРЫ -->
+    <figure class="phone">
+      <figcaption><b>03 · Тренеры</b><span>Карточка тренера отвечает на свой главный вопрос: кого учит, где, сколько стоит. Внизу — приглашение предложить школу: зовём наполнение, а не обещаем его.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Минск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-user"/></svg>14 тренеров рядом</div>
+        </div>
+
+        <div class="ribbon">
+          <span class="r-item on"><svg class="ic"><use href="#i-user"/></svg>Тренеры<span class="cnt">14</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-snow"/></svg>Катки<span class="cnt">7</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-bag"/></svg>Магазины<span class="cnt">6</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-wrench"/></svg>Сервис<span class="cnt">2</span></span>
+        </div>
+
+        <div class="sc-search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">тренер, вид спорта, метро…</span>
+          <button class="sc-map-btn"><svg class="ic"><use href="#i-map"/></svg>Карта</button>
+        </div>
+
+        <div class="chips">
+          <span class="chip">Хоккей</span>
+          <span class="chip on">Фигурное катание</span>
+          <span class="chip">Ролики</span>
+          <span class="chip">ОФП</span>
+        </div>
+
+        <div class="tr-card">
+          <div class="t-ava a">АГ</div>
+          <div class="tr-main">
+            <div class="tr-nm">Александр Г. <span class="rate"><svg class="ic"><use href="#i-star"/></svg>4.9 · 42</span></div>
+            <div class="tr-disc">Фигурное катание · дети и взрослые</div>
+            <div class="tr-loc"><svg class="ic"><use href="#i-pin"/></svg>Минск-Арена · ТРЦ «Замок»</div>
+            <div class="tr-price"><span class="tag">индивидуально</span>от 45 BYN / час</div>
+          </div>
+          <div class="tr-side">
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="tr-cta">Записаться</button>
+            <button class="tr-ghost"><svg class="ic"><use href="#i-send"/></svg>Написать</button>
+          </div>
+        </div>
+
+        <div class="tr-card">
+          <div class="t-ava b">ИС</div>
+          <div class="tr-main">
+            <div class="tr-nm">Ирина С. <span class="rate"><svg class="ic"><use href="#i-star"/></svg>4.8 · 27</span></div>
+            <div class="tr-disc">Ролики и скейт · дети с 5 лет</div>
+            <div class="tr-loc"><svg class="ic"><use href="#i-pin"/></svg>Лыжероллерная трасса · Веснянка</div>
+            <div class="tr-price"><span class="tag">группа до 4</span>от 20 BYN / занятие</div>
+          </div>
+          <div class="tr-side">
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <button class="tr-cta">Записаться</button>
+            <button class="tr-ghost"><svg class="ic"><use href="#i-send"/></svg>Написать</button>
+          </div>
+        </div>
+
+        <div class="schools-soon">
+          <svg class="ic"><use href="#i-cap"/></svg>
+          <div class="t">
+            <b>Школы и клубы подключаются</b>
+            <span>Детские секции и академии появятся в каталоге по мере подключения</span>
+          </div>
+          <a href="#">Предложить →</a>
+        </div>
+
+        <div class="tabs">
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 04 · МАГАЗИНЫ И СЕРВИС -->
+    <figure class="phone">
+      <figcaption><b>04 · Магазины и сервис</b><span>Два типа в одном ритме: у магазина — «что в наличии», у мастерской — «что и как быстро». Экспресс-заточка помечена честно: за 15 минут, а не «быстро».</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Минск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-wrench"/></svg>2 заточки рядом</div>
+        </div>
+
+        <div class="ribbon">
+          <span class="r-item"><svg class="ic"><use href="#i-user"/></svg>Тренеры<span class="cnt">14</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-snow"/></svg>Катки<span class="cnt">7</span></span>
+          <span class="r-item on"><svg class="ic"><use href="#i-bag"/></svg>Магазины<span class="cnt">6</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-wrench"/></svg>Сервис<span class="cnt">2</span></span>
+        </div>
+
+        <div class="sc-search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">коньки, клюшка, заточка…</span>
+          <button class="sc-map-btn"><svg class="ic"><use href="#i-map"/></svg>Карта</button>
+        </div>
+
+        <div class="chips">
+          <span class="chip on">Всё</span>
+          <span class="chip">Коньки</span>
+          <span class="chip">Клюшки</span>
+          <span class="chip">Одежда</span>
+        </div>
+
+        <div class="card featured" style="margin-top:12px">
+          <div class="art art-shop">
+            <span class="badge"><span class="dot"></span>Открыто · до 21:00</span>
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <div class="art-cap">
+              <div class="nm">Skate Pro</div>
+              <div class="mt">коньки · ролики · экипировка · ★ 4.7</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot on">в наличии · примерка</span>
+              <span class="slot">доставка</span>
+            </div>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="divider">Сервис и заточка</div>
+
+        <div class="card sm" style="margin-top:10px">
+          <div class="art art-workshop">
+            <span class="badge" style="background:rgba(4,38,42,.72)"><svg class="ic" style="width:11px;height:11px;color:#FFE9B8"><use href="#i-flame"/></svg>Экспресс · при вас</span>
+            <button class="heart"><svg class="ic"><use href="#i-heart"/></svg></button>
+            <div class="art-cap">
+              <div class="nm">Hockey Service</div>
+              <div class="mt">заточка · профилирование · ремонт клюшек · ★ 5.0</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot on">заточка от 10 BYN</span>
+              <span class="slot">15 мин при вас</span>
+            </div>
+            <button class="share-mini"><svg class="ic"><use href="#i-share"/></svg></button>
+          </div>
+        </div>
+
+        <div class="share-block">
+          <button class="cta-big" style="font-size:12.5px">Записаться на заточку · без очереди</button>
+          <div class="under">ул. Мястровская, 5 · Пн–Вс 10:00–20:00 · <a href="#">все магазины и сервис →</a></div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 05 · ХАБ ГОСТЬ -->
+    <figure class="phone">
+      <figcaption><b>05 · Хаб — гость</b><span>Одна история на входе: «На льду сейчас» — единый блок (герой ближайшего сеанса + две строки расписания, раньше это были два блока с одним смыслом) → поиск → «Куда катимся» — рынок одной сеткой (катки, тренеры, магазины, сервис; раньше — две навигации: «Места и тренеры» и «Подборки») → каток недели.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="hub-top">
+          <div>
+            <div class="sc-kicker">Минск · суббота</div>
+            <div class="sc-h1" style="font-size:20px">Вечер, Максим</div>
+            <div class="sc-sub">−3° · идеальный вечер для льда</div>
+          </div>
+          <div class="avatar">М</div>
+        </div>
+
+        <div class="hub-chips">
+          <span class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>лёд держит</span>
+          <span class="chip-mini">23 сеанса сегодня</span>
+        </div>
+
+        <div class="ice-now">
+          <div class="in-head">
+            <span class="kick">На льду сейчас · Минск</span>
+            <a href="#">весь лёд →</a>
+          </div>
+          <div class="hero">
+            <div class="t">
+              <div class="live-row"><span class="live"></span>Прямо сейчас</div>
+              <b>Ледовый дворец Спорта</b>
+              <div class="m">сеанс до 22:00 · 18 мин от вас</div>
+              <button>Открыть каток</button>
+            </div>
+            <div class="h-art"><div class="art art-palace" style="width:100%;height:100%"></div></div>
+          </div>
+          <div class="ice-today">
+            <div class="it-row"><span class="it-dot"></span><span class="it-time">18:15</span><span class="it-place">Парк Горького · открытый</span><span class="it-price">5 ₽</span></div>
+            <div class="it-row"><span class="it-dot"></span><span class="it-time">19:30</span><span class="it-place">Дворец Спорта · крытый</span><span class="it-price">8 ₽</span></div>
+          </div>
+        </div>
+
+        <div class="sc-search" style="margin-top:12px">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">каток, тренер, заточка…</span>
+          <span class="chip-mini" style="border:none;background:#E7ECEA">Минск <i style="font-style:normal;font-size:9px">▾</i></span>
+        </div>
+
+        <div class="cg">
+          <div class="cg-head"><b>Куда катимся</b><a href="#">все места →</a></div>
+          <div class="cg-grid">
+            <div class="cg-tile">
+              <div class="cg-ic ice"><svg class="ic"><use href="#i-snow"/></svg></div>
+              <div class="cg-t"><b>Катки <span class="cnt">37</span></b><span>лёд рядом</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic coach"><svg class="ic"><use href="#i-user"/></svg></div>
+              <div class="cg-t"><b>Тренеры <span class="cnt">14</span></b><span>занятия и школы</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic shop"><svg class="ic"><use href="#i-bag"/></svg></div>
+              <div class="cg-t"><b>Магазины <span class="cnt">13</span></b><span>экипировка</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic svc"><svg class="ic"><use href="#i-wrench"/></svg></div>
+              <div class="cg-t"><b>Сервис <span class="cnt">2</span></b><span>заточка · ремонт</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="weekly">
+          <div class="w-art"><div class="art art-sunset" style="width:100%;height:100%"></div></div>
+          <div class="t">
+            <div class="kick">Каток недели</div>
+            <b>Парк Горького залил лёд под звёздами</b>
+            <div class="m"><svg class="ic"><use href="#i-star"/></svg>4.8 · открытый · с 18:15</div>
+            <a href="#">Позвать с собой →</a>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 06 · ХАБ СВОЙ -->
+    <figure class="phone">
+      <figcaption><b>06 · Хаб — свой клиент</b><span>Своё — сверху: запись, тренер, абонемент, сертификат, серия. Рынок никуда не девается — «Куда катимся» внизу. Нет данных — нет блока.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="hub-top">
+          <div>
+            <div class="sc-kicker">Минск · суббота</div>
+            <div class="sc-h1" style="font-size:20px">Вечер, Максим</div>
+            <div class="sc-sub">завтра лёд · −3°</div>
+          </div>
+          <div class="avatar">М</div>
+        </div>
+
+        <div class="hub-chips">
+          <span class="chip-mini"><svg class="ic"><use href="#i-flame"/></svg>3 недели подряд</span>
+          <span class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>лёд держит</span>
+        </div>
+
+        <div class="block-card">
+          <div class="bk-ava">АК</div>
+          <div class="bk-t">
+            <div class="bk-kick">Завтра · 18:15</div>
+            <b>Фигурное катание</b>
+            <div class="m">Анна Коваль · Ледовый дворец Спорта</div>
+          </div>
+          <div class="bk-side">
+            <span class="bk-status"><span class="dot"></span>подтверждено</span>
+          </div>
+          <div class="bk-chev"><svg class="ic"><use href="#i-chev"/></svg></div>
+        </div>
+
+        <div class="block-card">
+          <div class="bk-ava" style="background:linear-gradient(140deg,#D3EFEF,#7FD7D8);color:#073C3E">АК</div>
+          <div class="bk-t">
+            <div class="bk-kick">Твой тренер</div>
+            <b>Анна Коваль</b>
+            <div class="m">фигурное катание · 9 лет на льду</div>
+          </div>
+          <button class="bk-btn"><svg class="ic"><use href="#i-send"/></svg>Написать</button>
+        </div>
+
+        <div class="pass">
+          <div class="p-head"><b>Абонемент · 8 занятий</b><span>4 / 8</span></div>
+          <div class="p-bar"><div class="p-fill"></div></div>
+          <div class="p-m">осталось 4 занятия · действует до 15 октября</div>
+        </div>
+
+        <div class="cert">
+          <svg class="ic"><use href="#i-ticket"/></svg>
+          <div class="t">
+            <b>Сертификат на 2 занятия</b>
+            <span>подарочный · действует до 30 ноября</span>
+          </div>
+          <div class="c-count">2 / 2</div>
+        </div>
+
+        <div class="streak">
+          <svg class="ring-svg" width="52" height="52" viewBox="0 0 52 52">
+            <circle class="bgc" cx="26" cy="26" r="20"></circle>
+            <circle class="fgc" cx="26" cy="26" r="20" stroke-dasharray="94.2 125.6" stroke-dashoffset="31.4" transform="rotate(-90 26 26)"></circle>
+            <text x="26" y="30.5" text-anchor="middle" font-family="Unbounded" font-weight="700" font-size="13" fill="#0B6E70">3/4</text>
+          </svg>
+          <div>
+            <b>Твоя серия</b>
+            <div class="s">до бейджа <b>«Хранитель льда»</b> — 1 неделя</div>
+          </div>
+        </div>
+
+        <div class="cg">
+          <div class="cg-head"><b>Куда катимся</b><a href="#">все места →</a></div>
+          <div class="cg-grid">
+            <div class="cg-tile">
+              <div class="cg-ic ice"><svg class="ic"><use href="#i-snow"/></svg></div>
+              <div class="cg-t"><b>Катки <span class="cnt">37</span></b><span>лёд рядом</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic coach"><svg class="ic"><use href="#i-user"/></svg></div>
+              <div class="cg-t"><b>Тренеры <span class="cnt">14</span></b><span>занятия и школы</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic shop"><svg class="ic"><use href="#i-bag"/></svg></div>
+              <div class="cg-t"><b>Магазины <span class="cnt">13</span></b><span>экипировка</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+            <div class="cg-tile">
+              <div class="cg-ic svc"><svg class="ic"><use href="#i-wrench"/></svg></div>
+              <div class="cg-t"><b>Сервис <span class="cnt">2</span></b><span>заточка · ремонт</span></div>
+              <span class="chev"><svg class="ic"><use href="#i-chev"/></svg></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 07 · ШЕРИНГ -->
+    <figure class="phone">
+      <figcaption><b>07 · Шеринг «Позвать с собой»</b><span>Виральная единица каталога: тон, сеанс, подписанные каналы и тёмная картинка с абсолютными датами. Тёмное живёт только в артефактах.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sh-head">
+          <b>Поделиться</b>
+          <button class="sh-x"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+
+        <div class="tones">
+          <div class="tone on">Позвать с собой</div>
+          <div class="tone">Просто ссылка</div>
+          <div class="tone">Похвастаться</div>
+        </div>
+
+        <div class="story-prev">
+          <div class="sp-art art art-sunset"></div>
+          <div class="sp-top">
+            <div class="logo"><span class="lg"></span>GLIDE</div>
+            <div class="date">пятница · 20:30</div>
+          </div>
+          <div class="sp-body">
+            <h3>Каток в парке Горького</h3>
+            <div class="row">
+              <span class="line"><svg class="ic" style="width:13px;height:13px"><use href="#i-snow"/></svg>−3° · открытый</span>
+              <span class="line"><svg class="ic" style="width:13px;height:13px"><use href="#i-check"/></svg>лёд готов</span>
+            </div>
+            <div class="addr"><svg class="ic"><use href="#i-pin"/></svg>Минск · парк Горького, 2</div>
+            <div class="sp-foot">
+              <div>
+                <div class="price-big">5 ₽</div>
+                <div class="price-sub">билет на месте</div>
+              </div>
+              <div class="qr-frame">
+                <div class="qr" data-m="111000100101000101111000100000111000101101010000010100110000111010101101001000111"></div>
+                <span>glide.by</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sess-chips">
+          <span class="chip">18:15</span>
+          <span class="chip">19:45</span>
+          <span class="chip on">20:30</span>
+        </div>
+
+        <div class="channels">
+          <button class="ch on"><svg class="ic"><use href="#i-plane"/></svg>Telegram</button>
+          <button class="ch"><svg class="ic"><use href="#i-share"/></svg>WhatsApp</button>
+          <button class="ch"><svg class="ic"><use href="#i-send"/></svg>Viber</button>
+          <button class="ch"><svg class="ic"><use href="#i-heart"/></svg>VK</button>
+          <button class="ch"><svg class="ic"><use href="#i-link"/></svg>Ссылка</button>
+          <button class="ch"><svg class="ic"><use href="#i-img"/></svg>Картинка</button>
+        </div>
+
+        <div class="og-prev">
+          <div class="lbl">Так ссылку увидят в чате</div>
+          <div class="og-card">
+            <div class="og-img"><div class="art art-sunset" style="width:100%;height:100%"></div></div>
+            <div class="og-t">
+              <b>Каток в парке Горького — GLIDE</b>
+              <div class="og-u">glide.by/p/minsk/gorky-park</div>
+              <div class="og-m">Пт, 2 окт · 18:15 · 5 ₽</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="og-note"><svg class="ic"><use href="#i-info"/></svg>Картинка живёт в кэше чата — даты только абсолютные</div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 08 · ПУСТОЙ ГОРОД -->
+    <figure class="phone">
+      <figcaption><b>08 · Пустой город</b><span>Ноль категорий — ноль чипов: лента категорий отсутствует. Каталог живёт без данных: «предложи свой каток», ссылка работает у всех.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Витебск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>−5° · лёд держит</div>
+        </div>
+
+
+        <div class="sc-search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">каток, заточка, магазин…</span>
+          <button class="sc-map-btn"><svg class="ic"><use href="#i-map"/></svg>Карта</button>
+          <button class="sc-near"><svg class="ic"><use href="#i-loc"/></svg>Рядом</button>
+        </div>
+
+        <div class="chips">
+          <span class="chip">Сейчас</span>
+          <span class="chip on">Сегодня вечером</span>
+          <span class="chip">Завтра</span>
+          <span class="chip">Выходные</span>
+        </div>
+
+        <div class="empty">
+          <div class="e-art art-frost">
+            <svg class="ic"><use href="#i-snow"/></svg>
+          </div>
+          <h3>В Витебске пока нет катков в каталоге</h3>
+          <p>Предложи свой — проверим расписание и добавим в течение дня. Ты будешь первым, кто привёл сюда лёд.</p>
+          <button class="cta-big">Предложить каток</button>
+          <a class="alt" href="#">Смотреть Минск →</a>
+          <div class="hint-row"><svg class="ic"><use href="#i-share"/></svg>ссылка на каталог работает у всех — даже без Telegram</div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 09 · ПУСТАЯ КАТЕГОРИЯ -->
+    <figure class="phone">
+      <figcaption><b>09 · Пустая категория</b><span>Пустой результат фильтра — не пустая страница: что искали, сколько всего есть, кнопка сброса и приглашение предложить место. Чипов-нулей в ленте нет.</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Минск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-bag"/></svg>6 магазинов рядом</div>
+        </div>
+
+        <div class="ribbon">
+          <span class="r-item"><svg class="ic"><use href="#i-user"/></svg>Тренеры<span class="cnt">14</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-snow"/></svg>Катки<span class="cnt">7</span></span>
+          <span class="r-item on"><svg class="ic"><use href="#i-bag"/></svg>Магазины<span class="cnt">6</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-wrench"/></svg>Сервис<span class="cnt">2</span></span>
+        </div>
+
+        <div class="sc-search">
+          <svg class="ic"><use href="#i-search"/></svg>
+          <span class="ph">коньки, клюшка, заточка…</span>
+          <button class="sc-map-btn"><svg class="ic"><use href="#i-map"/></svg>Карта</button>
+        </div>
+
+        <div class="chips">
+          <span class="chip">Всё</span>
+          <span class="chip on">Коньки</span>
+          <span class="chip">Клюшки</span>
+          <span class="chip">Одежда</span>
+        </div>
+
+        <div class="empty">
+          <div class="e-art art-shop">
+            <svg class="ic"><use href="#i-bag"/></svg>
+          </div>
+          <h3>По фильтру «Коньки» ничего нет</h3>
+          <p>В Минске 6 магазинов, но по этому фильтру пусто. Сбросьте фильтр или предложите свой магазин.</p>
+          <button class="cta-big">Сбросить фильтр</button>
+          <a class="alt" href="#">Предложить магазин →</a>
+          <div class="hint-row"><svg class="ic"><use href="#i-info"/></svg>пустой результат — честный экран, а не пустая страница</div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-home"/></svg></span>Хаб</div>
+          <div class="tab on"><span class="wrap"><svg class="ic"><use href="#i-search"/></svg></span>Поиск</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-cal"/></svg></span>Записи</div>
+          <div class="tab"><span class="wrap"><svg class="ic"><use href="#i-grid"/></svg></span>Ещё</div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+    <!-- 10 · ФИЛЬТРЫ -->
+    <figure class="phone">
+      <figcaption><b>10 · Фильтры и сортировка</b><span>Шторка адаптируется под вкладку: у катков — покрытие, цель визита, сервисы, цена сеанса. Сортировка: рядом, рейтинг, цена, свободное время. Кнопка показывает живой результат: «7 мест».</span></figcaption>
+      <div class="viewport"><div class="frame"><div class="screen">
+
+        <div class="sc-status">
+          <div class="sc-city">Минск <i>▾</i></div>
+          <div class="chip-mini"><svg class="ic"><use href="#i-snow"/></svg>−3° · лёд держит</div>
+        </div>
+
+        <div class="ribbon">
+          <span class="r-item"><svg class="ic"><use href="#i-user"/></svg>Тренеры<span class="cnt">14</span></span>
+          <span class="r-item on"><svg class="ic"><use href="#i-snow"/></svg>Катки<span class="cnt">7</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-bag"/></svg>Магазины<span class="cnt">6</span></span>
+          <span class="r-item"><svg class="ic"><use href="#i-wrench"/></svg>Сервис<span class="cnt">2</span></span>
+        </div>
+
+        <div class="card featured" style="margin-top:12px">
+          <div class="art art-sunset">
+            <span class="badge"><span class="dot"></span>Открыто до 23:00</span>
+            <div class="art-cap">
+              <div class="nm">Каток в парке Горького</div>
+              <div class="mt">открытый · 12 мин</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots">
+              <span class="slot on">18:15 · 5 ₽</span>
+              <span class="slot">19:45 · 5 ₽</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="filters">
+          <div class="dim"></div>
+          <div class="f-sheet">
+            <div class="f-handle"></div>
+            <div class="f-head">
+              <b>Фильтры</b>
+              <span class="f-type">Катки и арены</span>
+            </div>
+            <div class="f-sec">
+              <div class="fs-t">Тип покрытия</div>
+              <div class="f-chips">
+                <span class="f-chip on">Натуральный лёд · крытый</span>
+                <span class="f-chip on">Открытый сезонный</span>
+                <span class="f-chip">Синтетический</span>
+                <span class="f-chip">Роллердром</span>
+              </div>
+            </div>
+            <div class="f-sec">
+              <div class="fs-t">Цель визита</div>
+              <div class="f-chips">
+                <span class="f-chip on">Массовое катание</span>
+                <span class="f-chip">Аренда льда</span>
+                <span class="f-chip">Свободная подкатка</span>
+              </div>
+            </div>
+            <div class="f-sec">
+              <div class="fs-t">Сервисы на арене</div>
+              <div class="f-chips">
+                <span class="f-chip on">Прокат коньков</span>
+                <span class="f-chip">Заточка на месте</span>
+                <span class="f-chip">Помощники-пингвины</span>
+              </div>
+            </div>
+            <div class="f-sec">
+              <div class="fs-t">Цена сеанса</div>
+              <div class="f-range">
+                <div class="tr"></div>
+                <div class="fill"></div>
+                <div class="f-thumb a"></div>
+                <div class="f-thumb b"></div>
+              </div>
+              <div class="f-labels"><span>0 ₽</span><span>2 ₽</span><span>12 ₽</span></div>
+            </div>
+            <div class="f-sec">
+              <div class="fs-t">Сортировка</div>
+              <div class="f-sort">
+                <span class="f-chip on">Рядом</span>
+                <span class="f-chip">Рейтинг</span>
+                <span class="f-chip">Цена</span>
+                <span class="f-chip">Свободное время</span>
+              </div>
+            </div>
+            <div class="f-foot">
+              <button class="f-reset">Сбросить</button>
+              <button class="f-apply">Показать 7 мест</button>
+            </div>
+          </div>
+        </div>
+
+      </div></div></div>
+    </figure>
+
+  </section>
+
+  <!-- ============ ЧТО ЧИНИМ ============ -->
+  <div class="section-title"><span class="num">04</span><h2>Что было не так</h2><span class="sub">диагноз по твоему описанию, конституции и заметкам специалиста</span></div>
+  <section class="fix">
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>«Подборки» и «свежее» — контент, который некому производить; через неделю пусто</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Подборки — живые фильтры со счётчиками; «свежее» убрано, вместо него «сегодня на льду» из расписаний</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Каталог = катки, остальной рынок спрятан или обещан — клиент не видит целое</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Лента категорий со счётчиками: тренеры, школы, катки, магазины, сервис — рынок виден целиком, ноль не скрыт</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Два блока «Сегодня на льду» (тизер сверху + блок внизу) — один смысл дважды, каша</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Единый блок «На льду сейчас»: герой ближайшего сеанса + две строки расписания + «весь лёд»</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>«Места и тренеры» и «Подборки» — две навигации об одном рынке, у второй мелкий шрифт</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>«Куда катимся» — одна сетка: катки, тренеры, магазины, сервис со счётчиками и строкой ценности</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>«Рады вас видеть» — пустое приветствие, ничего не сообщает о дне и городе</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>«Вечер, Максим» + погода и живой счётчик дня: первая строка уже отвечает на вопрос</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Тёмные плитки «Подборок» в светлом хабе — мрачно и чуждо, как чужая вставка</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Светлые плитки «Куда катимся»: иконка типа на цветной плашке, счётчик, строка ценности. Тёмное — только в экспортных картинках</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Чипы-нули («Школы · 0») и пустые блоки — обещание без наполнения</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Чип рендерится только при данных; пустой результат фильтра — честный экран со сбросом</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Место без фото — серый плейсхолдер, который выдаёт пустоту</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Бесфотошный вариант карточки: иконка типа на плашке. Нет фото — нет фото-блока</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Разные типы мест — разная подача, каша из карточек</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Одна система: тип — цветом и значком, карточка каждого типа отвечает на свой главный вопрос</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Хаб один на всех: у новичка пусто, у своего клиента — ссылки вместо данных</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Хаб собирается из данных: у гостя — витрина города, у клиента — запись, тренер, абонемент, сертификат, серия</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Карта — окошко на 25% экрана, пины без смысла</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Карта — экран: пины-пилюли со временем, цвет пина — тип места, легенда, шторка-карусель, копирайт на месте</div>
+    </div>
+    <div class="fix-row">
+      <div class="was"><svg class="ic"><use href="#i-x"/></svg>Шеринг спрятан, без тона и превью</div>
+      <div class="mid"><svg class="ic"><use href="#i-arrow"/></svg></div>
+      <div class="now"><svg class="ic"><use href="#i-check"/></svg>Первый класс: тон «позвать с собой», выбор сеанса, подписанные каналы, тёмное превью с абсолютными датами</div>
+    </div>
+  </section>
+
+  <!-- ============ КОПИРАЙТ ============ -->
+  <div class="section-title"><span class="num">05</span><h2>Копирайт — проверено</h2><span class="sub">что обязано остаться в проде</span></div>
+  <section class="copyright">
+    <div class="copy-card">
+      <b><svg class="ic"><use href="#i-map"/></svg>Карта</b>
+      <p>Копирайт провайдера обязателен по условиям использования: <code>© Яндекс · Условия использования</code> — на экране карты есть, прижат к левому краю над шторкой. Убирать нельзя.</p>
+    </div>
+    <div class="copy-card">
+      <b><svg class="ic"><use href="#i-info"/></svg>Шрифты</b>
+      <p>Unbounded и Manrope — SIL Open Font License: свободны для коммерческого использования. В проде — самохостинг woff2, без Google Fonts CDN.</p>
+    </div>
+    <div class="copy-card">
+      <b><svg class="ic"><use href="#i-img"/></svg>Иллюстрации</b>
+      <p>Все «фото» в макете — собственные CSS/SVG-градиенты, сток не использован. QR — декоративный плейсхолдер; в проде — настоящая ссылка <code>glide.by/p/…</code>.</p>
+    </div>
+    <div class="copy-card">
+      <b><svg class="ic"><use href="#i-check"/></svg>Данные и имена</b>
+      <p>Названия мест — примеры данных. Товарные знаки мессенджеров — только как кнопки-каналы шеринга, стандартное использование.</p>
+    </div>
+  </section>
+
+  <!-- ============ ФУТЕР ============ -->
+  <footer class="foot">
+    <b>Самокритика v6 → v7:</b>
+    <ul>
+      <li><b>Хаб пересобран как история, а не список блоков.</b> Гость на входе получает один ответ за раз: «На льду сейчас» (герой ближайшего сеанса + две строки расписания — раньше это были два разнесённых блока с одним смыслом) → поиск → «Куда катимся» (рынок одной сеткой: катки, тренеры, магазины, сервис — раньше две навигации: «Места и тренеры» + «Подборки» мелким шрифтом) → каток недели.</li>
+      <li><b>Первая строка несёт ценность.</b> «Рады вас видеть» заменено на «Вечер, Максим» + «−3° · лёд держит» + живой счётчик дня. Приветствие отвечает на вопрос, а не заполняет место.</li>
+      <li><b>У своего клиента своё сверху, рынок — всегда под рукой.</b> Запись, тренер, абонемент, сертификат, серия — первыми; «Куда катимся» — ниже. Один и тот же блок, одна ментальная модель.</li>
+      <li><b>Карта для реализации:</b> hubIceZone + hubIceToday → один блок «На льду сейчас»; hubDiscovery + hubCollections → одна сетка «Куда катимся»; hubGreeting → «Вечер, имя» + чипы. Существующие персональные блоки (запись, тренер, абонемент, upcoming, streak, saved) — только порядок, без переписывания.</li>
+      <li><b>Что по-прежнему не делаю:</b> тёмную тему приложения, выдуманные данные, «скоро» без фактов, контент-блоки, которые некому вести.</li>
+    </ul>
+  </footer>
+
+</div>
+
+<script>
+document.querySelectorAll('.qr').forEach(function(el){
+  var m=(el.dataset.m||'').split('');
+  var h='';
+  m.forEach(function(c){h+='<i class="'+(c==='1'?'':'q0')+'"></i>';});
+  el.innerHTML=h;
+});
+</script>
+</body>
+</html>

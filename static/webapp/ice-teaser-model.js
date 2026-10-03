@@ -110,7 +110,8 @@
   }
 
   function arenaHref(payload) {
-    var ref = (payload && (payload.arena_slug || payload.arena_id)) || '';
+    // id важнее slug: тизер бывает «ближайший по стране», а slug уникален только в городе.
+    var ref = (payload && (payload.arena_id != null ? payload.arena_id : payload.arena_slug)) || '';
     if (!ref) return '';
     return 'arena?ref=' + encodeURIComponent(String(ref));
   }

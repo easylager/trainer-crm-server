@@ -230,7 +230,7 @@ class Arena(Base):
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
-    #: ice|gym|choreo|pool|outdoor|other — см. src/shared/venue_types.py. Лёд здесь
+    #: ice|gym|choreo|pool|outdoor|other|shop — см. src/shared/venue_types.py. Лёд здесь
     #: частный случай, а не синоним арены; дефолт сохраняет поведение старых строк.
     venue_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ice")
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
@@ -296,6 +296,8 @@ class ArenaProfile(Base):
     amenities: Mapped[dict] = mapped_column(JSONB(), nullable=False, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="published")
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Последняя правка карточки в админке (TASK-146, Q-012). NULL — неизвестно.
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 
     arena: Mapped["Arena"] = relationship(back_populates="profile", lazy="raise")
@@ -1723,10 +1725,16 @@ class TrainerDemandEvent(Base):
 
 CLIENT_SHARE_KIND_ICE_CITY_DAY = "ice_city_day"
 CLIENT_SHARE_KIND_TRAINER = "trainer"
+# TASK-146: «Поделиться» с карточки конкретного места (каток, зал, магазин).
+CLIENT_SHARE_KIND_PLACE = "place"
+# TASK-146: «Поделиться подборкой» — город + тип места + окно времени (/c/{город}).
+CLIENT_SHARE_KIND_SELECTION = "selection"
 
 CLIENT_SHARE_KINDS = (
     CLIENT_SHARE_KIND_ICE_CITY_DAY,
     CLIENT_SHARE_KIND_TRAINER,
+    CLIENT_SHARE_KIND_PLACE,
+    CLIENT_SHARE_KIND_SELECTION,
 )
 
 

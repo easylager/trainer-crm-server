@@ -322,11 +322,27 @@ def price_range_compact(day: Mapping[str, Any]) -> str:
     return f"{low_only}–{format_price_minor(hi, currency)}"
 
 
-def summary_line(day: Mapping[str, Any], *, city_name: str) -> str:
-    """Одна строка для og:description и для тела шеринга. Только факты из выборки."""
+def cacheable_day_label(day: Mapping[str, Any]) -> str:
+    """«Пт, 3 окт» из ``local_date``. Для og, картинки и текста в чате — не «сегодня»."""
+    raw = day.get("local_date")
+    parsed: date | None = raw if isinstance(raw, date) else None
+    if parsed is None and isinstance(raw, str) and len(raw) >= 10:
+        try:
+            parsed = date.fromisoformat(raw[:10])
+        except ValueError:
+            parsed = None
+    if parsed is None:
+        return str(day.get("day_label") or "")
+    from src.application.place_page import absolute_day_label
+
+    return absolute_day_label(parsed)
+
+
+def summary_line(day: Mapping[str, Any], *, city_name: str, absolute: bool = False) -> str:
+    """Одна строка фактов. ``absolute=True`` — для og и чата, где «сегодня» завтра врёт."""
     arenas = int(day.get("arena_count") or 0)
     sessions = int(day.get("session_count") or 0)
-    label = str(day.get("day_label") or "сегодня")
+    label = cacheable_day_label(day) if absolute else str(day.get("day_label") or "сегодня")
     if not sessions:
         return f"{city_name}: на {label} массовых катаний в расписании нет."
     a_word = plural_ru(arenas, "катке", "катках", "катках")
@@ -352,7 +368,7 @@ def compose_ice_city_day_share_message(
     ``openTelegramShareUrlFromMiniApp`` без правок.
     """
     url = (page_url or "").strip()
-    lines = [url, "", SHARE_OPENER, "", summary_line(day, city_name=city_name)]
+    lines = [url, "", SHARE_OPENER, "", summary_line(day, city_name=city_name, absolute=True)]
     return "\n".join(lines)
 
 

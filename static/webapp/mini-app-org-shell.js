@@ -18,15 +18,15 @@
 
   var TABS = [
     { id: 'home', label: 'Главная', path: 'org-home', icon: ICONS.home },
-    { id: 'schedule', label: 'Расписание', path: 'org-schedule', icon: ICONS.schedule },
-    { id: 'clients', label: 'Клиенты', path: 'org-clients', icon: ICONS.clients },
-    { id: 'catalog', label: 'Каталог', path: 'org-catalog', icon: ICONS.catalog },
+    { id: 'schedule', label: 'Расписание', path: null, icon: ICONS.schedule, soon: true },
+    { id: 'clients', label: 'Клиенты', path: null, icon: ICONS.clients, soon: true },
+    { id: 'catalog', label: 'Каталог', path: null, icon: ICONS.catalog, soon: true },
     { id: 'more', label: 'Ещё', path: null, icon: ICONS.more },
   ];
 
-  // «Ещё» — DEC-003: Абонементы и сертификаты слиты в один пункт; Заявки/Статистика — скоро.
+  // «Ещё» — DEC-003: Абонементы и сертификаты слиты в один пункт; Команда/Заявки/Статистика — скоро.
   var MORE_ITEMS = [
-    { path: 'org-team', label: 'Команда', hint: null, soon: false },
+    { path: null, label: 'Команда', hint: 'Скоро', soon: true },
     { path: 'org-profile', label: 'Профиль школы', hint: null, soon: false },
     { path: 'org-subscription', label: 'Подписка', hint: null, soon: false }, // S2, реализовано
     { path: null, label: 'Абонементы и сертификаты', hint: 'Скоро', soon: true },
@@ -47,13 +47,19 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'org-tabbar__it' + (tab.id === activeId ? ' on' : '');
-      btn.innerHTML = tab.icon + '<span>' + tab.label + '</span>';
+      if (tab.soon) btn.disabled = true;
+      btn.innerHTML =
+        tab.icon +
+        '<span>' +
+        tab.label +
+        '</span>' +
+        (tab.soon ? '<span class="org-more-row__soon">Скоро</span>' : '');
       btn.addEventListener('click', function () {
         if (tab.id === 'more') {
           openMoreSheet();
           return;
         }
-        if (tab.id === activeId) return;
+        if (tab.soon || tab.id === activeId) return;
         navigate(tab.path);
       });
       nav.appendChild(btn);

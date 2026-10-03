@@ -32,6 +32,10 @@ class IceParserJob(Base):
             "cadence IN ('hourly', 'daily', 'weekly')",
             name="ck_ice_parser_jobs_cadence",
         ),
+        CheckConstraint(
+            "alert_state IN ('ok', 'failing')",
+            name="ck_ice_parser_jobs_alert_state",
+        ),
         Index("ix_ice_parser_jobs_due", "is_enabled", "next_run_at"),
     )
 
@@ -49,6 +53,15 @@ class IceParserJob(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # TASK-146: состояние источника — свежесть для публичного API и дедуп алертов.
+    last_ok_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ok_slot_count: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    failing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_streak: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+    last_error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    last_error_summary: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    alert_state: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ok")
+    alert_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IceScrapeRun(Base):

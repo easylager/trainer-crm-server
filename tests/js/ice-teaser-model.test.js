@@ -47,16 +47,17 @@ describe('formatIceTeaser (AC-001)', () => {
     assert.match(view.subtitle, /массовое/);
     assert.match(view.subtitle, /взр/);
     assert.match(view.subtitle, /12/);
-    assert.equal(view.href, 'arena?ref=chizhovka');
+    // TASK-146: id важнее slug — тизер бывает «по стране», а slug уникален только в городе.
+    assert.equal(view.href, 'arena?ref=12');
   });
 
-  it('uses arena id when slug is missing', () => {
+  it('falls back to slug only when id is missing', () => {
     const { formatIceTeaser } = loadModel();
     const view = formatIceTeaser(
-      sampleTeaser({ arena_slug: null }),
+      sampleTeaser({ arena_id: null }),
       new Date('2026-09-06T07:00:00Z')
     );
-    assert.equal(view.href, 'arena?ref=12');
+    assert.equal(view.href, 'arena?ref=chizhovka');
   });
 
   it('omits distance when the API did not compute it', () => {

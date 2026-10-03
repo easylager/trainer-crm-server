@@ -24,7 +24,40 @@
     ['locker_rooms', 'Раздевалки'],
     ['cafe', 'Кафе'],
     ['accessibility', 'Доступность'],
+    /* TASK-146: услуги магазина (ключи — src/application/arena_profile.py). */
+    ['retail', 'Розница'],
+    ['skate_molding', 'Формовка'],
+    ['blade_profiling', 'Профилирование'],
+    ['foot_scan', '3D-скан стопы'],
+    ['repair', 'Ремонт'],
   ];
+
+  /* TASK-146: услуги магазина — плитками с подписью, специализация — тегами. */
+  var SHOP_SERVICES = [
+    ['retail', 'Розница', 'Коньки, защита, форма'],
+    ['skate_sharpening', 'Заточка', 'Лезвия под ваш стиль катания'],
+    ['skate_molding', 'Формовка', 'Ботинок по форме стопы'],
+    ['blade_profiling', 'Профилирование', 'Профиль лезвия под игрока'],
+    ['foot_scan', '3D-скан стопы', 'Точный подбор размера'],
+    ['skate_rental', 'Прокат', 'Коньки на время'],
+    ['repair', 'Ремонт', 'Коньки, клюшки, форма'],
+  ];
+  var SHOP_DISCIPLINES = [
+    ['discipline_hockey', 'Хоккей'],
+    ['discipline_figure', 'Фигурное'],
+    ['discipline_roller', 'Ролики'],
+  ];
+
+  function shopServicesView(amenities) {
+    amenities = amenities || {};
+    var tiles = SHOP_SERVICES.filter(function (s) { return amenities[s[0]] === true; }).map(function (s) {
+      return { key: s[0], title: s[1], sub: s[2] };
+    });
+    var disciplines = SHOP_DISCIPLINES.filter(function (d) { return amenities[d[0]] === true; }).map(function (d) {
+      return d[1];
+    });
+    return { tiles: tiles, disciplines: disciplines };
+  }
 
   var MONTHS_PREP = [
     '',
@@ -190,6 +223,56 @@
     return text;
   }
 
+  /**
+   * TASK-146: парсер давно не читал сайт катка (schedule_stale с сервера). Сеансы
+   * показываем — чаще всего они верны, — но прямо говорим, от какого они числа.
+   */
+  function staleScheduleNote(freshness) {
+    freshness = freshness || {};
+    if (!freshness.schedule_stale) return null;
+    var at = freshness.schedule_observed_at ? new Date(freshness.schedule_observed_at) : null;
+    if (!at || isNaN(at.getTime())) return 'Расписание могло измениться — уточните на сайте или по телефону';
+    var hh = at.getHours();
+    var mm = at.getMinutes();
+    return (
+      'Расписание от ' + at.getDate() + ' ' + MONTHS_GEN[at.getMonth()] + ', ' +
+      (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm +
+      ' — могло измениться, уточните на сайте или по телефону'
+    );
+  }
+
+  /**
+   * TASK-146 (DEC-014): откуда данные карточки и насколько они свежие — для мест без
+   * владельца-аккаунта (магазин, зал). Расписание льда говорит само за себя
+   * (formatFreshness); здесь — карточка: проверка, последняя правка, погода.
+   */
+  function trustLines(card, now) {
+    card = card || {};
+    var f = card.freshness || {};
+    var lines = [];
+    var verified = f.verified_at ? new Date(f.verified_at) : null;
+    var edited = f.profile_updated_at ? new Date(f.profile_updated_at) : null;
+    if (verified && !isNaN(verified.getTime())) {
+      lines.push('Проверено командой Glide ' + verified.getDate() + ' ' + MONTHS_GEN[verified.getMonth()]);
+    }
+    if (edited && !isNaN(edited.getTime()) && (!verified || edited > verified)) {
+      var d = daysBetween(f.profile_updated_at, now || new Date());
+      if (d != null && d >= 0) {
+        lines.push('Данные обновлены ' + (d === 0 ? 'сегодня' : pluralDays(d) + ' назад'));
+      }
+    }
+    if (!lines.length && !f.schedule_observed_at) {
+      lines.push('Карточку собрала команда Glide по открытым данным');
+    }
+    if (card.venue_type === 'outdoor') {
+      lines.push('Открытый лёд зависит от погоды — уточняйте перед выездом');
+    }
+    return lines;
+  }
+
+  var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+    'сентября', 'октября', 'ноября', 'декабря'];
+
   function sessionNowState(session, now) {
     if (!session) return 'upcoming';
     var start = session.starts_at_utc ? new Date(session.starts_at_utc) : null;
@@ -209,14 +292,25 @@
     return 'Массовое катание';
   }
 
-  function iceRowCta(session) {
-    var href = String((session && session.external_url) || '').trim() || null;
-    return {
-      cta: 'Билет на месте',
-      ctaKind: 'ghost',
-      href: href,
-      bookable: false,
-    };
+  /**
+   * Кнопка строки сеанса. Раньше на каждом сеансе стояло «Билет на месте» — даже у Замка,
+   * где билеты продаются онлайн с остатком мест: приложение врало. Теперь только факт:
+   * ссылка на сеанс (касса или страница события) или общая касса места — «Билеты»;
+   * нет ни того ни другого — кнопки нет, строка говорит временем и ценой.
+   */
+  function iceRowCta(session, ticketsUrl) {
+    var href = safeHttpUrl(session && session.external_url) || safeHttpUrl(ticketsUrl);
+    if (!href) return { cta: '', ctaKind: '', href: null, bookable: false };
+    // Не 'solid': заливка у нас — своя запись («Заявка»), а это уход во внешнюю кассу.
+    return { cta: 'Билеты', ctaKind: 'link', href: href, bookable: false };
+  }
+
+  function safeHttpUrl(value) {
+    var href = String(value || '').trim();
+    var lower = href.toLowerCase();
+    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
+    if (/\s/.test(href)) return null;
+    return href;
   }
 
   function hhmm(value) {
@@ -235,7 +329,7 @@
       var nowState = sessionNowState(s, now);
       var meta = formatSessionPrices(s);
       if (nowState !== 'upcoming') continue;
-      var cta = iceRowCta(s);
+      var cta = iceRowCta(s, opts.ticketsUrl);
       rows.push({
         nature: 'ice',
         stripe: 'ice',
@@ -357,17 +451,64 @@
     return out;
   }
 
-  function heroPhotoUrl(card) {
-    card = card || {};
-    var hero = card.hero;
-    if (!hero || !hero.variants) return null;
-    var v = hero.variants;
-    return v.hero || v.card || v.thumb || null;
+  function isPublicPhotoUrl(url) {
+    var u = String(url || '').trim();
+    if (!u) return false;
+    var low = u.toLowerCase();
+    if (low.indexOf('javascript:') === 0 || low.indexOf('data:') === 0) return false;
+    return low.charAt(0) === '/' || low.indexOf('https://') === 0 || low.indexOf('http://') === 0;
   }
 
-  function heroView(card) {
-    var url = heroPhotoUrl(card);
-    return { mode: url ? 'photo' : 'placeholder', url: url };
+  function heroPhotoUrls(card, preferUrl) {
+    /* Карточка списка уже показала card/thumb — тот кадр в кэше. hero (1600px)
+       часто 404, и шапка остаётся пустой при живой мини-карточке. */
+    card = card || {};
+    var hero = card.hero;
+    var v = hero && hero.variants ? hero.variants : {};
+    var out = [];
+    var seen = {};
+    [v.card, v.thumb, v.hero].forEach(function (raw) {
+      if (!isPublicPhotoUrl(raw) || seen[raw]) return;
+      seen[raw] = true;
+      out.push(raw);
+    });
+    if (isPublicPhotoUrl(preferUrl)) {
+      out = [preferUrl].concat(out.filter(function (u) { return u !== preferUrl; }));
+    }
+    return out;
+  }
+
+  function heroPhotoUrl(card, preferUrl) {
+    var urls = heroPhotoUrls(card, preferUrl);
+    return urls.length ? urls[0] : null;
+  }
+
+  function heroView(card, preferUrl) {
+    var urls = heroPhotoUrls(card, preferUrl);
+    return {
+      mode: urls.length ? 'photo' : 'placeholder',
+      url: urls.length ? urls[0] : null,
+      urls: urls,
+    };
+  }
+
+  function heroPrefetchRecord(item) {
+    if (!item) return null;
+    var url = item.card || item.thumb || '';
+    if (!isPublicPhotoUrl(url)) return null;
+    return {
+      id: item.id != null ? item.id : null,
+      slug: item.slug || item.arena_slug || '',
+      url: url,
+    };
+  }
+
+  function heroPrefetchMatches(record, ref) {
+    if (!record || !isPublicPhotoUrl(record.url) || ref == null || ref === '') return false;
+    var r = String(ref);
+    if (record.id != null && String(record.id) === r) return true;
+    if (record.slug && String(record.slug) === r) return true;
+    return false;
   }
 
   function ribbonLegend() {
@@ -393,11 +534,8 @@
   }
 
   function ticketCta(card) {
-    var href = String((card && card.tickets_url) || '').trim();
+    var href = safeHttpUrl(card && card.tickets_url);
     if (!href) return null;
-    var lower = href.toLowerCase();
-    if (lower.indexOf('https://') !== 0 && lower.indexOf('http://') !== 0) return null;
-    if (/\s/.test(href)) return null;
     return { href: href, label: 'Купить билет' };
   }
 
@@ -414,15 +552,48 @@
     return 'catalog?' + parts.join('&');
   }
 
+  /** «?day=2026-10-03&s=123» из ленты: день и сеанс, на которых открыть расписание. */
+  function parseScheduleFocus(search) {
+    var qp = new URLSearchParams(search || '');
+    var day = isoDate(qp.get('day'));
+    var sid = String(qp.get('s') || '').trim();
+    return { day: day, sessionId: /^\d+$/.test(sid) ? sid : null };
+  }
+
   function parseArenaRef(search, startParam) {
     var qp = new URLSearchParams(search || '');
     var ref = qp.get('ref') || qp.get('arena') || qp.get('arena_id') || qp.get('id') || qp.get('slug');
     if (ref) return String(ref).trim();
     var sp = startParam != null ? String(startParam).trim() : '';
     if (!sp) return null;
+    var withSession = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    if (withSession) return withSession[1];
     var m = /^arena[_-](.+)$/i.exec(sp);
     if (m) return m[1];
     return sp || null;
+  }
+
+  /** ``arena_42_s_7`` → ``"7"``. Сеанс в диплинке, когда в query его ещё нет. */
+  function sessionIdFromStartParam(startParam) {
+    var m = /^arena[_-][1-9][0-9]*_s_([1-9][0-9]*)$/i.exec(String(startParam || '').trim());
+    return m ? m[1] : null;
+  }
+
+  /** День сеанса в ленте карточки, если ссылка принесла только id. */
+  function dayForSession(days, sessionId) {
+    var want = String(sessionId || '');
+    if (!want) return null;
+    var list = days || [];
+    var i;
+    var j;
+    for (i = 0; i < list.length; i++) {
+      var sessions = list[i].sessions || [];
+      for (j = 0; j < sessions.length; j++) {
+        var id = sessions[j] && sessions[j].id;
+        if (id != null && String(id) === want) return String(list[i].local_date || '') || null;
+      }
+    }
+    return null;
   }
 
   function iceSectionMode(opts) {
@@ -467,20 +638,195 @@
     return chips;
   }
 
-  function formatOpeningHours(hours) {
+  /* TASK-146: часы бывают daily (каждый день) и weekly (по дням). Ключи — как на сервере
+     (src/application/arena_profile.py: WEEKDAY_KEYS), неделя с понедельника. */
+  var WEEK_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  var WEEK_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  function normHhmm(raw) {
+    var t = String(raw == null ? '' : raw).trim().replace('.', ':');
+    var m = /^(\d{1,2})(?::(\d{1,2}))?$/.exec(t);
+    if (!m) return '';
+    var h = Number(m[1]);
+    var mi = Number(m[2] || 0);
+    if (h > 24 || mi > 59) return '';
+    return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
+  }
+
+  /** Часы на день недели (0 = понедельник) или null — выходной/неизвестно. */
+  function hoursForWeekday(hours, weekday) {
     hours = hours || {};
-    var daily = hours.daily;
-    if (daily && (daily.open || daily.close)) {
-      return 'Пн–Вс ' + (daily.open || '') + '–' + (daily.close || '');
+    if (hours.weekly && typeof hours.weekly === 'object') {
+      var pair = hours.weekly[WEEK_KEYS[((weekday % 7) + 7) % 7]];
+      if (pair && pair.length === 2 && normHhmm(pair[0]) && normHhmm(pair[1])) {
+        return [normHhmm(pair[0]), normHhmm(pair[1])];
+      }
+      return null;
     }
+    var daily = hours.daily;
+    if (daily && normHhmm(daily.open) && normHhmm(daily.close)) return [normHhmm(daily.open), normHhmm(daily.close)];
+    return null;
+  }
+
+  function formatOpeningHours(hours) {
+    var days = [];
+    var known = false;
+    for (var d = 0; d < 7; d++) {
+      days.push(hoursForWeekday(hours, d));
+      if (days[d]) known = true;
+    }
+    if (!known) return '';
+    var key = function (p) { return p ? p[0] + '–' + p[1] : 'выходной'; };
+    var parts = [];
+    var start = 0;
+    for (var i = 1; i <= 7; i++) {
+      if (i === 7 || key(days[i]) !== key(days[start])) {
+        var label = i - 1 === start ? WEEK_SHORT[start] : WEEK_SHORT[start] + '–' + WEEK_SHORT[i - 1];
+        parts.push(label + ' ' + key(days[start]));
+        start = i;
+      }
+    }
+    return parts.join(' · ');
+  }
+
+  /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
+  function openUntilLabel(hours, now) {
+    now = now || new Date();
+    var weekday = (now.getDay() + 6) % 7;
+    var pair = hoursForWeekday(hours, weekday);
+    if (!pair) return '';
+    var hm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+    var open = pair[1] > pair[0] ? hm >= pair[0] && hm < pair[1] : hm >= pair[0] || hm < pair[1];
+    if (open) return 'открыт до ' + pair[1];
+    if (hm < pair[0]) return 'откроется в ' + pair[0];
     return '';
   }
 
-  function openUntilLabel(hours) {
-    hours = hours || {};
-    var daily = hours.daily;
-    if (daily && daily.close) return 'открыт до ' + daily.close;
-    return '';
+  /*
+   * TASK-146: расписание как сеансы в кино. Раньше каждая строка повторяла «Массовое катание ·
+   * взр. 10 · дет. 8 · прокат +9» — у Замка тринадцать раз подряд. Теперь цены один раз над
+   * группой, ниже — сетка времени; у каждого времени своя ссылка в кассу, если она есть.
+   */
+  var DAY_TOP = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  function upcomingSessions(sessions, now) {
+    return (sessions || []).filter(function (s) { return sessionNowState(s, now) === 'upcoming'; });
+  }
+
+  /** Полоса дней: «Сегодня · Завтра · Пн 5 …», у каждого — число сеансов впереди. */
+  function dayStrip(sessionDays, todayIso, now, n) {
+    var byDate = {};
+    (sessionDays || []).forEach(function (d) { byDate[String(d.local_date || '').slice(0, 10)] = d.sessions || []; });
+    var out = [];
+    for (var i = 0; i < (n || 7); i++) {
+      var iso = addDaysYmd(todayIso, i);
+      var date = parseLocalDate(iso);
+      out.push({
+        iso: iso,
+        top: i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : DAY_TOP[date.getDay()],
+        num: String(date.getDate()),
+        count: upcomingSessions(byDate[iso], now).length,
+        weekend: date.getDay() === 0 || date.getDay() === 6,
+      });
+    }
+    return out;
+  }
+
+  /** Сегодня, если впереди есть сеансы; иначе первый день со льдом; иначе сегодня. */
+  function defaultScheduleDay(strip) {
+    for (var i = 0; i < (strip || []).length; i++) if (strip[i].count) return strip[i].iso;
+    return strip && strip.length ? strip[0].iso : null;
+  }
+
+  function minutesBetween(a, b) {
+    var pa = String(a || '').split(':');
+    var pb = String(b || '').split(':');
+    if (pa.length < 2 || pb.length < 2) return null;
+    var d = (Number(pb[0]) * 60 + Number(pb[1])) - (Number(pa[0]) * 60 + Number(pa[1]));
+    if (d < 0) d += 24 * 60;
+    return d > 0 && d < 12 * 60 ? d : null;
+  }
+
+  function priceChips(session) {
+    var cur = session.currency_code || 'BYN';
+    var adult = formatMinor(session.price_adult_minor, cur);
+    var child = formatMinor(session.price_child_minor, cur);
+    var rental = formatMinor(session.price_rental_minor, cur);
+    var out = [];
+    if (adult) out.push({ label: child ? 'Взрослый' : 'Билет', value: adult.withCurrency });
+    if (child) out.push({ label: 'Детский', value: child.withCurrency });
+    if (rental) out.push({ label: 'Прокат', value: rental.withCurrency });
+    return out;
+  }
+
+  /**
+   * Сеансы дня, сгруппированные по «что это и сколько стоит». Одинаковые сеансы —
+   * одна группа с сеткой времени; другой тип или другая цена — своя группа.
+   * `next` — ближайший сеанс дня (подсвечивается), только среди будущих.
+   */
+  function showtimesForDay(opts) {
+    opts = opts || {};
+    var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(function (a, b) {
+      return String(a.starts_at_local).localeCompare(String(b.starts_at_local));
+    });
+    var groups = [];
+    var index = {};
+    var picked = opts.pickedId != null ? String(opts.pickedId) : null;
+    var hasPicked = !!picked && list.some(function (x) { return String(x.id) === picked; });
+    list.forEach(function (s, i) {
+      var start = hhmm(s.starts_at_local);
+      var dur = minutesBetween(start, hhmm(s.ends_at_local));
+      var key = [iceKindLabel(s), s.price_adult_minor, s.price_child_minor, s.price_rental_minor, dur, s.age_note || ''].join('|');
+      if (!(key in index)) {
+        index[key] = groups.length;
+        groups.push({ title: iceKindLabel(s), duration: dur ? dur + ' мин' : '', prices: priceChips(s), note: s.age_note || '', times: [] });
+      }
+      var cta = iceRowCta(s, opts.ticketsUrl);
+      groups[index[key]].times.push({
+        time: start,
+        href: cta.href,
+        sessionId: s.id != null ? s.id : null,
+        // Выбранный в ленте сеанс важнее «ближайшего»: подсветка одна.
+        next: !hasPicked && i === 0 && !!opts.markNext,
+        picked: hasPicked && String(s.id) === picked,
+        capacity: s.capacity_note || '',
+      });
+    });
+    return { groups: groups, count: list.length };
+  }
+
+  /** Быстрые действия под обложкой: маршрут, звонок, сайт/инстаграм — только то, что есть. */
+  function quickActions(card) {
+    card = card || {};
+    var out = [];
+    if (card.latitude != null && card.longitude != null) {
+      out.push({ id: 'route', label: 'Маршрут', href: 'https://yandex.by/maps/?rtext=~' + card.latitude + ',' + card.longitude + '&rtt=auto' });
+    } else if (card.address) {
+      out.push({ id: 'route', label: 'Маршрут', href: 'https://yandex.by/maps/?text=' + encodeURIComponent(card.address) });
+    }
+    var phone = String(card.phone || '').trim();
+    if (phone) out.push({ id: 'call', label: 'Позвонить', href: 'tel:' + phone.replace(/[^\d+]/g, '') });
+    var contacts = practiceContacts(card);
+    var insta = contacts.socials.filter(function (x) { return x.label === 'Instagram'; })[0];
+    if (contacts.website) out.push({ id: 'site', label: 'Сайт', href: contacts.website.href });
+    else if (insta) out.push({ id: 'insta', label: 'Instagram', href: insta.href });
+    return out;
+  }
+
+  /** Часы по дням для списка «Часы работы»: сегодняшний день отмечен. */
+  function weekHours(hours, now) {
+    now = now || new Date();
+    var today = (now.getDay() + 6) % 7;
+    var known = false;
+    var rows = [];
+    for (var d = 0; d < 7; d++) {
+      var pair = hoursForWeekday(hours, d);
+      if (pair) known = true;
+      rows.push({ label: WEEK_SHORT[d], value: pair ? pair[0] + '–' + pair[1] : 'выходной', today: d === today, closed: !pair });
+    }
+    if (!known) return null;
+    var uniform = rows.every(function (r) { return r.value === rows[0].value; });
+    return { uniform: uniform, rows: rows, todayValue: rows[today].value, status: openUntilLabel(hours, now) };
   }
 
   function heroMetaLine(card) {
@@ -517,6 +863,33 @@
     return bits.join(' · ');
   }
 
+  /**
+   * TASK-146: ближайшие сеансы для шита «Поделиться» — делятся конкретным временем.
+   * «Сегодня 19:00» / «Завтра 11:00» / «Сб 18:30». Порядок — как в ленте.
+   */
+  function shareSlots(days, todayIso, limit) {
+    days = days || [];
+    limit = limit || 6;
+    var tomorrow = '';
+    try {
+      var t = parseLocalDate(todayIso);
+      t.setDate(t.getDate() + 1);
+      tomorrow = ymd(t);
+    } catch (e) { /* */ }
+    var out = [];
+    for (var i = 0; i < days.length && out.length < limit; i++) {
+      var iso = days[i].local_date;
+      var head = iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
+      var list = days[i].sessions || [];
+      for (var j = 0; j < list.length && out.length < limit; j++) {
+        var hhmm = String(list[j].starts_at_local || '').slice(0, 5);
+        if (list[j].id == null || !hhmm) continue;
+        out.push({ id: list[j].id, label: head + ' ' + hhmm });
+      }
+    }
+    return out;
+  }
+
   function startParamFromLocation(loc) {
     loc = loc || (typeof window !== 'undefined' ? window.location : null);
     if (!loc) return null;
@@ -538,17 +911,24 @@
     buildRibbonForDay: buildRibbonForDay,
     buildWeekSummaries: buildWeekSummaries,
     heroPhotoUrl: heroPhotoUrl,
+    heroPhotoUrls: heroPhotoUrls,
+    heroPrefetchRecord: heroPrefetchRecord,
+    heroPrefetchMatches: heroPrefetchMatches,
     heroView: heroView,
     ribbonLegend: ribbonLegend,
     trainerCta: trainerCta,
     ticketCta: ticketCta,
     buildBookingHref: buildBookingHref,
     parseArenaRef: parseArenaRef,
+    sessionIdFromStartParam: sessionIdFromStartParam,
+    dayForSession: dayForSession,
     iceSectionMode: iceSectionMode,
     iceFeedView: iceFeedView,
     seasonClosedBanner: seasonClosedBanner,
     amenityChips: amenityChips,
     formatOpeningHours: formatOpeningHours,
+    openUntilLabel: openUntilLabel,
+    hoursForWeekday: hoursForWeekday,
     heroMetaLine: heroMetaLine,
     trainerSubtitle: trainerSubtitle,
     parseLocalDate: parseLocalDate,
@@ -557,6 +937,16 @@
     ribbonIsoForDay: ribbonIsoForDay,
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
+    shareSlots: shareSlots,
+    shopServicesView: shopServicesView,
+    trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
+    dayStrip: dayStrip,
+    staleScheduleNote: staleScheduleNote,
+    parseScheduleFocus: parseScheduleFocus,
+    defaultScheduleDay: defaultScheduleDay,
+    showtimesForDay: showtimesForDay,
+    quickActions: quickActions,
+    weekHours: weekHours,
   };
 });

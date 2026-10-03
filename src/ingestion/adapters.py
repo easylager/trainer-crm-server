@@ -6,7 +6,7 @@ import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
@@ -257,6 +257,7 @@ class ZamokHtmlParser(IceParser):
         horizon = int(job.config.get("horizon_days") or 7)
         run_date = date.fromisoformat(str(job.config.get("run_date") or date.today().isoformat()))
         prices = _zamok_price_map(html)
+        tickets_url = _zamok_tickets_url(html)
         weekday_adult = prices.get("weekday_adult")
         weekend_adult = prices.get("weekend_adult")
         weekday_child = prices.get("weekday_child")
@@ -293,6 +294,7 @@ class ZamokHtmlParser(IceParser):
                         price_child=child,
                         price_rental=rental,
                         age_note="детский от 3 до 14 лет",
+                        external_url=tickets_url,
                     )
                 )
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
@@ -317,6 +319,25 @@ def _price_from_named_row(html: str, needle: str) -> int | None:
             if last is not None:
                 return last
     return None
+
+
+_BUY_LINK = re.compile(r'<a\b[^>]*href="(https?://[^"]+)"[^>]*>\s*Купить\s+билет', re.I)
+
+
+def _zamok_tickets_url(html: str) -> str | None:
+    """Кнопка «Купить билет» на странице катка (касса koronaticket.by).
+
+    Ссылку берём со страницы, а не прописываем: сменит ТЦ кассу — сменится и у нас.
+    Нет кнопки — None, и карточка не обещает онлайн-покупку. Чужие utm-метки меняем на
+    свои: касса должна видеть, что покупатель пришёл из каталога, а не со страницы ТЦ.
+    """
+    match = _BUY_LINK.search(html)
+    if not match:
+        return None
+    parts = urlsplit(match.group(1).replace("&amp;", "&"))
+    query = [(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith("utm_")]
+    query += [("utm_source", "glide"), ("utm_medium", "catalog")]
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 def _zamok_price_map(html: str) -> dict[str, int | None]:

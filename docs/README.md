@@ -43,12 +43,15 @@
 | [growth_loop.md](product-knowledge/growth_loop.md) | Циклы роста под ICP |
 | [client-booking-url-contract.md](product-knowledge/client-booking-url-contract.md) | Контракт ссылок записи клиента |
 | [organization-role-surfaces.md](product-knowledge/organization-role-surfaces.md) | Организации: что видит каждая роль |
+| [public-place-pages.md](product-knowledge/public-place-pages.md) | Публичные страницы мест и подборок, шеринг, /go, диплинки, окна времени, магазины |
+| [catalog-search-header.md](product-knowledge/catalog-search-header.md) | Шапка «Поиск»: сегмент рода, фильтр типа площадки, окно времени, пустое состояние |
 
 ## strategy — куда идём
 
 | Документ | О чём |
 |---|---|
 | [business-plan-2026.md](strategy/business-plan-2026.md) | Основной бизнес-план ICING |
+| [catalog-north-star-2026.md](strategy/catalog-north-star-2026.md) | Каталог как demand-слой: приоритеты build/sell, flywheel, North Star-метрика, пороги валидации у гейта go/no-go |
 | [business-plan-by-ru-detailed.md](strategy/business-plan-by-ru-detailed.md) · [-short](strategy/business-plan-by-ru-short.md) | План продаж в Беларуси и России |
 | [client-growth-2026.md](strategy/client-growth-2026.md) | Клиентское ядро и инфраструктура роста |
 | [partner-commerce-2026.md](strategy/partner-commerce-2026.md) | Третий двигатель выручки: экипировка и сервис |
@@ -97,6 +100,9 @@
 | [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
 | [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
 | [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
+| [2026-10-02-ice-map-fullscreen.md](plans/2026-10-02-ice-map-fullscreen.md) | TASK-147: карта мест на весь экран — план, AC, риски (дизайн в `design/ice-map-fullscreen.md`) |
+| [2026-10-03-catalog-hub-v4-design.md](plans/2026-10-03-catalog-hub-v4-design.md) | TASK-148: подборки из данных, чипы без нулей, бесфотошные карточки (макет в `design/client-hub-catalog-final-v2.html`) |
+| [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
 | [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
 
 ## ops — эксплуатация
@@ -106,6 +112,8 @@
 | [BACKUPS.md](ops/BACKUPS.md) | Off-site резервные копии Postgres |
 | [DISASTER_RECOVERY.md](ops/DISASTER_RECOVERY.md) | Восстановление после аварии |
 | [onboard-collective-formats.md](ops/onboard-collective-formats.md) | Runbook подключения коллектива |
+| [ice-freshness-and-alerts.md](ops/ice-freshness-and-alerts.md) | Лёд: как часто опрашиваем катки, флаг `schedule_stale` в API, алерты в админ-бот, отчёт о полноте каталога |
+| [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное

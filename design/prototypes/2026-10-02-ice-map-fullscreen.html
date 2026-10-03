@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Карта — полноэкранный прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /* ============================================================
+     Прототип вкладки «Поиск → Карта», 2026-10-02.
+     Токены — тёмная тема static/webapp/theme.css (html.client-mini-dark), 1:1.
+     Подложка карты нарисована SVG «по мотивам Минска»: в продукте это
+     Яндекс Карты JS API v3 с theme: 'dark' (в 2.1 тёмной темы нет).
+     ============================================================ */
+  :root{
+    --glide-500:#45B9BB; --glide-600:#2E9A9C; --glide-950:#04262A;
+    --glide-brand:var(--glide-500); --glide-ink-teal:#57D0D2; --glide-on-fill:#04262A;
+    --glide-paper:#0B0C0E; --glide-surface:#141618; --glide-card:#1A1D20;
+    --glide-line:#262A2E; --glide-line-strong:#33383D;
+    --glide-text:#E6E9EA; --glide-hint:#868D93;
+    --glide-brand-wash:rgba(69,185,187,.13);
+    --app-ok:#4FC98A; --app-venue-shop:#A48BFF; --app-venue-outdoor:#7FD7D8;
+
+    --map-ground:#15191C; --map-block:#1B2024; --map-road:#2A3036; --map-road-main:#363E45;
+    --map-water:#0F2A33; --map-park:#14261F; --map-label:#4C565E;
+
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-pill:999px;
+    --t-kicker:10px; --t-caption:12px; --t-body:14px; --t-lead:17px; --t-title:20px;
+    --font:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --ease:cubic-bezier(.2,.8,.2,1);
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--font); background:#050607; color:var(--glide-text);
+    min-height:100vh; display:flex; gap:40px; justify-content:center; align-items:flex-start;
+    padding:32px 16px 60px; flex-wrap:wrap;
+  }
+  button{font:inherit;color:inherit;}
+
+  /* ---------- Телефон ---------- */
+  .phone{
+    width:390px; max-width:100%; height:844px; position:relative; overflow:hidden;
+    border-radius:44px; background:var(--map-ground);
+    box-shadow:0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.9);
+    touch-action:none; user-select:none;
+  }
+  .phone-notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:118px;height:30px;background:#000;border-radius:16px;z-index:60;}
+
+  /* ---------- Карта ---------- */
+  .map{position:absolute; inset:0; overflow:hidden; cursor:grab;}
+  .map.dragging{cursor:grabbing;}
+  .world{position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform;}
+  .world svg{display:block;}
+  .pins{position:absolute; inset:0; pointer-events:none;}
+
+  /* Пин = время ближайшего сеанса. Информация в пине, а не в сноске над точкой. */
+  .pin{
+    background:none; border:0; padding:0;
+    position:absolute; transform:translate(-50%,-100%); pointer-events:auto; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center;
+    transition:transform .18s var(--ease);
+  }
+  .pin__body{
+    display:flex; align-items:center; gap:5px; white-space:nowrap;
+    height:30px; padding:0 11px; border-radius:var(--r-pill);
+    background:var(--glide-card); color:var(--glide-text);
+    border:1.5px solid var(--glide-line-strong);
+    font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.01em;
+    box-shadow:0 6px 16px -6px rgba(0,0,0,.7);
+    transition:background .18s, color .18s, border-color .18s, padding .18s;
+  }
+  .pin__tail{width:9px;height:9px;margin-top:-5px;transform:rotate(45deg);background:inherit;
+    border-right:1.5px solid var(--glide-line-strong);border-bottom:1.5px solid var(--glide-line-strong);background:var(--glide-card);}
+  .pin__ico{width:7px;height:7px;border-radius:50%;background:var(--glide-brand);flex:none;}
+  .pin--hit .pin__body{border-color:var(--glide-brand);}
+  .pin--hit .pin__tail{border-color:var(--glide-brand);}
+  .pin__name{display:none;font-weight:600;color:inherit;opacity:.85;}
+  /* Выбранный: инверсия + имя. Один взгляд — и понятно, какая карточка внизу. */
+  .pin--sel{z-index:5; transform:translate(-50%,-100%) scale(1.12);}
+  .pin--sel .pin__body{background:var(--glide-brand);color:var(--glide-on-fill);border-color:var(--glide-brand);padding:0 13px;}
+  .pin--sel .pin__tail{background:var(--glide-brand);border-color:var(--glide-brand);}
+  .pin--sel .pin__ico{background:var(--glide-on-fill);}
+  .pin--sel .pin__name{display:inline;}
+  /* Вне выбранного окна: тихая точка без времени — не спорит с ответом. */
+  .pin--dot{transform:translate(-50%,-50%);}
+  .pin--dot .pin__body{width:14px;height:14px;padding:0;border-radius:50%;background:var(--glide-surface);border:2px solid var(--glide-hint);box-shadow:none;}
+  .pin--dot .pin__tail,.pin--dot .pin__ico{display:none;}
+  .pin--dot.pin--sel{transform:translate(-50%,-50%) scale(1.25);}
+  .pin--dot.pin--sel .pin__body{background:var(--glide-text);border-color:var(--glide-text);}
+  .pin--shop .pin__ico{background:var(--app-venue-shop);}
+  .pin--shop.pin--hit .pin__body,.pin--shop.pin--hit .pin__tail{border-color:var(--app-venue-shop);}
+  .pin--outdoor .pin__ico{background:var(--app-venue-outdoor);}
+
+  /* Кластер говорит, что внутри: сколько мест и с какого времени. */
+  .cluster{
+    position:absolute; transform:translate(-50%,-50%); pointer-events:auto; cursor:pointer;
+    display:flex; align-items:center; gap:6px; height:36px; padding:0 12px 0 4px;
+    border-radius:var(--r-pill); background:var(--glide-card); border:1.5px solid var(--glide-brand);
+    box-shadow:0 8px 20px -6px rgba(0,0,0,.8), 0 0 0 6px rgba(69,185,187,.12);
+    font-size:13px; font-weight:700; white-space:nowrap;
+  }
+  .cluster__n{width:28px;height:28px;border-radius:50%;background:var(--glide-brand);color:var(--glide-on-fill);
+    display:grid;place-items:center;font-size:13px;}
+  .cluster--quiet{border-color:var(--glide-line-strong);box-shadow:0 8px 20px -6px rgba(0,0,0,.8);}
+  .cluster--quiet .cluster__n{background:var(--glide-line-strong);color:var(--glide-text);}
+  .cluster__t{font-variant-numeric:tabular-nums;}
+  /* Выбранное место внутри кластера: кластер берёт на себя выделение. */
+  .cluster--sel{background:var(--glide-brand);color:var(--glide-on-fill);}
+  .cluster--sel .cluster__n{background:var(--glide-on-fill);color:var(--glide-brand);}
+  .card__p{font-size:var(--t-caption);color:var(--glide-hint);font-weight:600;}
+
+  .me{position:absolute;width:18px;height:18px;transform:translate(-50%,-50%);border-radius:50%;
+    background:#4A9DFF;border:3px solid #fff;box-shadow:0 0 0 10px rgba(74,157,255,.18);pointer-events:none;}
+
+  /* ---------- Верх: плавает над картой ---------- */
+  .top{
+    position:absolute; left:0; right:0; top:0; z-index:20; padding:52px 12px 18px;
+    background:linear-gradient(180deg, rgba(11,12,14,.92) 0%, rgba(11,12,14,.72) 62%, rgba(11,12,14,0) 100%);
+    pointer-events:none;
+  }
+  .top > *{pointer-events:auto;}
+  .search{
+    display:flex; align-items:center; gap:10px; height:48px; padding:0 6px 0 16px;
+    border-radius:var(--r-pill); background:rgba(26,29,32,.94); border:1px solid var(--glide-line);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    box-shadow:0 10px 30px -12px rgba(0,0,0,.8);
+  }
+  .search svg{flex:none;color:var(--glide-hint);}
+  .search__q{flex:1;color:var(--glide-hint);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .search__city{
+    height:36px;padding:0 12px;border-radius:var(--r-pill);border:0;background:var(--glide-surface);
+    font-weight:700;font-size:var(--t-body);display:flex;align-items:center;gap:6px;cursor:pointer;
+  }
+  .search__city::after{content:'';border:4px solid transparent;border-top-color:var(--glide-hint);margin-top:4px;}
+  .chips{display:flex;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex:none;height:34px;padding:0 13px;border-radius:var(--r-pill);cursor:pointer;
+    background:rgba(26,29,32,.9);border:1px solid var(--glide-line);
+    font-size:13px;font-weight:600;color:var(--glide-text);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    display:flex;align-items:center;gap:6px;
+  }
+  .chip[aria-pressed="true"]{background:var(--glide-brand);border-color:var(--glide-brand);color:var(--glide-on-fill);}
+  .chip--sep{width:1px;height:20px;align-self:center;background:var(--glide-line-strong);padding:0;border:0;flex:none;}
+  .chip i{width:7px;height:7px;border-radius:50%;}
+
+  /* ---------- Кнопки на карте ---------- */
+  .fab{
+    position:absolute; right:12px; z-index:15; width:44px; height:44px; border-radius:50%;
+    background:rgba(26,29,32,.94); border:1px solid var(--glide-line);
+    display:grid; place-items:center; cursor:pointer;
+    box-shadow:0 8px 20px -8px rgba(0,0,0,.9);
+    transition:bottom .32s var(--ease), opacity .2s;
+  }
+  .fab[aria-pressed="true"]{color:#4A9DFF;}
+  .attrib{position:absolute;left:12px;z-index:14;font-size:10px;color:var(--map-label);transition:bottom .32s var(--ease);}
+
+  /* ---------- Шторка: свёрнута / карусель / список ---------- */
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; z-index:30;
+    background:var(--glide-paper); border-radius:24px 24px 0 0;
+    box-shadow:0 -12px 40px -8px rgba(0,0,0,.85); border-top:1px solid var(--glide-line);
+    transition:height .32s var(--ease);
+    display:flex; flex-direction:column;
+  }
+  .sheet.dragging{transition:none;}
+  .sheet__grab{flex:none;padding:8px 16px 4px;cursor:grab;touch-action:none;}
+  .sheet__handle{width:38px;height:5px;border-radius:3px;background:var(--glide-line-strong);margin:0 auto 10px;}
+  .sheet__head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+  .sheet__title{font-size:var(--t-lead);font-weight:700;letter-spacing:-.01em;}
+  .sheet__title b{color:var(--glide-ink-teal);}
+  .sheet__sub{font-size:var(--t-caption);color:var(--glide-hint);margin-top:2px;}
+  .sheet__toggle{border:0;background:none;color:var(--glide-ink-teal);font-weight:600;font-size:13px;cursor:pointer;padding:4px 0;white-space:nowrap;}
+  .sheet__body{flex:1;min-height:0;position:relative;}
+
+  .rail{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 16px 16px;scrollbar-width:none;}
+  .rail::-webkit-scrollbar{display:none;}
+  .rail .card{flex:0 0 calc(100% - 44px);scroll-snap-align:center;}
+  .list{position:absolute;inset:0;overflow-y:auto;padding:6px 16px 24px;display:none;}
+  .list .card{margin-bottom:10px;}
+  .sheet[data-snap="full"] .rail{display:none;}
+  .sheet[data-snap="full"] .list{display:block;}
+  .sheet[data-snap="peek"] .sheet__body{opacity:0;pointer-events:none;}
+
+  .card{
+    min-width:0; overflow:hidden;
+    display:flex;gap:12px;padding:10px;border-radius:var(--r-lg);
+    background:var(--glide-card);border:1px solid var(--glide-line);cursor:pointer;
+    transition:border-color .2s, background .2s;
+  }
+  .card.is-sel{border-color:var(--glide-brand);background:linear-gradient(180deg,#1C2224,#1A1D20);}
+  .card__ph{flex:none;width:84px;height:84px;border-radius:var(--r-md);background:#22272b center/cover;position:relative;overflow:hidden;}
+  .card__ph--empty{display:grid;place-items:center;font-size:28px;font-weight:700;color:#3a4147;
+    background:repeating-linear-gradient(135deg,#1f2427 0 10px,#22282b 10px 20px);}
+  .card__b{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;}
+  .card__n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .card__m{font-size:var(--t-caption);color:var(--glide-hint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .slots{display:flex;gap:5px;margin-top:auto;flex-wrap:nowrap;overflow:hidden;}
+  .slot{height:26px;padding:0 9px;border-radius:var(--r-sm);background:var(--glide-brand-wash);color:var(--glide-ink-teal);
+    font-size:12.5px;font-weight:700;display:flex;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .slot--price{background:transparent;color:var(--glide-hint);font-weight:600;padding:0 2px;}
+  .card__off{font-size:12px;color:var(--glide-hint);margin-top:auto;}
+  .card__shop{font-size:12px;color:var(--app-venue-shop);margin-top:auto;font-weight:600;}
+
+  .divider{display:flex;align-items:center;gap:10px;margin:6px 0 12px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--glide-hint);}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--glide-line);}
+  .share{
+    display:flex;align-items:center;justify-content:center;gap:8px;height:46px;margin:2px 0 18px;
+    border-radius:var(--r-pill);border:1px solid var(--glide-line-strong);background:var(--glide-surface);
+    font-weight:700;font-size:14px;cursor:pointer;width:100%;
+  }
+
+  /* ---------- Таб-бар ---------- */
+  .tabbar{
+    position:absolute;left:0;right:0;bottom:0;z-index:40;height:78px;padding:8px 18px 22px;
+    display:flex;justify-content:space-around;background:rgba(11,12,14,.96);border-top:1px solid var(--glide-line);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  }
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--glide-hint);font-weight:600;}
+  .tab svg{width:22px;height:22px;}
+  .tab--on{color:var(--glide-text);}
+  .tab--on svg{color:var(--glide-ink-teal);}
+
+  .toast{
+    position:absolute;left:50%;top:150px;transform:translate(-50%,-8px);z-index:50;opacity:0;
+    background:rgba(26,29,32,.96);border:1px solid var(--glide-line-strong);border-radius:var(--r-pill);
+    padding:8px 14px;font-size:12.5px;font-weight:600;white-space:nowrap;pointer-events:none;
+    transition:opacity .2s, transform .2s;
+  }
+  .toast.on{opacity:1;transform:translate(-50%,0);}
+
+  /* ---------- Пояснения рядом с телефоном ---------- */
+  .notes{max-width:400px;font-size:14px;line-height:1.55;color:#AAB1B6;padding-top:8px;}
+  .notes h1{font-size:22px;color:var(--glide-text);margin:0 0 4px;letter-spacing:-.01em;}
+  .notes .k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--glide-ink-teal);font-weight:700;}
+  .notes h2{font-size:14px;color:var(--glide-text);margin:22px 0 6px;}
+  .notes ol,.notes ul{padding-left:18px;margin:6px 0;}
+  .notes li{margin:4px 0;}
+  .notes b{color:var(--glide-text);font-weight:600;}
+  .notes .try{background:#111416;border:1px solid var(--glide-line);border-radius:12px;padding:12px 14px;margin-top:18px;}
+  @media (max-width:860px){ .notes{order:2;} }
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <div class="phone-notch"></div>
+
+  <div class="map" id="map">
+    <div class="world" id="world"></div>
+    <div class="pins" id="pins"></div>
+  </div>
+
+  <div class="top">
+    <div class="search" role="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="search__q">Каток, тренер, заточка</span>
+      <button class="search__city" type="button">Минск</button>
+    </div>
+    <div class="chips" id="whenChips" role="group" aria-label="Когда">
+      <button class="chip" data-when="now" aria-pressed="false">Сейчас</button>
+      <button class="chip" data-when="evening" aria-pressed="true">Сегодня вечером</button>
+      <button class="chip" data-when="tomorrow" aria-pressed="false">Завтра</button>
+      <button class="chip" data-when="weekend" aria-pressed="false">Выходные</button>
+      <span class="chip--sep"></span>
+      <button class="chip" data-type="shop" aria-pressed="false"><i style="background:var(--app-venue-shop)"></i>Магазины</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <button class="fab" id="locate" type="button" aria-label="Где я" aria-pressed="false">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3 3 10.5l7.2 2.3L12.5 20z"/></svg>
+  </button>
+  <div class="attrib" id="attrib">© Яндекс · Условия</div>
+
+  <section class="sheet" id="sheet" data-snap="half" aria-label="Места на карте">
+    <div class="sheet__grab" id="grab">
+      <div class="sheet__handle"></div>
+      <div class="sheet__head">
+        <div>
+          <div class="sheet__title" id="sheetTitle"></div>
+          <div class="sheet__sub" id="sheetSub"></div>
+        </div>
+        <button class="sheet__toggle" id="sheetToggle" type="button">Списком</button>
+      </div>
+    </div>
+    <div class="sheet__body">
+      <div class="rail" id="rail"></div>
+      <div class="list" id="list"></div>
+    </div>
+  </section>
+
+  <nav class="tabbar">
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>Главная</div>
+    <div class="tab tab--on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Поиск</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Записи</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>Ещё</div>
+  </nav>
+</div>
+
+<aside class="notes">
+  <div class="k">Прототип · 2026-10-02</div>
+  <h1>Карта на весь экран</h1>
+  <p>Главная мысль: человек нажал «Карта», значит экран принадлежит карте. Шапка «Поиск» и чипы
+  не стоят блоком над картой, а плавают поверх неё. Список не спрятан за переключателем: это та же шторка, только развёрнутая.</p>
+
+  <h2>Что поменялось</h2>
+  <ol>
+    <li><b>Карта ~85% экрана</b> вместо ~25%. Поиск — одна плавающая строка с городом внутри.</li>
+    <li><b>Пин = время.</b> «19:30» прямо в пине, а не обрезанная сноска «Ледовый дворец спо». Выбранный пин инвертируется и показывает имя.</li>
+    <li><b>Вне окна — тихая точка.</b> Место без сеансов «сегодня вечером» видно, но не спорит с ответом.</li>
+    <li><b>Кластер говорит, что внутри:</b> «3 · с 18:15». Тап — камера вписывает все места с полями под пины, внизу открываются именно они.</li>
+    <li><b>Шторка в трёх положениях:</b> свёрнута (сводка) → карусель → список. Пилюля «Список/Карта» больше не нужна.</li>
+    <li><b>Карусель связана с пинами:</b> листаешь карточки — камера ведёт к месту; тапнул пин — карусель доезжает до карточки.</li>
+    <li><b>Тёмная подложка.</b> Белое пятно в тёмном приложении и было главным «дёшево».</li>
+    <li><b>Меньше хрома:</b> вместо +/− щипок; «Рядом со мной» — круглая кнопка над шторкой.</li>
+  </ol>
+
+  <div class="try">
+    <b>Попробуйте:</b>
+    <ul>
+      <li>тапнуть кластер у Минск-Арены — это два места в одном комплексе, зумом их не развести;</li>
+      <li>полистать карусель и следить за пином;</li>
+      <li>потянуть шторку вверх и вниз, переключить «Завтра»;</li>
+      <li>перетащить карту, колесо мыши — зум.</li>
+    </ul>
+  </div>
+
+  <h2>Что нужно для продукта</h2>
+  <ul>
+    <li>Тёмная подложка — Яндекс JS API v3 (<code>theme: 'dark'</code>); в 2.1, на которой мы сейчас, её нет.</li>
+    <li>Время в пине уже есть в API списка (<code>live.starts_at_local</code>), бэкенд не трогаем.</li>
+    <li>Кластер «с 18:15» — минимум по времени внутри, считается на клиенте.</li>
+  </ul>
+</aside>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Данные (Минск, координаты приблизительные) ---------- */
+  var PLACES = [
+    { id: 1, name: 'ТЦ Замок', where: 'Центральный · пр-т Победителей, 65', lat: 53.9295, lon: 27.5125, type: 'ice', photo: 'Z',
+      s: { now: ['17:00'], evening: ['18:15', '20:00', '21:30'], tomorrow: ['12:00', '19:15'], weekend: ['11:00', '15:30'] }, price: 'взр. 10 · дет. 8' },
+    { id: 2, name: 'Минск-Арена', where: 'Центральный · пр-т Победителей, 111', lat: 53.9365, lon: 27.4830, type: 'ice', photo: 'М',
+      s: { now: [], evening: ['19:00', '20:45'], tomorrow: ['19:00'], weekend: ['13:00', '17:00'] }, price: 'взр. 12 · дет. 9' },
+    { id: 3, name: 'Конькобежный стадион', where: 'Центральный · пр-т Победителей, 111/1', lat: 53.9368, lon: 27.4836, type: 'ice', photo: 'К',
+      s: { now: [], evening: ['18:30'], tomorrow: [], weekend: ['12:00'] }, price: 'взр. 8 · дет. 6' },
+    { id: 4, name: 'Ледовый дворец спорта Минской области', where: 'Фрунзенский · ул. Притыцкого, 27', lat: 53.9076, lon: 27.4863, type: 'ice', photo: 'Л',
+      s: { now: [], evening: ['19:30'], tomorrow: ['18:00'], weekend: ['14:00'] }, price: 'взр. 9 · дет. 7' },
+    { id: 5, name: 'Чижовка-арена', where: 'Заводской · ул. Ташкентская, 19', lat: 53.8560, lon: 27.6390, type: 'ice', photo: 'Ч',
+      s: { now: ['16:45'], evening: ['18:45', '20:30'], tomorrow: ['18:45'], weekend: ['12:30', '16:00'] }, price: 'взр. 8 · дет. 6' },
+    { id: 6, name: 'ТЦ DiaMond city', where: 'Минский р-н · Щомыслица', lat: 53.8500, lon: 27.4560, type: 'ice', photo: 'D',
+      s: { now: [], evening: ['20:00'], tomorrow: ['20:00'], weekend: ['13:00'] }, price: 'взр. 11 · дет. 9' },
+    { id: 7, name: 'Олимпик-арена', where: 'Центральный · ул. Ратомская, 2', lat: 53.9445, lon: 27.4520, type: 'ice', photo: 'О',
+      s: { now: [], evening: [], tomorrow: ['17:30'], weekend: ['15:00'] }, price: 'взр. 10' },
+    { id: 8, name: 'Каток ХК «Юность»', where: 'Партизанский · ул. Первомайская, 3', lat: 53.9070, lon: 27.5880, type: 'ice', photo: 'Ю',
+      s: { now: [], evening: [], tomorrow: [], weekend: ['17:00', '18:15'] }, price: 'взр. 7 · дет. 5' },
+    { id: 9, name: 'Лыжероллерная трасса', where: 'Центральный · Победителей, 20/3', lat: 53.9185, lon: 27.5300, type: 'outdoor', photo: 'Т',
+      s: { now: ['весь день'], evening: ['до 22:00'], tomorrow: ['весь день'], weekend: ['весь день'] }, price: 'бесплатно' },
+    { id: 10, name: 'Figuristshop', where: 'Ленинский · ул. Кирова, 18', lat: 53.8945, lon: 27.5580, type: 'shop', photo: 'F',
+      s: {}, shop: 'Заточка · коньки · до 20:00' },
+    { id: 11, name: 'Hockey Store', where: 'Московский · ул. Немига, 5', lat: 53.9040, lon: 27.5520, type: 'shop', photo: 'H',
+      s: {}, shop: 'Заточка за 15 мин · до 21:00' },
+  ];
+  var WHEN_LABEL = { now: 'сейчас', evening: 'сегодня вечером', tomorrow: 'завтра', weekend: 'в выходные' };
+
+  /* ---------- Проекция и подложка ---------- */
+  var LAT0 = 53.985, LON0 = 27.38, K = 6200, COS = Math.cos(53.9 * Math.PI / 180);
+  var WORLD_W = 1700, WORLD_H = 1100;
+  function project(lat, lon) { return { x: (lon - LON0) * K * COS * 1.0, y: (LAT0 - lat) * K }; }
+
+  function buildGround() {
+    var g = [];
+    g.push('<svg width="' + WORLD_W + '" height="' + WORLD_H + '" viewBox="0 0 ' + WORLD_W + ' ' + WORLD_H + '" xmlns="http://www.w3.org/2000/svg">');
+    g.push('<rect width="100%" height="100%" fill="var(--map-ground)"/>');
+    // кварталы
+    var rnd = 7;
+    function r() { rnd = (rnd * 9301 + 49297) % 233280; return rnd / 233280; }
+    for (var y = 20; y < WORLD_H; y += 46) {
+      for (var x = 20; x < WORLD_W; x += 58) {
+        if (r() < 0.18) continue;
+        g.push('<rect x="' + (x + r() * 6) + '" y="' + (y + r() * 6) + '" width="' + (34 + r() * 14) + '" height="' + (24 + r() * 12) + '" rx="3" fill="var(--map-block)"/>');
+      }
+    }
+    // парки
+    [[560, 250, 150, 90], [860, 330, 110, 70], [1080, 520, 160, 100], [300, 520, 120, 80], [700, 860, 140, 80]].forEach(function (p) {
+      g.push('<ellipse cx="' + p[0] + '" cy="' + p[1] + '" rx="' + p[2] + '" ry="' + p[3] + '" fill="var(--map-park)"/>');
+    });
+    // вода: Свислочь и водохранилище Дрозды
+    g.push('<path d="M420 40 C 470 160, 560 230, 640 300 S 820 420, 900 470 S 1040 540, 1120 640 S 1260 820, 1380 1080" fill="none" stroke="var(--map-water)" stroke-width="20" stroke-linecap="round"/>');
+    g.push('<ellipse cx="455" cy="120" rx="95" ry="55" fill="var(--map-water)"/>');
+    g.push('<ellipse cx="760" cy="385" rx="46" ry="22" fill="var(--map-water)"/>');
+    // дороги: МКАД и проспекты
+    g.push('<ellipse cx="850" cy="520" rx="640" ry="430" fill="none" stroke="var(--map-road-main)" stroke-width="9"/>');
+    g.push('<path d="M120 60 L 880 470" stroke="var(--map-road-main)" stroke-width="10" fill="none"/>'); // Победителей
+    g.push('<path d="M880 470 L 1600 60" stroke="var(--map-road-main)" stroke-width="10" fill="none"/>'); // Независимости
+    g.push('<path d="M880 470 L 1500 1060" stroke="var(--map-road)" stroke-width="8" fill="none"/>');
+    g.push('<path d="M880 470 L 300 1060" stroke="var(--map-road)" stroke-width="8" fill="none"/>');
+    g.push('<path d="M60 560 L 1660 520" stroke="var(--map-road)" stroke-width="7" fill="none"/>');
+    g.push('<ellipse cx="880" cy="500" rx="230" ry="160" fill="none" stroke="var(--map-road)" stroke-width="6"/>');
+    // подписи районов
+    [['ЦЕНТРАЛЬНЫЙ', 720, 330], ['ФРУНЗЕНСКИЙ', 380, 640], ['ПАРТИЗАНСКИЙ', 1150, 600], ['ЗАВОДСКОЙ', 1290, 880], ['МОСКОВСКИЙ', 620, 860], ['СОВЕТСКИЙ', 1050, 280], ['ЛЕНИНСКИЙ', 920, 760]].forEach(function (l) {
+      g.push('<text x="' + l[1] + '" y="' + l[2] + '" fill="var(--map-label)" font-family="Golos Text, sans-serif" font-size="15" font-weight="700" letter-spacing="3">' + l[0] + '</text>');
+    });
+    g.push('<text x="840" y="470" fill="#6B757C" font-family="Golos Text, sans-serif" font-size="26" font-weight="700">Минск</text>');
+    g.push('</svg>');
+    return g.join('');
+  }
+
+  /* ---------- Состояние ---------- */
+  var phone = document.getElementById('phone');
+  var mapEl = document.getElementById('map');
+  var world = document.getElementById('world');
+  var pinsEl = document.getElementById('pins');
+  var sheet = document.getElementById('sheet');
+  var rail = document.getElementById('rail');
+  var listEl = document.getElementById('list');
+  var state = { when: 'evening', shops: false, sel: null, tx: 0, ty: 0, z: 1, me: null, group: null };
+  var W = phone.clientWidth, H = phone.clientHeight;
+  var TOP_UI = 150, TAB = 78;
+  var SNAP = { peek: 96, half: 222, full: H - 120 };
+
+  world.innerHTML = buildGround();
+
+  function visiblePlaces() {
+    return PLACES.filter(function (p) { return p.type !== 'shop' || state.shops; });
+  }
+  function timesOf(p) { return (p.s && p.s[state.when]) || []; }
+  function isHit(p) { return p.type === 'shop' ? true : timesOf(p).length > 0; }
+
+  /* ---------- Камера ---------- */
+  function sheetH() { return SNAP[sheet.dataset.snap] || SNAP.half; }
+  // Видимая область карты — между плавающим верхом и шторкой.
+  function viewport() { return { top: TOP_UI, bottom: H - TAB - sheetH(), left: 0, right: W }; }
+
+  function apply() {
+    world.style.transform = 'translate(' + state.tx + 'px,' + state.ty + 'px) scale(' + state.z + ')';
+    renderPins();
+  }
+  var anim = null;
+  function flyTo(tx, ty, z, ms) {
+    if (anim) cancelAnimationFrame(anim);
+    if (ms != null && ms <= 1) { state.tx = tx; state.ty = ty; state.z = z; apply(); return; }
+    var s0 = { tx: state.tx, ty: state.ty, z: state.z }, t0 = performance.now(), d = ms || 380;
+    function step(now) {
+      // Метка rAF бывает раньше performance.now() в момент вызова: без max(0) первый кадр
+      // даёт отрицательный прогресс, и кубическое сглаживание раздувает масштаб в сотни раз.
+      var k = Math.max(0, Math.min(1, (now - t0) / d)), e = 1 - Math.pow(1 - k, 3);
+      state.tx = s0.tx + (tx - s0.tx) * e;
+      state.ty = s0.ty + (ty - s0.ty) * e;
+      state.z = s0.z + (z - s0.z) * e;
+      apply();
+      if (k < 1) anim = requestAnimationFrame(step);
+    }
+    anim = requestAnimationFrame(step);
+  }
+  function clampZ(z) { return Math.max(0.42, Math.min(2.6, z)); }
+
+  // Вписать набор мест с полями под ярлыки пинов (сверху ~44px) — то, чего не делал стандартный зум.
+  function fitPlaces(list, opts) {
+    opts = opts || {};
+    var vp = viewport();
+    var pts = list.map(function (p) { return project(p.lat, p.lon); });
+    var minX = Math.min.apply(null, pts.map(function (p) { return p.x; }));
+    var maxX = Math.max.apply(null, pts.map(function (p) { return p.x; }));
+    var minY = Math.min.apply(null, pts.map(function (p) { return p.y; }));
+    var maxY = Math.max.apply(null, pts.map(function (p) { return p.y; }));
+    var padX = 70, padTop = 56, padBottom = 24;
+    var availW = vp.right - vp.left - padX * 2, availH = vp.bottom - vp.top - padTop - padBottom;
+    var z = Math.min(availW / Math.max(1, maxX - minX), availH / Math.max(1, maxY - minY));
+    z = clampZ(Math.min(z, opts.maxZ || 2.2));
+    var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    var sx = (vp.left + vp.right) / 2, sy = vp.top + padTop + availH / 2;
+    flyTo(sx - cx * z, sy - cy * z, z, opts.ms);
+  }
+  function panTo(p) {
+    var vp = viewport(), q = project(p.lat, p.lon);
+    var sx = W / 2, sy = (vp.top + vp.bottom) / 2 + 16;
+    var px = state.tx + q.x * state.z, py = state.ty + q.y * state.z;
+    if (px > 60 && px < W - 60 && py > vp.top + 50 && py < vp.bottom - 20) return; // уже на виду — не дёргаем камеру
+    flyTo(sx - q.x * state.z, sy - q.y * state.z, state.z, 320);
+  }
+
+  /* ---------- Пины и кластеры (в экранных координатах) ---------- */
+  function minTime(list) {
+    var t = [];
+    list.forEach(function (p) { timesOf(p).forEach(function (x) { if (/^\d\d:\d\d$/.test(x)) t.push(x); }); });
+    t.sort();
+    return t[0] || '';
+  }
+  function renderPins() {
+    var items = visiblePlaces().map(function (p) {
+      var q = project(p.lat, p.lon);
+      return { p: p, x: state.tx + q.x * state.z, y: state.ty + q.y * state.z };
+    });
+    // Жадная кластеризация: пины, чьи ярлыки налезут друг на друга (<62px), — в одну группу.
+    var groups = [];
+    items.sort(function (a, b) { return (isHit(b.p) ? 1 : 0) - (isHit(a.p) ? 1 : 0); });
+    items.forEach(function (it) {
+      var g = groups.filter(function (g) { return Math.abs(g.x - it.x) < 62 && Math.abs(g.y - it.y) < 40; })[0];
+      if (g) { g.list.push(it); g.x = (g.x * (g.list.length - 1) + it.x) / g.list.length; g.y = (g.y * (g.list.length - 1) + it.y) / g.list.length; }
+      else groups.push({ x: it.x, y: it.y, list: [it] });
+    });
+    var html = '';
+    groups.forEach(function (g, gi) {
+      if (g.list.length > 1) {
+        var places = g.list.map(function (i) { return i.p; });
+        var hits = places.filter(isHit);
+        var t = minTime(places);
+        var hasSel = places.some(function (p) { return p.id === state.sel; });
+        html += '<button class="cluster' + (hits.length ? '' : ' cluster--quiet') + (hasSel ? ' cluster--sel' : '') + '" data-group="' + gi + '" style="left:' + g.x + 'px;top:' + g.y + 'px">' +
+          '<span class="cluster__n">' + g.list.length + '</span>' +
+          '<span class="cluster__t">' + (t ? 'с ' + t : (hits.length ? 'места' : 'нет сеансов')) + '</span></button>';
+        return;
+      }
+      var p = g.list[0].p, hit = isHit(p), sel = state.sel === p.id;
+      var times = timesOf(p);
+      var label = p.type === 'shop' ? 'Магазин' : (times[0] || '');
+      var cls = 'pin pin--' + p.type + (hit ? ' pin--hit' : ' pin--dot') + (sel ? ' pin--sel' : '');
+      html += '<button class="' + cls + '" data-id="' + p.id + '" style="left:' + g.x + 'px;top:' + g.y + 'px" aria-label="' + p.name + '">' +
+        '<span class="pin__body"><span class="pin__ico"></span>' + (hit ? '<span>' + label + '</span><span class="pin__name">· ' + shortName(p.name) + '</span>' : '') + '</span>' +
+        '<span class="pin__tail"></span></button>';
+    });
+    if (state.me) {
+      var m = project(state.me.lat, state.me.lon);
+      html += '<span class="me" style="left:' + (state.tx + m.x * state.z) + 'px;top:' + (state.ty + m.y * state.z) + 'px"></span>';
+    }
+    pinsEl.innerHTML = html;
+    pinsEl._groups = groups;
+  }
+  function shortName(n) { return n.replace(/^ТЦ\s+/, '').replace(/Ледовый дворец спорта Минской области/, 'ЛДС Притыцкого').replace(/^Каток\s+/, ''); }
+
+  /* ---------- Карточки ---------- */
+  function cardHtml(p) {
+    var times = timesOf(p), body;
+    if (p.type === 'shop') body = '<div class="card__shop">' + p.shop + '</div>';
+    else if (times.length) {
+      body = '<div class="card__p">' + p.price + ' BYN</div>' +
+        '<div class="slots">' + times.slice(0, 3).map(function (t) { return '<span class="slot">' + t + '</span>'; }).join('') +
+        (times.length > 3 ? '<span class="slot slot--price">+' + (times.length - 3) + '</span>' : '') + '</div>';
+    } else {
+      var next = ['tomorrow', 'weekend'].filter(function (k) { return k !== state.when && (p.s[k] || []).length; })[0];
+      body = '<div class="card__off">' + WHEN_LABEL[state.when][0].toUpperCase() + WHEN_LABEL[state.when].slice(1) + ' нет · ближайший ' +
+        (next ? WHEN_LABEL[next] + ' ' + p.s[next][0] : '— уточняется') + '</div>';
+    }
+    return '<article class="card' + (state.sel === p.id ? ' is-sel' : '') + '" data-id="' + p.id + '">' +
+      '<div class="card__ph card__ph--empty">' + p.photo + '</div>' +
+      '<div class="card__b"><div class="card__n">' + p.name + '</div><div class="card__m">' + p.where + '</div>' + body + '</div></article>';
+  }
+
+  function feed() {
+    var list = state.group || visiblePlaces();
+    var hits = list.filter(isHit), rest = list.filter(function (p) { return !isHit(p); });
+    hits.sort(function (a, b) { return (timesOf(a)[0] || 'z').localeCompare(timesOf(b)[0] || 'z'); });
+    return { all: hits.concat(rest), hits: hits, rest: rest };
+  }
+
+  function renderSheet(keepScroll) {
+    var f = feed();
+    var title = document.getElementById('sheetTitle'), sub = document.getElementById('sheetSub');
+    var ice = f.hits.filter(function (p) { return p.type !== 'shop'; });
+    var sessions = ice.reduce(function (n, p) { return n + timesOf(p).filter(function (t) { return /\d\d:\d\d/.test(t); }).length; }, 0);
+    if (state.group) {
+      title.innerHTML = '<b>' + state.group.length + ' места</b> рядом';
+      sub.textContent = 'Тапните по карте, чтобы вернуться ко всем';
+    } else {
+      title.innerHTML = '<b>' + ice.length + ' ' + plural(ice.length, 'место', 'места', 'мест') + '</b> ' + WHEN_LABEL[state.when];
+      sub.textContent = sessions ? sessions + ' ' + plural(sessions, 'сеанс', 'сеанса', 'сеансов') + ' · ещё ' + f.rest.length + ' без сеансов в это время' : 'Сеансов в это время нет — показываем ближайшие';
+    }
+    var sl = rail.scrollLeft;
+    rail.innerHTML = f.all.map(cardHtml).join('');
+    if (keepScroll) rail.scrollLeft = sl;
+    listEl.innerHTML =
+      f.hits.map(cardHtml).join('') +
+      (f.hits.length ? '<button class="share" type="button">↗ Поделиться подборкой</button>' : '') +
+      (f.rest.length ? '<div class="divider">' + WHEN_LABEL[state.when] + ' без сеансов</div>' + f.rest.map(cardHtml).join('') : '');
+  }
+  function plural(n, a, b, c) { var m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; }
+
+  function select(id, opts) {
+    opts = opts || {};
+    state.sel = id;
+    var p = PLACES.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    if (sheet.dataset.snap === 'peek') setSnap('half');
+    renderPins();
+    Array.prototype.forEach.call(document.querySelectorAll('.card'), function (c) { c.classList.toggle('is-sel', Number(c.dataset.id) === id); });
+    if (opts.scrollRail) {
+      var card = rail.querySelector('.card[data-id="' + id + '"]');
+      if (card) { railLock = true; rail.scrollTo({ left: card.offsetLeft - 22, behavior: 'smooth' }); setTimeout(function () { railLock = false; }, 450); }
+    }
+    if (opts.pan) panTo(p);
+  }
+
+  /* ---------- Шторка ---------- */
+  function setSnap(s) {
+    sheet.dataset.snap = s;
+    sheet.style.height = SNAP[s] + 'px';
+    var b = SNAP[s] + TAB;
+    document.getElementById('locate').style.bottom = (b + 12) + 'px';
+    document.getElementById('attrib').style.bottom = (b + 10) + 'px';
+    document.getElementById('locate').style.opacity = s === 'full' ? 0 : 1;
+    document.getElementById('sheetToggle').textContent = s === 'full' ? 'На карте' : 'Списком';
+  }
+  sheet.style.bottom = TAB + 'px';
+  SNAP.full = H - TAB - 110;
+
+  (function dragSheet() {
+    var grab = document.getElementById('grab'), y0 = 0, h0 = 0, moved = false, on = false;
+    grab.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('.sheet__toggle')) return;
+      on = true; moved = false; y0 = e.clientY; h0 = sheet.getBoundingClientRect().height;
+      sheet.classList.add('dragging'); grab.setPointerCapture(e.pointerId);
+    });
+    grab.addEventListener('pointermove', function (e) {
+      if (!on) return;
+      var dy = y0 - e.clientY; if (Math.abs(dy) > 4) moved = true;
+      sheet.style.height = Math.max(90, Math.min(SNAP.full + 20, h0 + dy)) + 'px';
+    });
+    function end() {
+      if (!on) return; on = false; sheet.classList.remove('dragging');
+      var h = sheet.getBoundingClientRect().height;
+      if (!moved) { setSnap(sheet.dataset.snap === 'peek' ? 'half' : sheet.dataset.snap === 'half' ? 'full' : 'half'); return; }
+      var best = 'half', d = 1e9;
+      Object.keys(SNAP).forEach(function (k) { if (Math.abs(SNAP[k] - h) < d) { d = Math.abs(SNAP[k] - h); best = k; } });
+      setSnap(best);
+    }
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+    document.getElementById('sheetToggle').addEventListener('click', function () {
+      setSnap(sheet.dataset.snap === 'full' ? 'half' : 'full');
+    });
+  })();
+
+  /* Карусель → пин: какая карточка по центру, та и выбрана. */
+  var railLock = false, railTimer = null;
+  rail.addEventListener('scroll', function () {
+    if (railLock) return;
+    clearTimeout(railTimer);
+    railTimer = setTimeout(function () {
+      var mid = rail.scrollLeft + rail.clientWidth / 2, best = null, d = 1e9;
+      Array.prototype.forEach.call(rail.children, function (c) {
+        var m = c.offsetLeft + c.offsetWidth / 2;
+        if (Math.abs(m - mid) < d) { d = Math.abs(m - mid); best = c; }
+      });
+      if (best && Number(best.dataset.id) !== state.sel) select(Number(best.dataset.id), { pan: true });
+    }, 120);
+  });
+  document.getElementById('sheet').addEventListener('click', function (e) {
+    var c = e.target.closest('.card');
+    if (c) { toast('Открываем карточку места →'); return; }
+    if (e.target.closest('.share')) toast('Поделиться подборкой — шит как в продукте');
+  });
+
+  /* ---------- Карта: перетаскивание, колесо, тапы ---------- */
+  (function panZoom() {
+    var on = false, x0, y0, tx0, ty0, moved = false;
+    mapEl.addEventListener('pointerdown', function (e) {
+      on = true; moved = false; x0 = e.clientX; y0 = e.clientY; tx0 = state.tx; ty0 = state.ty;
+      mapEl.classList.add('dragging');
+      if (anim) cancelAnimationFrame(anim);
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (!on) return;
+      var dx = e.clientX - x0, dy = e.clientY - y0;
+      if (Math.abs(dx) + Math.abs(dy) > 5) moved = true;
+      if (!moved) return;
+      state.tx = tx0 + dx; state.ty = ty0 + dy; apply();
+    });
+    window.addEventListener('pointerup', function (e) {
+      if (!on) return; on = false; mapEl.classList.remove('dragging');
+      if (moved) return;
+      var el = document.elementFromPoint(e.clientX, e.clientY);
+      var pin = el && el.closest('.pin'), cl = el && el.closest('.cluster');
+      if (pin) { state.group = null; renderSheet(); select(Number(pin.dataset.id), { scrollRail: true }); return; }
+      if (cl) { openCluster(pinsEl._groups[Number(cl.dataset.group)].list.map(function (i) { return i.p; })); return; }
+      if (state.group) { state.group = null; renderSheet(); }
+    });
+    mapEl.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var r = phone.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      var z = clampZ(state.z * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+      state.tx = mx - (mx - state.tx) * (z / state.z);
+      state.ty = my - (my - state.ty) * (z / state.z);
+      state.z = z; apply();
+    }, { passive: false });
+  })();
+
+  /* Тап по кластеру: вписать все его места; если они в одном комплексе — не зумить, а показать их. */
+  function openCluster(places) {
+    var pts = places.map(function (p) { return project(p.lat, p.lon); });
+    var spanPx = Math.max(
+      Math.max.apply(null, pts.map(function (p) { return p.x; })) - Math.min.apply(null, pts.map(function (p) { return p.x; })),
+      Math.max.apply(null, pts.map(function (p) { return p.y; })) - Math.min.apply(null, pts.map(function (p) { return p.y; }))
+    );
+    state.group = places;
+    state.sel = null;
+    if (sheet.dataset.snap === 'peek' || sheet.dataset.snap === 'full') setSnap('half');
+    renderSheet();
+    rail.scrollLeft = 0;
+    if (spanPx < 6) {
+      toast(places.length + ' места в одном комплексе — показываем списком');
+      var q = pts[0];
+      flyTo(W / 2 - q.x * state.z, (viewport().top + viewport().bottom) / 2 - q.y * state.z, state.z, 300);
+    } else {
+      fitPlaces(places, { maxZ: 1.7 });
+    }
+    setTimeout(function () { if (state.group) select(feed().all[0].id, {}); }, 60);
+  }
+
+  /* ---------- Чипы и «где я» ---------- */
+  document.getElementById('whenChips').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    if (b.dataset.when) {
+      state.when = b.dataset.when;
+      Array.prototype.forEach.call(this.querySelectorAll('[data-when]'), function (c) { c.setAttribute('aria-pressed', c === b ? 'true' : 'false'); });
+    } else if (b.dataset.type === 'shop') {
+      state.shops = !state.shops; b.setAttribute('aria-pressed', state.shops ? 'true' : 'false');
+    }
+    state.group = null;
+    renderSheet(); renderPins();
+    var first = feed().all[0]; if (first) select(first.id, { scrollRail: true });
+  });
+  document.getElementById('locate').addEventListener('click', function () {
+    state.me = { lat: 53.9165, lon: 27.5450 };
+    this.setAttribute('aria-pressed', 'true');
+    var q = project(state.me.lat, state.me.lon), z = Math.max(state.z, 1.3), vp = viewport();
+    flyTo(W / 2 - q.x * z, (vp.top + vp.bottom) / 2 - q.y * z, z, 420);
+    toast('Сортируем по расстоянию от вас');
+  });
+
+  var toastT = null;
+  function toast(msg) {
+    var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('on'); }, 1800);
+  }
+
+  /* ---------- Старт ---------- */
+  setSnap('half');
+  renderSheet();
+  state.z = 0.6; apply();
+  fitPlaces(visiblePlaces().filter(function (p) { return p.type !== 'shop'; }), { ms: 1, maxZ: 1.2 });
+  setTimeout(function () { var f = feed().all[0]; if (f) select(f.id, {}); }, 30);
+})();
+</script>
+</body>
+</html>

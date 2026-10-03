@@ -680,11 +680,11 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=202609068', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=202609063', as: 'script' },
+      { href: base + 'ice-tab.js?v=202610056', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202610051', as: 'script' },
       { href: base + 'ice-map-model.js?v=2026090618', as: 'script' },
-      { href: base + 'ice-map.js?v=2026090618', as: 'script' },
-      { href: base + 'ice-tab.css?v=202609068', as: 'style' },
+      { href: base + 'ice-map.js?v=202610051', as: 'script' },
+      { href: base + 'ice-tab.css?v=202610056', as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
@@ -915,6 +915,9 @@
     readBookingsWarmCache: readBookingsWarmCache,
     writeBookingsWarmCache: writeBookingsWarmCache,
     maybeOpenArenaDeepLink: maybeOpenArenaDeepLink,
+    deepLinkTarget: deepLinkTarget,
+    reportCatalogPresence: reportCatalogPresence,
+    readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
   };
 
@@ -935,18 +938,88 @@
     }
   }
 
+  /**
+   * startapp-диплинки (src/application/place_links.py — там же их собирает сервер):
+   *   arena_<id>[_s_<session>]     → карточка места, при сеансе — на этот сеанс;
+   *   catalog_<city>[_<token>][_<when>]
+   *     token: skate | coach — интент; shop | gym | ice | outdoor | choreo | pool | other — тип места.
+   *     when: today_evening | today | tomorrow | weekend — то же окно, что на /c/.
+   * Срабатывает один раз за сессию мини-аппа: start_param живёт всё время, пока
+   * открыт WebView, и без защёлки «Назад» с карточки снова уводил бы на неё же.
+   */
+  var DEEP_LINK_FLAG = 'glide_start_param_used_v1';
+  var CATALOG_PRESENCE_PREFIX = 'glide_cat_presence_v1_';
+
+  /**
+   * Учёт входа в мини-апп каталога (WAU, startapp после шаринга). Один раз на surface/день/start_param.
+   */
+  function reportCatalogPresence(surface, startParam, extra) {
+    var tg = getTg();
+    if (!tg || !tg.initData) return;
+    var sp = startParam != null ? String(startParam).trim() : '';
+    var day = new Date().toISOString().slice(0, 10);
+    var dedupeKey = CATALOG_PRESENCE_PREFIX + surface + '_' + day + '_' + sp;
+    try {
+      if (global.sessionStorage.getItem(dedupeKey)) return;
+      global.sessionStorage.setItem(dedupeKey, '1');
+    } catch (e) { /* */ }
+    var body = { surface: surface, start_param: sp || null };
+    if (extra && extra.city_id) body.city_id = Number(extra.city_id);
+    if (extra && extra.arena_id) body.arena_id = Number(extra.arena_id);
+    global.fetch('/api/webapp/client/catalog/presence', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': tg.initData,
+      },
+      body: JSON.stringify(body),
+    }).catch(function () {});
+  }
+
+  function deepLinkTarget(sp) {
+    sp = String(sp || '').trim();
+    var arena = /^arena[_-]([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$/i.exec(sp);
+    if (arena) {
+      var arenaPath = 'arena?ref=' + arena[1];
+      if (arena[2]) arenaPath += '&s=' + arena[2];
+      return { key: 'arena', path: arenaPath };
+    }
+    // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
+    if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
+    var catalog = /^catalog_([1-9][0-9]*)(?:_(skate|coach|shop|gym|ice|outdoor|choreo|pool|other))?(?:_(today_evening|today|tomorrow|weekend))?$/i.exec(sp);
+    if (catalog) {
+      var q = 'city_id=' + catalog[1];
+      var intent = (catalog[2] || '').toLowerCase();
+      var when = (catalog[3] || '').toLowerCase();
+      var venueToken = intent === 'shop' || intent === 'gym' || intent === 'ice' || intent === 'outdoor' ||
+        intent === 'choreo' || intent === 'pool' || intent === 'other';
+      if (venueToken) q += '&venue=' + intent;
+      else if (intent) q += '&intent=' + intent;
+      else if (when) q += '&intent=skate';
+      if (when) q += '&when=' + when;
+      return { key: 'ice', path: 'ice?' + q };
+    }
+    return null;
+  }
+
   function maybeOpenArenaDeepLink() {
-    var key = pathnameKey();
-    if (key === 'arena') return false;
     var sp = String(readStartParam() || '').trim();
-    var m = /^arena[_-](.+)$/i.exec(sp);
-    if (!m) return false;
-    navigate('arena?ref=' + encodeURIComponent(m[1]));
+    var target = deepLinkTarget(sp);
+    if (!target) return false;
+    try {
+      if (global.sessionStorage.getItem(DEEP_LINK_FLAG) === sp) return false;
+      global.sessionStorage.setItem(DEEP_LINK_FLAG, sp);
+    } catch (e) { /* без storage — как раньше, по ключу страницы */ }
+    var current = pathnameKey();
+    if (current === target.key && target.key === 'arena') return false;
+    if (current === target.key && global.location.search === '?' + target.path.split('?')[1]) return false;
+    navigate(target.path);
     return true;
   }
 
   function boot() {
     init();
+    reportCatalogPresence('miniapp_shell', readStartParam());
     if (maybeOpenArenaDeepLink()) return;
     if (state.mode === 'tabs' && pathnameKey() !== 'catalog' && pathnameKey() !== 'client-bookings') {
       scheduleCatalogNavigationPrefetch();

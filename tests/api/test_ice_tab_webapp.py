@@ -53,21 +53,23 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "ice-tab.js" in body
     assert "ice-map.js" in body
     assert "catalog-main.js" not in body
-    assert "Где заниматься" in body
-    assert "Тренеры" in body
+    assert model.status_code == 200
+    assert "Места" in model.text
+    assert "Тренеры" in model.text
     assert 'data-intent="group"' not in body
-    assert "ice-masthead" in body
+    assert "ice-intent-row" in body
+    assert "iceModeSeg" in body
     assert "iceServiceChips" in body
     assert "iceCityPopular" in body
     # TASK-103: карта вернулась, но сегмент «Список / Карта» в шапку — нет.
     assert "iceViewSeg" not in body
     assert "iceViewSwitch" in body
     assert "iceMapSec" in body
-    # Плейсхолдер перестал обещать только лёд: вкладка держит площадки любого типа
-    # (зал, хореография) и тренеров, а не один каток.
-    assert "Тренер, место или город" in body
-    # Фильтр по типу площадки; чипы рисуются по фасетам города (venue_type_facets).
-    assert "iceVenueChips" in body
+    # Поле ищет по названию места. «Тренер» и «заточка» не обещаются плейсхолдером:
+    # тренеры — отдельный чип, заточка находится, если её набрать.
+    assert "Каток, зал или трасса" in body
+    assert 'id="iceNearestBtn"' in body and 'id="iceCatalogTools"' in body
+    assert "icePlaceTabs" in body
     assert js.status_code == 200
     # Флаг MAP_ENABLED снят намеренно: он гасил случай «экран открылся картой без
     # выхода», а TASK-103 делает этот случай невозможным — список всегда стартовый вид.
@@ -95,7 +97,6 @@ async def test_ice_tab_page_and_assets_served(app_use_test_db) -> None:
     assert "Каталог тренеров теперь здесь" not in body
     assert "#c2761a" not in css.text.lower()
     assert ".ice-ypin__label" in css.text
-    assert "color: inherit" not in css.text.split(".ice-ypin__label")[1].split("}")[0]
     assert ".ice-sec[hidden]" in css.text
     # «Где заниматься» и «Тренеры» — разные DOM-хосты: иначе WebView на кадр
     # перекрашивает табло катка в компактную строку тренера.

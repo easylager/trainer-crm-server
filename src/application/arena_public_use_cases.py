@@ -17,10 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_media import attach_arena_media_payloads
 from src.application.arena_profile import (
+    AMENITY_LABELS_RU,
     ARENA_PROFILE_STATUS_PUBLISHED,
+    hours_for_weekday,
+    hours_groups,
+    SHOP_SERVICE_KEYS,
     is_in_season,
     public_http_url,
 )
+from src.application.ice_time_windows import TimeWindow, resolve_window
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -38,11 +43,17 @@ from src.shared.currency import currency_for_country
 from src.shared.ice_discovery_scope import ice_discovery_countries
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
+    DEFAULT_HIDDEN_VENUE_TYPES,
+    has_public_skating,
+    VENUE_TYPE_ICE,
     VENUE_TYPE_KEYS,
+    VENUE_TYPE_OUTDOOR,
+    VENUE_TYPE_SHOP,
     normalize_venue_type,
     venue_card_cta,
     venue_site_label,
     venue_type_chip,
+    venue_type_icon,
     venue_type_noun,
 )
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -271,8 +282,62 @@ def _rank_tuple(item: Mapping[str, Any]) -> tuple:
     return (tier_rank, distance_key, has_48h, completeness, int(item["id"]))
 
 
+_MONTHS_PREP_RU = (
+    "январе", "феврале", "марте", "апреле", "мае", "июне",
+    "июле", "августе", "сентябре", "октябре", "ноябре", "декабре",
+)
+
+_SHOP_SERVICE_LABELS = tuple((key, AMENITY_LABELS_RU[key]) for key in SHOP_SERVICE_KEYS)
+
+
+def _place_line(item: Mapping[str, Any]) -> str:
+    """Строка ленты для места без сеансов (магазин, зал): что тут есть и когда открыто.
+
+    «Расписание уточняется» у магазина — неверный вопрос к месту: расписания у него
+    не бывает. Говорим то, что знаем: услуги и часы. Не знаем — честно «уточняйте».
+    """
+    bits: list[str] = []
+    if normalize_venue_type(item.get("venue_type")) == VENUE_TYPE_SHOP:
+        amenities = _as_mapping(item.get("amenities"))
+        services = [label for key, label in _SHOP_SERVICE_LABELS if amenities.get(key) is True]
+        if services:
+            # Строка ленты — одна строка: три главные услуги, остальное — на карточке.
+            head = " · ".join(services[:3])
+            rest = len(services) - 3
+            bits.append(f"{head} · ещё {rest}" if rest > 0 else head)
+    hours = _as_mapping(item.get("opening_hours"))
+    groups = hours_groups(hours)
+    if len(groups) == 1 and groups[0][1]:
+        bits.append(f"ежедневно {groups[0][1][0]}–{groups[0][1][1]}")
+    elif groups:
+        today_pair = hours_for_weekday(hours, _today_minsk().weekday())
+        bits.append(f"сегодня {today_pair[0]}–{today_pair[1]}" if today_pair else "сегодня выходной")
+    if not bits:
+        bits.append("часы работы уточняйте по телефону" if item.get("phone") else "часы работы уточняются")
+    line = " · ".join(bits)
+    return line[:1].upper() + line[1:]
+
+
 def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, Any]:
     currency = item.get("currency_code") or "BYN"
+    if intent == INTENT_SKATE and normalize_venue_type(item.get("venue_type")) not in (
+        VENUE_TYPE_ICE,
+        VENUE_TYPE_OUTDOOR,
+    ):
+        # TASK-146: у зала и магазина нет массового катания — у них «что и когда открыто».
+        return {"kind": "place", "text": _place_line(item), "currency_code": currency}
+    if (
+        intent == INTENT_SKATE
+        and not item.get("next_session_id")
+        and not is_in_season(item.get("season_start_month"), item.get("season_end_month"), today.month)
+    ):
+        # Q-014: вне сезона каток остаётся в ленте (он существует, и его страница в поиске),
+        # но говорит правду — «закрыт до ноября», а не «расписание уточняется».
+        start = item.get("season_start_month")
+        text = (
+            f"Сезон закрыт · откроется в {_MONTHS_PREP_RU[int(start) - 1]}" if start else "Сезон закрыт"
+        )
+        return {"kind": "closed", "text": text, "currency_code": currency}
     if intent == INTENT_SKATE:
         if not item.get("next_session_id"):
             return {
@@ -295,6 +360,10 @@ def _build_live(item: dict[str, Any], *, intent: str, today: date) -> dict[str, 
             parts.append(f"ещё {more} {word}")
         return {
             "kind": "session",
+            # TASK-146: «Позвать» на карточке ленты зовёт на этот самый сеанс.
+            "session_id": int(item["next_session_id"]),
+            # Q-006: сеанс вне выбранного окна — ближайший из того, что есть.
+            "outside_window": bool(item.get("outside_window")),
             "text": " · ".join(parts),
             "local_date": local_date.isoformat() if hasattr(local_date, "isoformat") else str(local_date),
             "starts_at_local": hhmm,
@@ -354,6 +423,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         # «Открыть карточку катка» на зале — ровно то, что мы и чиним.
         "venue_type": venue_type,
         "venue_chip": venue_type_chip(venue_type),
+        # TASK-148: иконка типа — плашка бесфотошной карточки. Клиент словаря
+        # типов не держит (см. src/shared/venue_types.py), иконку шлём готовой.
+        "venue_icon": venue_type_icon(venue_type),
         "venue_cta": venue_card_cta(venue_type),
         "tier": item["tier"],
         "thumb": thumb,
@@ -361,6 +433,8 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "currency_code": item.get("currency_code"),
         "live": live,
         "live_line": live.get("text"),
+        # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
+        "freshness": _schedule_freshness(item),
     }
 
 
@@ -370,7 +444,7 @@ SELECT
     p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
     p.tickets_url,
     p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
-    p.amenities, p.status, p.verified_at,
+    p.amenities, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
     nxt.id AS next_session_id,
     nxt.kind AS next_kind,
@@ -381,8 +455,22 @@ SELECT
     nxt.price_child_minor AS next_price_child_minor,
     nxt.price_rental_minor AS next_price_rental_minor,
     nxt.currency_code AS next_currency_code,
+    nxw.id AS win_session_id,
+    nxw.kind AS win_kind,
+    nxw.starts_at_utc AS win_starts_at_utc,
+    nxw.local_date AS win_local_date,
+    nxw.starts_at_local AS win_starts_at_local,
+    nxw.price_adult_minor AS win_price_adult_minor,
+    nxw.price_child_minor AS win_price_child_minor,
+    nxw.price_rental_minor AS win_price_rental_minor,
+    nxw.currency_code AS win_currency_code,
     COALESCE(sa.future_count, 0) AS future_session_count,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
+    sa.max_observed_at AS sessions_observed_at,
+    COALESCE(ipj.is_enabled, false) AS ice_job_enabled,
+    ipj.last_ok_at AS ice_last_ok_at,
+    ipj.config AS ice_job_config,
+    ipj.created_at AS ice_job_created_at,
     COALESCE(tc.trainer_count, 0) AS trainer_count,
     COALESCE(fs.free_slots, 0) AS free_slots,
     COALESCE(og.open_groups, 0) AS open_groups_count,
@@ -401,14 +489,29 @@ LEFT JOIN LATERAL (
     ORDER BY s.starts_at_utc
     LIMIT 1
 ) nxt ON true
+-- TASK-146 (Q-006): ближайший сеанс внутри выбранного окна времени («сегодня вечером»,
+-- «выходные»). Без окна границы — «сейчас … +1 год», и nxw совпадает с nxt.
+LEFT JOIN LATERAL (
+    SELECT s.id, s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+    FROM ice_sessions s
+    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+      AND s.starts_at_utc >= :win_from AND s.starts_at_utc < :win_to
+    ORDER BY s.starts_at_utc
+    LIMIT 1
+) nxw ON true
 LEFT JOIN (
     SELECT s.arena_id,
            COUNT(*)::int AS future_count,
-           COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h
+           COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h,
+           MAX(s.observed_at) AS max_observed_at
     FROM ice_sessions s
     WHERE {_CURRENT_SESSION_SQL}
     GROUP BY s.arena_id
 ) sa ON sa.arena_id = a.id
+-- TASK-146: источник расписания арены (одно задание на арену) — для честного
+-- флага schedule_stale: парсер есть, но давно не читал сайт успешно.
+LEFT JOIN ice_parser_jobs ipj ON ipj.arena_id = a.id
 LEFT JOIN (
     -- ta.is_public matters: the catalog's arena filter requires it (list_active_with_details),
     -- so counting hidden links here promised trainers the filter would never show (TASK-140).
@@ -479,6 +582,13 @@ def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _window_params(window: TimeWindow | None, now: datetime) -> dict[str, datetime]:
+    """Границы окна для nxw. Без окна — «сейчас … +1 год»: nxw совпадает с nxt."""
+    if window is None:
+        return {"win_from": now, "win_to": now + timedelta(days=366)}
+    return {"win_from": window.starts_at, "win_to": window.ends_at}
+
+
 async def _load_ice_arena_rows(
     session: AsyncSession,
     *,
@@ -486,6 +596,7 @@ async def _load_ice_arena_rows(
     bbox: tuple[float, float, float, float] | None,
     intent: str,
     now: datetime,
+    window: TimeWindow | None = None,
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {
         "now": now,
@@ -495,6 +606,7 @@ async def _load_ice_arena_rows(
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
         "ice_countries": ice_discovery_countries(),
+        **_window_params(window, now),
     }
     where = []
     if city_id is not None:
@@ -562,6 +674,22 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                                    AND m.status = 'published'
                              ))
                        ) AS map_rink_count,
+                       (
+                           -- TASK-146: город, где пока есть только магазины без координат
+                           -- (до геокодинга), тоже должен быть в выборе — иначе его места
+                           -- недостижимы ни из списка, ни по диплинку.
+                           SELECT COUNT(*)::int
+                           FROM arenas a
+                           LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                           WHERE a.city_id = c.id
+                             AND a.is_active AND a.is_confirmed
+                             AND (p.status IS NULL OR p.status = :published)
+                             AND (a.created_by_trainer_id IS NULL OR EXISTS (
+                                 SELECT 1 FROM media m
+                                 WHERE m.owner_type = 'arena' AND m.owner_id = a.id
+                                   AND m.status = 'published'
+                             ))
+                       ) AS place_count,
                        (
                            SELECT AVG(a.latitude)
                            FROM arenas a
@@ -664,7 +792,8 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
         skate_count = int(row["skate_count"] or 0)
         trainer_count = int(row["trainer_count"] or 0)
         map_rink_count = int(row["map_rink_count"] or 0)
-        if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0:
+        place_count = int(row["place_count"] or 0)
+        if skate_count <= 0 and trainer_count <= 0 and map_rink_count <= 0 and place_count <= 0:
             continue
         lat = row["latitude"]
         lon = row["longitude"]
@@ -689,6 +818,7 @@ async def list_ice_discovery_cities(session: AsyncSession) -> list[dict[str, Any
                 "skate_count": skate_count,
                 "trainer_count": trainer_count,
                 "map_rink_count": map_rink_count,
+                "place_count": place_count,
                 "latitude": float(lat) if lat is not None else None,
                 "longitude": float(lon) if lon is not None else None,
                 "bounds": bounds,
@@ -707,6 +837,7 @@ async def list_public_ice_arenas(
     venue_type: str | None = None,
     limit: int = DEFAULT_LIST_LIMIT,
     cursor: str | None = None,
+    when: str | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
     venue_filter = parse_venue_type_filter(venue_type)
@@ -722,9 +853,13 @@ async def list_public_ice_arenas(
         except ValueError as exc:
             raise IcePublicQueryError("cursor must be an integer offset") from exc
     now = datetime.now(timezone.utc)
+    # Окно времени имеет смысл только для «где покататься»: у тренеров — слоты недели.
+    window = resolve_window(when, now) if intent_value == INTENT_SKATE else None
     rows = await _load_ice_arena_rows(
-        session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now
+        session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
     )
+    if window is not None:
+        _apply_window(rows)
     if near_pt is not None:
         nlat, nlon = near_pt
         for row in rows:
@@ -741,7 +876,19 @@ async def list_public_ice_arenas(
     facets = _venue_type_facets(rows)
     if venue_filter:
         rows = [r for r in rows if normalize_venue_type(r.get("venue_type")) in venue_filter]
-    rows.sort(key=_rank_tuple)
+    else:
+        # TASK-146: «все типы» — это все места, где занимаются. Магазин приходит
+        # только по своему чипу: в ленте «где покататься» он шум, а не находка.
+        rows = [
+            r
+            for r in rows
+            if normalize_venue_type(r.get("venue_type")) not in DEFAULT_HIDDEN_VENUE_TYPES
+        ]
+    if window is not None:
+        # Сначала то, что есть в выбранном окне; остальное — ниже, с честной подписью.
+        rows.sort(key=lambda r: (0 if r.get("window_hit") else 1, *_rank_tuple(r)))
+    else:
+        rows.sort(key=_rank_tuple)
     page = rows[offset : offset + cap]
     await attach_arena_media_payloads(session, page)
     today = _today_minsk()
@@ -754,7 +901,120 @@ async def list_public_ice_arenas(
         "venue_type": sorted(venue_filter) if venue_filter else None,
         "venue_type_facets": facets,
         "next_cursor": next_cursor,
+        # TASK-146 (Q-006): какое окно применено и сколько мест в нём реально есть.
+        # hits == 0 — лента не пустая, а «в это время нет, вот ближайшее».
+        "window": (
+            {**window.as_payload(), "hits": sum(1 for r in rows if r.get("window_hit"))}
+            if window is not None
+            else None
+        ),
     }
+
+
+_WEEKDAYS_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_MONTHS_SHORT_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+
+
+def _human_day(local_date: date, today: date) -> str:
+    """«Сегодня» / «Завтра» / «Сб, 4 окт» — для подписи в интерфейсе, не ISO."""
+    if local_date in (today, today + timedelta(days=1)):
+        return _date_label(local_date, today)
+    return f"{_WEEKDAYS_SHORT_RU[local_date.weekday()]}, {local_date.day} {_MONTHS_SHORT_RU[local_date.month - 1]}"
+
+
+async def find_nearest_ice_now(
+    session: AsyncSession, *, near: str, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """
+    «Лёд рядом сейчас» (TASK-146, Q-013): ближайший к человеку каток, где сегодня ещё
+    будет массовое катание. Сегодня нигде — ближайший день, где лёд есть, и на нём —
+    ближайший каток. Не тупик «сегодня ничего», а честный следующий шаг.
+    """
+    lat, lon = parse_near(near) or (None, None)
+    if lat is None:
+        raise IcePublicQueryError("near must be lat,lon")
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT s.id AS session_id, s.local_date, s.starts_at_local, s.starts_at_utc,
+                       s.price_adult_minor, s.currency_code,
+                       a.id AS arena_id, a.name AS arena_name, a.latitude, a.longitude
+                FROM ice_sessions s
+                JOIN arenas a ON a.id = s.arena_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                JOIN cities c ON c.id = a.city_id
+                WHERE {_CURRENT_SESSION_SQL}
+                  AND a.is_active AND a.is_confirmed
+                  AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                  AND (p.status IS NULL OR p.status = :published)
+                  AND c.country = ANY(:ice_countries)
+                  AND s.local_date <= :horizon
+                ORDER BY s.starts_at_utc
+                """
+            ),
+            {
+                "st": STATUS_ACTIVE,
+                "now": now,
+                "published": ARENA_PROFILE_STATUS_PUBLISHED,
+                "ice_countries": ice_discovery_countries(),
+                "horizon": today + timedelta(days=13),
+            },
+        )
+    ).mappings().all()
+    if not rows:
+        return None
+    first_day = min(r["local_date"] for r in rows)
+    day = today if any(r["local_date"] == today for r in rows) else first_day
+    best: dict[str, Any] | None = None
+    for r in rows:
+        if r["local_date"] != day:
+            continue
+        dist = haversine_km(lat, lon, float(r["latitude"]), float(r["longitude"]))
+        # Сеансы уже отсортированы по времени: на каждом катке берём ближайший по времени.
+        if best is None or dist < best["distance_km"]:
+            best = {**dict(r), "distance_km": dist}
+    if best is None:
+        return None
+    local_date = best["local_date"]
+    return {
+        "arena_id": int(best["arena_id"]),
+        "arena_name": best["arena_name"],
+        "session_id": int(best["session_id"]),
+        "local_date": local_date.isoformat(),
+        "starts_at_local": _hhmm(best["starts_at_local"]),
+        "day_label": _human_day(local_date, today),
+        "is_today": local_date == today,
+        "distance_km": best["distance_km"],
+        "price": _format_price_minor(best["price_adult_minor"], best["currency_code"] or "BYN"),
+    }
+
+
+_WINDOW_FIELDS = (
+    ("win_session_id", "next_session_id"),
+    ("win_kind", "next_kind"),
+    ("win_starts_at_utc", "next_starts_at_utc"),
+    ("win_local_date", "next_local_date"),
+    ("win_starts_at_local", "next_starts_at_local"),
+    ("win_price_adult_minor", "next_price_adult_minor"),
+    ("win_price_child_minor", "next_price_child_minor"),
+    ("win_price_rental_minor", "next_price_rental_minor"),
+    ("win_currency_code", "next_currency_code"),
+)
+
+
+def _apply_window(rows: list[dict[str, Any]]) -> None:
+    """Есть сеанс в окне — карточка показывает его; нет — ближайший вне окна, с пометкой."""
+    for row in rows:
+        hit = row.get("win_session_id") is not None
+        row["window_hit"] = hit
+        if hit:
+            for src, dst in _WINDOW_FIELDS:
+                row[dst] = row.get(src)
+        elif row.get("next_session_id") is not None:
+            row["outside_window"] = True
 
 
 async def get_hub_ice_teaser(
@@ -806,6 +1066,10 @@ async def get_hub_ice_teaser(
     if city_id is not None:
         params["city_id"] = int(city_id)
         city_filter = "  AND a.city_id = :city_id\n"
+    # TASK-148 (AC-4): «Сегодня на льду» — вместе с тизером отдаём до 4 ближайших
+    # сеансов (тизер — первый), чтобы хаб рисовал блок без нового эндпоинта и без
+    # второго раунд-трипа. Раньше был LATERAL LIMIT 1 по аренам + внешний LIMIT 1:
+    # теперь те же фильтры, но по сеансам и с лимитом 4.
     sql = f"""
 SELECT
     a.id AS arena_id,
@@ -816,36 +1080,33 @@ SELECT
     c.name AS city_name,
     a.latitude AS arena_latitude,
     a.longitude AS arena_longitude,
-    nxt.kind,
-    nxt.starts_at_utc,
-    nxt.local_date,
-    nxt.starts_at_local,
-    nxt.price_adult_minor,
-    nxt.currency_code
-FROM arenas a
+    a.venue_type AS venue_type,
+    s.id AS session_id,
+    s.kind,
+    s.starts_at_utc,
+    s.local_date,
+    s.starts_at_local,
+    s.price_adult_minor,
+    s.currency_code
+FROM ice_sessions s
+JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
-JOIN LATERAL (
-    SELECT s.kind, s.starts_at_utc, s.local_date, s.starts_at_local,
-           s.price_adult_minor, s.currency_code
-    FROM ice_sessions s
-    WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
-    ORDER BY s.starts_at_utc
-    LIMIT 1
-) nxt ON true
-WHERE a.is_active AND a.is_confirmed
+WHERE {_CURRENT_SESSION_SQL}
+  AND a.is_active AND a.is_confirmed
   AND c.country = ANY(:ice_countries)
 {city_filter}  AND (p.status IS NULL OR p.status = :published)
   AND (a.created_by_trainer_id IS NULL OR EXISTS (
       SELECT 1 FROM media m
       WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
   ))
-ORDER BY nxt.starts_at_utc, a.id
-LIMIT 1
+ORDER BY s.starts_at_utc, a.id
+LIMIT 4
 """
-    row = (await session.execute(text(sql), params)).mappings().first()
-    if not row:
+    rows = (await session.execute(text(sql), params)).mappings().all()
+    if not rows:
         return None
+    row = rows[0]
     local_date = row["local_date"]
     starts_utc = row["starts_at_utc"]
     media_holder: dict[str, Any] = {"id": int(row["arena_id"])}
@@ -864,6 +1125,30 @@ LIMIT 1
         if alat is not None and alon is not None:
             nlat, nlon = near
             distance_km = haversine_km(nlat, nlon, float(alat), float(alon))
+    sessions = [
+        {
+            "session_id": int(r["session_id"]),
+            "arena_id": int(r["arena_id"]),
+            "arena_slug": r["arena_slug"],
+            "arena_name": r["arena_name"],
+            "venue_type": normalize_venue_type(r["venue_type"]),
+            "kind": r["kind"],
+            "starts_at_utc": (
+                r["starts_at_utc"].isoformat()
+                if hasattr(r["starts_at_utc"], "isoformat")
+                else str(r["starts_at_utc"])
+            ),
+            "local_date": (
+                r["local_date"].isoformat()
+                if hasattr(r["local_date"], "isoformat")
+                else str(r["local_date"])
+            ),
+            "starts_at_local": _hhmm(r["starts_at_local"]),
+            "price_adult_minor": r["price_adult_minor"],
+            "currency_code": r["currency_code"],
+        }
+        for r in rows
+    ]
     return {
         "arena_id": int(row["arena_id"]),
         "arena_slug": row["arena_slug"],
@@ -880,6 +1165,10 @@ LIMIT 1
         "thumb": thumb,
         "card": card,
         "distance_km": distance_km,
+        # TASK-148 (AC-4): id сеанса тизера + ближайшие сеансы (включая тизерный),
+        # чтобы блок «Сегодня на льду» строил свои 2–3 строки из тех же live-данных.
+        "session_id": int(row["session_id"]),
+        "sessions": sessions,
         # True when the caller passed no client city_id at all (country-wide fallback,
         # not a real match) — the frontend uses this to decide whether it's worth asking
         # for geolocation to refine an honest distance (see GET /client/hub/ice-teaser).
@@ -901,6 +1190,7 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
         "tg_st": TG_RECRUITING,
         "published": ARENA_PROFILE_STATUS_PUBLISHED,
         "ice_countries": ice_discovery_countries(),
+        **_window_params(None, now),
     }
     sql = _LIST_SQL
     if arena_ref.isdigit():
@@ -915,6 +1205,30 @@ async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str,
     return rows[0] if rows else None
 
 
+def _schedule_freshness(
+    row: Mapping[str, Any], *, sessions_observed_at: datetime | None = None
+) -> dict[str, Any]:
+    """TASK-146: schedule_observed_at / schedule_auto / schedule_stale из ice_parser_jobs.
+
+    Контракт полей — docs/ops/ice-freshness-and-alerts.md.
+    """
+    # Локальный импорт: пакет src.ingestion при импорте тянет health → этот модуль.
+    from src.ingestion.freshness import schedule_freshness_fields
+
+    observed = sessions_observed_at
+    if observed is None:
+        observed = row.get("sessions_observed_at")
+    config = row.get("ice_job_config")
+    return schedule_freshness_fields(
+        has_enabled_job=bool(row.get("ice_job_enabled")),
+        last_ok_at=row.get("ice_last_ok_at"),
+        sessions_observed_at=observed,
+        config=config if isinstance(config, Mapping) else None,
+        now=datetime.now(timezone.utc),
+        created_at=row.get("ice_job_created_at"),
+    )
+
+
 def _freshness_payload(
     row: Mapping[str, Any], *, observed_at: datetime | None, valid_until: datetime | None
 ) -> dict[str, Any]:
@@ -922,12 +1236,16 @@ def _freshness_payload(
     # «сайт катка» на зале — та же зашитая ледовость, что и в остальном копирайте.
     source_label = venue_site_label(row.get("venue_type")).lower() if website else None
     return {
-        "schedule_observed_at": _iso(observed_at),
+        # schedule_observed_at / schedule_auto / schedule_stale (TASK-146)
+        **_schedule_freshness(row, sessions_observed_at=observed_at),
         "schedule_valid_until": _iso(valid_until),
         "source_kind": "rink_website" if website else None,
         "source_label": source_label,
         "source_url": website,
         "verified_at": _iso(row.get("verified_at")),
+        # Q-012: последняя правка карточки — источник «обновлено N назад» у мест без
+        # расписания с сайта (магазин, зал). NULL — неизвестно, тогда о свежести молчим.
+        "profile_updated_at": _iso(row.get("profile_updated_at")),
     }
 
 
@@ -959,6 +1277,9 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "venue_noun": venue_type_noun(row.get("venue_type")),
         "venue_chip": venue_type_chip(row.get("venue_type")),
         "venue_site_label": venue_site_label(row.get("venue_type")),
+        # TASK-146: у места бывает массовое катание (каток или уличный лёд) — клиент
+        # не решает это сам по строке типа, а берёт готовый ответ.
+        "has_skating": has_public_skating(row.get("venue_type")),
         "district": row.get("district"),
         "address": row.get("address"),
         "latitude": row.get("latitude"),
@@ -983,6 +1304,8 @@ async def get_public_arena_card(session: AsyncSession, arena_ref: str) -> dict[s
         "gallery": row.get("gallery") or [],
         "tier": row["tier"],
         "currency_code": row.get("currency_code"),
+        # TASK-146: публичная страница места говорит «здесь работают N тренеров».
+        "trainer_count": int(row.get("trainer_count") or 0),
         "freshness": _freshness_payload(
             row,
             observed_at=obs_row[0] if obs_row else None,
@@ -1069,6 +1392,8 @@ async def list_public_arena_sessions(
         "to": end.isoformat(),
         "days": days,
         "kinds": list(CLIENT_ICE_SESSION_KINDS),
+        # TASK-146: насколько свежо это расписание (schedule_stale и др.).
+        "freshness": _schedule_freshness(row),
     }
 
 
@@ -1108,6 +1433,39 @@ async def _pg_trgm_enabled(session: AsyncSession) -> bool:
     return bool(result.scalar())
 
 
+# TASK-146: «где заточить коньки» ищут словом услуги, а не названием мастерской.
+# Корень слова → ключ удобства: ищем по префиксу, чтобы «заточка», «заточить»,
+# «наточить» и «прокат коньков» попадали без морфологии.
+_SERVICE_SEARCH_STEMS: tuple[tuple[str, str], ...] = (
+    ("заточ", "skate_sharpening"),
+    ("наточ", "skate_sharpening"),
+    ("точк", "skate_sharpening"),
+    ("прокат", "skate_rental"),
+    ("аренд", "skate_rental"),
+    ("ремонт", "repair"),
+    ("формовк", "skate_molding"),
+    ("профилир", "blade_profiling"),
+    ("скан", "foot_scan"),
+    ("хокке", "discipline_hockey"),
+    ("фигурн", "discipline_figure"),
+    ("ролик", "discipline_roller"),
+    ("купить", "retail"),
+    ("магазин", "retail"),
+    ("экипир", "retail"),
+)
+
+
+def service_amenity_keys_for_query(query: str) -> list[str]:
+    """Ключи удобств, о которых спрашивает запрос («заточка» → skate_sharpening)."""
+    words = [w for w in (query or "").lower().replace("ё", "е").split() if w]
+    keys: list[str] = []
+    for word in words:
+        for stem, key in _SERVICE_SEARCH_STEMS:
+            if (word.startswith(stem) or stem in word) and key not in keys:
+                keys.append(key)
+    return keys
+
+
 async def search_public_ice(
     session: AsyncSession, q: str, *, limit: int = SEARCH_LIMIT
 ) -> dict[str, Any]:
@@ -1118,7 +1476,7 @@ async def search_public_ice(
     like = f"%{query}%"
     use_trgm = await _pg_trgm_enabled(session)
     arena_sql = """
-        SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name
+        SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
@@ -1134,13 +1492,17 @@ async def search_public_ice(
               @@ plainto_tsquery('simple', :q)
             OR a.name ILIKE :like
             OR coalesce(p.district, '') ILIKE :like
+            OR EXISTS (
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
+            )
           )
         ORDER BY a.name, a.id
         LIMIT :lim
     """
     if use_trgm:
         arena_sql = """
-            SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name
+            SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
@@ -1157,6 +1519,10 @@ async def search_public_ice(
                 OR a.name ILIKE :like
                 OR coalesce(p.district, '') ILIKE :like
                 OR similarity(a.name, :q) > 0.2
+                OR EXISTS (
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
+            )
               )
             ORDER BY GREATEST(similarity(a.name, :q), 0) DESC, a.name, a.id
             LIMIT :lim
@@ -1167,6 +1533,7 @@ async def search_public_ice(
             "q": query,
             "like": like,
             "lim": cap,
+            "svc_keys": service_amenity_keys_for_query(query),
             "published": ARENA_PROFILE_STATUS_PUBLISHED,
             "ice_countries": ice_discovery_countries(),
         },
@@ -1214,6 +1581,8 @@ async def search_public_ice(
             "city_id": int(r[3]),
             "district": r[4],
             "city_name": r[5],
+            "venue_type": normalize_venue_type(r[6]),
+            "venue_chip": venue_type_chip(r[6]),
         }
         for r in arenas.fetchall()
     ]

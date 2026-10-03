@@ -207,6 +207,16 @@ def _parse_arena_ids_csv(raw: str | None) -> tuple[list[int] | None, bool, int]:
     return parsed[:_ARENA_IDS_FILTER_LIMIT], truncated, len(parsed)
 
 
+def _parse_int_csv(raw: str | None, limit: int = 50) -> list[int] | None:
+    """`service_ids=1,2,3` -> deduped ints (garbage skipped) or None."""
+    seen: list[int] = []
+    for chunk in (raw or "").split(","):
+        s = chunk.strip()
+        if s.isdigit() and int(s) not in seen:
+            seen.append(int(s))
+    return seen[:limit] or None
+
+
 def _photo_url_from_cdn(file_key: str) -> str | None:
     """Build CDN URL for file_key if photo_cdn_base_url is set."""
     return photo_url_from_cdn(file_key, Settings().photo_cdn_base_url)
@@ -435,6 +445,7 @@ async def list_active_trainers(
     offset: int = 0,
     city_id: int | None = None,
     service_id: int | None = None,
+    service_ids: str | None = None,  # comma-separated; logical OR over selected services
     arena_id: int | None = None,
     arena_ids: str | None = None,  # comma-separated; logical OR over selected arenas
     order_by: str = "rating",
@@ -480,6 +491,7 @@ async def list_active_trainers(
         offset=offset,
         city_id=city_id,
         service_id=service_id,
+        service_ids=_parse_int_csv(service_ids),
         arena_id=arena_id,
         arena_ids=arena_ids_filter,
         order_by=order_by,

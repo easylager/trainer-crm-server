@@ -14,6 +14,7 @@ from src.application.arena_public_use_cases import (
     DEFAULT_LIST_LIMIT,
     MAX_LIST_LIMIT,
     IcePublicQueryError,
+    find_nearest_ice_now,
     get_public_arena_card,
     list_ice_discovery_cities,
     list_public_arena_sessions,
@@ -30,7 +31,13 @@ from src.application.ice_city_day import (
     ice_city_day_page_url,
     summary_line,
 )
-from src.infrastructure.db.models import CLIENT_SHARE_KIND_ICE_CITY_DAY
+from src.application.place_links import place_image_url, place_page_url
+from src.application.place_page import load_place_view, share_payload
+from src.infrastructure.db.models import (
+    CLIENT_SHARE_KIND_ICE_CITY_DAY,
+    CLIENT_SHARE_KIND_PLACE,
+    CLIENT_SHARE_KIND_SELECTION,
+)
 from src.shared.config import Settings
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
@@ -72,6 +79,10 @@ async def get_public_ice_arenas(
     ),
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     cursor: str | None = None,
+    when: str | None = Query(
+        None,
+        description="Окно времени: auto | today_evening | today | tomorrow | weekend | any. auto — умный дефолт.",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -91,9 +102,25 @@ async def get_public_ice_arenas(
             venue_type=venue_type,
             limit=limit,
             cursor=cursor,
+            when=when,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
+
+
+@router.get("/ice/nearest")
+async def get_nearest_ice_now(
+    response: Response,
+    near: str = Query(..., description="lat,lon"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Лёд рядом сейчас»: ближайший каток с сеансом сегодня, иначе — в ближайший день со льдом."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        found = await find_nearest_ice_now(session, near=near)
+    except IcePublicQueryError as exc:
+        raise _query_error(exc) from exc
+    return {"item": found}
 
 
 @router.get("/ice/share/{city_id}")
@@ -159,7 +186,7 @@ async def get_ice_city_day_share(
         "day_label": day.get("day_label"),
         "arena_count": day.get("arena_count"),
         "session_count": day.get("session_count"),
-        "summary": summary_line(day, city_name=city_name),
+        "summary": summary_line(day, city_name=city_name, absolute=True),
         "share_context": ctx,
     }
 
@@ -236,6 +263,136 @@ async def get_public_arena_trainers(
     for trainer in payload["items"]:
         _enrich_trainer_photo_urls(trainer)
     return payload
+
+
+_SHARE_CHANNELS = ("telegram", "copy", "story", "system")
+
+
+@router.get("/ice/selection/share")
+async def get_public_selection_share(
+    response: Response,
+    city_id: int = Query(...),
+    venue_type: str | None = Query(None),
+    when: str | None = Query(None),
+    record: bool = Query(True),
+    channel: str | None = Query(None),
+    share_context: str | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    «Поделиться подборкой» из каталога (TASK-146): ссылка на /c/{город}?t=&w= — ровно
+    та выборка, что на экране (город, тип места, окно времени). Тот же контракт, что у
+    шеринга места; превью — og.png подборки.
+    """
+    from src.application.selection_page import (
+        clean_venue,
+        clean_when,
+        compose_selection_share,
+        load_selection_view,
+        selection_image_path,
+        selection_path,
+    )
+
+    response.headers["Cache-Control"] = "no-store"
+    row = (
+        await session.execute(text("SELECT id, name FROM cities WHERE id = :cid AND is_active"), {"cid": int(city_id)})
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    city = {"id": int(row[0]), "name": str(row[1])}
+    venue, window_key = clean_venue(venue_type), clean_when(when)
+    if window_key is None and (when or "").strip().lower() == "auto":
+        from src.application.ice_time_windows import resolve_window
+
+        resolved = resolve_window("auto")
+        window_key = resolved.key if resolved else None
+    view = await load_selection_view(session, city=city, venue=venue, when=window_key)
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    page_url = base + selection_path(city_name=city["name"], venue=venue, when=window_key)
+    payload = compose_selection_share(view, page_url=page_url)
+    if record:
+        ch = (channel or "").strip().lower()
+        await record_client_share(
+            session,
+            kind=CLIENT_SHARE_KIND_SELECTION,
+            share_context=(share_context or "ice_list").strip().lower()[:40],
+            city_id=city["id"],
+            payload={"venue_type": venue, "when": window_key, "channel": ch if ch in _SHARE_CHANNELS else None},
+        )
+    image = base + selection_image_path(city_name=city["name"], venue=venue, when=window_key)
+    story = image.replace("/og.png", "/story.png")
+    return {**payload, "og_image_url": image, "story_image_url": story, "venue_type": venue, "when": window_key}
+
+
+@router.get("/arenas/{arena_ref}/share")
+async def get_public_place_share(
+    arena_ref: str,
+    response: Response,
+    session_id: int | None = Query(None, description="Сеанс, которым делятся (ссылка ведёт прямо на него)."),
+    invite: bool = Query(False, description="Тон «Позвать с собой» вместо «Расписание»."),
+    share_context: str | None = Query(None, description="Где нажали: arena_card, ice_list, hub."),
+    record: bool = Query(True, description="false — предпросмотр в шите: показать, но не считать шерингом."),
+    channel: str | None = Query(None, description="Канал: telegram | copy | story | system."),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Готовое сообщение для шеринга места (TASK-146): ссылка на публичную страницу
+    ``/p/{city}/{slug}``, а не на бота — у страницы своё превью, и она открывается
+    в любом мессенджере без Telegram.
+
+    Контракт тот же, что у ``/ice/share`` и ``share-trainer``. Плюс ``story_image_url``
+    для «Сохранить картинку» (истории Instagram/VK) и ``invite_*`` — тот же текст в тоне
+    «погнали?», чтобы переключатель в шит-оверлее не ходил на сервер второй раз.
+
+    Публичная ручка: кто поделился, не знает (``actor_hash = NULL``), как и ``/ice/share``.
+
+    Шит «Поделиться» сначала показывает превью (``record=false`` — переключатели и выбор
+    сеанса не должны раздувать счётчик), а событие пишет по нажатию канала: одна строка ==
+    одно намерение отправить, с каналом в ``payload.channel`` (Q-007: что реально шерят и куда).
+    """
+    response.headers["Cache-Control"] = "no-store"
+    view = await load_place_view(session, arena_ref, session_id=session_id)
+    if view is None or not view["card"].get("slug"):
+        raise HTTPException(status_code=404, detail="Arena not found")
+    card = view["card"]
+    base = Settings().webapp_base_url
+    city_name = str(card.get("city_name") or "")
+    focus_id = int(view["focus"]["id"]) if view.get("focus") is not None else None
+    url_kwargs = {"base_url": base, "city_name": city_name, "slug": str(card["slug"]), "session_id": focus_id}
+    plain = share_payload(view, page_url=place_page_url(**url_kwargs), invite=False)
+    invited = share_payload(view, page_url=place_page_url(**url_kwargs, invite=True), invite=True)
+    chosen = invited if invite else plain
+
+    ctx = (share_context or "").strip().lower()[:40] or "arena_card"
+    if record:
+        ch = (channel or "").strip().lower()
+        await record_client_share(
+            session,
+            kind=CLIENT_SHARE_KIND_PLACE,
+            share_context=ctx,
+            city_id=int(card["city_id"]),
+            arena_id=int(card["id"]),
+            payload={
+                "venue_type": card.get("venue_type"),
+                "session_id": focus_id,
+                "invite": bool(invite),
+                "channel": ch if ch in _SHARE_CHANNELS else None,
+            },
+        )
+    return {
+        **chosen,
+        "invite_share_url": invited["share_url"],
+        "invite_share_body": invited["share_body"],
+        "invite_share_text": invited["share_text"],
+        "place_share_url": plain["share_url"],
+        "place_share_body": plain["share_body"],
+        "place_share_text": plain["share_text"],
+        "og_image_url": place_image_url(**url_kwargs, invite=invite),
+        "story_image_url": place_image_url(**url_kwargs, invite=invite, story=True),
+        "venue_type": card.get("venue_type"),
+        "session_id": focus_id,
+        "share_context": ctx,
+    }
 
 
 @router.get("/arenas/{arena_ref}")

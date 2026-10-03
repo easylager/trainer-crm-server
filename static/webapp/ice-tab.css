@@ -46,29 +46,198 @@ body.ar-pilot--ice .client-app-header {
   gap: 12px;
 }
 
-.ice-kicker {
-  margin: 0;
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--glide-ink-teal);
-}
-
-/* TASK-090: имя экрана и город — одна строка, минус ~45px до первой карточки. */
-.ice-hero-top {
+/* Намерение и город в одной строке: город меняет каталог, не поле поиска. */
+.ice-intent-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--app-space-3);
+  gap: 8px;
+  min-width: 0;
 }
 
-.ice-masthead {
-  margin: 0;
-  font-size: var(--app-text-display);
+.ice-intent-row .ice-seg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ice-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 3px;
+  gap: 2px;
+  background: var(--glide-surface);
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+}
+
+.ice-seg[hidden] {
+  display: none;
+}
+
+.ice-seg--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.ice-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-bold);
-  letter-spacing: -0.045em;
-  line-height: 1.05;
+  height: 32px;
+  border-radius: var(--app-radius-pill);
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.ice-seg button[aria-pressed='true'] {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
+
+.ice-seg--quiet {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--glide-line);
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.ice-seg--quiet.ice-seg--n3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ice-seg--quiet.ice-seg--n4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.ice-seg--quiet button {
+  height: 36px;
+  border-radius: 0;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+
+.ice-seg--quiet button[aria-pressed='true'] {
+  background: transparent;
+  color: var(--glide-text);
+  box-shadow: inset 0 -2px 0 var(--app-cta-fill);
+}
+
+.ice-catalog-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ice-catalog-tools[hidden] {
+  display: none;
+}
+
+.ice-tools {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ice-tools--one .ice-tool {
+  flex: 0 1 auto;
+}
+
+.ice-tool {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ice-tool span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ice-tool::after {
+  content: '';
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--glide-hint);
+  margin-top: 2px;
+}
+
+.ice-tool[aria-expanded='true'] {
+  border-color: var(--app-cta-fill);
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-menu {
+  display: none;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--glide-card, var(--glide-surface));
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-md);
+}
+
+.ice-menu:not([hidden]) {
+  display: flex;
+}
+
+.ice-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: var(--app-radius-sm, 8px);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.ice-menu button[aria-pressed='true'] {
+  background: var(--glide-brand-wash, rgba(69, 185, 187, 0.13));
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-menu b {
+  font-weight: var(--app-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--glide-hint);
+  font-size: var(--app-text-caption);
+}
+
+.ice-menu button[aria-pressed='true'] b {
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-intent-row .ice-chips--intent {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .ice-citypill {
@@ -94,6 +263,23 @@ body.ar-pilot--ice .client-app-header {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * TASK-147: дубль города ВНУТРИ строки поиска. Живёт только в режиме карты
+ * (дизайн: «строка поиска с городом внутри»); в списке строка поиска остаётся
+ * исходной — иначе «Минск» перед иконкой лупы выглядит как поломка.
+ */
+.ice-citypill--insearch {
+  display: none;
+  flex: 0 0 auto;
+  max-width: 40%;
+  padding: 5px 10px;
+  font-size: var(--app-text-caption);
+}
+
+body.ice-view-map .ice-citypill--insearch {
+  display: inline-flex;
 }
 
 .ice-citypill::after {
@@ -143,14 +329,13 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
 }
 
-.ice-chips::-webkit-scrollbar {
-  height: 0;
+.ice-chips[hidden] {
+  display: none;
 }
 
 .ice-chip {
@@ -173,10 +358,6 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-chips--svc {
   padding-top: 2px;
-}
-
-.ice-chips--svc[hidden] {
-  display: none;
 }
 
 .ice-chips--svc .ice-chip {
@@ -305,7 +486,17 @@ body.ar-pilot--ice .client-app-header {
   }
 }
 
+.ice-listhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .ice-eyebrow {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--app-text-kicker);
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -354,17 +545,20 @@ body.ar-pilot--ice .client-app-header {
 }
 
 /*
- * AC-006 и Q-001: каток без кадра. Плоский прямоугольник читался как ошибка
- * загрузки; здесь это осознанная плашка — фактура льда под углом и монограмма.
+ * TASK-148 (AC-2): каток без кадра. Плоский серый прямоугольник читался как
+ * ошибка загрузки и запрещён: бесфотошная карточка — это осознанная плашка
+ * цвета типа места с иконкой типа. Фолбэк-монограмма остаётся на случай ответа
+ * без venue_icon, но не серой: по цветной плашке читается белым.
  */
 .ice-board__photo--empty {
-  background-image: repeating-linear-gradient(
-      115deg,
-      transparent 0 22px,
-      rgba(127, 127, 127, 0.06) 22px 24px
-    ),
-    linear-gradient(160deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+  background: var(--app-venue-ice);
 }
+.ice-board--type-ice .ice-board__photo--empty,
+.ice-board--type-outdoor .ice-board__photo--empty { background: var(--app-venue-ice); }
+.ice-board--type-gym .ice-board__photo--empty,
+.ice-board--type-choreo .ice-board__photo--empty { background: var(--app-venue-gym); }
+.ice-board--type-shop .ice-board__photo--empty { background: var(--app-venue-shop); }
+.ice-board--type-pool .ice-board__photo--empty { background: var(--app-venue-pool); }
 
 .ice-board__initial {
   position: absolute;
@@ -374,8 +568,7 @@ body.ar-pilot--ice .client-app-header {
   justify-content: center;
   font-size: var(--app-text-display);
   font-weight: var(--app-weight-bold);
-  color: var(--glide-hint);
-  opacity: 0.55;
+  color: var(--app-on-media);
   letter-spacing: -0.02em;
 }
 
@@ -543,6 +736,10 @@ body.ar-pilot--ice .client-app-header {
 /*
  * AC-006 / F-5: раньше это была плоская заливка — на скрине списка тренеров
  * получался ряд мёртвых прямоугольников. Теперь плашка говорит, чья она.
+ *
+ * TASK-148 (AC-2): для мест (карусель шторки карты) бесфотошная плашка — цвет
+ * типа места с иконкой типа; серых заглушек нет. Правило заскоплено на
+ * .ice-acard--type-* — карточки тренеров (без класса типа) не меняются.
  */
 .ice-acard__ph--empty {
   background: repeating-linear-gradient(
@@ -554,6 +751,31 @@ body.ar-pilot--ice .client-app-header {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.ice-acard--type-ice .ice-acard__ph--empty,
+.ice-acard--type-outdoor .ice-acard__ph--empty {
+  background: var(--app-venue-ice);
+  border-color: transparent;
+}
+.ice-acard--type-gym .ice-acard__ph--empty,
+.ice-acard--type-choreo .ice-acard__ph--empty {
+  background: var(--app-venue-gym);
+  border-color: transparent;
+}
+.ice-acard--type-shop .ice-acard__ph--empty {
+  background: var(--app-venue-shop);
+  border-color: transparent;
+}
+.ice-acard--type-pool .ice-acard__ph--empty {
+  background: var(--app-venue-pool);
+  border-color: transparent;
+}
+
+.ice-acard__icon {
+  font-size: var(--app-icon-lg);
+  line-height: 1;
+  color: var(--app-on-media);
 }
 
 .ice-acard__mono {
@@ -887,8 +1109,6 @@ body.ar-pilot--ice .client-app-header {
 
 .ice-map-stage {
   position: relative;
-  height: min(52vh, 420px);
-  min-height: 280px;
   background: var(--glide-paper);
 }
 
@@ -904,14 +1124,28 @@ body.ice-view-map .ice-tab {
 }
 
 body.ice-view-map .ice-sec--hero {
-  flex: 0 0 auto;
-  padding-bottom: 8px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  /* Верхняя площадка под шторку Telegram и ноты safe-area. */
+  padding: max(52px, env(safe-area-inset-top, 0px)) 12px 18px;
+  background: linear-gradient(180deg, rgba(11,12,14,.92) 0%, rgba(11,12,14,.72) 62%, rgba(11,12,14,0) 100%);
+  pointer-events: none;
 }
 
-/* Список/поиск не должны оставлять чёрную дыру над картой. */
-body.ice-view-map #iceListSec,
-body.ice-view-map #iceSearchSec {
-  display: none !important;
+/* Контролы кликабельны, остальное — стекло для пинов под ним. */
+body.ice-view-map .ice-sec--hero .ice-search,
+body.ice-view-map .ice-sec--hero #iceCatalogTools {
+  pointer-events: auto;
+}
+
+/* Над картой плавают только поиск (с городом внутри) и окно времени. */
+body.ice-view-map .ice-sec--hero .ice-intent-row,
+body.ice-view-map .ice-sec--hero #iceServiceChips,
+body.ice-view-map .ice-sec--hero #icePlaceTabs {
+  display: none;
 }
 
 body.ice-view-map .ice-map-wrap {
@@ -920,40 +1154,31 @@ body.ice-view-map .ice-map-wrap {
   display: flex;
   flex-direction: column;
   position: relative;
-  /* Место под пилюлю «Список» над таб-баром, чтобы она не ела карточку. */
-  padding: 0 0 58px;
+  /* Карта и шторка теперь fixed — в потоке остаётся только пустое состояние. */
+  padding: 0;
 }
 
 body.ice-view-map .ice-map-stage {
-  flex: 1 1 auto;
-  height: auto;
-  min-height: 200px;
+  position: fixed;
+  inset: 0;
+  bottom: var(--client-shell-tab-inset, 80px);
 }
 
-body.ice-view-map .ice-map-sheet {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  flex: 0 0 auto;
-  margin: 8px 12px 0;
-  z-index: 2;
-  padding-bottom: 0;
-  pointer-events: auto;
+/* Список/поиск не должны оставлять чёрную дыру над картой. */
+body.ice-view-map #iceListSec,
+body.ice-view-map #iceSearchSec {
+  display: none !important;
 }
 
-body.ice-view-map .ice-map-sheet:empty {
-  display: none;
-  margin: 0;
-}
-
+/* Заметка «N катков без координат» не конкурирует с шторкой: она в DOM,
+   но на карте не показывается (данные и так есть в сводке списка). */
 body.ice-view-map .ice-map-offmap {
-  flex: 0 0 auto;
-  margin: 6px 16px 0;
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
+  display: none;
+}
+
+/* Переключатель «Список/Карта» в режиме карты скрыт: его роль у шторки. */
+body.ice-view-map .ice-viewswitch {
+  display: none;
 }
 
 .ice-map-canvas {
@@ -961,31 +1186,180 @@ body.ice-view-map .ice-map-offmap {
   inset: 0;
 }
 
+/* Тёмная подложка: инвертируем только тайлы Яндекса, не весь контейнер. */
+html.client-mini-dark [class*="ground-pane"] {
+  filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9);
+}
+
+/* Копирайт Яндекса — обязательный элемент карты; низ синхронизирует шторку (JS). */
+.ice-map-attrib {
+  position: fixed;
+  left: 12px;
+  /* От низа окна, как шторка: над таб-баром + высота шторки (JS переставляет на peek/half). */
+  bottom: calc(var(--client-shell-tab-inset, 80px) + 104px);
+  z-index: 14;
+  font-size: var(--app-text-kicker);
+  color: var(--glide-hint);
+  transition: bottom 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ice-map-attrib a {
+  color: var(--glide-hint);
+  text-decoration: underline;
+}
+
 .ice-near {
   position: absolute;
-  right: 11px;
-  top: 11px;
-  z-index: 2;
-  background: var(--app-float-bg);
+  right: 12px;
+  bottom: 108px;
+  z-index: 15;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--glide-card);
   border: 1px solid var(--glide-line);
-  border-radius: var(--app-radius-sm);
-  padding: 8px 11px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.9);
+  cursor: pointer;
+  color: var(--tg-theme-text-color, var(--glide-text));
+  transition: bottom 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+}
+
+.ice-near svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Выбранная карточка в рельсе связана с пином брендовой рамкой. */
+.ice-map-rail .ice-acard.is-sel {
+  border-color: var(--app-cta-fill);
+  background: linear-gradient(180deg, var(--app-surface-card-top), var(--app-surface-card-bot));
+}
+
+/*
+ * ШТОРКА КАРТЫ (TASK-147). Overlay поверх карты, позиции peek/half (высоту
+ * ставит JS); тяга вверх или кнопка «Списком» ведут в списочный вид вкладки.
+ * fixed, а не absolute: у ближайшего позиционированного предка (.ice-map-wrap)
+ * высота гибкая, и bottom от него даёт двойной отступ от таб-бара.
+ */
+.ice-map-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--client-shell-tab-inset, 80px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  height: 222px;
+  background: var(--glide-paper);
+  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+  box-shadow: 0 -12px 40px -8px rgba(0, 0, 0, 0.85);
+  border-top: 1px solid var(--glide-line);
+  transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.ice-map-sheet[hidden] {
+  display: none;
+}
+
+.ice-map-sheet--drag {
+  transition: none;
+}
+
+.ice-map-sheet__grab {
+  flex: 0 0 auto;
+  padding: 10px 16px 6px;
+  cursor: grab;
+}
+
+.ice-map-sheet__handle {
+  width: 38px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--glide-line-strong);
+  margin: 0 auto 10px;
+}
+
+.ice-map-sheet__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ice-map-sheet__titles {
+  min-width: 0;
+}
+
+.ice-map-sheet__title {
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.ice-map-sheet__title b {
+  color: var(--glide-ink-teal);
+}
+
+.ice-map-sheet__sub {
+  margin-top: 2px;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ice-map-sheet__toggle {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--glide-ink-teal);
+  font: inherit;
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+  padding: 4px 0;
   cursor: pointer;
-  color: inherit;
+  white-space: nowrap;
 }
 
-.ice-map-sheet {
-  margin: -26px 12px 0;
-  position: relative;
-  z-index: 2;
-  padding-bottom: 8px;
-}
-
-.ice-map-sheet:empty {
+.ice-map-sheet__body {
+  flex: 1;
   min-height: 0;
+  position: relative;
+  touch-action: pan-x;
+}
+
+/* peek: сводка одна, карусель не отвечает на касания. */
+.ice-map-sheet[data-snap="peek"] .ice-map-sheet__body {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ice-map-sheet[data-snap="peek"] .ice-map-sheet__sub {
+  white-space: normal;
+}
+
+/* Тап по кластеру: места кластера лентой, листаются пальцем, карточка цепляется к краю. */
+.ice-map-rail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 16px 16px;
+}
+
+.ice-map-rail::-webkit-scrollbar {
+  height: 0;
+}
+
+.ice-map-rail > .ice-acard {
+  flex: 0 0 calc(100% - 44px);
+  scroll-snap-align: center;
 }
 
 .ice-acard--sheet {
@@ -1006,65 +1380,248 @@ body.ice-view-map .ice-map-offmap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  /* Точка якоря — кончик хвоста: пилюля висит над местом. */
   transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
 }
 
-.ice-ypin__dot {
-  width: 15px;
-  height: 15px;
-  border-radius: var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-pill) var(--app-radius-xs);
-  transform: rotate(45deg);
-  background: var(--glide-brand);
-  border: 2px solid var(--tg-theme-bg-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  display: block;
-}
-
-.ice-ypin--a .ice-ypin__dot {
-  background: var(--app-cta-fill);
-}
-
-.ice-ypin--c .ice-ypin__dot {
-  background: var(--glide-hint);
-  opacity: 0.55;
-  width: 11px;
-  height: 11px;
-}
-
-.ice-ypin--b .ice-ypin__dot {
-  background: var(--glide-hint);
-}
-
-.ice-ypin__label {
-  font-size: var(--app-text-kicker);
+.ice-ypin__body {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-card);
+  border: 1.5px solid var(--glide-line-strong);
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-bold);
-  background: var(--app-float-bg);
-  border: 1px solid var(--glide-line);
-  padding: 1px 5px;
-  border-radius: var(--app-radius-xs);
-  white-space: nowrap;
   color: var(--tg-theme-text-color, var(--glide-text));
+  white-space: nowrap;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.7);
+}
+
+.ice-ypin__tail {
+  width: 9px;
+  height: 9px;
+  margin-top: -5px;
+  transform: rotate(45deg);
+  background: var(--glide-card);
+  border-right: 1.5px solid var(--glide-line-strong);
+  border-bottom: 1.5px solid var(--glide-line-strong);
+}
+
+/* Цветная точка-маркер внутри пилюли: цвет = тип места (--map-venue, см. «Тип места» ниже). */
+.ice-ypin__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--map-venue, var(--glide-brand));
+  flex: 0 0 auto;
+}
+
+/* Время в пине не пляшет по ширине от строки к строке. */
+.ice-ypin__label {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
 .ice-ypin__label:empty {
   display: none;
 }
 
-.ice-ycluster {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--app-radius-pill);
-  background: var(--glide-brand);
+/* Короткое имя показывает только выбранный пин: «18:15 · Замок». */
+.ice-ypin__name {
+  display: none;
+  color: inherit;
+  opacity: 0.85;
+  font-weight: var(--app-weight-semibold);
+}
+
+.ice-ypin--sel {
+  z-index: 5;
+  transform: translate(-50%, -100%) scale(1.12);
+}
+
+.ice-ypin--sel .ice-ypin__body {
+  background: var(--app-cta-fill);
   color: var(--app-cta-text);
+  border-color: var(--app-cta-fill);
+  padding: 0 13px;
+}
+
+.ice-ypin--sel .ice-ypin__tail {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+}
+
+.ice-ypin--sel .ice-ypin__dot {
+  background: var(--app-cta-text);
+}
+
+.ice-ypin--sel .ice-ypin__name {
+  display: inline;
+}
+
+/*
+ * Полая точка (kind=dot): места без сеанса в окне видны, но не спорят
+ * с ответом. Центрируется на точке, а не висит хвостом над ней.
+ */
+.ice-ypin--dot {
+  transform: translate(-50%, -50%);
+}
+
+.ice-ypin--dot .ice-ypin__body,
+.ice-ypin--dot .ice-ypin__tail {
+  display: none;
+}
+
+.ice-ypin--dot::after {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--glide-card);
+  /* Обод серый, как .pin-hollow макета 02: полая точка = «приглушено / без сеанса», цвета типа у неё нет. */
+  border: 1.5px solid var(--glide-line-strong);
+  box-sizing: border-box;
+}
+
+.ice-ypin--dot.ice-ypin--sel {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.ice-ypin--dot.ice-ypin--sel::after {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+}
+
+/*
+ * TASK-147 (хвост к макету 02). Тип места — цвет точки пина и точки легенды.
+ * Одна переменная --map-venue на оба; значения — только токены theme.css:
+ * лёд и улица (уличный каток — тоже лёд) — тил, зал и хореография — тёплый,
+ * бассейн — синий, магазин — фиолетовый, другое — графит. Цвет типа несут пилюли
+ * пинов и легенда; полые точки (без сеанса) остаются серыми.
+ */
+.ice-ypin--ice,
+.ice-map-legend__item--ice {
+  --map-venue: var(--app-venue-ice);
+}
+
+.ice-ypin--outdoor,
+.ice-map-legend__item--outdoor {
+  --map-venue: var(--app-venue-ice);
+}
+
+.ice-ypin--gym,
+.ice-ypin--choreo,
+.ice-map-legend__item--gym,
+.ice-map-legend__item--choreo {
+  --map-venue: var(--app-venue-gym);
+}
+
+.ice-ypin--pool,
+.ice-map-legend__item--pool {
+  --map-venue: var(--app-venue-pool);
+}
+
+.ice-ypin--shop,
+.ice-map-legend__item--shop {
+  --map-venue: var(--app-venue-shop);
+}
+
+.ice-ypin--other,
+.ice-map-legend__item--other {
+  --map-venue: var(--app-venue-service);
+}
+
+/* Выбранный пин: у льда точка на заливке — цвет текста CTA (как раньше); у улицы, как и до
+   хвоста 02, — цвет льда; у остальных типов — свой цвет. */
+.ice-ypin--sel:not(.ice-ypin--ice) .ice-ypin__dot {
+  background: var(--map-venue);
+}
+
+/*
+ * Легенда типов (TASK-147). Только режим карты и только когда JS показал блок
+ * (≥2 типов в выдаче). Лежит в плавающем hero → pointer-events: none, карта под
+ * ней остаётся живой. Фон и текст — токены карточки, поэтому в тёмной теме
+ * легенда читается без отдельных правил.
+ */
+.ice-map-legend {
+  display: none;
+}
+
+body.ice-view-map .ice-map-legend:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-3);
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--app-space-2);
+  padding: var(--app-space-1) var(--app-space-3);
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-card);
+  border: 1px solid var(--glide-line);
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  /* Своё none, не только наследование с hero: карта под легендой остаётся живой. */
+  pointer-events: none;
+}
+
+.ice-map-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.3;
+  color: var(--glide-text);
+  white-space: nowrap;
+}
+
+.ice-map-legend__dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--map-venue, var(--glide-brand));
+  flex: 0 0 auto;
+}
+
+/* TASK-146: сеанс вне выбранного окна — пин бледный, время на нём не живёт (kind=dot). */
+.ice-ypin--off {
+  opacity: 0.6;
+}
+
+.ice-ycluster {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--glide-brand);
+  color: var(--glide-on-fill);
+  border: 1.5px solid var(--glide-brand);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: var(--app-text-caption);
   font-weight: var(--app-weight-bold);
-  font-size: var(--app-text-body);
-  border: 3px solid var(--tg-theme-bg-color);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+
+.ice-ycluster--quiet {
+  background: var(--glide-hint);
+  border-color: var(--glide-line-strong);
+  color: var(--glide-on-fill);
+}
+
+.ice-ycluster--sel {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  border-color: var(--app-cta-fill);
 }
 
 /*
@@ -1086,3 +1643,150 @@ body.ice-view-map .ice-map-offmap {
   font-size: var(--app-text-body);
   line-height: 1;
 }
+
+/*
+ * TASK-146. Рейка типа места (DEC-006). Своя семантика — тип, а не статус записи,
+ * поэтому свой класс, а не hub-booking-row/slot-card. Лёд — тил продукта, зал — тёплый,
+ * магазин — фиолетовый: три типа различимы без подписи.
+ */
+.ice-board-wrap { position: relative; }
+.ice-board::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  z-index: 2;
+  background: transparent;
+}
+.ice-board--type-ice::before,
+.ice-board--type-outdoor::before { background: var(--app-venue-ice); }
+.ice-board--type-gym::before,
+.ice-board--type-choreo::before { background: var(--app-venue-gym); }
+.ice-board--type-shop::before { background: var(--app-venue-shop); }
+.ice-board--type-pool::before { background: var(--app-venue-pool); }
+
+/* «Позвать» на кадре карточки с ближайшим сеансом. */
+.ice-board__invite {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  padding: 7px 12px;
+  background: var(--glide-card);
+  color: var(--glide-text);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.ice-board__invite::before { content: "⛸ "; }
+
+/*
+ * TASK-146: окно времени сортирует, а не фильтрует. Карточки вне окна — «афиша
+ * в архиве»: кадр ниже (цвет не трогаем — серые фото выглядели мёртвыми, а место
+ * живое, просто не в это окно), время сжато до строки, рейка типа пунктиром,
+ * а над временем прямо написано «Завтра нет · ближайший». Различие читается
+ * боковым зрением, без чтения подписей.
+ */
+.ice-board--off .ice-board__photo {
+  aspect-ratio: 5 / 2;
+}
+.ice-board--off::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--glide-hint) 0 6px,
+    transparent 6px 11px
+  ) !important;
+  opacity: 0.7;
+}
+.ice-board--off .ice-board__scrim { padding-top: var(--app-space-4); }
+.ice-board--off .ice-board__time {
+  display: inline;
+  font-size: var(--app-text-title);
+  letter-spacing: -0.01em;
+  color: var(--app-on-media-dim);
+}
+.ice-board--off .ice-board__day {
+  display: inline;
+  margin: 0 6px 0 0;
+}
+.ice-board--off .ice-board__depth { color: var(--glide-hint); }
+.ice-board__off {
+  display: table;
+  margin-bottom: 6px;
+  padding: 3px 9px;
+  border: 1px dashed var(--app-on-media-dim);
+  border-radius: var(--app-radius-pill);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-semibold);
+  letter-spacing: 0.04em;
+  color: var(--app-on-media);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Граница окна: липкая плашка — пока листаешь приглушённые карточки, она сверху. */
+.ice-window-break {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.ice-window-break::before,
+.ice-window-break::after {
+  content: "";
+  flex: 1 1 auto;
+  border-top: 1px dashed var(--glide-line);
+}
+.ice-window-break__pill {
+  flex: 0 1 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-float-bg);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  text-align: center;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.ice-window-break__pill b {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-semibold);
+}
+
+/* «Ближе» — сортировка ленты. Выключена выглядит как текст, включена — как выбранный чип. */
+.ice-search input { min-width: 0; }
+.ice-nearest {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+.ice-nearest:disabled { opacity: 0.6; }
+.ice-nearest[aria-pressed="true"] {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
+}
+
+/* TASK-146: парсер давно не читал сайт катка — подпись предупреждает, а не зовёт «ещё N сеансов». */
+.ice-board__depth--stale { color: var(--app-warning); }

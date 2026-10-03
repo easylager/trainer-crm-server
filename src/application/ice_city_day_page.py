@@ -17,11 +17,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.application.ice_city_day import (
+    cacheable_day_label,
     city_slug,
     plural_ru,
     price_range_line,
     summary_line,
 )
+from src.application.place_links import place_path
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
 
@@ -50,12 +52,18 @@ def _slot_html(slot: Mapping[str, Any]) -> str:
     return '<li class="slot">' + "".join(lines) + "</li>"
 
 
-def _arena_html(arena: Mapping[str, Any]) -> str:
+def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
     where = _arena_where(arena)
     slots = "".join(_slot_html(s) for s in arena.get("sessions") or [])
+    name = _esc(arena.get("name"))
+    slug = str(arena.get("slug") or "").strip()
+    if slug and city_name:
+        # TASK-146: у каждого катка своя публичная страница — расписание на неделю,
+        # цены, как добраться. Ссылка отсюда — и путь человеку, и связность для поиска.
+        name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
     parts = [
         '<article class="arena">',
-        f'<h2 class="arena__name">{_esc(arena.get("name"))}</h2>',
+        f'<h2 class="arena__name">{name}</h2>',
     ]
     if where:
         parts.append(f'<p class="arena__where">{_esc(where)}</p>')
@@ -93,10 +101,13 @@ def render_ice_city_day_page(
     day_label = str(day.get("day_label") or "сегодня")
     arenas = list(day.get("arenas") or [])
     description = summary_line(day, city_name=city_name)
-    title = f"Лёд в городе {city_name} — расписание на {day_label}"
+    # og и <title> кэширует мессенджер. Живой lede ниже по-прежнему говорит «сегодня».
+    og_label = cacheable_day_label(day) or day_label
+    og_title = f"Лёд в городе {city_name} — расписание на {og_label}"
+    og_description = summary_line(day, city_name=city_name, absolute=True)
 
     if arenas:
-        body = "".join(_arena_html(a) for a in arenas)
+        body = "".join(_arena_html(a, city_name=city_name) for a in arenas)
     else:
         body = _empty_html(city_name, day_label)
 
@@ -112,8 +123,9 @@ def render_ice_city_day_page(
         footer = "Расписание обновляется по данным катков."
 
     html = template
-    html = html.replace("__TITLE__", _esc(title))
     html = html.replace("__DESCRIPTION__", _esc(description))
+    html = html.replace("__OG_TITLE__", _esc(og_title))
+    html = html.replace("__OG_DESCRIPTION__", _esc(og_description))
     html = html.replace("__CANONICAL__", _esc(canonical_url))
     html = html.replace("__OG_IMAGE__", _esc(og_image_url))
     html = html.replace("__DAY_LABEL_UPPER__", _esc(day_label.upper()))

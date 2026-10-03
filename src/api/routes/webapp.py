@@ -220,6 +220,7 @@ from src.application.arena_profile import (
     InvalidArenaProfileStatusError,
     apply_admin_arena_profile_patch,
     ensure_arena_profile,
+    touch_arena_profile,
 )
 from src.application.arena_public_use_cases import get_hub_ice_teaser, parse_near
 from src.api.middleware.http_limits import client_ip_from_request
@@ -389,7 +390,13 @@ from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
 )
+from src.application.catalog_consumer_events import (
+    KIND_MINIAPP_CATALOG_ENTRY,
+    record_catalog_consumer_event,
+    telegram_actor_hash,
+)
 from src.application.client_delight_metrics import record_client_share
+from src.application.place_links import is_valid_start_param
 from src.application.client_first_success import build_first_booking_success
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
@@ -2858,8 +2865,11 @@ async def get_client_hub_bootstrap(
                                 else (str(lca) if lca is not None else None)
                             ),
                         }
+            city_raw = (row or {}).get("city_id")
             return {
                 "selected_trainer_id": int(tid) if tid is not None else None,
+                # TASK-146: карусель «Каталог» на Главной показывает места города клиента.
+                "city_id": int(city_raw) if city_raw is not None else None,
                 "primary_trainer_id": pid,
                 "primary_trainer_name": (
                     (p_hint or {}).get("trainer_display_name") if pid else None
@@ -3068,6 +3078,49 @@ async def get_client_share_trainer(
         "trainer_city": city_name,
         "share_context": raw_ctx or "catalog",
     }
+
+
+_MINIAPP_CATALOG_SURFACES = frozenset({"miniapp_ice", "miniapp_arena", "miniapp_shell"})
+
+
+class CatalogPresenceBody(BaseModel):
+    surface: str = Field(..., max_length=40)
+    start_param: str | None = Field(None, max_length=64)
+    city_id: int | None = None
+    arena_id: int | None = None
+
+
+@router.post("/client/catalog/presence")
+async def post_client_catalog_presence(
+    body: CatalogPresenceBody,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """
+    Успешный вход в мини-апп каталога (вкладка Поиск, карточка места, startapp после шаринга).
+    Один раз на surface + день на пользователя (дедуп на сервере).
+    """
+    response.headers["Cache-Control"] = "no-store"
+    surface = (body.surface or "").strip().lower()
+    if surface not in _MINIAPP_CATALOG_SURFACES:
+        raise HTTPException(status_code=400, detail="Unknown catalog surface")
+    sp = (body.start_param or "").strip() or None
+    if sp and not is_valid_start_param(sp):
+        sp = None
+    day = datetime.now(timezone.utc).date()
+    actor = telegram_actor_hash(client_catalog_telegram_key(principal), day)
+    inserted = await record_catalog_consumer_event(
+        session,
+        kind=KIND_MINIAPP_CATALOG_ENTRY,
+        surface=surface,
+        actor_hash=actor,
+        city_id=body.city_id,
+        arena_id=body.arena_id,
+        start_param=sp,
+        payload={"ingress": "miniapp", "platform": principal.platform.value},
+    )
+    return {"ok": True, "recorded": inserted}
 
 
 @router.get("/client/passes")
@@ -4835,6 +4888,22 @@ class AdminArenaCreateBody(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     sort_order: int | None = None
+    #: ice|gym|choreo|pool|outdoor|other|shop. Магазин заводит только админ (TASK-146).
+    venue_type: str | None = None
+
+
+def _admin_venue_type(raw: str | None) -> str | None:
+    """Строгая проверка на входе админки: опечатка не должна молча превратиться в «лёд»."""
+    if raw is None:
+        return None
+    from src.shared.venue_types import VENUE_TYPE_KEYS
+
+    key = raw.strip().lower()
+    if key not in VENUE_TYPE_KEYS:
+        raise HTTPException(
+            status_code=400, detail="venue_type must be one of: " + ", ".join(VENUE_TYPE_KEYS)
+        )
+    return key
 
 
 class AdminArenaPatchBody(BaseModel):
@@ -4845,6 +4914,7 @@ class AdminArenaPatchBody(BaseModel):
     longitude: float | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    venue_type: str | None = None
     phone: str | None = None
     website_url: str | None = None
     tickets_url: str | None = None
@@ -4875,7 +4945,7 @@ async def get_admin_arenas(
         SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.sort_order, a.is_active,
                p.slug, p.district, p.timezone, p.short_description, p.phone, p.website_url,
                p.tickets_url, p.social_urls, p.opening_hours, p.season_start_month, p.season_end_month,
-               p.amenities, p.status
+               p.amenities, p.status, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         WHERE a.city_id = :cid
@@ -4913,11 +4983,14 @@ async def get_admin_arenas(
             "season_end_month": row[17],
             "amenities": row[18] or {},
             "status": row[19] or "published",
+            "venue_type": row[20] or "ice",
         }
         for row in rows
     ]
     await attach_arena_media_payloads(session, items)
-    return {"items": items}
+    from src.shared.venue_types import venue_type_options
+
+    return {"items": items, "venue_types": venue_type_options(include_shop=True)}
 
 
 @router.post("/admin/arenas")
@@ -4937,15 +5010,18 @@ async def post_admin_arena(
     if not r_chk.fetchone():
         raise HTTPException(status_code=400, detail="City not found")
     sort_order = body.sort_order if body.sort_order is not None else 0
+    venue_type = _admin_venue_type(body.venue_type) or "ice"
     r = await session.execute(
         text(
             """
-            INSERT INTO arenas (city_id, name, address, latitude, longitude, sort_order, is_active)
-            VALUES (:city_id, :name, :address, :lat, :lon, :sort_order, true)
-            RETURNING id, name, address, latitude, longitude, sort_order, is_active
+            INSERT INTO arenas (city_id, name, address, latitude, longitude, sort_order, is_active,
+                                venue_type)
+            VALUES (:city_id, :name, :address, :lat, :lon, :sort_order, true, :venue_type)
+            RETURNING id, name, address, latitude, longitude, sort_order, is_active, venue_type
             """
         ),
         {
+            "venue_type": venue_type,
             "city_id": body.city_id,
             "name": name,
             "address": (body.address or "").strip() or None,
@@ -4965,6 +5041,7 @@ async def post_admin_arena(
         "longitude": row[4],
         "sort_order": row[5],
         "is_active": row[6],
+        "venue_type": row[7],
     }
 
 
@@ -5009,9 +5086,23 @@ async def patch_admin_arena(
     if body.is_active is not None:
         updates.append("is_active = :is_active")
         params["is_active"] = body.is_active
+    venue_type = _admin_venue_type(body.venue_type)
+    if venue_type is not None:
+        # Пишется до профиля: удобства ниже сверяются уже с новым типом.
+        updates.append("venue_type = :venue_type")
+        params["venue_type"] = venue_type
     profile_fields = body.model_dump(
         exclude_unset=True,
-        exclude={"city_id", "name", "address", "latitude", "longitude", "sort_order", "is_active"},
+        exclude={
+            "city_id",
+            "name",
+            "address",
+            "latitude",
+            "longitude",
+            "sort_order",
+            "is_active",
+            "venue_type",
+        },
     )
     if body.city_id is not None:
         profile_fields["city_id"] = body.city_id
@@ -5022,6 +5113,7 @@ async def patch_admin_arena(
         r = await session.execute(text(q), params)
         if r.rowcount == 0:
             raise HTTPException(status_code=404, detail="Arena not found")
+        await touch_arena_profile(session, arena_id)
     else:
         exists = await session.execute(text("SELECT 1 FROM arenas WHERE id = :id"), {"id": arena_id})
         if not exists.fetchone():
@@ -8545,6 +8637,8 @@ async def get_trainer_onboarding_quick_setup(
             JOIN cities c ON c.id = a.city_id AND c.is_active = true
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
             WHERE a.is_active = true
+              -- Магазин — не место работы тренера (TASK-146).
+              AND a.venue_type <> 'shop'
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         )

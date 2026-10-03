@@ -7,7 +7,7 @@ import os
 from collections import defaultdict
 from dataclasses import replace
 from datetime import date, datetime
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -142,31 +142,58 @@ def _format_calibration_line(cal: dict[str, Any] | None) -> str:
     )
 
 
-async def send_ice_health_to_admins(text_body: str, *, event: str) -> None:
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+def ice_alert_chat_ids(settings: Any) -> list[int]:
+    """Куда слать лёд-алерты: ICE_ALERT_CHAT_IDS (например, общий чат), иначе ADMIN_TELEGRAM_IDS."""
+    dedicated = list(getattr(settings, "ice_alert_chat_ids", None) or [])
+    ids = dedicated or list(getattr(settings, "admin_telegram_ids", None) or [])
+    return list(dict.fromkeys(int(i) for i in ids))
+
+
+async def send_ice_health_to_admins(
+    text_body: str,
+    *,
+    event: str,
+    settings: Any = None,
+    bot_factory: Callable[[str], Any] | None = None,
+) -> bool | None:
+    """Отправить текст в админ-бот.
+
+    True — ушло хотя бы в один чат; False — настроенная доставка не удалась;
+    None — без токена или получателей записали только в лог.
+    ``settings`` / ``bot_factory`` — для тестов.
+    """
+    if bot_factory is None and os.environ.get("PYTEST_CURRENT_TEST"):
         logger.debug("Skipping ice health %s under pytest", event)
-        return
-    from aiogram import Bot
-    from aiogram.client.default import DefaultBotProperties
-    from aiogram.enums import ParseMode
+        return False
+    if settings is None:
+        from src.shared.config import Settings
 
-    from src.shared.config import Settings
+        settings = Settings()
+    token = getattr(settings, "telegram_bot_token_admin", None)
+    chat_ids = ice_alert_chat_ids(settings)
+    if not token or not chat_ids:
+        logger.warning("Admin bot not configured, ice health %s (log only):\n%s", event, text_body)
+        return None
+    if bot_factory is None:
+        from aiogram import Bot
+        from aiogram.client.default import DefaultBotProperties
+        from aiogram.enums import ParseMode
 
-    settings = Settings()
-    token = settings.telegram_bot_token_admin
-    admin_ids = list(dict.fromkeys(settings.admin_telegram_ids or []))
-    if not token or not admin_ids:
-        logger.warning("Admin bot not configured, skipping ice health %s", event)
-        return
-    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        def bot_factory(bot_token: str) -> Any:
+            return Bot(token=bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+    bot = bot_factory(token)
+    delivered = False
     try:
-        for chat_id in admin_ids:
+        for chat_id in chat_ids:
             try:
                 await bot.send_message(chat_id=chat_id, text=text_body, disable_web_page_preview=True)
+                delivered = True
             except Exception:
                 logger.exception("failed ice health %s chat_id=%s", event, chat_id)
     finally:
         await bot.session.close()
+    return delivered
 
 
 async def tick_ice_health_alerts(session: AsyncSession, *, now: datetime) -> str | None:
@@ -250,6 +277,7 @@ __all__ = [
     "DIGEST_WEEKDAY_SUNDAY",
     "format_silent_sources_alert",
     "format_weekly_digest",
+    "ice_alert_chat_ids",
     "price_totals_grouped_by_currency",
     "send_ice_health_to_admins",
     "tick_ice_health_alerts",

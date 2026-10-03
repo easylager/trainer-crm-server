@@ -71,37 +71,52 @@ def _assert_local_database(url: str, *, apply: bool = True, allow_prod: bool = F
 async def _run_once() -> None:
     from sqlalchemy import text
 
-    from src.infrastructure.db import async_session_factory
+    from src.infrastructure.db.session import async_session_factory, engine
     from src.ingestion.jobs import SqlAlchemyParserJobStore
     from src.ingestion.parsers import default_registry
     from src.ingestion.publish import SqlAlchemyIceSessionPublisher
     from src.ingestion.scheduler import IceIngestScheduler
+    from src.ingestion.scheduler_lock import run_with_ice_ingest_lock
     from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
     from src.ingestion.types import RUN_STATUS_OK
 
-    now = datetime.now(timezone.utc)
-    async with async_session_factory() as session:
-        keys = sorted(MINSK_MK_PARSER_KEYS)
-        placeholders = ", ".join(f":key_{i}" for i in range(len(keys)))
-        params = {"now": now, **{f"key_{i}": key for i, key in enumerate(keys)}}
-        await session.execute(
-            text(
-                f"""
-                UPDATE ice_parser_jobs
-                SET next_run_at = :now
-                WHERE is_enabled = true AND parser_key IN ({placeholders})
-                """
-            ),
-            params,
-        )
-        scheduler = IceIngestScheduler(
-            store=SqlAlchemyParserJobStore(session),
-            recorder=SqlAlchemyScrapeRunRecorder(session),
-            registry=default_registry(),
-            publisher=SqlAlchemyIceSessionPublisher(session),
-        )
-        outcomes = await scheduler.run_due(now)
-        await session.commit()
+    async def run_jobs():
+        now = datetime.now(timezone.utc)
+        async with async_session_factory() as session:
+            keys = sorted(MINSK_MK_PARSER_KEYS)
+            placeholders = ", ".join(f":key_{i}" for i in range(len(keys)))
+            params = {"now": now, **{f"key_{i}": key for i, key in enumerate(keys)}}
+            await session.execute(
+                text(
+                    f"""
+                    UPDATE ice_parser_jobs
+                    SET next_run_at = :now
+                    WHERE is_enabled = true AND parser_key IN ({placeholders})
+                    """
+                ),
+                params,
+            )
+            # Persist the one-shot request before network work; the lock prevents the
+            # routine scheduler from claiming these jobs during the run.
+            await session.commit()
+            scheduler = IceIngestScheduler(
+                store=SqlAlchemyParserJobStore(session),
+                recorder=SqlAlchemyScrapeRunRecorder(session),
+                registry=default_registry(),
+                publisher=SqlAlchemyIceSessionPublisher(session),
+                # Use the routine scheduler's bounded batch and per-job commits.
+                checkpoint=session.commit,
+                # Юность, СДЮШОР и др. отвечают 403 небелорусским IP: им — через BY-прокси, если задан.
+                by_egress_proxy_url=Settings().by_egress_proxy_url,
+            )
+            outcomes = await scheduler.run_due(now)
+            await session.commit()
+            return outcomes
+
+    acquired, outcomes = await run_with_ice_ingest_lock(engine, run_jobs)
+    if not acquired:
+        print("ice ingest scheduler is already running; one-shot run skipped")
+        return
 
     if not outcomes:
         print("no due ice_parser_jobs")

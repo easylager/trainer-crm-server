@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.trainer_repository import TrainerRepository
-from src.shared.venue_types import normalize_venue_type
+from src.shared.venue_types import normalize_trainer_venue_type
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,7 @@ async def create_trainer_arena(
             "address": addr,
             "lat": lat,
             "lon": lon,
-            "venue_type": normalize_venue_type(venue_type),
+            "venue_type": normalize_trainer_venue_type(venue_type),
             "trainer_id": trainer_id,
         },
     )

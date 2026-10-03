@@ -85,6 +85,76 @@ describe('фильтр по типу площадки', () => {
   });
 });
 
+describe('catalog header (A′)', () => {
+  it('catalogScope: shop filter is its own segment', () => {
+    const { catalogScope } = loadModel();
+    assert.equal(catalogScope('skate', ['shop']), 'shop');
+    assert.equal(catalogScope('skate', []), 'places');
+    assert.equal(catalogScope('coach', []), 'coach');
+  });
+
+  it('placeTabsView: choreo forces menu, not underline row', () => {
+    const { placeTabsView, placeMenuNeeded } = loadModel();
+    const facets = [
+      { key: 'ice', chip: 'Лёд', count: 8 },
+      { key: 'gym', chip: 'Зал', count: 1 },
+      { key: 'choreo', chip: 'Хореография', count: 1 },
+    ];
+    assert.equal(placeMenuNeeded(facets), true);
+    assert.deepEqual(placeTabsView(facets, []), []);
+    const tabs = placeTabsView(
+      [
+        { key: 'ice', chip: 'Лёд', count: 8 },
+        { key: 'gym', chip: 'Зал', count: 1 },
+      ],
+      []
+    );
+    assert.deepEqual(
+      tabs.map((t) => t.label),
+      ['Все', 'Лёд', 'Зал']
+    );
+  });
+
+  it('whenPickerVisible: gym-only hides window; ice facet required for mixed', () => {
+    const { whenPickerVisible } = loadModel();
+    const facets = [
+      { key: 'ice', chip: 'Лёд', count: 3 },
+      { key: 'gym', chip: 'Зал', count: 1 },
+    ];
+    assert.equal(whenPickerVisible('skate', [], facets), true);
+    assert.equal(whenPickerVisible('skate', ['gym'], facets), false);
+    assert.equal(whenPickerVisible('skate', ['shop'], facets), false);
+    assert.equal(whenPickerVisible('skate', [], [{ key: 'gym', chip: 'Зал', count: 2 }]), false);
+  });
+
+  it('applyCatalogMode maps segments to intent and venueTypes', () => {
+    const { applyCatalogMode } = loadModel();
+    assert.deepEqual(applyCatalogMode('shop'), { intent: 'skate', venueTypes: ['shop'] });
+    assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
+    assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
+  });
+});
+
+describe('«Ближе» без геолокации', () => {
+  it('при выбранном городе не зовёт менять город', () => {
+    const { formatNearGeoBlockedMessage } = loadModel();
+    const msg = formatNearGeoBlockedMessage({
+      cityId: 1,
+      cityName: 'Минск',
+      reason: 'denied',
+    });
+    assert.match(msg, /Минск/);
+    assert.match(msg, /менять его не нужно/);
+    assert.ok(!/Выберите город/.test(msg));
+  });
+
+  it('без города предлагает выбрать город', () => {
+    const { formatNearGeoBlockedMessage } = loadModel();
+    const msg = formatNearGeoBlockedMessage({ reason: 'unsupported' });
+    assert.match(msg, /Выберите город/);
+  });
+});
+
 describe('buildListUrl (epic 2026-09-05 skate filter)', () => {
   it('«Где заниматься» asks the API for intent=skate; does not invent tiers', () => {
     const { buildListUrl } = loadModel();
@@ -322,7 +392,7 @@ describe('groupSearchResults (AC-004)', () => {
       grouped.map((g) => g.type),
       ['arena', 'trainer', 'city']
     );
-    assert.equal(grouped[0].label, 'Катки');
+    assert.equal(grouped[0].label, 'Места');
     assert.equal(grouped[1].label, 'Тренеры');
     assert.equal(grouped[2].label, 'Города');
     assert.equal(grouped[1].items[0].last_name, 'Иванова');
@@ -360,6 +430,14 @@ describe('rankServiceChips (2026-09-07 Тренеры service filter)', () => {
       { id: 2, name: 'A', sort_order: 1, trainer_count: 1 },
     ]);
     assert.deepEqual(ranked.map((s) => s.id), [2, 9]);
+  });
+
+  it('buildTrainersUrl sends several services as service_ids (any-of)', () => {
+    const { buildTrainersUrl } = loadModel();
+    const url = buildTrainersUrl({ cityId: 2, serviceIds: [3, 5] });
+    assert.match(url, /service_ids=3,5/);
+    assert.doesNotMatch(url, /[?&]service_id=/);
+    assert.doesNotMatch(buildTrainersUrl({ cityId: 2, serviceIds: [] }), /service_ids?=/);
   });
 
   it('buildTrainersUrl carries service_id only when set', () => {
@@ -405,8 +483,16 @@ describe('rankPopularCities (2026-09-07 city picker redesign)', () => {
 describe('hrefs', () => {
   it('arena rows open the TASK-052 card by slug or id', () => {
     const { arenaHref } = loadModel();
-    assert.equal(arenaHref({ slug: 'minsk-chizhovka', id: 12 }), 'arena?ref=minsk-chizhovka');
+    // TASK-146: id важнее slug — slug уникален только в городе, а поиск идёт по стране.
+    assert.equal(arenaHref({ slug: 'minsk-chizhovka', id: 12 }), 'arena?ref=12');
+    assert.equal(arenaHref({ slug: 'minsk-chizhovka' }), 'arena?ref=minsk-chizhovka');
     assert.equal(arenaHref({ id: 12 }), 'arena?ref=12');
+    // Карточка открывается на дне и сеансе с плитки ленты (выбрал «Завтра» — попал на завтра).
+    assert.equal(
+      arenaHref({ id: 12, live: { kind: 'session', local_date: '2026-10-03', session_id: 77 } }),
+      'arena?ref=12&day=2026-10-03&s=77',
+    );
+    assert.equal(arenaHref({ id: 12, live: { kind: 'place', text: 'Заточка' } }), 'arena?ref=12');
   });
 
   it('trainer search hits open the catalog trainer card, not the browse funnel', () => {
@@ -757,7 +843,8 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     const later = Object.assign({}, sessionItem, {
       live: Object.assign({}, sessionItem.live, { local_date: '2026-09-10' }),
     });
-    assert.equal(boardCardView(later, now).day, '10.09');
+    // 10.09.2026 — четверг: под чипом «Выходные» голая дата не говорит, суббота ли это.
+    assert.equal(boardCardView(later, now).day, 'Чт, 10.09');
   });
 
   it('«Сегодня» считается по Europe/Minsk, не по UTC-календарю', () => {
@@ -772,7 +859,7 @@ describe('boardCardView (TASK-090: карточка-табло)', () => {
     assert.equal(boardCardView(minskToday, afterUtcMidnight).day, 'Сегодня');
     assert.equal(
       sessionDayLabel({ local_date: '2026-09-06' }, afterUtcMidnight),
-      '06.09'
+      'Вс, 06.09'
     );
   });
 });
@@ -857,5 +944,181 @@ describe('formatSortCaption во время загрузки (TASK-095)', () => 
     const { formatSortCaption } = loadModel();
     const caption = formatSortCaption({ total: 5, items: [{ tier: 'A' }], intent: 'skate', loading: true });
     assert.match(caption, /^5 катков/);
+  });
+});
+
+describe('TASK-146: подпись и строка ленты для магазинов и залов', () => {
+  it('считает магазины магазинами, а не катками', () => {
+    const { formatSortCaption } = loadModel();
+    const shops = [{ venue_type: 'shop', tier: 'B' }];
+    assert.equal(formatSortCaption({ total: 1, items: shops, intent: 'skate' }), '1 магазин');
+    assert.equal(
+      formatSortCaption({ total: 0, items: [], intent: 'skate', venueTypes: ['shop'] }),
+      'Пока нет магазинов · смените город или чип'
+    );
+    const gyms = [{ venue_type: 'gym' }, { venue_type: 'choreo' }];
+    assert.equal(formatSortCaption({ total: 2, items: gyms, intent: 'skate' }), '2 зала');
+    const mixed = [{ venue_type: 'ice' }, { venue_type: 'gym' }, { venue_type: 'pool' }];
+    assert.equal(formatSortCaption({ total: 3, items: mixed, intent: 'skate' }), '3 места');
+  });
+
+  it('лёд по-прежнему — катки с расписанием', () => {
+    const { formatSortCaption } = loadModel();
+    assert.equal(
+      formatSortCaption({ total: 2, items: [{ venue_type: 'ice', tier: 'B' }, {}], intent: 'skate' }),
+      '2 катка · расписание уточняется'
+    );
+  });
+});
+
+describe('TASK-146: строка ленты места без сеансов', () => {
+  it('магазин показывает услуги и часы, а не «расписание уточняется»', () => {
+    const { formatLiveLine } = loadModel();
+    const line = formatLiveLine({ tier: 'B', live: { kind: 'place', text: 'Розница · Заточка · ежедневно 10:00–20:00' } });
+    assert.equal(line, 'Розница · Заточка · ежедневно 10:00–20:00');
+  });
+});
+
+describe('TASK-146 (Q-006): окно времени', () => {
+  it('auto подсвечивает окно, выбранное сервером; явный выбор — его', () => {
+    const { whenChipsView } = loadModel();
+    const auto = whenChipsView('auto', 'weekend');
+    assert.deepEqual(auto.filter((c) => c.active).map((c) => c.key), ['weekend']);
+    const manual = whenChipsView('tomorrow', 'weekend');
+    assert.deepEqual(manual.filter((c) => c.active).map((c) => c.key), ['tomorrow']);
+  });
+
+  it('чипы времени — только про лёд', () => {
+    const { whenChipsVisible } = loadModel();
+    assert.equal(whenChipsVisible('skate', []), true);
+    assert.equal(whenChipsVisible('skate', ['shop']), false);
+    assert.equal(whenChipsVisible('coach', []), false);
+  });
+
+  it('TASK-149: whenFromSearch — ровно ключи сервера (WHEN_KEYS в ice_time_windows.py)', () => {
+    const { whenFromSearch } = loadModel();
+    for (const key of ['auto', 'today_evening', 'today', 'tomorrow', 'weekend', 'any']) {
+      assert.equal(whenFromSearch('?when=' + key), key);
+    }
+  });
+
+  it('TASK-149: whenFromSearch — мусор, пустое и неизвестное дают null, не ошибку', () => {
+    const { whenFromSearch } = loadModel();
+    assert.equal(whenFromSearch(''), null);
+    assert.equal(whenFromSearch(null), null);
+    assert.equal(whenFromSearch(undefined), null);
+    assert.equal(whenFromSearch('?'), null);
+    assert.equal(whenFromSearch('?when='), null);
+    assert.equal(whenFromSearch('?when=%20%20'), null);
+    assert.equal(whenFromSearch('?when=junk'), null);
+    assert.equal(whenFromSearch('?when=tonight'), null);
+    assert.equal(whenFromSearch('?when=today_evening;drop'), null);
+    assert.equal(whenFromSearch('?when=%E0%A4%A'), null);
+    assert.equal(whenFromSearch('?intent=coach'), null);
+  });
+
+  it('TASK-149: whenFromSearch — регистр и пробелы нормализуются, как на сервере', () => {
+    const { whenFromSearch } = loadModel();
+    assert.equal(whenFromSearch('?when=TODAY_EVENING'), 'today_evening');
+    assert.equal(whenFromSearch('?when=Weekend'), 'weekend');
+    assert.equal(whenFromSearch('?when=%20tomorrow%20'), 'tomorrow');
+    assert.equal(whenFromSearch('when=any'), 'any');
+  });
+
+  it('TASK-149: whenFromSearch читает своё поле независимо от intent/venue/city_id', () => {
+    const { whenFromSearch, intentFromSearch, venueFromSearch, cityIdFromSearch } = loadModel();
+    const s = '?city_id=7&intent=skate&venue=ice&when=today_evening';
+    assert.equal(whenFromSearch(s), 'today_evening');
+    assert.equal(intentFromSearch(s), 'skate');
+    assert.equal(venueFromSearch(s), 'ice');
+    assert.equal(cityIdFromSearch(s), 7);
+    assert.equal(whenFromSearch('?city_id=7&intent=coach&venue=shop'), null);
+  });
+
+  it('TASK-149: применённое из ссылки окно подсвечивает свой чип; чипа «Сегодня» нет — не подсвечено ничего', () => {
+    const { whenChipsView, whenFromSearch } = loadModel();
+    const evening = whenChipsView(whenFromSearch('?when=today_evening'), 'tomorrow');
+    assert.deepEqual(evening.filter((c) => c.active).map((c) => c.key), ['today_evening']);
+    const today = whenChipsView(whenFromSearch('?when=today'), 'today');
+    assert.deepEqual(today.filter((c) => c.active).map((c) => c.key), []);
+  });
+
+  it('подпись честна, когда в окне пусто', () => {
+    const { formatSortCaption, buildListUrl } = loadModel();
+    const items = [{ venue_type: 'ice', tier: 'A' }, { venue_type: 'ice', tier: 'A' }];
+    assert.equal(
+      formatSortCaption({ total: 2, items, intent: 'skate', window: { label: 'Сегодня вечером', hits: 0 } }),
+      'Сегодня вечером сеансов нет · показываем ближайшие'
+    );
+    assert.equal(
+      formatSortCaption({ total: 2, items, intent: 'skate', window: { label: 'Выходные', hits: 1 } }),
+      '1 каток · выходные'
+    );
+    assert.match(buildListUrl({ cityId: 1, intent: 'skate', when: 'auto' }), /when=auto/);
+  });
+});
+
+describe('TASK-146: окно сортирует, а не фильтрует — две группы карточек', () => {
+  const win = { key: 'tomorrow', label: 'Завтра', hits: 1 };
+  const now = new Date('2026-10-02T08:00:00Z'); // пятница, Минск
+  const hit = { id: 1, name: 'Чижовка', venue_type: 'ice', distance_km: 9,
+    live: { kind: 'session', local_date: '2026-10-03', starts_at_local: '12:00', session_id: 11 } };
+  const off = { id: 2, name: 'ТЦ Замок', venue_type: 'ice', distance_km: 2,
+    live: { kind: 'session', outside_window: true, local_date: '2026-10-02', starts_at_local: '16:15', session_id: 22 } };
+  const unknown = { id: 3, name: 'Юность', venue_type: 'ice', distance_km: 1, live: { kind: 'unknown' } };
+
+  it('в окне — только сеанс без outside_window; места без сеанса — вне окна', () => {
+    const { splitByWindow } = loadModel();
+    const parts = splitByWindow([off, hit, unknown], win);
+    assert.deepEqual(parts.hits.map((i) => i.id), [1]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [2, 3]);
+    assert.equal(splitByWindow([off, unknown], null).rest.length, 0, 'без окна делить нечего');
+  });
+
+  it('карточка вне окна говорит «Завтра нет · ближайший», а не выдаёт «Сегодня» за ответ', () => {
+    const { boardCardView } = loadModel();
+    const v = boardCardView(off, now, { window: win });
+    assert.equal(v.offWindow, true);
+    assert.equal(v.offLabel, 'Завтра нет · ближайший');
+    assert.equal(v.day, 'Сегодня');
+    assert.equal(boardCardView(hit, now, { window: win }).offWindow, false);
+    assert.equal(boardCardView(off, now).offWindow, false, 'без окна приглушать нечего');
+  });
+
+  it('разделитель называет окно и число мест ниже', () => {
+    const { windowBreakView } = loadModel();
+    assert.deepEqual(windowBreakView({ key: 'weekend', label: 'Выходные' }, [off, unknown]), {
+      title: 'На выходных нет',
+      sub: '2 катка · их ближайшее время',
+    });
+    assert.equal(windowBreakView(win, []), null);
+  });
+
+  it('строка ленты и шторка карты помечают сеанс вне окна как ближайший', () => {
+    const { formatLiveLine } = loadModel();
+    assert.match(formatLiveLine(off, now), /^Ближайший: Сегодня 16:15/);
+    assert.match(formatLiveLine(hit, now), /^Завтра 12:00/);
+  });
+
+  it('«Рядом» сортирует по расстоянию внутри групп, а не смешивает их', () => {
+    const { orderForFeed } = loadModel();
+    const far = Object.assign({}, hit, { id: 4, distance_km: 20 });
+    const parts = orderForFeed([far, off, unknown, hit], win, true);
+    assert.deepEqual(parts.hits.map((i) => i.id), [1, 4]);
+    assert.deepEqual(parts.rest.map((i) => i.id), [3, 2]);
+    const asServer = orderForFeed([far, off, unknown, hit], win, false);
+    assert.deepEqual(asServer.hits.map((i) => i.id), [4, 1], 'без «Рядом» — порядок сервера');
+  });
+});
+
+describe('TASK-146: устаревшее расписание в ленте', () => {
+  it('schedule_stale на сеансе — подпись «могло измениться» вместо «ещё N сеансов»', () => {
+    const { boardCardView } = loadModel();
+    const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
+    const now = new Date('2026-10-02T10:00:00Z');
+    assert.equal(boardCardView(item, now, {}).stale, false);
+    const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
+    assert.equal(v.stale, true);
+    assert.equal(v.depth, 'Расписание могло измениться');
   });
 });

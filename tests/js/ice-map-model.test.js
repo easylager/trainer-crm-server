@@ -136,13 +136,20 @@ describe('clusters (AC-001)', () => {
   });
 });
 
-describe('pin chrome (A label, muted C)', () => {
-  it('labels A-pins with short name and next session time; C pins stay mute', () => {
+describe('pin chrome (TASK-147: пин = время)', () => {
+  it('A/B с сеансом в окне — пилюля с временем; C и outside_window — полая точка', () => {
     const { pinView } = loadModel();
     const a = pinView(rink());
     assert.equal(a.tone, 'a');
     assert.equal(a.muted, false);
-    assert.equal(a.label, 'Чижовка · 11:00');
+    assert.equal(a.kind, 'time');
+    assert.equal(a.time, '11:00');
+    assert.equal(a.shortName, 'Чижовка');
+    assert.equal(a.venue, 'ice');
+    assert.equal(a.selected, false);
+    const b = pinView(rink({ id: 3, tier: 'B', live: { kind: 'session', starts_at_local: '15:00' } }));
+    assert.equal(b.kind, 'time');
+    assert.equal(b.time, '15:00');
     const c = pinView(
       rink({
         id: 2,
@@ -153,7 +160,94 @@ describe('pin chrome (A label, muted C)', () => {
     );
     assert.equal(c.tone, 'c');
     assert.equal(c.muted, true);
+    assert.equal(c.kind, 'dot');
+    assert.equal(c.time, '');
     assert.equal(c.label, '');
+  });
+
+  it('TASK-146: сеанс вне выбранного окна — пин полый и без времени', () => {
+    const { pinView } = loadModel();
+    const base = rink();
+    const off = pinView(rink({ live: Object.assign({}, base.live, { outside_window: true }) }));
+    assert.equal(off.when, 'off');
+    assert.equal(off.muted, true);
+    assert.equal(off.kind, 'dot');
+    assert.equal(off.time, '');
+    assert.equal(pinView(base).when, 'in');
+  });
+
+  it('selected флаг пробрасывается', () => {
+    const { pinView } = loadModel();
+    const sel = pinView(rink(), { selected: true });
+    assert.equal(sel.selected, true);
+    const unsel = pinView(rink());
+    assert.equal(unsel.selected, false);
+  });
+});
+
+describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () => {
+  it('clusterSummary считает количество, минимальное время и ярлык', () => {
+    const { clusterSummary } = loadModel();
+    const items = [
+      rink({ id: 1, live: { kind: 'session', starts_at_local: '19:30' } }),
+      rink({ id: 2, live: { kind: 'session', starts_at_local: '18:15' } }),
+      rink({ id: 3, tier: 'C', live: { kind: 'unknown' } }),
+    ];
+    const s = clusterSummary(items);
+    assert.equal(s.count, 3);
+    assert.equal(s.hasHits, true);
+    assert.equal(s.minTime, '18:15');
+    assert.equal(s.label, 'с 18:15');
+  });
+
+  it('clusterSummary без сеансов — «нет сеансов»', () => {
+    const { clusterSummary } = loadModel();
+    const s = clusterSummary([
+      rink({ id: 1, tier: 'C', live: { kind: 'unknown' } }),
+      rink({ id: 2, tier: 'C', live: { kind: 'unknown' } }),
+    ]);
+    assert.equal(s.hasHits, false);
+    assert.equal(s.label, 'нет сеансов');
+  });
+
+  it('railOrder — сначала места с сеансом по времени, потом остальные', () => {
+    const { railOrder } = loadModel();
+    const items = [
+      rink({ id: 1, live: { kind: 'session', starts_at_local: '19:30' } }),
+      rink({ id: 2, tier: 'C', live: { kind: 'unknown' } }),
+      rink({ id: 3, live: { kind: 'session', starts_at_local: '18:15' } }),
+      rink({ id: 4, tier: 'C', live: { kind: 'unknown' } }),
+    ];
+    const ordered = railOrder(items);
+    assert.deepEqual(
+      ordered.map((it) => it.id),
+      [3, 1, 2, 4]
+    );
+  });
+
+  it('sheetSummary — «7 мест сегодня вечером · 11 сеансов · ещё 2 без сеансов»', () => {
+    const { sheetSummary } = loadModel();
+    const items = [];
+    for (let i = 0; i < 7; i++) {
+      items.push(rink({ id: i + 1, live: { kind: 'session', starts_at_local: '19:00' } }));
+    }
+    items.push(rink({ id: 100, venue_type: 'shop', live: { kind: 'unknown' } }));
+    items.push(rink({ id: 101, venue_type: 'shop', live: { kind: 'unknown' } }));
+    const s = sheetSummary(items, { key: 'evening', label: 'сегодня вечером' });
+    assert.match(s, /7 мест/);
+    assert.match(s, /сегодня вечером/);
+    assert.match(s, /7 сеансов/);
+    assert.match(s, /ещё 2 без сеансов/);
+  });
+
+  it('snapFor — ближайшее положение шторки', () => {
+    const { snapFor } = loadModel();
+    const snaps = { peek: 96, half: 222, full: 600 };
+    assert.equal(snapFor(90, snaps), 'peek');
+    assert.equal(snapFor(150, snaps), 'peek'); // 150 ближе к 96, чем к 222
+    assert.equal(snapFor(400, snaps), 'half'); // 400 ближе к 222, чем к 600
+    assert.equal(snapFor(160, snaps), 'half'); // 160 ближе к 222, чем к 96
+    assert.equal(snapFor(500, snaps), 'full'); // 500 ближе к 600, чем к 222
   });
 });
 
@@ -390,7 +484,8 @@ describe('pin sheet target (TASK-075 AC-002)', () => {
   it('opens our arena card, never a Yandex org card', () => {
     const { pinSheetTarget } = loadModel();
     const target = pinSheetTarget(rink({ slug: 'minsk-chizhovka', id: 12 }));
-    assert.equal(target.href, 'arena?ref=minsk-chizhovka');
+    // TASK-146: id важнее slug — slug уникален только внутри города.
+    assert.equal(target.href, 'arena?ref=12');
     assert.equal(target.opens, 'arena-card');
     assert.equal(target.yandexOrgCard, false);
     assert.equal(pinSheetTarget(rink({ id: 12, slug: null })).href, 'arena?ref=12');
@@ -445,5 +540,161 @@ describe('map start without key or arenas (TASK-075 AC-004 + EDGE)', () => {
     assert.equal(ready.kind, 'map');
     assert.equal(ready.showMap, true);
     assert.equal(ready.provider, 'yandex');
+  });
+});
+
+describe('clusterFocus (тап по кластеру)', () => {
+  it('разнесённые места: вписать с полями под ярлыки и не глубже 16', () => {
+    const { clusterFocus } = loadModel();
+    const f = clusterFocus([[53.90, 27.55], [53.92, 27.58]], { maxZoom: 19 });
+    assert.equal(f.mode, 'zoom');
+    assert.deepEqual(f.bounds, [[53.90, 27.55], [53.92, 27.58]]);
+    assert.equal(f.maxZoom, 16);
+    assert.ok(f.margin[0] >= 100, 'сверху поле под ярлык пина');
+  });
+
+  it('места в одном комплексе: не зумить, показать списком', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([[53.9, 27.55], [53.9002, 27.5501]]).mode, 'list');
+  });
+
+  it('уважает более строгий maxZoom карты', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([[53.9, 27.5], [53.95, 27.6]], { maxZoom: 14 }).maxZoom, 14);
+  });
+
+  it('пустой кластер — ничего не делать', () => {
+    const { clusterFocus } = loadModel();
+    assert.equal(clusterFocus([]).mode, 'none');
+  });
+});
+
+describe('тип места: цвет пина и легенда (TASK-147, хвост к макету 02)', () => {
+  const fs = require('node:fs');
+  const cssPath = path.resolve(__dirname, '../../static/webapp/ice-tab.css');
+  const themePath = path.resolve(__dirname, '../../static/webapp/theme.css');
+
+  function place(id, venue, extra) {
+    return rink(Object.assign({ id, venue_type: venue, latitude: 53.9 + id / 100, longitude: 27.5 }, extra || {}));
+  }
+
+  it('pinView.venue: неизвестный и пустой тип — лёд, как на сервере', () => {
+    const { pinView, venueKey } = loadModel();
+    assert.equal(pinView(place(1, 'shop')).venue, 'shop');
+    assert.equal(pinView(place(2, 'POOL')).venue, 'pool');
+    assert.equal(pinView(place(3, 'zoo')).venue, 'ice');
+    assert.equal(pinView(place(4, '')).venue, 'ice');
+    assert.equal(venueKey({}), 'ice');
+    assert.equal(venueKey(null), 'ice');
+  });
+
+  it('легенда: только типы из выдачи, фиксированный порядок', () => {
+    const { legendView } = loadModel();
+    const v = legendView([place(1, 'shop'), place(2, 'ice'), place(3, 'gym'), place(4, 'ice')]);
+    assert.equal(v.show, true);
+    assert.deepEqual(v.entries.map((e) => e.key), ['ice', 'gym', 'shop']);
+    assert.deepEqual(v.entries.map((e) => e.label), ['Лёд', 'Зал', 'Магазин']);
+  });
+
+  it('легенда: нет магазинов в выдаче — «Магазин» в легенде нет', () => {
+    const { legendView } = loadModel();
+    const v = legendView([place(1, 'ice'), place(2, 'gym')]);
+    assert.deepEqual(v.entries.map((e) => e.key), ['ice', 'gym']);
+  });
+
+  it('outdoor — это лёд: цвет льда, в легенде сводится со льдом в одну запись «Лёд»', () => {
+    const { legendView, VENUE_TOKEN, pinView } = loadModel();
+    assert.equal(VENUE_TOKEN.outdoor, VENUE_TOKEN.ice);
+    assert.equal(VENUE_TOKEN.outdoor, '--app-venue-ice');
+    // сам пин по-прежнему знает свой тип (класс ice-ypin--outdoor), цвет ему даёт CSS
+    assert.equal(pinView(place(1, 'outdoor')).venue, 'outdoor');
+    const mixed = legendView([place(1, 'ice', { venue_chip: 'Лёд' }), place(2, 'outdoor', { venue_chip: 'Улица' }), place(3, 'shop')]);
+    assert.deepEqual(mixed.entries.map((e) => e.key), ['ice', 'shop']);
+    assert.deepEqual(mixed.entries.map((e) => e.label), ['Лёд', 'Магазин']);
+    // только лёд + улица — это один цвет, легенды нет
+    assert.equal(legendView([place(1, 'ice'), place(2, 'outdoor')]).show, false);
+    // улица одна среди других типов: запись «Лёд», а не «Улица»; в легенде не бывает записи outdoor
+    const only = legendView([place(1, 'outdoor', { venue_chip: 'Улица' }), place(2, 'gym')]);
+    assert.deepEqual(only.entries.map((e) => e.label), ['Лёд', 'Зал']);
+    assert.ok(!only.entries.some((e) => e.key === 'outdoor'));
+  });
+
+  it('легенда: один тип (или пусто) — блока нет вообще', () => {
+    const { legendView } = loadModel();
+    assert.equal(legendView([place(1, 'ice'), place(2, 'ice')]).show, false);
+    assert.equal(legendView([place(1, 'gym')]).show, false);
+    assert.equal(legendView([]).show, false);
+    assert.equal(legendView(null).show, false);
+  });
+
+  it('легенда считает только места с координатами (как пины)', () => {
+    const { legendView } = loadModel();
+    const off = place(2, 'shop', { latitude: null, longitude: null, on_map: false });
+    assert.equal(legendView([place(1, 'ice'), off]).show, false);
+  });
+
+  it('легенда: подпись с сервера (venue_chip) важнее запасной; без неё — запасная', () => {
+    const { legendView } = loadModel();
+    const v = legendView([place(1, 'ice', { venue_chip: 'Каток' }), place(2, 'pool')]);
+    assert.deepEqual(v.entries.map((e) => e.label), ['Каток', 'Бассейн']);
+  });
+
+  it('тип без выдумок: неизвестный тип в выдаче даёт «Лёд», а не новую запись', () => {
+    const { legendView } = loadModel();
+    const v = legendView([place(1, 'zoo'), place(2, 'ice')]);
+    assert.equal(v.show, false);
+  });
+
+  it('время на пине — только у льда: у зала/магазина «10:00–20:00» это часы, а не сеанс', () => {
+    const { pinView, clusterSummary } = loadModel();
+    const gym = place(1, 'gym', { live: { kind: 'place', text: 'Сегодня 10:00–20:00' } });
+    const v = pinView(gym);
+    assert.equal(v.kind, 'dot');
+    assert.equal(v.time, '');
+    assert.equal(v.label, '');
+    assert.equal(clusterSummary([gym]).hasHits, false);
+    const outdoor = place(2, 'outdoor', { live: { kind: 'session', text: 'Сегодня 19:00', starts_at_local: '19:00' } });
+    assert.equal(pinView(outdoor).time, '19:00');
+  });
+
+  it('каждому типу — токен --app-venue-*, который есть в theme.css, и правило в CSS пина и легенды', () => {
+    const { VENUE_TOKEN } = loadModel();
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const theme = fs.readFileSync(themePath, 'utf8');
+    Object.keys(VENUE_TOKEN).forEach((key) => {
+      const token = VENUE_TOKEN[key];
+      assert.match(token, /^--app-venue-/);
+      assert.ok(theme.includes(token + ':'), token + ' объявлен в theme.css');
+      [`.ice-ypin--${key}`, `.ice-map-legend__item--${key}`].forEach((sel) => {
+        const at = css.indexOf(sel);
+        assert.ok(at >= 0, sel + ' есть в ice-tab.css');
+        const block = css.slice(at, css.indexOf('}', at));
+        assert.ok(block.includes('--map-venue: var(' + token + ')'), sel + ' → ' + token);
+      });
+    });
+  });
+
+  it('CSS карты: новых hex нет в блоках типа и легенды', () => {
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const from = css.indexOf('TASK-147 (хвост к макету 02)');
+    const to = css.indexOf('.ice-map-legend__dot');
+    const block = css.slice(from, css.indexOf('}', to));
+    assert.doesNotMatch(block, /#[0-9a-fA-F]{3,8}\b/);
+  });
+  it('полые точки (без сеанса) остаются серыми, как .pin-hollow макета 02', () => {
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const at = css.indexOf('.ice-ypin--dot::after {');
+    const block = css.slice(at, css.indexOf('}', at));
+    assert.match(block, /border:\s*1\.5px solid var\(--glide-line-strong\)/);
+    assert.doesNotMatch(block, /--map-venue/);
+  });
+
+  it('копирайт Яндекса: bottom считается от таб-бара, как у шторки (иначе он под шторкой)', () => {
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const at = css.indexOf('.ice-map-attrib {');
+    const block = css.slice(at, css.indexOf('}', at));
+    assert.match(block, /bottom:\s*calc\(var\(--client-shell-tab-inset, 80px\) \+ 104px\)/);
+    const js = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/ice-map.js'), 'utf8');
+    assert.match(js, /attribEl\.style\.bottom = 'calc\(var\(--client-shell-tab-inset, 80px\) \+ '/);
   });
 });

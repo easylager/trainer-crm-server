@@ -1031,6 +1031,7 @@ async def list_active_trainers_for_client(
     filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
     filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
     collective_slug: str | None = None,
+    service_ids: list[int] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Active trainers; optional arena filter (logical OR over arena_ids). Returns (items, total)."""
     trainer_ids: list[int] | None = None
@@ -1052,6 +1053,7 @@ async def list_active_trainers_for_client(
         filter_days=filter_days,
         filter_time_slots=filter_time_slots,
         trainer_ids=trainer_ids,
+        service_ids=service_ids,
     )
 
 

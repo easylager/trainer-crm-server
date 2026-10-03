@@ -49,7 +49,9 @@ from src.shared.ops_db_guard import (
     warn_prod_ack,
 )
 
-ARENA_IDS_TO_ARCHIVE: tuple[int, ...] = (12, 39, 199)
+# 12 «Лыжероллерная трасса» снята отсюда 2026-10-02: владелец решил её показывать
+# (см. scripts/curate_catalog_visibility.py), а этот скрипт её прятал.
+ARENA_IDS_TO_ARCHIVE: tuple[int, ...] = (39, 199)
 
 
 def _db_url() -> str:

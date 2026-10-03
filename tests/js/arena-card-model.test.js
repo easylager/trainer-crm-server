@@ -152,8 +152,9 @@ describe('buildRibbonForDay', () => {
     assert.equal(rows.length, 2);
     assert.equal(rows[0].nature, 'ice');
     assert.equal(rows[0].stripe, 'ice');
-    assert.equal(rows[0].cta, 'Билет на месте');
-    assert.equal(rows[0].ctaKind, 'ghost');
+    // Ни ссылки сеанса, ни кассы места — кнопки нет: «Билет на месте» было бы выдумкой.
+    assert.equal(rows[0].cta, '');
+    assert.equal(rows[0].href, null);
     assert.equal(rows[1].nature, 'lesson');
     assert.equal(rows[1].stripe, 'lesson');
     assert.equal(rows[1].cta, 'Заявка');
@@ -188,7 +189,7 @@ describe('buildRibbonForDay', () => {
       assert.equal(rows.length, 1);
       assert.equal(rows[0].nature, 'ice');
       assert.equal(rows[0].bookable, false);
-      assert.equal(rows[0].ctaKind, 'ghost');
+      assert.equal(rows[0].ctaKind, 'link');
       assert.notEqual(rows[0].cta, 'Записаться');
       assert.ok(!/запис/i.test(rows[0].cta));
       assert.equal(rows[0].href, 'https://rink.example/tickets');
@@ -305,13 +306,35 @@ describe('heroPhotoUrl', () => {
     assert.equal(heroPhotoUrl({}), null);
   });
 
-  it('prefers hero variant then card then thumb', () => {
-    const { heroPhotoUrl } = loadModel();
+  it('prefers the list card frame, then thumb, then hero', () => {
+    const { heroPhotoUrl, heroPhotoUrls } = loadModel();
     assert.equal(
       heroPhotoUrl({
         hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } },
       }),
-      '/h.jpg'
+      '/c.jpg'
+    );
+    assert.deepEqual(
+      heroPhotoUrls({
+        hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } },
+      }),
+      ['/c.jpg', '/t.jpg', '/h.jpg']
+    );
+  });
+
+  it('still shows a photo when only the thumb variant exists', () => {
+    const { heroPhotoUrl } = loadModel();
+    assert.equal(heroPhotoUrl({ hero: { variants: { thumb: '/t.jpg' } } }), '/t.jpg');
+  });
+
+  it('puts the mini-card photo first when we already showed it', () => {
+    const { heroPhotoUrls } = loadModel();
+    assert.deepEqual(
+      heroPhotoUrls(
+        { hero: { variants: { thumb: '/t.jpg', hero: '/h.jpg', card: '/c.jpg' } } },
+        '/t.jpg'
+      ),
+      ['/t.jpg', '/c.jpg', '/h.jpg']
     );
   });
 });
@@ -331,26 +354,55 @@ describe('heroView', () => {
     });
     assert.equal(view.mode, 'photo');
     assert.equal(view.url, '/h.jpg');
+    assert.deepEqual(view.urls, ['/h.jpg']);
+  });
+
+  it('prefetch record is the list photo and matches id or slug', () => {
+    const { heroPrefetchRecord, heroPrefetchMatches } = loadModel();
+    const rec = heroPrefetchRecord({
+      id: 3,
+      slug: 'tc-zamok',
+      card: '/c.jpg',
+      thumb: '/t.jpg',
+    });
+    assert.deepEqual(rec, { id: 3, slug: 'tc-zamok', url: '/c.jpg' });
+    assert.equal(heroPrefetchMatches(rec, '3'), true);
+    assert.equal(heroPrefetchMatches(rec, 'tc-zamok'), true);
+    assert.equal(heroPrefetchMatches(rec, '9'), false);
+    assert.equal(heroPrefetchRecord({ id: 1 }), null);
   });
 });
 
 describe('iceRowCta', () => {
-  it('is informational Билет на месте; external_url is a link, never booking', () => {
+  it('без ссылки — без кнопки; ничего не обещаем «на месте»', () => {
     const { iceRowCta } = loadModel();
-    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), {
-      cta: 'Билет на месте',
-      ctaKind: 'ghost',
-      href: null,
-      bookable: false,
-    });
-    const linked = iceRowCta({
-      kind: 'open_ice',
-      external_url: 'https://chizhovka.example',
-    });
-    assert.equal(linked.cta, 'Билет на месте');
-    assert.equal(linked.ctaKind, 'ghost');
+    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), { cta: '', ctaKind: '', href: null, bookable: false });
+    assert.equal(iceRowCta({ kind: 'public_skate' }, 'javascript:alert(1)').href, null);
+  });
+
+  it('ссылка сеанса важнее общей кассы места; это ссылка, не запись', () => {
+    const { iceRowCta } = loadModel();
+    const linked = iceRowCta({ kind: 'open_ice', external_url: 'https://chizhovka.example/e/1' }, 'https://kassa.example');
+    assert.equal(linked.cta, 'Билеты');
+    assert.equal(linked.ctaKind, 'link');
     assert.equal(linked.bookable, false);
-    assert.equal(linked.href, 'https://chizhovka.example');
+    assert.equal(linked.href, 'https://chizhovka.example/e/1');
+    assert.equal(iceRowCta({ kind: 'public_skate' }, 'https://koronaticket.by/rink').href, 'https://koronaticket.by/rink');
+  });
+
+  it('касса места доходит до каждой строки ленты', () => {
+    const { buildRibbonForDay } = loadModel();
+    const rows = buildRibbonForDay({
+      localDate: '2026-09-06',
+      sessions: [{ kind: 'public_skate', local_date: '2026-09-06', starts_at_local: '20:15:00',
+        starts_at_utc: '2026-09-06T17:15:00Z', ends_at_utc: '2026-09-06T18:00:00Z' }],
+      groups: [],
+      weekday: 6,
+      now: new Date('2026-09-06T06:00:00Z'),
+      ticketsUrl: 'https://koronaticket.by/rink',
+    });
+    assert.equal(rows[0].cta, 'Билеты');
+    assert.equal(rows[0].href, 'https://koronaticket.by/rink');
   });
 });
 
@@ -397,7 +449,22 @@ describe('parseArenaRef', () => {
     const { parseArenaRef } = loadModel();
     assert.equal(parseArenaRef('?ref=chizhovka', null), 'chizhovka');
     assert.equal(parseArenaRef('', 'arena_88'), '88');
+    assert.equal(parseArenaRef('', 'arena_88_s_15'), '88');
     assert.equal(parseArenaRef('?arena_id=12', 'arena_other'), '12');
+  });
+
+  it('сеанс из start_param и день этого сеанса в ленте', () => {
+    const { sessionIdFromStartParam, dayForSession } = loadModel();
+    assert.equal(sessionIdFromStartParam('arena_88_s_15'), '15');
+    assert.equal(sessionIdFromStartParam('arena_88'), null);
+    assert.equal(
+      dayForSession(
+        [{ local_date: '2026-10-04', sessions: [{ id: 15 }] }, { local_date: '2026-10-05', sessions: [] }],
+        '15'
+      ),
+      '2026-10-04'
+    );
+    assert.equal(dayForSession([{ local_date: '2026-10-04', sessions: [{ id: 1 }] }], '15'), null);
   });
 });
 
@@ -539,5 +606,150 @@ describe('practiceContacts', () => {
     assert.equal(empty.website, null);
     assert.equal(empty.shortDescription, null);
     assert.deepEqual(empty.socials, []);
+  });
+});
+
+describe('shareSlots (TASK-146)', () => {
+  it('ближайшие сеансы с человеческими подписями и лимитом', () => {
+    const { shareSlots } = loadModel();
+    const days = [
+      { local_date: '2026-10-02', sessions: [{ id: 1, starts_at_local: '19:00' }, { id: 2, starts_at_local: '20:45:00' }] },
+      { local_date: '2026-10-03', sessions: [{ id: 3, starts_at_local: '11:00' }] },
+      { local_date: '2026-10-04', sessions: [{ id: 4, starts_at_local: '18:30' }, { id: 5, starts_at_local: '' }] },
+    ];
+    assert.deepEqual(shareSlots(days, '2026-10-02', 3), [
+      { id: 1, label: 'Сегодня 19:00' },
+      { id: 2, label: 'Сегодня 20:45' },
+      { id: 3, label: 'Завтра 11:00' },
+    ]);
+    assert.deepEqual(shareSlots(days, '2026-10-02', 10).slice(-1), [{ id: 4, label: 'Вс 18:30' }]);
+    assert.deepEqual(shareSlots([], '2026-10-02'), []);
+  });
+});
+
+describe('магазин и доверие (TASK-146)', () => {
+  it('плитки услуг в порядке показа, специализация отдельно, false не рисуется', () => {
+    const { shopServicesView } = loadModel();
+    const v = shopServicesView({
+      repair: true,
+      retail: true,
+      skate_molding: true,
+      foot_scan: false,
+      discipline_hockey: true,
+      discipline_figure: false,
+    });
+    assert.deepEqual(v.tiles.map((t) => t.title), ['Розница', 'Формовка', 'Ремонт']);
+    assert.deepEqual(v.disciplines, ['Хоккей']);
+  });
+
+  it('свежесть карточки без расписания — по последней правке; улица — про погоду', () => {
+    const { trustLines } = loadModel();
+    const now = new Date('2026-10-02T12:00:00Z');
+    const shop = trustLines(
+      { venue_type: 'shop', freshness: { profile_updated_at: '2026-09-29T10:00:00Z' } },
+      now
+    );
+    assert.equal(shop.length, 1);
+    assert.match(shop[0], /^Данные обновлены 3 дня назад$/);
+    assert.deepEqual(trustLines({ venue_type: 'gym', freshness: {} }, now), [
+      'Карточку собрала команда Glide по открытым данным',
+    ]);
+    const outdoor = trustLines({ venue_type: 'outdoor', freshness: { schedule_observed_at: '2026-10-02T08:00:00Z' } }, now);
+    assert.deepEqual(outdoor, ['Открытый лёд зависит от погоды — уточняйте перед выездом']);
+  });
+});
+
+describe('TASK-146: расписание как сеансы в кино', () => {
+  const now = new Date('2026-10-02T10:00:00Z'); // 13:00 по Минску
+  const s = (id, t, extra = {}) => ({
+    id, kind: 'public_skate', local_date: '2026-10-02',
+    starts_at_local: t + ':00', ends_at_local: t.replace(/:\d+$/, ':59') + ':00',
+    starts_at_utc: '2026-10-02T' + String(Number(t.slice(0, 2)) - 3).padStart(2, '0') + t.slice(2) + ':00Z',
+    ends_at_utc: '2026-10-02T' + String(Number(t.slice(0, 2)) - 2).padStart(2, '0') + t.slice(2) + ':00Z',
+    price_adult_minor: 1000, price_child_minor: 800, price_rental_minor: 900, currency_code: 'BYN', ...extra,
+  });
+
+  it('одинаковые сеансы — одна группа, цены один раз, ближайший подсвечен, прошедшие скрыты', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({
+      sessions: [s(1, '11:15'), s(2, '14:15'), s(3, '15:15'), s(4, '18:00', { price_adult_minor: 1200 })],
+      now, ticketsUrl: 'https://koronaticket.by/rink', markNext: true,
+    });
+    assert.equal(v.count, 3);
+    assert.equal(v.groups.length, 2);
+    assert.deepEqual(v.groups[0].times.map((t) => t.time), ['14:15', '15:15']);
+    assert.equal(v.groups[0].times[0].next, true);
+    assert.equal(v.groups[0].times[1].next, false);
+    assert.equal(v.groups[0].times[0].href, 'https://koronaticket.by/rink');
+    assert.deepEqual(v.groups[0].prices.map((p) => p.label + ' ' + p.value), ['Взрослый 10 BYN', 'Детский 8 BYN', 'Прокат 9 BYN']);
+    assert.equal(v.groups[1].prices[0].value, '12 BYN');
+  });
+
+  it('без кассы время — не ссылка', () => {
+    const { showtimesForDay } = loadModel();
+    const v = showtimesForDay({ sessions: [s(2, '14:15')], now });
+    assert.equal(v.groups[0].times[0].href, null);
+  });
+
+  it('полоса дней считает только будущие сеансы; по умолчанию — первый день со льдом', () => {
+    const { dayStrip, defaultScheduleDay } = loadModel();
+    const strip = dayStrip([{ local_date: '2026-10-02', sessions: [s(1, '11:15')] },
+      { local_date: '2026-10-04', sessions: [s(5, '18:00', { local_date: '2026-10-04' })] }], '2026-10-02', now, 7);
+    assert.equal(strip.length, 7);
+    assert.equal(strip[0].top, 'Сегодня');
+    assert.equal(strip[1].top, 'Завтра');
+    assert.equal(strip[2].top, 'Вс');
+    assert.equal(strip[0].count, 0); // единственный сеанс сегодня уже прошёл
+    assert.equal(defaultScheduleDay(strip), '2026-10-04');
+  });
+
+  it('быстрые действия — только то, что есть; сайт важнее инстаграма', () => {
+    const { quickActions } = loadModel();
+    assert.deepEqual(quickActions({}), []);
+    const a = quickActions({ latitude: 53.9, longitude: 27.5, phone: '+375 (29) 111-22-33',
+      social_urls: { instagram: 'https://instagram.com/x' } });
+    assert.deepEqual(a.map((x) => x.id), ['route', 'call', 'insta']);
+    assert.equal(a[1].href, 'tel:+375291112233');
+  });
+
+  it('часы по дням: сегодня отмечен, одинаковые дни — «ежедневно»', () => {
+    const { weekHours } = loadModel();
+    assert.equal(weekHours(null, now), null);
+    assert.equal(weekHours({ daily: { open: '10:00', close: '23:00' } }, now).uniform, true);
+    const w = weekHours({ weekly: { mon: ['10:00', '20:00'], tue: ['10:00', '20:00'], wed: ['10:00', '20:00'],
+      thu: ['10:00', '20:00'], fri: ['10:00', '20:00'], sat: ['11:00', '18:00'], sun: null } }, now);
+    assert.equal(w.uniform, false);
+    assert.equal(w.rows.filter((r) => r.today)[0].label, 'Пт');
+    assert.equal(w.rows[6].value, 'выходной');
+  });
+});
+
+describe('TASK-146: карточка открывается на дне и сеансе из ленты', () => {
+  it('parseScheduleFocus читает day и s, мусор отбрасывает', () => {
+    const { parseScheduleFocus } = loadModel();
+    assert.deepEqual(parseScheduleFocus('?ref=1&day=2026-10-03&s=77'), { day: '2026-10-03', sessionId: '77' });
+    assert.deepEqual(parseScheduleFocus('?ref=1&day=завтра&s=x'), { day: null, sessionId: null });
+  });
+
+  it('выбранный в ленте сеанс подсвечен вместо ближайшего', () => {
+    const { showtimesForDay } = loadModel();
+    const mk = (id, h) => ({ id, kind: 'public_skate', starts_at_local: h + ':15:00', ends_at_local: h + ':59:00',
+      starts_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':15:00Z',
+      ends_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':59:00Z', currency_code: 'BYN' });
+    const now = new Date('2026-10-02T10:00:00Z');
+    const v = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '2' });
+    assert.deepEqual(v.groups[0].times.map((t) => [t.time, t.next, t.picked]), [['14:15', false, false], ['18:15', false, true]]);
+    const w = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '999' });
+    assert.equal(w.groups[0].times[0].next, true);
+  });
+});
+
+describe('TASK-146: устаревшее расписание', () => {
+  it('флаг schedule_stale даёт честную плашку с датой; без флага — ничего', () => {
+    const { staleScheduleNote } = loadModel();
+    assert.equal(staleScheduleNote({ schedule_stale: false }), null);
+    assert.equal(staleScheduleNote(null), null);
+    const note = staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' });
+    assert.match(note, /^Расписание от 1 октября, \d{2}:00 — могло измениться/);
   });
 });

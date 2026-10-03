@@ -56,11 +56,13 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
         assert re.search(r'\bactive\b', tag), tag
     assert "arena-card.js" in body
     page_js = js.text + model.text + body
-    assert "Лента льда" in page_js
-    assert "Билет на месте" in page_js
+    assert "Расписание" in page_js
+    # TASK-146: «Билет на месте» на каждом сеансе было выдумкой — кнопка только при реальной кассе.
+    assert "cta: 'Билет на месте'" not in model.text
     assert "Сегодня" in page_js
     assert "Завтра" in page_js
-    assert "Неделя" in page_js
+    # «Неделя» сводкой заменена полосой из семи дней с датами (dayStrip).
+    assert "dayStrip" in page_js
     assert "Расписание уточняется" in page_js
     assert "Это ваш каток?" not in page_js
     assert "Забрать страницу" not in page_js
@@ -77,9 +79,10 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "arena?ref=" in shell
     assert "iceRowCta" in model.text
     assert "ticketCta" in model.text
-    assert "id=\"arenaTicketsCta\"" in body
-    assert "Купить билет" in body
-    assert "arena-tickets-cta" in css.text
+    # Касса — в шапке расписания и на каждом времени, а не второй липкой панелью над навигацией.
+    assert "id=\"arenaTicketsCta\"" not in body
+    assert "Билеты онлайн" in js.text
+    assert "arena-time--link" in css.text
     assert "bookable: false" in model.text or "bookable:false" in model.text
     assert 'data-action="book"' not in js.text
 
@@ -282,8 +285,11 @@ async def test_arena_card_level_b_payload_has_contacts_not_sessions(
     assert feed.json()["days"] == []
     js = (REPO_ROOT / "static/webapp/arena-card.js").read_text(encoding="utf-8")
     assert "Расписание уточняется" in js
-    assert "Позвонить" in js
-    assert "Сайт катка" in js
+    # Позвонить и сайт — в ряду быстрых действий под обложкой, он есть при любом состоянии льда.
+    model = (REPO_ROOT / "static/webapp/arena-card-model.js").read_text(encoding="utf-8")
+    assert "label: 'Позвонить'" in model
+    assert "label: 'Сайт'" in model
+    assert "renderQuickActions()" in js
 
 
 @pytest.mark.asyncio

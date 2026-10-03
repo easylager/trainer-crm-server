@@ -1,0 +1,159 @@
+/*
+ * Шит «Поделиться» (TASK-146). Светлый, как вся среда мини-аппа: тёмное — только
+ * сама карточка-превью внутри (это и есть экспортируемый артефакт, DEC-007).
+ * Только токены theme.css — шит переключает тему вместе с приложением.
+ */
+.gss {
+  position: fixed;
+  inset: 0;
+  z-index: 9500; /* над таб-баром (9000) и шитом «Ещё» (9100–9200) */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.18s ease;
+}
+.gss.is-open { background: var(--app-scrim, rgba(4, 18, 26, 0.42)); }
+.gss[hidden] { display: none; }
+
+.gss-sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--glide-card);
+  color: var(--glide-text);
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(24px);
+  opacity: 0;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.gss.is-open .gss-sheet { transform: none; opacity: 1; }
+
+.gss-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: var(--app-text-lead);
+}
+.gss-x {
+  border: 0;
+  background: var(--app-chip-bg);
+  color: inherit;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--app-radius-pill);
+  font-size: var(--app-text-body);
+  cursor: pointer;
+}
+
+.gss-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--app-radius-md);
+  background: var(--app-chip-bg);
+  margin-bottom: 10px;
+}
+.gss-tab {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 9px 8px;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+.gss-tab.is-on { background: var(--glide-card); box-shadow: var(--app-float-shadow); }
+
+.gss-slots {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+}
+.gss-slots::-webkit-scrollbar { display: none; }
+.gss-slot {
+  flex: 0 0 auto;
+  border: 1px solid var(--glide-line);
+  background: transparent;
+  color: inherit;
+  padding: 7px 11px;
+  border-radius: var(--app-radius-pill);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.gss-slot.is-on {
+  border-color: var(--app-cta-fill);
+  background: var(--glide-brand-wash);
+  font-weight: var(--app-weight-semibold);
+}
+
+.gss-preview { margin: 0 0 12px; }
+.gss-preview__img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: var(--app-radius-lg);
+  background: var(--glide-deep);
+}
+.gss-preview__img--wait { animation: gss-pulse 1.2s ease-in-out infinite; }
+@keyframes gss-pulse { 50% { opacity: 0.6; } }
+.gss-preview figcaption {
+  margin-top: 8px;
+  white-space: pre-line;
+  font-size: var(--app-text-caption);
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.gss-channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.gss-ch {
+  border: 1px solid var(--glide-line);
+  background: var(--glide-card);
+  color: inherit;
+  padding: 12px 4px;
+  border-radius: var(--app-radius-md);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+.gss-ch:disabled { opacity: 0.5; }
+.gss-ch--tg {
+  background: var(--app-brand-telegram);
+  border-color: var(--app-brand-telegram);
+  color: var(--app-brand-telegram-on);
+}
+.gss-note { margin: 10px 0 0; font-size: var(--app-text-caption); color: var(--glide-hint); text-align: center; }
+
+.gss-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  border-radius: var(--app-radius-md);
+  background: var(--glide-text);
+  color: var(--glide-card);
+  font-size: var(--app-text-caption);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.gss-toast.is-on { opacity: 1; }

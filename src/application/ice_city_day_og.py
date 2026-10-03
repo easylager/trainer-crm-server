@@ -23,7 +23,7 @@ from typing import Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
-from src.application.ice_city_day import plural_ru, price_range_compact
+from src.application.ice_city_day import cacheable_day_label, plural_ru, price_range_compact
 
 OG_WIDTH = 1200
 OG_HEIGHT = 630
@@ -73,7 +73,7 @@ def render_ice_city_day_og(*, city_name: str, day: Mapping[str, object]) -> byte
 
     arenas = int(day.get("arena_count") or 0)
     sessions = int(day.get("session_count") or 0)
-    label = str(day.get("day_label") or "сегодня")
+    label = cacheable_day_label(day) or str(day.get("day_label") or "")
 
     draw.text((pad, 92), f"ЛЁД · {label.upper()}", font=f_kicker, fill=_ACCENT)
     draw.text((pad, 148), _fit(draw, city_name, f_title, inner), font=f_title, fill=_INK)

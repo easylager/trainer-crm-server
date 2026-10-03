@@ -22,6 +22,10 @@ def _reset_rate_limiters_between_tests():
 def test_rate_limit_bucket_for_path():
     assert rate_limit_bucket_for_path("/health") == "skip"
     assert rate_limit_bucket_for_path("/webapp/x") == "skip"
+    assert rate_limit_bucket_for_path("/go") == "public"
+    assert rate_limit_bucket_for_path("/go/insta") == "public"
+    assert rate_limit_bucket_for_path("/go/flyer-olimpik/minsk") == "public"
+    assert rate_limit_bucket_for_path("/gopher") == "skip"
     assert rate_limit_bucket_for_path("/api/webhooks/bepaid") == "skip"
     assert rate_limit_bucket_for_path("/api/public/cities") == "public"
     assert rate_limit_bucket_for_path("/api/webapp/schedule") == "webapp"

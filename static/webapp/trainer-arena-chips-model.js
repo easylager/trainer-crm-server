@@ -27,7 +27,8 @@
   }
 
   function arenaHref(id, slug) {
-    var ref = slug || id;
+    // id важнее slug: slug уникален только в городе (TASK-146).
+    var ref = id != null && id !== '' ? id : slug;
     if (ref == null || ref === '') return '';
     return 'arena?ref=' + encodeURIComponent(String(ref));
   }

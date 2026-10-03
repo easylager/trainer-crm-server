@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import text
 
-from src.ingestion.jobs import InMemoryParserJobStore, advance_next_run_at
+from src.ingestion.jobs import InMemoryParserJobStore
 from src.ingestion.parsers import MinskArenaSaleframeParser, ParserRegistry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import InMemoryScrapeRunRecorder
@@ -51,9 +51,15 @@ def _scheduler(
     return sched, store, recorder
 
 
+def _within(value: datetime, minutes: float, *, jitter: float = 0.15) -> bool:
+    lo = _NOW + timedelta(minutes=minutes * (1 - jitter))
+    hi = _NOW + timedelta(minutes=minutes * (1 + jitter))
+    return lo <= value <= hi
+
+
 @pytest.mark.asyncio
-async def test_due_job_is_picked_up_and_cadence_advances() -> None:
-    """AC-001: past next_run_at runs; after the attempt next_run_at moves by cadence."""
+async def test_due_job_is_picked_up_and_next_poll_is_daytime_interval() -> None:
+    """AC-001 (TASK-146): после прогона следующий — через ~45 мин днём, а не через каденс."""
     job = _job()
     sched, store, recorder = _scheduler([job])
     outcomes = await sched.run_due(_NOW)
@@ -61,20 +67,21 @@ async def test_due_job_is_picked_up_and_cadence_advances() -> None:
     assert len(outcomes) == 1
     updated = store.get(job.id)
     assert updated.last_run_at == _NOW
-    assert updated.next_run_at == advance_next_run_at("daily", _NOW)
-    assert updated.next_run_at == _NOW + timedelta(days=1)
-    assert recorder.runs[0].status in {RUN_STATUS_EMPTY, RUN_STATUS_ERROR} or recorder.runs
+    # _NOW = 13:00 по Минску — дневной опрос.
+    assert _within(updated.next_run_at, 45)
+    assert recorder.runs
 
 
 @pytest.mark.asyncio
-async def test_hourly_and_weekly_cadence_deltas() -> None:
+async def test_weekly_cadence_no_longer_delays_fresh_polling() -> None:
+    """TASK-146: weekly-источник перечитывается так же часто, как hourly."""
     hourly = _job(id=1, cadence="hourly", arena_id=1)
     weekly = _job(id=2, cadence="weekly", arena_id=2, parser_key=RecordingParser.parser_key)
     recording = RecordingParser()
     sched, store, _ = _scheduler([hourly, weekly], parsers=[recording])
     await sched.run_due(_NOW)
-    assert store.get(1).next_run_at == _NOW + timedelta(hours=1)
-    assert store.get(2).next_run_at == _NOW + timedelta(weeks=1)
+    assert _within(store.get(1).next_run_at, 45)
+    assert _within(store.get(2).next_run_at, 45)
 
 
 @pytest.mark.asyncio
@@ -109,8 +116,10 @@ async def test_unknown_parser_key_is_error_and_other_jobs_continue() -> None:
     assert by_job[1].status == RUN_STATUS_ERROR
     assert by_job[2].job_id == 2
     assert recording.seen_configs  # known parser still ran
-    assert store.get(1).next_run_at == _NOW + timedelta(days=1)
-    assert store.get(2).next_run_at == _NOW + timedelta(days=1)
+    # TASK-146: упавший источник повторяем через 15 мин (бэкофф), а не через сутки.
+    assert _within(store.get(1).next_run_at, 15)
+    assert store.get(1).state.failure_streak == 1
+    assert _within(store.get(2).next_run_at, 45)
 
 
 @pytest.mark.asyncio

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     telegram_webapp_init_data_clock_skew_sec: int = 300
     # Comma-separated list of admin telegram IDs, e.g. "123,456"
     admin_telegram_ids: list[int] | None = None
+    # TASK-146: куда админ-бот шлёт алерты по источникам льда (например, общий чат
+    # команды, id группы отрицательный). Пусто — в ADMIN_TELEGRAM_IDS.
+    ice_alert_chat_ids: list[int] | None = None
     # When True: no Telegram getChat to backfill `clients.telegram_username` (temporary QA for relay / no-@username DMs).
     disable_client_telegram_username_enrich: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # When True: trainer hub «Написать» always opens bot relay (never t.me), for QA when DM is blocked but @ exists.
@@ -93,6 +96,8 @@ class Settings(BaseSettings):
     api_rate_limit_upload_window_sec: float = 60.0
     api_rate_limit_default_max_requests: int = 200
     api_rate_limit_default_window_sec: float = 60.0
+    # /go attribution accepts only provisioned campaign slugs; valid but unconfigured links still redirect.
+    catalog_entry_source_keys: list[str] = ["insta", "flyer-olimpik", "direct", "other"]
     # Client self-booking anti-spam (per Telegram user + pending quotas).
     client_booking_rate_max_requests: int = 8
     client_booking_rate_window_sec: float = 600.0
@@ -195,6 +200,14 @@ class Settings(BaseSettings):
 
     # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
     client_bot_username: str | None = None
+    # TASK-146: короткое имя мини-аппа клиентского бота (BotFather → /newapp), например "app".
+    # Задано → публичные страницы мест ведут в t.me/<bot>/<app>?startapp=arena_<id> и мини-апп
+    # открывается сразу на карточке. Пусто → t.me/<bot>?start=arena_<id>, бот отвечает кнопкой.
+    client_mini_app_short_name: str | None = None
+    # У клиентского бота настроено основное мини-приложение (BotFather → Main Mini App):
+    # ссылки вида t.me/<bot>?startapp=… открывают мини-апп сразу на нужном экране.
+    # false — ссылки идут через /start, и бот отвечает кнопкой.
+    client_bot_main_mini_app: bool = True
     # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
     certificate_pdf_brand_display_name: str = "GLIDE"
     # Одна строка под названием бренда — не абзац: в PDF она стоит над номиналом, и всё,
