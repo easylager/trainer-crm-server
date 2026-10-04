@@ -227,6 +227,7 @@
     var startY = 0;
     var dy = 0;
     var dragging = false;
+    var dragMoved = false;
     var dragPointerId = null;
 
     function dragClientY(ev) {
@@ -234,57 +235,81 @@
       return ev.clientY;
     }
 
-    function onMove(ev) {
+    function resetSheetDragTransform() {
+      sheet.style.transform = '';
+      sheet.style.transition = '';
+    }
+
+    function finishDrag() {
+      if (!dragging) return;
+      dragging = false;
+      dragPointerId = null;
+      global.removeEventListener('pointermove', onDocMove, true);
+      global.removeEventListener('pointerup', onDocEnd, true);
+      global.removeEventListener('pointercancel', onDocEnd, true);
+      global.removeEventListener('touchmove', onDocMove, true);
+      global.removeEventListener('touchend', onDocEnd, true);
+      global.removeEventListener('touchcancel', onDocEnd, true);
+      if (dy > 56) {
+        resetSheetDragTransform();
+        closeShopMapFiltersPanel();
+        renderCatalogHeader();
+      } else {
+        resetSheetDragTransform();
+      }
+      dy = 0;
+      dragMoved = false;
+    }
+
+    function onDocMove(ev) {
       if (!dragging) return;
       if (dragPointerId != null && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
       dy = Math.max(0, dragClientY(ev) - startY);
+      if (dy > 6) dragMoved = true;
+      sheet.style.transition = 'none';
       sheet.style.transform = 'translateY(' + dy + 'px)';
       if (ev.cancelable) ev.preventDefault();
     }
 
-    function onEnd(ev) {
+    function onDocEnd(ev) {
       if (!dragging) return;
       if (dragPointerId != null && ev && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
-      dragging = false;
-      dragPointerId = null;
-      sheet.style.transform = '';
-      if (dy > 48) {
-        closeShopMapFiltersPanel();
-        renderCatalogHeader();
-      }
-      dy = 0;
+      finishDrag();
     }
 
     function onStart(ev) {
       if (!state.shopMapFiltersOpen) return;
+      if (ev.button != null && ev.button !== 0) return;
       if (ev.target && ev.target.closest && ev.target.closest('button, a, input, [data-shop-service], [data-shop-discipline]')) {
         return;
       }
       dragging = true;
+      dragMoved = false;
       dragPointerId = ev.pointerId != null ? ev.pointerId : null;
       startY = dragClientY(ev);
       dy = 0;
+      sheet.style.transition = 'none';
       if (typeof ev.currentTarget.setPointerCapture === 'function' && ev.pointerId != null) {
         try {
           ev.currentTarget.setPointerCapture(ev.pointerId);
         } catch (e) { /* WebView */ }
       }
+      global.addEventListener('pointermove', onDocMove, true);
+      global.addEventListener('pointerup', onDocEnd, true);
+      global.addEventListener('pointercancel', onDocEnd, true);
+      global.addEventListener('touchmove', onDocMove, { capture: true, passive: false });
+      global.addEventListener('touchend', onDocEnd, true);
+      global.addEventListener('touchcancel', onDocEnd, true);
     }
 
     dragZone.forEach(function (el) {
       el.addEventListener('pointerdown', onStart);
-      el.addEventListener('pointermove', onMove);
-      el.addEventListener('pointerup', onEnd);
-      el.addEventListener('pointercancel', onEnd);
       el.addEventListener('touchstart', onStart, { passive: true });
-      el.addEventListener('touchmove', onMove, { passive: false });
-      el.addEventListener('touchend', onEnd);
-      el.addEventListener('touchcancel', onEnd);
     });
 
     if (handle) {
-      handle.addEventListener('click', function () {
-        if (dy > 8) return;
+      handle.addEventListener('pointerup', function (ev) {
+        if (!state.shopMapFiltersOpen || dragMoved || dy > 8) return;
         closeShopMapFiltersPanel();
         renderCatalogHeader();
       });
@@ -486,6 +511,8 @@
     var mapBtn = $('iceShopMapFiltersBtn');
     var mapLabel = $('iceShopMapFiltersLabel');
     if (mapLabel) mapLabel.textContent = M.shopMapToolbarLabel(filters);
+    if (onMap && state.shopMapFiltersOpen) mountShopPanelInSheet();
+    else if (!state.shopMapFiltersOpen) restoreShopPanelToList();
     updateShopSheetChrome();
     var now = new Date();
     var serviceChips = M.shopServiceChipsView(state.shopSourceItems, filters, now);
@@ -783,9 +810,13 @@
    * свайп шторки, закрытие sheet без setView). Подтягиваем вёрстку к state.
    */
   function repairCatalogChrome() {
-    restoreShopPanelToList();
     if (!mapViewActive()) {
+      restoreShopPanelToList();
       if (state.shopMapFiltersOpen) closeShopMapFiltersPanel();
+    } else if (state.shopMapFiltersOpen) {
+      mountShopPanelInSheet();
+    } else {
+      restoreShopPanelToList();
     }
     setViewToggle();
     renderCatalogHeader();
