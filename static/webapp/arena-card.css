@@ -866,6 +866,21 @@ a.arena-row {
 .arena-time--next b,
 .arena-time--next small { color: var(--app-cta-text); }
 
+button.arena-time {
+  background: var(--glide-surface, transparent);
+  font: inherit;
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+button.arena-time--picked {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+}
+button.arena-time--picked b,
+button.arena-time--picked small { color: var(--app-cta-text); }
+
 .arena-none {
   display: flex;
   flex-direction: column;

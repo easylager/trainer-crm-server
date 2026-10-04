@@ -26,14 +26,8 @@
     }
   }
 
-  function scheduleStaleWarn(freshness, now) {
-    freshness = freshness || {};
-    if (!freshness.schedule_stale) return false;
-    if (!freshness.schedule_observed_at) return true;
-    var at = new Date(freshness.schedule_observed_at);
-    if (isNaN(at.getTime())) return true;
-    now = now instanceof Date ? now : new Date();
-    return ymdInMinsk(at) !== ymdInMinsk(now);
+  function scheduleStaleWarn() {
+    return false;
   }
 
   function pluralRu(n, one, few, many) {
@@ -553,6 +547,12 @@
     if (!pills.length) return 'Все магазины';
     if (pills.length === 1) return pills[0].label;
     return pills[0].label + ' · ещё ' + (pills.length - 1);
+  }
+
+  function shopMapResultsCta(count) {
+    var n = Math.max(0, Number(count) || 0);
+    if (!n) return 'Нет магазинов по фильтру';
+    return 'Показать ' + n + ' ' + pluralRu(n, 'магазин', 'магазина', 'магазинов');
   }
 
   function shopActiveFilterPills(filters) {
@@ -1092,8 +1092,12 @@
   }
 
   /** Окно времени — только когда в выборе есть лёд с сеансами. */
-  function whenPickerVisible(intent, venueTypes, facets) {
+  function whenPickerVisible(intent, venueTypes, facets, opts) {
+    opts = opts || {};
     if (!whenSkateFilterContext(intent, venueTypes)) return false;
+    /* Сервер уже применил окно (выходные, вечер…) — чип должен остаться в шапке,
+       иначе подпись ленты и пустая шапка расходятся. */
+    if (opts.activeWindow) return true;
     if (facets && facets.length) return facetCount(facets, 'ice') > 0;
     return true;
   }
@@ -1542,9 +1546,7 @@
          площадке. Фолбэк — для ответов старого API без поля. */
       depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
-    // TASK-146: предупреждение только если данные не сегодняшние — иначе смысл ленты теряется.
-    var stale = isSession && scheduleStaleWarn(item.freshness, now);
-    if (stale) depth = 'Расписание могло измениться';
+    var stale = false;
     return {
       stale: stale,
       href: arenaHref(item),
@@ -1841,6 +1843,7 @@
     shopWhenMenuLabel: shopWhenMenuLabel,
     shopActiveFilterPills: shopActiveFilterPills,
     shopMapToolbarLabel: shopMapToolbarLabel,
+    shopMapResultsCta: shopMapResultsCta,
     filterShopCatalog: filterShopCatalog,
     hasActiveShopFilters: hasActiveShopFilters,
     formatEmptyShopFilters: formatEmptyShopFilters,
