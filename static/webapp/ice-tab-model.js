@@ -18,6 +18,24 @@
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
   var MINSK_TZ = 'Europe/Minsk';
 
+  function ymdInMinsk(d) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: MINSK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function scheduleStaleWarn(freshness, now) {
+    freshness = freshness || {};
+    if (!freshness.schedule_stale) return false;
+    if (!freshness.schedule_observed_at) return true;
+    var at = new Date(freshness.schedule_observed_at);
+    if (isNaN(at.getTime())) return true;
+    now = now instanceof Date ? now : new Date();
+    return ymdInMinsk(at) !== ymdInMinsk(now);
+  }
+
   function pluralRu(n, one, few, many) {
     var abs = Math.abs(n) % 100;
     if (abs >= 11 && abs <= 14) return many;
@@ -983,8 +1001,8 @@
          площадке. Фолбэк — для ответов старого API без поля. */
       depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
-    // TASK-146: парсер давно не читал сайт катка — время показываем, но не выдаём за свежее.
-    var stale = isSession && !!(item.freshness && item.freshness.schedule_stale);
+    // TASK-146: предупреждение только если данные не сегодняшние — иначе смысл ленты теряется.
+    var stale = isSession && scheduleStaleWarn(item.freshness, now);
     if (stale) depth = 'Расписание могло измениться';
     return {
       stale: stale,

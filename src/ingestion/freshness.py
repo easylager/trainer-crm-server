@@ -221,16 +221,24 @@ def is_schedule_stale(
     config: dict[str, Any] | None,
     now: datetime,
     created_at: datetime | None = None,
+    sessions_observed_at: datetime | None = None,
 ) -> bool:
     """Расписание арены устарело: есть автоматический источник, но он давно не читался.
 
     Без включённого парсера (ручной ввод, etalon) флаг всегда False — там нечему
     «устаревать» автоматически. Новый источник, ещё ни разу не прочитанный, получает
     тот же порог от момента создания, а не «устаревший» сразу.
+
+    ``sessions_observed_at`` — свежие сеансы в БД (тот же смысл, что в
+    ``schedule_observed_at``): если они новее ``last_ok_at``, порог считаем от них.
     """
     if not has_enabled_job:
         return False
     anchor = last_ok_at or created_at
+    if sessions_observed_at is not None:
+        s = _as_utc(sessions_observed_at)
+        if anchor is None or s > _as_utc(anchor):
+            anchor = sessions_observed_at
     if anchor is None:
         return True
     return _as_utc(now) - _as_utc(anchor) > stale_after(config)
@@ -255,6 +263,7 @@ def schedule_freshness_fields(
     stale = is_schedule_stale(
         has_enabled_job=has_enabled_job,
         last_ok_at=last_ok_at,
+        sessions_observed_at=sessions_observed_at,
         config=config,
         now=now,
         created_at=created_at,

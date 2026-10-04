@@ -26,6 +26,8 @@
 
   function todayIso(now) {
     now = now || new Date();
+    var tz = state.card && state.card.timezone;
+    if (tz) return M.ymdInTimeZone(now, tz);
     return M.ymd(now);
   }
 
@@ -473,8 +475,6 @@
         sep +
         '<a class="crm-tel-link arena-info__tel" href="' +
         esc(href) +
-        '" data-action="call" data-call-phone="' +
-        esc(p) +
         '">' +
         esc(p) +
         '</a>'
@@ -488,8 +488,6 @@
         return (
           '<a class="arena-qa" href="' +
           esc(a.href) +
-          '" data-action="call" data-call-phone="' +
-          esc(a.phone || '') +
           '">' +
           icon(a.id) +
           '<span>' +
@@ -577,7 +575,7 @@
           var hot = t.next || t.picked;
           var cls = 'arena-time' + (hot ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
           // Подсветка = «ближайший к вам сеанс» (сегодня или с плитки ленты ?s=), не «вы вручную выбрали».
-          var tag = t.picked || t.next ? 'Ближайший' : t.capacity;
+          var tag = t.next ? 'Ближайший' : t.capacity;
           var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
           return t.href
             ? '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>'
@@ -640,8 +638,8 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
-      (M.staleScheduleNote(state.card.freshness)
-        ? '<p class="arena-stale">' + esc(M.staleScheduleNote(state.card.freshness)) + '</p>'
+      (M.staleScheduleNote(state.card.freshness, new Date())
+        ? '<p class="arena-stale">' + esc(M.staleScheduleNote(state.card.freshness, new Date())) + '</p>'
         : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
@@ -980,6 +978,9 @@
       return;
     }
     if (action === 'call') {
+      /* Нативный tel: на <a> — не перехватываем (Telegram WebView / iOS long-press). */
+      var callHref = (t.getAttribute('href') || '').trim();
+      if (callHref.toLowerCase().indexOf('tel:') === 0) return;
       ev.preventDefault();
       if (!dialPhone(t.getAttribute('data-call-phone'))) {
         var tg = global.Telegram && global.Telegram.WebApp;

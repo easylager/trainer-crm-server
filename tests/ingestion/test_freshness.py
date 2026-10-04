@@ -195,6 +195,14 @@ def test_schedule_stale_flag() -> None:
     assert not is_schedule_stale(
         has_enabled_job=True, last_ok_at=None, config={}, now=_NOW, created_at=_NOW - timedelta(hours=1)
     )
+    # Свежие сеансы в БД важнее старого last_ok парсера.
+    assert not is_schedule_stale(
+        has_enabled_job=True,
+        last_ok_at=_NOW - timedelta(hours=7),
+        sessions_observed_at=_NOW - timedelta(hours=1),
+        config={},
+        now=_NOW,
+    )
 
 
 def test_schedule_freshness_fields_prefers_latest_confirmation() -> None:

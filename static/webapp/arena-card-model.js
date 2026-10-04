@@ -223,13 +223,22 @@
     return text;
   }
 
+  /** Показывать плашку «могло измениться» только если данные реально старые, не сегодня. */
+  function shouldWarnScheduleStale(freshness, now) {
+    freshness = freshness || {};
+    if (!freshness.schedule_stale) return false;
+    if (!freshness.schedule_observed_at) return true;
+    var days = daysBetween(freshness.schedule_observed_at, now || new Date());
+    return days == null || days > 0;
+  }
+
   /**
    * TASK-146: парсер давно не читал сайт катка (schedule_stale с сервера). Сеансы
    * показываем — чаще всего они верны, — но прямо говорим, от какого они числа.
    */
-  function staleScheduleNote(freshness) {
+  function staleScheduleNote(freshness, now) {
     freshness = freshness || {};
-    if (!freshness.schedule_stale) return null;
+    if (!shouldWarnScheduleStale(freshness, now)) return null;
     var at = freshness.schedule_observed_at ? new Date(freshness.schedule_observed_at) : null;
     if (!at || isNaN(at.getTime())) return 'Расписание могло измениться — уточните на сайте или по телефону';
     var hh = at.getHours();
@@ -273,14 +282,44 @@
   var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
     'сентября', 'октября', 'ноября', 'декабря'];
 
+  function sessionStartMs(session) {
+    if (!session) return 0;
+    if (session.starts_at_utc) {
+      var utc = new Date(session.starts_at_utc).getTime();
+      if (!isNaN(utc)) return utc;
+    }
+    var d = parseLocalDate(session.local_date);
+    var hm = hhmm(session.starts_at_local);
+    if (d && hm) {
+      var p = hm.split(':');
+      d.setHours(Number(p[0]), Number(p[1] || 0), 0, 0);
+      return d.getTime();
+    }
+    return 0;
+  }
+
+  function compareSessionsByStart(a, b) {
+    return sessionStartMs(a) - sessionStartMs(b);
+  }
+
+  /** Календарный «сегодня» в часовом поясе арены (не устройства). */
+  function ymdInTimeZone(date, timeZone) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(date);
+    } catch (e) {
+      return ymd(date);
+    }
+  }
+
   function sessionNowState(session, now) {
     if (!session) return 'upcoming';
     var start = session.starts_at_utc ? new Date(session.starts_at_utc) : null;
     var end = session.ends_at_utc ? new Date(session.ends_at_utc) : null;
     var t = now ? now.getTime() : Date.now();
-    if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
-      if (t >= start.getTime() && t < end.getTime()) return 'live';
-      if (t >= end.getTime()) return 'past';
+    if (start && !isNaN(start.getTime())) {
+      if (t < start.getTime()) return 'upcoming';
+      if (end && !isNaN(end.getTime()) && t < end.getTime()) return 'live';
+      return 'past';
     }
     return 'upcoming';
   }
@@ -750,6 +789,7 @@
   var DAY_TOP = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
   function upcomingSessions(sessions, now) {
+    /* PDEC-005: в витрине только сеансы, которые ещё не начались (как на сервере). */
     return (sessions || []).filter(function (s) { return sessionNowState(s, now) === 'upcoming'; });
   }
 
@@ -821,14 +861,13 @@
    */
   function showtimesForDay(opts) {
     opts = opts || {};
-    var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(function (a, b) {
-      return String(a.starts_at_local).localeCompare(String(b.starts_at_local));
-    });
+    var list = upcomingSessions(opts.sessions, opts.now || new Date()).slice().sort(compareSessionsByStart);
     var groups = [];
     var index = {};
     var picked = opts.pickedId != null ? String(opts.pickedId) : null;
     var hasPicked = !!picked && list.some(function (x) { return String(x.id) === picked; });
-    list.forEach(function (s, i) {
+    var nearestId = list.length && list[0].id != null ? String(list[0].id) : null;
+    list.forEach(function (s) {
       var start = hhmm(s.starts_at_local);
       var dur = minutesBetween(start, hhmm(s.ends_at_local));
       var key = [iceKindLabel(s), s.price_adult_minor, s.price_child_minor, s.price_rental_minor, dur, s.age_note || ''].join('|');
@@ -847,8 +886,7 @@
         time: start,
         href: cta.href,
         sessionId: s.id != null ? s.id : null,
-        // Выбранный в ленте сеанс важнее «ближайшего»: подсветка одна.
-        next: !hasPicked && i === 0 && !!opts.markNext,
+        next: !!opts.markNext && !hasPicked && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
         capacity: s.capacity_note || '',
       });
@@ -1022,6 +1060,9 @@
     formatSessionPrices: formatSessionPrices,
     formatFreshness: formatFreshness,
     sessionNowState: sessionNowState,
+    sessionStartMs: sessionStartMs,
+    compareSessionsByStart: compareSessionsByStart,
+    ymdInTimeZone: ymdInTimeZone,
     iceKindLabel: iceKindLabel,
     iceRowCta: iceRowCta,
     buildRibbonForDay: buildRibbonForDay,
@@ -1058,6 +1099,7 @@
     trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,
     dayStrip: dayStrip,
+    shouldWarnScheduleStale: shouldWarnScheduleStale,
     staleScheduleNote: staleScheduleNote,
     parseScheduleFocus: parseScheduleFocus,
     defaultScheduleDay: defaultScheduleDay,
