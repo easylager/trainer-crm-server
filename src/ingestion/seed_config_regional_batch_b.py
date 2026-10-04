@@ -17,6 +17,8 @@ GRODNO_TRINITI_CONFIG: dict = {
     "url": "https://ice.triniti-grodno.by/",
     "api_url": "https://ice.triniti-grodno.by/api/ice.php",
     "prices_url": "https://ice.triniti-grodno.by/prajs.html",
+    # Календарь на главной: клик по сеансу на их сайте ставит cookie и ведёт на biletyi.html.
+    "booking_url": "https://ice.triniti-grodno.by/#calendar",
     "timezone": "Europe/Minsk",
     "kind": "public_skate",
     "default_duration_minutes": 45,

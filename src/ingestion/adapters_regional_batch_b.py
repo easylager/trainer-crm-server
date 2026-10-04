@@ -88,6 +88,7 @@ class GrodnoTrinitiParser(IceParser):
         rental = _triniti_rental_minor(prices_html)
         if job.config.get("rental_minor") is not None:
             rental = int(job.config["rental_minor"])
+        booking_url = str(job.config.get("booking_url") or "").strip() or None
         slots: list[ExtractedSlot] = []
         for item in items or []:
             start_raw = str(item.get("start_date") or "")
@@ -111,6 +112,7 @@ class GrodnoTrinitiParser(IceParser):
                     price_rental=rental,
                     source_id=str(item.get("id") or "") or None,
                     age_note=age_note,
+                    external_url=booking_url,
                 )
             )
         return Extraction(

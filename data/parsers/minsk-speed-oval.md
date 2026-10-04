@@ -6,7 +6,7 @@
 - cadence: daily
 - requires_by_egress: false
 
-Тот же комплекс ABWS object id=4 «Конькобежный стадион»: овал — service/139 (`minskarena_speed_oval_v1`), хоккейная площадка внутри здания — service/55 (`minskarena_saleframe_v1`, arena_id 115). Главная «Арена» (большой лёд) — arena_id 2, service/62.
+Тот же комплекс ABWS object id=4 «Конькобежный стадион»: овал — service/139, хоккейная площадка — service/55 (второй проход в `minskarena_speed_oval_v1`, `hockey_mk_service_id`). Главная «Арена» — arena_id 2, service/62.
 
 ## Sources
 
@@ -45,11 +45,12 @@
   "kind_allow_substrings": ["массовое катание"],
   "drop_item_name_substrings": ["заточка"],
   "requires_by_egress": false,
-  "requires_auth": false
+  "requires_auth": false,
+  "hockey_mk_service_id": 55
 }
 ```
 
-Не использовать: hockey `service/55` (другой лёд), ByCard, inner HTML CMS.
+Не использовать: ByCard, inner HTML CMS. Hockey /55 — только через `hockey_mk_service_id`, не отдельный job.
 
 ## How to extract (reverse)
 

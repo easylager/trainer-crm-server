@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,12 @@ from zoneinfo import ZoneInfo
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.seed_config import PARSER_KEY_MINSK_ARENA, PARSER_KEY_MINSK_MAIN_ARENA, PARSER_KEY_MINSK_SPEED_OVAL
+from src.ingestion.seed_config import (
+    MINSK_ARENA_SALEFRAME_CONFIG,
+    PARSER_KEY_MINSK_ARENA,
+    PARSER_KEY_MINSK_MAIN_ARENA,
+    PARSER_KEY_MINSK_SPEED_OVAL,
+)
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -247,10 +253,38 @@ class MinskMainArenaSaleframeParser(MinskArenaSaleframeParser):
     parser_key = PARSER_KEY_MINSK_MAIN_ARENA
 
 
+def _hockey_mk_saleframe_config(job: ParserJob) -> dict | None:
+    """Service/55 config for a second pass when arena 115 job also covers hockey MK."""
+    if job.config.get("hockey_mk_service_id") is None:
+        return None
+    if job.config.get("fixture_dir"):
+        hockey_dir = job.config.get("hockey_mk_fixture_dir")
+        if not hockey_dir:
+            return None
+        return {**MINSK_ARENA_SALEFRAME_CONFIG, "fixture_dir": str(hockey_dir)}
+    return dict(MINSK_ARENA_SALEFRAME_CONFIG)
+
+
 class MinskSpeedOvalParser(MinskArenaSaleframeParser):
-    """ABWS saleframe/139 on object id=4. Same extract as hockey/55; rental joins service/138 by start."""
+    """ABWS saleframe/139 on object id=4; hockey rink /55 merged here (uq_ice_parser_jobs_arena_id)."""
 
     parser_key = PARSER_KEY_MINSK_SPEED_OVAL
+
+    async def extract(self, job: ParserJob) -> Extraction:
+        oval = await super().extract(job)
+        hockey_cfg = _hockey_mk_saleframe_config(job)
+        if hockey_cfg is None:
+            return oval
+        hockey_job = replace(job, config=hockey_cfg, parser_key=PARSER_KEY_MINSK_ARENA)
+        hockey = await MinskArenaSaleframeParser().extract(hockey_job)
+        snapshot = dict(oval.snapshot) if isinstance(oval.snapshot, dict) else {"oval": oval.snapshot}
+        snapshot["hockey_mk_service"] = hockey.snapshot
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=snapshot,
+            slots=[*oval.slots, *hockey.slots],
+        )
 
 
 class ZamokHtmlParser(IceParser):

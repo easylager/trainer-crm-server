@@ -29,6 +29,11 @@ def _job(**overrides) -> ParserJob:
         config={
             "url": "https://ledlife.by/massovye_kataniya/",
             "prices_url": "https://ledlife.by/stoimost_uslug/",
+            "prices_detail_url": "https://ledlife.by/krytyi_katok434451/",
+            "mk_price_bands": {
+                "day_45": {"adult": 1000, "child": 800},
+                "evening_45": {"adult": 1100, "child": 900},
+            },
             "timezone": "Europe/Minsk",
             "requires_by_egress": True,
             "fixture_dir": str(_FIXTURES),
@@ -75,10 +80,31 @@ async def test_ledlife_live_capture_has_future_mass_slots(tmp_path: Path) -> Non
 
     for name in ("massovye_kataniya-live.html", "stoimost_uslug-live.html"):
         shutil.copy(_FIXTURES / name, tmp_path / name.replace("-live", ""))
+    shutil.copy(_FIXTURES / "krytyi_katok434451.html", tmp_path / "krytyi_katok434451.html")
     base = _job()
-    job = replace(base, config={**base.config, "fixture_dir": str(tmp_path)})
+    job = replace(
+        base,
+        config={
+            **base.config,
+            "fixture_dir": str(tmp_path),
+            "mk_rental_minor": 700,
+        },
+    )
     extraction = await LedlifeOriginHtmlParser().extract(job)
     assert extraction.snapshot["blocked_without_by_egress"] is False
     assert len(extraction.slots) >= 3
     dates = {s.local_date for s in extraction.slots}
     assert "2026-10-04" in dates or "2026-10-10" in dates
+    assert all(s.price_adult is not None and s.price_child is not None for s in extraction.slots)
+    assert extraction.slots[0].price_adult == 11.0  # evening/weekend band, BYN with VAT
+    assert extraction.slots[0].price_rental == 7.0
+
+
+def test_ledlife_preiskurant_page_uses_mk_bands() -> None:
+    from src.ingestion.adapters_minsk_by_egress import _ledlife_prices_from_stoimost
+
+    html = (_FIXTURES / "krytyi_katok434451.html").read_text(encoding="utf-8")
+    job = _job()
+    book = _ledlife_prices_from_stoimost(html, job)
+    assert book["day_45"] == {"adult": 1000, "child": 800}
+    assert book["evening_45"] == {"adult": 1100, "child": 900}

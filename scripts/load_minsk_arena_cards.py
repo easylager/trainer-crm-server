@@ -170,6 +170,7 @@ class ArenaCard:
     district: str | None
     phone: str | None
     website_url: str | None
+    tickets_url: str | None
     opening_hours: dict[str, Any] | None
     season_start_month: int | None
     season_end_month: int | None
@@ -496,6 +497,7 @@ def parse_dossier(path: Path) -> ArenaCard:
     district = _known_text(value_of("district"))
     phone = compact_phone(value_of("phone"))
     website_url = _known_text(value_of("website_url"))
+    tickets_url = _known_text(value_of("tickets_url"))
     opening_hours = parse_opening_hours(value_of("opening_hours"))
     season_start, season_end = parse_season(value_of("season"))
     amenities = parse_amenities(value_of("amenities"))
@@ -531,6 +533,7 @@ def parse_dossier(path: Path) -> ArenaCard:
         district=district,
         phone=phone,
         website_url=website_url,
+        tickets_url=tickets_url,
         opening_hours=opening_hours,
         season_start_month=season_start,
         season_end_month=season_end,
@@ -805,6 +808,7 @@ def profile_patch(card: ArenaCard) -> dict[str, Any]:
         "district": card.district,
         "phone": card.phone,
         "website_url": card.website_url,
+        "tickets_url": card.tickets_url,
         "opening_hours": card.opening_hours,
         "season_start_month": card.season_start_month,
         "season_end_month": card.season_end_month,

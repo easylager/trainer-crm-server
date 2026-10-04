@@ -37,7 +37,6 @@ BY_EGRESS_PARSER_KEYS = frozenset(
 
 MINSK_MK_PARSER_KEYS = frozenset(
     {
-        "minskarena_saleframe_v1",
         "minskarena_main_saleframe_v1",
         "zamok_html_v1",
         "chizhovka_html_v1",

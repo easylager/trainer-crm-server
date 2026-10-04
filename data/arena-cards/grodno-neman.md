@@ -23,7 +23,7 @@ unknown явно писать `unknown`, не выдумывать.
 ## Photos
 | file or URL | license (own\|operator\|permitted) | attribution | note |
 |---|---|---|---|
-| https://neman.hockey.by/cache/upload/iblock/f0d/1xz8xaq6g12uoqkto7fdtrsrbdp4qu26/mass_sm-307x205.jpg | operator | ХК «Неман» | Превью-фото у самого поста «СТАРТ МАССОВЫХ КАТАНИЙ» https://neman.hockey.by/news/sobytie/news446875.html — фото льда/сеанса МК. **нужно разрешение**. Локально не копировали. |
+| photos/arena-11/hero.webp | own | оператор ЛДС / IceProCare | Интерьер ледовой арены на ул. Коммунальная, 3а (hero для карточки). |
 
 ## Conflicts
 - Два ХК «Неман»-льда: ЛДС Коммунальная 3а (прод arena_id=11, эта карточка) и ФОК ур. Пышки, 13, где физически проходит МК по снимку 2026-09-06 — не заводить как вторую арену, писать `session_label`.

@@ -20,4 +20,5 @@ fetch() {
 
 fetch "https://ledlife.by/massovye_kataniya/" "$ROOT/data/fixtures/minsk-ledlife/massovye_kataniya-live.html"
 fetch "https://ledlife.by/stoimost_uslug/" "$ROOT/data/fixtures/minsk-ledlife/stoimost_uslug-live.html"
+fetch "https://ledlife.by/krytyi_katok434451/" "$ROOT/data/fixtures/minsk-ledlife/krytyi_katok434451-live.html"
 fetch "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/" "$ROOT/data/fixtures/minsk-junost/junost-origin-live.html"

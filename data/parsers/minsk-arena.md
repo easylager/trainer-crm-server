@@ -2,8 +2,10 @@
 
 ABWS `object.id=4` «Конькобежный стадион», не здание главной «Арены» (service/62 → arena_id 2).
 
+Слоты service/55 подтягивает **`minskarena_speed_oval_v1`** на arena_id 115 (`hockey_mk_service_id` в job.config) — отдельной строки `ice_parser_jobs` нет (один arena_id).
+
 - arena_id: 115
-- parser_key: minskarena_saleframe_v1
+- parser_key: null
 - cadence: daily
 - requires_by_egress: false
 

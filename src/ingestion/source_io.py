@@ -74,6 +74,19 @@ async def fetch_http_text(url: str, *, headers: dict[str, str] | None = None) ->
             return await response.text()
 
 
+async def fetch_http_text_optional(url: str, *, headers: dict[str, str] | None = None) -> str | None:
+    """GET body or None on HTTP/network failure (ledlife price fallbacks)."""
+    request_headers = {"User-Agent": _USER_AGENT, **(headers or {})}
+    try:
+        async with client_session(20) as session:
+            async with session.get(url, headers=request_headers, proxy=current_egress_proxy()) as response:
+                if response.status >= 400:
+                    return None
+                return await response.text()
+    except (aiohttp.ClientError, TimeoutError):
+        return None
+
+
 async def fetch_http_json(url: str, *, headers: dict[str, str] | None = None) -> Any:
     return json.loads(await fetch_http_text(url, headers=headers))
 

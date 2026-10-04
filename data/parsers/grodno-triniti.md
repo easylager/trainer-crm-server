@@ -25,6 +25,7 @@
   "child_field": "c_price",
   "rental_minor": 800,
   "drop_if_adult_minor_gte": 2000,
+  "booking_url": "https://ice.triniti-grodno.by/#calendar",
   "requires_by_egress": false
 }
 ```
@@ -56,4 +57,4 @@
 ## Blockers / notes
 
 - Geo-блока нет. Каденс daily: JSON на неделю вперёд.
-- Онлайн-оплата на сайте может быть выключена — на extract не влияет.
+- Онлайн-оплата на сайте может быть временно выключена (баннер «только в кассе» на главной) — слоты в API всё равно есть. В приложении `booking_url` / `tickets_url` ведут на `#calendar`; покупка на их сайте — клик по тому же сеансу в календаре → `/biletyi.html` (cookie `session_id`).

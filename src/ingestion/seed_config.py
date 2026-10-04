@@ -86,6 +86,8 @@ MINSK_SPEED_OVAL_SALEFRAME_CONFIG: dict = {
     "drop_item_name_substrings": ["заточка"],
     "requires_by_egress": False,
     "requires_auth": False,
+    # ABWS service/55 on the same object — merged in MinskSpeedOvalParser (one job per arena_id).
+    "hockey_mk_service_id": 55,
 }
 
 _SALEFRAME_DEFAULTS = {

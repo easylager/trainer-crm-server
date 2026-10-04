@@ -12,6 +12,7 @@
 | district | Октябрьский район (Кастрычніцкі раён) | Nominatim reverse `lat=53.649866&lon=23.854538` → `class=leisure,type=ice_rink`, `city_district=Кастрычніцкі раён` https://nominatim.openstreetmap.org/reverse?lat=53.649866&lon=23.854538&format=json&addressdetails=1 | 2026-09-07 |
 | phone | +375 (29) 311-23-23 | https://ice.triniti-grodno.by/ (шапка + meta description) | 2026-09-07 |
 | website_url | https://ice.triniti-grodno.by/ | сайт катка (не общий сайт ТРК TRINITI) | 2026-09-07 |
+| tickets_url | https://ice.triniti-grodno.by/#calendar | главная, блок `#calendar` — оттуда «Купить билет» / выбор сеанса (онлайн через biletyi.html, когда включена) | 2026-10-04 |
 | opening_hours | unknown | на сайте нет отдельного блока часов работы; расписание сеансов 11:00–22:45 (`api/ice.php`) — это сетка МК, не opening_hours | 2026-09-07 |
 | season | unknown | «круглый год» в meta description, явных месяцев не указано | 2026-09-07 |
 | amenities | skate_rental: true; skate_sharpening: unknown; parking: unknown; locker_rooms: unknown; cafe: unknown; accessibility: unknown | прокат коньков — отдельная строка прайса https://ice.triniti-grodno.by/prajs.html; остальное на сайте не названо | 2026-09-07 |

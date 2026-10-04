@@ -88,6 +88,9 @@ async def test_grodno_triniti_matches_71_gold_sessions() -> None:
     weekday = by_key[("2026-09-08", "11:00")]
     assert weekday.price_adult_minor == 900 and weekday.price_child_minor == 700
     assert all(slot.price_rental_minor == 800 for slot in slots)
+    assert all(
+        slot.external_url == "https://ice.triniti-grodno.by/#calendar" for slot in slots
+    )
 
 
 @pytest.mark.asyncio

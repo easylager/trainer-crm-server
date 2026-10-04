@@ -9,10 +9,16 @@ from typing import Any
 from src.ingestion.htmlutil import parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
-from src.ingestion.source_io import load_source_text
+from src.ingestion.source_io import fetch_http_text_optional, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
 _BY_BLOCK_MARKER = "403 Forbidden"
+
+# Прейскурант «Крытый каток» от 01.09.2026 (фото на krytyi_katok434451): цена **с НДС**, касса, 45 мин МК.
+LEDLIFE_MK_PRICE_BANDS_VAT_2026_09: dict[str, dict[str, int]] = {
+    "day_45": {"adult": 1000, "child": 800},
+    "evening_45": {"adult": 1100, "child": 900},
+}
 _LED_DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{2})")
 _LED_TIME = re.compile(r"^(\d{1,2})-(\d{2})$")
 _MASS_LABEL = re.compile(r"МАССОВ(ЫЕ|ОЕ)\s+КАТАН", re.IGNORECASE)
@@ -169,7 +175,7 @@ def _ledlife_prices_from_stoimost_tables(tables: list[list[list[str]]]) -> dict[
             ):
                 in_mk = False
                 continue
-            if "массовое катание на коньках" in lower and "семейн" not in lower:
+            if "массовое катание" in lower and "семейн" not in lower and "большое" not in lower:
                 in_mk = True
             if not in_mk:
                 continue
@@ -217,12 +223,182 @@ def _ledlife_prices_from_stoimost_plain(plain: str) -> dict[str, dict[str, int]]
     return book
 
 
-def _ledlife_prices_from_stoimost(html: str) -> dict[str, dict[str, int]]:
+def _ledlife_mk_price_bands_from_config(job: ParserJob) -> dict[str, dict[str, int]]:
+    raw = job.config.get("mk_price_bands")
+    if not isinstance(raw, dict):
+        return dict(LEDLIFE_MK_PRICE_BANDS_VAT_2026_09)
+    out: dict[str, dict[str, int]] = {}
+    for key, band in raw.items():
+        if isinstance(band, dict) and "adult" in band and "child" in band:
+            out[str(key)] = {"adult": int(band["adult"]), "child": int(band["child"])}
+    return out or dict(LEDLIFE_MK_PRICE_BANDS_VAT_2026_09)
+
+
+def _ledlife_prices_from_preiskurant_page(html: str, job: ParserJob) -> dict[str, dict[str, int]]:
+    """Site publishes preiskurant as scanned pages (images), not HTML tables."""
+    if re.search(r"preiskurant|прейскурант", html, re.I):
+        return _ledlife_mk_price_bands_from_config(job)
+    return {}
+
+
+def _ledlife_is_schedule_html(html: str) -> bool:
+    plain = strip_tags(html)
+    return len(re.findall(r"\b\d{2}\.\d{2}\.\d{2}\b", plain)) >= 5
+
+
+def _ledlife_schedule_url(job: ParserJob) -> str:
+    return str(job.config.get("url") or "").rstrip("/")
+
+
+def _ledlife_skip_price_url(job: ParserJob, url: str) -> bool:
+    u = url.rstrip("/")
+    sched = _ledlife_schedule_url(job)
+    if sched and u == sched:
+        return True
+    return "massovye_kataniya" in u.lower()
+
+
+def _ledlife_prices_from_mk_amount_run(html: str) -> dict[str, dict[str, int]]:
+    """Fallback when ledlife reformatted prices outside classic tables."""
+    if _ledlife_is_schedule_html(html):
+        return {}
+    plain = strip_tags(html)
+    lower = plain.lower()
+    start = -1
+    for needle in (
+        "массовое катание на коньках",
+        "массовое катание",
+        "большое массовое катание",
+    ):
+        start = lower.find(needle)
+        if start >= 0:
+            break
+    if start < 0:
+        return {}
+    end = len(plain)
+    for stop in ("семейное массовое", "абонемент", "заточка коньков", "прокат коньков"):
+        pos = lower.find(stop, start + 10)
+        if pos > start:
+            end = min(end, pos)
+    section = plain[start:end]
+    amounts: list[int] = []
+    for whole, frac in re.findall(r"\b(\d{1,2})[,.](\d{2})\b", section):
+        minor = int(whole) * 100 + int(frac)
+        if 300 <= minor <= 2500:
+            amounts.append(minor)
+    if len(amounts) >= 4:
+        return {
+            "day_45": {"adult": amounts[0], "child": amounts[1]},
+            "evening_45": {"adult": amounts[2], "child": amounts[3]},
+        }
+    if len(amounts) >= 2:
+        pair = {"adult": amounts[0], "child": amounts[1]}
+        return {"day_45": pair, "evening_45": dict(pair)}
+    return {}
+
+
+def _ledlife_discover_price_page_urls(html: str) -> list[str]:
+    seen: set[str] = set()
+    urls: list[str] = []
+    for match in re.finditer(r'href="(/[^"#?]+)"', html, flags=re.I):
+        path = match.group(1).strip()
+        low = path.lower()
+        if any(skip in low for skip in ("javascript", "mailto", "callback", "feedback", ".pdf", "viber:")):
+            continue
+        if not any(
+            token in low
+            for token in ("stoimost", "massovoe", "katan", "katok", "prejskur", "prajs", "tsen", "uslug")
+        ):
+            continue
+        url = f"https://ledlife.by{path}"
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def _ledlife_prices_candidate_urls(job: ParserJob, stoimost_html: str) -> list[str]:
+    """Hub stoimost_uslug often 403/empty on subpaths — try several BY pages."""
+    seen: set[str] = set()
+    urls: list[str] = []
+
+    def add(raw: str | None) -> None:
+        if not raw:
+            return
+        u = raw.strip()
+        if not u or u in seen:
+            return
+        seen.add(u)
+        urls.append(u)
+
+    add(job.config.get("prices_detail_url"))
+    add("https://ledlife.by/krytyi_katok434451/")
+    for pattern in (
+        r'href="(/krytyi_katok\d+/)"',
+        r'href="(/krytyi_ledovyi_katok/)"',
+        r'href="(/massovoe_katanie/)"',
+    ):
+        match = re.search(pattern, stoimost_html, flags=re.I)
+        if match:
+            add(f"https://ledlife.by{match.group(1)}")
+    fallbacks = job.config.get("prices_fallback_urls")
+    if isinstance(fallbacks, list):
+        for item in fallbacks:
+            add(str(item))
+    else:
+        add("https://ledlife.by/krytyi_ledovyi_katok/")
+        add("https://ledlife.by/massovoe_katanie/")
+        add("https://ledlife.by/krytyi_katok434451/")
+    return urls
+
+
+async def _load_ledlife_prices_html(job: ParserJob) -> str:
+    primary = await load_source_text(job, filename="stoimost_uslug.html", url_keys=("prices_url",))
+    if _ledlife_prices_from_stoimost(primary, job):
+        return primary
+    fixture_dir = job.config.get("fixture_dir")
+    if fixture_dir:
+        from pathlib import Path
+
+        for name in ("krytyi_katok434451.html", "krytyi_katok.html", "prices_detail.html"):
+            path = Path(str(fixture_dir)) / name
+            if path.is_file():
+                detail = path.read_text(encoding="utf-8")
+                if _ledlife_prices_from_stoimost(detail, job):
+                    return detail
+        return primary
+    prices_url = str(job.config.get("prices_url") or "https://ledlife.by/stoimost_uslug/").rstrip("/")
+    queue = list(_ledlife_prices_candidate_urls(job, primary))
+    seen_urls: set[str] = set()
+    while queue and len(seen_urls) < 18:
+        url = queue.pop(0)
+        if url in seen_urls or _ledlife_skip_price_url(job, url):
+            continue
+        seen_urls.add(url)
+        if url.rstrip("/") == prices_url:
+            detail = primary
+        else:
+            detail = await fetch_http_text_optional(url)
+        if not detail or is_by_origin_blocked_snapshot(detail):
+            continue
+        if _ledlife_prices_from_stoimost(detail, job):
+            return detail
+        for child in _ledlife_discover_price_page_urls(detail):
+            if child not in seen_urls and child not in queue and not _ledlife_skip_price_url(job, child):
+                queue.append(child)
+    return primary
+
+
+def _ledlife_prices_from_stoimost(html: str, job: ParserJob | None = None) -> dict[str, dict[str, int]]:
     """Day vs evening 45-minute MK bands (adult/child in minor units)."""
     tables = parse_tables(html)
     book = _ledlife_prices_from_stoimost_tables(tables) if tables else {}
     if not book:
         book = _ledlife_prices_from_stoimost_plain(strip_tags(html))
+    if not book:
+        book = _ledlife_prices_from_mk_amount_run(html)
+    if not book and job is not None:
+        book = _ledlife_prices_from_preiskurant_page(html, job)
     return book
 
 
@@ -318,7 +494,22 @@ def _ledlife_price_band_key(slot: ExtractedSlot) -> str:
     return "day_45"
 
 
-def _apply_ledlife_prices(slots: list[ExtractedSlot], price_book: dict[str, dict[str, int]]) -> None:
+def _ledlife_mk_rental_minor(job: ParserJob, *, price_book: dict[str, dict[str, int]]) -> int | None:
+    if not price_book:
+        return None
+    raw = job.config.get("mk_rental_minor")
+    if raw is None:
+        return None
+    return int(raw)
+
+
+def _apply_ledlife_prices(
+    slots: list[ExtractedSlot],
+    price_book: dict[str, dict[str, int]],
+    job: ParserJob,
+) -> None:
+    rental_minor = _ledlife_mk_rental_minor(job, price_book=price_book)
+    rental_major = _minor_to_major(rental_minor)
     for slot in slots:
         band_key = _ledlife_price_band_key(slot)
         band = price_book.get(band_key) or price_book.get("evening_45") or price_book.get("day_45")
@@ -329,6 +520,8 @@ def _apply_ledlife_prices(slots: list[ExtractedSlot], price_book: dict[str, dict
         slot.price_adult = _minor_to_major(adult_minor)
         slot.price_child = _minor_to_major(child_minor)
         slot.age_note = _mk_age_note_when_tiered(adult_minor, child_minor)
+        if rental_major is not None:
+            slot.price_rental = rental_major
 
 
 class LedlifeOriginHtmlParser(IceParser):
@@ -342,13 +535,12 @@ class LedlifeOriginHtmlParser(IceParser):
             slots = _parse_ledlife_style_table(schedule)
             if slots:
                 try:
-                    prices_html = await load_source_text(
-                        job, filename="stoimost_uslug.html", url_keys=("prices_url",)
-                    )
+                    prices_html = await _load_ledlife_prices_html(job)
                 except Exception:  # noqa: BLE001 — optional prices page
                     prices_html = ""
                 if prices_html and not is_by_origin_blocked_snapshot(prices_html):
-                    _apply_ledlife_prices(slots, _ledlife_prices_from_stoimost(prices_html))
+                    book = _ledlife_prices_from_stoimost(prices_html, job)
+                    _apply_ledlife_prices(slots, book, job)
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,

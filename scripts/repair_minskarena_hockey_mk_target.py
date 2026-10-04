@@ -1,6 +1,7 @@
-"""Move ABWS service/55 (hockey-rink MK) off arena_id=2 onto Конькобежный стадион (115).
+"""Retire standalone hockey MK job (service/55) and move misplaced sessions to arena 115.
 
-Service/55 init.object = «Конькобежный стадион»; main «Арена» MK is service/62 on arena 2.
+Hockey ABWS is ingested inside ``minskarena_speed_oval_v1`` (one row per arena_id).
+Prod may still have ``minskarena_saleframe_v1`` on arena 2 from an older seed.
 
 Default dry-run. Prod: ``--apply --i-know-this-is-prod``.
 
@@ -35,6 +36,7 @@ HOCKEY_ARENA_ID = 115
 MAIN_ARENA_ID = 2
 HOCKEY_PARSER = "minskarena_saleframe_v1"
 MAIN_PARSER = "minskarena_main_saleframe_v1"
+SPEED_OVAL_PARSER = "minskarena_speed_oval_v1"
 HOCKEY_LABEL = "%хоккейн%"
 
 
@@ -49,11 +51,11 @@ async def run(*, apply: bool) -> None:
                     """
                     SELECT id, arena_id, parser_key, is_enabled
                     FROM ice_parser_jobs
-                    WHERE parser_key IN (:hockey, :main)
-                    ORDER BY parser_key
+                    WHERE parser_key IN (:hockey, :main, :oval)
+                    ORDER BY parser_key, arena_id
                     """
                 ),
-                {"hockey": HOCKEY_PARSER, "main": MAIN_PARSER},
+                {"hockey": HOCKEY_PARSER, "main": MAIN_PARSER, "oval": SPEED_OVAL_PARSER},
             )
         ).mappings().all()
         print("parser jobs:", [dict(r) for r in jobs])
@@ -64,28 +66,38 @@ async def run(*, apply: bool) -> None:
                     """
                     SELECT COUNT(*) FROM ice_sessions
                     WHERE arena_id = :main_id
-                      AND (session_label ILIKE :lbl OR kind = 'public_skate')
+                      AND (session_label ILIKE :lbl OR session_label ILIKE '%хоккейной площадке%')
                     """
                 ),
                 {"main_id": MAIN_ARENA_ID, "lbl": HOCKEY_LABEL},
             )
         ).scalar_one()
-        print(f"ice_sessions on arena {MAIN_ARENA_ID} (public_skate or hockey label): {misplaced}")
+        print(f"ice_sessions on arena {MAIN_ARENA_ID} with hockey label: {misplaced}")
+
+        stale_hockey_jobs = (
+            await session.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM ice_parser_jobs
+                    WHERE parser_key = :hockey_key
+                    """
+                ),
+                {"hockey_key": HOCKEY_PARSER},
+            )
+        ).scalar_one()
+        print(f"stale {HOCKEY_PARSER} job rows: {stale_hockey_jobs}")
 
         if not apply:
-            print("dry-run — pass --apply to update jobs and move hockey MK sessions")
+            print(
+                "dry-run — pass --apply to delete stale hockey job rows, "
+                "move hockey-labelled sessions to 115; then seed for main arena /62"
+            )
             await engine.dispose()
             return
 
         await session.execute(
-            text(
-                """
-                UPDATE ice_parser_jobs
-                SET arena_id = :hockey_aid
-                WHERE parser_key = :hockey_key AND arena_id <> :hockey_aid
-                """
-            ),
-            {"hockey_aid": HOCKEY_ARENA_ID, "hockey_key": HOCKEY_PARSER},
+            text("DELETE FROM ice_parser_jobs WHERE parser_key = :hockey_key"),
+            {"hockey_key": HOCKEY_PARSER},
         )
         await session.execute(
             text(
@@ -99,7 +111,10 @@ async def run(*, apply: bool) -> None:
             {"hockey_aid": HOCKEY_ARENA_ID, "main_id": MAIN_ARENA_ID, "lbl": HOCKEY_LABEL},
         )
         await session.commit()
-        print("applied: hockey job → arena 115; hockey-labelled sessions moved")
+        print(
+            f"applied: removed {HOCKEY_PARSER} jobs; hockey-labelled sessions → arena {HOCKEY_ARENA_ID}. "
+            f"Run seed_ice_parser_jobs for {MAIN_PARSER} on arena {MAIN_ARENA_ID}."
+        )
     await engine.dispose()
 
 

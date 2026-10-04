@@ -11,7 +11,10 @@ from src.ingestion.jobs import InMemoryParserJobStore, job_from_row
 from src.ingestion.parsers import ParserRegistry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import InMemoryScrapeRunRecorder
-from src.ingestion.seed_config import MINSK_ARENA_SALEFRAME_CONFIG, PARSER_KEY_MINSK_ARENA
+from src.ingestion.seed_config import (
+    MINSK_SPEED_OVAL_SALEFRAME_CONFIG,
+    PARSER_KEY_MINSK_ARENA,
+)
 from src.ingestion.seed_jobs import (
     REPO_ROOT,
     JobSeed,
@@ -201,12 +204,7 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     seeds = build_minsk_job_seeds()
     by_key = {seed.parser_key: seed for seed in seeds}
 
-    arena = by_key[PARSER_KEY_MINSK_ARENA]
-    assert arena.is_enabled is True
-    assert arena.config["url"] == MINSK_ARENA_SALEFRAME_CONFIG["url"]
-    assert arena.config["service_id"] == 55
-    assert arena.config["prices_already_minor"] is True
-    assert arena.cadence == "daily"
+    assert PARSER_KEY_MINSK_ARENA not in by_key
 
     oval = by_key["minskarena_speed_oval_v1"]
     assert oval.is_enabled is True
@@ -214,6 +212,8 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     assert oval.config["service_id"] == 139
     assert oval.config["rental_service_id"] == 138
     assert oval.config["adult_zone_id"] == 1008
+    assert oval.config["hockey_mk_service_id"] == 55
+    assert oval.config["url"] == MINSK_SPEED_OVAL_SALEFRAME_CONFIG["url"]
 
     assert by_key["zamok_html_v1"].is_enabled is True
     assert by_key["zamok_html_v1"].config["url"] == "https://tczamok.by/entertainments/ice-rink"
@@ -221,11 +221,9 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     assert "schedule_url" in by_key["chizhovka_html_v1"].config
     assert by_key["ledby_html_v1"].is_enabled is True
 
-    hockey_mk = by_key["minskarena_saleframe_v1"]
     main_mk = by_key["minskarena_main_saleframe_v1"]
-    assert hockey_mk.arena_id == 115
     assert main_mk.arena_id == 2
-    assert hockey_mk.is_enabled is True
+    assert main_mk.is_enabled is True
 
     junost = by_key["junost_origin_html_v1"]
     ledlife = by_key["ledlife_origin_html_v1"]

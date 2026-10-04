@@ -10,8 +10,8 @@
 
 ## Sources
 
-- schedule+prices: https://ledlife.by/massovye_kataniya/  ← единственный SoT сетки
-- related (не fallback времён): https://ledlife.by/massovoe_katanie/ правила; https://ledlife.by/stoimost_uslug/ прайс «в кассе»
+- schedule: https://ledlife.by/massovye_kataniya/  ← сетка сеансов
+- prices: https://ledlife.by/krytyi_katok434451/ — прейскурант **картинками** (preiskurant3_s_01092026_*.jpg), не HTML-таблица; bands в `mk_price_bands` (с НДС, касса)
 - widget/api: нет
 - job.config JSON (черновик):
 
@@ -19,6 +19,16 @@
 {
   "url": "https://ledlife.by/massovye_kataniya/",
   "prices_url": "https://ledlife.by/stoimost_uslug/",
+  "prices_detail_url": "https://ledlife.by/krytyi_katok434451/",
+  "mk_price_bands": {
+    "day_45": { "adult": 1000, "child": 800 },
+    "evening_45": { "adult": 1100, "child": 900 }
+  },
+  "mk_rental_minor": 700,
+  "prices_fallback_urls": [
+    "https://ledlife.by/krytyi_ledovyi_katok/",
+    "https://ledlife.by/massovoe_katanie/"
+  ],
   "timezone": "Europe/Minsk",
   "kind": "public_skate",
   "requires_by_egress": true,
