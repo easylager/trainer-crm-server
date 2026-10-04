@@ -315,18 +315,15 @@
   function resolvedShareSessionId() {
     var slots = scheduleSlots();
     var picked = sharePickedId();
-    if (picked && slots.some(function (s) { return String(s.id) === picked; })) return picked;
+    if (picked && sessionExistsInSchedule(picked)) return picked;
     return slots.length ? String(slots[0].id) : null;
   }
 
   function shareInviteCtaLabel() {
-    var slots = scheduleSlots();
     var sid = resolvedShareSessionId();
-    if (!sid || !slots.length) return 'Позвать с собой';
-    for (var i = 0; i < slots.length; i++) {
-      if (String(slots[i].id) === sid) return 'Позвать на ' + slots[i].label;
-    }
-    return 'Позвать с собой';
+    if (!sid || !scheduleSlots().length) return 'Позвать с собой';
+    var when = M.shareSlotInviteLabel(scheduleDays(), todayIso(), sid, state.day || todayIso());
+    return when ? 'Позвать на ' + when : 'Позвать с собой';
   }
 
   function renderShareBar() {
@@ -351,7 +348,11 @@
     var base = '/api/public/arenas/' + encodeURIComponent(String(state.card.id));
     return fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)).then(
       function (data) {
-        return M.shareSlots((data && data.days) || [], today, 8);
+        var days = (data && data.days) || [];
+        return {
+          slots: M.shareSlots(days, today, 0),
+          slotSections: M.shareSlotsGrouped(days, today),
+        };
       }
     );
   }
@@ -359,16 +360,17 @@
   function openShare(invite) {
     if (!global.GlideShareSheet || !state.card) return;
     var isIce = skatingCard();
-    var slots = isIce ? scheduleSlots() : [];
+    var payload = isIce ? shareSheetPayload() : { slots: [], slotSections: [] };
     var loadSlots =
-      isIce && slots.length <= 1
+      isIce && payload.slots.length <= 1
         ? function () {
             return fetchShareSlots();
           }
         : null;
     global.GlideShareSheet.open({
       ref: state.card.id,
-      slots: slots,
+      slots: payload.slots,
+      slotSections: payload.slotSections,
       sessionId: resolvedShareSessionId(),
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
@@ -589,8 +591,27 @@
     return '<div class="arena-qas arena-qas--' + items.length + '">' + items.join('') + '</div>';
   }
 
+  function scheduleDays() {
+    return (state.sessions && state.sessions.days) || [];
+  }
+
   function scheduleSlots() {
-    return skatingCard() ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso(), 8) : [];
+    return skatingCard() ? M.shareSlots(scheduleDays(), todayIso(), 0) : [];
+  }
+
+  function shareSheetPayload() {
+    var today = todayIso();
+    var days = scheduleDays();
+    return {
+      slots: M.shareSlots(days, today, 0),
+      slotSections: M.shareSlotsGrouped(days, today),
+    };
+  }
+
+  function sessionExistsInSchedule(sessionId) {
+    if (sessionId == null) return false;
+    var id = String(sessionId);
+    return scheduleSlots().some(function (s) { return String(s.id) === id; });
   }
 
   function strip() {
@@ -646,29 +667,39 @@
           : '') +
         '<div class="arena-times">' +
         g.times.map(function (t) {
-          var cls = 'arena-time';
-          if (t.picked) cls += ' arena-time--picked';
-          else if (t.next) cls += ' arena-time--next';
-          if (t.href) cls += ' arena-time--link';
+          var slotCls = 'arena-slot';
+          if (t.picked) slotCls += ' arena-slot--picked';
+          if (!t.ticketHref) slotCls += ' arena-slot--no-buy';
+          var timeCls = 'arena-slot-time';
+          if (t.picked) timeCls += ' arena-time--picked';
+          else if (t.next) timeCls += ' arena-time--next';
           var tag = t.picked ? 'В приглашении' : t.next ? 'Ближайший' : t.capacity;
           var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
-          if (t.href) {
-            return '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>';
-          }
+          var buy =
+            t.ticketHref
+              ? '<button type="button" class="arena-slot-buy" data-action="external" data-href="' +
+                esc(t.ticketHref) +
+                '" title="Билеты на сайте" aria-label="Билеты на сайте">↗</button>'
+              : '';
           if (t.sessionId != null) {
             return (
+              '<div class="' +
+              slotCls +
+              '">' +
               '<button type="button" class="' +
-              cls +
+              timeCls +
               '" data-action="pick-session" data-session-id="' +
               esc(t.sessionId) +
               '" aria-pressed="' +
               (t.picked ? 'true' : 'false') +
               '">' +
               body +
-              '</button>'
+              '</button>' +
+              buy +
+              '</div>'
             );
           }
-          return '<span class="' + cls + '">' + body + '</span>';
+          return '<div class="' + slotCls + '"><span class="' + timeCls + '">' + body + '</span>' + buy + '</div>';
         }).join('') +
         '</div>' +
         (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
@@ -720,6 +751,12 @@
       state.day = inStrip ? focusDay : M.defaultScheduleDay(days);
     }
     var tickets = M.ticketCta(state.card);
+    var iso = state.day || todayIso();
+    var byDate = sessionsByDate();
+    var daySessions = byDate[iso] || [];
+    var hasTicketLinks = daySessions.some(function (s) {
+      return M.iceRowCta(s, state.card && state.card.tickets_url).href;
+    });
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
@@ -727,6 +764,7 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
+      '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'

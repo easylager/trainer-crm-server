@@ -252,6 +252,16 @@ describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () =>
     assert.doesNotMatch(s, /сеанс/);
   });
 
+  it('singlePlaceFocus — bbox вокруг координат магазина', () => {
+    const { singlePlaceFocus } = loadModel();
+    const f = singlePlaceFocus({ latitude: 53.9, longitude: 27.56, venue_type: 'shop' }, {
+      margin: [150, 70, 240, 70],
+    });
+    assert.ok(f);
+    assert.deepEqual(f.bounds[0], [53.9 - 0.0018, 27.56 - 0.0018]);
+    assert.deepEqual(f.margin, [150, 70, 240, 70]);
+  });
+
   it('snapFor — ближайшее положение шторки', () => {
     const { snapFor } = loadModel();
     const snaps = { peek: 96, half: 222, full: 600 };

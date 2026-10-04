@@ -31,7 +31,8 @@
   "drop_label_substrings": ["абонемент", "заточка", "пингвин", "морской котик", "карта посетителя"],
   "prices_already_minor": true,
   "requires_by_egress": false,
-  "korona_tickets_url": "https://koronaticket.by/rink"
+  "korona_tickets_url": "https://koronaticket.by/rink",
+  "poll_minutes": 15
 }
 ```
 
@@ -70,3 +71,4 @@
 - Стабильная HTML-сетка, geo-блока нет.
 - Если касса снимет `:15`-фильтр или сменит длительность — чинить спеку, не if в адаптере.
 - Спайк захардкодил цены; адаптер обязан читать их с той же страницы.
+- **`poll_minutes: 15`** — остатки Korona на проде обновляет `ice-platform-notification`, не ручной ingest.

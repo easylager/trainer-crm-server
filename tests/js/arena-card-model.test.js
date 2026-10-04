@@ -609,6 +609,28 @@ describe('practiceContacts', () => {
   });
 });
 
+describe('shareSlotsGrouped (TASK-158)', () => {
+  it('группирует сеансы по дням для share sheet', () => {
+    const { shareSlotsGrouped } = loadModel();
+    const days = [
+      {
+        local_date: '2026-10-02',
+        sessions: [
+          { id: 1, starts_at_local: '19:00:00', price_adult_minor: 1100, currency_code: 'BYN' },
+          { id: 2, starts_at_local: '21:00:00', price_adult_minor: 1100, currency_code: 'BYN' },
+        ],
+      },
+      { local_date: '2026-10-03', sessions: [{ id: 3, starts_at_local: '11:00:00', price_adult_minor: 1100, currency_code: 'BYN' }] },
+    ];
+    const g = shareSlotsGrouped(days, '2026-10-02');
+    assert.equal(g.length, 2);
+    assert.equal(g[0].dayLabel, 'Сегодня');
+    assert.deepEqual(g[0].rows.map((r) => r.time), ['19:00', '21:00']);
+    assert.equal(g[0].rows[0].meta, '11 BYN');
+    assert.equal(g[1].dayLabel, 'Завтра');
+  });
+});
+
 describe('shareSlots (TASK-146)', () => {
   it('ближайшие сеансы с человеческими подписями и лимитом', () => {
     const { shareSlots } = loadModel();
@@ -618,11 +640,13 @@ describe('shareSlots (TASK-146)', () => {
       { local_date: '2026-10-04', sessions: [{ id: 4, starts_at_local: '18:30' }, { id: 5, starts_at_local: '' }] },
     ];
     assert.deepEqual(shareSlots(days, '2026-10-02', 3), [
-      { id: 1, label: 'Сегодня 19:00' },
-      { id: 2, label: 'Сегодня 20:45' },
-      { id: 3, label: 'Завтра 11:00' },
+      { id: 1, label: 'Сегодня 19:00', localDate: '2026-10-02', time: '19:00' },
+      { id: 2, label: 'Сегодня 20:45', localDate: '2026-10-02', time: '20:45' },
+      { id: 3, label: 'Завтра 11:00', localDate: '2026-10-03', time: '11:00' },
     ]);
-    assert.deepEqual(shareSlots(days, '2026-10-02', 10).slice(-1), [{ id: 4, label: 'Вс 18:30' }]);
+    assert.deepEqual(shareSlots(days, '2026-10-02', 10).slice(-1), [
+      { id: 4, label: 'Вс 18:30', localDate: '2026-10-04', time: '18:30' },
+    ]);
     assert.deepEqual(shareSlots([], '2026-10-02'), []);
   });
 });
@@ -749,7 +773,7 @@ describe('TASK-146: расписание как сеансы в кино', () =>
     assert.deepEqual(v.groups[0].times.map((t) => t.time), ['14:15', '15:15']);
     assert.equal(v.groups[0].times[0].next, true);
     assert.equal(v.groups[0].times[1].next, false);
-    assert.equal(v.groups[0].times[0].href, 'https://koronaticket.by/rink');
+    assert.equal(v.groups[0].times[0].ticketHref, 'https://koronaticket.by/rink');
     assert.deepEqual(v.groups[0].prices.map((p) => p.label + ' ' + p.value), ['Взрослый 10 BYN', 'Детский 8 BYN', 'Прокат 9 BYN']);
     assert.equal(v.groups[1].prices[0].value, '12 BYN');
   });
@@ -757,7 +781,7 @@ describe('TASK-146: расписание как сеансы в кино', () =>
   it('без кассы время — не ссылка', () => {
     const { showtimesForDay } = loadModel();
     const v = showtimesForDay({ sessions: [s(2, '14:15')], now });
-    assert.equal(v.groups[0].times[0].href, null);
+    assert.equal(v.groups[0].times[0].ticketHref, null);
   });
 
   it('полоса дней считает только будущие сеансы; по умолчанию — первый день со льдом', () => {

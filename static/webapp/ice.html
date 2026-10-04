@@ -17,14 +17,15 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610045" />
-  <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610061" />
+  <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610064" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-client-shell.js?v=202610060"></script>
+  <script src="mini-app-client-shell.js?v=202610065"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
-  <script src="ice-tab-model.js?v=202610049"></script>
-  <script src="mini-app-share-sheet.js?v=202610027"></script>
-  <script src="ice-map-model.js?v=202610053"></script>
+  <script src="ice-tab-model.js?v=202610066"></script>
+  <script src="arena-card-model.js?v=202610064"></script>
+  <script src="mini-app-share-sheet.js?v=202610064"></script>
+  <script src="ice-map-model.js?v=202610054"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -77,8 +78,10 @@
         <div class="ice-shop-filters__map-bar" id="iceShopMapBar" hidden>
           <button type="button" class="ice-tool ice-shop-map-filters-btn" id="iceShopMapFiltersBtn" aria-expanded="false">
             <span id="iceShopMapFiltersLabel">Все магазины</span>
+            <span class="ice-shop-map-filters-btn__chev" id="iceShopMapFiltersChev" aria-hidden="true">▾</span>
           </button>
         </div>
+        <div class="ice-shop-filters__list-wrap" id="iceShopFiltersListWrap">
         <div class="ice-shop-filters__panel" id="iceShopFiltersPanel">
         <div class="ice-shop-filters__block">
           <p class="ice-shop-filters__kicker">Что нужно</p>
@@ -101,6 +104,7 @@
           <div class="ice-chips ice-chips--shop" id="iceShopDisciplineChips" role="group" aria-label="Дисциплина"></div>
         </div>
         <div class="ice-shop-active" id="iceShopActiveFilters" hidden></div>
+        </div>
         </div>
       </div>
       <!--
@@ -173,6 +177,19 @@
     </div>
   </div>
 
+  <div class="ice-shop-sheet-root" id="iceShopSheetRoot" hidden aria-hidden="true">
+    <div class="ice-shop-sheet-overlay" id="iceShopSheetOverlay"></div>
+    <div class="ice-shop-sheet" id="iceShopSheet" role="dialog" aria-modal="true" aria-labelledby="iceShopSheetTitle">
+      <div class="ice-shop-sheet__handle" id="iceShopSheetHandle" tabindex="0" role="button" aria-label="Закрыть фильтры"></div>
+      <header class="ice-shop-sheet__head">
+        <h2 class="ice-shop-sheet__title" id="iceShopSheetTitle">Фильтры</h2>
+        <button type="button" class="ice-shop-sheet__reset" id="iceShopSheetReset" hidden>Сбросить</button>
+      </header>
+      <div class="ice-shop-sheet__scroll" id="iceShopSheetPanelMount"></div>
+      <button type="button" class="ice-shop-sheet__cta" id="iceShopSheetDone">Показать магазины</button>
+    </div>
+  </div>
+
   <div class="ice-picker" id="iceCityPicker" hidden>
     <div class="ice-picker__head">
       <h2>Город</h2>
@@ -204,7 +221,7 @@
   </button>
 
   <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-map.js?v=202610055"></script>
-  <script src="ice-tab.js?v=202610049"></script>
+  <script src="ice-map.js?v=202610057"></script>
+  <script src="ice-tab.js?v=202610067"></script>
 </body>
 </html>

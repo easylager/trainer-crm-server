@@ -1149,6 +1149,10 @@
         bboxState = null;
         start();
       },
+      snapPeek: function () {
+        if (!sheetEl || sheetEl.hidden) return;
+        setSnap('peek');
+      },
       resize: function () {
         if (map) map.container.fitToViewport();
       },

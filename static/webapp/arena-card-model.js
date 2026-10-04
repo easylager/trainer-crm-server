@@ -866,7 +866,7 @@
       var cta = iceRowCta(s, opts.ticketsUrl);
       groups[index[key]].times.push({
         time: start,
-        href: cta.href,
+        ticketHref: cta.href,
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
@@ -1004,7 +1004,8 @@
    */
   function shareSlots(days, todayIso, limit) {
     days = days || [];
-    limit = limit || 6;
+    var unlimited = limit === 0 || limit == null;
+    if (!unlimited) limit = limit || 6;
     var tomorrow = '';
     try {
       var t = parseLocalDate(todayIso);
@@ -1012,17 +1013,69 @@
       tomorrow = ymd(t);
     } catch (e) { /* */ }
     var out = [];
-    for (var i = 0; i < days.length && out.length < limit; i++) {
+    for (var i = 0; i < days.length && (unlimited || out.length < limit); i++) {
       var iso = days[i].local_date;
       var head = iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
       var list = days[i].sessions || [];
-      for (var j = 0; j < list.length && out.length < limit; j++) {
+      for (var j = 0; j < list.length && (unlimited || out.length < limit); j++) {
         var hhmm = String(list[j].starts_at_local || '').slice(0, 5);
         if (list[j].id == null || !hhmm) continue;
-        out.push({ id: list[j].id, label: head + ' ' + hhmm });
+        out.push({ id: list[j].id, label: head + ' ' + hhmm, localDate: iso, time: hhmm });
       }
     }
     return out;
+  }
+
+  /** TASK-158: список сеансов в share sheet — группы по дню. */
+  function shareSlotsGrouped(days, todayIso) {
+    days = days || [];
+    var tomorrow = '';
+    try {
+      var t = parseLocalDate(todayIso);
+      t.setDate(t.getDate() + 1);
+      tomorrow = ymd(t);
+    } catch (e) { /* */ }
+    var sections = [];
+    for (var i = 0; i < days.length; i++) {
+      var iso = days[i].local_date;
+      var dayLabel =
+        iso === todayIso ? 'Сегодня' : iso === tomorrow ? 'Завтра' : WEEKDAYS_SHORT[parseLocalDate(iso).getDay()];
+      var list = days[i].sessions || [];
+      var rows = [];
+      for (var j = 0; j < list.length; j++) {
+        var s = list[j];
+        var time = String(s.starts_at_local || '').slice(0, 5);
+        if (s.id == null || !time) continue;
+        var price = formatMinor(s.price_adult_minor, s.currency_code || 'BYN');
+        rows.push({
+          id: s.id,
+          time: time,
+          meta: price ? price.withCurrency : '',
+        });
+      }
+      if (rows.length) sections.push({ dayLabel: dayLabel, rows: rows });
+    }
+    return sections;
+  }
+
+  function shareSlotInviteLabel(days, todayIso, sessionId, focusIso) {
+    if (sessionId == null) return '';
+    var id = String(sessionId);
+    var slots = shareSlots(days, todayIso, 0);
+    for (var i = 0; i < slots.length; i++) {
+      if (String(slots[i].id) !== id) continue;
+      if (focusIso && slots[i].localDate === focusIso) return slots[i].time;
+      if (slots[i].localDate === todayIso) return slots[i].time;
+      return slots[i].label;
+    }
+    return '';
+  }
+
+  function scheduleInviteHint(hasTicketLinks) {
+    if (hasTicketLinks) {
+      return 'Время — для приглашения. Кнопка ↗ — билеты на сайте катка.';
+    }
+    return 'Нажмите время — оно попадёт в приглашение. Покупка онлайн здесь не нужна.';
   }
 
   function startParamFromLocation(loc) {
@@ -1076,6 +1129,9 @@
     practiceContacts: practiceContacts,
     startParamFromLocation: startParamFromLocation,
     shareSlots: shareSlots,
+    shareSlotsGrouped: shareSlotsGrouped,
+    shareSlotInviteLabel: shareSlotInviteLabel,
+    scheduleInviteHint: scheduleInviteHint,
     shopServicesView: shopServicesView,
     trustLines: trustLines,
     WEEKDAYS_SHORT: WEEKDAYS_SHORT,

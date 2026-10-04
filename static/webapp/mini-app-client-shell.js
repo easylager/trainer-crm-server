@@ -212,6 +212,11 @@
           return;
         }
         if (tab.path && isSameTabRoute(tab.path)) {
+          if (tab.id === 'catalog' && handleCatalogTabRetap()) {
+            closeMoreSheet();
+            syncTabBarActive();
+            return;
+          }
           syncTabBarActive();
           return;
         }
@@ -399,6 +404,16 @@
     return q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0;
   }
 
+  /** Повторный тап «Поиск» на ice.html — выход с карты в список (см. IceCatalog.onTabRetap). */
+  function handleCatalogTabRetap() {
+    try {
+      if (global.IceCatalog && typeof global.IceCatalog.onTabRetap === 'function') {
+        return !!global.IceCatalog.onTabRetap();
+      }
+    } catch (e) { /* */ }
+    return false;
+  }
+
   function isSameTabRoute(path) {
     var target = normalizeRoutePath(path);
     var targetPath = target.split('?')[0];
@@ -484,6 +499,10 @@
   function navigate(path) {
     if (isSameTabRoute(path)) {
       closeMoreSheet();
+      if (normalizeRoutePath(path).split('?')[0] === 'ice' && handleCatalogTabRetap()) {
+        syncTabBarActive();
+        return;
+      }
       syncTabBarActive();
       return;
     }
@@ -680,11 +699,11 @@
   function prefetchIceAssets() {
     var base = webappBasePath();
     var assets = [
-      { href: base + 'ice-tab.js?v=202610049', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=202610049', as: 'script' },
-      { href: base + 'ice-map-model.js?v=202610053', as: 'script' },
-      { href: base + 'ice-map.js?v=202610055', as: 'script' },
-      { href: base + 'ice-tab.css?v=202610056', as: 'style' },
+      { href: base + 'ice-tab.js?v=202610061', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202610061', as: 'script' },
+      { href: base + 'ice-map-model.js?v=202610054', as: 'script' },
+      { href: base + 'ice-map.js?v=202610057', as: 'script' },
+      { href: base + 'ice-tab.css?v=202610061', as: 'style' },
     ];
     assets.forEach(function (spec) {
       if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;

@@ -5,6 +5,8 @@
 
 Теория (планировщик, `schedule_stale`, алерты): [ops/ice-freshness-and-alerts.md](../ops/ice-freshness-and-alerts.md).
 
+Общий one-shot ingest в прод (Замок, регион, без BY-прокси): [ice-ingest-prod-from-local.md](ice-ingest-prod-from-local.md).
+
 ## Кто что обновляет
 
 | Источник | Где крутится | Нужен BY IP |
@@ -153,7 +155,8 @@ bash scripts/fetch_minsk_by_origin_fixtures.sh
 
 | Симптом | Что проверить |
 |---|---|
-| `ProdDatabaseError` / localhost | `export DATABASE_URL` на Railway URL |
+| `ProdDatabaseError` / localhost | `export DATABASE_URL` на Railway **public** URL (см. [ice-ingest-prod-from-local.md](ice-ingest-prod-from-local.md)) |
+| `gaierror` / `railway.internal` | Не резолвится с Mac — `bash scripts/run_ice_ingest_prod_local.sh` |
 | `blocked` / 403 | VPN, прокси `start`, `check` → BY |
 | Слоты есть локально, на проде пусто | ingest шёл не в ту БД |
 | Цены `null` | `stoimost_uslug` без таблицы цен — перезапросить страницу через прокси |

@@ -160,22 +160,43 @@
     }
   }
 
-  function slotChips() {
+  function slotList() {
+    var sections = state.slotSections;
     var slots = state.slots || [];
-    if (!slots.length) return '';
-    return (
-      '<div class="gss-slots" role="group" aria-label="Сеанс">' +
-      slots
-        .map(function (s) {
-          var on = String(s.id) === String(state.sessionId);
-          return (
-            '<button type="button" class="gss-slot' + (on ? ' is-on' : '') + '" data-slot="' + esc(s.id) + '"' +
-            ' aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(s.label) + '</button>'
-          );
-        })
-        .join('') +
-      '</div>'
-    );
+    if (!sections || !sections.length) {
+      if (!slots.length) return '';
+      sections = [{ dayLabel: '', rows: slots.map(function (s) {
+        var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
+        return { id: s.id, time: m ? m[1] : s.label, meta: '' };
+      }) }];
+    }
+    var html =
+      '<p class="gss-slot-q">На какое время зовём?</p>' +
+      '<div class="gss-slot-list" role="listbox" aria-label="Сеанс">';
+    sections.forEach(function (sec) {
+      if (sec.dayLabel) html += '<p class="gss-slot-day">' + esc(sec.dayLabel) + '</p>';
+      (sec.rows || []).forEach(function (row) {
+        var on = String(row.id) === String(state.sessionId);
+        var meta = row.meta || '';
+        if (on) meta = meta ? meta + ' · выбрано' : 'Выбрано';
+        html +=
+          '<button type="button" class="gss-slot-row' + (on ? ' is-on' : '') + '" data-slot="' + esc(row.id) + '"' +
+          ' aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          '<span>' + esc(row.time) + '</span><em>' + esc(meta) + '</em></button>';
+      });
+    });
+    html += '</div>';
+    if (state.ref && !state.endpoint && slots.length <= 1 && typeof state.loadSlots === 'function') {
+      html +=
+        '<button type="button" class="gss-more-slots" data-gss-load-slots>Загрузить расписание</button>';
+    }
+    return html;
+  }
+
+  function sessionPicker() {
+    if (state.endpoint) return '';
+    if (!state.invite) return '';
+    return slotList();
   }
 
   function render() {
@@ -193,7 +214,7 @@
         '</div>';
     root.querySelector('.gss-body').innerHTML =
       tabs +
-      slotChips() +
+      sessionPicker() +
       '<figure class="gss-preview">' + preview +
       '<figcaption>' + esc(p ? p.share_body : 'Готовим карточку…') + '</figcaption></figure>' +
       '<div class="gss-channels">' +
@@ -245,6 +266,21 @@
       reload();
       return;
     }
+    if (ev.target.closest('[data-gss-load-slots]') && typeof state.loadSlots === 'function') {
+      haptic();
+      state.loadSlots().then(function (more) {
+        if (!more) return;
+        if (Array.isArray(more)) {
+          state.slots = more;
+        } else {
+          state.slots = more.slots || [];
+          state.slotSections = more.slotSections || null;
+        }
+        if (!state.sessionId && state.slots[0]) state.sessionId = state.slots[0].id;
+        reload();
+      });
+      return;
+    }
     var ch = ev.target.closest('[data-ch]');
     if (ch && state.payload) {
       var name = ch.getAttribute('data-ch');
@@ -278,10 +314,12 @@
       ref: opts.ref,
       endpoint: opts.endpoint || null,
       slots: opts.slots || [],
+      slotSections: opts.slotSections || null,
       sessionId: opts.sessionId || (opts.slots && opts.slots[0] && opts.slots[0].id) || null,
       invite: !!opts.invite,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
+      loadSlots: opts.loadSlots || null,
       payload: null,
     };
     root.hidden = false;

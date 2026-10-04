@@ -138,6 +138,27 @@ describe('catalog header (A′)', () => {
     assert.deepEqual(applyCatalogMode('coach'), { intent: 'coach', venueTypes: [] });
     assert.deepEqual(applyCatalogMode('places'), { intent: 'skate', venueTypes: [] });
   });
+
+  it('catalogStateAfterCityChange сбрасывает магазинный сегмент и фильтры', () => {
+    const { catalogStateAfterCityChange } = loadModel();
+    const next = catalogStateAfterCityChange(
+      { skate_count: 2, trainer_count: 1 },
+      {
+        intent: 'skate',
+        venueTypes: ['shop'],
+        shopService: 'retail',
+        shopOpenNow: true,
+      }
+    );
+    assert.deepEqual(next.venueTypes, []);
+    assert.equal(next.intent, 'skate');
+    assert.equal(next.shopService, '');
+    assert.equal(next.shopOpenNow, false);
+    assert.equal(
+      catalogStateAfterCityChange({ skate_count: 0, trainer_count: 3 }, { intent: 'skate', venueTypes: ['shop'] }).intent,
+      'coach'
+    );
+  });
 });
 
 describe('shop catalog filters', () => {

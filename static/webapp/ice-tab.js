@@ -146,9 +146,126 @@
     state.shopUiPicker = false;
   }
 
+  function shopPanelListHome() {
+    return $('iceShopFiltersListWrap');
+  }
+
+  function shopPanelSheetMount() {
+    return $('iceShopSheetPanelMount');
+  }
+
+  function shopPanelNode() {
+    return $('iceShopFiltersPanel');
+  }
+
+  function restoreShopPanelToList() {
+    var panel = shopPanelNode();
+    var home = shopPanelListHome();
+    if (panel && home && panel.parentNode !== home) home.appendChild(panel);
+  }
+
+  function mountShopPanelInSheet() {
+    var panel = shopPanelNode();
+    var mount = shopPanelSheetMount();
+    if (panel && mount) mount.appendChild(panel);
+  }
+
+  function updateShopSheetChrome() {
+    var open = !!(state.shopMapFiltersOpen && mapViewActive());
+    if (document.body) document.body.classList.toggle('ice-shop-sheet-open', open);
+    var root = $('iceShopSheetRoot');
+    if (root) {
+      root.hidden = !open;
+      root.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    var overlay = $('iceShopSheetOverlay');
+    if (overlay) overlay.classList.toggle('ice-shop-sheet-overlay--open', open);
+    var sheet = $('iceShopSheet');
+    if (sheet) sheet.classList.toggle('ice-shop-sheet--open', open);
+    var done = $('iceShopSheetDone');
+    if (done) done.textContent = M.shopMapResultsCta(state.items.length);
+    var reset = $('iceShopSheetReset');
+    if (reset) reset.hidden = !M.hasActiveShopFilters(shopFilterState());
+    var mapBtn = $('iceShopMapFiltersBtn');
+    if (mapBtn) mapBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function openShopMapFiltersSheet() {
+    if (!mapViewActive()) return;
+    state.shopMapFiltersOpen = true;
+    mountShopPanelInSheet();
+    if (mapCtl && typeof mapCtl.snapPeek === 'function') mapCtl.snapPeek();
+    updateShopSheetChrome();
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (tg && typeof tg.HapticFeedback !== 'undefined' && typeof tg.HapticFeedback.impactOccurred === 'function') {
+      try {
+        tg.HapticFeedback.impactOccurred('light');
+      } catch (e) { /* */ }
+    }
+  }
+
   function closeShopMapFiltersPanel() {
     state.shopMapFiltersOpen = false;
     state.shopUiPicker = false;
+    restoreShopPanelToList();
+    updateShopSheetChrome();
+  }
+
+  function toggleShopMapFiltersSheet() {
+    if (state.shopMapFiltersOpen) closeShopMapFiltersPanel();
+    else openShopMapFiltersSheet();
+    renderCatalogHeader();
+  }
+
+  function wireShopFilterSheetGestures() {
+    var sheet = $('iceShopSheet');
+    var handle = $('iceShopSheetHandle');
+    if (!sheet || sheet.dataset.dismissWired === '1') return;
+    sheet.dataset.dismissWired = '1';
+    var dragEls = [handle, $('iceShopSheetTitle')].filter(Boolean);
+    var startY = 0;
+    var dy = 0;
+    var dragging = false;
+    function onEnd() {
+      if (!dragging) return;
+      dragging = false;
+      sheet.style.transform = '';
+      if (dy > 56) {
+        closeShopMapFiltersPanel();
+        renderCatalogHeader();
+      }
+      dy = 0;
+    }
+    dragEls.forEach(function (el) {
+      el.addEventListener('pointerdown', function (ev) {
+        if (!state.shopMapFiltersOpen) return;
+        dragging = true;
+        startY = ev.clientY;
+        dy = 0;
+        if (typeof el.setPointerCapture === 'function') el.setPointerCapture(ev.pointerId);
+      });
+      el.addEventListener('pointermove', function (ev) {
+        if (!dragging) return;
+        dy = Math.max(0, ev.clientY - startY);
+        sheet.style.transform = 'translateY(' + dy + 'px)';
+      });
+      el.addEventListener('pointerup', onEnd);
+      el.addEventListener('pointercancel', onEnd);
+    });
+    if (handle) {
+      handle.addEventListener('click', function () {
+        if (dy > 8) return;
+        closeShopMapFiltersPanel();
+        renderCatalogHeader();
+      });
+      handle.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          closeShopMapFiltersPanel();
+          renderCatalogHeader();
+        }
+      });
+    }
   }
 
   function whenQueryForApi() {
@@ -234,10 +351,17 @@
   }
 
   function syncShopListFromFilters() {
-    if (!state.shopSourceItems.length) return;
+    if (!state.shopSourceItems.length) {
+      state.items = [];
+      state.total = 0;
+      syncMapListItems();
+      if (state.shopMapFiltersOpen) updateShopSheetChrome();
+      return;
+    }
     state.items = M.filterShopCatalog(state.shopSourceItems, shopFilterState(), new Date());
     state.total = state.items.length;
     syncMapListItems();
+    if (state.shopMapFiltersOpen) updateShopSheetChrome();
   }
 
   function renderShopFilters(show) {
@@ -257,16 +381,14 @@
     host.hidden = false;
     var onMap = mapViewActive();
     host.classList.toggle('ice-shop-filters--map', onMap);
-    host.classList.toggle('is-expanded', onMap && state.shopMapFiltersOpen);
+    if (!onMap && state.shopMapFiltersOpen) closeShopMapFiltersPanel();
     var filters = shopFilterState();
     var mapBar = $('iceShopMapBar');
     if (mapBar) mapBar.hidden = !onMap;
     var mapBtn = $('iceShopMapFiltersBtn');
-    if (mapBtn) {
-      mapBtn.setAttribute('aria-expanded', onMap && state.shopMapFiltersOpen ? 'true' : 'false');
-    }
     var mapLabel = $('iceShopMapFiltersLabel');
     if (mapLabel) mapLabel.textContent = M.shopMapToolbarLabel(filters);
+    updateShopSheetChrome();
     var now = new Date();
     var serviceChips = M.shopServiceChipsView(state.shopSourceItems, filters, now);
     var serviceBox = $('iceShopServiceChips');
@@ -426,7 +548,9 @@
     var placeMenu = $('icePlaceMenu');
     var whenMenu = $('iceWhenMenu');
     var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
-    var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets);
+    var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets, {
+      activeWindow: !!(state.window && state.window.key),
+    });
 
     if (toolsHost && toolsRow) {
     if (!needPlaceTool && !needWhen) {
@@ -555,6 +679,20 @@
     return mapAllowed() && state.view === 'map';
   }
 
+  /**
+   * Карта и список живут в одном DOM: класс body, hidden у секций и панель
+   * фильтров магазинов легко расходятся с state.view (возврат из bfcache,
+   * свайп шторки, закрытие sheet без setView). Подтягиваем вёрстку к state.
+   */
+  function repairCatalogChrome() {
+    restoreShopPanelToList();
+    if (!mapViewActive()) {
+      if (state.shopMapFiltersOpen) closeShopMapFiltersPanel();
+    }
+    setViewToggle();
+    renderCatalogHeader();
+  }
+
   function setViewToggle() {
     var allowed = mapAllowed();
     var showMapView = mapViewActive();
@@ -584,11 +722,30 @@
     }
   }
 
+  /**
+   * Повторный тап «Поиск» в нижнем баре на этой вкладке: выйти с карты (как «Списком»)
+   * или закрыть оверлей поиска.
+   */
+  function onCatalogTabRetap() {
+    if (mapViewActive()) {
+      setView('list');
+      return true;
+    }
+    var searchSec = $('iceSearchSec');
+    if (searchSec && !searchSec.hidden) {
+      var input = $('iceSearchInput');
+      if (input) input.value = '';
+      showSearch('');
+      return true;
+    }
+    return false;
+  }
+
   function setView(next) {
     var wanted = next === 'map' && mapAllowed() ? 'map' : 'list';
     if (state.view === wanted) return;
     state.view = wanted;
-    state.shopMapFiltersOpen = false;
+    closeShopMapFiltersPanel();
     setViewToggle();
     renderCatalogHeader();
     persist();
@@ -1569,15 +1726,36 @@
     if (known) {
       city = Object.assign({}, known, { name: city.name || known.name, id: known.id });
     }
+    var prevCityId = state.cityId != null && state.cityId !== '' ? Number(state.cityId) : null;
+    var nextCityId = Number(city.id);
+    var cityChanged = prevCityId !== null && prevCityId !== nextCityId;
+
     state.cityId = city.id;
     state.cityName = city.name || '';
     state.skateCount = city.skate_count;
-    /* Явно выбранный тип места (чип или ссылка ?venue=shop) — это просьба о местах:
-       не перескакиваем на тренеров, даже если массового катания в городе нет. */
-    var nextIntent = state.venueTypes && state.venueTypes.length
-      ? state.intent
-      : M.pickCityIntent(city, state.intent);
-    if (nextIntent !== state.intent) state.intent = nextIntent;
+
+    if (cityChanged) {
+      var cityCatalog = M.catalogStateAfterCityChange(city, state);
+      state.intent = cityCatalog.intent;
+      state.venueTypes = cityCatalog.venueTypes.slice();
+      state.shopService = cityCatalog.shopService;
+      state.shopDiscipline = cityCatalog.shopDiscipline;
+      state.shopOpenNow = cityCatalog.shopOpenNow;
+      state.shopWhen = cityCatalog.shopWhen;
+      state.shopSourceItems = [];
+      state.items = [];
+      state.total = 0;
+      state.venueFacets = [];
+      state.shopUiPicker = false;
+      closeShopMapFiltersPanel();
+    } else {
+      /* Тот же город (или первый applyCity после boot): не сбрасываем вкладку «Магазины». */
+      var nextIntent =
+        state.venueTypes && state.venueTypes.length
+          ? state.intent
+          : M.pickCityIntent(city, state.intent);
+      if (nextIntent !== state.intent) state.intent = nextIntent;
+    }
     if (state.intent === 'coach') state.view = 'list';
     setCityLabel();
     setChips();
@@ -1881,19 +2059,72 @@
     });
   }
 
+  function catalogTodayIso() {
+    var ACM = global.ArenaCardModel;
+    if (ACM && typeof ACM.ymd === 'function') return ACM.ymd(new Date());
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function catalogAddDaysIso(iso, n) {
+    var ACM = global.ArenaCardModel;
+    if (ACM && typeof ACM.parseLocalDate === 'function' && typeof ACM.ymd === 'function') {
+      var d = ACM.parseLocalDate(iso);
+      d.setDate(d.getDate() + n);
+      return ACM.ymd(d);
+    }
+    return iso;
+  }
+
+  function openCatalogInvite(ref, sessionId, label) {
+    if (!global.GlideShareSheet || !ref) return;
+    var fallback = function () {
+      global.GlideShareSheet.open({
+        ref: ref,
+        sessionId: sessionId,
+        slots: sessionId ? [{ id: sessionId, label: label || '' }] : [],
+        invite: true,
+        context: 'ice_list',
+      });
+    };
+    var ACM = global.ArenaCardModel;
+    if (!ACM || typeof ACM.shareSlots !== 'function') {
+      fallback();
+      return;
+    }
+    var today = catalogTodayIso();
+    var to = catalogAddDaysIso(today, 13);
+    fetchJson('/api/public/arenas/' + encodeURIComponent(String(ref)) + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to))
+      .then(function (data) {
+        var days = (data && data.days) || [];
+        var slots = ACM.shareSlots(days, today, 0);
+        var slotSections = ACM.shareSlotsGrouped ? ACM.shareSlotsGrouped(days, today) : null;
+        var sid = sessionId;
+        if (sid && !slots.some(function (s) { return String(s.id) === String(sid); })) {
+          slots.unshift({ id: sessionId, label: label || '' });
+        }
+        if (!sid && slots.length) sid = slots[0].id;
+        global.GlideShareSheet.open({
+          ref: ref,
+          sessionId: sid,
+          slots: slots,
+          slotSections: slotSections,
+          invite: true,
+          context: 'ice_list',
+        });
+      })
+      .catch(fallback);
+  }
+
   function onRootClick(ev) {
     var invite = ev.target.closest('[data-invite-arena]');
     if (invite && global.GlideShareSheet) {
       ev.preventDefault();
-      global.GlideShareSheet.open({
-        ref: invite.getAttribute('data-invite-arena'),
-        sessionId: invite.getAttribute('data-invite-session'),
-        slots: [
-          { id: invite.getAttribute('data-invite-session'), label: invite.getAttribute('data-invite-label') },
-        ],
-        invite: true,
-        context: 'ice_list',
-      });
+      openCatalogInvite(
+        invite.getAttribute('data-invite-arena'),
+        invite.getAttribute('data-invite-session'),
+        invite.getAttribute('data-invite-label')
+      );
       return;
     }
     var card = ev.target.closest('[data-href]');
@@ -1979,10 +2210,31 @@
       mapFiltersBtn.addEventListener('click', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        state.shopMapFiltersOpen = !state.shopMapFiltersOpen;
+        toggleShopMapFiltersSheet();
+      });
+    }
+
+    var shopSheetOverlay = $('iceShopSheetOverlay');
+    if (shopSheetOverlay) {
+      shopSheetOverlay.addEventListener('click', function () {
+        closeShopMapFiltersPanel();
         renderCatalogHeader();
       });
     }
+    var shopSheetDone = $('iceShopSheetDone');
+    if (shopSheetDone) {
+      shopSheetDone.addEventListener('click', function () {
+        closeShopMapFiltersPanel();
+        renderCatalogHeader();
+      });
+    }
+    var shopSheetReset = $('iceShopSheetReset');
+    if (shopSheetReset) {
+      shopSheetReset.addEventListener('click', function () {
+        clearShopFilters();
+      });
+    }
+    wireShopFilterSheetGestures();
 
     var shopFilters = $('iceShopFilters');
     if (shopFilters) {
@@ -2244,9 +2496,13 @@
 
     global.addEventListener('pagehide', persist);
     global.addEventListener('pageshow', function (ev) {
+      repairCatalogChrome();
       if (!ev.persisted) return;
       var saved = M.loadIceState(global.sessionStorage);
       if (saved && saved.scrollY) global.scrollTo(0, saved.scrollY);
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') repairCatalogChrome();
     });
   }
 
@@ -2311,8 +2567,7 @@
         }, 0);
       }
     } catch (e) { /* */ }
-    setChips();
-    setViewToggle();
+    repairCatalogChrome();
     /*
      * TASK-095: скелетон рисуется первым же кадром, не дожидаясь резолва города.
      * Иначе между появлением экрана и первым запросом список — пустое место, и
@@ -2365,6 +2620,8 @@
     }
     return;
   }
+
+  global.IceCatalog = { onTabRetap: onCatalogTabRetap };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

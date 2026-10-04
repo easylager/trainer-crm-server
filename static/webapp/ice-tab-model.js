@@ -251,6 +251,22 @@
     return { intent: INTENTS.skate, venueTypes: [] };
   }
 
+  /**
+   * Смена города — новый каталог целиком, не «магазины Минска» в Бобруйске.
+   * Сегмент «Магазины» и фильтры сбрасываются; intent подстраивается под город.
+   */
+  function catalogStateAfterCityChange(city, current) {
+    current = current || {};
+    return {
+      intent: pickCityIntent(city, current.intent),
+      venueTypes: [],
+      shopService: '',
+      shopDiscipline: '',
+      shopOpenNow: false,
+      shopWhen: 'any',
+    };
+  }
+
   function catalogSearchPlaceholder(scope) {
     if (scope === 'coach') return 'Имя тренера';
     if (scope === 'shop') return 'Магазин или заточка';
@@ -1834,6 +1850,7 @@
     placeMenuView: placeMenuView,
     placeMenuLabel: placeMenuLabel,
     applyCatalogMode: applyCatalogMode,
+    catalogStateAfterCityChange: catalogStateAfterCityChange,
     catalogSearchPlaceholder: catalogSearchPlaceholder,
     SHOP_SERVICE_FILTERS: SHOP_SERVICE_FILTERS,
     shopServiceChipsView: shopServiceChipsView,

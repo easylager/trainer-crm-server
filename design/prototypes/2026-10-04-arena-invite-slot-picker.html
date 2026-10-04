@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Карточка катка — время для приглашения (прототип)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    TASK-157 / invite UX, 2026-10-04.
+    Вопрос: не перегрузит ли «время + ↗» и предвыбор тапом?
+    Прототип: 3 экрана телефона + шит. ← → между экранами.
+
+    Правило:
+      • Тап по времени — только «в приглашение» (предвыбор).
+      • ↗ — только покупка на сайте (отдельная кнопка, не вся плитка).
+      • Полный выбор — в шите «Позвать» (список, не 6 чипов).
+  */
+  :root {
+    --glide-brand: #45b9bb;
+    --glide-on-fill: #04262a;
+    --glide-paper: #0b0c0e;
+    --glide-surface: #141618;
+    --glide-card: #1a1d20;
+    --glide-line: #262a2e;
+    --glide-text: #e6e9ea;
+    --glide-hint: #868d93;
+    --glide-ink-teal: #57d0d2;
+    --glide-brand-wash: rgba(69, 185, 187, 0.13);
+    --app-cta-fill: var(--glide-brand);
+    --app-cta-text: var(--glide-on-fill);
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --font: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: #050607;
+    color: var(--glide-text);
+    min-height: 100vh;
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 28px 16px 96px;
+    flex-wrap: wrap;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--glide-ink-teal); outline-offset: 2px; }
+
+  .thesis { width: min(440px, 100%); padding-top: 4px; }
+  .thesis h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  .thesis h1 em { font-style: normal; color: var(--glide-ink-teal); }
+  .lede { margin: 10px 0 0; font-size: 14px; line-height: 1.55; color: var(--glide-hint); }
+  .compare {
+    margin-top: 18px;
+    display: grid;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .compare .box {
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--glide-line);
+    background: var(--glide-card);
+  }
+  .compare .box.good { border-color: rgba(69, 185, 187, 0.45); }
+  .compare .box.bad { border-color: rgba(240, 162, 75, 0.35); opacity: 0.92; }
+  .compare b { display: block; margin-bottom: 6px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--glide-hint); }
+  .navhint { margin-top: 16px; font-size: 12px; color: var(--glide-hint); }
+  .navhint kbd {
+    display: inline-block; padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--glide-line); background: var(--glide-surface); font-size: 11px;
+  }
+
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .phone-label { font-size: 12px; font-weight: 600; color: var(--glide-hint); text-align: center; max-width: 390px; line-height: 1.4; }
+  .phone-label b { color: var(--glide-text); }
+  .phone {
+    width: 390px; max-width: 100%; height: 844px; position: relative; overflow: hidden;
+    border-radius: 44px; background: var(--glide-paper);
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0, 0, 0, 0.9);
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 30px; background: #000; border-radius: 16px; z-index: 20; pointer-events: none;
+  }
+  .screen {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    padding-top: 44px; padding-bottom: 64px; overflow: hidden;
+  }
+  .screen.is-on { display: flex; }
+
+  .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  .hero-img {
+    height: 168px; margin: 0 16px; border-radius: var(--r-lg);
+    background: linear-gradient(145deg, #1e3a4a 0%, #0d1216 70%);
+    position: relative; overflow: hidden;
+  }
+  .hero-img::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.75));
+  }
+  .hero-txt { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; }
+  .hero-txt h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  .hero-txt p { margin: 4px 0 0; font-size: 12px; color: var(--glide-hint); }
+
+  .share-bar {
+    display: grid; grid-template-columns: 1fr auto; gap: 8px;
+    padding: 12px 16px 0;
+  }
+  .btn-pri {
+    height: 44px; padding: 0 14px; border-radius: var(--r-md);
+    background: var(--app-cta-fill); color: var(--app-cta-text);
+    font-size: 14px; font-weight: 700; border: 0;
+  }
+  .btn-sec {
+    height: 44px; padding: 0 14px; border-radius: var(--r-md);
+    background: var(--glide-surface); border: 1px solid var(--glide-line);
+    font-size: 14px; font-weight: 600;
+  }
+
+  .sec { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .sec-h { margin: 0; font-size: 16px; font-weight: 700; }
+  .sec-hint {
+    margin: -4px 0 4px; font-size: 12px; line-height: 1.45; color: var(--glide-hint);
+  }
+  .sec-hint strong { color: var(--glide-ink-teal); font-weight: 600; }
+
+  .day-strip {
+    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+  }
+  .day-strip::-webkit-scrollbar { display: none; }
+  .day {
+    flex: 0 0 auto; width: 52px; padding: 8px 4px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    text-align: center; font-size: 10px; color: var(--glide-hint);
+  }
+  .day b { display: block; font-size: 15px; color: var(--glide-text); margin: 2px 0; }
+  .day[aria-pressed="true"] { border-color: var(--glide-brand); background: var(--glide-brand-wash); }
+
+  .show-title { font-size: 13px; font-weight: 700; margin: 4px 0 0; }
+  .show-meta { font-size: 11px; color: var(--glide-hint); margin-bottom: 6px; }
+  .times {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  /* v2: на узком экране 2 колонки — плитка шире, ↗ не давит */
+  .slot {
+    display: flex; align-items: stretch; gap: 0;
+    min-height: 52px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    overflow: hidden;
+  }
+  .slot-time {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+    padding: 6px 4px; border: 0; background: transparent;
+    font-variant-numeric: tabular-nums;
+  }
+  .slot-time b { font-size: 15px; font-weight: 700; }
+  .slot-time small { font-size: 9px; letter-spacing: 0.02em; color: var(--glide-hint); text-transform: uppercase; }
+  .slot-time.is-nearest small { color: var(--glide-ink-teal); }
+  .slot.is-picked { border-color: var(--glide-brand); box-shadow: 0 0 0 1px var(--glide-brand); }
+  .slot.is-picked .slot-time { background: var(--glide-brand-wash); }
+  .slot.is-picked .slot-time small { color: var(--glide-ink-teal); }
+  .slot-buy {
+    flex: 0 0 40px; display: flex; align-items: center; justify-content: center;
+    border: 0; border-left: 1px solid var(--glide-line);
+    background: var(--glide-card); color: var(--glide-ink-teal);
+    font-size: 16px; font-weight: 700;
+  }
+  .slot-buy:active { background: var(--glide-brand-wash); }
+  .slot.no-buy .slot-time { width: 100%; }
+
+  .density-note {
+    margin-top: 8px; padding: 10px 12px; border-radius: var(--r-sm);
+    background: rgba(240, 162, 75, 0.08); border: 1px dashed rgba(240, 162, 75, 0.35);
+    font-size: 11px; line-height: 1.45; color: var(--glide-hint);
+  }
+
+  /* Share sheet */
+  .sheet-scrim {
+    position: absolute; inset: 0; background: rgba(4, 18, 26, 0.55);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 30;
+  }
+  .sheet-scrim.is-on { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
+    max-height: 78%; background: var(--glide-card);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    transform: translateY(105%); transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    display: flex; flex-direction: column; padding: 14px 16px 24px;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  }
+  .sheet.is-on { transform: translateY(0); }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .sheet-head b { font-size: 17px; }
+  .sheet-x {
+    width: 32px; height: 32px; border-radius: var(--r-pill);
+    background: var(--glide-surface); border: 0; font-size: 14px;
+  }
+  .sheet-tabs {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+    background: var(--glide-surface); border-radius: var(--r-md); margin-bottom: 12px;
+  }
+  .sheet-tabs button {
+    height: 36px; border-radius: var(--r-sm); font-size: 13px; font-weight: 600; color: var(--glide-hint);
+  }
+  .sheet-tabs button.is-on { background: var(--glide-card); color: var(--glide-text); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+  .sheet-q { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  .sheet-list {
+    flex: 1; overflow-y: auto; margin: 0 -4px; padding: 0 4px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .sheet-day { margin: 10px 0 4px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--glide-hint); font-weight: 600; }
+  .sheet-day:first-child { margin-top: 0; }
+  .sheet-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 11px 12px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    text-align: left;
+  }
+  .sheet-row.is-on { border-color: var(--glide-brand); background: var(--glide-brand-wash); }
+  .sheet-row span { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sheet-row em { font-size: 12px; color: var(--glide-hint); font-style: normal; }
+  .sheet-preview {
+    margin-top: 12px; padding: 12px; border-radius: var(--r-md);
+    background: linear-gradient(135deg, #2a6b6d, #0f2a2c);
+    font-size: 12px; line-height: 1.45; color: #e8f4f4;
+  }
+  .sheet-preview b { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
+  .sheet-channels {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px;
+  }
+  .sheet-channels button {
+    height: 40px; border-radius: var(--r-sm); background: var(--glide-surface);
+    border: 1px solid var(--glide-line); font-size: 11px; font-weight: 600;
+  }
+  .sheet-channels button.tg { background: #2aabee; border-color: #2aabee; color: #fff; }
+
+  .toast {
+    position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%) translateY(8px);
+    padding: 8px 14px; border-radius: var(--r-pill); background: var(--glide-card);
+    border: 1px solid var(--glide-line); font-size: 12px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s; z-index: 25; white-space: nowrap;
+  }
+  .toast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<aside class="thesis">
+  <h1>Время для <em>приглашения</em> — без путаницы с кассой</h1>
+  <p class="lede">
+    Слева в телефоне — как это может выглядеть. Идея против перегруза:
+    <strong>не три разных UI</strong>, а одна сетка и одно правило. Покупка — только ↗,
+    приглашение — тап по времени + полный список в шите.
+  </p>
+  <div class="compare">
+    <div class="box bad">
+      <b>Сейчас (боль)</b>
+      С кассой: вся плитка уводит на сайт — нельзя «выбрать для позова».
+      Без кассы: плитка то кнопка, то нет. В шите — только ближайшие чипы.
+    </div>
+    <div class="box good">
+      <b>Предложение</b>
+      Плитка = <strong>время</strong> (выбор) + опционально <strong>↗</strong> (40px).
+      Сетка <strong>2×N</strong>, не 4 колонки — меньше мелочи. Подсказка — одна строка.
+      «Позвать» открывает <strong>список</strong> всех сеансов, предвыбор с карточки уже отмечен.
+    </div>
+  </div>
+  <p class="navhint"><kbd>←</kbd> <kbd>→</kbd> — экраны: <b>с кассой</b> · <b>без кассы</b> · <b>шит</b></p>
+</aside>
+
+<div class="phone-wrap">
+  <p class="phone-label" id="phoneLabel"><b>Экран 1.</b> Есть билеты на сайте (ТЦ Замок)</p>
+  <div class="phone" id="phone">
+    <div class="notch" aria-hidden="true"></div>
+    <div class="toast" id="toast" role="status"></div>
+
+    <!-- Screen 1: with ticket links -->
+    <div class="screen is-on" data-screen="0">
+      <div class="scroll">
+        <div class="hero-img">
+          <div class="hero-txt">
+            <h2>ТЦ «Замок»</h2>
+            <p>Центральный район · каток</p>
+          </div>
+        </div>
+        <div class="share-bar">
+          <button type="button" class="btn-pri" data-open-sheet>Позвать на 18:15</button>
+          <button type="button" class="btn-sec" data-open-sheet>Поделиться</button>
+        </div>
+        <section class="sec">
+          <h3 class="sec-h">Расписание</h3>
+          <p class="sec-hint">Время — <strong>для приглашения</strong>. Кнопка ↗ — билеты на сайте катка.</p>
+          <div class="day-strip" role="tablist">
+            <button type="button" class="day" aria-pressed="true"><span>Сегодня</span><b>4</b></button>
+            <button type="button" class="day" aria-pressed="false"><span>Завтра</span><b>5</b></button>
+            <button type="button" class="day" aria-pressed="false"><span>Вс</span><b>3</b></button>
+          </div>
+          <p class="show-title">Массовое катание</p>
+          <p class="show-meta">45 мин · взр. 11 BYN</p>
+          <div class="times" data-times>
+            <div class="slot" data-id="s1">
+              <button type="button" class="slot-time is-nearest" data-pick><b>16:15</b><small>ближайший</small></button>
+              <button type="button" class="slot-buy" data-buy title="Билеты на сайте">↗</button>
+            </div>
+            <div class="slot is-picked" data-id="s2">
+              <button type="button" class="slot-time" data-pick><b>18:15</b><small>в приглашении</small></button>
+              <button type="button" class="slot-buy" data-buy title="Билеты на сайте">↗</button>
+            </div>
+            <div class="slot" data-id="s3">
+              <button type="button" class="slot-time" data-pick><b>20:30</b><small></small></button>
+              <button type="button" class="slot-buy" data-buy>↗</button>
+            </div>
+          </div>
+          <p class="density-note">↗ не отдельная строка под каждым временем — одна узкая колонка. На 4-колоночной сетке было бы тесно; здесь 2 колонки.</p>
+        </section>
+      </div>
+    </div>
+
+    <!-- Screen 2: no ticket -->
+    <div class="screen" data-screen="1">
+      <div class="scroll">
+        <div class="hero-img" style="background:linear-gradient(145deg,#2a3540,#0d1216)">
+          <div class="hero-txt">
+            <h2>Конькобежный стадион</h2>
+            <p>Центральный район</p>
+          </div>
+        </div>
+        <div class="share-bar">
+          <button type="button" class="btn-pri" data-open-sheet>Позвать на 18:15</button>
+          <button type="button" class="btn-sec" data-open-sheet>Поделиться</button>
+        </div>
+        <section class="sec">
+          <h3 class="sec-h">Расписание</h3>
+          <p class="sec-hint">Нажмите время — оно попадёт в приглашение. Покупка онлайн здесь не нужна.</p>
+          <div class="day-strip">
+            <button type="button" class="day" aria-pressed="true"><span>Сегодня</span><b>2</b></button>
+            <button type="button" class="day" aria-pressed="false"><span>Завтра</span><b>2</b></button>
+          </div>
+          <p class="show-title">Массовое катание на дорожке</p>
+          <p class="show-meta">45 мин</p>
+          <div class="times" data-times>
+            <div class="slot no-buy" data-id="b1">
+              <button type="button" class="slot-time is-nearest" data-pick><b>16:00</b><small>ближайший</small></button>
+            </div>
+            <div class="slot no-buy is-picked" data-id="b2">
+              <button type="button" class="slot-time" data-pick><b>18:15</b><small>в приглашении</small></button>
+            </div>
+          </div>
+          <p class="density-note">Без ↗ плитка проще — те же правила выбора, меньше элементов.</p>
+        </section>
+      </div>
+    </div>
+
+    <!-- Screen 3: sheet only mock -->
+    <div class="screen" data-screen="2">
+      <div class="scroll" style="filter:blur(2px);opacity:.5;pointer-events:none">
+        <div class="hero-img" style="height:120px;margin-top:20px"></div>
+        <div class="share-bar"><button type="button" class="btn-pri">…</button></div>
+      </div>
+      <div class="sheet-scrim is-on"></div>
+      <div class="sheet is-on" role="dialog" aria-label="Поделиться">
+        <div class="sheet-head"><b>Поделиться</b><button type="button" class="sheet-x" data-close-sheet>✕</button></div>
+        <div class="sheet-tabs">
+          <button type="button">Расписание</button>
+          <button type="button" class="is-on">Позвать с собой</button>
+        </div>
+        <p class="sheet-q">На какое время зовём?</p>
+        <div class="sheet-list">
+          <p class="sheet-day">Сегодня</p>
+          <button type="button" class="sheet-row"><span>16:15</span><em>11 BYN</em></button>
+          <button type="button" class="sheet-row is-on"><span>18:15</span><em>11 BYN · выбрано на карточке</em></button>
+          <button type="button" class="sheet-row"><span>20:30</span><em>11 BYN</em></button>
+          <p class="sheet-day">Завтра</p>
+          <button type="button" class="sheet-row"><span>11:00</span><em>11 BYN</em></button>
+          <button type="button" class="sheet-row"><span>14:00</span><em>11 BYN</em></button>
+          <button type="button" class="sheet-row"><span>18:00</span><em>11 BYN</em></button>
+          <p class="sheet-day">Воскресенье</p>
+          <button type="button" class="sheet-row"><span>12:30</span><em>11 BYN</em></button>
+        </div>
+        <div class="sheet-preview">
+          <b>Превью в чате</b>
+          Погнали кататься? Вс, 4 окт, 18:15 — ТЦ «Замок», 11 BYN…
+        </div>
+        <div class="sheet-channels">
+          <button type="button" class="tg">Telegram</button>
+          <button type="button">Ссылка</button>
+          <button type="button">Картинка</button>
+          <button type="button">Другое</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var screens = document.querySelectorAll('.screen');
+  var label = document.getElementById('phoneLabel');
+  var toast = document.getElementById('toast');
+  var idx = 0;
+  var labels = [
+    '<b>Экран 1.</b> Есть билеты на сайте — время + ↗',
+    '<b>Экран 2.</b> Без кассы — только выбор времени',
+    '<b>Экран 3.</b> Шит: полный список (не 6 чипов)',
+  ];
+  var pickedLabel = { s1: '16:15', s2: '18:15', s3: '20:30', b1: '16:00', b2: '18:15' };
+  var currentPick = 's2';
+
+  function showScreen(n) {
+    idx = (n + screens.length) % screens.length;
+    screens.forEach(function (s, i) { s.classList.toggle('is-on', i === idx); });
+    label.innerHTML = labels[idx];
+  }
+
+  function flash(msg) {
+    toast.textContent = msg;
+    toast.classList.add('is-on');
+    clearTimeout(flash._t);
+    flash._t = setTimeout(function () { toast.classList.remove('is-on'); }, 1600);
+  }
+
+  function wireTimes(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-pick]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var slot = btn.closest('.slot');
+        if (!slot) return;
+        root.querySelectorAll('.slot').forEach(function (s) {
+          s.classList.remove('is-picked');
+          var sm = s.querySelector('.slot-time small');
+          if (sm && !s.querySelector('.is-nearest')) sm.textContent = '';
+          if (sm && s.querySelector('.is-nearest') && !s.classList.contains('is-picked')) sm.textContent = 'ближайший';
+        });
+        slot.classList.add('is-picked');
+        var small = btn.querySelector('small');
+        if (small) small.textContent = 'в приглашении';
+        currentPick = slot.getAttribute('data-id');
+        var pri = root.closest('.screen').querySelector('.btn-pri');
+        if (pri && pickedLabel[currentPick]) pri.textContent = 'Позвать на ' + pickedLabel[currentPick];
+        flash('Выбрано для приглашения: ' + pickedLabel[currentPick]);
+      });
+    });
+    root.querySelectorAll('[data-buy]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        flash('Открыли бы сайт катка (покупка)');
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-times]').forEach(wireTimes);
+
+  document.querySelectorAll('[data-open-sheet]').forEach(function (btn) {
+    btn.addEventListener('click', function () { showScreen(2); });
+  });
+  document.querySelectorAll('[data-close-sheet]').forEach(function (btn) {
+    btn.addEventListener('click', function () { showScreen(0); });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') showScreen(idx + 1);
+    if (e.key === 'ArrowLeft') showScreen(idx - 1);
+  });
+})();
+</script>
+</body>
+</html>
