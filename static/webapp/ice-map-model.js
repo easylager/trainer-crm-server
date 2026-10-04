@@ -690,6 +690,20 @@
    */
   var CLUSTER_SAME_SPOT_DEG = 0.0006; // ≈ 60 м: один комплекс, зумом не развести
   var CLUSTER_MAX_ZOOM = 16;
+  var SINGLE_PLACE_PAD_DEG = 0.0018;
+
+  function singlePlaceFocus(place, opts) {
+    opts = opts || {};
+    if (!place || !hasCoords(place)) return null;
+    var lat = Number(place.latitude);
+    var lon = Number(place.longitude);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    var d = SINGLE_PLACE_PAD_DEG;
+    return {
+      bounds: [[lat - d, lon - d], [lat + d, lon + d]],
+      margin: opts.margin || [110, 80, 48, 80],
+    };
+  }
 
   function clusterFocus(points, opts) {
     opts = opts || {};
@@ -719,6 +733,7 @@
 
   return {
     clusterFocus: clusterFocus,
+    singlePlaceFocus: singlePlaceFocus,
     PLACEHOLDER_API_KEY: PLACEHOLDER_API_KEY,
     nearMePolicy: nearMePolicy,
     resolveApiKey: resolveApiKey,
