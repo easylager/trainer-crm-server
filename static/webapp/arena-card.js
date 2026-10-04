@@ -14,6 +14,9 @@
     trainers: null,
     day: null,
     galleryIndex: 0,
+    focus: null,
+    /* Сеанс для «Позвать» / «Поделиться»; тап по времени в сетке. */
+    sharePickSessionId: null,
   };
 
   function esc(s) {
@@ -303,12 +306,37 @@
     return vt === 'ice' || vt === 'outdoor';
   }
 
+  function sharePickedId() {
+    if (state.sharePickSessionId) return String(state.sharePickSessionId);
+    if (state.focus && state.focus.sessionId) return String(state.focus.sessionId);
+    return null;
+  }
+
+  function resolvedShareSessionId() {
+    var slots = scheduleSlots();
+    var picked = sharePickedId();
+    if (picked && slots.some(function (s) { return String(s.id) === picked; })) return picked;
+    return slots.length ? String(slots[0].id) : null;
+  }
+
+  function shareInviteCtaLabel() {
+    var slots = scheduleSlots();
+    var sid = resolvedShareSessionId();
+    if (!sid || !slots.length) return 'Позвать с собой';
+    for (var i = 0; i < slots.length; i++) {
+      if (String(slots[i].id) === sid) return 'Позвать на ' + slots[i].label;
+    }
+    return 'Позвать с собой';
+  }
+
   function renderShareBar() {
     if (!global.GlideShareSheet) return '';
     if (scheduleSlots().length) {
       return (
-        '<div class="arena-share">' +
-        '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">Позвать с собой</button>' +
+        '<div class="arena-share" id="arenaShareBar">' +
+        '<button type="button" class="arena-btn arena-btn--pri" data-action="share-invite">' +
+        esc(shareInviteCtaLabel()) +
+        '</button>' +
         '<button type="button" class="arena-btn" data-action="share">Поделиться</button>' +
         '</div>'
       );
@@ -317,15 +345,35 @@
     return '';
   }
 
+  function fetchShareSlots() {
+    var today = todayIso();
+    var to = addDaysIso(today, 13);
+    var base = '/api/public/arenas/' + encodeURIComponent(String(state.card.id));
+    return fetchJson(base + '/sessions?from=' + encodeURIComponent(today) + '&to=' + encodeURIComponent(to)).then(
+      function (data) {
+        return M.shareSlots((data && data.days) || [], today, 8);
+      }
+    );
+  }
+
   function openShare(invite) {
     if (!global.GlideShareSheet || !state.card) return;
     var isIce = skatingCard();
+    var slots = isIce ? scheduleSlots() : [];
+    var loadSlots =
+      isIce && slots.length <= 1
+        ? function () {
+            return fetchShareSlots();
+          }
+        : null;
     global.GlideShareSheet.open({
       ref: state.card.id,
-      slots: isIce ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [],
+      slots: slots,
+      sessionId: resolvedShareSessionId(),
       invite: !!invite,
       venueType: skatingCard() ? 'ice' : state.card.venue_type,
       context: 'arena_card',
+      loadSlots: loadSlots,
     });
   }
 
@@ -483,7 +531,7 @@
   var ICONS = {
     route: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
     copyPhone:
-      '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+      '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
     site: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     insta: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17" cy="7" r="0.6"/>',
     share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
@@ -542,7 +590,7 @@
   }
 
   function scheduleSlots() {
-    return skatingCard() ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso()) : [];
+    return skatingCard() ? M.shareSlots((state.sessions && state.sessions.days) || [], todayIso(), 8) : [];
   }
 
   function strip() {
@@ -575,7 +623,7 @@
       now: new Date(),
       ticketsUrl: state.card && state.card.tickets_url,
       markNext: iso === todayIso(),
-      pickedId: state.focus && state.focus.sessionId,
+      pickedId: sharePickedId(),
     });
     var lessons = ribbonForIso(iso).filter(function (r) { return r.nature === 'lesson'; });
     var html = '';
@@ -598,14 +646,29 @@
           : '') +
         '<div class="arena-times">' +
         g.times.map(function (t) {
-          var hot = t.next || t.picked;
-          var cls = 'arena-time' + (hot ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
-          // Подсветка = «ближайший к вам сеанс» (сегодня или с плитки ленты ?s=), не «вы вручную выбрали».
-          var tag = t.next ? 'Ближайший' : t.capacity;
+          var cls = 'arena-time';
+          if (t.picked) cls += ' arena-time--picked';
+          else if (t.next) cls += ' arena-time--next';
+          if (t.href) cls += ' arena-time--link';
+          var tag = t.picked ? 'В приглашении' : t.next ? 'Ближайший' : t.capacity;
           var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
-          return t.href
-            ? '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>'
-            : '<span class="' + cls + '">' + body + '</span>';
+          if (t.href) {
+            return '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>';
+          }
+          if (t.sessionId != null) {
+            return (
+              '<button type="button" class="' +
+              cls +
+              '" data-action="pick-session" data-session-id="' +
+              esc(t.sessionId) +
+              '" aria-pressed="' +
+              (t.picked ? 'true' : 'false') +
+              '">' +
+              body +
+              '</button>'
+            );
+          }
+          return '<span class="' + cls + '">' + body + '</span>';
         }).join('') +
         '</div>' +
         (g.note ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
@@ -664,9 +727,6 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
-      (M.staleScheduleNote(state.card.freshness, new Date())
-        ? '<p class="arena-stale">' + esc(M.staleScheduleNote(state.card.freshness, new Date())) + '</p>'
-        : '') +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +
       '</div>'
@@ -833,11 +893,19 @@
   function paintRowsOnly() {
     var el = document.getElementById('arenaRows');
     if (el) el.innerHTML = renderShowtimes();
+    paintShareBar();
     var tabs = document.getElementById('arenaDayTabs');
     if (!tabs) return;
     [].forEach.call(tabs.querySelectorAll('[data-day]'), function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-day') === state.day ? 'true' : 'false');
     });
+  }
+
+  function paintShareBar() {
+    var bar = document.getElementById('arenaShareBar');
+    if (!bar) return;
+    var pri = bar.querySelector('[data-action="share-invite"]');
+    if (pri) pri.textContent = shareInviteCtaLabel();
   }
 
   var REPORT_FIELDS = [
@@ -1030,6 +1098,13 @@
       openExternal(t.getAttribute('data-href'));
       return;
     }
+    if (action === 'pick-session') {
+      var sid = t.getAttribute('data-session-id');
+      if (!sid) return;
+      state.sharePickSessionId = sid;
+      paintRowsOnly();
+      return;
+    }
     if (action === 'share' || action === 'share-invite') {
       openShare(action === 'share-invite');
       return;
@@ -1086,6 +1161,9 @@
         if (state.focus && state.focus.sessionId && !state.focus.day) {
           var found = M.dayForSession(state.sessions.days, state.focus.sessionId);
           if (found) state.focus.day = found;
+        }
+        if (state.focus && state.focus.sessionId) {
+          state.sharePickSessionId = String(state.focus.sessionId);
         }
         paint();
         if (global.ClientShell && global.ClientShell.reportCatalogPresence) {

@@ -125,6 +125,11 @@ describe('catalog header (A′)', () => {
     assert.equal(whenPickerVisible('skate', ['gym'], facets), false);
     assert.equal(whenPickerVisible('skate', ['shop'], facets), false);
     assert.equal(whenPickerVisible('skate', [], [{ key: 'gym', chip: 'Зал', count: 2 }]), false);
+    assert.equal(
+      whenPickerVisible('skate', [], [{ key: 'gym', chip: 'Зал', count: 2 }], { activeWindow: true }),
+      true,
+      'активное окно с сервера — чип времени виден, даже если в фасетах нет льда'
+    );
   });
 
   it('applyCatalogMode maps segments to intent and venueTypes', () => {
@@ -193,6 +198,12 @@ describe('shop catalog filters', () => {
       shopMapToolbarLabel({ shopService: 'skate_sharpening', shopOpenNow: true }),
       'Заточка · ещё 1'
     );
+  });
+
+  it('shopMapResultsCta — кнопка «Готово» на карте', () => {
+    const { shopMapResultsCta } = loadModel();
+    assert.equal(shopMapResultsCta(0), 'Нет магазинов по фильтру');
+    assert.match(shopMapResultsCta(4), /Показать 4 магазина/);
   });
 
   it('persists shop filter fields in session state', () => {
@@ -1224,20 +1235,12 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
 });
 
 describe('TASK-146: устаревшее расписание в ленте', () => {
-  it('schedule_stale на сеансе — подпись «могло измениться» вместо «ещё N сеансов»', () => {
+  it('schedule_stale не меняет подпись карточки в ленте', () => {
     const { boardCardView } = loadModel();
     const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
     const now = new Date('2026-10-02T10:00:00Z');
-    assert.equal(boardCardView(item, now, {}).stale, false);
     const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
-    assert.equal(v.stale, true);
-    assert.equal(v.depth, 'Расписание могло измениться');
-    const freshToday = boardCardView(
-      { ...item, freshness: { schedule_stale: true, schedule_observed_at: '2026-10-02T06:00:00Z' } },
-      now,
-      {}
-    );
-    assert.equal(freshToday.stale, false);
-    assert.match(freshToday.depth, /сеанс/);
+    assert.equal(v.stale, false);
+    assert.match(v.depth, /сеанс/);
   });
 });

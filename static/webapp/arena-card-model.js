@@ -223,31 +223,13 @@
     return text;
   }
 
-  /** Показывать плашку «могло измениться» только если данные реально старые, не сегодня. */
-  function shouldWarnScheduleStale(freshness, now) {
-    freshness = freshness || {};
-    if (!freshness.schedule_stale) return false;
-    if (!freshness.schedule_observed_at) return true;
-    var days = daysBetween(freshness.schedule_observed_at, now || new Date());
-    return days == null || days > 0;
+  /** schedule_stale — для API и алертов; в UI карточки слоты показываем как источник правды. */
+  function shouldWarnScheduleStale() {
+    return false;
   }
 
-  /**
-   * TASK-146: парсер давно не читал сайт катка (schedule_stale с сервера). Сеансы
-   * показываем — чаще всего они верны, — но прямо говорим, от какого они числа.
-   */
-  function staleScheduleNote(freshness, now) {
-    freshness = freshness || {};
-    if (!shouldWarnScheduleStale(freshness, now)) return null;
-    var at = freshness.schedule_observed_at ? new Date(freshness.schedule_observed_at) : null;
-    if (!at || isNaN(at.getTime())) return 'Расписание могло измениться — уточните на сайте или по телефону';
-    var hh = at.getHours();
-    var mm = at.getMinutes();
-    return (
-      'Расписание от ' + at.getDate() + ' ' + MONTHS_GEN[at.getMonth()] + ', ' +
-      (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm +
-      ' — могло измениться, уточните на сайте или по телефону'
-    );
+  function staleScheduleNote() {
+    return null;
   }
 
   /**
@@ -922,7 +904,7 @@
     if (phones.length) {
       out.push({
         id: 'copyPhone',
-        label: 'Скопировать',
+        label: 'Телефон',
         phone: phones[0],
         phones: phones,
       });

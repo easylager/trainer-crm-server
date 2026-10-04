@@ -778,7 +778,7 @@ describe('TASK-146: расписание как сеансы в кино', () =>
     const a = quickActions({ latitude: 53.9, longitude: 27.5, phone: '+375 (29) 111-22-33',
       social_urls: { instagram: 'https://instagram.com/x' } });
     assert.deepEqual(a.map((x) => x.id), ['route', 'copyPhone', 'insta']);
-    assert.equal(a[1].label, 'Скопировать');
+    assert.equal(a[1].label, 'Телефон');
     assert.equal(a[1].phone, '+375 (29) 111-22-33');
     const multi = quickActions({ phone: '+375447838518; +375173095476' });
     assert.equal(multi[0].phone, '+375447838518');
@@ -818,18 +818,11 @@ describe('TASK-146: карточка открывается на дне и се�
 });
 
 describe('TASK-146: устаревшее расписание', () => {
-  it('флаг schedule_stale даёт честную плашку с датой; без флага — ничего', () => {
-    const { staleScheduleNote } = loadModel();
+  it('schedule_stale не показываем в UI — слоты как источник правды', () => {
+    const { staleScheduleNote, shouldWarnScheduleStale } = loadModel();
     const now = new Date('2026-10-02T10:00:00Z');
-    assert.equal(staleScheduleNote({ schedule_stale: false }, now), null);
-    assert.equal(staleScheduleNote(null, now), null);
-    const note = staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' }, now);
-    assert.match(note, /^Расписание от 1 октября, \d{2}:00 — могло измениться/);
-    assert.equal(
-      staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-02T08:00:00Z' }, now),
-      null,
-      'сегодня обновляли — не пугаем'
-    );
+    assert.equal(staleScheduleNote({ schedule_stale: true, schedule_observed_at: '2026-10-01T11:00:00Z' }, now), null);
+    assert.equal(shouldWarnScheduleStale({ schedule_stale: true }, now), false);
   });
 });
 
