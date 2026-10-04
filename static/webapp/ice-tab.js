@@ -146,159 +146,12 @@
     state.shopUiPicker = false;
   }
 
-  function shopPanelListHome() {
-    return $('iceShopFiltersListWrap');
-  }
-
-  function shopPanelSheetMount() {
-    return $('iceShopSheetPanelMount');
-  }
-
-  function shopPanelNode() {
-    return $('iceShopFiltersPanel');
-  }
-
-  function restoreShopPanelToList() {
-    var panel = shopPanelNode();
-    var home = shopPanelListHome();
-    if (panel && home && panel.parentNode !== home) home.appendChild(panel);
-  }
-
-  function mountShopPanelInSheet() {
-    var panel = shopPanelNode();
-    var mount = shopPanelSheetMount();
-    if (panel && mount) mount.appendChild(panel);
-  }
-
-  function updateShopSheetChrome() {
-    var open = !!(state.shopMapFiltersOpen && mapViewActive());
-    if (document.body) document.body.classList.toggle('ice-shop-sheet-open', open);
-    var root = $('iceShopSheetRoot');
-    if (root) {
-      root.hidden = !open;
-      root.setAttribute('aria-hidden', open ? 'false' : 'true');
-    }
-    var overlay = $('iceShopSheetOverlay');
-    if (overlay) overlay.classList.toggle('ice-shop-sheet-overlay--open', open);
-    var sheet = $('iceShopSheet');
-    if (sheet) sheet.classList.toggle('ice-shop-sheet--open', open);
-    var done = $('iceShopSheetDone');
-    if (done) done.textContent = M.shopMapResultsCta(state.items.length);
-    var reset = $('iceShopSheetReset');
-    if (reset) reset.hidden = !M.hasActiveShopFilters(shopFilterState());
-    var mapBtn = $('iceShopMapFiltersBtn');
-    if (mapBtn) mapBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-
-  function openShopMapFiltersSheet() {
-    if (!mapViewActive()) return;
-    state.shopMapFiltersOpen = true;
-    mountShopPanelInSheet();
-    if (mapCtl && typeof mapCtl.snapPeek === 'function') mapCtl.snapPeek();
-    updateShopSheetChrome();
-    var tg = global.Telegram && global.Telegram.WebApp;
-    if (tg && typeof tg.HapticFeedback !== 'undefined' && typeof tg.HapticFeedback.impactOccurred === 'function') {
-      try {
-        tg.HapticFeedback.impactOccurred('light');
-      } catch (e) { /* */ }
-    }
-  }
-
   function closeShopMapFiltersPanel() {
     state.shopMapFiltersOpen = false;
     state.shopUiPicker = false;
-    restoreShopPanelToList();
-    updateShopSheetChrome();
   }
 
-  function toggleShopMapFiltersSheet() {
-    if (state.shopMapFiltersOpen) closeShopMapFiltersPanel();
-    else openShopMapFiltersSheet();
-    renderCatalogHeader();
-  }
-
-  function wireShopFilterSheetGestures() {
-    var sheet = $('iceShopSheet');
-    var handle = $('iceShopSheetHandle');
-    var head = sheet && sheet.querySelector('.ice-shop-sheet__head');
-    if (!sheet || sheet.dataset.dismissWired === '1') return;
-    sheet.dataset.dismissWired = '1';
-    var dragZone = [handle, head].filter(Boolean);
-    var startY = 0;
-    var dy = 0;
-    var dragging = false;
-    var dragPointerId = null;
-
-    function dragClientY(ev) {
-      if (ev.touches && ev.touches.length) return ev.touches[0].clientY;
-      return ev.clientY;
-    }
-
-    function onMove(ev) {
-      if (!dragging) return;
-      if (dragPointerId != null && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
-      dy = Math.max(0, dragClientY(ev) - startY);
-      sheet.style.transform = 'translateY(' + dy + 'px)';
-      if (ev.cancelable) ev.preventDefault();
-    }
-
-    function onEnd(ev) {
-      if (!dragging) return;
-      if (dragPointerId != null && ev && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
-      dragging = false;
-      dragPointerId = null;
-      sheet.style.transform = '';
-      if (dy > 48) {
-        closeShopMapFiltersPanel();
-        renderCatalogHeader();
-      }
-      dy = 0;
-    }
-
-    function onStart(ev) {
-      if (!state.shopMapFiltersOpen) return;
-      if (ev.target && ev.target.closest && ev.target.closest('button, a, input, [data-shop-service], [data-shop-discipline]')) {
-        return;
-      }
-      dragging = true;
-      dragPointerId = ev.pointerId != null ? ev.pointerId : null;
-      startY = dragClientY(ev);
-      dy = 0;
-      if (typeof ev.currentTarget.setPointerCapture === 'function' && ev.pointerId != null) {
-        try {
-          ev.currentTarget.setPointerCapture(ev.pointerId);
-        } catch (e) { /* WebView */ }
-      }
-    }
-
-    dragZone.forEach(function (el) {
-      el.addEventListener('pointerdown', onStart);
-      el.addEventListener('pointermove', onMove);
-      el.addEventListener('pointerup', onEnd);
-      el.addEventListener('pointercancel', onEnd);
-      el.addEventListener('touchstart', onStart, { passive: true });
-      el.addEventListener('touchmove', onMove, { passive: false });
-      el.addEventListener('touchend', onEnd);
-      el.addEventListener('touchcancel', onEnd);
-    });
-
-    if (handle) {
-      handle.addEventListener('click', function () {
-        if (dy > 8) return;
-        closeShopMapFiltersPanel();
-        renderCatalogHeader();
-      });
-      handle.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-          ev.preventDefault();
-          closeShopMapFiltersPanel();
-          renderCatalogHeader();
-        }
-      });
-    }
-  }
-
-  function onShopFiltersPanelClick(ev) {
+  function onShopFiltersClick(ev) {
     var svc = ev.target.closest('[data-shop-service]');
     if (svc) {
       var key = svc.getAttribute('data-shop-service') || '';
@@ -453,13 +306,11 @@
       state.items = [];
       state.total = 0;
       syncMapListItems();
-      if (state.shopMapFiltersOpen) updateShopSheetChrome();
       return;
     }
     state.items = M.filterShopCatalog(state.shopSourceItems, shopFilterState(), new Date());
     state.total = state.items.length;
     syncMapListItems();
-    if (state.shopMapFiltersOpen) updateShopSheetChrome();
   }
 
   function renderShopFilters(show) {
@@ -479,14 +330,17 @@
     host.hidden = false;
     var onMap = mapViewActive();
     host.classList.toggle('ice-shop-filters--map', onMap);
+    host.classList.toggle('is-expanded', onMap && state.shopMapFiltersOpen);
     if (!onMap && state.shopMapFiltersOpen) closeShopMapFiltersPanel();
     var filters = shopFilterState();
     var mapBar = $('iceShopMapBar');
     if (mapBar) mapBar.hidden = !onMap;
     var mapBtn = $('iceShopMapFiltersBtn');
+    if (mapBtn) {
+      mapBtn.setAttribute('aria-expanded', onMap && state.shopMapFiltersOpen ? 'true' : 'false');
+    }
     var mapLabel = $('iceShopMapFiltersLabel');
     if (mapLabel) mapLabel.textContent = M.shopMapToolbarLabel(filters);
-    updateShopSheetChrome();
     var now = new Date();
     var serviceChips = M.shopServiceChipsView(state.shopSourceItems, filters, now);
     var serviceBox = $('iceShopServiceChips');
@@ -783,10 +637,7 @@
    * свайп шторки, закрытие sheet без setView). Подтягиваем вёрстку к state.
    */
   function repairCatalogChrome() {
-    restoreShopPanelToList();
-    if (!mapViewActive()) {
-      if (state.shopMapFiltersOpen) closeShopMapFiltersPanel();
-    }
+    if (!mapViewActive() && state.shopMapFiltersOpen) closeShopMapFiltersPanel();
     setViewToggle();
     renderCatalogHeader();
   }
@@ -2308,37 +2159,15 @@
       mapFiltersBtn.addEventListener('click', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        toggleShopMapFiltersSheet();
-      });
-    }
-
-    var shopSheetOverlay = $('iceShopSheetOverlay');
-    if (shopSheetOverlay) {
-      shopSheetOverlay.addEventListener('click', function () {
-        closeShopMapFiltersPanel();
+        state.shopMapFiltersOpen = !state.shopMapFiltersOpen;
         renderCatalogHeader();
       });
     }
-    var shopSheetDone = $('iceShopSheetDone');
-    if (shopSheetDone) {
-      shopSheetDone.addEventListener('click', function () {
-        closeShopMapFiltersPanel();
-        renderCatalogHeader();
-      });
-    }
-    var shopSheetReset = $('iceShopSheetReset');
-    if (shopSheetReset) {
-      shopSheetReset.addEventListener('click', function () {
-        clearShopFilters();
-      });
-    }
-    wireShopFilterSheetGestures();
 
-    /* Панель переезжает в bottom sheet — слушатель на #iceShopFiltersPanel, не на обёртке. */
-    var shopPanel = $('iceShopFiltersPanel');
-    if (shopPanel && shopPanel.dataset.clickWired !== '1') {
-      shopPanel.dataset.clickWired = '1';
-      shopPanel.addEventListener('click', onShopFiltersPanelClick);
+    var shopFilters = $('iceShopFilters');
+    if (shopFilters && shopFilters.dataset.clickWired !== '1') {
+      shopFilters.dataset.clickWired = '1';
+      shopFilters.addEventListener('click', onShopFiltersClick);
     }
 
     var toolsHost = $('iceCatalogTools');

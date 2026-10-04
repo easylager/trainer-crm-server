@@ -440,36 +440,12 @@ body.ice-view-map .ice-citypill--insearch {
 
 .ice-shop-map-filters-btn {
   width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
-/* .ice-tool::after — второй шеврон посередине строки; свой — .ice-shop-map-filters-btn__chev */
-.ice-shop-map-filters-btn.ice-tool::after {
-  content: none;
-  display: none;
-}
-
-.ice-shop-map-filters-btn__chev {
-  font-size: 12px;
-  opacity: 0.75;
-  transition: transform 0.2s ease;
-}
-
-body.ice-shop-sheet-open .ice-shop-map-filters-btn__chev {
-  transform: rotate(180deg);
-}
-
-/* Карта: одна пилюля в hero; фильтры — в нижнем sheet (не раскрываются в шапке). */
+/* Карта: одна строка «Фильтры», полная панель — по тапу (как окно времени у «Мест»). */
 body.ice-view-map .ice-shop-filters {
   padding: 0 0 4px;
   gap: 6px;
-}
-
-body.ice-view-map .ice-shop-filters__list-wrap {
-  display: none;
 }
 
 .ice-shop-filters__map-bar[hidden] {
@@ -480,129 +456,20 @@ body.ice-view-map .ice-shop-filters__map-bar:not([hidden]) {
   display: flex;
 }
 
-/* ─── Фильтры магазинов на карте: bottom sheet ─── */
-.ice-shop-sheet-root[hidden] {
-  display: none !important;
+body.ice-view-map .ice-shop-filters__panel {
+  display: none;
 }
 
-.ice-shop-sheet-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 34;
-  background: rgba(0, 0, 0, 0.48);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-.ice-shop-sheet-overlay.ice-shop-sheet-overlay--open {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.ice-shop-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--client-shell-tab-inset, 80px);
-  z-index: 35;
-  max-height: min(68vh, 520px);
+body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
   display: flex;
-  flex-direction: column;
-  padding: 6px 16px 12px;
-  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
-  background: var(--app-float-bg, var(--glide-paper));
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.35);
-  border-top: 1px solid var(--glide-line);
-  transform: translateY(105%);
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-  overflow: hidden;
-}
-
-.ice-shop-sheet.ice-shop-sheet--open {
-  transform: translateY(0);
-}
-
-.ice-shop-sheet__handle {
-  width: 40px;
-  height: 5px;
-  border-radius: var(--app-radius-pill);
-  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
-  margin: 2px auto 8px;
-  flex-shrink: 0;
-  touch-action: none;
-  cursor: grab;
-}
-
-.ice-shop-sheet__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-shrink: 0;
-  padding-bottom: 8px;
-  touch-action: none;
-  cursor: grab;
-}
-
-.ice-shop-sheet__title {
-  margin: 0;
-  font-size: var(--app-text-headline);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: -0.02em;
-}
-
-.ice-shop-sheet__reset {
-  font: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-semibold);
-  color: var(--glide-ink-teal);
-  background: none;
-  border: 0;
-  padding: 6px 0;
-  cursor: pointer;
-}
-
-.ice-shop-sheet__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  max-height: min(50vh, 380px);
+  overflow: auto;
   overscroll-behavior: contain;
-}
-
-.ice-shop-sheet__scroll .ice-shop-filters__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 0 8px;
-  max-height: none;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-
-.ice-shop-sheet__cta {
-  flex-shrink: 0;
-  margin-top: 10px;
-  width: 100%;
-  min-height: 48px;
-  border: 0;
+  padding: 10px 12px;
   border-radius: var(--app-radius-md);
-  background: var(--glide-brand, #45b9bb);
-  color: var(--glide-on-brand, #0b0c0e);
-  font: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  cursor: pointer;
-}
-
-.ice-shop-sheet__cta:active {
-  opacity: 0.92;
-}
-
-body.ice-shop-sheet-open .ice-map-sheet {
-  transition-duration: 0.2s;
+  background: rgba(11, 12, 14, 0.96);
+  border: 1px solid var(--glide-line);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
 }
 
 .ice-shop-filters[hidden] {
