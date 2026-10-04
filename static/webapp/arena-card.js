@@ -1008,6 +1008,22 @@
       copyArenaPhone(t.getAttribute('data-copy-phone'));
       return;
     }
+    if (action === 'call') {
+      /* В Telegram WebView tap по tel: на плитке часто молчит — открываем набор через JS. href остаётся для long-press. */
+      ev.preventDefault();
+      var callPhone = (t.getAttribute('data-call-phone') || '').trim();
+      if (!callPhone) {
+        var callHref = (t.getAttribute('href') || '').trim();
+        if (callHref.toLowerCase().indexOf('tel:') === 0) callPhone = callHref.slice(4);
+      }
+      if (!dialPhone(callPhone)) {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && typeof tg.showAlert === 'function') {
+          tg.showAlert('Не удалось открыть набор номера. Удержите номер, чтобы скопировать.');
+        }
+      }
+      return;
+    }
     if (action === 'external') {
       // Касса, карта, сайт: из Mini App — через Telegram, иначе ссылка откроется внутри webview.
       ev.preventDefault();
