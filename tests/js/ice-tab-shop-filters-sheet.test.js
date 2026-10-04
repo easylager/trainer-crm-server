@@ -1,5 +1,5 @@
 /**
- * Шторка фильтров магазинов на карте: панель в mount, клики по чипам, repair после visibility.
+ * Фильтры магазинов на карте: дропдаун в hero (без bottom sheet).
  * Run: node --test tests/js/ice-tab-shop-filters-sheet.test.js
  */
 'use strict';
@@ -24,7 +24,23 @@ function makeElement(id) {
     style: {},
     dataset: {},
     parentNode: null,
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    classList: {
+      _c: new Set(),
+      add(...a) {
+        a.forEach((x) => this._c.add(x));
+      },
+      remove(...a) {
+        a.forEach((x) => this._c.delete(x));
+      },
+      toggle(name, on) {
+        if (on === undefined) {
+          if (this._c.has(name)) this._c.delete(name);
+          else this._c.add(name);
+        } else if (on) this._c.add(name);
+        else this._c.delete(name);
+      },
+      contains: (n) => el.classList._c.has(n),
+    },
     querySelector: () => null,
     querySelectorAll: () => [],
     setAttribute() {},
@@ -100,15 +116,7 @@ async function bootShopsOnMap() {
     'iceShopMapBar',
     'iceShopMapFiltersBtn',
     'iceShopMapFiltersLabel',
-    'iceShopFiltersListWrap',
     'iceShopFiltersPanel',
-    'iceShopSheetPanelMount',
-    'iceShopSheetRoot',
-    'iceShopSheetOverlay',
-    'iceShopSheet',
-    'iceShopSheetHandle',
-    'iceShopSheetDone',
-    'iceShopSheetReset',
     'iceShopOpenNow',
     'iceShopWhenBtn',
     'iceShopWhenMenu',
@@ -121,10 +129,7 @@ async function bootShopsOnMap() {
   ids.forEach((id) => {
     elements[id] = makeElement(id);
   });
-  elements.iceShopSheet.querySelector = (sel) => {
-    if (sel === '.ice-shop-sheet__head') return makeElement('iceShopSheetHead');
-    return null;
-  };
+  elements.iceShopFilters.appendChild(elements.iceShopFiltersPanel);
 
   const minskShop = {
     id: 501,
@@ -214,12 +219,11 @@ async function bootShopsOnMap() {
   vm.runInContext(tabSource, context);
   await flushPromises(120);
 
-  elements.icePlaceTabs.dispatch('click', {
-    target: {
-      getAttribute: (a) => (a === 'data-place-type' ? 'shop' : null),
-      closest: (sel) => (sel === '[data-place-type]' ? elements.icePlaceTabs : null),
-    },
-  });
+  const shopTab = {
+    getAttribute: (a) => (a === 'data-place-type' ? 'shop' : null),
+    closest: (sel) => (sel === '[data-place-type]' ? shopTab : null),
+  };
+  elements.icePlaceTabs.dispatch('click', { target: shopTab });
   await flushPromises(40);
 
   elements.iceViewSwitch.dispatch('click', { target: elements.iceViewSwitch });
@@ -228,8 +232,8 @@ async function bootShopsOnMap() {
   return { elements, visListeners, store, model };
 }
 
-describe('ice-tab: шторка фильтров магазинов', () => {
-  it('открытие sheet: панель в mount, клик по чипу, repair после visibility', async () => {
+describe('ice-tab: фильтры магазинов на карте (дропдаун)', () => {
+  it('тап по строке раскрывает панель в hero, чипы кликабельны', async () => {
     const { elements, visListeners, store, model } = await bootShopsOnMap();
 
     elements.iceShopMapFiltersBtn.dispatch('click', {
@@ -238,14 +242,11 @@ describe('ice-tab: шторка фильтров магазинов', () => {
       stopPropagation() {},
     });
 
-    assert.equal(
-      elements.iceShopFiltersPanel.parentNode,
-      elements.iceShopSheetPanelMount,
-      'панель должна жить в шторке'
+    assert.ok(
+      elements.iceShopFilters.classList.contains('is-expanded'),
+      'после тапа host должен получить is-expanded'
     );
-    assert.equal(elements.iceShopSheetRoot.hidden, false);
-
-    elements.iceShopFiltersPanel.dispatch('click', { target: chipTarget('retail') });
+    elements.iceShopFilters.dispatch('click', { target: chipTarget('retail') });
     await flushPromises(10);
 
     const persisted = JSON.parse(store[model.ICE_STATE_KEY] || '{}');
@@ -256,8 +257,8 @@ describe('ice-tab: шторка фильтров магазинов', () => {
 
     assert.equal(
       elements.iceShopFiltersPanel.parentNode,
-      elements.iceShopSheetPanelMount,
-      'после visibilitychange панель не должна уезжать в скрытый list-wrap'
+      elements.iceShopFilters,
+      'после visibilitychange панель на месте'
     );
   });
 });
