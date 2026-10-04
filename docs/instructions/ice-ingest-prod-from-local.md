@@ -23,10 +23,8 @@ due у job).
 После смены `poll_minutes` в спеке один раз применить конфиг на проде:
 
 ```bash
-railway run -s api-server -- bash -c 'PYTHONPATH=. python3 scripts/seed_ice_parser_jobs.py --apply --i-know-this-is-prod'
+bash scripts/run_ice_ingest_prod_local.sh scripts/seed_ice_parser_jobs.py --apply --i-know-this-is-prod
 ```
-
-(нужен public `DATABASE_URL` — через `run_ice_ingest_prod_local.sh` обёртку не подходит; проще выполнить seed из Railway shell или с `DATABASE_PUBLIC_URL`, как в ручном варианте ниже, подставив seed-команду вместо ingest.)
 
 Либо точечно в SQL (если seed не гоняете):
 

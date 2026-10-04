@@ -21,6 +21,7 @@ API_SERVICE="${RAILWAY_API_SERVICE:-api-server}"
 PUB="$(railway run -s "$POSTGRES_SERVICE" -- printenv DATABASE_PUBLIC_URL)"
 if [[ -z "$PUB" ]]; then
   echo "DATABASE_PUBLIC_URL is empty on service $POSTGRES_SERVICE." >&2
+  echo "Railway → Postgres → Connect → Public network, or set RAILWAY_POSTGRES_SERVICE." >&2
   exit 1
 fi
 case "$PUB" in
