@@ -12,6 +12,7 @@ from src.ingestion.parsers import ParserRegistry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import InMemoryScrapeRunRecorder
 from src.ingestion.seed_config import (
+    MINSK_ARENA_SALEFRAME_CONFIG,
     MINSK_SPEED_OVAL_SALEFRAME_CONFIG,
     PARSER_KEY_MINSK_ARENA,
 )
