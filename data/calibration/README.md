@@ -11,7 +11,7 @@
 | minsk-chizhovka | Чижовка | HTML schedule+prices | adapter |
 | minsk-ledby | led.by | HTML timetable+prices | adapter |
 | minsk-diamond | DiaMond city | HTML сетка | adapter |
-| minsk-junost | Юность | 403 / truncated BY | blocked_empty (`sessions: []`) |
+| minsk-junost | Юность | IG caption fixture | adapter (`junost_instagram_caption_v1`) |
 | minsk-ledlife | ledlife | nginx 403 | blocked_empty (`sessions: []`) |
 
 Gold-файл каждой арены: `data/fixtures/<source_id>/expected.json` (`schema_version: canonical-slot-v1`). Слоты оттуда, не выдуманы.

@@ -97,17 +97,22 @@
       "source_id": "minsk-junost",
       "fixture_dir": "data/fixtures/minsk-junost",
       "gold_file": "expected.json",
-      "parser_key": "junost_origin_html_v1",
+      "parser_key": "junost_instagram_caption_v1",
       "scoring": "adapter",
       "now": "2026-10-04T09:00:00+00:00",
       "source_files": [
+        "instagram-caption-2026-10-04.txt",
+        "instagram-caption-latest.txt",
         "junost-origin.html",
         "junost-origin-schedule.html",
         "globalping-by-truncated.html"
       ],
       "job_config": {
-        "url": "https://junost.by/seansy_massovogo_kataniya_na_vyhodnyh/",
-        "schedule_fixture": "junost-origin-schedule.html",
+        "caption_file": "data/fixtures/minsk-junost/instagram-caption-2026-10-04.txt",
+        "pivot_year": 2026,
+        "timezone": "Europe/Minsk",
+        "kind": "public_skate",
+        "requires_by_egress": false,
         "prices_already_minor": false
       }
     },
