@@ -236,7 +236,7 @@ class KobrinLdsParser(IceParser):
         schedule_html = await load_source_text(job, filename="schedule.html", url_keys=("schedule_url",))
         prices_html = await load_source_text(job, filename="prices.html", url_keys=("prices_url",))
         duration = int(job.config.get("duration_minutes") or 45)
-        age_note = str(job.config.get("age_note") or "до 16 лет")
+        age_note = str(job.config.get("age_note") or "Детский билет — до 16 лет")
         adult, child, rental = _kobrin_prices(prices_html)
         monday = _kobrin_monday(schedule_html)
         target_table: list[list[str]] | None = None

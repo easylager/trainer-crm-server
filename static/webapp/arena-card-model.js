@@ -253,7 +253,7 @@
     var verified = f.verified_at ? new Date(f.verified_at) : null;
     var edited = f.profile_updated_at ? new Date(f.profile_updated_at) : null;
     if (verified && !isNaN(verified.getTime())) {
-      lines.push('Проверено командой Glide ' + verified.getDate() + ' ' + MONTHS_GEN[verified.getMonth()]);
+      lines.push('Проверено командой Glide');
     }
     if (edited && !isNaN(edited.getTime()) && (!verified || edited > verified)) {
       var d = daysBetween(f.profile_updated_at, now || new Date());
@@ -799,6 +799,21 @@
     return out;
   }
 
+  /** Подпись к детскому тарифу: «до 16 лет» без контекста непонятна родителям. */
+  function formatChildTicketAgeNote(raw) {
+    var note = String(raw || '').trim();
+    if (!note) return '';
+    if (/^детский\s+билет\b/i.test(note)) {
+      return note.replace(/^детский\s+билет\s*[-–—]?\s*/i, 'Детский билет — ');
+    }
+    if (/^до\s+\d+\s+лет$/i.test(note)) {
+      return 'Детский билет — ' + note.charAt(0).toLowerCase() + note.slice(1);
+    }
+    var m = note.match(/^(?:детский|дети|детям)\s+(.+)$/i);
+    if (m) return 'Детский билет — ' + m[1];
+    return note;
+  }
+
   /**
    * Сеансы дня, сгруппированные по «что это и сколько стоит». Одинаковые сеансы —
    * одна группа с сеткой времени; другой тип или другая цена — своя группа.
@@ -819,7 +834,13 @@
       var key = [iceKindLabel(s), s.price_adult_minor, s.price_child_minor, s.price_rental_minor, dur, s.age_note || ''].join('|');
       if (!(key in index)) {
         index[key] = groups.length;
-        groups.push({ title: iceKindLabel(s), duration: dur ? dur + ' мин' : '', prices: priceChips(s), note: s.age_note || '', times: [] });
+        groups.push({
+          title: iceKindLabel(s),
+          duration: dur ? dur + ' мин' : '',
+          prices: priceChips(s),
+          note: formatChildTicketAgeNote(s.age_note),
+          times: [],
+        });
       }
       var cta = iceRowCta(s, opts.ticketsUrl);
       groups[index[key]].times.push({
@@ -835,6 +856,21 @@
     return { groups: groups, count: list.length };
   }
 
+  /** Несколько номеров в каталоге часто идут через «;» — для tel: нужен каждый отдельно. */
+  function phoneNumbers(raw) {
+    return String(raw || '')
+      .split(/[;,\n]/)
+      .map(function (p) {
+        return p.trim();
+      })
+      .filter(Boolean);
+  }
+
+  function phoneToTelHref(phone) {
+    var cleaned = String(phone || '').replace(/[^\d+]/g, '');
+    return cleaned ? 'tel:' + cleaned : '';
+  }
+
   /** Быстрые действия под обложкой: маршрут, звонок, сайт/инстаграм — только то, что есть. */
   function quickActions(card) {
     card = card || {};
@@ -844,8 +880,16 @@
     } else if (card.address) {
       out.push({ id: 'route', label: 'Маршрут', href: 'https://yandex.by/maps/?text=' + encodeURIComponent(card.address) });
     }
-    var phone = String(card.phone || '').trim();
-    if (phone) out.push({ id: 'call', label: 'Позвонить', href: 'tel:' + phone.replace(/[^\d+]/g, '') });
+    var phones = phoneNumbers(card.phone);
+    if (phones.length) {
+      out.push({
+        id: 'call',
+        label: 'Позвонить',
+        phone: phones[0],
+        phones: phones,
+        href: phoneToTelHref(phones[0]),
+      });
+    }
     var contacts = practiceContacts(card);
     var insta = contacts.socials.filter(function (x) { return x.label === 'Instagram'; })[0];
     if (contacts.website) out.push({ id: 'site', label: 'Сайт', href: contacts.website.href });
@@ -1017,7 +1061,10 @@
     staleScheduleNote: staleScheduleNote,
     parseScheduleFocus: parseScheduleFocus,
     defaultScheduleDay: defaultScheduleDay,
+    formatChildTicketAgeNote: formatChildTicketAgeNote,
     showtimesForDay: showtimesForDay,
+    phoneNumbers: phoneNumbers,
+    phoneToTelHref: phoneToTelHref,
     quickActions: quickActions,
     weekHours: weekHours,
     massAccessView: massAccessView,

@@ -489,52 +489,132 @@ a.arena-row {
   color: var(--glide-hint);
 }
 
+/* Выше таб-бара клиентского shell (~9000), как шит «Поделиться». */
 .arena-modal {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(15, 26, 34, 0.45);
+  z-index: 9600;
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  background: transparent;
+  transition: background 0.18s ease;
+}
+
+.arena-modal.is-open {
+  background: var(--app-scrim, rgba(4, 18, 26, 0.42));
 }
 
 .arena-modal[hidden] {
   display: none;
 }
 
-.arena-modal__sheet {
-  width: min(480px, 100%);
-  background: var(--app-float-bg);
-  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  box-shadow: var(--app-float-shadow);
+.arena-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.arena-modal__sheet h2 {
+.arena-modal__sheet {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--glide-card);
+  color: var(--glide-text);
+  border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--app-float-shadow);
+  transform: translateY(24px);
+  opacity: 0;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.arena-modal.is-open .arena-modal__sheet {
+  transform: none;
+  opacity: 1;
+}
+
+.arena-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.arena-modal__head h2 {
   margin: 0;
   font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.02em;
 }
 
-.arena-modal__sheet label {
+.arena-modal__close {
+  flex-shrink: 0;
+  border: 0;
+  background: var(--app-chip-bg);
+  color: inherit;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--app-radius-pill);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.arena-modal__lead {
+  margin: 0 0 14px;
   font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.arena-modal__form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
 }
 
-.arena-modal__sheet select,
-.arena-modal__sheet input {
+.arena-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.arena-modal__label {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+
+.arena-modal__field select,
+.arena-modal__field input {
   font: inherit;
-  padding: 10px;
-  border-radius: var(--app-radius-sm);
-  border: 1px solid var(--glide-line);
-  background: var(--app-canvas-bg);
+  padding: 12px 14px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg);
   color: inherit;
+  box-shadow: var(--app-card-shadow);
+}
+
+.arena-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.arena-btn--ghost {
+  background: transparent;
+  border-color: var(--glide-line);
+  box-shadow: none;
 }
 
 @media (max-width: 360px) {
@@ -813,6 +893,31 @@ a.arena-row {
 }
 .arena-info > span { font-size: var(--app-text-caption); color: var(--glide-hint); }
 a.arena-info b { color: var(--glide-ink-teal); }
+.arena-info__phone-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 2px;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-info__phone-sep {
+  color: var(--glide-hint);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.arena-info__tel {
+  color: var(--glide-ink-teal);
+  overflow-wrap: anywhere;
+}
+/* Адрес, телефон, сайт — можно выделить и скопировать (Telegram WebView). */
+.ar-pilot .arena-card .arena-infos .arena-info b,
+.ar-pilot .arena-card .arena-infos .arena-info .arena-info__tel,
+.ar-pilot .arena-card .arena-infos .arena-info > span {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
 .arena-info__open {
   font-style: normal;
   font-size: var(--app-text-caption);
@@ -895,13 +1000,6 @@ a.arena-info b { color: var(--glide-ink-teal); }
   font-size: var(--app-text-caption);
   font-weight: var(--app-weight-semibold);
   text-align: center;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.ar-pilot .arena-card a.arena-info.arena-info[href^="tel:"] {
-  display: flex;
-  padding: 12px 14px;
-  border-top: 1px solid var(--glide-line);
 }
 
 /* Парсер давно не читал сайт катка: сеансы показываем, но честно говорим, от какого они числа. */

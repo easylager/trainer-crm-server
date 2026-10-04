@@ -656,6 +656,38 @@ describe('магазин и доверие (TASK-146)', () => {
     ]);
     const outdoor = trustLines({ venue_type: 'outdoor', freshness: { schedule_observed_at: '2026-10-02T08:00:00Z' } }, now);
     assert.deepEqual(outdoor, ['Открытый лёд зависит от погоды — уточняйте перед выездом']);
+    const verified = trustLines(
+      { venue_type: 'shop', freshness: { verified_at: '2026-09-06T10:00:00Z' } },
+      now
+    );
+    assert.deepEqual(verified, ['Проверено командой Glide']);
+  });
+});
+
+describe('formatChildTicketAgeNote', () => {
+  it('добавляет «Детский билет» к голому возрастному лимиту и типовым формулировкам', () => {
+    const { formatChildTicketAgeNote, showtimesForDay } = loadModel();
+    assert.equal(formatChildTicketAgeNote('до 16 лет'), 'Детский билет — до 16 лет');
+    assert.equal(formatChildTicketAgeNote('детский до 14 лет'), 'Детский билет — до 14 лет');
+    assert.equal(formatChildTicketAgeNote('детский от 3 до 12 лет'), 'Детский билет — от 3 до 12 лет');
+    assert.equal(formatChildTicketAgeNote('дети до 14 лет'), 'Детский билет — до 14 лет');
+    const now = new Date('2026-10-02T10:00:00Z');
+    const v = showtimesForDay({
+      sessions: [{
+        id: 1,
+        kind: 'public_skate',
+        starts_at_local: '14:15:00',
+        ends_at_local: '14:59:00',
+        starts_at_utc: '2026-10-02T11:15:00Z',
+        ends_at_utc: '2026-10-02T11:59:00Z',
+        price_adult_minor: 1000,
+        price_child_minor: 800,
+        currency_code: 'BYN',
+        age_note: 'до 16 лет',
+      }],
+      now,
+    });
+    assert.equal(v.groups[0].note, 'Детский билет — до 16 лет');
   });
 });
 
@@ -710,6 +742,10 @@ describe('TASK-146: расписание как сеансы в кино', () =>
       social_urls: { instagram: 'https://instagram.com/x' } });
     assert.deepEqual(a.map((x) => x.id), ['route', 'call', 'insta']);
     assert.equal(a[1].href, 'tel:+375291112233');
+    assert.equal(a[1].phone, '+375 (29) 111-22-33');
+    const multi = quickActions({ phone: '+375447838518; +375173095476' });
+    assert.equal(multi[0].href, 'tel:+375447838518');
+    assert.deepEqual(multi[0].phones, ['+375447838518', '+375173095476']);
   });
 
   it('часы по дням: сегодня отмечен, одинаковые дни — «ежедневно»', () => {

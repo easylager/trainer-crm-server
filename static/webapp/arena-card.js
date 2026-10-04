@@ -75,6 +75,21 @@
     global.location.href = path;
   }
 
+  function dialPhone(phone) {
+    var num = String(phone || '').trim();
+    if (!num) return false;
+    var Crm = global.CrmPhoneField;
+    if (Crm && typeof Crm.openPhoneDialer === 'function' && Crm.openPhoneDialer(num)) return true;
+    var uri = Crm && typeof Crm.phoneToTelUri === 'function' ? Crm.phoneToTelUri(num) : 'tel:' + num.replace(/[^\d+]/g, '');
+    if (!uri) return false;
+    try {
+      global.location.href = uri;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function openExternal(url) {
     var tg = global.Telegram && global.Telegram.WebApp;
     if (tg && typeof tg.openLink === 'function') {
@@ -407,6 +422,8 @@
       extra =
         ' href="' +
         esc(row.href) +
+        '" data-action="external" data-href="' +
+        esc(row.href) +
         '" target="_blank" rel="noopener noreferrer"';
     }
     if (row.nature === 'lesson' && row.group) {
@@ -447,13 +464,49 @@
   }
 
   /** Ряд быстрых действий под обложкой: то, ради чего открывают карточку места. */
+  function renderPhoneLinks(phones) {
+    return (phones || []).map(function (p, i) {
+      var href = M.phoneToTelHref(p);
+      if (!href) return esc(p);
+      var sep = i ? '<span class="arena-info__phone-sep">; </span>' : '';
+      return (
+        sep +
+        '<a class="crm-tel-link arena-info__tel" href="' +
+        esc(href) +
+        '" data-action="call" data-call-phone="' +
+        esc(p) +
+        '">' +
+        esc(p) +
+        '</a>'
+      );
+    }).join('');
+  }
+
   function renderQuickActions() {
     var items = M.quickActions(state.card).map(function (a) {
-      var external = a.id !== 'call';
+      if (a.id === 'call') {
+        return (
+          '<a class="arena-qa" href="' +
+          esc(a.href) +
+          '" data-action="call" data-call-phone="' +
+          esc(a.phone || '') +
+          '">' +
+          icon(a.id) +
+          '<span>' +
+          esc(a.label) +
+          '</span></a>'
+        );
+      }
       return (
-        '<a class="arena-qa" href="' + esc(a.href) + '"' +
-        (external ? ' data-action="external" data-href="' + esc(a.href) + '"' : '') +
-        '>' + icon(a.id) + '<span>' + esc(a.label) + '</span></a>'
+        '<a class="arena-qa" href="' +
+        esc(a.href) +
+        '" data-action="external" data-href="' +
+        esc(a.href) +
+        '">' +
+        icon(a.id) +
+        '<span>' +
+        esc(a.label) +
+        '</span></a>'
       );
     });
     // У катка с сеансами «Поделиться» стоит рядом с «Позвать с собой»; у остальных — здесь.
@@ -523,7 +576,8 @@
         g.times.map(function (t) {
           var hot = t.next || t.picked;
           var cls = 'arena-time' + (hot ? ' arena-time--next' : '') + (t.href ? ' arena-time--link' : '');
-          var tag = t.picked ? 'выбран' : t.next ? 'ближайший' : t.capacity;
+          // Подсветка = «ближайший к вам сеанс» (сегодня или с плитки ленты ?s=), не «вы вручную выбрали».
+          var tag = t.picked || t.next ? 'Ближайший' : t.capacity;
           var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
           return t.href
             ? '<a class="' + cls + '" href="' + esc(t.href) + '" data-action="external" data-href="' + esc(t.href) + '">' + body + '</a>'
@@ -687,10 +741,14 @@
     } else if (card.season_start_month === 1 && card.season_end_month === 12) {
       rows += '<div class="arena-info"><small>Сезон</small><b>Круглый год</b></div>';
     }
-    if (card.phone) {
+    var phones = M.phoneNumbers(card.phone);
+    if (phones.length) {
       rows +=
-        '<a class="arena-info" href="tel:' + esc(String(card.phone).replace(/[^\d+]/g, '')) + '">' +
-        '<small>Телефон</small><b>' + esc(card.phone) + '</b></a>';
+        '<div class="arena-info arena-info--phones">' +
+        '<small>Телефон</small>' +
+        '<div class="arena-info__phone-row">' +
+        renderPhoneLinks(phones) +
+        '</div></div>';
     }
     if (contacts.website) {
       rows +=
@@ -781,14 +839,21 @@
     field.innerHTML = REPORT_FIELDS.map(function (f) {
       return '<option value="' + f.id + '">' + esc(f.label) + '</option>';
     }).join('');
-    value.placeholder = 'как должно быть';
+    value.placeholder = 'Например: 10:30 или +375 29 123-45-67';
     value.value = '';
     modal.hidden = false;
+    requestAnimationFrame(function () {
+      modal.classList.add('is-open');
+    });
+    var closeBtn = document.getElementById('arenaModalClose');
+    if (closeBtn) closeBtn.focus();
   }
 
   function closeModal() {
     var modal = document.getElementById('arenaModal');
-    if (modal) modal.hidden = true;
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.hidden = true;
   }
 
   function storeLocalReport(payload) {
@@ -811,13 +876,20 @@
     var modal = document.getElementById('arenaModal');
     var field = document.getElementById('arenaModalField');
     var value = document.getElementById('arenaModalValue');
+    var suggested = value && String(value.value || '').trim();
+    var tg = global.Telegram && global.Telegram.WebApp;
+    if (!suggested) {
+      if (tg && tg.showAlert) tg.showAlert('Напишите, как должно быть правильно.');
+      else if (value) value.focus();
+      return;
+    }
     var kind = modal && modal.dataset.kind;
     var payload = {
       kind: kind || 'report',
       arena_id: state.card && state.card.id,
       arena_slug: state.card && state.card.slug,
       field: field && field.value,
-      suggested: value && value.value,
+      suggested: suggested,
       at: new Date().toISOString(),
     };
     var msg =
@@ -828,23 +900,47 @@
       ' field=' +
       payload.field +
       ' value=' +
-      (payload.suggested || '');
+      suggested;
     storeLocalReport(payload);
     var cred = initData();
-    if (cred) {
-      fetch('/api/webapp/support', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Telegram-Init-Data': cred,
-        },
-        body: JSON.stringify({ message: msg, role: 'client' }),
-      }).catch(function () { /* local store already saved */ });
+    var submitBtn = document.getElementById('arenaModalSubmit');
+    if (submitBtn) submitBtn.disabled = true;
+
+    function done(ok, detail) {
+      if (submitBtn) submitBtn.disabled = false;
+      closeModal();
+      if (tg && tg.showAlert) {
+        tg.showAlert(
+          ok
+            ? 'Спасибо, передали администратору.'
+            : detail || 'Не удалось отправить. Попробуйте позже или напишите в поддержку из бота.'
+        );
+      }
     }
-    closeModal();
-    if (global.Telegram && global.Telegram.WebApp && global.Telegram.WebApp.showAlert) {
-      global.Telegram.WebApp.showAlert('Спасибо, передали администратору.');
+
+    if (!cred) {
+      done(false, 'Откройте карточку из Telegram — тогда сообщение уйдёт команде. Сейчас сохранили только на устройстве.');
+      return;
     }
+    fetch('/api/webapp/support', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Telegram-Init-Data': cred,
+      },
+      body: JSON.stringify({ message: msg, role: 'client' }),
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        return r.json();
+      })
+      .then(function (body) {
+        if (body && body.ok) done(true);
+        else throw new Error('not ok');
+      })
+      .catch(function () {
+        done(false);
+      });
   }
 
   function onRootClick(ev) {
@@ -881,6 +977,16 @@
       // Группа ведёт на карточку тренера и раскрывает там именно этот набор.
       // Прыжок на общий список времени терял выбранную группу.
       goBooking(t.getAttribute('data-trainer'), { groupId: t.getAttribute('data-group') });
+      return;
+    }
+    if (action === 'call') {
+      ev.preventDefault();
+      if (!dialPhone(t.getAttribute('data-call-phone'))) {
+        var tg = global.Telegram && global.Telegram.WebApp;
+        if (tg && typeof tg.showAlert === 'function') {
+          tg.showAlert('Не удалось открыть набор номера. Удержите номер, чтобы скопировать.');
+        }
+      }
       return;
     }
     if (action === 'external') {
@@ -977,6 +1083,15 @@
     if (form) form.addEventListener('submit', submitModal);
     var cancel = document.getElementById('arenaModalCancel');
     if (cancel) cancel.addEventListener('click', closeModal);
+    var backdrop = document.getElementById('arenaModalBackdrop');
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    var closeX = document.getElementById('arenaModalClose');
+    if (closeX) closeX.addEventListener('click', closeModal);
+    global.document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      var modal = document.getElementById('arenaModal');
+      if (modal && !modal.hidden) closeModal();
+    });
     if (global.ClientShell && typeof global.ClientShell.setForcedTab === 'function') {
       global.ClientShell.setForcedTab('catalog');
     }
