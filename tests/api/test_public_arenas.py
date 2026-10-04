@@ -554,3 +554,50 @@ async def test_trainers_on_arena_reuse_can_book(app_use_test_db, db_session) -> 
     arena_hits = [h for h in found["groups"] if h["type"] == "arena"][0]["items"]
     assert any(h["id"] == tid for h in trainer_hits)
     assert any(h["id"] == arena_id for h in arena_hits)
+
+
+@pytest.mark.asyncio
+async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, db_session) -> None:
+    empty_cid = await _insert_city(db_session, name=f"IceEmpty-{uuid.uuid4().hex[:6]}")
+    rink_cid = await _insert_city(db_session, name=f"IceRink-{uuid.uuid4().hex[:6]}")
+    coach_cid = await _insert_city(db_session, name=f"IceCoach-{uuid.uuid4().hex[:6]}")
+    await _insert_arena(db_session, rink_cid, name="Каток на карте", latitude=55.75, longitude=37.62)
+    tr = await db_session.execute(
+        text("INSERT INTO trainers (status, is_catalog_visible) VALUES ('active', true) RETURNING id")
+    )
+    tid = int(tr.scalar_one())
+    await db_session.execute(
+        text("INSERT INTO trainer_cities (trainer_id, city_id, is_primary) VALUES (:t, :c, true)"),
+        {"t": tid, "c": coach_cid},
+    )
+    await db_session.flush()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/ice/cities")
+        all_cities = await client.get("/api/public/cities")
+        interest = await client.post(
+            "/api/public/ice/interest",
+            json={"city_id": coach_cid, "intent": "skate", "source": "coming_soon_cta"},
+        )
+        missing = await client.post("/api/public/ice/interest", json={"city_id": 9_999_999})
+    assert resp.status_code == 200, resp.text
+    ids = {it["id"] for it in resp.json()["items"]}
+    assert empty_cid not in ids
+    assert rink_cid in ids
+    assert coach_cid in ids
+    all_ids = {it["id"] for it in all_cities.json()["items"]}
+    assert empty_cid in all_ids
+    coach = next(it for it in resp.json()["items"] if it["id"] == coach_cid)
+    assert coach["trainer_count"] >= 1
+    assert coach["map_rink_count"] == 0
+    rink = next(it for it in resp.json()["items"] if it["id"] == rink_cid)
+    assert rink["map_rink_count"] >= 1
+    assert rink["latitude"] is not None
+    assert interest.status_code == 200, interest.text
+    assert interest.json()["ok"] is True
+    assert missing.status_code == 404
+    counted = await db_session.execute(
+        text("SELECT COUNT(*) FROM ice_city_interest WHERE city_id = :cid"),
+        {"cid": coach_cid},
+    )
+    assert int(counted.scalar_one()) == 1
+

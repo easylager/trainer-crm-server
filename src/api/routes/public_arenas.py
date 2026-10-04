@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -13,9 +14,11 @@ from src.application.arena_public_use_cases import (
     MAX_LIST_LIMIT,
     IcePublicQueryError,
     get_public_arena_card,
+    list_ice_cities,
     list_public_arena_sessions,
     list_public_arena_trainers,
     list_public_ice_arenas,
+    record_ice_city_interest,
     search_public_ice,
 )
 from src.shared.config import Settings
@@ -60,6 +63,38 @@ async def get_public_ice_arenas(
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc
+
+
+class IceCityInterestBody(BaseModel):
+    city_id: int
+    intent: str = "skate"
+    source: str = Field(default="coming_soon_cta", max_length=32)
+
+
+@router.get("/ice/cities")
+async def get_ice_cities(response: Response, session: AsyncSession = Depends(get_session)) -> dict:
+    """Ice tab city picker: only cities with a map rink or a catalog trainer."""
+    response.headers["Cache-Control"] = "no-store"
+    return await list_ice_cities(session)
+
+
+@router.post("/ice/interest")
+async def post_ice_interest(
+    body: IceCityInterestBody,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Record that a client asked for skating in a city that has trainers but no map rinks."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        payload = await record_ice_city_interest(
+            session, city_id=body.city_id, intent=body.intent, source=body.source
+        )
+    except IcePublicQueryError as exc:
+        raise _query_error(exc) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    return payload
 
 
 @router.get("/search")

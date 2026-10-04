@@ -66,6 +66,27 @@
     return '/api/public/search?' + params.join('&');
   }
 
+  function buildGroupsProbeUrl(opts) {
+    opts = opts || {};
+    var params = ['limit=1'];
+    if (opts.cityId != null && opts.cityId !== '') {
+      params.push('city_id=' + encodeURIComponent(String(opts.cityId)));
+    }
+    return '/api/public/training-groups?' + params.join('&');
+  }
+
+  function shouldShowGroupChip(count) {
+    return Number(count) > 0;
+  }
+
+  function sanitizeIntent(intent, opts) {
+    opts = opts || {};
+    if (intent === INTENTS.group && !opts.hasGroups) return INTENTS.skate;
+    if (intent === INTENTS.coach) return INTENTS.coach;
+    if (intent === INTENTS.group) return INTENTS.group;
+    return INTENTS.skate;
+  }
+
   function buildTrainersUrl(opts) {
     opts = opts || {};
     var params = ['order_by=rating'];
@@ -77,6 +98,14 @@
       params.push('offset=' + encodeURIComponent(String(opts.offset)));
     }
     return '/api/public/trainers?' + params.join('&');
+  }
+
+  function buildIceCitiesUrl() {
+    return '/api/public/ice/cities';
+  }
+
+  function buildIceInterestUrl() {
+    return '/api/public/ice/interest';
   }
 
   function catalogHref() {
@@ -181,10 +210,6 @@
     };
   }
 
-  function trainersMovedHint() {
-    return 'Каталог тренеров теперь здесь — чип «Тренеры», в один тап.';
-  }
-
   function formatDistanceKm(km) {
     if (km == null || km === '' || isNaN(Number(km))) return '';
     var n = Number(km);
@@ -279,7 +304,18 @@
     return String(live.text || item.live_line || 'Расписание уточняется').trim();
   }
 
-  function formatEmptyList(intent) {
+  function formatEmptyList(intent, opts) {
+    opts = opts || {};
+    var trainers = Number(opts.trainerCount) || 0;
+    var rinks = Number(opts.mapRinkCount) || 0;
+    if (intent === INTENTS.skate && trainers > 0 && rinks <= 0) {
+      return {
+        kind: 'coming-soon',
+        title: 'Скоро добавим катки',
+        body: 'В этом городе уже есть тренеры. Расписание массового катания подключим — нажмите, если хотите кататься здесь.',
+        cta: 'Хочу кататься здесь',
+      };
+    }
     if (intent === INTENTS.skate) {
       return {
         title: 'Сейчас нет массового катания',
@@ -387,6 +423,11 @@
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
     buildTrainersUrl: buildTrainersUrl,
+    buildIceCitiesUrl: buildIceCitiesUrl,
+    buildIceInterestUrl: buildIceInterestUrl,
+    buildGroupsProbeUrl: buildGroupsProbeUrl,
+    shouldShowGroupChip: shouldShowGroupChip,
+    sanitizeIntent: sanitizeIntent,
     catalogHref: catalogHref,
     mapHref: mapHref,
     trainerHref: trainerHref,
@@ -396,7 +437,6 @@
     hasFutureSkateSlot: hasFutureSkateSlot,
     filterSkateLens: filterSkateLens,
     listRowCta: listRowCta,
-    trainersMovedHint: trainersMovedHint,
     formatMeta: formatMeta,
     formatDistanceKm: formatDistanceKm,
     liveTone: liveTone,

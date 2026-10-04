@@ -196,7 +196,7 @@
     var minLonSpan = 0.42;
     var fallback = opts.fallbackCenter;
     if (!fallback || !isFinite(Number(fallback[0])) || !isFinite(Number(fallback[1]))) {
-      fallback = [53.902496, 27.561481];
+      fallback = null;
     }
     var onMap = splitMapAndList(items).onMap;
     var minLat;
@@ -214,11 +214,13 @@
       maxLat = Math.max.apply(null, lats) + pad;
       minLon = Math.min.apply(null, lons) - pad;
       maxLon = Math.max.apply(null, lons) + pad;
-    } else {
+    } else if (fallback) {
       minLat = Number(fallback[0]) - minLatSpan / 2;
       maxLat = Number(fallback[0]) + minLatSpan / 2;
       minLon = Number(fallback[1]) - minLonSpan / 2;
       maxLon = Number(fallback[1]) + minLonSpan / 2;
+    } else {
+      return null;
     }
     if (maxLat - minLat < minLatSpan) {
       var midLat = (minLat + maxLat) / 2;
