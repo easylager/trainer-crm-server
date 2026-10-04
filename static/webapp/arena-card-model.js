@@ -886,7 +886,7 @@
         time: start,
         href: cta.href,
         sessionId: s.id != null ? s.id : null,
-        next: !!opts.markNext && !hasPicked && nearestId && String(s.id) === nearestId,
+        next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,
         capacity: s.capacity_note || '',
       });

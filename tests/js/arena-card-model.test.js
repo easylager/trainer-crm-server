@@ -701,6 +701,43 @@ describe('TASK-146: расписание как сеансы в кино', () =>
     price_adult_minor: 1000, price_child_minor: 800, price_rental_minor: 900, currency_code: 'BYN', ...extra,
   });
 
+  it('«Ближайший» — по starts_at_utc, не по порядку в ленте и не лексикографии', () => {
+    const { showtimesForDay } = loadModel();
+    const now = new Date('2026-10-04T09:28:00Z'); // 12:28 Минск
+    const v = showtimesForDay({
+      sessions: [
+        {
+          id: 99,
+          kind: 'public_skate',
+          local_date: '2026-10-04',
+          starts_at_local: '16:15:00',
+          ends_at_local: '16:59:00',
+          starts_at_utc: '2026-10-04T13:15:00Z',
+          ends_at_utc: '2026-10-04T14:00:00Z',
+          currency_code: 'BYN',
+        },
+        {
+          id: 10,
+          kind: 'public_skate',
+          local_date: '2026-10-04',
+          starts_at_local: '13:00:00',
+          ends_at_local: '13:44:00',
+          starts_at_utc: '2026-10-04T10:00:00Z',
+          ends_at_utc: '2026-10-04T10:45:00Z',
+          currency_code: 'BYN',
+        },
+      ],
+      now,
+      markNext: true,
+      pickedId: '99',
+    });
+    const times = v.groups[0].times;
+    assert.equal(times.find((t) => t.time === '13:00').next, true);
+    assert.equal(times.find((t) => t.time === '13:00').picked, false);
+    assert.equal(times.find((t) => t.time === '16:15').next, false);
+    assert.equal(times.find((t) => t.time === '16:15').picked, true);
+  });
+
   it('одинаковые сеансы — одна группа, цены один раз, ближайший подсвечен, прошедшие скрыты', () => {
     const { showtimesForDay } = loadModel();
     const v = showtimesForDay({
@@ -767,14 +804,14 @@ describe('TASK-146: карточка открывается на дне и се�
     assert.deepEqual(parseScheduleFocus('?ref=1&day=завтра&s=x'), { day: null, sessionId: null });
   });
 
-  it('выбранный в ленте сеанс подсвечен вместо ближайшего', () => {
+  it('сеанс из ленты подсвечен, «Ближайший» — у реально следующего по времени', () => {
     const { showtimesForDay } = loadModel();
     const mk = (id, h) => ({ id, kind: 'public_skate', starts_at_local: h + ':15:00', ends_at_local: h + ':59:00',
       starts_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':15:00Z',
       ends_at_utc: '2026-10-02T' + String(h - 3).padStart(2, '0') + ':59:00Z', currency_code: 'BYN' });
     const now = new Date('2026-10-02T10:00:00Z');
     const v = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '2' });
-    assert.deepEqual(v.groups[0].times.map((t) => [t.time, t.next, t.picked]), [['14:15', false, false], ['18:15', false, true]]);
+    assert.deepEqual(v.groups[0].times.map((t) => [t.time, t.next, t.picked]), [['14:15', true, false], ['18:15', false, true]]);
     const w = showtimesForDay({ sessions: [mk(1, 14), mk(2, 18)], now, markNext: true, pickedId: '999' });
     assert.equal(w.groups[0].times[0].next, true);
   });
