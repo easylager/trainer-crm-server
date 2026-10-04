@@ -137,18 +137,20 @@ describe('clusters (AC-001)', () => {
 });
 
 describe('pin chrome (TASK-147: пин = время)', () => {
-  it('A/B с сеансом в окне — пилюля с временем; C и outside_window — полая точка', () => {
+  it('A/B с сеансом в окне — пилюля с временем; C — имя, outside — приглушено', () => {
     const { pinView } = loadModel();
     const a = pinView(rink());
     assert.equal(a.tone, 'a');
     assert.equal(a.muted, false);
-    assert.equal(a.kind, 'time');
+    assert.equal(a.kind, 'place');
+    assert.equal(a.label, '11:00');
     assert.equal(a.time, '11:00');
     assert.equal(a.shortName, 'Чижовка');
     assert.equal(a.venue, 'ice');
     assert.equal(a.selected, false);
     const b = pinView(rink({ id: 3, tier: 'B', live: { kind: 'session', starts_at_local: '15:00' } }));
-    assert.equal(b.kind, 'time');
+    assert.equal(b.kind, 'place');
+    assert.equal(b.label, '15:00');
     assert.equal(b.time, '15:00');
     const c = pinView(
       rink({
@@ -160,9 +162,9 @@ describe('pin chrome (TASK-147: пин = время)', () => {
     );
     assert.equal(c.tone, 'c');
     assert.equal(c.muted, true);
-    assert.equal(c.kind, 'dot');
+    assert.equal(c.kind, 'place');
     assert.equal(c.time, '');
-    assert.equal(c.label, '');
+    assert.ok(c.label);
   });
 
   it('TASK-146: сеанс вне выбранного окна — пин полый и без времени', () => {
@@ -171,7 +173,7 @@ describe('pin chrome (TASK-147: пин = время)', () => {
     const off = pinView(rink({ live: Object.assign({}, base.live, { outside_window: true }) }));
     assert.equal(off.when, 'off');
     assert.equal(off.muted, true);
-    assert.equal(off.kind, 'dot');
+    assert.equal(off.kind, 'place');
     assert.equal(off.time, '');
     assert.equal(pinView(base).when, 'in');
   });
@@ -250,6 +252,26 @@ describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () =>
     const s = sheetSummary(items, null);
     assert.equal(s, '13 магазинов');
     assert.doesNotMatch(s, /сеанс/);
+  });
+
+  it('sheetRailEmptyState — выдача без координат', () => {
+    const { sheetRailEmptyState } = loadModel();
+    const noCoords = [
+      rink({ id: 1, latitude: null, longitude: null, on_map: false }),
+      rink({ id: 2, latitude: null, longitude: null, on_map: false }),
+    ];
+    const st = sheetRailEmptyState({ listItems: noCoords, mapItems: noCoords });
+    assert.equal(st.title, 'На карте пока нет точек');
+    assert.equal(st.action.kind, 'list');
+    const mapped = [rink({ id: 9, latitude: 53.91, longitude: 27.51 })];
+    assert.equal(sheetRailEmptyState({ listItems: mapped, mapItems: mapped }), null);
+  });
+
+  it('pinLayerSignature меняется при смене live', () => {
+    const { pinLayerSignature } = loadModel();
+    const a = [rink({ id: 1, live: { starts_at_local: '18:00' } })];
+    const b = [rink({ id: 1, live: { starts_at_local: '19:00' } })];
+    assert.notEqual(pinLayerSignature(a), pinLayerSignature(b));
   });
 
   it('singlePlaceFocus — bbox вокруг координат магазина', () => {
@@ -602,7 +624,11 @@ describe('тип места: цвет пина и легенда (TASK-147, хв
 
   it('pinView.venue: неизвестный и пустой тип — лёд, как на сервере', () => {
     const { pinView, venueKey } = loadModel();
-    assert.equal(pinView(place(1, 'shop')).venue, 'shop');
+    const shopPin = pinView(place(1, 'shop'));
+    assert.equal(shopPin.venue, 'shop');
+    assert.equal(shopPin.kind, 'place');
+    assert.ok(shopPin.label);
+    assert.equal(shopPin.muted, false);
     assert.equal(pinView(place(2, 'POOL')).venue, 'pool');
     assert.equal(pinView(place(3, 'zoo')).venue, 'ice');
     assert.equal(pinView(place(4, '')).venue, 'ice');
@@ -671,9 +697,9 @@ describe('тип места: цвет пина и легенда (TASK-147, хв
     const { pinView, clusterSummary } = loadModel();
     const gym = place(1, 'gym', { live: { kind: 'place', text: 'Сегодня 10:00–20:00' } });
     const v = pinView(gym);
-    assert.equal(v.kind, 'dot');
+    assert.equal(v.kind, 'place');
     assert.equal(v.time, '');
-    assert.equal(v.label, '');
+    assert.ok(v.label);
     assert.equal(clusterSummary([gym]).hasHits, false);
     const outdoor = place(2, 'outdoor', { live: { kind: 'session', text: 'Сегодня 19:00', starts_at_local: '19:00' } });
     assert.equal(pinView(outdoor).time, '19:00');

@@ -1508,7 +1508,7 @@ html.client-mini-dark [class*="ground-pane"] {
 
 /*
  * ШТОРКА КАРТЫ (TASK-147). Overlay поверх карты, позиции peek/half (высоту
- * ставит JS); тяга вверх или кнопка «Списком» ведут в списочный вид вкладки.
+ * ставит JS); в списочный вид — только кнопка «Списком», не жест шторки.
  * fixed, а не absolute: у ближайшего позиционированного предка (.ice-map-wrap)
  * высота гибкая, и bottom от него даёт двойной отступ от таб-бара.
  */
@@ -1602,7 +1602,7 @@ html.client-mini-dark [class*="ground-pane"] {
   touch-action: pan-x;
 }
 
-/* peek: сводка одна, карусель не отвечает на касания. */
+/* peek: свёрнутая шторка — только заголовок, карта на весь экран. */
 .ice-map-sheet[data-snap="peek"] .ice-map-sheet__body {
   opacity: 0;
   pointer-events: none;
@@ -1629,6 +1629,39 @@ html.client-mini-dark [class*="ground-pane"] {
 .ice-map-rail > .ice-acard {
   flex: 0 0 calc(100% - 44px);
   scroll-snap-align: center;
+}
+
+.ice-map-rail-empty {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 4px 8px;
+  font-size: var(--app-text-caption);
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.ice-map-rail-empty b {
+  display: block;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+  color: var(--glide-text);
+  margin-bottom: 4px;
+}
+
+.ice-map-rail-empty p {
+  margin: 0;
+}
+
+.ice-map-rail-empty__btn {
+  margin-top: 10px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal);
+  cursor: pointer;
 }
 
 .ice-acard--sheet {
@@ -1802,6 +1835,94 @@ html.client-mini-dark [class*="ground-pane"] {
   --map-venue: var(--app-venue-shop);
 }
 
+/* Пилюли мест (магазины, катки, залы): цвет типа, на общем плане — компактнее. */
+.ice-ypin--place .ice-ypin__body {
+  height: 28px;
+  padding: 0 10px;
+  border-width: 2px;
+  border-color: var(--map-venue, var(--glide-brand));
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.12),
+    0 6px 18px -6px rgba(0, 0, 0, 0.8);
+}
+
+.ice-ypin--place:not(.ice-ypin--sel) .ice-ypin__body {
+  background: color-mix(in srgb, var(--map-venue, var(--glide-brand)) 38%, var(--glide-card));
+}
+
+.ice-ypin--place .ice-ypin__dot {
+  width: 7px;
+  height: 7px;
+  background: var(--map-venue, var(--glide-brand));
+}
+
+.ice-ypin--place .ice-ypin__label {
+  color: var(--glide-text);
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ice-ypin--place.ice-ypin--off:not(.ice-ypin--sel) .ice-ypin__body {
+  opacity: 0.72;
+}
+
+.ice-ypin--place.ice-ypin--compact .ice-ypin__body {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  border-width: 1.5px;
+}
+
+.ice-ypin--place.ice-ypin--compact .ice-ypin__label {
+  max-width: 68px;
+}
+
+.ice-ypin--place.ice-ypin--compact .ice-ypin__dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* Магазины: фиолетовая обводка — всё на карте уже под фильтр. */
+.ice-ypin--shop.ice-ypin--place .ice-ypin__body {
+  border-color: var(--app-venue-shop);
+}
+
+.ice-ypin--shop.ice-ypin--place:not(.ice-ypin--sel) .ice-ypin__body {
+  background: color-mix(in srgb, var(--app-venue-shop) 42%, var(--glide-card));
+}
+
+.ice-ypin--shop.ice-ypin--place .ice-ypin__dot {
+  background: var(--app-venue-shop);
+}
+
+.ice-ypin--place.ice-ypin--sel {
+  z-index: 6;
+  transform: translate(-50%, -100%) scale(1.06);
+}
+
+.ice-ypin--place.ice-ypin--sel .ice-ypin__body {
+  background: var(--app-cta-fill);
+  border-color: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  box-shadow:
+    0 0 0 3px rgba(69, 185, 187, 0.35),
+    0 10px 24px -6px rgba(0, 0, 0, 0.9);
+}
+
+.ice-ypin--place.ice-ypin--sel .ice-ypin__dot {
+  background: var(--app-cta-text);
+}
+
+.ice-ypin--place.ice-ypin--sel .ice-ypin__label,
+.ice-ypin--place.ice-ypin--sel .ice-ypin__name {
+  color: inherit;
+}
+
+.ice-ypin--dim:not(.ice-ypin--sel):not(.ice-ypin--shop) {
+  opacity: 0.42;
+}
+
 .ice-ypin--other,
 .ice-map-legend__item--other {
   --map-venue: var(--app-venue-service);
@@ -1884,6 +2005,12 @@ body.ice-view-map .ice-map-legend:not([hidden]) {
 .ice-ycluster--quiet {
   background: var(--glide-hint);
   border-color: var(--glide-line-strong);
+  color: var(--glide-on-fill);
+}
+
+.ice-ycluster--shops {
+  background: var(--app-venue-shop);
+  border-color: var(--app-venue-shop);
   color: var(--glide-on-fill);
 }
 

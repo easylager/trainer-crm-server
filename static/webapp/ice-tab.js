@@ -388,48 +388,11 @@
         .join('');
     }
     var discBlock = $('iceShopDisciplineBlock');
-    var discChips = M.shopDisciplineChipsView(state.shopSourceItems, filters, now);
-    if (discBlock) discBlock.hidden = !discChips.length;
-    var discBox = $('iceShopDisciplineChips');
-    if (discBox) {
-      discBox.innerHTML = discChips
-        .map(function (c) {
-          return (
-            '<button type="button" class="ice-chip ice-chip--shop" data-shop-discipline="' +
-            esc(c.key) +
-            '" aria-pressed="' +
-            (c.active ? 'true' : 'false') +
-            '">' +
-            esc(c.label) +
-            ' <span class="ice-chip__n">' +
-            esc(String(c.count)) +
-            '</span></button>'
-          );
-        })
-        .join('');
-    }
+    if (discBlock) discBlock.hidden = true;
     var activeHost = $('iceShopActiveFilters');
-    var pills = M.shopActiveFilterPills(filters);
     if (activeHost) {
-      if (!pills.length) {
-        activeHost.hidden = true;
-        activeHost.innerHTML = '';
-      } else {
-        activeHost.hidden = false;
-        activeHost.innerHTML =
-          pills
-            .map(function (p) {
-              return (
-                '<span class="ice-shop-pill">' +
-                esc(p.label) +
-                '<button type="button" data-shop-clear="' +
-                esc(p.kind) +
-                '" aria-label="Сбросить">×</button></span>'
-              );
-            })
-            .join('') +
-          '<button type="button" class="ice-shop-reset" data-shop-clear="all">Сбросить всё</button>';
-      }
+      activeHost.hidden = true;
+      activeHost.innerHTML = '';
     }
   }
 
@@ -766,6 +729,13 @@
         fetchJson: fetchJson,
         getIntent: function () {
           return state.intent;
+        },
+        getCatalogScope: function () {
+          return M.catalogScope(state.intent, state.venueTypes);
+        },
+        getShopMapCaption: function () {
+          if (M.catalogScope(state.intent, state.venueTypes) !== 'shop') return '';
+          return M.shopMapToolbarLabel(shopFilterState());
         },
         getCityId: function () {
           return state.cityId;

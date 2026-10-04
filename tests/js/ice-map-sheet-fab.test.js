@@ -49,7 +49,15 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     const js = read('ice-map.js');
     assert.match(js, /railLock/);
     assert.match(js, /snapFor/);
-    assert.match(js, /onSheetFull/, 'тяга вверх ведёт в списочный вид');
+    assert.match(js, /onSheetFull/, 'кнопка «Списком» ведёт в списочный вид');
+    assert.doesNotMatch(
+      js.slice(js.indexOf('function bindSheetDrag'), js.indexOf('function bindRail')),
+      /dyMax > 60[\s\S]*onSheetFull/,
+      'жест шторки не закрывает карту'
+    );
+    assert.match(js, /setSnap\(snap === 'peek' \? 'half' : 'peek'\)/, 'тап по ручке сворачивает шторку');
+    assert.match(js, /pinLayerSignature/, 'слой пинов не пересобирается без смены выдачи');
+    assert.match(js, /sheetRailEmptyState/, 'пустая карусель — понятный empty-state');
   });
 
   it('выделение пина трогает только сменившиеся плейсмарки', () => {
@@ -70,6 +78,9 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(fetch, /defaultSheet\(\)/, 'после смены viewport шторку пересобираем');
     const selectFn = js.slice(js.indexOf('function select(item, o)'), js.indexOf('function openClusterRail'));
     assert.match(selectFn, /o\.expand \|\| o\.fromPin/, 'peek→half только по пину или явному expand');
+    assert.match(selectFn, /focusSelectedOnMap/, 'карусель и пин ведут камеру к выбранному месту');
+    assert.match(js, /function catalogOnMap/, 'карусель из listItems вкладки, не из bbox');
+    assert.match(fetch, /listItems\.length > 0\) return/, 'bbox не подменяет каталог после зума');
     assert.doesNotMatch(selectFn, /if \(snap === 'peek'\) setSnap\('half'\)/);
     const def = js.slice(js.indexOf('function defaultSheet()'), js.indexOf('function paintSheet'));
     assert.doesNotMatch(def, /expand:\s*true/);
@@ -158,7 +169,8 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(css, /body\.ice-view-map \.ice-map-legend:not\(\[hidden\]\)\s*{\s*display:\s*flex/);
     assert.match(css, /body\.ice-view-map \.ice-map-legend:not\(\[hidden\]\)[\s\S]*?pointer-events:\s*none/, 'легенда не перехватывает карту');
     const js = read('ice-map.js');
-    assert.match(js, /MM\.legendView\(mapItems\)/, 'состав легенды — из чистой функции модели');
+    assert.match(js, /MM\.legendView\(catalogOnMap\(\)\)/, 'состав легенды — из чистой функции модели');
+    assert.match(js, /getShopMapCaption/, 'у магазинов легенда = активный фильтр');
     assert.match(js, /legendEl\.hidden = true/, 'нет сцены или < 2 типов — скрыта');
   });
 });

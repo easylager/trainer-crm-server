@@ -195,12 +195,11 @@ describe('shop catalog filters', () => {
     assert.ok(!keys.includes('repair'));
   });
 
-  it('shopDisciplineChipsView only for sharpen-like services', () => {
+  it('shop discipline row hidden in catalog UI', () => {
     const { shopDisciplineChipsView, shopDisciplineRowVisible } = loadModel();
     assert.equal(shopDisciplineRowVisible('retail'), false);
-    assert.equal(shopDisciplineChipsView(shops, { shopService: 'retail' }, new Date()).length, 0);
-    const chips = shopDisciplineChipsView(shops, { shopService: 'skate_sharpening' }, new Date());
-    assert.ok(chips.some((c) => c.key === 'discipline_hockey'));
+    assert.equal(shopDisciplineRowVisible('skate_sharpening'), false);
+    assert.equal(shopDisciplineChipsView(shops, { shopService: 'skate_sharpening' }, new Date()).length, 0);
   });
 
   it('open now uses Minsk weekly hours', () => {

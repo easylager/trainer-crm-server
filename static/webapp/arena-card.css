@@ -881,15 +881,20 @@ a.arena-row {
 .arena-slot-time b { font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
 .arena-slot-time small {
   font-size: var(--app-text-kicker);
+  line-height: 1.2;
   color: var(--glide-hint);
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  max-width: 100%;
+  padding: 0 2px;
+  box-sizing: border-box;
 }
-.arena-time--next {
-  background: var(--app-cta-fill);
+.arena-slot--picked .arena-slot-time small {
+  text-transform: none;
+  letter-spacing: 0;
 }
-.arena-time--next b,
-.arena-time--next small { color: var(--app-cta-text); }
+/* «Ближайший» — как в прототипе: обычная плитка, акцент только на подписи (не CTA-заливка). */
+.arena-time--next small { color: var(--glide-ink-teal, var(--app-cta-fill)); }
 
 button.arena-slot-time {
   font: inherit;

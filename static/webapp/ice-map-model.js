@@ -310,6 +310,74 @@
     return n + ' ' + word + ' без координат — только в списке';
   }
 
+  /**
+   * Карусель шторки пуста, но выдача есть — объясняем почему и даём выход в список.
+   */
+  function sheetRailEmptyState(opts) {
+    opts = opts || {};
+    var list = opts.listItems || [];
+    var pins = opts.mapItems || [];
+    if (splitMapAndList(pins).onMap.length > 0) return null;
+
+    var catalog = String(opts.catalogScope || 'places');
+    var listSplit = splitMapAndList(list);
+    var pinSplit = splitMapAndList(pins);
+    var total = Math.max(list.length, pins.length);
+    if (total <= 0) {
+      return {
+        title: 'Нет мест на карте',
+        body: 'Попробуйте другой фильтр или город',
+        action: null,
+      };
+    }
+
+    if (listSplit.onMap.length === 0 && listSplit.offMapCount > 0) {
+      return {
+        title: 'На карте пока нет точек',
+        body: 'Адреса уточняем — смотрите в списке',
+        action: { label: 'Открыть список', kind: 'list' },
+      };
+    }
+
+    if (pins.length > 0 && pinSplit.onMap.length === 0) {
+      return {
+        title: 'В этой области пусто',
+        body: 'Сдвиньте карту или откройте список',
+        action: { label: 'Списком', kind: 'list' },
+      };
+    }
+
+    if (catalog === 'shop') {
+      return {
+        title: 'Магазины без координат',
+        body: 'Откройте список — там полные адреса',
+        action: { label: 'Открыть список', kind: 'list' },
+      };
+    }
+
+    return {
+      title: 'Подвиньте карту',
+      body: 'Здесь нет мест из вашего фильтра',
+      action: { label: 'Списком', kind: 'list' },
+    };
+  }
+
+  function pinLayerSignature(onMap) {
+    return (onMap || [])
+      .map(function (item) {
+        var live = (item && item.live) || {};
+        return (
+          String(item.id) +
+          ':' +
+          String(live.starts_at_local || live.text || '') +
+          ':' +
+          String((item && item.tier) || '')
+        );
+      })
+      .sort()
+      .join('|');
+  }
+
   function cellDegForZoom(zoom) {
     var z = Number(zoom);
     if (!isFinite(z)) z = 12;
@@ -465,24 +533,50 @@
     var time = liveTime(item);
     var shortName = shortArenaName(item && item.name);
     var venue = venueKey(item);
-    // TASK-147: пин = время ближайшего сеанса. Tier A/B с сеансом в окне — пилюля
-    // с временем; tier C и outside_window — полая точка без текста.
-    var kind = (tone === 'a' || tone === 'b') && time ? 'time' : 'dot';
+    // Магазины: не «сеанс в окне», а точка на карте. Полая серая точка — для льда.
+    if (venue === 'shop') {
+      return {
+        tone: tone,
+        muted: false,
+        when: 'in',
+        kind: 'place',
+        time: '',
+        shortName: shortName,
+        venue: venue,
+        selected: !!opts.selected,
+        label: shortName,
+      };
+    }
+    // Пилюля как у магазинов: время сеанса или короткое имя; цвет — тип места.
+    var label = time || shortName;
     return {
       tone: tone,
-      muted: tone === 'c' || off,
+      muted: (tone === 'c' && !time) || off,
       when: off ? 'off' : 'in',
-      kind: kind,
+      kind: 'place',
       time: time,
       shortName: shortName,
       venue: venue,
       selected: !!opts.selected,
-      label: kind === 'time' ? time : '',
+      label: label,
     };
   }
 
   function clusterSummary(items) {
     var list = items || [];
+    if (
+      list.length &&
+      list.every(function (item) {
+        return venueKey(item) === 'shop';
+      })
+    ) {
+      return {
+        count: list.length,
+        hasHits: true,
+        minTime: '',
+        label: 'магазины',
+      };
+    }
     var hits = 0;
     var minTime = '';
     list.forEach(function (item) {
@@ -690,6 +784,20 @@
    */
   var CLUSTER_SAME_SPOT_DEG = 0.0006; // ≈ 60 м: один комплекс, зумом не развести
   var CLUSTER_MAX_ZOOM = 16;
+  var SINGLE_PLACE_PAD_DEG = 0.0018;
+
+  function singlePlaceFocus(place, opts) {
+    opts = opts || {};
+    if (!place || !hasCoords(place)) return null;
+    var lat = Number(place.latitude);
+    var lon = Number(place.longitude);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    var d = SINGLE_PLACE_PAD_DEG;
+    return {
+      bounds: [[lat - d, lon - d], [lat + d, lon + d]],
+      margin: opts.margin || [110, 80, 48, 80],
+    };
+  }
 
   function clusterFocus(points, opts) {
     opts = opts || {};
@@ -719,6 +827,7 @@
 
   return {
     clusterFocus: clusterFocus,
+    singlePlaceFocus: singlePlaceFocus,
     PLACEHOLDER_API_KEY: PLACEHOLDER_API_KEY,
     nearMePolicy: nearMePolicy,
     resolveApiKey: resolveApiKey,
@@ -736,6 +845,8 @@
     hasCoords: hasCoords,
     splitMapAndList: splitMapAndList,
     formatOffMapNote: formatOffMapNote,
+    sheetRailEmptyState: sheetRailEmptyState,
+    pinLayerSignature: pinLayerSignature,
     cellDegForZoom: cellDegForZoom,
     clusterArenas: clusterArenas,
     shortArenaName: shortArenaName,

@@ -174,9 +174,14 @@
     var railLock = false;     // лок на время программного скролла карусели
     var railUnlockTimer = null;
     var railTimer = null;
+    var lastPinLayerSig = '';
 
     function getIntent() {
       return opts.getIntent ? opts.getIntent() : 'skate';
+    }
+
+    function isShopCatalog() {
+      return opts.getCatalogScope ? opts.getCatalogScope() === 'shop' : false;
     }
 
     function getCityId() {
@@ -232,7 +237,26 @@
        CSS по ключу типа (токены --app-venue-*), здесь только разметка. */
     function paintLegend() {
       if (!legendEl) return;
-      var view = stageOn ? MM.legendView(mapItems) : { show: false, entries: [] };
+      if (!stageOn) {
+        legendEl.hidden = true;
+        legendEl.innerHTML = '';
+        return;
+      }
+      if (isShopCatalog()) {
+        var cap = typeof opts.getShopMapCaption === 'function' ? String(opts.getShopMapCaption() || '') : '';
+        var n = catalogOnMap().length;
+        if (!cap) {
+          cap = n + ' ' + MM.pluralRu(n, 'магазин', 'магазина', 'магазинов');
+        }
+        legendEl.innerHTML =
+          '<span class="ice-map-legend__item ice-map-legend__item--shop">' +
+          '<i class="ice-map-legend__dot" aria-hidden="true"></i>' +
+          esc(cap) +
+          '</span>';
+        legendEl.hidden = false;
+        return;
+      }
+      var view = MM.legendView(catalogOnMap());
       if (!view.show) {
         legendEl.hidden = true;
         legendEl.innerHTML = '';
@@ -289,11 +313,55 @@
       });
       bindSheetDrag();
       bindRail();
+      bindSheetEmptyActions();
       setSnap(snap);
+    }
+
+    function bindSheetEmptyActions() {
+      if (!sheetEl || sheetEl.__emptyBound) return;
+      sheetEl.__emptyBound = true;
+      sheetEl.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('[data-map-empty-action]');
+        if (!btn) return;
+        if (btn.getAttribute('data-map-empty-action') === 'list' && typeof opts.onSheetFull === 'function') {
+          opts.onSheetFull();
+        }
+      });
+    }
+
+    function railEmptyHtml(state) {
+      if (!state) return '';
+      var btn = state.action
+        ? '<button type="button" class="ice-map-rail-empty__btn" data-map-empty-action="' +
+          esc(state.action.kind) +
+          '">' +
+          esc(state.action.label) +
+          '</button>'
+        : '';
+      return (
+        '<div class="ice-map-rail-empty">' +
+        '<b>' +
+        esc(state.title) +
+        '</b><p>' +
+        esc(state.body) +
+        '</p>' +
+        btn +
+        '</div>'
+      );
     }
 
     function sheetVisiblePx() {
       return snap === 'peek' ? SHEET_PEEK : SHEET_HALF;
+    }
+
+    /** Карусель и пины: выдача вкладки, не срез bbox после зума к одной арене. */
+    function catalogOnMap() {
+      if (!listItems.length) return MM.splitMapAndList(mapItems).onMap.slice();
+      return mapItemsFromList(listItems);
+    }
+
+    function railPlaceCount() {
+      return catalogOnMap().length;
     }
 
     function setSnap(next) {
@@ -329,7 +397,7 @@
         chrome.sub.textContent = 'Тапните по карте, чтобы вернуться ко всем';
         return;
       }
-      var s = MM.sheetSummary(mapItems, getWhen());
+      var s = MM.sheetSummary(catalogOnMap(), getWhen());
       if (!s) s = 'Места города';
       var cut = s.indexOf(' · ');
       if (cut >= 0) {
@@ -358,7 +426,8 @@
         var ids = railItems.map(function (it) {
           return it.id;
         });
-        var still = mapItems.filter(function (it) {
+        var pool = catalogOnMap();
+        var still = pool.filter(function (it) {
           return ids.indexOf(it.id) >= 0;
         });
         if (still.length > 1) return still;
@@ -366,14 +435,24 @@
       }
       railItems = null;
       railMode = 'all';
-      return MM.splitMapAndList(mapItems).onMap;
+      return catalogOnMap();
     }
 
     function renderSheet() {
       if (!sheetEl) return;
       buildChrome();
       var items = MM.railOrder(currentRailSet());
-      chrome.rail.innerHTML = railCardsHtml(items);
+      if (!items.length) {
+        chrome.rail.innerHTML = railEmptyHtml(
+          MM.sheetRailEmptyState({
+            listItems: listItems,
+            mapItems: mapItems,
+            catalogScope: isShopCatalog() ? 'shop' : 'places',
+          })
+        );
+      } else {
+        chrome.rail.innerHTML = railCardsHtml(items);
+      }
       renderSummary();
       applyRailSelection();
       if (selected && items.some(function (it) { return it.id === selected.id; })) {
@@ -390,6 +469,8 @@
       objs.forEach(function (obj) {
         var want = !!(item && obj.properties.get('arenaId') === item.id);
         if (obj.properties.get('sel') !== want) obj.properties.set('sel', want);
+        var dim = !isShopCatalog() && !!(item && !want);
+        if (obj.properties.get('dim') !== dim) obj.properties.set('dim', dim);
       });
     }
 
@@ -436,7 +517,35 @@
       var lat = coords[0];
       var lon = coords[1];
       if (lat > sLat && lat < nLat && lon > wLon && lon < eLon) return;
+      ignoreBounds = true;
       map.setCenter(coords, map.getZoom(), { duration: 320 });
+      global.setTimeout(function () {
+        ignoreBounds = false;
+      }, 380);
+    }
+
+    /* Карусель / тап по пину: карта отвечает «где это» — зум к точке, не только если уехала за край. */
+    function focusSelectedOnMap(item) {
+      if (!map || !item) return;
+      var focus = MM.singlePlaceFocus(item, {
+        margin: [150, 70, sheetVisiblePx() + 24, 70],
+      });
+      if (!focus) return;
+      ignoreBounds = true;
+      map
+        .setBounds(focus.bounds, { checkZoomRange: true, zoomMargin: focus.margin, duration: 320 })
+        .then(function () {
+          var cap = map.options.get('maxZoom');
+          if (map.getZoom() > cap) map.setZoom(cap, { duration: 150 });
+        })
+        .then(function () {
+          global.setTimeout(function () {
+            ignoreBounds = false;
+            setPinSelection(selected);
+          }, 380);
+        }, function () {
+          ignoreBounds = false;
+        });
     }
 
     function select(item, o) {
@@ -451,7 +560,7 @@
          Пан и зум карты зовут defaultSheet → select без expand — шторку не трогаем. */
       if ((o.expand || o.fromPin) && snap === 'peek') setSnap('half');
       if (o.fromPin) scrollToCard(item);
-      if (o.pan) panToItem(item);
+      if (o.pan || o.fromPin || o.expand) focusSelectedOnMap(item);
     }
 
     /* ─── Кластер ─── */
@@ -483,7 +592,7 @@
       var ids = objs.map(function (o) {
         return o.properties.get('arenaId');
       });
-      var items = mapItems.filter(function (it) {
+      var items = catalogOnMap().filter(function (it) {
         return ids.indexOf(it.id) >= 0;
       });
       if (!items.length) return;
@@ -508,7 +617,8 @@
         var ids = railItems.map(function (it) {
           return it.id;
         });
-        var still = mapItems.filter(function (it) {
+        var pool = catalogOnMap();
+        var still = pool.filter(function (it) {
           return ids.indexOf(it.id) >= 0;
         });
         if (still.length > 1) {
@@ -521,21 +631,26 @@
           railItems = null;
         }
       }
-      if (selected && mapItems.some(function (it) { return it.id === selected.id; })) {
+      var onCatalog = catalogOnMap();
+      if (selected && onCatalog.some(function (it) { return it.id === selected.id; })) {
         showSheet(true);
         renderSheet();
         select(selected, {});
         return;
       }
       selected = null;
-      var nearest = MM.pickNearest(mapItems.length ? mapItems : MM.splitMapAndList(listItems).onMap);
+      var nearest = MM.pickNearest(onCatalog.length ? onCatalog : MM.splitMapAndList(listItems).onMap);
       if (nearest) {
         railMode = 'all';
         railItems = null;
         showSheet(true);
         renderSheet();
         nearestMode = nearest.distance_km != null;
-        select(nearest, {});
+        select(nearest, isShopCatalog() ? { pan: true } : {});
+      } else if (listItems.length || mapItems.length) {
+        selected = null;
+        showSheet(true);
+        renderSheet();
       } else {
         showSheet(false);
         selected = null;
@@ -558,10 +673,29 @@
     }
 
     /* ─── Слои карты ─── */
-    function syncObjects() {
+    function pinCompact() {
+      if (!map) return false;
+      return map.getZoom() < 14;
+    }
+
+    function syncObjects(force) {
       if (!clusterer || !ymaps) return;
+      var onMapCount = catalogOnMap().length;
+      var minCluster = isShopCatalog() || onMapCount <= 28 ? 100 : 2;
+      if (clusterer.options.get('minClusterSize') !== minCluster) {
+        clusterer.options.set('minClusterSize', minCluster);
+        force = true;
+      }
+      var onMap = catalogOnMap();
+      var sig = MM.pinLayerSignature(onMap) + '|z' + (pinCompact() ? 'c' : 'n');
+      if (!force && sig === lastPinLayerSig && clusterer.getGeoObjects().length) {
+        setPinSelection(selected);
+        paintLegend();
+        return;
+      }
+      lastPinLayerSig = sig;
       clusterer.removeAll();
-      var marks = MM.splitMapAndList(mapItems).onMap.map(function (item) {
+      var marks = onMap.map(function (item) {
         var view = MM.pinView(item);
         var pm = new ymaps.Placemark(
           [Number(item.latitude), Number(item.longitude)],
@@ -574,6 +708,8 @@
             venue: view.venue,
             kind: view.kind,
             sel: false,
+            dim: false,
+            compact: pinCompact(),
             arenaId: item.id,
             item: item,
           },
@@ -601,6 +737,14 @@
       paintLegend();
     }
 
+    function mapItemsFromList(source) {
+      source = source || listItems;
+      if (typeof opts.filterMapItems === 'function') {
+        source = opts.filterMapItems(source);
+      }
+      return MM.splitMapAndList(source).onMap.slice();
+    }
+
     function showCoachEmpty() {
       listItems = [];
       mapItems = [];
@@ -622,6 +766,12 @@
         showCoachEmpty();
         return;
       }
+      /* Магазины: полный набор уже в listItems + клиентские фильтры; bbox-перезапрос
+         дёргает шторку, сбрасывает выделение и даёт пустую карусель вне вьюпорта. */
+      if (isShopCatalog()) return;
+      /* Каталог уже в listItems (фильтры вкладки). Bbox после focusSelectedOnMap
+         подменял mapItems одной ареной и ломал карусель. */
+      if (listItems.length > 0) return;
       if (!map || !opts.listUrl) return;
       var bbox = MM.boundsToBbox(map.getBounds());
       if (MM.bboxExceedsCity(bbox)) {
@@ -647,8 +797,7 @@
       bboxState = plan;
       fetchJson(url).then(function (data) {
         var raw = (data && data.items) || [];
-        mapItems =
-          typeof opts.filterMapItems === 'function' ? opts.filterMapItems(raw) : raw;
+        mapItems = mapItemsFromList(raw);
         syncObjects();
         defaultSheet();
       });
@@ -679,6 +828,7 @@
 
     function onBoundsChange() {
       if (ignoreBounds) return;
+      if (map && clusterer) syncObjects();
       global.clearTimeout(boundsTimer);
       boundsTimer = global.setTimeout(fetchViewport, 320);
     }
@@ -709,11 +859,20 @@
               ' ice-ypin--' + String(props.get('when') || 'in') +
               ' ice-ypin--' + String(props.get('venue') || 'ice') +
               ' ice-ypin--' + String(props.get('kind') || 'dot') +
-              (props.get('sel') ? ' ice-ypin--sel' : '');
+              (props.get('sel') ? ' ice-ypin--sel' : '') +
+              (props.get('dim') ? ' ice-ypin--dim' : '') +
+              (props.get('compact') ? ' ice-ypin--compact' : '');
             var label = root.querySelector('.ice-ypin__label');
-            if (label) label.textContent = String(props.get('label') || '');
+            var labelText = String(props.get('label') || '');
+            if (label) label.textContent = labelText;
             var name = root.querySelector('.ice-ypin__name');
-            if (name) name.textContent = String(props.get('shortName') || '');
+            if (name) {
+              var sn = String(props.get('shortName') || '');
+              var venue = String(props.get('venue') || 'ice');
+              if (venue === 'shop' || labelText === sn) name.textContent = '';
+              else if (props.get('sel') && labelText && labelText !== sn) name.textContent = sn;
+              else name.textContent = '';
+            }
           },
         }
       );
@@ -741,6 +900,12 @@
             });
             root.classList.toggle('ice-ycluster--sel', sel);
             root.classList.toggle('ice-ycluster--quiet', !s.hasHits);
+            root.classList.toggle(
+              'ice-ycluster--shops',
+              items.length && items.every(function (it) {
+                return MM.venueKey(it) === 'shop';
+              })
+            );
           },
         }
       );
@@ -823,7 +988,7 @@
         if (Math.abs(dy) > 5) moved = true;
         dyMax = Math.max(dyMax, dy);
         /* Полные пределы не тянут: выше half — это уже «хочу список». */
-        var h = Math.max(64, Math.min(SHEET_HALF, h0 + dy));
+        var h = Math.max(SHEET_PEEK, Math.min(SHEET_HALF, h0 + dy));
         sheetEl.style.height = h + 'px';
       });
       function end() {
@@ -832,10 +997,6 @@
         sheetEl.classList.remove('ice-map-sheet--drag');
         if (!moved) {
           setSnap(snap === 'peek' ? 'half' : 'peek');
-          return;
-        }
-        if (dyMax > 60 && typeof opts.onSheetFull === 'function') {
-          opts.onSheetFull();
           return;
         }
         setSnap(MM.snapFor(sheetEl.getBoundingClientRect().height, { peek: SHEET_PEEK, half: SHEET_HALF }));
@@ -867,7 +1028,7 @@
           if (!best) return;
           var id = Number(best.getAttribute('data-id'));
           if (selected && Number(selected.id) === id) return;
-          var source = railMode === 'cluster' && railItems ? railItems : mapItems;
+          var source = railMode === 'cluster' && railItems ? railItems : catalogOnMap();
           var item = source.filter(function (it) {
             return Number(it.id) === id;
           })[0];
@@ -923,7 +1084,7 @@
         hideEmpty(emptyEl);
         showStage(true);
         map.container.fitToViewport();
-        mapItems = MM.splitMapAndList(listItems).onMap.slice();
+        mapItems = mapItemsFromList(listItems);
         syncObjects();
         defaultSheet();
         applyCityCamera();
@@ -974,7 +1135,7 @@
             if (map && map.container && typeof map.container.fitToViewport === 'function') {
               map.container.fitToViewport();
             }
-            mapItems = MM.splitMapAndList(listItems).onMap.slice();
+            mapItems = mapItemsFromList(listItems);
             syncObjects();
             defaultSheet();
             fitCity();
@@ -1097,7 +1258,8 @@
         mapItems = [];
         selected = null;
         nearestMode = false;
-        if (clusterer) syncObjects();
+        lastPinLayerSig = '';
+        if (clusterer) syncObjects(true);
         paintSheet(null);
         showStage(false);
         hideEmpty(emptyEl);
@@ -1136,7 +1298,7 @@
         if (map) {
           hideEmpty(emptyEl);
           showStage(true);
-          mapItems = MM.splitMapAndList(listItems).onMap.slice();
+          mapItems = mapItemsFromList(listItems);
           syncObjects();
           defaultSheet();
           applyCityCamera();

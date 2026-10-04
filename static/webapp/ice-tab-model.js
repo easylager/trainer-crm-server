@@ -317,8 +317,9 @@
     return !!SHOP_SERVICE_NEEDS_DISCIPLINE[String(serviceKey || '')];
   }
 
-  function shopDisciplineRowVisible(serviceKey) {
-    return shopServiceNeedsDiscipline(serviceKey);
+  function shopDisciplineRowVisible(_serviceKey) {
+    /* «Для кого» (хоккей/фигурное) — отложено: чип услуги уже сужает выдачу. */
+    return false;
   }
 
   function hasActiveShopFilters(filters) {
