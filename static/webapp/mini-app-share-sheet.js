@@ -11,8 +11,8 @@
  *  - выбор сеанса — делятся конкретным временем, а не «приходи как-нибудь»;
  *  - превью — та самая картинка, которую увидит друг. Человек видит результат до
  *    отправки — и охотнее отправляет;
- *  - четыре канала: Telegram · Ссылка (в Viber/WhatsApp/«Избранное») · Картинка
- *    (истории Instagram/VK — у них нет API «опубликовать») · Другое (системное меню).
+ *  - четыре канала: Telegram · Ссылка · Сторис (TG shareToStory / IG через Web Share)
+ *    · Другое (системное меню).
  *
  * Счётчик честный: переключатели и превью идут с record=false, событие пишется только
  * по нажатию канала (с каналом) — см. GET /api/public/arenas/{ref}/share.
@@ -104,6 +104,124 @@
     global.open(url, '_blank', 'noopener');
   }
 
+  function absoluteMediaUrl(url) {
+    try {
+      return new URL(String(url || ''), global.location.href).href;
+    } catch (e) {
+      return String(url || '');
+    }
+  }
+
+  function copyText(text, done) {
+    var s = String(text || '').trim();
+    if (!s) {
+      if (done) done();
+      return;
+    }
+    if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(s).then(function () { if (done) done(); }, function () { if (done) done(); });
+    } else if (done) {
+      done();
+    }
+  }
+
+  /** @returns {boolean} */
+  function tryShareToStory(p) {
+    var t = tg();
+    if (!t || typeof t.shareToStory !== 'function') return false;
+    if (t.isVersionAtLeast && !t.isVersionAtLeast('7.8')) return false;
+    var media = absoluteMediaUrl(p.story_image_url);
+    if (!/^https:\/\//i.test(media)) return false;
+    var params = {};
+    var caption = String(p.share_body || '').trim();
+    if (caption) params.text = caption.slice(0, 200);
+    var link = String(p.share_url || '').trim();
+    if (link) params.widget_link = { url: link, name: 'Карта льда' };
+    try {
+      t.shareToStory(media, params);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** @returns {Promise<boolean>} */
+  function tryShareStoryFile(p) {
+    return new Promise(function (resolve) {
+      var nav = global.navigator;
+      if (!nav || typeof nav.share !== 'function' || typeof nav.canShare !== 'function') {
+        resolve(false);
+        return;
+      }
+      var fetchUrl = sameOriginPath(p.story_image_url);
+      fetch(fetchUrl, { cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('http');
+          return r.blob();
+        })
+        .then(function (blob) {
+          var file = new File([blob], 'glide-story.png', { type: 'image/png' });
+          var payload = { files: [file] };
+          if (!nav.canShare(payload)) {
+            resolve(false);
+            return;
+          }
+          copyText(p.share_url, function () {
+            nav.share(payload).then(
+              function () { resolve(true); },
+              function () { resolve(false); }
+            );
+          });
+        })
+        .catch(function () { resolve(false); });
+    });
+  }
+
+  /** @returns {boolean} */
+  function tryDownloadStoryFile(p) {
+    var t = tg();
+    var media = absoluteMediaUrl(p.story_image_url);
+    if (!t || typeof t.downloadFile !== 'function') return false;
+    if (t.isVersionAtLeast && !t.isVersionAtLeast('8.0')) return false;
+    try {
+      t.downloadFile({ url: media, file_name: 'glide-story.png' });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Сторис: TG → системный share с файлом → download / открыть картинку.
+   * @returns {Promise<string>} канал для telemetry: story_tg | story_os | story_fallback
+   */
+  function openStoryShare(p) {
+    return new Promise(function (resolve) {
+      if (tryShareToStory(p)) {
+        toast('Откройте редактор истории Telegram');
+        resolve('story_tg');
+        return;
+      }
+      tryShareStoryFile(p).then(function (shared) {
+        if (shared) {
+          toast('Ссылка в буфере — добавьте стикером в Instagram');
+          resolve('story_os');
+          return;
+        }
+        copyText(p.share_url, function () {
+          if (tryDownloadStoryFile(p)) {
+            toast('Ссылка в буфере — добавьте стикер ссылки в сторис');
+            resolve('story_fallback');
+            return;
+          }
+          openUrl(absoluteMediaUrl(p.story_image_url));
+          toast('Ссылка в буфере — сохраните картинку из просмотра');
+          resolve('story_fallback');
+        });
+      });
+    });
+  }
+
   var CHANNELS = {
     telegram: function (p) {
       var opened = false;
@@ -127,16 +245,9 @@
       }
     },
     story: function (p) {
-      var t = tg();
-      var url = p.story_image_url;
-      // Bot API 8.0: нативное «Сохранить файл». Старые клиенты — открываем картинку.
-      if (t && typeof t.downloadFile === 'function' && (!t.isVersionAtLeast || t.isVersionAtLeast('8.0'))) {
-        try {
-          t.downloadFile({ url: url, file_name: 'glide-' + (state.ref || 'place') + '.png' });
-          return;
-        } catch (e) { /* fall through */ }
-      }
-      openUrl(url);
+      openStoryShare(p).then(function (channel) {
+        track(channel);
+      });
     },
     system: function (p) {
       if (global.navigator && typeof navigator.share === 'function') {
@@ -199,12 +310,34 @@
     return slotList();
   }
 
+  function renderPreview(p) {
+    if (!p || !p.og_image_url) {
+      return '<div class="gss-preview__img gss-preview__img--wait"></div>';
+    }
+    var og =
+      '<img class="gss-preview__img" src="' + esc(sameOriginPath(p.og_image_url)) + '" alt="Так ссылку увидят в чате" loading="eager" />';
+    if (state.endpoint && p.story_image_url) {
+      var story =
+        '<img class="gss-preview__img gss-preview__img--story" src="' +
+        esc(sameOriginPath(p.story_image_url)) +
+        '" alt="Картинка для сторис" loading="eager" />';
+      return (
+        '<div class="gss-preview-duo">' +
+        '<div class="gss-preview-duo__col"><span class="gss-preview-duo__tag">Чат</span>' +
+        og +
+        '</div>' +
+        '<div class="gss-preview-duo__col"><span class="gss-preview-duo__tag">Сторис</span>' +
+        story +
+        '</div></div>'
+      );
+    }
+    return og;
+  }
+
   function render() {
     var p = state.payload;
     var isIce = (state.venueType || 'ice') === 'ice';
-    var preview = p && p.og_image_url
-      ? '<img class="gss-preview__img" src="' + esc(sameOriginPath(p.og_image_url)) + '" alt="Так ссылку увидят в чате" loading="eager" />'
-      : '<div class="gss-preview__img gss-preview__img--wait"></div>';
+    var preview = renderPreview(p);
     var tabs = state.endpoint
       ? ''
       : '<div class="gss-tabs" role="group" aria-label="Тон">' +
@@ -220,10 +353,12 @@
       '<div class="gss-channels">' +
       '<button type="button" class="gss-ch gss-ch--tg" data-ch="telegram"' + (p ? '' : ' disabled') + '>Telegram</button>' +
       '<button type="button" class="gss-ch" data-ch="copy"' + (p ? '' : ' disabled') + '>Ссылка</button>' +
-      '<button type="button" class="gss-ch" data-ch="story"' + (p ? '' : ' disabled') + '>Картинка</button>' +
+      '<button type="button" class="gss-ch' + (state.endpoint ? ' gss-ch--story' : '') + '" data-ch="story"' +
+      (p ? '' : ' disabled') +
+      '>Сторис</button>' +
       '<button type="button" class="gss-ch" data-ch="system"' + (p ? '' : ' disabled') + '>Другое</button>' +
       '</div>' +
-      '<p class="gss-note">Друзья увидят время, цену и адрес — без приложения и регистрации.</p>';
+      '<p class="gss-note">В чат — Telegram или Ссылка. В сторис — QR на карточке; ссылку для стикера копируем сами.</p>';
   }
 
   function reload() {
@@ -284,6 +419,10 @@
     var ch = ev.target.closest('[data-ch]');
     if (ch && state.payload) {
       var name = ch.getAttribute('data-ch');
+      if (name === 'story') {
+        CHANNELS.story(state.payload);
+        return;
+      }
       track(name);
       CHANNELS[name](state.payload);
     }
@@ -333,5 +472,5 @@
     global.setTimeout(function () { if (root) root.hidden = true; }, 180);
   }
 
-  global.GlideShareSheet = { open: open, close: close };
+  global.GlideShareSheet = { open: open, close: close, _openStoryShare: openStoryShare };
 })(window);

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 from typing import Any, Mapping
+from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -41,6 +42,40 @@ _INK = (255, 255, 255)
 _MUTED = (160, 190, 200)
 _ACCENT = (94, 214, 210)
 _LINE = (40, 70, 80)
+
+_STORY_QR_SIZE = 200
+
+
+def share_display_path(page_url: str) -> str:
+    """Короткий путь для корешка story.png — без хоста (TASK-168)."""
+    u = urlparse((page_url or "").strip())
+    path = u.path or "/"
+    if u.query:
+        path = f"{path}?{u.query}"
+    return path
+
+
+def _story_qr_image(share_url: str, size: int) -> Image.Image | None:
+    url = (share_url or "").strip()
+    if not url:
+        return None
+    try:
+        import qrcode
+    except ImportError:
+        return None
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=3,
+        border=1,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    raw = qr.make_image(fill_color="black", back_color="white")
+    pil = raw.get_image() if hasattr(raw, "get_image") else raw
+    if not isinstance(pil, Image.Image):
+        return None
+    return pil.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
 
 
 def _gradient(size: tuple[int, int]) -> Image.Image:
@@ -199,10 +234,16 @@ def _render_og(view: Mapping[str, Any], lines: Mapping[str, str]) -> Image.Image
     return img
 
 
-def _render_story(view: Mapping[str, Any], lines: Mapping[str, str], display_url: str) -> Image.Image:
+def _render_story(
+    view: Mapping[str, Any],
+    lines: Mapping[str, str],
+    *,
+    share_url: str = "",
+    display_path: str = "",
+) -> Image.Image:
     """
-    Сторис — постер-билет. Ссылка в историях не кликается (кроме стикеров), поэтому
-    адрес места напечатан на корешке: его можно набрать руками.
+    Сторис — постер-билет. В историях ссылка в пикселях не кликается — QR на share_url
+    и короткий путь (/c/…, /p/…) на корешке; кликабельная ссылка уходит в чат отдельно.
     """
     w, h = STORY_SIZE
     img = _gradient(STORY_SIZE)
@@ -285,13 +326,22 @@ def _render_story(view: Mapping[str, Any], lines: Mapping[str, str], display_url
             draw.text((x, y), line, font=f_sub, fill=_MUTED)
             y += 56
 
-    # URL без пробелов: переносим по «/», чтобы адрес читался целиком, а не «mins…».
-    url_lines = _wrap(draw, display_url.replace("/", " /").replace(": /", ":/"), f_url, inner, 2) if display_url else []
-    url_lines = [line.replace(" /", "/") for line in url_lines]
-    uy = stub_y + 70
-    for line in url_lines:
-        draw.text((x, uy), line, font=f_url, fill=_INK)
-        uy += 52
+    path = (display_path or "").strip()
+    qr = _story_qr_image(share_url, _STORY_QR_SIZE)
+    qr_pad = 48
+    text_w = inner - (_STORY_QR_SIZE + qr_pad if qr else 0)
+    uy = stub_y + 56
+    if path:
+        path_lines = _wrap(draw, path.replace("/", " /").replace(": /", ":/"), f_url, text_w, 2)
+        path_lines = [line.replace(" /", "/") for line in path_lines]
+        for line in path_lines:
+            draw.text((x, uy), line, font=f_url, fill=_INK)
+            uy += 52
+    draw.text((x, uy + 8), "Сканируй QR · карта льда", font=f_brand, fill=_MUTED)
+    if qr is not None:
+        qx = x + inner - _STORY_QR_SIZE
+        qy = stub_y + 44
+        img.paste(qr, (qx, qy))
     draw.text((x, bottom - 70), "Glide · карта льда", font=f_brand, fill=_ACCENT)
     return img
 
@@ -301,10 +351,17 @@ def render_place_card(
     *,
     invite: bool = False,
     story: bool = False,
+    share_url: str = "",
+    display_path: str = "",
     display_url: str = "",
 ) -> bytes:
     lines = card_lines(view, invite=invite)
-    img = _render_story(view, lines, display_url) if story else _render_og(view, lines)
+    dp = display_path or display_url
+    img = (
+        _render_story(view, lines, share_url=share_url, display_path=dp)
+        if story
+        else _render_og(view, lines)
+    )
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
@@ -338,7 +395,12 @@ def render_selection_card(view: Mapping[str, Any], *, story: bool = False) -> by
             when = str(slots[0].get("starts_at_local") or "")[:5] if slots else ""
             rows.append((str(item.get("name") or ""), when))
         lines = {**lines, "day": "", "time": "", "sub": "", "rows": rows}
-        img = _render_story(fake_view, lines, display_url=view.get("display_url") or "")
+        img = _render_story(
+            fake_view,
+            lines,
+            share_url=str(view.get("share_url") or ""),
+            display_path=str(view.get("display_path") or view.get("display_url") or ""),
+        )
     else:
         img = _render_og(fake_view, lines)
     buf = io.BytesIO()

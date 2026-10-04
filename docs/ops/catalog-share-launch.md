@@ -33,6 +33,8 @@
     ORDER BY id DESC LIMIT 20;
     ```
     У подборки `kind=selection`, у места `kind=place`, в `payload.channel` канал. Пока шит только открывали — новых строк нет.
+    Сторис в шите: `story_tg` (редактор Telegram), `story_os` (системное «Поделиться» с PNG), `story_fallback` — не путать со старым `story`.
+11a. **Сторис из мини-аппа:** «Сторис» → в Telegram открывается редактор истории (не только «Файлы»). На `story.png` есть QR и путь `/c/…` или `/p/…`; для Instagram ссылка копируется в буфер — стикер ссылки вешает пользователь.
 12. `/sitemap.xml` содержит `/c/<город>` и `/p/…`. `/robots.txt` указывает на sitemap и закрывает `/webapp/` и `/api/`.
 13. Телеметрия каталога (после шагов 7–10): открыть `/c/…` в браузере → в БД появляется `public_page_view`. Нажать «Открыть в Telegram» → `public_telegram_cta` (URL в адресной строке на секунду — `/api/public/catalog/open-telegram?…`). Открыть мини-апп с той же подборки → в течение минуты `miniapp_catalog_entry` с тем же `start_param` в колонке.
     ```sql
