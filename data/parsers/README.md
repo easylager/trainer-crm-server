@@ -18,7 +18,7 @@
 | [minsk-zamok](./minsk-zamok.md) | 3 | `zamok_html_v1` | daily | no | `data/fixtures/minsk-zamok/` |
 | [minsk-chizhovka](./minsk-chizhovka.md) | 6 | `chizhovka_html_v1` | daily | no | `data/fixtures/minsk-chizhovka/` |
 | [minsk-ledby](./minsk-ledby.md) | 5 | `ledby_html_v1` | weekly | no | `data/fixtures/minsk-ledby/` |
-| [minsk-junost](./minsk-junost.md) | 8 | `junost_origin_html_v1` | weekly | **yes** | `data/fixtures/minsk-junost/` |
+| [minsk-junost](./minsk-junost.md) | 8 | `junost_instagram_caption_v1` | weekly | no | `data/fixtures/minsk-junost/` (caption IG) |
 | [grodno-triniti](./grodno-triniti.md) | 10 | `triniti_ice_api_v1` | daily | no | `data/fixtures/grodno-triniti/` |
 | [gomel-lds](./gomel-lds.md) | 33 | `gomel_hockey_news_v1` | weekly | no | `data/fixtures/gomel-lds/` |
 

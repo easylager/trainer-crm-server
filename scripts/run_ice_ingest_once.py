@@ -31,7 +31,6 @@ from src.shared.ops_db_guard import (
 BY_EGRESS_PARSER_KEYS = frozenset(
     {
         "ledlife_origin_html_v1",
-        "junost_origin_html_v1",
     }
 )
 
@@ -64,6 +63,7 @@ MINSK_MK_PARSER_KEYS = frozenset(
         "ldsokolniki_html_v1",
         "ledovyydvorets_html_v1",
         "yubileyny_afisha_html_v1",
+        "junost_instagram_caption_v1",
     }
 ) | BY_EGRESS_PARSER_KEYS
 

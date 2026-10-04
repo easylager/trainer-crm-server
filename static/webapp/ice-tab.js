@@ -220,38 +220,68 @@
   function wireShopFilterSheetGestures() {
     var sheet = $('iceShopSheet');
     var handle = $('iceShopSheetHandle');
+    var head = sheet && sheet.querySelector('.ice-shop-sheet__head');
     if (!sheet || sheet.dataset.dismissWired === '1') return;
     sheet.dataset.dismissWired = '1';
-    var dragEls = [handle, $('iceShopSheetTitle')].filter(Boolean);
+    var dragZone = [handle, head].filter(Boolean);
     var startY = 0;
     var dy = 0;
     var dragging = false;
-    function onEnd() {
+    var dragPointerId = null;
+
+    function dragClientY(ev) {
+      if (ev.touches && ev.touches.length) return ev.touches[0].clientY;
+      return ev.clientY;
+    }
+
+    function onMove(ev) {
       if (!dragging) return;
+      if (dragPointerId != null && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
+      dy = Math.max(0, dragClientY(ev) - startY);
+      sheet.style.transform = 'translateY(' + dy + 'px)';
+      if (ev.cancelable) ev.preventDefault();
+    }
+
+    function onEnd(ev) {
+      if (!dragging) return;
+      if (dragPointerId != null && ev && ev.pointerId != null && ev.pointerId !== dragPointerId) return;
       dragging = false;
+      dragPointerId = null;
       sheet.style.transform = '';
-      if (dy > 56) {
+      if (dy > 48) {
         closeShopMapFiltersPanel();
         renderCatalogHeader();
       }
       dy = 0;
     }
-    dragEls.forEach(function (el) {
-      el.addEventListener('pointerdown', function (ev) {
-        if (!state.shopMapFiltersOpen) return;
-        dragging = true;
-        startY = ev.clientY;
-        dy = 0;
-        if (typeof el.setPointerCapture === 'function') el.setPointerCapture(ev.pointerId);
-      });
-      el.addEventListener('pointermove', function (ev) {
-        if (!dragging) return;
-        dy = Math.max(0, ev.clientY - startY);
-        sheet.style.transform = 'translateY(' + dy + 'px)';
-      });
+
+    function onStart(ev) {
+      if (!state.shopMapFiltersOpen) return;
+      if (ev.target && ev.target.closest && ev.target.closest('button, a, input, [data-shop-service], [data-shop-discipline]')) {
+        return;
+      }
+      dragging = true;
+      dragPointerId = ev.pointerId != null ? ev.pointerId : null;
+      startY = dragClientY(ev);
+      dy = 0;
+      if (typeof ev.currentTarget.setPointerCapture === 'function' && ev.pointerId != null) {
+        try {
+          ev.currentTarget.setPointerCapture(ev.pointerId);
+        } catch (e) { /* WebView */ }
+      }
+    }
+
+    dragZone.forEach(function (el) {
+      el.addEventListener('pointerdown', onStart);
+      el.addEventListener('pointermove', onMove);
       el.addEventListener('pointerup', onEnd);
       el.addEventListener('pointercancel', onEnd);
+      el.addEventListener('touchstart', onStart, { passive: true });
+      el.addEventListener('touchmove', onMove, { passive: false });
+      el.addEventListener('touchend', onEnd);
+      el.addEventListener('touchcancel', onEnd);
     });
+
     if (handle) {
       handle.addEventListener('click', function () {
         if (dy > 8) return;
@@ -265,6 +295,74 @@
           renderCatalogHeader();
         }
       });
+    }
+  }
+
+  function onShopFiltersPanelClick(ev) {
+    var svc = ev.target.closest('[data-shop-service]');
+    if (svc) {
+      var key = svc.getAttribute('data-shop-service') || '';
+      state.shopService = key;
+      if (!M.shopDisciplineRowVisible(key)) state.shopDiscipline = '';
+      syncShopListFromFilters();
+      renderList();
+      renderCatalogHeader();
+      persist();
+      return;
+    }
+    var disc = ev.target.closest('[data-shop-discipline]');
+    if (disc) {
+      var dkey = disc.getAttribute('data-shop-discipline') || '';
+      state.shopDiscipline = state.shopDiscipline === dkey ? '' : dkey;
+      syncShopListFromFilters();
+      renderList();
+      renderCatalogHeader();
+      persist();
+      return;
+    }
+    if (ev.target.closest('#iceShopOpenNow')) {
+      state.shopOpenNow = !state.shopOpenNow;
+      if (state.shopOpenNow) {
+        state.shopWhen = 'any';
+        state.shopUiPicker = false;
+      }
+      syncShopListFromFilters();
+      renderList();
+      renderCatalogHeader();
+      persist();
+      return;
+    }
+    if (ev.target.closest('#iceShopWhenBtn')) {
+      if (state.shopOpenNow) return;
+      state.shopUiPicker = !state.shopUiPicker;
+      renderCatalogHeader();
+      return;
+    }
+    var whenBtn = ev.target.closest('[data-shop-when]');
+    if (whenBtn && whenBtn.closest('#iceShopWhenMenu')) {
+      state.shopWhen = whenBtn.getAttribute('data-shop-when') || 'any';
+      state.shopUiPicker = false;
+      syncShopListFromFilters();
+      renderList();
+      renderCatalogHeader();
+      persist();
+      return;
+    }
+    var clearBtn = ev.target.closest('[data-shop-clear]');
+    if (clearBtn) {
+      var what = clearBtn.getAttribute('data-shop-clear') || '';
+      if (what === 'all') {
+        clearShopFilters();
+        return;
+      }
+      if (what === 'service') state.shopService = '';
+      if (what === 'discipline') state.shopDiscipline = '';
+      if (what === 'open') state.shopOpenNow = false;
+      if (what === 'when') state.shopWhen = 'any';
+      syncShopListFromFilters();
+      renderList();
+      renderCatalogHeader();
+      persist();
     }
   }
 
@@ -2236,75 +2334,11 @@
     }
     wireShopFilterSheetGestures();
 
-    var shopFilters = $('iceShopFilters');
-    if (shopFilters) {
-      shopFilters.addEventListener('click', function (ev) {
-        var svc = ev.target.closest('[data-shop-service]');
-        if (svc) {
-          var key = svc.getAttribute('data-shop-service') || '';
-          state.shopService = key;
-          if (!M.shopDisciplineRowVisible(key)) state.shopDiscipline = '';
-          syncShopListFromFilters();
-          renderList();
-          renderCatalogHeader();
-          persist();
-          return;
-        }
-        var disc = ev.target.closest('[data-shop-discipline]');
-        if (disc) {
-          var dkey = disc.getAttribute('data-shop-discipline') || '';
-          state.shopDiscipline = state.shopDiscipline === dkey ? '' : dkey;
-          syncShopListFromFilters();
-          renderList();
-          renderCatalogHeader();
-          persist();
-          return;
-        }
-        if (ev.target.closest('#iceShopOpenNow')) {
-          state.shopOpenNow = !state.shopOpenNow;
-          if (state.shopOpenNow) {
-            state.shopWhen = 'any';
-            state.shopUiPicker = false;
-          }
-          syncShopListFromFilters();
-          renderList();
-          renderCatalogHeader();
-          persist();
-          return;
-        }
-        if (ev.target.closest('#iceShopWhenBtn')) {
-          if (state.shopOpenNow) return;
-          state.shopUiPicker = !state.shopUiPicker;
-          renderCatalogHeader();
-          return;
-        }
-        var whenBtn = ev.target.closest('[data-shop-when]');
-        if (whenBtn && whenBtn.closest('#iceShopWhenMenu')) {
-          state.shopWhen = whenBtn.getAttribute('data-shop-when') || 'any';
-          state.shopUiPicker = false;
-          syncShopListFromFilters();
-          renderList();
-          renderCatalogHeader();
-          persist();
-          return;
-        }
-        var clearBtn = ev.target.closest('[data-shop-clear]');
-        if (clearBtn) {
-          var what = clearBtn.getAttribute('data-shop-clear') || '';
-          if (what === 'all') {
-            clearShopFilters();
-            return;
-          }
-          if (what === 'service') state.shopService = '';
-          if (what === 'discipline') state.shopDiscipline = '';
-          if (what === 'open') state.shopOpenNow = false;
-          if (what === 'when') state.shopWhen = 'any';
-          syncShopListFromFilters();
-          renderList();
-          renderCatalogHeader();
-          persist();
-        }
-      });
+    /* Панель переезжает в bottom sheet — слушатель на #iceShopFiltersPanel, не на обёртке. */
+    var shopPanel = $('iceShopFiltersPanel');
+    if (shopPanel && shopPanel.dataset.clickWired !== '1') {
+      shopPanel.dataset.clickWired = '1';
+      shopPanel.addEventListener('click', onShopFiltersPanelClick);
     }
 
     var toolsHost = $('iceCatalogTools');

@@ -13,12 +13,12 @@
 |---|---|---|
 | Минск-Арена, Чижовка, Замок, большинство региональных BY | `notification_service` на Railway | нет |
 | **ledlife.by** (СДЮШОР, `minsk-ledlife`, arena_id 4) | см. ниже | **да** |
-| **junost.by** (ХК «Юность», arena_id 8) | см. ниже | **да** |
+| **ХК «Юность»** (arena_id 8) | [ice-ingest-junost-instagram.md](ice-ingest-junost-instagram.md) | нет (ручной caption IG) |
 
 На Railway у `notification_service` **нет** `BY_EGRESS_PROXY_URL` → задания
-`ledlife_origin_html_v1` и `junost_origin_html_v1` там получают статус `blocked` и
-**сами не подтягивают** расписание. Пока не появится BY-прокси в env воркера, прод
-обновляют **с ноутбука в РБ** (этот runbook).
+`ledlife_origin_html_v1` там получает статус `blocked` и **сам не подтягивает**
+расписание. Пока нет BY-прокси в env воркера, СДЮШОР обновляют **с ноутбука в РБ**
+(этот runbook). Юность — отдельно, подпись Instagram: [ice-ingest-junost-instagram.md](ice-ingest-junost-instagram.md).
 
 Автоопрос остальных катков: цикл раз в **60 с**, после успешного прогона следующий
 запрос примерно через **45 мин** (днём). Расписание считается устаревшим
@@ -108,7 +108,7 @@ bash scripts/local_by_egress_proxy.sh start
 4. В выводе искать строки вида:
    ```
    arena_id=4 parser_key=ledlife_origin_html_v1 status=ok … slots_published=…
-   arena_id=8 parser_key=junost_origin_html_v1 status=ok|empty …
+   arena_id=8 — см. [ice-ingest-junost-instagram.md](ice-ingest-junost-instagram.md) (не этот runbook)
    ```
    - `ok` — сеансы записаны в прод.
    - `empty` — на сайте нет будущих слотов в разметке (часто устаревшие даты на

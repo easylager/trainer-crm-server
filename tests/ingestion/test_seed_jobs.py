@@ -226,11 +226,12 @@ def test_real_minsk_registry_seeds_spec_jobs() -> None:
     assert main_mk.arena_id == 2
     assert main_mk.is_enabled is True
 
-    junost = by_key["junost_origin_html_v1"]
+    junost = by_key["junost_instagram_caption_v1"]
     ledlife = by_key["ledlife_origin_html_v1"]
     assert junost.is_enabled is True
     assert ledlife.is_enabled is True
-    assert junost.config["requires_by_egress"] is True
+    assert junost.config["requires_by_egress"] is False
+    assert "caption_file" in junost.config
     assert ledlife.config["requires_by_egress"] is True
 
     enabled_ids = {seed.arena_id for seed in seeds if seed.is_enabled}

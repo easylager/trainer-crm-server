@@ -446,6 +446,12 @@ body.ice-view-map .ice-citypill--insearch {
   gap: 8px;
 }
 
+/* .ice-tool::after — второй шеврон посередине строки; свой — .ice-shop-map-filters-btn__chev */
+.ice-shop-map-filters-btn.ice-tool::after {
+  content: none;
+  display: none;
+}
+
 .ice-shop-map-filters-btn__chev {
   font-size: 12px;
   opacity: 0.75;
@@ -535,6 +541,8 @@ body.ice-view-map .ice-shop-filters__map-bar:not([hidden]) {
   gap: 12px;
   flex-shrink: 0;
   padding-bottom: 8px;
+  touch-action: none;
+  cursor: grab;
 }
 
 .ice-shop-sheet__title {
