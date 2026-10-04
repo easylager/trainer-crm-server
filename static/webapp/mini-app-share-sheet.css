@@ -168,6 +168,24 @@
 }
 
 .gss-preview { margin: 0 0 12px; }
+.gss-preview-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: start;
+}
+.gss-preview-duo__tag {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gss-preview-duo__col .gss-preview__img {
+  width: 100%;
+}
 .gss-preview__img {
   display: block;
   width: 100%;
@@ -175,6 +193,10 @@
   object-fit: cover;
   border-radius: var(--app-radius-lg);
   background: var(--glide-deep);
+}
+.gss-preview__img--story {
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
 }
 .gss-preview__img--wait { animation: gss-pulse 1.2s ease-in-out infinite; }
 @keyframes gss-pulse { 50% { opacity: 0.6; } }
@@ -207,6 +229,10 @@
   background: var(--app-brand-telegram);
   border-color: var(--app-brand-telegram);
   color: var(--app-brand-telegram-on);
+}
+.gss-ch--story {
+  border-color: var(--app-cta-fill);
+  color: var(--glide-ink-teal, var(--app-cta-fill));
 }
 .gss-note { margin: 10px 0 0; font-size: var(--app-text-caption); color: var(--glide-hint); text-align: center; }
 

@@ -270,7 +270,7 @@ async def get_public_arena_trainers(
     return payload
 
 
-_SHARE_CHANNELS = ("telegram", "copy", "story", "system")
+_SHARE_CHANNELS = ("telegram", "copy", "story", "story_tg", "story_os", "story_fallback", "system")
 
 
 @router.get("/ice/selection/share")

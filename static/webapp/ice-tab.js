@@ -1057,8 +1057,9 @@
    * живёт в четырёх других точках.
    */
   function shareAvailable() {
-    // TASK-146: делимся подборкой — она есть для любого типа места (лёд, магазины, залы).
-    return !!(state.cityId && state.intent === 'skate' && !state.loading && state.items.length);
+    // TASK-146 / TASK-168: подборка /c/{город} — для площадок (не тренеры/группы).
+    if (!state.cityId || state.loading || !state.items.length) return false;
+    return state.intent === 'skate';
   }
 
   function setShareButton() {
