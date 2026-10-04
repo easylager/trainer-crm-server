@@ -170,11 +170,23 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
     assert.equal(arenasRequest(requests), null);
   });
 
-  it('окно не входит в сохраняемое состояние — восстановление не может его подменить', async () => {
-    const { model } = await bootWith('?city_id=1');
-    const calls = [];
-    model.saveIceState({ intent: 'skate', when: 'tomorrow' }, { setItem: (k, v) => calls.push(v) });
-    assert.equal('when' in JSON.parse(calls[0]), false);
+  it('возврат с карточки арены: when из sessionStorage → запрос с тем же окном', async () => {
+    const { requests } = await bootWith('?city_id=1', {
+      intent: 'skate',
+      cityId: 1,
+      when: 'tomorrow',
+      whenDay: '',
+    });
+    assert.match(arenasRequest(requests), /[?&]when=tomorrow(&|$)/);
+  });
+
+  it('?when= в ссылке сильнее сохранённого окна', async () => {
+    const { requests } = await bootWith('?city_id=1&when=weekend', {
+      intent: 'skate',
+      cityId: 1,
+      when: 'tomorrow',
+    });
+    assert.match(arenasRequest(requests), /[?&]when=weekend(&|$)/);
   });
 
   it('вкладка «Магазины» из sessionStorage — запрос с venue_type=shop', async () => {

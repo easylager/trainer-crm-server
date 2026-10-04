@@ -112,6 +112,8 @@
         shopDiscipline: state.shopDiscipline,
         shopOpenNow: state.shopOpenNow,
         shopWhen: state.shopWhen,
+        when: state.when,
+        whenDay: state.whenDay,
         scrollY: global.scrollY || 0,
         view: state.view,
       },
@@ -2176,6 +2178,7 @@
           state.whenDay = pick.whenDay;
           closeUiPicker();
           renderCatalogHeader();
+          persist();
           loadArenas();
           return;
         }
@@ -2189,6 +2192,7 @@
           state.whenDay = dayPick.whenDay;
           closeUiPicker();
           renderCatalogHeader();
+          persist();
           loadArenas();
         }
       });
@@ -2378,13 +2382,19 @@
       }
       /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
          venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
-         окна нет — параметр молча игнорируем, как и раньше. Окно не пишется в
-         sessionStorage (см. persist), поэтому восстановление его не перетрёт. */
+         окна нет — параметр молча игнорируем. Без ?when=/ ?day= восстанавливаем окно из
+         sessionStorage (возврат с карточки арены); ссылка сильнее сохранённого. */
       var urlWhenBoot = M.hydrateWhenFromUrl(global.location.search || '', state.intent, state.venueTypes);
       if (urlWhenBoot) {
         state.when = urlWhenBoot.when;
         state.whenDay = urlWhenBoot.whenDay || '';
         state.urlWhenHydrated = true;
+      } else if (saved) {
+        var savedWhenBoot = M.hydrateWhenFromSaved(saved, state.intent, state.venueTypes);
+        if (savedWhenBoot) {
+          state.when = savedWhenBoot.when;
+          state.whenDay = savedWhenBoot.whenDay || '';
+        }
       }
       if (saved) {
         if (saved.shopService) state.shopService = String(saved.shopService);
