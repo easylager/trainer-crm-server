@@ -37,6 +37,7 @@ def default_registry() -> ParserRegistry:
         ZamokHtmlParser,
     )
     from src.ingestion.adapters_minsk_by_egress import LedlifeOriginHtmlParser
+    from src.ingestion.junost_instagram_caption import JunostInstagramCaptionParser
     from src.ingestion.adapters_regional_batch_a import (
         BaranovichiLdsParser,
         BrestLdsParser,
@@ -91,6 +92,7 @@ def default_registry() -> ParserRegistry:
         LedByHtmlParser(),
         DiamondHtmlParser(),
         JunostHtmlParser(),
+        JunostInstagramCaptionParser(),
         LedlifeOriginHtmlParser(),
         BrestLdsParser(),
         BaranovichiLdsParser(),
