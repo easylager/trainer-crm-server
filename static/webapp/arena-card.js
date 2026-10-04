@@ -475,6 +475,8 @@
         sep +
         '<a class="crm-tel-link arena-info__tel" href="' +
         esc(href) +
+        '" data-action="call" data-call-phone="' +
+        esc(p) +
         '">' +
         esc(p) +
         '</a>'
@@ -488,6 +490,8 @@
         return (
           '<a class="arena-qa" href="' +
           esc(a.href) +
+          '" data-action="call" data-call-phone="' +
+          esc(a.phone || '') +
           '">' +
           icon(a.id) +
           '<span>' +
@@ -978,11 +982,14 @@
       return;
     }
     if (action === 'call') {
-      /* Нативный tel: на <a> — не перехватываем (Telegram WebView / iOS long-press). */
-      var callHref = (t.getAttribute('href') || '').trim();
-      if (callHref.toLowerCase().indexOf('tel:') === 0) return;
+      /* В Telegram WebView tap по tel: на плитке часто молчит — открываем набор через JS. href остаётся для long-press. */
       ev.preventDefault();
-      if (!dialPhone(t.getAttribute('data-call-phone'))) {
+      var callPhone = (t.getAttribute('data-call-phone') || '').trim();
+      if (!callPhone) {
+        var callHref = (t.getAttribute('href') || '').trim();
+        if (callHref.toLowerCase().indexOf('tel:') === 0) callPhone = callHref.slice(4);
+      }
+      if (!dialPhone(callPhone)) {
         var tg = global.Telegram && global.Telegram.WebApp;
         if (tg && typeof tg.showAlert === 'function') {
           tg.showAlert('Не удалось открыть набор номера. Удержите номер, чтобы скопировать.');
