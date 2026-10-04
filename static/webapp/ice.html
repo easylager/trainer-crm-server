@@ -17,14 +17,14 @@
   <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
   <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
   <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="stylesheet" href="ice-tab.css?v=202610057" />
+  <link rel="stylesheet" href="ice-tab.css?v=202610045" />
   <link rel="stylesheet" href="mini-app-share-sheet.css?v=202610027" />
   <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-client-shell.js?v=202610059"></script>
+  <script src="mini-app-client-shell.js?v=202610060"></script>
   <script src="catalog-geo-model.js?v=202610026"></script>
-  <script src="ice-tab-model.js?v=202610041"></script>
+  <script src="ice-tab-model.js?v=202610049"></script>
   <script src="mini-app-share-sheet.js?v=202610027"></script>
-  <script src="ice-map-model.js?v=202610052"></script>
+  <script src="ice-map-model.js?v=202610053"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#iceRoot" blocking="render" />
 </head>
@@ -72,6 +72,36 @@
         <div class="ice-tools" id="iceToolsRow"></div>
         <div class="ice-menu" id="icePlaceMenu" hidden></div>
         <div class="ice-menu" id="iceWhenMenu" hidden></div>
+      </div>
+      <div class="ice-shop-filters" id="iceShopFilters" hidden>
+        <div class="ice-shop-filters__map-bar" id="iceShopMapBar" hidden>
+          <button type="button" class="ice-tool ice-shop-map-filters-btn" id="iceShopMapFiltersBtn" aria-expanded="false">
+            <span id="iceShopMapFiltersLabel">Все магазины</span>
+          </button>
+        </div>
+        <div class="ice-shop-filters__panel" id="iceShopFiltersPanel">
+        <div class="ice-shop-filters__block">
+          <p class="ice-shop-filters__kicker">Что нужно</p>
+          <div class="ice-chips ice-chips--shop" id="iceShopServiceChips" role="group" aria-label="Услуга магазина"></div>
+        </div>
+        <div class="ice-shop-filters__block">
+          <p class="ice-shop-filters__kicker">Когда удобно</p>
+          <div class="ice-shop-filters__time">
+            <button type="button" class="ice-shop-toggle" id="iceShopOpenNow" aria-pressed="false">
+              <span class="ice-shop-toggle__dot" aria-hidden="true"></span>Открыто сейчас
+            </button>
+            <button type="button" class="ice-tool ice-shop-when" id="iceShopWhenBtn" aria-expanded="false">
+              <span>Любое время</span>
+            </button>
+          </div>
+          <div class="ice-menu" id="iceShopWhenMenu" hidden></div>
+        </div>
+        <div class="ice-shop-filters__block" id="iceShopDisciplineBlock" hidden>
+          <p class="ice-shop-filters__kicker">Для кого</p>
+          <div class="ice-chips ice-chips--shop" id="iceShopDisciplineChips" role="group" aria-label="Дисциплина"></div>
+        </div>
+        <div class="ice-shop-active" id="iceShopActiveFilters" hidden></div>
+        </div>
       </div>
       <!--
         TASK-147 (макет 02): легенда типов мест под чипами окна. Живёт только в режиме карты
@@ -174,7 +204,7 @@
   </button>
 
   <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-map.js?v=202610054"></script>
-  <script src="ice-tab.js?v=202610058"></script>
+  <script src="ice-map.js?v=202610055"></script>
+  <script src="ice-tab.js?v=202610049"></script>
 </body>
 </html>

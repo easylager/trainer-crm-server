@@ -777,11 +777,11 @@ describe('TASK-146: расписание как сеансы в кино', () =>
     assert.deepEqual(quickActions({}), []);
     const a = quickActions({ latitude: 53.9, longitude: 27.5, phone: '+375 (29) 111-22-33',
       social_urls: { instagram: 'https://instagram.com/x' } });
-    assert.deepEqual(a.map((x) => x.id), ['route', 'call', 'insta']);
-    assert.equal(a[1].href, 'tel:+375291112233');
+    assert.deepEqual(a.map((x) => x.id), ['route', 'copyPhone', 'insta']);
+    assert.equal(a[1].label, 'Скопировать');
     assert.equal(a[1].phone, '+375 (29) 111-22-33');
     const multi = quickActions({ phone: '+375447838518; +375173095476' });
-    assert.equal(multi[0].href, 'tel:+375447838518');
+    assert.equal(multi[0].phone, '+375447838518');
     assert.deepEqual(multi[0].phones, ['+375447838518', '+375173095476']);
   });
 

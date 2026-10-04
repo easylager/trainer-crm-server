@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Лёд — когда кататься (v3)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    v3 — компакт + раскрытие будней, без суб/вс в списке и без «Другая дата».
+
+    Строки:
+      Сегодня вечером · Завтра · один будний день (послезавтра или первый будний после выходных)
+      [Показать ещё N будней ▾] → остальные пн–пт в горизонте
+      Выходные · Любое время
+
+    Сб/вс только через «Выходные».
+  */
+  :root {
+    --glide-500: #45b9bb;
+    --glide-brand: var(--glide-500);
+    --glide-on-fill: #04262a;
+    --glide-paper: #0b0c0e;
+    --glide-surface: #141618;
+    --glide-card: #1a1d20;
+    --glide-line: #262a2e;
+    --glide-text: #e6e9ea;
+    --glide-hint: #868d93;
+    --glide-ink-teal: #57d0d2;
+    --glide-brand-wash: rgba(69, 185, 187, 0.13);
+    --app-cta-fill: var(--glide-brand);
+    --app-cta-text: var(--glide-on-fill);
+    --app-radius-sm: 8px;
+    --app-radius-md: 12px;
+    --app-radius-pill: 999px;
+    --app-text-caption: 12px;
+    --app-text-body: 14px;
+    --app-weight-semibold: 600;
+    --app-weight-bold: 700;
+    --font: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: #050607;
+    color: var(--glide-text);
+    min-height: 100vh;
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 32px 16px 100px;
+    flex-wrap: wrap;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: transparent; }
+  button:focus-visible { outline: 2px solid var(--glide-ink-teal); outline-offset: 2px; }
+
+  .thesis { width: min(420px, 100%); padding-top: 8px; }
+  .thesis h1 { font-size: 24px; line-height: 1.25; letter-spacing: -0.03em; margin: 0; font-weight: 700; }
+  .thesis h1 em { font-style: normal; color: var(--glide-ink-teal); }
+  .lede { margin: 12px 0 0; font-size: 15px; line-height: 1.5; color: var(--glide-hint); }
+  .lede strong { color: var(--glide-text); font-weight: 600; }
+  .rules {
+    margin: 18px 0 0;
+    padding: 12px 14px;
+    border: 1px solid var(--glide-line);
+    border-radius: var(--app-radius-md);
+    background: var(--glide-card);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--glide-hint);
+  }
+  .rules b {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--glide-text);
+  }
+  .rules ol { margin: 0; padding-left: 18px; }
+  .rules li { margin: 5px 0; }
+  .state {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--glide-line);
+    border-radius: var(--app-radius-md);
+    background: var(--glide-card);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--glide-hint);
+    font-variant-numeric: tabular-nums;
+  }
+  .state b { color: var(--glide-text); }
+  .state code { color: var(--glide-ink-teal); font-size: 11px; }
+
+  .phones { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .phone-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--glide-hint); }
+
+  .phone {
+    width: 390px;
+    max-width: 100%;
+    height: 820px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 44px;
+    background: var(--glide-paper);
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0, 0, 0, 0.9);
+  }
+  .notch {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 118px;
+    height: 30px;
+    background: #000;
+    border-radius: 16px;
+    z-index: 8;
+    pointer-events: none;
+  }
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding-top: 44px;
+    overflow: hidden;
+  }
+
+  .hero { padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px; flex: none; }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--glide-line);
+    border-radius: var(--app-radius-md);
+    padding: 9px 11px;
+    color: var(--glide-hint);
+    font-size: var(--app-text-body);
+  }
+  .seg {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 3px;
+    gap: 2px;
+    background: var(--glide-surface);
+    border: 1px solid var(--glide-line);
+    border-radius: var(--app-radius-pill);
+  }
+  .seg button {
+    height: 32px;
+    border-radius: var(--app-radius-pill);
+    font-size: var(--app-text-caption);
+    font-weight: var(--app-weight-bold);
+    color: var(--glide-hint);
+  }
+  .seg button[aria-pressed='true'] { background: var(--app-cta-fill); color: var(--app-cta-text); }
+
+  .ice-catalog-tools { display: flex; flex-direction: column; gap: 8px; }
+  .ice-tool {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--app-radius-md);
+    border: 1px solid var(--glide-line);
+    background: var(--glide-surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--app-text-body);
+    font-weight: var(--app-weight-semibold);
+    width: 100%;
+  }
+  .ice-tool span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ice-tool::after {
+    content: '';
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--glide-hint);
+    margin-top: 2px;
+  }
+  .ice-tool[aria-expanded='true'] { border-color: var(--app-cta-fill); color: var(--glide-ink-teal); }
+
+  .ice-menu {
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    background: var(--glide-card);
+    border: 1px solid var(--glide-line);
+    border-radius: var(--app-radius-md);
+    max-height: min(340px, 46vh);
+    overflow-y: auto;
+  }
+  .ice-menu button.row {
+    text-align: left;
+    padding: 10px 10px;
+    border-radius: var(--app-radius-sm);
+    font-size: var(--app-text-body);
+    font-weight: var(--app-weight-semibold);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+  }
+  .ice-menu button.row[aria-pressed='true'] {
+    background: var(--glide-brand-wash);
+    color: var(--glide-ink-teal);
+  }
+  .ice-menu button.row .sub {
+    font-size: var(--app-text-caption);
+    font-weight: var(--app-weight-semibold);
+    color: var(--glide-hint);
+    margin-left: 6px;
+  }
+  .ice-menu button.row[aria-pressed='true'] .sub { color: var(--glide-ink-teal); opacity: 0.85; }
+  .ice-menu b {
+    font-size: var(--app-text-caption);
+    font-weight: var(--app-weight-semibold);
+    font-variant-numeric: tabular-nums;
+    color: var(--glide-hint);
+    flex: none;
+  }
+  .ice-menu button.row[aria-pressed='true'] b { color: var(--glide-ink-teal); }
+  .ice-menu button.row.is-zero .label { opacity: 0.75; }
+  .ice-menu button.row.is-zero b { opacity: 0.5; }
+
+  .ice-menu button.row--toggle {
+    color: var(--glide-ink-teal);
+    font-size: var(--app-text-caption);
+    padding: 8px 10px;
+  }
+  .ice-menu button.row--toggle::after {
+    content: '';
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    margin-left: auto;
+    transition: transform 0.15s ease;
+  }
+  .ice-menu button.row--toggle[aria-expanded='true']::after {
+    transform: rotate(180deg);
+  }
+  .ice-menu__more {
+    display: none;
+    flex-direction: column;
+  }
+  .ice-menu__more.is-open { display: flex; }
+  .ice-menu__more button.row { padding-left: 18px; }
+
+  .ice-menu__anchors {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--glide-line);
+  }
+
+  .feed {
+    flex: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--glide-line);
+    padding: 12px 16px;
+    font-size: var(--app-text-caption);
+    color: var(--glide-hint);
+    line-height: 1.45;
+  }
+
+  .dock {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px 20px;
+    background: linear-gradient(transparent, #050607 50%);
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .dock button {
+    padding: 10px 14px;
+    border-radius: var(--app-radius-pill);
+    border: 1px solid var(--glide-line);
+    background: var(--glide-card);
+    font-size: 13px;
+    font-weight: var(--app-weight-semibold);
+  }
+  .dock button[aria-pressed='true'] { border-color: var(--glide-brand); color: var(--glide-ink-teal); }
+</style>
+</head>
+<body>
+
+<aside class="thesis">
+  <h1>Когда кататься — <em>v3</em></h1>
+  <p class="lede">
+    Согласованная модель: <strong>будни по одному разу</strong>, суббота и воскресенье только
+    через «Выходные». Без «Другой даты» и без длинного календаря.
+  </p>
+  <div class="rules">
+    <b>Правила меню</b>
+    <ol>
+      <li>Всегда видно: «Сегодня вечером», «Завтра», <em>один</em> следующий будний день.</li>
+      <li>Если послезавтра — сб/вс, третья строка = ближайший понедельник (не дублируем выходные).</li>
+      <li>Кнопка «Ещё N будней» раскрывает остальные пн–пт в горизонте (14 дней), уже показанные не повторяем.</li>
+      <li>«Выходные» и «Любое время» — отдельный блок внизу, визуально отделён линией.</li>
+      <li>Горизонт без picker: ~2 недели будней + выходные; дальше — «Любое время» и карточка катка.</li>
+    </ol>
+  </div>
+  <div class="state">
+    <b>«Сегодня» в демо:</b> вс, 4 окт 2026<br>
+    <b>Выбор:</b> <span id="stateLabel">Завтра</span><br>
+    <b>API:</b> <code id="stateApi">when=tomorrow</code>
+  </div>
+</aside>
+
+<div class="phones">
+  <div class="phone-wrap">
+    <span class="phone-label">Свёрнуто</span>
+    <div class="phone" data-panel="collapsed">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="hero">
+          <div class="search">Каток или зал</div>
+          <div class="seg">
+            <button type="button" aria-pressed="true">Места</button>
+            <button type="button" aria-pressed="false">Тренеры</button>
+            <button type="button" aria-pressed="false">Магазины</button>
+          </div>
+          <div class="ice-catalog-tools">
+            <button type="button" class="ice-tool" aria-expanded="true"><span class="trigger-label">Завтра</span></button>
+            <div class="ice-menu" data-expanded="false"></div>
+          </div>
+        </header>
+        <main class="feed feed-cap">Завтра · 9 сеансов · сначала в этот день</main>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone-wrap">
+    <span class="phone-label">Будни раскрыты</span>
+    <div class="phone" data-panel="expanded">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="hero">
+          <div class="search">Каток или зал</div>
+          <div class="seg">
+            <button type="button" aria-pressed="true">Места</button>
+            <button type="button" aria-pressed="false">Тренеры</button>
+            <button type="button" aria-pressed="false">Магазины</button>
+          </div>
+          <div class="ice-catalog-tools">
+            <button type="button" class="ice-tool" aria-expanded="true"><span class="trigger-label">Пт, 9 окт</span></button>
+            <div class="ice-menu" data-expanded="true"></div>
+          </div>
+        </header>
+        <main class="feed feed-cap">Пт, 9 окт · 6 сеансов</main>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="dock" role="toolbar">
+  <button type="button" data-today="2026-10-04" aria-pressed="true">Вс 4 окт</button>
+  <button type="button" data-today="2026-10-09" aria-pressed="false">Чт 9 окт</button>
+  <button type="button" data-today="2026-10-10" aria-pressed="false">Пт 10 окт</button>
+</div>
+
+<script>
+(function () {
+  var MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  var WD = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  var HORIZON_DAYS = 14;
+
+  var sessionCounts = {
+    '2026-10-04': 11, '2026-10-05': 9, '2026-10-06': 7, '2026-10-07': 4,
+    '2026-10-08': 4, '2026-10-09': 6, '2026-10-10': 14, '2026-10-11': 12,
+    '2026-10-12': 5, '2026-10-13': 8, '2026-10-14': 3, '2026-10-15': 6,
+    '2026-10-16': 7, '2026-10-17': 15, '2026-10-18': 11
+  };
+
+  var TODAY = new Date(Date.UTC(2026, 9, 4));
+  var selection = { kind: 'preset', id: 'tomorrow' };
+  var menuExpanded = { collapsed: false, expanded: true };
+
+  function pad(n) { return n < 10 ? '0' + n : String(n); }
+  function iso(d) {
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+  function addDays(d, n) {
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
+  }
+  function isWeekend(d) {
+    var w = d.getUTCDay();
+    return w === 0 || w === 6;
+  }
+  function isWeekday(d) { return !isWeekend(d); }
+  function countFor(key) { return sessionCounts[key] != null ? sessionCounts[key] : 0; }
+
+  function dayLabel(d, offsetFromToday) {
+    if (offsetFromToday === 1) return 'Завтра';
+    return WD[d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()];
+  }
+
+  /** Первый будний день строго после «завтра» (для третьей строки). */
+  function thirdPinnedDay() {
+    var d = addDays(TODAY, 2);
+    while (!isWeekday(d)) d = addDays(d, 1);
+    return d;
+  }
+
+  /** Все будни в горизонте, кроме уже закреплённых (завтра + third). */
+  function extraWeekdays() {
+    var pinned = new Set([iso(addDays(TODAY, 1)), iso(thirdPinnedDay())]);
+    var out = [];
+    for (var i = 1; i <= HORIZON_DAYS; i++) {
+      var d = addDays(TODAY, i);
+      if (!isWeekday(d)) continue;
+      var key = iso(d);
+      if (pinned.has(key)) continue;
+      out.push({ date: key, d: d, offset: i });
+    }
+    return out;
+  }
+
+  function weekendSessionCount() {
+    var sum = 0;
+    for (var i = 1; i <= HORIZON_DAYS; i++) {
+      var d = addDays(TODAY, i);
+      if (!isWeekend(d)) continue;
+      sum += countFor(iso(d));
+    }
+    return sum;
+  }
+
+  function row(opts) {
+    return (
+      '<button type="button" class="row' + (opts.zero ? ' is-zero' : '') + (opts.toggle ? ' row--toggle' : '') + '" ' +
+      'role="option" data-kind="' + opts.kind + '" ' +
+      (opts.id ? 'data-id="' + opts.id + '" ' : '') +
+      (opts.date ? 'data-date="' + opts.date + '" ' : '') +
+      (opts.toggle ? 'aria-expanded="' + (opts.expanded ? 'true' : 'false') + '" ' : '') +
+      'aria-pressed="' + (opts.pressed ? 'true' : 'false') + '">' +
+      '<span class="label">' + opts.label + (opts.sub ? '<span class="sub">' + opts.sub + '</span>' : '') + '</span>' +
+      (opts.count != null ? '<b>' + opts.count + '</b>' : '') +
+      '</button>'
+    );
+  }
+
+  function buildMenu(expanded) {
+    var html = [];
+    html.push(row({
+      kind: 'preset',
+      id: 'today_evening',
+      label: 'Сегодня вечером',
+      sub: 'с 16:00',
+      pressed: selection.kind === 'preset' && selection.id === 'today_evening'
+    }));
+
+    var tom = addDays(TODAY, 1);
+    var tomKey = iso(tom);
+    html.push(row({
+      kind: 'day',
+      date: tomKey,
+      label: dayLabel(tom, 1),
+      count: countFor(tomKey),
+      zero: countFor(tomKey) === 0,
+      pressed: selection.kind === 'day' && selection.date === tomKey
+    }));
+
+    var third = thirdPinnedDay();
+    var thirdKey = iso(third);
+    var thirdOff = Math.round((third - TODAY) / 86400000);
+    html.push(row({
+      kind: 'day',
+      date: thirdKey,
+      label: dayLabel(third, thirdOff),
+      count: countFor(thirdKey),
+      zero: countFor(thirdKey) === 0,
+      pressed: selection.kind === 'day' && selection.date === thirdKey
+    }));
+
+    var extras = extraWeekdays();
+    if (extras.length) {
+      html.push(row({
+        kind: 'toggle',
+        label: expanded ? 'Скрыть будни' : 'Ещё ' + extras.length + ' будн' + (extras.length === 1 ? 'ий' : extras.length < 5 ? 'их' : 'их дня'),
+        toggle: true,
+        expanded: expanded
+      }));
+      html.push('<div class="ice-menu__more' + (expanded ? ' is-open' : '') + '">');
+      extras.forEach(function (x) {
+        html.push(row({
+          kind: 'day',
+          date: x.date,
+          label: dayLabel(x.d, x.offset),
+          count: countFor(x.date),
+          zero: countFor(x.date) === 0,
+          pressed: selection.kind === 'day' && selection.date === x.date
+        }));
+      });
+      html.push('</div>');
+    }
+
+    html.push('<div class="ice-menu__anchors">');
+    html.push(row({
+      kind: 'preset',
+      id: 'weekend',
+      label: 'Выходные',
+      sub: 'сб–вс',
+      count: weekendSessionCount(),
+      pressed: selection.kind === 'preset' && selection.id === 'weekend'
+    }));
+    html.push(row({
+      kind: 'preset',
+      id: 'any',
+      label: 'Любое время',
+      pressed: selection.kind === 'preset' && selection.id === 'any'
+    }));
+    html.push('</div>');
+
+    return html.join('');
+  }
+
+  function selectionLabel() {
+    if (selection.kind === 'preset') {
+      var m = {
+        today_evening: 'Сегодня вечером',
+        weekend: 'Выходные',
+        any: 'Любое время',
+        tomorrow: 'Завтра'
+      };
+      return m[selection.id] || 'Любое время';
+    }
+    var bits = selection.date.split('-');
+    var d = new Date(Date.UTC(+bits[0], +bits[1] - 1, +bits[2]));
+    var off = Math.round((d - TODAY) / 86400000);
+    return dayLabel(d, off);
+  }
+
+  function selectionApi() {
+    if (selection.kind === 'preset') {
+      if (selection.id === 'any') return 'when=any';
+      return 'when=' + selection.id;
+    }
+    var tom = iso(addDays(TODAY, 1));
+    if (selection.date === tom) return 'when=tomorrow';
+    return 'day=' + selection.date;
+  }
+
+  function renderAll() {
+    document.querySelectorAll('.phone').forEach(function (phone) {
+      var panel = phone.getAttribute('data-panel');
+      var expanded = panel === 'expanded' ? menuExpanded.expanded : menuExpanded.collapsed;
+      var menu = phone.querySelector('.ice-menu');
+      menu.innerHTML = buildMenu(expanded);
+      menu.setAttribute('data-expanded', expanded ? 'true' : 'false');
+      phone.querySelector('.trigger-label').textContent = selectionLabel();
+      var cap = phone.querySelector('.feed-cap');
+      if (cap) cap.textContent = selectionLabel() + ' · сортировка ленты по окну';
+    });
+    document.getElementById('stateLabel').textContent = selectionLabel();
+    document.getElementById('stateApi').textContent = selectionApi();
+  }
+
+  document.querySelectorAll('.ice-menu').forEach(function (menu) {
+    menu.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('button[data-kind]');
+      if (!btn) return;
+      var phone = menu.closest('.phone');
+      var panel = phone.getAttribute('data-panel');
+      var kind = btn.getAttribute('data-kind');
+
+      if (kind === 'toggle') {
+        if (panel === 'expanded') menuExpanded.expanded = !menuExpanded.expanded;
+        else menuExpanded.collapsed = !menuExpanded.collapsed;
+        renderAll();
+        return;
+      }
+      if (kind === 'preset') {
+        selection = { kind: 'preset', id: btn.getAttribute('data-id') };
+      } else if (kind === 'day') {
+        selection = { kind: 'day', date: btn.getAttribute('data-date') };
+      }
+      renderAll();
+    });
+  });
+
+  document.querySelector('.dock').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button[data-today]');
+    if (!b) return;
+    document.querySelectorAll('.dock button').forEach(function (x) {
+      x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+    });
+    var p = b.getAttribute('data-today').split('-');
+    TODAY = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    selection = { kind: 'preset', id: 'tomorrow' };
+    menuExpanded = { collapsed: false, expanded: true };
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

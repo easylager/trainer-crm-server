@@ -83,6 +83,10 @@ async def get_public_ice_arenas(
         None,
         description="Окно времени: auto | today_evening | today | tomorrow | weekend | any. auto — умный дефолт.",
     ),
+    day: str | None = Query(
+        None,
+        description="Конкретный календарный день YYYY-MM-DD (Минск); приоритет над when, кроме совпадения с «завтра».",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Ice tab list. intent=skate only includes arenas with a future public_skate|open_ice slot.
@@ -103,6 +107,7 @@ async def get_public_ice_arenas(
             limit=limit,
             cursor=cursor,
             when=when,
+            day=day,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc

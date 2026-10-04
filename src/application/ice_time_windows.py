@@ -22,16 +22,23 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from src.shared.notification_hours import NOTIFICATION_TZ
 
 WHEN_KEYS = ("auto", "today_evening", "today", "tomorrow", "weekend", "any")
 
+_DAY_ISO_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_DAY_HORIZON_DAYS = 14
+
 _EVENING_FROM = time(16, 0)
 _LATE = time(21, 0)
+
+_WEEKDAYS_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_MONTHS_SHORT_RU = ("янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
 
 @dataclass(frozen=True)
@@ -40,14 +47,18 @@ class TimeWindow:
     label: str
     starts_at: datetime  # UTC, включительно
     ends_at: datetime  # UTC, не включительно
+    local_date: str | None = None  # YYYY-MM-DD для key == "day"
 
     def as_payload(self) -> dict[str, str]:
-        return {
+        payload = {
             "key": self.key,
             "label": self.label,
             "from": self.starts_at.isoformat(),
             "to": self.ends_at.isoformat(),
         }
+        if self.local_date:
+            payload["date"] = self.local_date
+        return payload
 
 
 def auto_window_key(now: datetime) -> str:
@@ -93,3 +104,63 @@ def resolve_window(raw: str | None, now: datetime | None = None) -> TimeWindow |
         saturday = today + timedelta(days=5 - today.weekday())
     monday = saturday + timedelta(days=2)
     return TimeWindow("weekend", "Выходные", max(now, at(saturday, time(0, 0))), at(monday, time(0, 0)))
+
+
+def _minsk_today(now: datetime) -> date:
+    return now.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+
+
+def day_window_label(target: date, today: date) -> str:
+    if target == today + timedelta(days=1):
+        return "Завтра"
+    wd = _WEEKDAYS_SHORT_RU[target.weekday()]
+    return f"{wd}, {target.day} {_MONTHS_SHORT_RU[target.month - 1]}"
+
+
+def parse_calendar_day(raw: str | None, now: datetime | None = None) -> date | None:
+    """Календарный день YYYY-MM-DD в горизонте каталога (сегодня … +14 дней)."""
+    now = now or datetime.now(timezone.utc)
+    text = (raw or "").strip()
+    m = _DAY_ISO_RE.match(text)
+    if not m:
+        return None
+    try:
+        target = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+    today = _minsk_today(now)
+    if target < today or target > today + timedelta(days=_DAY_HORIZON_DAYS):
+        return None
+    return target
+
+
+def resolve_day_window(target: date, now: datetime | None = None) -> TimeWindow:
+    now = now or datetime.now(timezone.utc)
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    today = _minsk_today(now)
+    label = day_window_label(target, today)
+
+    def at(day: date, hh_mm: time) -> datetime:
+        return datetime.combine(day, hh_mm, tzinfo=tz).astimezone(timezone.utc)
+
+    start = at(target, time(0, 0))
+    if target == today:
+        start = now
+    end = at(target + timedelta(days=1), time(0, 0))
+    return TimeWindow("day", label, start, end, local_date=target.isoformat())
+
+
+def resolve_list_window(
+    when: str | None,
+    day: str | None = None,
+    now: datetime | None = None,
+) -> TimeWindow | None:
+    """Окно для ленты: ``day`` (конкретный будний день) важнее ``when``."""
+    now = now or datetime.now(timezone.utc)
+    parsed = parse_calendar_day(day, now)
+    if parsed is not None:
+        today = _minsk_today(now)
+        if parsed == today + timedelta(days=1):
+            return resolve_window("tomorrow", now)
+        return resolve_day_window(parsed, now)
+    return resolve_window(when, now)

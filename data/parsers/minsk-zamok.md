@@ -9,7 +9,8 @@
 
 - schedule: https://tczamok.by/entertainments/ice-rink
 - prices: тот же URL (таблица «Цены на посещение»)
-- widget/api: нет; обычный HTML
+- remaining seats (optional enrich): https://koronaticket.by/rink — SSR `window.__NUXT__`, поле `sessions[].tickets_info`
+- widget/api: нет на tczamok; касса — Nuxt SSR без отдельного публичного JSON
 - job.config JSON (черновик):
 
 ```json
@@ -29,7 +30,8 @@
   },
   "drop_label_substrings": ["абонемент", "заточка", "пингвин", "морской котик", "карта посетителя"],
   "prices_already_minor": true,
-  "requires_by_egress": false
+  "requires_by_egress": false,
+  "korona_tickets_url": "https://koronaticket.by/rink"
 }
 ```
 
@@ -47,6 +49,7 @@
    - прокат коньков `9 р. 00 к.` → 900
 6. На слоте три поля: weekday → 1000/800/900, weekend → 1100/900/900. `age_note`: «детский от 3 до 14 лет».
 7. Merge: страница не режет взр/дет на разные строки времени. Один слот на `(local_date, starts_at_local)`.
+8. **Остаток мест (TASK-156):** после сетки слотов — GET `korona_tickets_url` (или фикстура `korona-rink.html` в `fixture_dir`). Парсер `src/ingestion/koronaticket_rink.py` разбирает `__NUXT__`, матч по `(local_date, starts_at_local)`. Формула UI: `remaining = count - bought - locked - ordered` (не ниже 0). В слот → `capacity_note`, например `70 мест`; при 0 или `is_available=false` → `нет мест`. Сбой Korona не отменяет слоты с tczamok.
 
 ## Canonical example (expected after validate)
 
@@ -60,7 +63,7 @@
 
 ## Fixture
 
-`data/fixtures/minsk-zamok/` — `ice-rink.html` + `expected.json` (91 слот при `run_date=2026-09-05`).
+`data/fixtures/minsk-zamok/` — `ice-rink.html`, `korona-rink.html` (срез `__NUXT__`), `expected.json` (91 слот при `run_date=2026-09-05`).
 
 ## Blockers / notes
 

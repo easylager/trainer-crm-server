@@ -24,11 +24,12 @@ from src.application.arena_profile import (
     hours_groups,
     intervals_for_weekday,
     normalize_hhmm,
+    SHOP_DISCIPLINE_KEYS,
     SHOP_SERVICE_KEYS,
     is_in_season,
     public_http_url,
 )
-from src.application.ice_time_windows import TimeWindow, resolve_window
+from src.application.ice_time_windows import TimeWindow, resolve_list_window
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
     STATUS_ACTIVE,
@@ -422,7 +423,8 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
             card = variants.get("card") or variants.get("hero") or thumb
     live = _build_live(item, intent=intent, today=today)
     venue_type = normalize_venue_type(item.get("venue_type"))
-    return {
+    amenities = _as_mapping(item.get("amenities"))
+    payload: dict[str, Any] = {
         "id": item["id"],
         "slug": item.get("slug"),
         "city_id": item["city_id"],
@@ -450,6 +452,11 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
         "freshness": _schedule_freshness(item),
     }
+    if venue_type == VENUE_TYPE_SHOP:
+        payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
+        payload["shop_disciplines"] = [k for k in SHOP_DISCIPLINE_KEYS if amenities.get(k) is True]
+        payload["opening_hours"] = _as_mapping(item.get("opening_hours"))
+    return payload
 
 
 _LIST_SQL = f"""
@@ -852,6 +859,7 @@ async def list_public_ice_arenas(
     limit: int = DEFAULT_LIST_LIMIT,
     cursor: str | None = None,
     when: str | None = None,
+    day: str | None = None,
 ) -> dict[str, Any]:
     intent_value = parse_intent(intent)
     venue_filter = parse_venue_type_filter(venue_type)
@@ -868,7 +876,7 @@ async def list_public_ice_arenas(
             raise IcePublicQueryError("cursor must be an integer offset") from exc
     now = datetime.now(timezone.utc)
     # Окно времени имеет смысл только для «где покататься»: у тренеров — слоты недели.
-    window = resolve_window(when, now) if intent_value == INTENT_SKATE else None
+    window = resolve_list_window(when, day, now) if intent_value == INTENT_SKATE else None
     rows = await _load_ice_arena_rows(
         session, city_id=city_id, bbox=bbox_box, intent=intent_value, now=now, window=window
     )

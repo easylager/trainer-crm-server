@@ -921,11 +921,10 @@
     var phones = phoneNumbers(card.phone);
     if (phones.length) {
       out.push({
-        id: 'call',
-        label: 'Позвонить',
+        id: 'copyPhone',
+        label: 'Скопировать',
         phone: phones[0],
         phones: phones,
-        href: phoneToTelHref(phones[0]),
       });
     }
     var contacts = practiceContacts(card);

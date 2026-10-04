@@ -77,19 +77,46 @@
     global.location.href = path;
   }
 
-  function dialPhone(phone) {
-    var num = String(phone || '').trim();
-    if (!num) return false;
-    var Crm = global.CrmPhoneField;
-    if (Crm && typeof Crm.openPhoneDialer === 'function' && Crm.openPhoneDialer(num)) return true;
-    var uri = Crm && typeof Crm.phoneToTelUri === 'function' ? Crm.phoneToTelUri(num) : 'tel:' + num.replace(/[^\d+]/g, '');
-    if (!uri) return false;
-    try {
-      global.location.href = uri;
-      return true;
-    } catch (e) {
-      return false;
+  function copyArenaPhone(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return;
+    var tg = global.Telegram && global.Telegram.WebApp;
+    function notifyOk() {
+      if (tg && typeof tg.showAlert === 'function') {
+        try {
+          tg.showAlert('Номер скопирован:\n' + text);
+          return;
+        } catch (e) {
+          /* noop */
+        }
+      }
+      try {
+        global.alert('Номер скопирован:\n' + text);
+      } catch (e2) {
+        /* noop */
+      }
     }
+    function notifyFail() {
+      if (tg && typeof tg.showAlert === 'function') {
+        try {
+          tg.showAlert('Скопируйте номер вручную:\n' + text);
+          return;
+        } catch (e) {
+          /* noop */
+        }
+      }
+      try {
+        global.alert(text);
+      } catch (e2) {
+        /* noop */
+      }
+    }
+    var clip = global.navigator && global.navigator.clipboard;
+    if (clip && typeof clip.writeText === 'function') {
+      clip.writeText(text).then(notifyOk).catch(notifyFail);
+      return;
+    }
+    notifyFail();
   }
 
   function openExternal(url) {
@@ -455,7 +482,8 @@
 
   var ICONS = {
     route: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
-    call: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+    copyPhone:
+      '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     site: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     insta: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.5"/><circle cx="17" cy="7" r="0.6"/>',
     share: '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>',
@@ -468,35 +496,29 @@
   /** Ряд быстрых действий под обложкой: то, ради чего открывают карточку места. */
   function renderPhoneLinks(phones) {
     return (phones || []).map(function (p, i) {
-      var href = M.phoneToTelHref(p);
-      if (!href) return esc(p);
       var sep = i ? '<span class="arena-info__phone-sep">; </span>' : '';
       return (
         sep +
-        '<a class="crm-tel-link arena-info__tel" href="' +
-        esc(href) +
-        '" data-action="call" data-call-phone="' +
+        '<button type="button" class="arena-info__tel arena-info__tel--copy" data-action="copy-phone" data-copy-phone="' +
         esc(p) +
         '">' +
         esc(p) +
-        '</a>'
+        '</button>'
       );
     }).join('');
   }
 
   function renderQuickActions() {
     var items = M.quickActions(state.card).map(function (a) {
-      if (a.id === 'call') {
+      if (a.id === 'copyPhone') {
         return (
-          '<a class="arena-qa" href="' +
-          esc(a.href) +
-          '" data-action="call" data-call-phone="' +
+          '<button type="button" class="arena-qa" data-action="copy-phone" data-copy-phone="' +
           esc(a.phone || '') +
           '">' +
           icon(a.id) +
           '<span>' +
           esc(a.label) +
-          '</span></a>'
+          '</span></button>'
         );
       }
       return (
@@ -981,20 +1003,9 @@
       goBooking(t.getAttribute('data-trainer'), { groupId: t.getAttribute('data-group') });
       return;
     }
-    if (action === 'call') {
-      /* В Telegram WebView tap по tel: на плитке часто молчит — открываем набор через JS. href остаётся для long-press. */
+    if (action === 'copy-phone') {
       ev.preventDefault();
-      var callPhone = (t.getAttribute('data-call-phone') || '').trim();
-      if (!callPhone) {
-        var callHref = (t.getAttribute('href') || '').trim();
-        if (callHref.toLowerCase().indexOf('tel:') === 0) callPhone = callHref.slice(4);
-      }
-      if (!dialPhone(callPhone)) {
-        var tg = global.Telegram && global.Telegram.WebApp;
-        if (tg && typeof tg.showAlert === 'function') {
-          tg.showAlert('Не удалось открыть набор номера. Удержите номер, чтобы скопировать.');
-        }
-      }
+      copyArenaPhone(t.getAttribute('data-copy-phone'));
       return;
     }
     if (action === 'external') {

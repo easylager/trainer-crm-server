@@ -225,7 +225,7 @@ describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () =>
     );
   });
 
-  it('sheetSummary — «7 мест сегодня вечером · 11 сеансов · ещё 2 без сеансов»', () => {
+  it('sheetSummary — лёд с сеансами и магазины отдельно', () => {
     const { sheetSummary } = loadModel();
     const items = [];
     for (let i = 0; i < 7; i++) {
@@ -237,7 +237,19 @@ describe('clusterSummary / railOrder / sheetSummary / snapFor (TASK-147)', () =>
     assert.match(s, /7 мест/);
     assert.match(s, /сегодня вечером/);
     assert.match(s, /7 сеансов/);
-    assert.match(s, /ещё 2 без сеансов/);
+    assert.match(s, /ещё 2 магазина/);
+    assert.doesNotMatch(s, /без сеансов/);
+  });
+
+  it('sheetSummary — только магазины на карте', () => {
+    const { sheetSummary } = loadModel();
+    const items = [];
+    for (let i = 0; i < 13; i++) {
+      items.push(rink({ id: i + 1, venue_type: 'shop', live: { kind: 'place', text: 'Розница' } }));
+    }
+    const s = sheetSummary(items, null);
+    assert.equal(s, '13 магазинов');
+    assert.doesNotMatch(s, /сеанс/);
   });
 
   it('snapFor — ближайшее положение шторки', () => {

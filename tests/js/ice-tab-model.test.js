@@ -135,6 +135,86 @@ describe('catalog header (A′)', () => {
   });
 });
 
+describe('shop catalog filters', () => {
+  const shops = [
+    {
+      id: 1,
+      shop_services: ['skate_sharpening', 'retail'],
+      shop_disciplines: ['discipline_hockey'],
+      opening_hours: { weekly: { mon: ['10:00', '20:00'] } },
+    },
+    {
+      id: 2,
+      shop_services: ['retail'],
+      shop_disciplines: ['discipline_figure'],
+      opening_hours: { weekly: { mon: ['11:00', '17:00'] } },
+    },
+  ];
+
+  it('filterShopCatalog by service and discipline', () => {
+    const { filterShopCatalog } = loadModel();
+    const onlySharpen = filterShopCatalog(shops, { shopService: 'skate_sharpening' }, new Date('2026-10-06T12:00:00Z'));
+    assert.equal(onlySharpen.length, 1);
+    assert.equal(onlySharpen[0].id, 1);
+    const hockey = filterShopCatalog(shops, { shopService: 'skate_sharpening', shopDiscipline: 'discipline_hockey' }, new Date());
+    assert.equal(hockey.length, 1);
+  });
+
+  it('shopServiceChipsView hides zero-count services', () => {
+    const { shopServiceChipsView } = loadModel();
+    const chips = shopServiceChipsView(shops, {}, new Date());
+    const keys = chips.map((c) => c.key);
+    assert.ok(keys.includes(''));
+    assert.ok(keys.includes('skate_sharpening'));
+    assert.ok(!keys.includes('repair'));
+  });
+
+  it('shopDisciplineChipsView only for sharpen-like services', () => {
+    const { shopDisciplineChipsView, shopDisciplineRowVisible } = loadModel();
+    assert.equal(shopDisciplineRowVisible('retail'), false);
+    assert.equal(shopDisciplineChipsView(shops, { shopService: 'retail' }, new Date()).length, 0);
+    const chips = shopDisciplineChipsView(shops, { shopService: 'skate_sharpening' }, new Date());
+    assert.ok(chips.some((c) => c.key === 'discipline_hockey'));
+  });
+
+  it('open now uses Minsk weekly hours', () => {
+    const { filterShopCatalog, shopMatchesHours } = loadModel();
+    const mondayNoon = new Date('2026-10-05T09:00:00Z'); // 12:00 Minsk Monday
+    assert.equal(shopMatchesHours(shops[0], { shopOpenNow: true }, mondayNoon), true);
+    assert.equal(shopMatchesHours(shops[1], { shopOpenNow: true }, mondayNoon), true);
+    const filtered = filterShopCatalog(shops, { shopOpenNow: true }, mondayNoon);
+    assert.equal(filtered.length, 2);
+  });
+
+  it('shopMapToolbarLabel summarizes active filters on map', () => {
+    const { shopMapToolbarLabel } = loadModel();
+    assert.equal(shopMapToolbarLabel({}), 'Все магазины');
+    assert.equal(
+      shopMapToolbarLabel({ shopService: 'skate_sharpening', shopOpenNow: true }),
+      'Заточка · ещё 1'
+    );
+  });
+
+  it('persists shop filter fields in session state', () => {
+    const { saveIceState, loadIceState, ICE_STATE_KEY } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+    };
+    saveIceState(
+      { intent: 'skate', shopService: 'retail', shopDiscipline: '', shopOpenNow: true, shopWhen: 'evening' },
+      storage
+    );
+    const loaded = loadIceState(storage);
+    assert.equal(loaded.shopService, 'retail');
+    assert.equal(loaded.shopOpenNow, true);
+    assert.equal(loaded.shopWhen, 'evening');
+  });
+});
+
 describe('«Ближе» без геолокации', () => {
   it('при выбранном городе не зовёт менять город', () => {
     const { formatNearGeoBlockedMessage } = loadModel();
@@ -708,7 +788,15 @@ describe('session restore', () => {
       },
     };
     saveIceState(
-      { intent: 'coach', cityId: 5, cityName: 'Гродно', serviceId: 3, scrollY: 420, view: 'map' },
+      {
+        intent: 'coach',
+        cityId: 5,
+        cityName: 'Гродно',
+        serviceId: 3,
+        venueTypes: ['shop', 'SHOP', 'nope'],
+        scrollY: 420,
+        view: 'map',
+      },
       storage
     );
     assert.ok(mem[ICE_STATE_KEY]);
@@ -717,6 +805,7 @@ describe('session restore', () => {
     assert.equal(loaded.cityId, 5);
     assert.equal(loaded.cityName, 'Гродно');
     assert.equal(loaded.serviceId, 3);
+    assert.deepEqual(loaded.venueTypes, ['shop']);
     assert.equal(loaded.view, 'map');
     assert.equal(loaded.scrollY, 420);
   });
@@ -1055,6 +1144,29 @@ describe('TASK-146 (Q-006): окно времени', () => {
       '2 катка · выходные'
     );
     assert.match(buildListUrl({ cityId: 1, intent: 'skate', when: 'auto' }), /when=auto/);
+  });
+
+  it('whenMenuView: нет субботы в строках, выходные отдельно', () => {
+    const { whenMenuView } = loadModel();
+    const now = new Date('2026-10-04T09:00:00Z'); // вс
+    const view = whenMenuView({ when: 'auto', whenDay: '', resolvedKey: 'weekend', now, menuExpanded: false });
+    const dayRows = view.rows.filter((r) => r.kind === 'day');
+    assert.equal(dayRows.length, 2, 'завтра + один будний');
+    assert.ok(dayRows.every((r) => !/Сб|Вс/.test(r.label) || r.label === 'Завтра'));
+    assert.deepEqual(view.anchors.map((a) => a.id), ['weekend', 'any']);
+  });
+
+  it('buildListUrl: конкретный день — day=, не when=', () => {
+    const { buildListUrl } = loadModel();
+    const url = buildListUrl({ cityId: 1, intent: 'skate', when: 'day', whenDay: '2026-10-08' });
+    assert.match(url, /day=2026-10-08/);
+    assert.doesNotMatch(url, /when=/);
+  });
+
+  it('whenBootFromSearch читает day= и when=', () => {
+    const { whenBootFromSearch } = loadModel();
+    assert.deepEqual(whenBootFromSearch('?day=2026-10-08'), { when: 'day', whenDay: '2026-10-08' });
+    assert.deepEqual(whenBootFromSearch('?when=weekend'), { when: 'weekend', whenDay: '' });
   });
 });
 

@@ -76,6 +76,7 @@ class ExtractedSlot:
     source_id: str | None = None
     session_label: str | None = None
     age_note: str | None = None
+    capacity_note: str | None = None
     external_url: str | None = None
 
 
@@ -108,6 +109,7 @@ class CanonicalSlotDraft:
     valid_until: datetime | None
     session_label: str | None = None
     age_note: str | None = None
+    capacity_note: str | None = None
     external_url: str | None = None
     source_id: str | None = None
     parser_job_id: int | None = None

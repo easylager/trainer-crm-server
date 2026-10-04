@@ -6,7 +6,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.application.ice_time_windows import auto_window_key, resolve_window
+from datetime import date
+
+from src.application.ice_time_windows import (
+    auto_window_key,
+    parse_calendar_day,
+    resolve_day_window,
+    resolve_list_window,
+    resolve_window,
+)
 
 MSK = timezone(timedelta(hours=3))  # Минск, UTC+3
 
@@ -62,3 +70,26 @@ def test_tomorrow_is_the_whole_next_day_and_any_means_no_window() -> None:
     assert resolve_window("any") is None
     assert resolve_window("nonsense") is None
     assert resolve_window(None) is None
+
+
+def test_day_param_resolves_calendar_weekday() -> None:
+    now = at(2026, 10, 4, 12)  # воскресенье
+    assert parse_calendar_day("2026-10-07", now) == date(2026, 10, 7)
+    w = resolve_list_window(None, "2026-10-07", now)
+    assert w is not None
+    assert w.key == "day"
+    assert w.label == "Ср, 7 окт"
+    assert w.local_date == "2026-10-07"
+
+
+def test_day_param_tomorrow_aliases_when_tomorrow() -> None:
+    now = at(2026, 10, 4, 12)
+    w = resolve_list_window(None, "2026-10-05", now)
+    assert w is not None
+    assert w.key == "tomorrow"
+
+
+def test_resolve_day_window_starts_now_on_today() -> None:
+    now = at(2026, 10, 4, 15)
+    w = resolve_day_window(date(2026, 10, 4), now)
+    assert w.starts_at == now

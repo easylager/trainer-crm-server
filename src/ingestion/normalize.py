@@ -32,6 +32,7 @@ _KOPECK = re.compile(r"коп", re.IGNORECASE)
 _SOURCE_ID_MAX_LEN = 160  # ice_sessions.source_id, migration 0204
 _SESSION_LABEL_MAX_LEN = 128  # ice_sessions.session_label
 _AGE_NOTE_MAX_LEN = 128  # ice_sessions.age_note
+_CAPACITY_NOTE_MAX_LEN = 128  # ice_sessions.capacity_note
 _EXTERNAL_URL_MAX_LEN = 512  # ice_sessions.external_url
 
 
@@ -150,6 +151,7 @@ class IceSessionNormalizer:
                     "source_id": raw.source_id,
                     "session_label": raw.session_label,
                     "age_note": raw.age_note,
+                    "capacity_note": raw.capacity_note,
                     "external_url": raw.external_url,
                 },
             )
@@ -166,6 +168,8 @@ class IceSessionNormalizer:
                 bucket["ends_at_local"] = raw.ends_at_local
             if raw.age_note and not bucket["age_note"]:
                 bucket["age_note"] = raw.age_note
+            if raw.capacity_note and not bucket["capacity_note"]:
+                bucket["capacity_note"] = raw.capacity_note
             if raw.source_id and not bucket["source_id"]:
                 bucket["source_id"] = raw.source_id
 
@@ -207,6 +211,7 @@ class IceSessionNormalizer:
                     valid_until=parts.ends_at_utc,
                     session_label=_clip_text(bucket["session_label"], _SESSION_LABEL_MAX_LEN),
                     age_note=_clip_text(bucket["age_note"], _AGE_NOTE_MAX_LEN),
+                    capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
                     parser_job_id=job.id,

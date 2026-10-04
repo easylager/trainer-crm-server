@@ -60,6 +60,7 @@ _EXPECTED_FIELDS = frozenset(
         "valid_until",
         "session_label",
         "age_note",
+        "capacity_note",
         "external_url",
         "source_id",
         "parser_job_id",

@@ -235,6 +235,67 @@ body.ar-pilot--ice .client-app-header {
   color: var(--glide-ink-teal, var(--glide-ink-teal));
 }
 
+.ice-menu-sub {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+  margin-left: 6px;
+}
+
+.ice-menu button[aria-pressed='true'] .ice-menu-sub {
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+  opacity: 0.85;
+}
+
+.ice-menu-toggle {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--app-radius-sm, 8px);
+  font: inherit;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.ice-menu-toggle::after {
+  content: '';
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+
+.ice-menu-toggle[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.ice-menu-day--nested {
+  padding-left: 18px;
+}
+
+.ice-menu-anchors {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--glide-line);
+}
+
+.ice-menu:not([hidden]) {
+  max-height: min(380px, 48vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .ice-intent-row .ice-chips--intent {
   flex: 1 1 auto;
   min-width: 0;
@@ -358,6 +419,200 @@ body.ice-view-map .ice-citypill--insearch {
 
 .ice-chips--svc {
   padding-top: 2px;
+}
+
+.ice-shop-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 4px;
+}
+
+.ice-shop-filters__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ice-shop-filters__map-bar {
+  display: none;
+}
+
+.ice-shop-map-filters-btn {
+  width: 100%;
+}
+
+/* Карта: одна строка «Фильтры», полная панель — по тапу (как окно времени у «Мест»). */
+body.ice-view-map .ice-shop-filters {
+  padding: 0 0 4px;
+  gap: 6px;
+}
+
+.ice-shop-filters__map-bar[hidden] {
+  display: none !important;
+}
+
+body.ice-view-map .ice-shop-filters__map-bar:not([hidden]) {
+  display: flex;
+}
+
+body.ice-view-map .ice-shop-filters__panel {
+  display: none;
+}
+
+body.ice-view-map .ice-shop-filters.is-expanded .ice-shop-filters__panel {
+  display: flex;
+  max-height: min(50vh, 380px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-md);
+  background: rgba(11, 12, 14, 0.96);
+  border: 1px solid var(--glide-line);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.ice-shop-filters[hidden] {
+  display: none !important;
+}
+
+.ice-shop-filters__block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ice-shop-filters__kicker {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-semibold);
+}
+
+.ice-chips--shop {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.ice-chips--shop::-webkit-scrollbar {
+  display: none;
+}
+
+.ice-chip--shop[aria-pressed='true'] {
+  background: var(--glide-brand-wash, rgba(69, 185, 187, 0.13));
+  border-color: color-mix(in srgb, var(--app-venue-shop, #a48bff) 55%, transparent);
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-chip__n {
+  font-size: 11px;
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+  font-variant-numeric: tabular-nums;
+}
+
+.ice-chip--shop[aria-pressed='true'] .ice-chip__n {
+  color: var(--glide-ink-teal, var(--glide-ink-teal));
+}
+
+.ice-shop-filters__time {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ice-shop-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--app-radius-pill, 999px);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--app-weight-semibold);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ice-shop-toggle[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--app-ok, #4fc98a) 50%, transparent);
+  background: color-mix(in srgb, var(--app-ok, #4fc98a) 12%, transparent);
+  color: var(--app-ok, #4fc98a);
+}
+
+.ice-shop-toggle__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--glide-hint);
+}
+
+.ice-shop-toggle[aria-pressed='true'] .ice-shop-toggle__dot {
+  background: var(--app-ok, #4fc98a);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-ok, #4fc98a) 22%, transparent);
+}
+
+.ice-shop-when {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ice-shop-when:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ice-shop-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.ice-shop-active[hidden] {
+  display: none;
+}
+
+.ice-shop-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: var(--app-radius-pill, 999px);
+  background: var(--glide-card, var(--glide-surface));
+  font-size: 12px;
+  font-weight: var(--app-weight-semibold);
+}
+
+.ice-shop-pill button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--glide-hint);
+  cursor: pointer;
+}
+
+.ice-shop-reset {
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+  cursor: pointer;
 }
 
 .ice-chips--svc .ice-chip {
@@ -1128,7 +1383,7 @@ body.ice-view-map .ice-sec--hero {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: 50;
   /* Верхняя площадка под шторку Telegram и ноты safe-area. */
   padding: max(52px, env(safe-area-inset-top, 0px)) 12px 18px;
   background: linear-gradient(180deg, rgba(11,12,14,.92) 0%, rgba(11,12,14,.72) 62%, rgba(11,12,14,0) 100%);
@@ -1137,7 +1392,10 @@ body.ice-view-map .ice-sec--hero {
 
 /* Контролы кликабельны, остальное — стекло для пинов под ним. */
 body.ice-view-map .ice-sec--hero .ice-search,
-body.ice-view-map .ice-sec--hero #iceCatalogTools {
+body.ice-view-map .ice-sec--hero #iceCatalogTools,
+body.ice-view-map .ice-sec--hero #iceShopFilters,
+body.ice-view-map .ice-sec--hero #iceShopMapFiltersBtn,
+body.ice-view-map .ice-sec--hero .ice-shop-filters__map-bar {
   pointer-events: auto;
 }
 

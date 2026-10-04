@@ -62,7 +62,9 @@
     if (venue) params.push('venue_type=' + encodeURIComponent(venue));
     if (opts.limit) params.push('limit=' + encodeURIComponent(String(opts.limit)));
     if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
-    if (opts.when) params.push('when=' + encodeURIComponent(String(opts.when)));
+    var timeQ = whenListQuery(opts.when, opts.whenDay);
+    if (timeQ.day) params.push('day=' + encodeURIComponent(timeQ.day));
+    else if (timeQ.when) params.push('when=' + encodeURIComponent(timeQ.when));
     return '/api/public/ice/arenas?' + params.join('&');
   }
 
@@ -261,6 +263,338 @@
     return 'Каток, зал или трасса';
   }
 
+  /** Услуги магазина в шапке — задачи пользователя, не сырой JSON amenities. */
+  var SHOP_SERVICE_FILTERS = [
+    { key: '', label: 'Все' },
+    { key: 'skate_sharpening', label: 'Заточка' },
+    { key: 'retail', label: 'Розница' },
+    { key: 'skate_molding', label: 'Формовка' },
+    { key: 'repair', label: 'Ремонт' },
+    { key: 'blade_profiling', label: 'Профиль коньков' },
+    { key: 'foot_scan', label: '3D-подбор', minCount: 2 },
+  ];
+
+  var SHOP_DISCIPLINE_FILTERS = [
+    { key: 'discipline_hockey', label: 'Хоккей' },
+    { key: 'discipline_figure', label: 'Фигурное' },
+    { key: 'discipline_roller', label: 'Ролики' },
+  ];
+
+  var SHOP_SERVICE_NEEDS_DISCIPLINE = {
+    skate_sharpening: true,
+    repair: true,
+    blade_profiling: true,
+  };
+
+  var SHOP_HOURS_WHEN = [
+    { key: 'any', label: 'Любое время' },
+    { key: 'evening', label: 'Сегодня вечером' },
+    { key: 'tomorrow', label: 'Завтра' },
+    { key: 'weekend', label: 'В выходные' },
+  ];
+
+  var WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  function shopServicesOf(item) {
+    return (item && item.shop_services) || [];
+  }
+
+  function shopDisciplinesOf(item) {
+    return (item && item.shop_disciplines) || [];
+  }
+
+  function shopServiceNeedsDiscipline(serviceKey) {
+    return !!SHOP_SERVICE_NEEDS_DISCIPLINE[String(serviceKey || '')];
+  }
+
+  function shopDisciplineRowVisible(serviceKey) {
+    return shopServiceNeedsDiscipline(serviceKey);
+  }
+
+  function hasActiveShopFilters(filters) {
+    filters = filters || {};
+    return !!(
+      filters.shopService ||
+      filters.shopDiscipline ||
+      filters.shopOpenNow ||
+      (filters.shopWhen && filters.shopWhen !== 'any')
+    );
+  }
+
+  function normalizeHhmm(raw) {
+    var text = String(raw || '').trim().replace('.', ':');
+    if (!text) return '';
+    var parts = text.split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parseInt(parts[1] || '0', 10);
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 24 || m < 0 || m > 59) return '';
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+
+  function hhmmToMinutes(hhmm) {
+    var n = normalizeHhmm(hhmm);
+    if (!n) return null;
+    var p = n.split(':');
+    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+  }
+
+  function parseDayIntervals(raw) {
+    if (!raw) return [];
+    if (raw.length && raw[0] && raw[0].length === 2 && typeof raw[0][0] === 'string') {
+      var out = [];
+      for (var i = 0; i < raw.length; i++) {
+        var o = normalizeHhmm(raw[i][0]);
+        var c = normalizeHhmm(raw[i][1]);
+        if (o && c) out.push([o, c]);
+      }
+      return out;
+    }
+    if (raw.length === 2) {
+      var o = normalizeHhmm(raw[0]);
+      var c = normalizeHhmm(raw[1]);
+      return o && c ? [[o, c]] : [];
+    }
+    return [];
+  }
+
+  function intervalsForWeekday(openingHours, weekday) {
+    var hours = openingHours && typeof openingHours === 'object' ? openingHours : {};
+    var weekly = hours.weekly;
+    if (weekly && typeof weekly === 'object') {
+      return parseDayIntervals(weekly[WEEKDAY_KEYS[weekday % 7]]);
+    }
+    var daily = hours.daily;
+    if (daily && typeof daily === 'object') {
+      var o = normalizeHhmm(daily.open);
+      var c = normalizeHhmm(daily.close);
+      return o && c ? [[o, c]] : [];
+    }
+    return [];
+  }
+
+  function weekdayMinsk(now) {
+    now = now instanceof Date ? now : new Date();
+    try {
+      var wd = new Intl.DateTimeFormat('en-US', { timeZone: MINSK_TZ, weekday: 'short' }).format(now);
+      var map = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+      return map[wd] != null ? map[wd] : 0;
+    } catch (e) {
+      return (now.getDay() + 6) % 7;
+    }
+  }
+
+  function hhmmMinsk(now) {
+    now = now instanceof Date ? now : new Date();
+    try {
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: MINSK_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(now);
+    } catch (e) {
+      return normalizeHhmm(now.getHours() + ':' + now.getMinutes());
+    }
+  }
+
+  function shopOpenAtMinutes(item, weekday, nowMins) {
+    var intervals = intervalsForWeekday(item.opening_hours, weekday);
+    for (var i = 0; i < intervals.length; i++) {
+      var open = hhmmToMinutes(intervals[i][0]);
+      var close = hhmmToMinutes(intervals[i][1]);
+      if (open == null || close == null) continue;
+      if (nowMins >= open && nowMins < close) return true;
+    }
+    return false;
+  }
+
+  function shopOpenOnWeekday(item, weekday) {
+    return intervalsForWeekday(item.opening_hours, weekday).length > 0;
+  }
+
+  function shopOpenEveningToday(item, weekday, nowMins) {
+    var intervals = intervalsForWeekday(item.opening_hours, weekday);
+    var evening = 18 * 60;
+    for (var i = 0; i < intervals.length; i++) {
+      var open = hhmmToMinutes(intervals[i][0]);
+      var close = hhmmToMinutes(intervals[i][1]);
+      if (open == null || close == null) continue;
+      if (close > evening && open < close && nowMins < close) return true;
+    }
+    return false;
+  }
+
+  function shopMatchesHours(item, filters, now) {
+    filters = filters || {};
+    now = now instanceof Date ? now : new Date();
+    var today = weekdayMinsk(now);
+    var nowMins = hhmmToMinutes(hhmmMinsk(now));
+    if (filters.shopOpenNow) {
+      if (!item.opening_hours) return false;
+      return shopOpenAtMinutes(item, today, nowMins != null ? nowMins : 0);
+    }
+    var when = filters.shopWhen || 'any';
+    if (when === 'any') return true;
+    if (!item.opening_hours) return false;
+    if (when === 'evening') return shopOpenEveningToday(item, today, nowMins != null ? nowMins : 0);
+    if (when === 'tomorrow') return shopOpenOnWeekday(item, (today + 1) % 7);
+    if (when === 'weekend') return shopOpenOnWeekday(item, 5) || shopOpenOnWeekday(item, 6);
+    return true;
+  }
+
+  function shopMatchesService(item, serviceKey) {
+    if (!serviceKey) return true;
+    return shopServicesOf(item).indexOf(serviceKey) >= 0;
+  }
+
+  function shopMatchesDiscipline(item, disciplineKey) {
+    if (!disciplineKey) return true;
+    return shopDisciplinesOf(item).indexOf(disciplineKey) >= 0;
+  }
+
+  function filterShopCatalog(items, filters, now, opts) {
+    opts = opts || {};
+    items = items || [];
+    filters = filters || {};
+    var serviceKey = opts.omitService ? '' : filters.shopService || '';
+    var disciplineKey = opts.omitDiscipline ? '' : filters.shopDiscipline || '';
+    var hours = {
+      shopOpenNow: filters.shopOpenNow,
+      shopWhen: filters.shopWhen,
+    };
+    return items.filter(function (item) {
+      if (!shopMatchesService(item, serviceKey)) return false;
+      if (!shopMatchesDiscipline(item, disciplineKey)) return false;
+      if (!shopMatchesHours(item, hours, now)) return false;
+      return true;
+    });
+  }
+
+  function shopServiceCount(items, key) {
+    var n = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (shopServicesOf(items[i]).indexOf(key) >= 0) n += 1;
+    }
+    return n;
+  }
+
+  function shopDisciplineCount(items, key) {
+    var n = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (shopDisciplinesOf(items[i]).indexOf(key) >= 0) n += 1;
+    }
+    return n;
+  }
+
+  function shopServiceChipsView(sourceItems, filters, now) {
+    sourceItems = sourceItems || [];
+    filters = filters || {};
+    now = now || new Date();
+    var base = filterShopCatalog(sourceItems, filters, now, { omitService: true });
+    var selected = String(filters.shopService || '');
+    var out = [];
+    for (var i = 0; i < SHOP_SERVICE_FILTERS.length; i++) {
+      var def = SHOP_SERVICE_FILTERS[i];
+      var count;
+      if (!def.key) count = base.length;
+      else count = shopServiceCount(base, def.key);
+      if (def.key && def.minCount && count < def.minCount) continue;
+      if (def.key && count <= 0) continue;
+      out.push({
+        key: def.key,
+        label: def.label,
+        count: count,
+        active: selected === def.key,
+      });
+    }
+    return out;
+  }
+
+  function shopDisciplineChipsView(sourceItems, filters, now) {
+    if (!shopDisciplineRowVisible(filters.shopService)) return [];
+    sourceItems = sourceItems || [];
+    filters = filters || {};
+    now = now || new Date();
+    var base = filterShopCatalog(sourceItems, filters, now, { omitDiscipline: true });
+    var selected = String(filters.shopDiscipline || '');
+    var out = [];
+    for (var j = 0; j < SHOP_DISCIPLINE_FILTERS.length; j++) {
+      var def = SHOP_DISCIPLINE_FILTERS[j];
+      var count = shopDisciplineCount(base, def.key);
+      if (count <= 0) continue;
+      out.push({
+        key: def.key,
+        label: def.label,
+        count: count,
+        active: selected === def.key,
+      });
+    }
+    return out;
+  }
+
+  function shopWhenMenuView(selectedKey) {
+    selectedKey = selectedKey || 'any';
+    return SHOP_HOURS_WHEN.map(function (w) {
+      return { key: w.key, label: w.label, active: selectedKey === w.key };
+    });
+  }
+
+  function shopWhenMenuLabel(selectedKey) {
+    selectedKey = selectedKey || 'any';
+    for (var i = 0; i < SHOP_HOURS_WHEN.length; i++) {
+      if (SHOP_HOURS_WHEN[i].key === selectedKey) return SHOP_HOURS_WHEN[i].label;
+    }
+    return 'Любое время';
+  }
+
+  function shopMapToolbarLabel(filters) {
+    filters = filters || {};
+    var pills = shopActiveFilterPills(filters);
+    if (!pills.length) return 'Все магазины';
+    if (pills.length === 1) return pills[0].label;
+    return pills[0].label + ' · ещё ' + (pills.length - 1);
+  }
+
+  function shopActiveFilterPills(filters) {
+    filters = filters || {};
+    var pills = [];
+    if (filters.shopService) {
+      for (var i = 0; i < SHOP_SERVICE_FILTERS.length; i++) {
+        if (SHOP_SERVICE_FILTERS[i].key === filters.shopService) {
+          pills.push({ kind: 'service', key: filters.shopService, label: SHOP_SERVICE_FILTERS[i].label });
+          break;
+        }
+      }
+    }
+    if (filters.shopDiscipline) {
+      for (var j = 0; j < SHOP_DISCIPLINE_FILTERS.length; j++) {
+        if (SHOP_DISCIPLINE_FILTERS[j].key === filters.shopDiscipline) {
+          pills.push({ kind: 'discipline', key: filters.shopDiscipline, label: SHOP_DISCIPLINE_FILTERS[j].label });
+          break;
+        }
+      }
+    }
+    if (filters.shopOpenNow) pills.push({ kind: 'open', key: 'open', label: 'Открыто' });
+    if (filters.shopWhen && filters.shopWhen !== 'any' && !filters.shopOpenNow) {
+      pills.push({ kind: 'when', key: filters.shopWhen, label: shopWhenMenuLabel(filters.shopWhen) });
+    }
+    return pills;
+  }
+
+  function formatEmptyShopFilters(opts) {
+    opts = opts || {};
+    var sharpen = Number(opts.sharpeningCount) || 0;
+    var body = 'Попробуйте снять фильтры по услуге или времени.';
+    var action = { label: 'Сбросить фильтры', kind: 'clear-shop-filters' };
+    var secondary = sharpen > 0 ? { label: 'Показать ' + sharpen + ' с заточкой', kind: 'shop-service:skate_sharpening' } : null;
+    return {
+      title: 'Сейчас никто не подходит',
+      body: body,
+      action: action,
+      secondary: secondary,
+    };
+  }
+
   /** Сообщение, когда «Ближе» не получило геолокацию. reason: unsupported | denied */
   function formatNearGeoBlockedMessage(opts) {
     opts = opts || {};
@@ -286,12 +620,176 @@
     return 'Разрешите доступ к геолокации — или выберите город вручную.';
   }
 
-  function whenPickerLabel(selected, resolvedKey) {
-    var chips = whenChipsView(selected, resolvedKey);
-    for (var i = 0; i < chips.length; i++) {
-      if (chips[i].active) return chips[i].label;
+  var WHEN_HORIZON_DAYS = 14;
+  var WHEN_PRESET_LABELS = {
+    today_evening: 'Сегодня вечером',
+    tomorrow: 'Завтра',
+    weekend: 'Выходные',
+    any: 'Любое время',
+  };
+
+  function isWeekendIso(iso) {
+    var bits = String(iso || '').split('-');
+    if (bits.length < 3) return false;
+    var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
+    return wd === 0 || wd === 6;
+  }
+
+  function formatWhenDayLabel(iso, todayIso) {
+    todayIso = todayIso || minskDateIso(new Date());
+    if (iso === addDaysIso(todayIso, 1)) return 'Завтра';
+    var bits = String(iso).split('-');
+    var wd = new Date(Date.UTC(Number(bits[0]), Number(bits[1]) - 1, Number(bits[2]))).getUTCDay();
+    return WEEKDAYS_SHORT_RU[wd] + ', ' + bits[2] + '.' + bits[1];
+  }
+
+  /** Третья строка меню: первый будний день после «завтра». */
+  function whenThirdPinnedIso(todayIso) {
+    var cursor = addDaysIso(todayIso, 2);
+    var guard = 0;
+    while (isWeekendIso(cursor) && guard < 8) {
+      cursor = addDaysIso(cursor, 1);
+      guard += 1;
     }
-    return 'Любое время';
+    return cursor;
+  }
+
+  function whenExtraWeekdayIsos(todayIso) {
+    todayIso = todayIso || minskDateIso(new Date());
+    var tomorrow = addDaysIso(todayIso, 1);
+    var third = whenThirdPinnedIso(todayIso);
+    var pinned = {};
+    pinned[tomorrow] = true;
+    pinned[third] = true;
+    var out = [];
+    for (var i = 1; i <= WHEN_HORIZON_DAYS; i++) {
+      var iso = addDaysIso(todayIso, i);
+      if (isWeekendIso(iso)) continue;
+      if (pinned[iso]) continue;
+      out.push(iso);
+    }
+    return out;
+  }
+
+  function whenListQuery(when, whenDay) {
+    var day = String(whenDay || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return { when: '', day: day };
+    var w = String(when || '').trim();
+    if (!w) return { when: '', day: '' };
+    if (w === 'day') return { when: 'auto', day: '' };
+    return { when: w, day: '' };
+  }
+
+  function whenSelectionActive(when, whenDay, todayIso, row, resolvedKey) {
+    todayIso = todayIso || minskDateIso(new Date());
+    var w = when || 'auto';
+    var tomorrow = addDaysIso(todayIso, 1);
+    if (row.kind === 'preset') {
+      if (row.id === 'any') return w === 'any';
+      if (w === 'auto') return row.id === (resolvedKey || 'any');
+      return w === row.id;
+    }
+    if (row.kind === 'day') {
+      if (w === 'tomorrow' && row.date === tomorrow) return true;
+      return w === 'day' && whenDay === row.date;
+    }
+    return false;
+  }
+
+  /**
+   * Меню «Когда»: вечер, завтра, один будний день, раскрытие остальных будней,
+   * выходные и любое время. Сб/вс — только «Выходные».
+   */
+  function whenMenuView(opts) {
+    opts = opts || {};
+    var now = opts.now instanceof Date ? opts.now : new Date();
+    var todayIso = minskDateIso(now);
+    var when = opts.when || 'auto';
+    var whenDay = String(opts.whenDay || '').trim();
+    var resolvedKey = opts.resolvedKey || 'any';
+    var expanded = !!opts.menuExpanded;
+    var tomorrow = addDaysIso(todayIso, 1);
+    var third = whenThirdPinnedIso(todayIso);
+    var extras = whenExtraWeekdayIsos(todayIso);
+    var rows = [];
+
+    rows.push({
+      kind: 'preset',
+      id: 'today_evening',
+      label: 'Сегодня вечером',
+      sub: 'с 16:00',
+      active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'today_evening' }, resolvedKey),
+    });
+    rows.push({
+      kind: 'day',
+      date: tomorrow,
+      label: 'Завтра',
+      active: whenSelectionActive(when, whenDay, todayIso, { kind: 'day', date: tomorrow }, resolvedKey),
+    });
+    rows.push({
+      kind: 'day',
+      date: third,
+      label: formatWhenDayLabel(third, todayIso),
+      active: whenSelectionActive(when, whenDay, todayIso, { kind: 'day', date: third }, resolvedKey),
+    });
+    if (extras.length) {
+      rows.push({
+        kind: 'toggle',
+        count: extras.length,
+        expanded: expanded,
+        label: expanded ? 'Скрыть будни' : 'Ещё ' + extras.length + ' будн' + (extras.length === 1 ? 'ий' : 'их'),
+      });
+      if (expanded) {
+        extras.forEach(function (iso) {
+          rows.push({
+            kind: 'day',
+            date: iso,
+            label: formatWhenDayLabel(iso, todayIso),
+            nested: true,
+            active: whenSelectionActive(when, whenDay, todayIso, { kind: 'day', date: iso }, resolvedKey),
+          });
+        });
+      }
+    }
+    var anchors = [
+      {
+        kind: 'preset',
+        id: 'weekend',
+        label: 'Выходные',
+        sub: 'сб–вс',
+        active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'weekend' }, resolvedKey),
+      },
+      {
+        kind: 'preset',
+        id: 'any',
+        label: 'Любое время',
+        active: whenSelectionActive(when, whenDay, todayIso, { kind: 'preset', id: 'any' }, resolvedKey),
+      },
+    ];
+    return { rows: rows, anchors: anchors };
+  }
+
+  function whenPickerLabel(when, whenDay, resolvedKey) {
+    var w = when || 'auto';
+    if (w === 'day' && whenDay) return formatWhenDayLabel(whenDay, minskDateIso(new Date()));
+    if (w === 'auto') return WHEN_PRESET_LABELS[resolvedKey] || 'Любое время';
+    return WHEN_PRESET_LABELS[w] || 'Любое время';
+  }
+
+  function applyWhenMenuPick(currentWhen, currentDay, pick, todayIso) {
+    todayIso = todayIso || minskDateIso(new Date());
+    var tomorrow = addDaysIso(todayIso, 1);
+    if (pick.kind === 'toggle') {
+      return { when: currentWhen, whenDay: currentDay, toggle: true };
+    }
+    if (pick.kind === 'preset') {
+      return { when: pick.id || 'any', whenDay: '', toggle: false };
+    }
+    if (pick.kind === 'day') {
+      if (pick.date === tomorrow) return { when: 'tomorrow', whenDay: '', toggle: false };
+      return { when: 'day', whenDay: pick.date || '', toggle: false };
+    }
+    return { when: currentWhen, whenDay: currentDay, toggle: false };
   }
 
   function mapShowsArenas(intent) {
@@ -515,20 +1013,27 @@
     }
   }
 
-  /**
-   * TASK-146 (Q-006): чипы окна времени. По умолчанию — «auto»: сервер сам выбирает окно
-   * по дню и часу и возвращает его ключ; подсвечиваем ровно то, что применено.
-   */
-  var WHEN_CHIPS = [
-    ['today_evening', 'Сегодня вечером'],
-    ['tomorrow', 'Завтра'],
-    ['weekend', 'Выходные'],
-    ['any', 'Любое время'],
-  ];
+  function normalizeVenueTypes(list) {
+    var out = [];
+    var seen = {};
+    (list || []).forEach(function (raw) {
+      var key = String(raw || '').trim().toLowerCase();
+      if (VENUE_KEYS.indexOf(key) < 0 || seen[key]) return;
+      seen[key] = true;
+      out.push(key);
+    });
+    return out;
+  }
 
+  /** @deprecated тесты и старые вызовы; для UI — whenMenuView. */
   function whenChipsView(selected, resolvedKey) {
     var active = selected && selected !== 'auto' ? selected : resolvedKey || 'any';
-    return WHEN_CHIPS.map(function (c) {
+    return [
+      ['today_evening', 'Сегодня вечером'],
+      ['tomorrow', 'Завтра'],
+      ['weekend', 'Выходные'],
+      ['any', 'Любое время'],
+    ].map(function (c) {
       return { key: c[0], label: c[1], active: c[0] === active };
     });
   }
@@ -553,15 +1058,49 @@
     }
   }
 
-  /** Окно времени — только когда в выборе есть лёд с сеансами. */
-  function whenPickerVisible(intent, venueTypes, facets) {
+  function dayFromSearch(search) {
+    var raw = String(search || '');
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    try {
+      var value = String(new URLSearchParams(raw).get('day') || '').trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function whenBootFromSearch(search) {
+    var day = dayFromSearch(search);
+    if (day) {
+      var today = minskDateIso(new Date());
+      if (day === addDaysIso(today, 1)) return { when: 'tomorrow', whenDay: '' };
+      return { when: 'day', whenDay: day };
+    }
+    var when = whenFromSearch(search);
+    if (when) return { when: when, whenDay: '' };
+    return null;
+  }
+
+  /** Лёд в выборе: без учёта фасетов (диплинк, boot до первого ответа). */
+  function whenSkateFilterContext(intent, venueTypes) {
     if (coerceIntent(intent) !== INTENTS.skate) return false;
     var v = venueTypes || [];
     if (v.length === 1 && v[0] === 'shop') return false;
     if (v.length === 1 && v[0] !== 'ice') return false;
     if (v.length > 1 && v.indexOf('ice') < 0) return false;
+    return true;
+  }
+
+  /** Окно времени — только когда в выборе есть лёд с сеансами. */
+  function whenPickerVisible(intent, venueTypes, facets) {
+    if (!whenSkateFilterContext(intent, venueTypes)) return false;
     if (facets && facets.length) return facetCount(facets, 'ice') > 0;
     return true;
+  }
+
+  function hydrateWhenFromUrl(search, intent, venueTypes) {
+    if (!whenSkateFilterContext(intent, venueTypes)) return null;
+    return whenBootFromSearch(search);
   }
 
   function whenChipsVisible(intent, venueTypes, facets) {
@@ -890,10 +1429,12 @@
     today: 'Сегодня нет',
     tomorrow: 'Завтра нет',
     weekend: 'На выходных нет',
+    day: 'В этот день нет',
   };
 
   function windowMissLabel(win) {
     if (!win) return '';
+    if (win.key === 'day') return WINDOW_MISS.day;
     return WINDOW_MISS[win.key] || String(win.label || '') + ' нет';
   }
 
@@ -1246,6 +1787,11 @@
           cityName: state.cityName || '',
           serviceId: state.serviceId || null,
           serviceIds: state.serviceIds || [],
+          venueTypes: normalizeVenueTypes(state.venueTypes),
+          shopService: String(state.shopService || ''),
+          shopDiscipline: String(state.shopDiscipline || ''),
+          shopOpenNow: !!state.shopOpenNow,
+          shopWhen: String(state.shopWhen || 'any'),
           scrollY: state.scrollY || 0,
           view: state.view || 'list',
         })
@@ -1262,6 +1808,7 @@
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
+      if (parsed.venueTypes) parsed.venueTypes = normalizeVenueTypes(parsed.venueTypes);
       return parsed;
     } catch (e) {
       return null;
@@ -1286,9 +1833,32 @@
     placeMenuLabel: placeMenuLabel,
     applyCatalogMode: applyCatalogMode,
     catalogSearchPlaceholder: catalogSearchPlaceholder,
+    SHOP_SERVICE_FILTERS: SHOP_SERVICE_FILTERS,
+    shopServiceChipsView: shopServiceChipsView,
+    shopDisciplineChipsView: shopDisciplineChipsView,
+    shopDisciplineRowVisible: shopDisciplineRowVisible,
+    shopWhenMenuView: shopWhenMenuView,
+    shopWhenMenuLabel: shopWhenMenuLabel,
+    shopActiveFilterPills: shopActiveFilterPills,
+    shopMapToolbarLabel: shopMapToolbarLabel,
+    filterShopCatalog: filterShopCatalog,
+    hasActiveShopFilters: hasActiveShopFilters,
+    formatEmptyShopFilters: formatEmptyShopFilters,
+    intervalsForWeekday: intervalsForWeekday,
+    shopMatchesHours: shopMatchesHours,
     formatNearGeoBlockedMessage: formatNearGeoBlockedMessage,
     whenPickerVisible: whenPickerVisible,
     whenPickerLabel: whenPickerLabel,
+    whenMenuView: whenMenuView,
+    whenListQuery: whenListQuery,
+    applyWhenMenuPick: applyWhenMenuPick,
+    whenBootFromSearch: whenBootFromSearch,
+    hydrateWhenFromUrl: hydrateWhenFromUrl,
+    whenSkateFilterContext: whenSkateFilterContext,
+    dayFromSearch: dayFromSearch,
+    formatWhenDayLabel: formatWhenDayLabel,
+    whenThirdPinnedIso: whenThirdPinnedIso,
+    whenExtraWeekdayIsos: whenExtraWeekdayIsos,
     mapShowsArenas: mapShowsArenas,
     formatCoachMapEmpty: formatCoachMapEmpty,
     buildSearchUrl: buildSearchUrl,
@@ -1314,6 +1884,7 @@
     whenChipsView: whenChipsView,
     whenChipsVisible: whenChipsVisible,
     venueFromSearch: venueFromSearch,
+    normalizeVenueTypes: normalizeVenueTypes,
     whenFromSearch: whenFromSearch,
     mapHref: mapHref,
     trainerHref: trainerHref,

@@ -19,6 +19,7 @@ from src.ingestion.seed_config import (
     PARSER_KEY_MINSK_MAIN_ARENA,
     PARSER_KEY_MINSK_SPEED_OVAL,
 )
+from src.ingestion.koronaticket_rink import enrich_zamok_slots, load_korona_rink_html
 from src.ingestion.source_io import fetch_http_json, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -337,6 +338,9 @@ class ZamokHtmlParser(IceParser):
                         external_url=tickets_url,
                     )
                 )
+        korona_html = await load_korona_rink_html(job)
+        if korona_html:
+            enrich_zamok_slots(slots, korona_html)
         return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
 
 

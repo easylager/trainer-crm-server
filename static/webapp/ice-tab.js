@@ -21,8 +21,18 @@
        фильтра, иначе выбранный чип исчез бы из собственного списка. */
     venueTypes: [],
     venueFacets: [],
+    shopSourceItems: [],
+    shopService: '',
+    shopDiscipline: '',
+    shopOpenNow: false,
+    shopWhen: 'any',
+    shopUiPicker: false,
+    shopMapFiltersOpen: false,
     /* TASK-146 (Q-006): окно времени. auto — умный дефолт на сервере; window — что применено. */
     when: 'auto',
+    whenDay: '',
+    whenMenuExpanded: false,
+    urlWhenHydrated: false,
     /* Где человек (lat,lon) — если разрешил геолокацию; ближние места выше. */
     near: null,
     /* «Рядом» нажата: лента по расстоянию (внутри групп окна времени). */
@@ -97,6 +107,11 @@
         cityId: state.cityId,
         cityName: state.cityName,
         serviceIds: state.serviceIds,
+        venueTypes: state.venueTypes,
+        shopService: state.shopService,
+        shopDiscipline: state.shopDiscipline,
+        shopOpenNow: state.shopOpenNow,
+        shopWhen: state.shopWhen,
         scrollY: global.scrollY || 0,
         view: state.view,
       },
@@ -128,6 +143,220 @@
 
   function closeUiPicker() {
     state.uiPicker = false;
+    state.shopUiPicker = false;
+  }
+
+  function closeShopMapFiltersPanel() {
+    state.shopMapFiltersOpen = false;
+    state.shopUiPicker = false;
+  }
+
+  function whenQueryForApi() {
+    if (!M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) {
+      return { when: '', whenDay: '' };
+    }
+    return { when: state.when, whenDay: state.whenDay };
+  }
+
+  function renderWhenMenuRow(row) {
+    if (row.kind === 'toggle') {
+      return (
+        '<button type="button" class="ice-menu-toggle" data-when-toggle="1" aria-expanded="' +
+        (row.expanded ? 'true' : 'false') +
+        '"><span>' +
+        esc(row.label) +
+        '</span></button>'
+      );
+    }
+    var pressed = row.active ? 'true' : 'false';
+    var cls = 'ice-menu-day' + (row.nested ? ' ice-menu-day--nested' : '');
+    var data =
+      row.kind === 'preset'
+        ? ' data-when-preset="' + esc(row.id) + '"'
+        : ' data-when-day="' + esc(row.date) + '"';
+    var sub = row.sub ? '<span class="ice-menu-sub">' + esc(row.sub) + '</span>' : '';
+    return (
+      '<button type="button" class="' +
+      cls +
+      '"' +
+      data +
+      ' aria-pressed="' +
+      pressed +
+      '"><span class="ice-menu-label">' +
+      esc(row.label) +
+      sub +
+      '</span></button>'
+    );
+  }
+
+  function renderWhenMenuHtml() {
+    var resolved = state.window ? state.window.key : 'any';
+    var view = M.whenMenuView({
+      when: state.when,
+      whenDay: state.whenDay,
+      resolvedKey: resolved,
+      menuExpanded: state.whenMenuExpanded,
+    });
+    var html = view.rows.map(renderWhenMenuRow).join('');
+    html += '<div class="ice-menu-anchors">';
+    html += view.anchors.map(renderWhenMenuRow).join('');
+    html += '</div>';
+    return html;
+  }
+
+  function shopFilterState() {
+    return {
+      shopService: state.shopService || '',
+      shopDiscipline: state.shopDiscipline || '',
+      shopOpenNow: !!state.shopOpenNow,
+      shopWhen: state.shopWhen || 'any',
+    };
+  }
+
+  function clearShopFilters(opts) {
+    opts = opts || {};
+    state.shopService = opts.shopService || '';
+    state.shopDiscipline = '';
+    state.shopOpenNow = false;
+    state.shopWhen = 'any';
+    closeUiPicker();
+    closeShopMapFiltersPanel();
+    syncShopListFromFilters();
+    renderList();
+    renderCatalogHeader();
+    persist();
+  }
+
+  function syncMapListItems() {
+    if (!mapCtl || state.intent === 'coach') return;
+    if (!mapViewActive()) return;
+    mapCtl.setListItems(state.items);
+  }
+
+  function syncShopListFromFilters() {
+    if (!state.shopSourceItems.length) return;
+    state.items = M.filterShopCatalog(state.shopSourceItems, shopFilterState(), new Date());
+    state.total = state.items.length;
+    syncMapListItems();
+  }
+
+  function renderShopFilters(show) {
+    var host = $('iceShopFilters');
+    if (!host) return;
+    if (!show) {
+      host.hidden = true;
+      host.classList.remove('is-expanded', 'ice-shop-filters--map');
+      return;
+    }
+    /* Пока нет выдачи магазинов — не рисуем «пустую» шапку из статического HTML. */
+    if (!state.shopSourceItems.length) {
+      host.hidden = true;
+      host.classList.remove('is-expanded', 'ice-shop-filters--map');
+      return;
+    }
+    host.hidden = false;
+    var onMap = mapViewActive();
+    host.classList.toggle('ice-shop-filters--map', onMap);
+    host.classList.toggle('is-expanded', onMap && state.shopMapFiltersOpen);
+    var filters = shopFilterState();
+    var mapBar = $('iceShopMapBar');
+    if (mapBar) mapBar.hidden = !onMap;
+    var mapBtn = $('iceShopMapFiltersBtn');
+    if (mapBtn) {
+      mapBtn.setAttribute('aria-expanded', onMap && state.shopMapFiltersOpen ? 'true' : 'false');
+    }
+    var mapLabel = $('iceShopMapFiltersLabel');
+    if (mapLabel) mapLabel.textContent = M.shopMapToolbarLabel(filters);
+    var now = new Date();
+    var serviceChips = M.shopServiceChipsView(state.shopSourceItems, filters, now);
+    var serviceBox = $('iceShopServiceChips');
+    if (serviceBox) {
+      serviceBox.innerHTML = serviceChips
+        .map(function (c) {
+          return (
+            '<button type="button" class="ice-chip ice-chip--shop" data-shop-service="' +
+            esc(c.key) +
+            '" aria-pressed="' +
+            (c.active ? 'true' : 'false') +
+            '">' +
+            esc(c.label) +
+            (c.key ? ' <span class="ice-chip__n">' + esc(String(c.count)) + '</span>' : '') +
+            '</button>'
+          );
+        })
+        .join('');
+    }
+    var openBtn = $('iceShopOpenNow');
+    if (openBtn) openBtn.setAttribute('aria-pressed', state.shopOpenNow ? 'true' : 'false');
+    var whenBtn = $('iceShopWhenBtn');
+    if (whenBtn) {
+      whenBtn.setAttribute('aria-pressed', state.shopWhen !== 'any' && !state.shopOpenNow ? 'true' : 'false');
+      whenBtn.setAttribute('aria-expanded', state.shopUiPicker ? 'true' : 'false');
+      var whenLabel = whenBtn.querySelector('span');
+      if (whenLabel) whenLabel.textContent = M.shopWhenMenuLabel(state.shopOpenNow ? 'any' : state.shopWhen);
+      whenBtn.disabled = !!state.shopOpenNow;
+    }
+    var whenMenu = $('iceShopWhenMenu');
+    if (whenMenu) {
+      whenMenu.hidden = !state.shopUiPicker;
+      whenMenu.innerHTML = M.shopWhenMenuView(state.shopWhen)
+        .map(function (w) {
+          return (
+            '<button type="button" data-shop-when="' +
+            esc(w.key) +
+            '" aria-pressed="' +
+            (w.active ? 'true' : 'false') +
+            '">' +
+            esc(w.label) +
+            '</button>'
+          );
+        })
+        .join('');
+    }
+    var discBlock = $('iceShopDisciplineBlock');
+    var discChips = M.shopDisciplineChipsView(state.shopSourceItems, filters, now);
+    if (discBlock) discBlock.hidden = !discChips.length;
+    var discBox = $('iceShopDisciplineChips');
+    if (discBox) {
+      discBox.innerHTML = discChips
+        .map(function (c) {
+          return (
+            '<button type="button" class="ice-chip ice-chip--shop" data-shop-discipline="' +
+            esc(c.key) +
+            '" aria-pressed="' +
+            (c.active ? 'true' : 'false') +
+            '">' +
+            esc(c.label) +
+            ' <span class="ice-chip__n">' +
+            esc(String(c.count)) +
+            '</span></button>'
+          );
+        })
+        .join('');
+    }
+    var activeHost = $('iceShopActiveFilters');
+    var pills = M.shopActiveFilterPills(filters);
+    if (activeHost) {
+      if (!pills.length) {
+        activeHost.hidden = true;
+        activeHost.innerHTML = '';
+      } else {
+        activeHost.hidden = false;
+        activeHost.innerHTML =
+          pills
+            .map(function (p) {
+              return (
+                '<span class="ice-shop-pill">' +
+                esc(p.label) +
+                '<button type="button" data-shop-clear="' +
+                esc(p.kind) +
+                '" aria-label="Сбросить">×</button></span>'
+              );
+            })
+            .join('') +
+          '<button type="button" class="ice-shop-reset" data-shop-clear="all">Сбросить всё</button>';
+      }
+    }
   }
 
   function renderCatalogHeader() {
@@ -198,18 +427,15 @@
     var whenMenu = $('iceWhenMenu');
     var needPlaceTool = scope === 'places' && M.placeMenuNeeded(state.venueFacets);
     var needWhen = M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets);
-    if (!toolsHost || !toolsRow) return;
 
+    if (toolsHost && toolsRow) {
     if (!needPlaceTool && !needWhen) {
       toolsHost.hidden = true;
       toolsRow.innerHTML = '';
       if (placeMenu) placeMenu.hidden = true;
       if (whenMenu) whenMenu.hidden = true;
-      closeUiPicker();
-      setSearchPlaceholder();
-      return;
-    }
-
+      if (state.uiPicker) closeUiPicker();
+    } else {
     toolsHost.hidden = false;
     var toolHtml = '';
     if (needPlaceTool) {
@@ -251,23 +477,11 @@
         '<button type="button" class="ice-tool" data-ui-picker="when" aria-expanded="' +
         (whenOpen ? 'true' : 'false') +
         '"><span>' +
-        esc(M.whenPickerLabel(state.when, resolved)) +
+        esc(M.whenPickerLabel(state.when, state.whenDay, resolved)) +
         '</span></button>';
       if (whenMenu) {
         whenMenu.hidden = !whenOpen;
-        whenMenu.innerHTML = M.whenChipsView(state.when, resolved)
-          .map(function (c) {
-            return (
-              '<button type="button" data-when="' +
-              esc(c.key) +
-              '" aria-pressed="' +
-              (c.active ? 'true' : 'false') +
-              '">' +
-              esc(c.label) +
-              '</button>'
-            );
-          })
-          .join('');
+        whenMenu.innerHTML = renderWhenMenuHtml();
       }
     } else if (whenMenu) {
       whenMenu.hidden = true;
@@ -275,10 +489,13 @@
       if (state.uiPicker === 'when') closeUiPicker();
     }
 
-    toolsRow.className = 'ice-tools' + (toolHtml.indexOf('</button>') >= 0 && toolHtml.indexOf('</button>') !== toolHtml.lastIndexOf('</button>') ? '' : ' ice-tools--one');
     var toolCount = (needPlaceTool ? 1 : 0) + (needWhen ? 1 : 0);
     toolsRow.className = 'ice-tools' + (toolCount === 1 ? ' ice-tools--one' : '');
     toolsRow.innerHTML = toolHtml;
+    }
+    }
+
+    renderShopFilters(scope === 'shop');
     setSearchPlaceholder();
   }
 
@@ -371,7 +588,9 @@
     var wanted = next === 'map' && mapAllowed() ? 'map' : 'list';
     if (state.view === wanted) return;
     state.view = wanted;
+    state.shopMapFiltersOpen = false;
     setViewToggle();
+    renderCatalogHeader();
     persist();
     setTelegramSwipes(wanted === 'map');
     if (wanted === 'list') {
@@ -429,7 +648,8 @@
             venueTypes: state.venueTypes,
             limit: extra.limit || 50,
             /* Окно времени — и на карту: иначе пин «19:30» под чипом «Завтра» — сегодняшний. */
-            when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
+            when: whenQueryForApi().when,
+            whenDay: whenQueryForApi().whenDay,
           };
           if (extra.near) opts.near = extra.near;
           if (extra.bbox) opts.bbox = extra.bbox;
@@ -479,6 +699,11 @@
         // Шапка шторки: «7 мест сегодня вечером …» — метка текущего окна.
         getWindow: function () {
           return state.window;
+        },
+        /* Магазины: услуга/дисциплина/часы — только на клиенте; bbox-запрос карты без этого. */
+        filterMapItems: function (items) {
+          if (M.catalogScope(state.intent, state.venueTypes) !== 'shop') return items || [];
+          return M.filterShopCatalog(items || [], shopFilterState(), new Date());
         },
       });
     }
@@ -665,12 +890,22 @@
     }
     if (paint === 'empty') {
       var city = cityFromState(state.cityId) || {};
-      var empty = M.formatEmptyList(state.intent, {
-        serviceName: state.intent === 'coach' && state.serviceIds.length ? currentServiceLabel() : '',
-        trainerCount: city.trainer_count,
-        mapRinkCount: city.map_rink_count,
-        hasSkate: M.shouldShowSkateChip(state.skateCount),
-      });
+      var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
+      var empty;
+      if (shopScope && state.shopSourceItems.length && M.hasActiveShopFilters(shopFilterState())) {
+        empty = M.formatEmptyShopFilters({
+          sharpeningCount: state.shopSourceItems.filter(function (it) {
+            return (it.shop_services || []).indexOf('skate_sharpening') >= 0;
+          }).length,
+        });
+      } else {
+        empty = M.formatEmptyList(state.intent, {
+          serviceName: state.intent === 'coach' && state.serviceIds.length ? currentServiceLabel() : '',
+          trainerCount: city.trainer_count,
+          mapRinkCount: city.map_rink_count,
+          hasSkate: M.shouldShowSkateChip(state.skateCount),
+        });
+      }
       renderEmpty(list, empty, state.intent === 'coach' ? 'ice' : 'city');
       showActiveList();
       return;
@@ -777,8 +1012,11 @@
     if (global.GlideShareSheet) {
       var q = ['city_id=' + encodeURIComponent(state.cityId)];
       if (state.venueTypes && state.venueTypes.length === 1) q.push('venue_type=' + encodeURIComponent(state.venueTypes[0]));
-      var key = state.window && state.window.key;
-      if (key && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) q.push('when=' + encodeURIComponent(key));
+      var timeQ = whenQueryForApi();
+      if (M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) {
+        if (timeQ.day) q.push('day=' + encodeURIComponent(timeQ.day));
+        else if (timeQ.when) q.push('when=' + encodeURIComponent(timeQ.when));
+      }
       global.GlideShareSheet.open({ endpoint: '/api/public/ice/selection/share?' + q.join('&'), context: 'ice_list' });
       return;
     }
@@ -848,6 +1086,17 @@
         recordIceInterest();
       };
     }
+    if (kind === 'clear-shop-filters') {
+      return function () {
+        clearShopFilters();
+      };
+    }
+    if (kind && kind.indexOf('shop-service:') === 0) {
+      var svc = kind.slice('shop-service:'.length);
+      return function () {
+        clearShopFilters({ shopService: svc });
+      };
+    }
     if (kind && kind.indexOf('intent:') === 0) {
       var next = kind.slice('intent:'.length);
       return function () {
@@ -892,8 +1141,15 @@
 
   function applyArenaPayload(data) {
     var incoming = (data && data.items) || [];
-    state.items = incoming.slice();
-    state.total = data && data.total != null ? data.total : incoming.length;
+    var scope = M.catalogScope(state.intent, state.venueTypes);
+    if (scope === 'shop') {
+      state.shopSourceItems = incoming.slice();
+      syncShopListFromFilters();
+    } else {
+      state.shopSourceItems = [];
+      state.items = incoming.slice();
+      state.total = data && data.total != null ? data.total : incoming.length;
+    }
     state.cursor = data && data.next_cursor;
     state.venueFacets = (data && data.venue_type_facets) || [];
     state.window = (data && data.window) || null;
@@ -1017,11 +1273,37 @@
 
   function fetchJson(url, opts) {
     opts = opts || {};
-    return fetch(url, {
-      cache: 'no-store',
-      headers: opts.auth ? authHeaders() : {},
-    }).then(function (r) {
-      return r.ok ? r.json() : null;
+    var timeoutMs = opts.timeoutMs != null ? Number(opts.timeoutMs) : 20000;
+    var headers = opts.auth ? authHeaders() : {};
+    var run = function () {
+      return fetch(url, {
+        cache: 'no-store',
+        headers: headers,
+      }).then(function (r) {
+        return r.ok ? r.json() : null;
+      });
+    };
+    if (!(timeoutMs > 0)) return run();
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = global.setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject(new Error('fetch-timeout'));
+      }, timeoutMs);
+      run()
+        .then(function (data) {
+          if (done) return;
+          done = true;
+          global.clearTimeout(timer);
+          resolve(data);
+        })
+        .catch(function (err) {
+          if (done) return;
+          done = true;
+          global.clearTimeout(timer);
+          reject(err);
+        });
     });
   }
 
@@ -1070,14 +1352,27 @@
   }
 
   function loadArenas() {
-    if (!state.cityId) return Promise.resolve();
+    if (!state.cityId) {
+      failCatalogBoot();
+      return Promise.resolve();
+    }
+    if (!state.urlWhenHydrated) {
+      var urlWhenBoot = M.hydrateWhenFromUrl(global.location.search || '', state.intent, state.venueTypes);
+      if (urlWhenBoot) {
+        state.when = urlWhenBoot.when;
+        state.whenDay = urlWhenBoot.whenDay || '';
+        state.urlWhenHydrated = true;
+      }
+    }
     var gen = beginListFetch('skate');
+    var timeQ = whenQueryForApi();
     var url = M.buildListUrl({
       cityId: state.cityId,
       intent: state.intent,
       venueTypes: state.venueTypes,
       limit: 50,
-      when: M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets) ? state.when : '',
+      when: timeQ.when,
+      whenDay: timeQ.whenDay,
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
     });
@@ -1246,8 +1541,30 @@
     });
   }
 
+  function failCatalogBoot() {
+    state.loading = false;
+    state.loadedIntent = null;
+    renderList();
+    loadFailed();
+  }
+
+  function ensureProvisionalCity() {
+    if (state.cityId) return;
+    var fb = M.pickFallbackCity(state.cities);
+    if (fb) applyCity(fb);
+  }
+
+  function applyCityIfDifferent(city) {
+    if (!city || city.id == null) return;
+    if (state.cityId != null && Number(city.id) === Number(state.cityId)) return;
+    applyCity(city);
+  }
+
   function applyCity(city) {
-    if (!city) return;
+    if (!city) {
+      failCatalogBoot();
+      return;
+    }
     var known = cityFromState(city.id);
     if (known) {
       city = Object.assign({}, known, { name: city.name || known.name, id: known.id });
@@ -1398,23 +1715,39 @@
             return;
           }
         }
-        return fetchJson('/api/webapp/client/session', { auth: true }).then(function (session) {
-          var sid = session && session.city_id;
-          var fromSession = sid
-            ? state.cities.filter(function (c) {
-                return Number(c.id) === Number(sid);
-              })[0]
-            : null;
-          if (fromSession) {
-            if (session.city_name) fromSession = Object.assign({}, fromSession, { name: session.city_name });
-            applyCity(fromSession);
-            return;
-          }
-          return geolocateOrFallback(session);
-        });
+        /* Не блокируем ленту сессией/GPS: сразу дефолтный город, потом уточняем. */
+        ensureProvisionalCity();
+        return fetchJson('/api/webapp/client/session', { auth: true, timeoutMs: 8000 })
+          .then(function (session) {
+            var sid = session && session.city_id;
+            var fromSession = sid
+              ? state.cities.filter(function (c) {
+                  return Number(c.id) === Number(sid);
+                })[0]
+              : null;
+            if (fromSession) {
+              if (session.city_name) {
+                fromSession = Object.assign({}, fromSession, { name: session.city_name });
+              }
+              applyCityIfDifferent(fromSession);
+              return;
+            }
+            return geolocateOrFallback(session);
+          })
+          .catch(function () {
+            return geolocateOrFallback(null);
+          });
       })
       .catch(function () {
+        /* cities не загрузились — всё равно пробуем фолбэк, иначе вечное «ищем катки…». */
+        if (!state.cities.length) state.cities = [];
         applyCity(M.pickFallbackCity(state.cities));
+      })
+      .then(function () {
+        if (state.cityId) return;
+        var fb = M.pickFallbackCity(state.cities);
+        if (fb) applyCity(fb);
+        else failCatalogBoot();
       });
   }
 
@@ -1426,8 +1759,9 @@
    */
   function geolocateOrFallback(session) {
     var G = global.CatalogGeoModel;
+    var fallbackCity = M.pickFallbackCity(state.cities);
     var fallback = function () {
-      applyCity(M.pickFallbackCity(state.cities));
+      if (!state.cityId) applyCity(fallbackCity);
     };
     var go =
       G &&
@@ -1445,7 +1779,19 @@
       fallback();
       return;
     }
+    /* Не ждём GPS, чтобы отрисовать каталог: сначала дефолтный город, потом уточняем. */
+    if (fallbackCity && !state.cityId) applyCity(fallbackCity);
     return new Promise(function (resolve) {
+      var settled = false;
+      function finish() {
+        if (settled) return;
+        settled = true;
+        resolve();
+      }
+      global.setTimeout(function () {
+        fallback();
+        finish();
+      }, 9000);
       global.navigator.geolocation.getCurrentPosition(
         function (pos) {
           state.near = pos.coords.latitude.toFixed(5) + ',' + pos.coords.longitude.toFixed(5);
@@ -1455,16 +1801,16 @@
               var city = cityId
                 ? state.cities.filter(function (c) { return Number(c.id) === cityId; })[0]
                 : null;
-              if (city) applyCity(city);
+              if (city && Number(city.id) !== Number(state.cityId)) applyCity(city);
               else fallback();
             })
             .catch(fallback)
-            .then(resolve);
+            .then(finish);
         },
         function () {
           G.writeDeclinedFlag(global.localStorage);
           fallback();
-          resolve();
+          finish();
         },
         { timeout: 8000, maximumAge: 300000 }
       );
@@ -1628,6 +1974,87 @@
       });
     }
 
+    var mapFiltersBtn = $('iceShopMapFiltersBtn');
+    if (mapFiltersBtn) {
+      mapFiltersBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        state.shopMapFiltersOpen = !state.shopMapFiltersOpen;
+        renderCatalogHeader();
+      });
+    }
+
+    var shopFilters = $('iceShopFilters');
+    if (shopFilters) {
+      shopFilters.addEventListener('click', function (ev) {
+        var svc = ev.target.closest('[data-shop-service]');
+        if (svc) {
+          var key = svc.getAttribute('data-shop-service') || '';
+          state.shopService = key;
+          if (!M.shopDisciplineRowVisible(key)) state.shopDiscipline = '';
+          syncShopListFromFilters();
+          renderList();
+          renderCatalogHeader();
+          persist();
+          return;
+        }
+        var disc = ev.target.closest('[data-shop-discipline]');
+        if (disc) {
+          var dkey = disc.getAttribute('data-shop-discipline') || '';
+          state.shopDiscipline = state.shopDiscipline === dkey ? '' : dkey;
+          syncShopListFromFilters();
+          renderList();
+          renderCatalogHeader();
+          persist();
+          return;
+        }
+        if (ev.target.closest('#iceShopOpenNow')) {
+          state.shopOpenNow = !state.shopOpenNow;
+          if (state.shopOpenNow) {
+            state.shopWhen = 'any';
+            state.shopUiPicker = false;
+          }
+          syncShopListFromFilters();
+          renderList();
+          renderCatalogHeader();
+          persist();
+          return;
+        }
+        if (ev.target.closest('#iceShopWhenBtn')) {
+          if (state.shopOpenNow) return;
+          state.shopUiPicker = !state.shopUiPicker;
+          renderCatalogHeader();
+          return;
+        }
+        var whenBtn = ev.target.closest('[data-shop-when]');
+        if (whenBtn && whenBtn.closest('#iceShopWhenMenu')) {
+          state.shopWhen = whenBtn.getAttribute('data-shop-when') || 'any';
+          state.shopUiPicker = false;
+          syncShopListFromFilters();
+          renderList();
+          renderCatalogHeader();
+          persist();
+          return;
+        }
+        var clearBtn = ev.target.closest('[data-shop-clear]');
+        if (clearBtn) {
+          var what = clearBtn.getAttribute('data-shop-clear') || '';
+          if (what === 'all') {
+            clearShopFilters();
+            return;
+          }
+          if (what === 'service') state.shopService = '';
+          if (what === 'discipline') state.shopDiscipline = '';
+          if (what === 'open') state.shopOpenNow = false;
+          if (what === 'when') state.shopWhen = 'any';
+          syncShopListFromFilters();
+          renderList();
+          renderCatalogHeader();
+          persist();
+        }
+      });
+    }
+
     var toolsHost = $('iceCatalogTools');
     if (toolsHost) {
       toolsHost.addEventListener('click', function (ev) {
@@ -1648,9 +2075,33 @@
           loadArenas();
           return;
         }
-        var whenBtn = ev.target.closest('[data-when]');
-        if (whenBtn && whenBtn.closest('#iceWhenMenu')) {
-          state.when = whenBtn.getAttribute('data-when') || 'any';
+        var whenToggle = ev.target.closest('[data-when-toggle]');
+        if (whenToggle && whenToggle.closest('#iceWhenMenu')) {
+          state.whenMenuExpanded = !state.whenMenuExpanded;
+          renderCatalogHeader();
+          return;
+        }
+        var whenPreset = ev.target.closest('[data-when-preset]');
+        if (whenPreset && whenPreset.closest('#iceWhenMenu')) {
+          var pick = M.applyWhenMenuPick(state.when, state.whenDay, {
+            kind: 'preset',
+            id: whenPreset.getAttribute('data-when-preset') || 'any',
+          });
+          state.when = pick.when;
+          state.whenDay = pick.whenDay;
+          closeUiPicker();
+          renderCatalogHeader();
+          loadArenas();
+          return;
+        }
+        var whenDayBtn = ev.target.closest('[data-when-day]');
+        if (whenDayBtn && whenDayBtn.closest('#iceWhenMenu')) {
+          var dayPick = M.applyWhenMenuPick(state.when, state.whenDay, {
+            kind: 'day',
+            date: whenDayBtn.getAttribute('data-when-day') || '',
+          });
+          state.when = dayPick.when;
+          state.whenDay = dayPick.whenDay;
           closeUiPicker();
           renderCatalogHeader();
           loadArenas();
@@ -1828,13 +2279,30 @@
       if (urlVenue) {
         state.intent = 'skate';
         state.venueTypes = [urlVenue];
+      } else if (
+        saved &&
+        saved.venueTypes &&
+        saved.venueTypes.length &&
+        M.coerceIntent(state.intent) === M.INTENTS.skate
+      ) {
+        state.venueTypes = saved.venueTypes.slice();
       }
       /* TASK-149: ?when=<окно> из ссылки (хаб «Сегодня вечером»). Читаем ПОСЛЕ intent и
          venue: именно они решают, видны ли чипы окна. У «Тренеров» и у не-ледовых типов
          окна нет — параметр молча игнорируем, как и раньше. Окно не пишется в
          sessionStorage (см. persist), поэтому восстановление его не перетрёт. */
-      var urlWhen = M.whenFromSearch(global.location.search || '');
-      if (urlWhen && M.whenPickerVisible(state.intent, state.venueTypes, state.venueFacets)) state.when = urlWhen;
+      var urlWhenBoot = M.hydrateWhenFromUrl(global.location.search || '', state.intent, state.venueTypes);
+      if (urlWhenBoot) {
+        state.when = urlWhenBoot.when;
+        state.whenDay = urlWhenBoot.whenDay || '';
+        state.urlWhenHydrated = true;
+      }
+      if (saved) {
+        if (saved.shopService) state.shopService = String(saved.shopService);
+        if (saved.shopDiscipline) state.shopDiscipline = String(saved.shopDiscipline);
+        state.shopOpenNow = !!saved.shopOpenNow;
+        if (saved.shopWhen) state.shopWhen = String(saved.shopWhen);
+      }
       // TASK-091: строка поиска на Главной ведёт сюда и сразу открывает клавиатуру.
       if (params.get('focus') === 'search') {
         global.setTimeout(function () {
@@ -1852,7 +2320,22 @@
      */
     state.loading = true;
     renderList();
+    global.setTimeout(function () {
+      if (!state.cityId) {
+        ensureProvisionalCity();
+        if (!state.cityId && state.loading) failCatalogBoot();
+      } else if (state.loading && state.loadedIntent === null) {
+        loadList();
+      }
+    }, 3500);
     resolveCity().then(function () {
+      if (!state.cityId) {
+        var fb = M.pickFallbackCity(state.cities);
+        if (fb) applyCity(fb);
+        else failCatalogBoot();
+      } else if (state.loading && state.loadedIntent === null) {
+        loadList();
+      }
       if (saved && saved.scrollY) {
         global.setTimeout(function () {
           global.scrollTo(0, saved.scrollY);
@@ -1862,6 +2345,25 @@
         global.ClientShell.reportCatalogPresence('miniapp_ice', null, { city_id: state.cityId });
       }
     });
+  }
+
+  function showBootDependencyError() {
+    var cap = $('iceCaption');
+    if (cap) cap.textContent = 'Каталог не запустился';
+    var list = $('iceListSkate');
+    if (list) {
+      list.innerHTML =
+        '<div class="ice-empty"><b>Не загрузились скрипты каталога</b><p>Закройте вкладку «Поиск» и откройте снова. Если не помогло — обновите мини-приложение.</p></div>';
+    }
+  }
+
+  if (!M) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showBootDependencyError);
+    } else {
+      showBootDependencyError();
+    }
+    return;
   }
 
   if (document.readyState === 'loading') {

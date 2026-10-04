@@ -176,4 +176,11 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
     model.saveIceState({ intent: 'skate', when: 'tomorrow' }, { setItem: (k, v) => calls.push(v) });
     assert.equal('when' in JSON.parse(calls[0]), false);
   });
+
+  it('вкладка «Магазины» из sessionStorage — запрос с venue_type=shop', async () => {
+    const { requests } = await bootWith('?city_id=1', { intent: 'skate', venueTypes: ['shop'] });
+    const url = arenasRequest(requests);
+    assert.ok(url, requests.join(' | '));
+    assert.match(url, /[?&]venue_type=shop(&|$)/);
+  });
 });

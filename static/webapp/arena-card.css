@@ -715,6 +715,18 @@ a.arena-row {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* mini-app-components сбрасывает button[data-call-phone] — здесь только data-copy-phone */
+.ar-pilot .arena-card button.arena-qa {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+  line-height: inherit;
+  border: 1px solid var(--app-card-line);
+  background: var(--app-card-bg) !important;
+  box-shadow: var(--app-card-shadow);
+}
 .arena-qa svg {
   width: 22px;
   height: 22px;
@@ -910,6 +922,22 @@ a.arena-info b { color: var(--glide-ink-teal); }
   color: var(--glide-ink-teal);
   overflow-wrap: anywhere;
 }
+button.arena-info__tel--copy {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent !important;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: var(--glide-ink-teal);
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
 /* Адрес, телефон, сайт — можно выделить и скопировать (Telegram WebView). */
 .ar-pilot .arena-card .arena-infos .arena-info b,
 .ar-pilot .arena-card .arena-infos .arena-info .arena-info__tel,
@@ -987,19 +1015,6 @@ a.arena-info b { color: var(--glide-ink-teal); }
   grid-column: 1 / -1;
   font-size: var(--app-text-caption);
   color: var(--glide-hint);
-}
-
-/* Глобальный сброс tel:-ссылок (mini-app-components.css, с !important) снимал с плитки
-   «Позвонить» и строки «Телефон» рамку, фон и отступы. Возвращаем их только здесь. */
-.ar-pilot .arena-card a.arena-qa.arena-qa[href^="tel:"] {
-  display: flex;
-  padding: 12px 4px 10px;
-  border: 1px solid var(--app-card-line);
-  background: var(--app-card-bg) !important;
-  box-shadow: var(--app-card-shadow);
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  text-align: center;
 }
 
 /* Парсер давно не читал сайт катка: сеансы показываем, но честно говорим, от какого они числа. */

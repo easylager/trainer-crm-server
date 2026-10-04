@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Шапка «Магазины» — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    Прототип шапки сегмента «Магазины» (ice.html), 2026-10-04.
+    Контекст: у «Мест» есть тип + окно; у «Тренеров» — услуги; у магазинов сейчас пусто.
+    Данные: amenities магазина (arena_profile.SHOP_SERVICE_KEYS, SHOP_DISCIPLINE_KEYS),
+    часы opening_hours — уже в ленте и на карточке.
+
+    Референсы (продукт, не копипаст UI):
+      • Sk8Sharp / Hockey Caddy — задача «найти заточку», тип услуги у точки, расстояние.
+      • Google Maps / 2ГИС retail — «Открыто сейчас», горизонтальные категории, счётчики.
+      • Sparx / Rink Link — хоккей vs фигурное как разные потребности у одной «заточки».
+
+    ← → переключают экраны телефона. Клик по чипам — локально на активном экране.
+  */
+  :root{
+    --glide-500:#45B9BB; --glide-brand:var(--glide-500); --glide-on-fill:#04262A;
+    --glide-paper:#0B0C0E; --glide-surface:#141618; --glide-card:#1A1D20;
+    --glide-line:#262A2E; --glide-line-strong:#33383D;
+    --glide-text:#E6E9EA; --glide-hint:#868D93; --glide-ink-teal:#57D0D2;
+    --glide-brand-wash:rgba(69,185,187,.13);
+    --app-ok:#4FC98A; --app-warn:#F0A24B; --app-venue-shop:#A48BFF;
+    --app-on-media:#F4F7F7; --app-on-media-dim:#C5D0D2;
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
+    --t-kicker:10px; --t-caption:12px; --t-body:14px; --t-title:20px;
+    --font:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--font); background:#050607; color:var(--glide-text);
+    min-height:100vh; display:flex; gap:36px; justify-content:center; align-items:flex-start;
+    padding:28px 16px 96px; flex-wrap:wrap;
+  }
+  button,input{font:inherit;color:inherit}
+  button{cursor:pointer}
+  button:focus-visible{outline:2px solid var(--glide-ink-teal);outline-offset:2px}
+
+  .thesis{width:min(440px,100%); padding-top:8px}
+  .thesis h1{font-size:24px;line-height:1.22;letter-spacing:-.03em;margin:0;font-weight:700}
+  .thesis h1 em{font-style:normal;color:var(--app-venue-shop)}
+  .lede{margin:10px 0 0;font-size:14px;line-height:1.55;color:var(--glide-hint)}
+  .lede a{color:var(--glide-ink-teal);text-decoration:none;border-bottom:1px solid rgba(87,208,210,.35)}
+  h2{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--glide-ink-teal);margin:22px 0 8px}
+  .tbl{width:100%;border-collapse:collapse;font-size:12px;line-height:1.4}
+  .tbl th,.tbl td{border:1px solid var(--glide-line);padding:8px 10px;text-align:left;vertical-align:top}
+  .tbl th{background:var(--glide-surface);color:var(--glide-hint);font-weight:600}
+  .tbl code{font-size:11px;color:var(--glide-ink-teal)}
+  .rules{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.45}
+  .rules li{padding-left:14px;position:relative;color:var(--glide-text)}
+  .rules li::before{content:"";position:absolute;left:0;top:.55em;width:6px;height:6px;border-radius:99px;background:var(--app-venue-shop)}
+  .cuts{margin:14px 0 0;padding:12px 14px;border:1px dashed var(--glide-line);border-radius:12px;font-size:12px;line-height:1.5;color:var(--glide-hint)}
+  .cuts b{color:var(--glide-text)}
+  .navhint{margin-top:18px;font-size:12px;color:var(--glide-hint)}
+  .navhint kbd{
+    display:inline-block;padding:2px 7px;border-radius:6px;border:1px solid var(--glide-line);
+    background:var(--glide-surface);font-size:11px;font-family:inherit;
+  }
+
+  .phone-wrap{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .phone-label{font-size:12px;font-weight:600;color:var(--glide-hint);text-align:center;max-width:390px;line-height:1.4}
+  .phone-label b{color:var(--glide-text)}
+  .phone{
+    width:390px; max-width:100%; height:844px; position:relative; overflow:hidden;
+    border-radius:44px; background:var(--glide-paper);
+    box-shadow:0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0,0,0,.9);
+  }
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:118px;height:30px;background:#000;border-radius:16px;z-index:8;pointer-events:none}
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;padding-top:44px;padding-bottom:72px;overflow:hidden}
+  .screen.is-on{display:flex}
+
+  .hero{padding:12px 16px 10px;display:flex;flex-direction:column;gap:9px;flex:none}
+  .search{
+    display:flex;align-items:center;gap:8px;background:var(--glide-paper);border:1px solid var(--glide-line);
+    border-radius:var(--r-md);padding:9px 11px;
+  }
+  .search svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;color:var(--glide-hint)}
+  .search input{flex:1;min-width:0;border:0;background:transparent;font-size:14px;outline:none}
+  .search input::placeholder{color:var(--glide-hint)}
+  .city-in{
+    flex:none;max-width:42%;height:28px;padding:0 10px;border:0;border-radius:var(--r-pill);
+    background:var(--glide-surface);font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;
+  }
+  .city-in::after{content:"";width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--glide-hint);margin-top:2px}
+
+  .seg{
+    display:grid;grid-template-columns:1fr 1fr 1fr;padding:3px;gap:2px;
+    background:var(--glide-surface);border:1px solid var(--glide-line);border-radius:var(--r-pill);
+  }
+  .seg button{
+    border:0;background:transparent;color:var(--glide-hint);font-size:13px;font-weight:700;
+    height:34px;border-radius:var(--r-pill);padding:0 6px;
+  }
+  .seg button[aria-pressed="true"]{background:var(--glide-brand);color:var(--glide-on-fill)}
+  .seg button[data-mode="shop"][aria-pressed="true"]{background:color-mix(in srgb, var(--app-venue-shop) 88%, #000);color:#fff}
+
+  .filter-block{display:flex;flex-direction:column;gap:7px}
+  .filter-kicker{
+    margin:0;padding:0 2px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--glide-hint);font-weight:600;
+  }
+  .chips{display:flex;flex-wrap:nowrap;gap:7px;overflow-x:auto;scrollbar-width:none;padding:0 1px 2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{
+    flex:none;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;
+    border-radius:var(--r-pill);border:1px solid var(--glide-line);background:var(--glide-surface);
+    font-size:13px;font-weight:600;color:var(--glide-text);
+  }
+  .chip .n{font-size:11px;font-weight:600;color:var(--glide-hint);font-variant-numeric:tabular-nums}
+  .chip[aria-pressed="true"]{
+    background:var(--glide-brand-wash);border-color:rgba(164,139,255,.55);color:var(--glide-ink-teal);
+  }
+  .chip[aria-pressed="true"] .n{color:var(--glide-ink-teal)}
+  .chip--ghost{background:transparent;color:var(--glide-hint)}
+
+  .time-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .toggle{
+    display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:var(--r-pill);
+    border:1px solid var(--glide-line);background:var(--glide-surface);font-size:13px;font-weight:600;
+  }
+  .toggle[aria-pressed="true"]{border-color:rgba(79,201,138,.5);background:rgba(79,201,138,.12);color:var(--app-ok)}
+  .toggle__dot{width:8px;height:8px;border-radius:99px;background:var(--glide-hint)}
+  .toggle[aria-pressed="true"] .toggle__dot{background:var(--app-ok);box-shadow:0 0 0 3px rgba(79,201,138,.2)}
+  .when-one{
+    height:34px;padding:0 12px;border-radius:var(--r-pill);border:1px solid var(--glide-line);
+    background:var(--glide-surface);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;
+  }
+  .when-one::after{
+    content:"";width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid var(--glide-hint);margin-top:2px;
+  }
+  .when-one[aria-pressed="true"]{border-color:var(--glide-brand);color:var(--glide-ink-teal)}
+
+  .active-sent{
+    display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0 0;font-size:12px;line-height:1.35;color:var(--glide-hint);
+  }
+  .active-sent .pill{
+    border:0;background:var(--glide-card);color:var(--glide-text);padding:5px 9px;border-radius:var(--r-pill);
+    font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;
+  }
+  .active-sent .pill button{
+    border:0;background:none;padding:0;color:var(--glide-hint);font-size:14px;line-height:1;
+  }
+
+  .list{flex:1;min-height:0;overflow:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:10px}
+  .listhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0 2px}
+  .eyebrow{margin:0;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--glide-hint)}
+  .near{
+    border:1px solid var(--glide-line);background:transparent;color:var(--glide-hint);
+    border-radius:var(--r-pill);padding:5px 10px;font-size:12px;font-weight:600;
+  }
+  .near[aria-pressed="true"]{border-color:var(--glide-brand);color:var(--glide-ink-teal)}
+
+  .board{
+    display:block;border:1px solid var(--glide-line);border-radius:var(--r-lg);
+    background:var(--glide-card);overflow:hidden;color:inherit;text-decoration:none;
+  }
+  .board__hero{
+    position:relative;aspect-ratio:2.2/1;display:flex;align-items:flex-end;
+    background:linear-gradient(145deg,#3a2a68 0%,#1e1638 55%,#120e22 100%);
+  }
+  .board__hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55}
+  .board__scrim{position:relative;width:100%;padding:14px 14px 11px;background:linear-gradient(180deg,transparent,rgba(4,8,10,.78))}
+  .board__badge{
+    display:inline-block;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--app-on-media);background:rgba(164,139,255,.35);padding:3px 8px;border-radius:var(--r-pill);margin-bottom:6px;
+  }
+  .board__name{display:block;font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--app-on-media)}
+  .board__where{display:block;margin-top:3px;font-size:12px;line-height:1.35;color:var(--app-on-media-dim)}
+  .board__facts{display:block;padding:10px 14px;font-size:12px;line-height:1.4;color:var(--glide-hint)}
+  .board__facts .open{color:var(--app-ok);font-weight:600}
+  .board__facts .closed{color:var(--app-warn);font-weight:600}
+  .board__depth{
+    display:flex;justify-content:space-between;padding:10px 14px 12px;border-top:1px solid var(--glide-line);
+    font-size:14px;font-weight:500;color:var(--glide-ink-teal);
+  }
+
+  .empty{
+    margin-top:8px;padding:28px 18px;border:1px dashed var(--glide-line);border-radius:var(--r-lg);
+    text-align:center;background:var(--glide-card);
+  }
+  .empty h3{margin:0;font-size:17px;letter-spacing:-.02em}
+  .empty p{margin:8px 0 0;font-size:13px;line-height:1.45;color:var(--glide-hint)}
+  .empty button{
+    margin-top:14px;height:36px;padding:0 16px;border-radius:var(--r-pill);border:0;
+    background:var(--glide-brand);color:var(--glide-on-fill);font-weight:700;font-size:13px;
+  }
+
+  .tabbar{
+    position:absolute;left:0;right:0;bottom:0;height:72px;padding:8px 20px 18px;
+    display:flex;justify-content:space-around;align-items:flex-end;
+    background:linear-gradient(180deg,transparent,rgba(11,12,14,.92) 28%,var(--glide-paper));
+    border-top:1px solid var(--glide-line);pointer-events:none;
+  }
+  .tabbar span{font-size:10px;color:var(--glide-hint);font-weight:600}
+  .tabbar span.on{color:var(--glide-ink-teal)}
+</style>
+</head>
+<body>
+
+<aside class="thesis">
+  <h1>Шапка <em>Магазины</em></h1>
+  <p class="lede">
+    Предложение для сегмента «Магазины» во вкладке «Поиск». Опирается на реальные поля каталога
+    (<code>SHOP_SERVICE_KEYS</code>, <code>opening_hours</code>, дисциплины) и на пустое место
+    под сегментом — сейчас у магазинов нет второго ряда инструментов, в отличие от «Мест».
+    Базовая шапка каталога: <a href="2026-10-03-catalog-header-chrome.html">catalog-header-chrome</a>.
+  </p>
+
+  <h2>Ресерч (что делают похожие продукты)</h2>
+  <ul class="rules">
+    <li><b>Задача, не витрина.</b> Sk8Sharp и Hockey Caddy начинают с «где заточить / обслужить коньки», а не с полного списка магазинов. Тип услуги — первый фильтр.</li>
+    <li><b>«Открыто сейчас».</b> У retail в картах (Google, 2ГИС) это отдельный переключатель, не пункт в длинном меню. Для мастерских после тренировки — критично.</li>
+    <li><b>Хоккей ≠ фигурное.</b> Rink Link и Sparx подчёркивают разный hollow и разные мастерские. У нас это уже в данных (<code>discipline_*</code>), не выдумываем теги.</li>
+    <li><b>Не обещать то, чего нет.</b> Очередь и «ждать 20 мин» (Hockey Caddy) — v2, пока нет источника. В UI не рисуем.</li>
+  </ul>
+
+  <h2>Дизайн-решение (рекомендуемый вариант A)</h2>
+  <ul class="rules">
+    <li><b>Ряд 1 — «Что нужно»</b> горизонтальные чипы с счётчиком. Группировка по задаче пользователя, не сырой JSON: Заточка · Розница · Формовка · Ремонт · Профиль. Чип с нулём в городе не показываем (как в TASK-148).</li>
+    <li><b>Ряд 2 — «Когда удобно»</b> переключатель «Открыто сейчас» + одна кнопка-меню «Время» (Сегодня вечером · Завтра · В выходные · Любое). Окно «сегодня вечером» для магазинов — про часы, не про сеансы на льду.</li>
+    <li><b>Ряд 3 (условный)</b> «Для кого» — Хоккей · Фигурное · Ролики — только если выбрана заточка/ремонт/профиль или активен поиск «заточка». Для чистой розницы не занимаем высоту.</li>
+    <li><b>Сводка фильтров</b> одной строкой под шапкой + сброс. Сортировка «Ближе» остаётся в заголовке списка.</li>
+  </ul>
+
+  <h2>Маппинг на данные (Минск, октябрь 2026)</h2>
+  <table class="tbl">
+    <thead><tr><th>Чип в UI</th><th>amenities / query</th><th>Сейчас в городе</th></tr></thead>
+    <tbody>
+      <tr><td>Розница</td><td><code>retail</code></td><td>11</td></tr>
+      <tr><td>Формовка</td><td><code>skate_molding</code></td><td>5</td></tr>
+      <tr><td>Заточка</td><td><code>skate_sharpening</code></td><td>4</td></tr>
+      <tr><td>Ремонт</td><td><code>repair</code></td><td>3</td></tr>
+      <tr><td>Профиль</td><td><code>blade_profiling</code></td><td>2</td></tr>
+      <tr><td>3D-подбор</td><td><code>foot_scan</code> — отдельный чип только если ≥2 точек; иначе только на карточке</td><td>1</td></tr>
+      <tr><td>Хоккей / Фигурное / Ролики</td><td><code>discipline_*</code></td><td>9 / 3 / 2</td></tr>
+      <tr><td>Открыто сейчас</td><td>сервер: <code>open_now=1</code> по <code>opening_hours</code></td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <p class="cuts">
+    <b>Отклонено:</b> выпадающий список из 11 услуг (как в админке) — не сканируется пальцем;
+    дублировать чипы «Прокат» у магазинов (редко и путает с катком);
+    копировать чипы окна «Сегодня вечером» с льда без переименования — пользователь думает про сеансы.
+    <br><br>
+    <b>API (следующий шаг, вне макета):</b> фасеты <code>shop_service_facets</code> в ответе
+    <code>/api/public/ice/arenas?venue_type=shop</code> + query <code>service=</code>,
+    <code>discipline=</code>, <code>open=now|evening|weekend</code>. Пока фильтр можно клиентски
+    на уже загруженном списке для прототипа в проде.
+  </p>
+
+  <p class="navhint">Экраны прототипа: <kbd>←</kbd> <kbd>→</kbd></p>
+</aside>
+
+<div class="phone-wrap">
+  <p class="phone-label" id="screenLabel"><b>1/4</b> Базовый вид — все магазины, без фильтров</p>
+  <div class="phone" id="phone">
+    <div class="notch" aria-hidden="true"></div>
+
+    <!-- Screen 1: default -->
+    <div class="screen is-on" data-screen="0" data-label="Базовый вид — все магазины, без фильтров">
+      <header class="hero">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>
+          <input type="search" placeholder="Магазин или заточка" aria-label="Поиск">
+          <button type="button" class="city-in">Минск</button>
+        </div>
+        <div class="seg" role="tablist" aria-label="Род каталога">
+          <button type="button" role="tab" aria-pressed="false">Места</button>
+          <button type="button" role="tab" aria-pressed="false">Тренеры</button>
+          <button type="button" role="tab" data-mode="shop" aria-pressed="true">Магазины</button>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Что нужно</p>
+          <div class="chips" role="group" aria-label="Услуга">
+            <button type="button" class="chip" aria-pressed="true">Все <span class="n">13</span></button>
+            <button type="button" class="chip" aria-pressed="false">Заточка <span class="n">4</span></button>
+            <button type="button" class="chip" aria-pressed="false">Розница <span class="n">11</span></button>
+            <button type="button" class="chip" aria-pressed="false">Формовка <span class="n">5</span></button>
+            <button type="button" class="chip" aria-pressed="false">Ремонт <span class="n">3</span></button>
+            <button type="button" class="chip" aria-pressed="false">Профиль <span class="n">2</span></button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Когда удобно</p>
+          <div class="time-row">
+            <button type="button" class="toggle" aria-pressed="false"><span class="toggle__dot" aria-hidden="true"></span>Открыто сейчас</button>
+            <button type="button" class="when-one" aria-pressed="false">Любое время</button>
+          </div>
+        </div>
+      </header>
+      <div class="list">
+        <div class="listhead">
+          <p class="eyebrow">13 магазинов</p>
+          <button type="button" class="near" aria-pressed="false">Ближе</button>
+        </div>
+        <a class="board" href="#">
+          <div class="board__hero">
+            <div class="board__scrim">
+              <span class="board__badge">Магазин</span>
+              <span class="board__name">SportContinent</span>
+              <span class="board__where">ул. Притыцкого, 27 · 1-й этаж ЛДС</span>
+            </div>
+          </div>
+          <span class="board__facts">Розница · Формовка · <span class="open">сегодня 11:00–18:00</span></span>
+          <span class="board__depth">Открыть карточку магазина <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="board" href="#">
+          <div class="board__hero" style="background:linear-gradient(145deg,#2a3a4a,#141a22)">
+            <div class="board__scrim">
+              <span class="board__badge">Мастерская</span>
+              <span class="board__name">HotIce</span>
+              <span class="board__where">ул. Козлова, 14</span>
+            </div>
+          </div>
+          <span class="board__facts">Заточка · Ремонт · Формовка · <span class="open">открыто до 19:00</span></span>
+          <span class="board__depth">Открыть карточку магазина <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+      <div class="tabbar" aria-hidden="true"><span>Поиск</span><span class="on">···</span><span>Ещё</span></div>
+    </div>
+
+    <!-- Screen 2: sharpening + discipline -->
+    <div class="screen" data-screen="1" data-label="Заточка + «Открыто сейчас» + дисциплина «Фигурное»">
+      <header class="hero">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>
+          <input type="search" placeholder="Магазин или заточка" value="заточка фигурные">
+          <button type="button" class="city-in">Минск</button>
+        </div>
+        <div class="seg" role="tablist">
+          <button type="button" role="tab" aria-pressed="false">Места</button>
+          <button type="button" role="tab" aria-pressed="false">Тренеры</button>
+          <button type="button" role="tab" data-mode="shop" aria-pressed="true">Магазины</button>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Что нужно</p>
+          <div class="chips">
+            <button type="button" class="chip" aria-pressed="false">Все <span class="n">13</span></button>
+            <button type="button" class="chip" aria-pressed="true">Заточка <span class="n">4</span></button>
+            <button type="button" class="chip" aria-pressed="false">Розница <span class="n">11</span></button>
+            <button type="button" class="chip" aria-pressed="false">Формовка <span class="n">5</span></button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Когда удобно</p>
+          <div class="time-row">
+            <button type="button" class="toggle" aria-pressed="true"><span class="toggle__dot"></span>Открыто сейчас</button>
+            <button type="button" class="when-one" aria-pressed="false">Любое время</button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Для кого</p>
+          <div class="chips">
+            <button type="button" class="chip chip--ghost" aria-pressed="false">Хоккей <span class="n">3</span></button>
+            <button type="button" class="chip" aria-pressed="true">Фигурное <span class="n">2</span></button>
+            <button type="button" class="chip chip--ghost" aria-pressed="false">Ролики <span class="n">1</span></button>
+          </div>
+        </div>
+        <div class="active-sent" aria-live="polite">
+          <span class="pill">Заточка <button type="button" aria-label="Сбросить">×</button></span>
+          <span class="pill">Открыто <button type="button" aria-label="Сбросить">×</button></span>
+          <span class="pill">Фигурное <button type="button" aria-label="Сбросить">×</button></span>
+          <button type="button" class="chip chip--ghost" style="height:28px;padding:0 8px">Сбросить всё</button>
+        </div>
+      </header>
+      <div class="list">
+        <div class="listhead">
+          <p class="eyebrow">2 магазина</p>
+          <button type="button" class="near" aria-pressed="true">Ближе</button>
+        </div>
+        <a class="board" href="#">
+          <div class="board__hero" style="background:linear-gradient(145deg,#4a3558,#221830)">
+            <div class="board__scrim">
+              <span class="board__badge">Мастерская</span>
+              <span class="board__name">Figuristshop</span>
+              <span class="board__where">ул. Кирова, 18 · 1,2 км</span>
+            </div>
+          </div>
+          <span class="board__facts">Заточка фигурных · Розница · <span class="open">открыто · до 20:00</span></span>
+          <span class="board__depth">Открыть карточку магазина <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="board" href="#">
+          <div class="board__hero" style="background:linear-gradient(145deg,#2a3a4a,#141a22)">
+            <div class="board__scrim">
+              <span class="board__badge">Мастерская</span>
+              <span class="board__name">HotIce</span>
+              <span class="board__where">ул. Козлова, 14 · 3,4 км</span>
+            </div>
+          </div>
+          <span class="board__facts">Заточка · <span class="closed">закроется в 19:00</span></span>
+          <span class="board__depth">Открыть карточку магазина <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+      <div class="tabbar" aria-hidden="true"><span>Поиск</span><span class="on">···</span><span>Ещё</span></div>
+    </div>
+
+    <!-- Screen 3: retail + evening -->
+    <div class="screen" data-screen="2" data-label="Розница + «Сегодня вечером» (после тренировки)">
+      <header class="hero">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>
+          <input type="search" placeholder="Магазин или заточка">
+          <button type="button" class="city-in">Минск</button>
+        </div>
+        <div class="seg" role="tablist">
+          <button type="button" role="tab" aria-pressed="false">Места</button>
+          <button type="button" role="tab" aria-pressed="false">Тренеры</button>
+          <button type="button" role="tab" data-mode="shop" aria-pressed="true">Магазины</button>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Что нужно</p>
+          <div class="chips">
+            <button type="button" class="chip" aria-pressed="false">Все <span class="n">13</span></button>
+            <button type="button" class="chip" aria-pressed="false">Заточка <span class="n">4</span></button>
+            <button type="button" class="chip" aria-pressed="true">Розница <span class="n">11</span></button>
+            <button type="button" class="chip" aria-pressed="false">Формовка <span class="n">5</span></button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Когда удобно</p>
+          <div class="time-row">
+            <button type="button" class="toggle" aria-pressed="false"><span class="toggle__dot"></span>Открыто сейчас</button>
+            <button type="button" class="when-one" aria-pressed="true">Сегодня вечером</button>
+          </div>
+        </div>
+        <p class="lede" style="margin:0;font-size:11px;line-height:1.4;padding:0 2px">Вечером = открыты после 18:00 по местному времени, не «сеанс на льду».</p>
+      </header>
+      <div class="list">
+        <div class="listhead">
+          <p class="eyebrow">6 магазинов</p>
+          <button type="button" class="near" aria-pressed="false">Ближе</button>
+        </div>
+        <a class="board" href="#">
+          <div class="board__hero">
+            <div class="board__scrim">
+              <span class="board__badge">Магазин</span>
+              <span class="board__name">SportContinent</span>
+              <span class="board__where">ул. Притыцкого, 27</span>
+            </div>
+          </div>
+          <span class="board__facts">Розница · Формовка · <span class="open">сегодня до 21:00</span></span>
+          <span class="board__depth">Открыть карточку магазина <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+      <div class="tabbar" aria-hidden="true"><span>Поиск</span><span class="on">···</span><span>Ещё</span></div>
+    </div>
+
+    <!-- Screen 4: empty -->
+    <div class="screen" data-screen="3" data-label="Пустой результат — честное состояние + смягчение">
+      <header class="hero">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>
+          <input type="search" placeholder="Магазин или заточка">
+          <button type="button" class="city-in">Минск</button>
+        </div>
+        <div class="seg" role="tablist">
+          <button type="button" role="tab" aria-pressed="false">Места</button>
+          <button type="button" role="tab" aria-pressed="false">Тренеры</button>
+          <button type="button" role="tab" data-mode="shop" aria-pressed="true">Магазины</button>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Что нужно</p>
+          <div class="chips">
+            <button type="button" class="chip" aria-pressed="true">Профиль <span class="n">2</span></button>
+            <button type="button" class="chip" aria-pressed="false">Заточка <span class="n">4</span></button>
+          </div>
+        </div>
+        <div class="filter-block">
+          <p class="filter-kicker">Когда удобно</p>
+          <div class="time-row">
+            <button type="button" class="toggle" aria-pressed="true"><span class="toggle__dot"></span>Открыто сейчас</button>
+            <button type="button" class="when-one" aria-pressed="false">Любое время</button>
+          </div>
+        </div>
+        <div class="active-sent">
+          <span class="pill">Профиль <button type="button">×</button></span>
+          <span class="pill">Открыто <button type="button">×</button></span>
+        </div>
+      </header>
+      <div class="list">
+        <div class="listhead">
+          <p class="eyebrow">0 магазинов</p>
+          <button type="button" class="near" aria-pressed="false">Ближе</button>
+        </div>
+        <div class="empty">
+          <h3>Сейчас никто не подходит</h3>
+          <p>Профилирование лезвия в Минске есть, но в это время точки закрыты. Снимите «Открыто сейчас» или посмотрите все магазины с заточкой.</p>
+          <button type="button">Показать 4 с заточкой</button>
+        </div>
+      </div>
+      <div class="tabbar" aria-hidden="true"><span>Поиск</span><span class="on">···</span><span>Ещё</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var screens = Array.prototype.slice.call(document.querySelectorAll('.screen'));
+  var label = document.getElementById('screenLabel');
+  var idx = 0;
+
+  function show(i) {
+    idx = (i + screens.length) % screens.length;
+    screens.forEach(function (s, n) {
+      s.classList.toggle('is-on', n === idx);
+    });
+    var active = screens[idx];
+    var cap = active.getAttribute('data-label') || '';
+    label.innerHTML = '<b>' + (idx + 1) + '/' + screens.length + '</b> ' + cap;
+  }
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'ArrowRight') show(idx + 1);
+    if (ev.key === 'ArrowLeft') show(idx - 1);
+  });
+
+  document.querySelectorAll('.chips').forEach(function (row) {
+    row.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('.chip');
+      if (!btn || btn.classList.contains('chip--ghost')) return;
+      row.querySelectorAll('.chip').forEach(function (c) {
+        if (!c.classList.contains('chip--ghost')) c.setAttribute('aria-pressed', c === btn ? 'true' : 'false');
+      });
+    });
+  });
+
+  document.querySelectorAll('.toggle').forEach(function (t) {
+    t.addEventListener('click', function () {
+      var on = t.getAttribute('aria-pressed') === 'true';
+      t.setAttribute('aria-pressed', on ? 'false' : 'true');
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -82,13 +82,13 @@ class SqlAlchemyIceSessionPublisher:
                     arena_id, kind, starts_at_utc, ends_at_utc, local_date,
                     starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor,
-                    currency_code, session_label, age_note, external_url, status,
+                    currency_code, session_label, age_note, capacity_note, external_url, status,
                     source_id, observed_at, valid_until
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                     :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
-                    :currency_code, :session_label, :age_note, :external_url, :status,
+                    :currency_code, :session_label, :age_note, :capacity_note, :external_url, :status,
                     :source_id, :observed_at, :valid_until
                 )
                 """
@@ -108,6 +108,7 @@ class SqlAlchemyIceSessionPublisher:
                 "currency_code": draft.currency_code,
                 "session_label": draft.session_label,
                 "age_note": draft.age_note,
+                "capacity_note": draft.capacity_note,
                 "external_url": draft.external_url,
                 "status": draft.status,
                 "source_id": source_id,

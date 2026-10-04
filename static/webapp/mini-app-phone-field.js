@@ -407,28 +407,19 @@
     return 'tel:' + cleaned;
   }
 
-  /** Open the system dialer. tel: is NOT supported by Telegram.WebApp.openLink. */
-  function openPhoneDialer(phone) {
-    var uri = phoneToTelUri(phone);
-    if (!uri) return false;
-    /* Same-document navigation works in more Telegram iOS builds than window.open(tel:). */
-    try {
-      window.location.href = uri;
-      return true;
-    } catch (e0) {
-      /* continue */
-    }
-    try {
-      window.location.assign(uri);
-      return true;
-    } catch (e1) {
-      /* continue */
-    }
+  function telegramWebApp() {
+    return global.Telegram && global.Telegram.WebApp ? global.Telegram.WebApp : null;
+  }
+
+  /** Synthetic click — does not replace document URL (safe in Telegram Mini App). */
+  function dialViaHiddenAnchor(uri) {
     try {
       var a = document.createElement('a');
       a.href = uri;
-      a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
-      (document.body || document.documentElement).appendChild(a);
+      a.setAttribute('aria-hidden', 'true');
+      a.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;';
+      var root = document.body || document.documentElement;
+      root.appendChild(a);
       a.click();
       setTimeout(function () {
         try {
@@ -436,18 +427,107 @@
         } catch (x) {
           /* noop */
         }
-      }, 0);
+      }, 100);
       return true;
-    } catch (e2) {
-      /* continue */
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function notifyDialFailure(displayPhone) {
+    var text = String(displayPhone || '').trim();
+    var msg = text
+      ? 'Не удалось открыть набор. Скопируйте номер: ' + text
+      : 'Не удалось открыть набор номера.';
+    var tg = telegramWebApp();
+    if (tg && typeof tg.showAlert === 'function') {
+      try {
+        tg.showAlert(msg);
+        return;
+      } catch (e0) {
+        /* noop */
+      }
     }
     try {
-      window.open(uri, '_self');
-      return true;
-    } catch (e3) {
-      /* continue */
+      global.alert(msg);
+    } catch (e1) {
+      /* noop */
     }
-    return false;
+  }
+
+  function tryCopyPhoneThenNotify(displayPhone) {
+    var text = String(displayPhone || '').trim();
+    if (!text) {
+      notifyDialFailure('');
+      return;
+    }
+    var clip = global.navigator && global.navigator.clipboard;
+    if (clip && typeof clip.writeText === 'function') {
+      clip
+        .writeText(text)
+        .then(function () {
+          var tg = telegramWebApp();
+          var ok = 'Номер скопирован: ' + text + '\nВставьте его в приложение «Телефон».';
+          if (tg && typeof tg.showAlert === 'function') {
+            try {
+              tg.showAlert(ok);
+              return;
+            } catch (e) {
+              /* noop */
+            }
+          }
+          try {
+            global.alert(ok);
+          } catch (e2) {
+            /* noop */
+          }
+        })
+        .catch(function () {
+          notifyDialFailure(text);
+        });
+      return;
+    }
+    notifyDialFailure(text);
+  }
+
+  /** Open the system dialer. tel: is NOT supported by Telegram.WebApp.openLink. */
+  function openPhoneDialer(phone) {
+    var uri = phoneToTelUri(phone);
+    if (!uri) return false;
+    var display = String(phone || '').trim() || uri.replace(/^tel:/i, '');
+    var inTg = !!telegramWebApp();
+
+    if (dialViaHiddenAnchor(uri)) {
+      return true;
+    }
+
+    /*
+     * location.href / assign / open(tel:, '_self') в Telegram Mini App иногда подменяют
+     * document URL (и срывают API → «Ведутся технические работы»). Вне Telegram — можно.
+     */
+    if (!inTg) {
+      try {
+        global.location.href = uri;
+        return true;
+      } catch (e0) {
+        /* continue */
+      }
+      try {
+        global.location.assign(uri);
+        return true;
+      } catch (e1) {
+        /* continue */
+      }
+      try {
+        global.open(uri, '_self');
+        return true;
+      } catch (e2) {
+        /* continue */
+      }
+    }
+
+    tryCopyPhoneThenNotify(display);
+    return true;
   }
 
   /**
@@ -526,6 +606,7 @@
     parseE164ToCountryAndNational: parseE164ToCountryAndNational,
     phoneToTelUri: phoneToTelUri,
     openPhoneDialer: openPhoneDialer,
+    dialViaHiddenAnchor: dialViaHiddenAnchor,
     phoneTelLinkHtml: phoneTelLinkHtml,
     wirePhoneCallButtons: wirePhoneCallButtons,
     wirePhoneTelLinks: wirePhoneTelLinks,

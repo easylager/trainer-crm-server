@@ -517,15 +517,15 @@
 
   function sheetSummary(items, window) {
     var list = items || [];
-    var ice = list.filter(function (item) {
+    var venues = list.filter(function (item) {
       return String(item.venue_type || 'ice') !== 'shop';
     });
+    var shopCount = list.length - venues.length;
     var sessions = 0;
-    ice.forEach(function (item) {
+    venues.forEach(function (item) {
       var t = liveTime(item);
       if (t && /^\d{1,2}:\d{2}$/.test(t)) sessions++;
     });
-    var rest = list.length - ice.length;
     var whenLabel = '';
     if (window && window.label) whenLabel = window.label;
     else if (window && window.key) {
@@ -538,16 +538,21 @@
       whenLabel = labels[window.key] || '';
     }
     var parts = [];
-    if (ice.length) {
-      var word = pluralRu(ice.length, 'место', 'места', 'мест');
-      parts.push(ice.length + ' ' + word + (whenLabel ? ' ' + whenLabel : ''));
+    if (venues.length) {
+      var placeWord = pluralRu(venues.length, 'место', 'места', 'мест');
+      parts.push(venues.length + ' ' + placeWord + (whenLabel ? ' ' + whenLabel : ''));
     }
     if (sessions) {
-      var word = pluralRu(sessions, 'сеанс', 'сеанса', 'сеансов');
-      parts.push(sessions + ' ' + word);
+      var sessionWord = pluralRu(sessions, 'сеанс', 'сеанса', 'сеансов');
+      parts.push(sessions + ' ' + sessionWord);
     }
-    if (rest) {
-      parts.push('ещё ' + rest + ' без сеансов');
+    if (shopCount) {
+      var shopWord = pluralRu(shopCount, 'магазин', 'магазина', 'магазинов');
+      if (venues.length || sessions) {
+        parts.push('ещё ' + shopCount + ' ' + shopWord);
+      } else {
+        parts.push(shopCount + ' ' + shopWord);
+      }
     }
     return parts.join(' · ');
   }

@@ -646,7 +646,9 @@
       if (!url) return;
       bboxState = plan;
       fetchJson(url).then(function (data) {
-        mapItems = (data && data.items) || [];
+        var raw = (data && data.items) || [];
+        mapItems =
+          typeof opts.filterMapItems === 'function' ? opts.filterMapItems(raw) : raw;
         syncObjects();
         defaultSheet();
       });
@@ -999,8 +1001,10 @@
           var cityId = getCityId();
           if (cityId != null) extra.cityId = cityId;
           fetchJson(listUrl(extra)).then(function (data) {
-            var items = (data && data.items) || [];
-            if (typeof opts.onNearList === 'function') opts.onNearList({ items: items, total: items.length });
+            var raw = (data && data.items) || [];
+            var items =
+              typeof opts.filterMapItems === 'function' ? opts.filterMapItems(raw) : raw;
+            if (typeof opts.onNearList === 'function') opts.onNearList({ items: raw, total: raw.length });
             listItems = items.length ? items : listItems;
             var mapped = MM.splitMapAndList(items).onMap;
             if (!mapped.length) {
