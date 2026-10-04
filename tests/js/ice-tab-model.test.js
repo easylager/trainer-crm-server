@@ -1120,5 +1120,12 @@ describe('TASK-146: устаревшее расписание в ленте', ()
     const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
     assert.equal(v.stale, true);
     assert.equal(v.depth, 'Расписание могло измениться');
+    const freshToday = boardCardView(
+      { ...item, freshness: { schedule_stale: true, schedule_observed_at: '2026-10-02T06:00:00Z' } },
+      now,
+      {}
+    );
+    assert.equal(freshToday.stale, false);
+    assert.match(freshToday.depth, /сеанс/);
   });
 });

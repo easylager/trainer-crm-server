@@ -681,7 +681,7 @@
     var base = webappBasePath();
     var assets = [
       { href: base + 'ice-tab.js?v=202610056', as: 'script' },
-      { href: base + 'ice-tab-model.js?v=202610060', as: 'script' },
+      { href: base + 'ice-tab-model.js?v=202610041', as: 'script' },
       { href: base + 'ice-map-model.js?v=2026090618', as: 'script' },
       { href: base + 'ice-map.js?v=202610051', as: 'script' },
       { href: base + 'ice-tab.css?v=202610056', as: 'style' },
