@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
 from src.application.place_card_image import render_place_card, share_display_path
+from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.catalog_consumer_events import record_public_page_view
 from src.application.place_links import (
     place_image_url,
@@ -31,6 +32,7 @@ from src.application.place_links import (
 )
 from src.application.place_page import load_place_view, render_place_page, share_payload
 from src.shared.config import Settings
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 router = APIRouter(tags=["public-place"])
 
@@ -86,6 +88,24 @@ def _not_found(home: str) -> HTMLResponse:
     return HTMLResponse(_NOT_FOUND_HTML.replace("__HOME__", home), status_code=404)
 
 
+async def _merged_redirect(session: AsyncSession, arena_id: int, request: Request) -> RedirectResponse | None:
+    """301 from a retired duplicate (``arenas.merged_into_arena_id``) to the canonical page.
+
+    TASK-177: duplicates are retired into one canonical id; links to the old card that
+    already live in chats and search indexes keep working and pass their weight on.
+    """
+    target_id = await resolve_merged_arena_id(session, int(arena_id))
+    if target_id is None:
+        return None
+    view = await load_place_view(session, str(target_id))
+    if view is None or not view["card"].get("slug"):
+        return None
+    card = view["card"]
+    target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
+    q = request.url.query
+    return RedirectResponse(url=target + (f"?{q}" if q else ""), status_code=301)
+
+
 async def _resolve(session: AsyncSession, city_ref: str, slug: str):
     city = await resolve_city_by_ref(session, city_ref)
     if city is None:
@@ -99,7 +119,8 @@ async def place_by_id(arena_id: int, request: Request, session: AsyncSession = D
     """Короткая форма по id (бот, админка) → 301 на каноническую ``/p/{city}/{slug}``."""
     view = await load_place_view(session, str(arena_id))
     if view is None or not view["card"].get("slug"):
-        return _not_found(_base() + "/webapp/ice")
+        merged = await _merged_redirect(session, arena_id, request)
+        return merged or _not_found(_base() + "/webapp/ice")
     card = view["card"]
     target = place_path(city_name=str(card.get("city_name") or ""), slug=str(card["slug"]))
     q = request.url.query
@@ -123,7 +144,8 @@ async def place_page(
     invite = _flag(i)
     view = await load_place_view(session, str(arena_id), session_id=session_id)
     if view is None:
-        return _not_found(base + "/webapp/ice")
+        merged = await _merged_redirect(session, arena_id, request)
+        return merged or _not_found(base + "/webapp/ice")
     card = view["card"]
     city_name = str(card.get("city_name") or city["name"])
     if city_ref != city_slug(city_name) or slug != card.get("slug"):
@@ -228,14 +250,13 @@ async def place_story_image(
 # поиска — «массовое катание <город> расписание», «заточка коньков <район>».
 # ---------------------------------------------------------------------------
 
-_SITEMAP_SQL = text("""
+_SITEMAP_SQL = text(f"""
     SELECT c.name AS city_name, p.slug, a.venue_type
     FROM arenas a
     JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
-    WHERE a.is_active AND a.is_confirmed AND c.is_active
+    WHERE {PUBLIC_ARENA_VISIBLE_SQL}
       AND p.status = 'published' AND p.slug IS NOT NULL
-      AND c.country = ANY(:countries)
     ORDER BY c.sort_order, c.id, a.id
     """)
 
@@ -244,10 +265,8 @@ _SITEMAP_SQL = text("""
 async def sitemap(session: AsyncSession = Depends(get_session)) -> Response:
     from xml.sax.saxutils import escape
 
-    from src.shared.ice_discovery_scope import ice_discovery_countries
-
     base = _base()
-    rows = (await session.execute(_SITEMAP_SQL, {"countries": ice_discovery_countries()})).mappings().all()
+    rows = (await session.execute(_SITEMAP_SQL, public_scope_params())).mappings().all()
     urls: list[tuple[str, str]] = [(base + "/", "weekly")]
     seen_cities: set[str] = set()
     shop_cities: set[str] = set()
