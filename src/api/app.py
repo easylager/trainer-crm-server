@@ -1293,6 +1293,19 @@ def webapp_hub_collections_model_js(request: Request):
     )
 
 
+@app.get("/webapp/hub-me-card.js")
+def webapp_hub_me_card_js(request: Request):
+    """TASK-160 «моя карточка» хаба — чистая модель + рендер. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "hub-me-card.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/hub-ice-today-model.js")
 def webapp_hub_ice_today_model_js(request: Request):
     """TASK-148 (AC-4) hub «Сегодня на льду» view-model (pure). Use ``?v=…`` for long cache."""
