@@ -87,6 +87,7 @@ class Extraction:
     snapshot: Any
     slots: list[ExtractedSlot] = field(default_factory=list)
     observed_at: datetime | None = None
+    schedule_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ class CanonicalSlotDraft:
     capacity_note: str | None = None
     external_url: str | None = None
     source_id: str | None = None
+    schedule_basis: str = "live"
     parser_job_id: int | None = None
     scrape_run_id: int | None = None
 
@@ -131,3 +133,5 @@ class ScrapeRunRecord:
     persisted_id: int | None = None
     http_status: int | None = None
     error_code: str | None = None
+    publish_horizon_days: int = 14
+    publish_timezone: str = "Europe/Minsk"

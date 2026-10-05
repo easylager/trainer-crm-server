@@ -128,7 +128,8 @@ SELECT
     s.currency_code,
     s.price_note,
     s.session_label,
-    s.age_note
+    s.age_note,
+    s.schedule_basis
 FROM ice_sessions s
 JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -239,6 +240,7 @@ def _group_by_arena(rows: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
                 "price_note": row["price_note"],
                 "session_label": row["session_label"],
                 "age_note": row["age_note"],
+                "schedule_basis": row.get("schedule_basis") or "live",
             }
         )
     return [arenas[aid] for aid in order]

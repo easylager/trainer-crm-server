@@ -2,23 +2,30 @@
 Потребительская аналитика каталога: просмотры публички, клик «Открыть в Telegram», вход в мини-апп.
 
 Отдельно от ``client_share_events`` (намерение отправить) и ``trainer_demand_events`` (Lead Mode).
-Без PII: только ``actor_hash`` (telegram user / день или IP+UA / день на публичке).
+Без PII: только ``actor_hash`` (HMAC telegram id или IP+UA на публичке).
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.catalog_deep_links import is_catalog_deep_link
 from src.application.place_links import is_valid_start_param
+from src.shared.notification_hours import NOTIFICATION_TZ
 
 logger = logging.getLogger(__name__)
+
+# Сопоставимый ряд WAU/дедупа — только после выката TASK-189 (без day в actor_hash).
+METRICS_COMPARABLE_SINCE = date(2026, 10, 6)
 
 KIND_PUBLIC_PAGE_VIEW = "public_page_view"
 KIND_PUBLIC_TELEGRAM_CTA = "public_telegram_cta"
@@ -38,23 +45,67 @@ SURFACE_MINIAPP_ARENA = "miniapp_arena"
 SURFACE_MINIAPP_SHELL = "miniapp_shell"
 
 
-def public_actor_hash(*, client_ip: str | None, user_agent: str | None, day: date) -> str | None:
+def _actor_hmac_secret() -> bytes:
+    raw = (
+        os.environ.get("CATALOG_ACTOR_HMAC_SECRET")
+        or os.environ.get("SECRET_KEY")
+        or "catalog-dev-actor-hmac"
+    )
+    return raw.encode("utf-8")
+
+
+def _hmac_actor(prefix: str, payload: str) -> str:
+    return hmac.new(_actor_hmac_secret(), f"{prefix}|{payload}".encode(), hashlib.sha256).hexdigest()
+
+
+def catalog_event_day_minsk(when: datetime | None = None) -> date:
+    when = when or datetime.now(timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when.astimezone(ZoneInfo(NOTIFICATION_TZ)).date()
+
+
+def minsk_day_bounds(day: date) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+    end = start + timedelta(days=1)
+    return start, end
+
+
+def public_actor_hash(*, client_ip: str | None, user_agent: str | None, day: date | None = None) -> str | None:
     if not client_ip and not user_agent:
         return None
-    raw = f"pub|{(client_ip or '').strip()}|{(user_agent or '').strip()[:200]}|{day.isoformat()}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    raw = f"{(client_ip or '').strip()}|{(user_agent or '').strip()[:200]}"
+    return _hmac_actor("pub", raw)
 
 
-def telegram_actor_hash(telegram_id: int | str, day: date) -> str:
-    raw = f"tg|{int(telegram_id)}|catalog|{day.isoformat()}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+def telegram_actor_hash(telegram_id: int | str, day: date | None = None) -> str:
+    return _hmac_actor("tg", str(int(telegram_id)))
 
 
-def event_dedup_hash(*, kind: str, surface: str, actor_hash: str | None, day: date) -> str | None:
+def event_dedup_hash(
+    *,
+    kind: str,
+    surface: str,
+    actor_hash: str | None,
+    day: date,
+    city_id: int | None = None,
+    arena_id: int | None = None,
+) -> str | None:
     if not actor_hash:
         return None
-    raw = f"{kind}|{surface}|{actor_hash}|{day.isoformat()}"
+    raw = f"{kind}|{surface}|{actor_hash}|{day.isoformat()}|{city_id or 0}|{arena_id or 0}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def is_share_attributed_deeplink_open(start_param: str | None, payload: dict[str, Any] | None) -> bool:
+    body = payload or {}
+    if body.get("share_deeplink"):
+        return True
+    sp = (start_param or "").strip()
+    if not sp or sp == "catalog":
+        return False
+    return is_share_deeplink_start_param(sp)
 
 
 def is_share_deeplink_start_param(start_param: str | None) -> bool:
@@ -79,39 +130,32 @@ async def record_catalog_consumer_event(
     sp = (start_param or "").strip() or None
     if sp and not is_valid_start_param(sp):
         sp = None
-    day = datetime.now(timezone.utc).date()
+    day = catalog_event_day_minsk()
     body = dict(payload or {})
     if sp and is_share_deeplink_start_param(sp):
         body.setdefault("share_deeplink", True)
-    dedup_hash = event_dedup_hash(kind=kind, surface=surface, actor_hash=actor_hash, day=day) if dedup else None
-    if dedup and dedup_hash:
-        exists = await session.execute(
-            text(
-                """
-                SELECT 1 FROM catalog_consumer_events
-                WHERE kind = :kind AND surface = :surface AND actor_hash = :actor
-                  AND occurred_at >= :day_start AND occurred_at < :day_end
-                LIMIT 1
-                """
-            ),
-            {
-                "kind": kind,
-                "surface": surface,
-                "actor": actor_hash,
-                "day_start": datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc),
-                "day_end": datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc),
-            },
+    dedup_key = (
+        event_dedup_hash(
+            kind=kind,
+            surface=surface,
+            actor_hash=actor_hash,
+            day=day,
+            city_id=city_id,
+            arena_id=arena_id,
         )
-        if exists.first() is not None:
-            return False
+        if dedup
+        else None
+    )
     try:
-        await session.execute(
+        result = await session.execute(
             text(
                 """
                 INSERT INTO catalog_consumer_events
-                    (kind, surface, actor_hash, city_id, arena_id, start_param, payload)
+                    (kind, surface, actor_hash, city_id, arena_id, start_param, payload, dedup_key)
                 VALUES
-                    (:kind, :surface, :actor, :city_id, :arena_id, :start_param, CAST(:payload AS jsonb))
+                    (:kind, :surface, :actor, :city_id, :arena_id, :start_param, CAST(:payload AS jsonb), :dedup_key)
+                ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
+                RETURNING id
                 """
             ),
             {
@@ -122,8 +166,11 @@ async def record_catalog_consumer_event(
                 "arena_id": arena_id,
                 "start_param": sp,
                 "payload": json.dumps(body, ensure_ascii=False),
+                "dedup_key": dedup_key,
             },
         )
+        if result.first() is None:
+            return False
         await session.commit()
         return True
     except Exception:
@@ -185,13 +232,11 @@ async def record_public_page_view(
 
     if not isinstance(request, Request):
         return
-    day = datetime.now(timezone.utc).date()
     forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     client_ip = forwarded[:64] if forwarded else (request.client.host if request.client else None)
     actor = public_actor_hash(
         client_ip=client_ip,
         user_agent=request.headers.get("user-agent"),
-        day=day,
     )
     await record_catalog_consumer_event(
         session,
@@ -202,6 +247,105 @@ async def record_public_page_view(
         arena_id=arena_id,
         payload={"path": str(request.url.path)},
     )
+
+
+async def get_catalog_weekly_unique_by_city(
+    session: AsyncSession,
+    *,
+    weeks: int = 4,
+    as_of: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Недельные уникальные actor_hash с demand-событиями, разбивка по city_id."""
+    as_of_dt = as_of or datetime.now(timezone.utc)
+    if as_of_dt.tzinfo is None:
+        as_of_dt = as_of_dt.replace(tzinfo=timezone.utc)
+    since = as_of_dt - timedelta(weeks=weeks)
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT date_trunc('week', occurred_at AT TIME ZONE 'Europe/Minsk') AS week_start,
+                       city_id,
+                       COUNT(DISTINCT actor_hash) AS unique_actors,
+                       COUNT(*) AS events
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND actor_hash IS NOT NULL
+                  AND kind IN (:pv, :mini)
+                  AND occurred_at::date >= :comparable_since
+                GROUP BY 1, 2
+                ORDER BY 1 DESC, 3 DESC
+                """
+            ),
+            {
+                "since": since,
+                "as_of": as_of_dt,
+                "pv": KIND_PUBLIC_PAGE_VIEW,
+                "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                "comparable_since": METRICS_COMPARABLE_SINCE,
+            },
+        )
+    ).mappings().all()
+    return [
+        {
+            "week_start": row["week_start"].isoformat() if row["week_start"] else None,
+            "city_id": row["city_id"],
+            "unique_actors": int(row["unique_actors"] or 0),
+            "events": int(row["events"] or 0),
+        }
+        for row in rows
+    ]
+
+
+async def get_catalog_top_arenas_by_events(
+    session: AsyncSession,
+    *,
+    days: int = 7,
+    as_of: datetime | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """События demand по arena_id за окно (после METRICS_COMPARABLE_SINCE)."""
+    as_of_dt = as_of or datetime.now(timezone.utc)
+    if as_of_dt.tzinfo is None:
+        as_of_dt = as_of_dt.replace(tzinfo=timezone.utc)
+    since = as_of_dt - timedelta(days=days)
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT arena_id,
+                       city_id,
+                       COUNT(*) AS events,
+                       COUNT(DISTINCT actor_hash) AS unique_actors
+                FROM catalog_consumer_events
+                WHERE occurred_at >= :since AND occurred_at < :as_of
+                  AND arena_id IS NOT NULL
+                  AND kind IN (:pv, :mini)
+                  AND occurred_at::date >= :comparable_since
+                GROUP BY arena_id, city_id
+                ORDER BY events DESC
+                LIMIT :lim
+                """
+            ),
+            {
+                "since": since,
+                "as_of": as_of_dt,
+                "pv": KIND_PUBLIC_PAGE_VIEW,
+                "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                "comparable_since": METRICS_COMPARABLE_SINCE,
+                "lim": limit,
+            },
+        )
+    ).mappings().all()
+    return [
+        {
+            "arena_id": row["arena_id"],
+            "city_id": row["city_id"],
+            "events": int(row["events"] or 0),
+            "unique_actors": int(row["unique_actors"] or 0),
+        }
+        for row in rows
+    ]
 
 
 async def get_catalog_virality_cb_metrics(
@@ -243,7 +387,8 @@ async def get_catalog_virality_cb_metrics(
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind = :kind
                   AND start_param IS NOT NULL
-                  AND (start_param LIKE 'arena_%' OR start_param LIKE 'catalog%')
+                  AND start_param <> 'catalog'
+                  AND COALESCE((payload->>'share_deeplink')::boolean, false) = true
                 """
             ),
             {"since": since, "as_of": as_of_dt, "kind": KIND_MINIAPP_CATALOG_ENTRY},

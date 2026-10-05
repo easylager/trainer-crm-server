@@ -40,6 +40,7 @@ from src.application.arena_public_use_cases import (
 )
 from src.application.client_share_message import share_body_for_native_share_dialog
 from src.application.ice_city_day import format_price_minor, plural_ru
+from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 from src.application.arena_profile import (
     WEEKDAY_SHORT_RU,
     format_intervals_ru,
@@ -501,11 +502,16 @@ def _slot_chip(slot: Mapping[str, Any], *, focused: bool, base_path: str, invite
     hhmm = str(slot.get("starts_at_local") or "")[:5]
     price = slot_price(slot)
     href = base_path + place_query(session_id=int(slot["id"]), invite=invite)
+    basis_cls = public_basis_css_class(str(slot.get("schedule_basis") or "live"))
     cls = "slot slot--focus" if focused else "slot"
+    if basis_cls:
+        cls += f" {basis_cls}"
     price_html = f'<span class="slot__price">{_esc(price)}</span>' if price else ""
+    hint = basis_hint_ru(str(slot.get("schedule_basis") or "live"))
+    title_attr = f' title="{_esc(hint)}"' if hint else ""
     # Слот — ссылка на ту же страницу с ?s=: выбрал сеанс — и делишься уже им.
     return (
-        f'<a class="{cls}" href="{_esc(href)}#plan" rel="nofollow">'
+        f'<a class="{cls}" href="{_esc(href)}#plan" rel="nofollow"{title_attr}>'
         f'<span class="slot__time">{_esc(hhmm)}</span>{price_html}</a>'
     )
 
@@ -528,7 +534,23 @@ def _schedule_html(view: Mapping[str, Any], *, base_path: str, invite: bool) -> 
             '<section class="sec"><h2 class="sec__title">Массовое катание</h2>'
             f'<p class="muted">{_esc(hint)}</p></section>'
         )
-    parts = ['<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>']
+    phone = str(card.get("phone") or "").strip()
+    non_live = [
+        basis_hint_ru(str(s.get("schedule_basis") or "live"))
+        for day in days
+        for s in (day.get("sessions") or [])
+    ]
+    non_live = [h for h in non_live if h]
+    basis_note = ""
+    if non_live:
+        tel = f' <a href="tel:{_esc(phone)}">Позвонить</a>' if phone else ""
+        basis_note = (
+            f'<p class="schedule-basis">{_esc(non_live[0])}.{tel}</p>'
+        )
+    parts = [
+        '<section class="sec" id="schedule"><h2 class="sec__title">Массовое катание</h2>',
+        basis_note,
+    ]
     for day in days:
         d = _parse_iso_date(day.get("local_date"))
         if d is None:

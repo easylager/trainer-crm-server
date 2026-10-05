@@ -1562,6 +1562,14 @@
    * время как якорь, глубина предложения отдельной строкой. Функция чистая:
    * решает, ЧТО написано в каждом слоте, разметку собирает ice-tab.js.
    */
+  function scheduleBasisHint(live) {
+    var b = String((live && live.schedule_basis) || 'live');
+    if (b === 'projected') return 'Обычная сетка — уточните по телефону';
+    if (b === 'photo') return 'С фото — уточните по телефону';
+    if (b === 'manual') return 'Вручную — уточните по телефону';
+    return '';
+  }
+
   function boardCardView(item, now, opts) {
     item = item || {};
     opts = opts || {};
@@ -1578,7 +1586,8 @@
       // more_count — все будущие сеансы, а не «за неделю»: обещать окно нельзя.
       depth = 'Ещё ' + more + ' ' + pluralRu(more, 'сеанс', 'сеанса', 'сеансов') + ' в расписании';
     } else if (isSession) {
-      depth = 'Расписание и цены';
+      var basisLine = scheduleBasisHint(live);
+      depth = basisLine || 'Расписание и цены';
     } else {
       /* Подпись склоняет сервер по venue_type: на зале это «карточку зала».
          Хардкод «катка» здесь и был тем, что ломалось на первой же не-ледовой

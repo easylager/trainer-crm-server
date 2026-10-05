@@ -163,7 +163,8 @@ class IceIngestScheduler:
             with egress_proxy(proxy):
                 extraction = await parser.extract(job)
             drafts = self._normalizer.normalize(extraction, job, now=now)
-            validated = self._validator.validate(drafts)
+            max_drop = float(job.config.get("max_invalid_slot_ratio", 1.0))
+            validated = self._validator.validate(drafts, max_drop_ratio=max_drop)
         except IceSessionValidationError as exc:
             return (
                 self._record(
@@ -190,7 +191,7 @@ class IceIngestScheduler:
                 empty,
             )
         status = RUN_STATUS_OK if validated else RUN_STATUS_EMPTY
-        dropped = max(0, len(extraction.slots) - len(validated))
+        dropped = max(0, len(drafts) - len(validated))
         return (
             self._record(
                 job,
@@ -200,6 +201,8 @@ class IceIngestScheduler:
                 slot_count=len(validated),
                 slots_dropped=dropped,
                 snapshot=extraction.snapshot,
+                publish_horizon_days=int(job.config.get("horizon_days") or 14),
+                publish_timezone=str(job.config.get("timezone") or "Europe/Minsk"),
             ),
             validated,
         )
@@ -216,6 +219,8 @@ class IceIngestScheduler:
         slot_count: int = 0,
         slots_dropped: int = 0,
         snapshot=None,
+        publish_horizon_days: int = 14,
+        publish_timezone: str = "Europe/Minsk",
     ) -> ScrapeRunRecord:
         return ScrapeRunRecord(
             job_id=job.id,
@@ -229,4 +234,6 @@ class IceIngestScheduler:
             finished_at=finished_at,
             snapshot=snapshot,
             error_code=error_code,
+            publish_horizon_days=publish_horizon_days,
+            publish_timezone=publish_timezone,
         )

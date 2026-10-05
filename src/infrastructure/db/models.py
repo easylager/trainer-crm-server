@@ -394,6 +394,10 @@ class IceSession(Base):
             "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
             name="ck_ice_sessions_duration",
         ),
+        CheckConstraint(
+            "schedule_basis IN ('live', 'projected', 'photo', 'manual')",
+            name="ck_ice_sessions_schedule_basis",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -422,6 +426,9 @@ class IceSession(Base):
     observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    schedule_basis: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="live"
+    )
 
 
 class IceCityInterest(Base):
@@ -435,6 +442,17 @@ class IceCityInterest(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+
+# M2M bridge for the unused Trainer.services/Service.trainers relationship (never referenced
+# outside this file — real per-trainer service rows go through repositories, not this ORM
+# collection). Declared so mapper configuration resolves secondary="trainer_services" below;
+# intentionally only the PK columns, not the extra business columns migrations added later.
+trainer_services_table = Table(
+    "trainer_services",
+    Base.metadata,
+    Column("trainer_id", ForeignKey("trainers.id", ondelete="CASCADE"), primary_key=True),
+    Column("service_id", ForeignKey("services.id", ondelete="CASCADE"), primary_key=True),
+)
 
 # M2M: trainer works at these arenas; filter catalog by arena via this table
 trainer_arenas_table = Table(

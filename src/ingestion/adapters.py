@@ -341,7 +341,15 @@ class ZamokHtmlParser(IceParser):
         korona_html = await load_korona_rink_html(job)
         if korona_html:
             enrich_zamok_slots(slots, korona_html)
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+        from src.shared.schedule_basis import SCHEDULE_BASIS_PROJECTED
+
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_PROJECTED,
+        )
 
 
 def _price_from_named_row(html: str, needle: str) -> int | None:

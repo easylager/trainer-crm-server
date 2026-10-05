@@ -24,6 +24,7 @@ from src.application.ice_city_day import (
     summary_line,
 )
 from src.application.place_links import place_path
+from src.shared.schedule_basis import basis_hint_ru, public_basis_css_class
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
 
@@ -49,7 +50,11 @@ def _slot_html(slot: Mapping[str, Any]) -> str:
     lines = [f'<span class="slot__time">{_esc(time_text)}</span>']
     if second:
         lines.append(f'<span class="slot__price">{_esc(second)}</span>')
-    return '<li class="slot">' + "".join(lines) + "</li>"
+    basis_cls = public_basis_css_class(str(slot.get("schedule_basis") or "live"))
+    cls = "slot" + (f" {basis_cls}" if basis_cls else "")
+    hint = basis_hint_ru(str(slot.get("schedule_basis") or "live"))
+    title_attr = f' title="{_esc(hint)}"' if hint else ""
+    return f'<li class="{cls}"{title_attr}>' + "".join(lines) + "</li>"
 
 
 def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:

@@ -110,7 +110,15 @@ class BrestLdsParser(IceParser):
                     age_note=age_note,
                 )
             )
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=prices_html, slots=slots)
+        from src.shared.schedule_basis import SCHEDULE_BASIS_PROJECTED
+
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=prices_html,
+            slots=slots,
+            schedule_basis=SCHEDULE_BASIS_PROJECTED,
+        )
 
 
 # ---------------------------------------------------------------------------

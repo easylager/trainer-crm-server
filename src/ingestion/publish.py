@@ -1,12 +1,11 @@
 """Replace ice_sessions in the source horizon after an ok scrape run. Never from extractors."""
 from __future__ import annotations
 
-from datetime import date
-
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import compute_price_minor
+from src.ingestion.publish_horizon import publish_local_date_window
 from src.ingestion.scrape_runs import assert_can_replace_ice_sessions
 from src.ingestion.types import CanonicalSlotDraft, PARSER_KINDS, RUN_STATUS_OK, ScrapeRunRecord
 
@@ -41,8 +40,11 @@ class SqlAlchemyIceSessionPublisher:
         assert_can_replace_ice_sessions(run, run_id=run_id)
         if run.status != RUN_STATUS_OK or not drafts:
             return 0
-        dates = [draft.local_date for draft in drafts]
-        lo, hi = min(dates), max(dates)
+        lo, hi = publish_local_date_window(
+            now=run.finished_at,
+            timezone_name=run.publish_timezone,
+            horizon_days=run.publish_horizon_days,
+        )
         # Savepoint: one bad draft (e.g. a still-oversized field) must roll back
         # only this job's DELETE+INSERTs, not the whole scheduler-tick session —
         # otherwise every other due job in the same tick loses its work too.
@@ -83,13 +85,13 @@ class SqlAlchemyIceSessionPublisher:
                     starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor,
                     currency_code, session_label, age_note, capacity_note, external_url, status,
-                    source_id, observed_at, valid_until
+                    source_id, observed_at, valid_until, schedule_basis
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                     :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
                     :currency_code, :session_label, :age_note, :capacity_note, :external_url, :status,
-                    :source_id, :observed_at, :valid_until
+                    :source_id, :observed_at, :valid_until, :schedule_basis
                 )
                 """
             ),
@@ -114,5 +116,6 @@ class SqlAlchemyIceSessionPublisher:
                 "source_id": source_id,
                 "observed_at": draft.observed_at,
                 "valid_until": draft.valid_until,
+                "schedule_basis": draft.schedule_basis,
             },
         )

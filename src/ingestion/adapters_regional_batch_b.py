@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
+from src.shared.schedule_basis import SCHEDULE_BASIS_PHOTO, SCHEDULE_BASIS_PROJECTED
 from src.ingestion.parsers import IceParser
 from src.ingestion.seed_config_regional_batch_b import (
     PARSER_KEY_GRODNO_NEMAN,
@@ -456,7 +457,13 @@ class LidaLdsParser(IceParser):
             slots = _lida_slots_from_weekday_config(
                 job, prices=prices, duration=duration, age_note=age_note
             )
-            return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+            return Extraction(
+                arena_id=job.arena_id,
+                parser_key=self.parser_key,
+                snapshot=html,
+                slots=slots,
+                schedule_basis=SCHEDULE_BASIS_PROJECTED,
+            )
 
         base_url = str(job.config.get("prices_url") or "https://hc-lida.by/")
         best: list[tuple[date, str]] = []
@@ -486,11 +493,14 @@ class LidaLdsParser(IceParser):
                         age_note=age_note,
                     )
                 )
-        else:
-            slots = _lida_slots_from_weekday_config(
-                job, prices=prices, duration=duration, age_note=age_note
-            )
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=html, slots=slots)
+        basis = SCHEDULE_BASIS_PHOTO if slots else None
+        return Extraction(
+            arena_id=job.arena_id,
+            parser_key=self.parser_key,
+            snapshot=html,
+            slots=slots,
+            schedule_basis=basis,
+        )
 
 
 # ---------------------------------------------------------------------------

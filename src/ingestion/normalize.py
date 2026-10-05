@@ -10,6 +10,7 @@ from typing import Any
 from src.application.ice_session_use_cases import (
     DEFAULT_ARENA_TZ,
     STATUS_ACTIVE,
+    SessionDateTimes,
     compute_session_datetimes,
     parse_hhmm,
 )
@@ -20,6 +21,7 @@ from src.ingestion.types import (
     Extraction,
     ParserJob,
 )
+from src.shared.schedule_basis import resolve_schedule_basis
 
 _AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)")
 _KOPECK = re.compile(r"коп", re.IGNORECASE)
@@ -105,7 +107,26 @@ def _as_date(value: str | date) -> date:
 def _as_time(value: str | time) -> time:
     if isinstance(value, time):
         return time(value.hour, value.minute)
-    return parse_hhmm(str(value))
+    raw = str(value).strip()
+    if raw in ("24:00", "24:00:00"):
+        return time(0, 0)
+    return parse_hhmm(raw)
+
+
+def _duration_and_end_local(starts_at_local: time, end_raw) -> tuple[int, time]:
+    if not end_raw:
+        return 0, starts_at_local
+    raw = str(end_raw).strip()
+    if raw in ("24:00", "24:00:00"):
+        start_m = starts_at_local.hour * 60 + starts_at_local.minute
+        return max(30, 24 * 60 - start_m), time(0, 0)
+    end_local = _as_time(end_raw)
+    start_m = starts_at_local.hour * 60 + starts_at_local.minute
+    end_m = end_local.hour * 60 + end_local.minute
+    span = end_m - start_m
+    if span <= 0:
+        span += 24 * 60
+    return span, end_local
 
 
 def _truthy_minor_flag(config: dict[str, Any]) -> bool:
@@ -128,6 +149,11 @@ class IceSessionNormalizer:
         currency = str(config.get("currency_code") or "BYN")
         already_minor = _truthy_minor_flag(config)
         default_duration = int(config.get("default_duration_minutes") or 60)
+        session_basis = resolve_schedule_basis(
+            parser_key=job.parser_key,
+            job_config=config,
+            extraction_basis=extraction.schedule_basis,
+        )
         observed = extraction.observed_at or now
         if observed.tzinfo is None:
             observed = observed.replace(tzinfo=timezone.utc)
@@ -176,21 +202,26 @@ class IceSessionNormalizer:
         drafts: list[CanonicalSlotDraft] = []
         for (local_date, starts_at_local), bucket in sorted(merged.items()):
             duration = default_duration
+            end_local = starts_at_local
             end_raw = bucket["ends_at_local"]
             if end_raw:
-                end_local = _as_time(end_raw)
-                start_minutes = starts_at_local.hour * 60 + starts_at_local.minute
-                end_minutes = end_local.hour * 60 + end_local.minute
-                span = end_minutes - start_minutes
-                if span <= 0:
-                    span += 24 * 60
-                duration = span
+                duration, end_local = _duration_and_end_local(starts_at_local, end_raw)
+            if duration <= 0:
+                duration = default_duration
             parts = compute_session_datetimes(
                 local_date=local_date,
                 starts_at_local=starts_at_local,
                 duration_minutes=duration,
                 tz_name=tz_name,
             )
+            if end_raw and str(end_raw).strip() in ("24:00", "24:00:00"):
+                parts = SessionDateTimes(
+                    starts_at_utc=parts.starts_at_utc,
+                    ends_at_utc=parts.ends_at_utc,
+                    local_date=parts.local_date,
+                    starts_at_local=parts.starts_at_local,
+                    ends_at_local=time(0, 0),
+                )
             if parts.ends_at_utc <= now:
                 continue
             drafts.append(
@@ -214,6 +245,7 @@ class IceSessionNormalizer:
                     capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
+                    schedule_basis=session_basis,
                     parser_job_id=job.id,
                     scrape_run_id=None,
                 )
