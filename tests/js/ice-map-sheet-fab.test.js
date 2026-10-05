@@ -143,6 +143,13 @@ describe('ice map layout — шторка overlay (TASK-147)', () => {
     assert.match(css, /invert\(1\)\s+hue-rotate\(180deg\)/);
   });
 
+  it('ice.html раскрывает Mini App на полную высоту (CTA из чата)', () => {
+    const html = read('ice.html');
+    const sdk = html.indexOf('telegram-web-app.js');
+    const full = html.indexOf('mini-app-full-height.js');
+    assert.ok(sdk >= 0 && full > sdk, 'mini-app-full-height.js после SDK Telegram');
+  });
+
   it('бамп ?v= статики карты в ice.html', () => {
     const html = read('ice.html');
     for (const file of ['ice-tab.css', 'ice-map-model.js', 'ice-map.js', 'ice-tab.js']) {
