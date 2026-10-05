@@ -39,6 +39,7 @@ from src.infrastructure.db.models import (
     CLIENT_SHARE_KIND_SELECTION,
 )
 from src.shared.config import Settings
+from src.shared.ice_discovery_scope import public_city_scope_sql, public_scope_params
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
 
@@ -152,8 +153,8 @@ async def get_ice_city_day_share(
     response.headers["Cache-Control"] = "no-store"
     row = (
         await session.execute(
-            text("SELECT id, name FROM cities WHERE id = :cid AND is_active"),
-            {"cid": int(city_id)},
+            text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
+            {"cid": int(city_id), **public_scope_params()},
         )
     ).first()
     if row is None:
@@ -300,7 +301,8 @@ async def get_public_selection_share(
 
     response.headers["Cache-Control"] = "no-store"
     row = (
-        await session.execute(text("SELECT id, name FROM cities WHERE id = :cid AND is_active"), {"cid": int(city_id)})
+        await session.execute(text(f"SELECT id, name FROM cities WHERE id = :cid AND {public_city_scope_sql('cities')}"),
+            {"cid": int(city_id), **public_scope_params()},)
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="City not found")
