@@ -625,6 +625,8 @@ describe('shareSlotsGrouped (TASK-158)', () => {
     const g = shareSlotsGrouped(days, '2026-10-02');
     assert.equal(g.length, 2);
     assert.equal(g[0].dayLabel, 'Сегодня');
+    assert.equal(g[0].localDate, '2026-10-02');
+    assert.equal(g[0].dayNum, '2');
     assert.deepEqual(g[0].rows.map((r) => r.time), ['19:00', '21:00']);
     assert.equal(g[0].rows[0].meta, '11 BYN');
     assert.equal(g[1].dayLabel, 'Завтра');

@@ -26,6 +26,17 @@ def test_place_url_is_city_scoped_and_readable() -> None:
         place_image_url(base_url="https://glide.by", city_name="Брест", slug="x", story=True)
         == "https://glide.by/p/brest/x/story.png"
     )
+    assert (
+        place_image_url(
+            base_url="https://glide.by",
+            city_name="Минск",
+            slug="zamok",
+            session_id=42,
+            invite=True,
+            story=True,
+        )
+        == "https://glide.by/p/minsk/zamok/session/42/story.png?i=1"
+    )
 
 
 def test_start_params_fit_telegram_limits() -> None:

@@ -38,6 +38,7 @@ router = APIRouter(tags=["public-place"])
 # Картинка дороже в рендере и меняется реже — 15 минут, как у «Лёд сегодня».
 _PAGE_CACHE = {"Cache-Control": "public, max-age=300"}
 _IMAGE_CACHE = {"Cache-Control": "public, max-age=900"}
+_IMAGE_CACHE_SESSION = {"Cache-Control": "private, no-store, must-revalidate"}
 
 
 def _base() -> str:
@@ -184,43 +185,56 @@ async def _image(
     city, arena_id = await _resolve(session, city_ref, slug)
     if city is None or arena_id is None:
         return Response(status_code=404)
-    view = await load_place_view(session, str(arena_id), session_id=_int_or_none(s))
+    focus_id = _int_or_none(s)
+    view = await load_place_view(session, str(arena_id), session_id=focus_id)
     if view is None:
         return Response(status_code=404)
     card = view["card"]
+    invite = _flag(i)
     page = place_page_url(
-        base_url=_base(), city_name=str(card.get("city_name") or ""), slug=str(card.get("slug") or "")
+        base_url=_base(),
+        city_name=str(card.get("city_name") or ""),
+        slug=str(card.get("slug") or ""),
+        session_id=focus_id,
+        invite=invite,
     )
-    kwargs = {"invite": _flag(i), "story": story}
+    kwargs = {"invite": invite, "story": story}
     if story:
         kwargs["share_url"] = page
         kwargs["display_path"] = share_display_path(page)
     png = await run_in_threadpool(render_place_card, view, **kwargs)
-    return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
+    cache = _IMAGE_CACHE_SESSION if focus_id is not None else _IMAGE_CACHE
+    return Response(content=png, media_type="image/png", headers=cache)
 
 
 @router.get("/p/{city_ref}/{slug}/og.png")
+@router.get("/p/{city_ref}/{slug}/session/{session_id}/og.png")
 async def place_og_image(
     city_ref: str,
     slug: str,
+    session_id: int | None = None,
     s: str | None = None,
     i: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """og:image 1200×630 — превью ссылки в Telegram/Viber/VK."""
-    return await _image(session, city_ref, slug, s, i, story=False)
+    sid = str(session_id) if session_id is not None else s
+    return await _image(session, city_ref, slug, sid, i, story=False)
 
 
 @router.get("/p/{city_ref}/{slug}/story.png")
+@router.get("/p/{city_ref}/{slug}/session/{session_id}/story.png")
 async def place_story_image(
     city_ref: str,
     slug: str,
+    session_id: int | None = None,
     s: str | None = None,
     i: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """9:16 для историй Instagram/VK — у них нет API «опубликовать», только «сохранить и выложить»."""
-    return await _image(session, city_ref, slug, s, i, story=True)
+    sid = str(session_id) if session_id is not None else s
+    return await _image(session, city_ref, slug, sid, i, story=True)
 
 
 # ---------------------------------------------------------------------------
