@@ -9,22 +9,22 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609287"></script>
-  <script src="mini-app-phone-field.js?v=202609287"></script>
-  <link rel="stylesheet" href="theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202609287" />
-  <script src="mini-app-telegram-chrome.js?v=202609287"></script>  <script src="client-profile-switcher.js?v=202609287"></script>
-  <link rel="preload" href="catalog-main.js?v=202609287" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202609287" />
-  <link rel="stylesheet" href="booking-client.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610027" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-client-shell.js?v=202610027"></script>
-  <script src="booking-client.js?v=202609287"></script>
-  <script src="booking-deeplink.js?v=202609287"></script>
+  <script src="client-mini-app-theme.js?v=2026100513"></script>
+  <script src="mini-app-phone-field.js?v=2026100513"></script>
+  <link rel="stylesheet" href="theme.css?v=2026100513" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026100513" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026100513" />
+  <script src="mini-app-telegram-chrome.js?v=2026100513"></script>  <script src="client-profile-switcher.js?v=2026100513"></script>
+  <link rel="preload" href="catalog-main.js?v=2026100513" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=2026100513" />
+  <link rel="stylesheet" href="booking-client.css?v=2026100513" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=2026100513" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=2026100513" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100513" />
+  <script src="mini-app-empty-state.js?v=2026100513"></script>
+  <script src="mini-app-client-shell.js?v=2026100513"></script>
+  <script src="booking-client.js?v=2026100513"></script>
+  <script src="booking-deeplink.js?v=2026100513"></script>
   <script>
     (function () {
       try {
@@ -65,10 +65,23 @@
           <p class="catalog-hero__powered" id="catalogHeroPowered" hidden></p>
         </header>
 
+        <!-- TASK-163 / DEC-003: город по геопозиции применяем оптимистично, но не молча —
+             сверху подтверждение с основанием догадки. В сессию он уходит только по «Да». -->
+        <div class="catalog-geo-confirm" id="catalogGeoConfirm" role="status" aria-live="polite" hidden>
+          <p class="catalog-geo-confirm__title" id="catalogGeoConfirmTitle"></p>
+          <p class="catalog-geo-confirm__meta" id="catalogGeoConfirmMeta" hidden></p>
+          <div class="catalog-geo-confirm__actions">
+            <button type="button" class="catalog-geo-confirm__yes" id="catalogGeoConfirmYes">Да, мой город</button>
+            <button type="button" class="catalog-geo-confirm__other" id="catalogGeoConfirmOther">Другой город</button>
+          </div>
+        </div>
+
         <section class="catalog-block catalog-block--popular" aria-labelledby="catalogScenariosLabel">
           <h3 class="catalog-block__eyebrow" id="catalogScenariosLabel">Популярное</h3>
           <div class="catalog-scenario-chips catalog-scenario-chips--duo" id="catalogScenarioChips" role="group" aria-label="Популярные варианты">
             <button type="button" class="catalog-scenario-chip" data-scenario="skating">⛸️ Улучшить катание</button>
+            <!-- TASK-163: единственный вход в геолокацию. Вторым в ряду — чтобы не уехал за край скролла. -->
+            <button type="button" class="catalog-geo-chip" id="catalogGeoChip" aria-haspopup="dialog">⌖ Рядом со мной</button>
             <button type="button" class="catalog-scenario-chip" data-scenario="from-zero">🌱 С нуля</button>
           </div>
         </section>
@@ -451,11 +464,24 @@
     </div>
   </div>
 
-  <script src="trainer-arena-chips-model.js?v=202610023"></script>
-  <script src="catalog-geo-model.js?v=202609287"></script>
-  <script src="ru-person-name.js?v=202609287"></script>
-  <script src="ru-text.js?v=202609287"></script>
-  <script defer src="catalog-main.js?v=202609287"></script>
-  <script defer src="mini-app-client-home.js?v=202609287"></script>
+  <!-- TASK-163: шторка-прайминг перед системным запросом геопозиции.
+       Системный диалог идёт только после тапа по «Разрешить геопозицию». -->
+  <div class="catalog-geo-sheet" id="catalogGeoSheet" hidden>
+    <div class="catalog-geo-sheet__card" role="dialog" aria-modal="true" aria-labelledby="catalogGeoSheetTitle">
+      <div class="catalog-geo-sheet__grip" aria-hidden="true"></div>
+      <div class="catalog-geo-sheet__icon" aria-hidden="true">⌖</div>
+      <b class="catalog-geo-sheet__title" id="catalogGeoSheetTitle">Показать катки рядом?</b>
+      <p class="catalog-geo-sheet__text" id="catalogGeoSheetText">Возьмём геопозицию один раз, чтобы отсортировать катки по расстоянию и подставить ваш город. Мы её не храним и не передаём.</p>
+      <button type="button" class="btn-primary btn-block catalog-geo-sheet__allow" id="catalogGeoAllow" data-geo-action="request">Разрешить геопозицию</button>
+      <button type="button" class="catalog-geo-sheet__quiet" id="catalogGeoDismiss">Не сейчас</button>
+    </div>
+  </div>
+
+  <script src="trainer-arena-chips-model.js?v=2026100513"></script>
+  <script src="catalog-geo-model.js?v=2026100513"></script>
+  <script src="ru-person-name.js?v=2026100513"></script>
+  <script src="ru-text.js?v=2026100513"></script>
+  <script defer src="catalog-main.js?v=2026100513"></script>
+  <script defer src="mini-app-client-home.js?v=2026100513"></script>
 </body>
 </html>

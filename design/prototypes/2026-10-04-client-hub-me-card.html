@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>«Моя карточка» — один герой хаба во всех состояниях</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    2026-10-04 · UI/UX-ревизия клиентского хаба.
+    Предмет: верхний блок хаба (#nextBookingBlock → .hub-next-card) и всё, что
+    сейчас живёт рядом с ним вразнобой: строка поиска, панель абонемента,
+    зона льда, сертификаты (которых на хабе нет вообще).
+
+    Тезис: у хаба нет одного героя. В пяти состояниях Intent Engine верх экрана
+    собирают четыре разных компонента, и клиент каждый раз учит новый экран.
+    Предложение — ОДНА карточка с фиксированной анатомией и пятью заполнениями.
+
+    Навигация: ← → или клики по списку состояний. T — светлая/тёмная тема.
+  */
+  :root {
+    --glide-brand: #45b9bb;
+    --glide-on-fill: #04262a;
+    --glide-paper: #0b0c0e;
+    --glide-surface: #141618;
+    --glide-card: #1a1d20;
+    --glide-line: #262a2e;
+    --glide-line-strong: #33383d;
+    --glide-text: #e6e9ea;
+    --glide-hint: #868d93;
+    --glide-ink-teal: #57d0d2;
+    --glide-brand-wash: rgba(69, 185, 187, 0.13);
+    --warn: #f0a24b;
+    --warn-wash: rgba(240, 162, 75, 0.14);
+    --ok: #4fc98a;
+    --ok-wash: rgba(79, 201, 138, 0.13);
+    --venue-shop: #a48bff;
+    --app-cta-fill: var(--glide-brand);
+    --app-cta-text: var(--glide-on-fill);
+    --page: #050607;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --font: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  html[data-theme="light"] {
+    --glide-paper: #f1f3f2;
+    --glide-surface: #ffffff;
+    --glide-card: #ffffff;
+    --glide-line: #e2e6e5;
+    --glide-line-strong: #cfd6d5;
+    --glide-text: #101617;
+    --glide-hint: #5e6b6b;
+    --glide-ink-teal: #0b6e70;
+    --glide-brand-wash: rgba(69, 185, 187, 0.12);
+    --warn: #c87a15;
+    --warn-wash: rgba(200, 122, 21, 0.12);
+    --ok: #0f7048;
+    --ok-wash: rgba(15, 112, 72, 0.1);
+    --venue-shop: #7a5af5;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--page);
+    color: var(--glide-text);
+    min-height: 100vh;
+    display: flex;
+    gap: 28px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 26px 14px 110px;
+    flex-wrap: wrap;
+  }
+  html[data-theme="light"] body { background: #dfe4e3; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--glide-ink-teal); outline-offset: 2px; }
+
+  /* ── Левая колонка: тезис ────────────────────────────────────────── */
+  .thesis { width: min(424px, 100%); }
+  .thesis h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  .thesis h1 em { font-style: normal; color: var(--glide-ink-teal); }
+  .lede { margin: 10px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--glide-hint); }
+  .lede b { color: var(--glide-text); font-weight: 600; }
+
+  .block { margin-top: 20px; }
+  .block > h2 {
+    margin: 0 0 10px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint);
+  }
+  .probs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .probs li {
+    display: grid; grid-template-columns: 22px 1fr; gap: 10px;
+    padding: 11px 13px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-card);
+    font-size: 12.5px; line-height: 1.45; color: var(--glide-hint);
+  }
+  .probs li.is-hot { border-color: rgba(240, 162, 75, 0.42); }
+  .probs .n {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--warn-wash); color: var(--warn); font-size: 11px; font-weight: 700;
+  }
+  .probs b { display: block; color: var(--glide-text); font-weight: 600; margin-bottom: 3px; font-size: 13px; }
+  .probs .said {
+    display: inline-block; margin-top: 5px; padding: 2px 7px; border-radius: var(--r-pill);
+    background: var(--glide-brand-wash); color: var(--glide-ink-teal);
+    font-size: 10px; font-weight: 600; letter-spacing: 0.03em;
+  }
+
+  .rules { margin: 0; padding-left: 17px; font-size: 12.5px; line-height: 1.55; color: var(--glide-hint); }
+  .rules li { margin-bottom: 7px; }
+  .rules strong { color: var(--glide-text); font-weight: 600; }
+
+  .anat {
+    display: grid; gap: 6px; font-size: 12px; line-height: 1.4;
+  }
+  .anat div {
+    display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline;
+    padding: 8px 12px; border-radius: var(--r-sm);
+    background: var(--glide-surface); border: 1px solid var(--glide-line);
+    color: var(--glide-hint);
+  }
+  .anat code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px;
+    color: var(--glide-ink-teal); letter-spacing: 0.02em;
+  }
+
+  .open-q {
+    padding: 12px 14px; border-radius: var(--r-md);
+    border: 1px dashed rgba(240, 162, 75, 0.45); background: var(--warn-wash);
+    font-size: 12.5px; line-height: 1.5; color: var(--glide-text);
+  }
+  .open-q b { display: block; font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--warn); margin-bottom: 6px; }
+  .open-q p { margin: 0 0 8px; }
+  .open-q p:last-child { margin-bottom: 0; }
+
+  .navhint { margin-top: 18px; font-size: 11.5px; color: var(--glide-hint); line-height: 1.7; }
+  .navhint kbd {
+    display: inline-block; padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--glide-line); background: var(--glide-surface); font-size: 11px;
+  }
+
+  /* ── Правая колонка: стенд ───────────────────────────────────────── */
+  .stand { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+
+  .states {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    max-width: 758px;
+  }
+  .states button {
+    padding: 7px 12px; border-radius: var(--r-pill);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    color: var(--glide-hint); font-size: 12px; font-weight: 600;
+  }
+  .states button.is-on {
+    background: var(--app-cta-fill); color: var(--app-cta-text);
+    border-color: transparent;
+  }
+  .states button .idx { opacity: 0.55; margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+  .state-note {
+    max-width: 758px; text-align: center; font-size: 13px; line-height: 1.5;
+    color: var(--glide-hint); min-height: 38px;
+  }
+  .state-note b { color: var(--glide-text); font-weight: 600; }
+
+  .phones { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .phone-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--glide-hint);
+  }
+  .phone-label.bad { color: var(--warn); }
+  .phone-label.good { color: var(--glide-ink-teal); }
+  .phone {
+    width: 370px; max-width: 100%; height: 780px; position: relative; overflow: hidden;
+    border-radius: 42px; background: var(--glide-paper);
+    box-shadow: 0 0 0 1px rgba(128, 140, 145, 0.25), 0 40px 80px -34px rgba(0, 0, 0, 0.9);
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 112px; height: 28px; background: #000; border-radius: 16px; z-index: 20; pointer-events: none;
+  }
+  html[data-theme="light"] .notch { background: #11181a; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; padding-top: 42px; padding-bottom: 62px; }
+  .scroll { position: relative; flex: 1; overflow-y: auto; padding: 0 15px 18px; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 58px;
+    display: grid; grid-template-columns: repeat(4, 1fr); align-items: center;
+    border-top: 1px solid var(--glide-line); background: var(--glide-card);
+    font-size: 9.5px; color: var(--glide-hint); z-index: 10;
+  }
+  .tabbar span { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .tabbar span em { font-style: normal; font-size: 15px; }
+  .tabbar .on { color: var(--glide-ink-teal); font-weight: 700; }
+
+  /* ── Общие элементы хаба ──────────────────────────────────────────── */
+  .hero-row { display: flex; align-items: center; gap: 10px; padding: 8px 0 12px; min-height: 52px; }
+  .greet { flex: 1; min-width: 0; }
+  .greet b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .greet span { display: block; font-size: 12px; color: var(--glide-hint); margin-top: 2px; }
+  .greet .mism { color: var(--warn); }
+  .psw {
+    display: flex; align-items: center; gap: 6px; max-width: 152px;
+    padding: 6px 10px 6px 6px; border-radius: var(--r-pill);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden;
+  }
+  .psw i {
+    width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: var(--glide-brand-wash); color: var(--glide-ink-teal); font-size: 11px; font-style: normal; font-weight: 700;
+  }
+  .psw u { text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
+
+  .search {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    margin-top: 10px; padding: 11px 13px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    text-align: left; font-size: 13.5px; color: var(--glide-hint);
+  }
+  .search::before { content: '⌕'; font-size: 16px; }
+
+  .sec-head { display: flex; justify-content: space-between; align-items: baseline; margin: 17px 0 8px; }
+  .kicker { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; }
+  .sec-link { font-size: 12.5px; font-weight: 600; color: var(--glide-ink-teal); }
+  .sec-title { font-size: 15px; font-weight: 700; }
+
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile {
+    display: flex; align-items: center; gap: 10px; padding: 11px 12px;
+    border-radius: var(--r-md); border: 1px solid var(--glide-line); background: var(--glide-surface);
+  }
+  .tile em {
+    width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center;
+    font-style: normal; font-size: 15px; background: var(--glide-brand-wash); color: var(--glide-ink-teal);
+  }
+  .tile.shop em { background: color-mix(in srgb, var(--venue-shop) 15%, transparent); color: var(--venue-shop); }
+  .tile b { display: block; font-size: 13px; font-weight: 600; }
+  .tile b i { font-style: normal; color: var(--glide-hint); font-weight: 600; }
+  .tile small { display: block; font-size: 11px; color: var(--glide-hint); margin-top: 1px; }
+  .tile--wide { grid-column: 1 / -1; }
+
+  .ice-card {
+    display: flex; gap: 11px; padding: 11px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-card);
+  }
+  .ice-card__ph {
+    width: 64px; height: 64px; border-radius: var(--r-sm); flex: none; display: grid; place-items: center;
+    background: linear-gradient(135deg, #2a4a4c, #152022); font-size: 24px;
+  }
+  .ice-card__b { flex: 1; min-width: 0; align-self: center; }
+  .ice-card__t { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ice-card__n { font-size: 13.5px; font-weight: 600; margin-top: 1px; }
+  .ice-card__f { font-size: 11.5px; color: var(--glide-hint); margin-top: 2px; }
+  .ice-rows { margin-top: 7px; border-radius: var(--r-md); border: 1px solid var(--glide-line); background: var(--glide-surface); }
+  .ice-rows div {
+    display: flex; gap: 10px; align-items: baseline; padding: 9px 12px; font-size: 12.5px;
+    border-top: 1px solid var(--glide-line);
+  }
+  .ice-rows span { flex: 1; }
+  .ice-rows div:first-child { border-top: 0; }
+  .ice-rows b { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 40px; }
+  .ice-rows span { color: var(--glide-hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .avatar {
+    width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: var(--glide-brand-wash); color: var(--glide-ink-teal); font-size: 13px; font-weight: 700;
+    overflow: hidden;
+  }
+  .avatar--lg { width: 46px; height: 46px; font-size: 15px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--r-pill);
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+  .pill--ok { background: var(--ok-wash); color: var(--ok); }
+  .pill--wait { background: var(--warn-wash); color: var(--warn); }
+  .pill--soon { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
+
+  .btn-fill {
+    display: block; width: 100%; height: 46px; border: 0; border-radius: var(--r-sm);
+    background: var(--app-cta-fill); color: var(--app-cta-text); font-size: 14.5px; font-weight: 700;
+  }
+  .btn-ghost {
+    display: block; width: 100%; height: 44px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line-strong); background: transparent;
+    font-size: 14px; font-weight: 600;
+  }
+  .btn-quiet { border: 0; background: transparent; color: var(--glide-ink-teal); font-size: 12.5px; font-weight: 700; padding: 0; }
+
+  /* ── «Сейчас»: текущая карточка (.hub-next-card) ──────────────────── */
+  .now-card {
+    padding: 15px; border-radius: var(--r-lg);
+    border: 1px solid var(--glide-line); background: var(--glide-card);
+  }
+  .now-card--open { border-color: rgba(69, 185, 187, 0.35); }
+  .now-time { font-size: 38px; font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--glide-ink-teal); font-variant-numeric: tabular-nums; }
+  .now-when { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 13px; color: var(--glide-hint); }
+  .now-who {
+    display: flex; align-items: center; gap: 10px; margin-top: 13px;
+    padding-top: 13px; border-top: 1px solid var(--glide-line);
+  }
+  .now-who-t { flex: 1; min-width: 0; }
+  .now-who-t b { display: block; font-size: 14.5px; font-weight: 700; }
+  .now-who-t span { display: block; font-size: 12px; color: var(--glide-hint); margin-top: 1px; }
+  .now-cta { margin-top: 13px; }
+  .now-alt { display: block; width: 100%; text-align: center; margin-top: 11px; }
+  .now-meter {
+    display: flex; align-items: center; gap: 9px; margin-top: 13px; padding-top: 12px;
+    border-top: 1px solid var(--glide-line); font-size: 12.5px; color: var(--glide-hint);
+  }
+  .now-meter b { font-size: 15px; color: var(--glide-text); }
+  .now-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--glide-line); overflow: hidden; }
+  .now-bar i { display: block; height: 100%; background: var(--app-cta-fill); }
+
+  .now-rest { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--glide-line); }
+  .now-rest-day { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; margin-bottom: 6px; }
+  .now-line { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; }
+  .now-line b { font-variant-numeric: tabular-nums; min-width: 42px; }
+  .now-line span { flex: 1; min-width: 0; color: var(--glide-hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Отдельная панель абонемента «как сейчас» */
+  .now-pass {
+    display: flex; align-items: center; gap: 12px; margin-top: 10px;
+    padding: 13px 14px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+  }
+  .now-pass .num { font-size: 27px; font-weight: 700; color: var(--ok); line-height: 1; font-variant-numeric: tabular-nums; }
+  .now-pass .body { flex: 1; min-width: 0; }
+  .now-pass .k { display: block; font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; }
+  .now-pass .t { display: block; font-size: 14px; font-weight: 600; }
+  .now-pass .s { display: block; font-size: 11.5px; color: var(--glide-hint); margin-top: 1px; }
+  .now-pass .ch { color: var(--glide-hint); font-size: 18px; }
+
+  .now-slots { margin-top: 10px; }
+  .now-slots .rh { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; margin-bottom: 7px; }
+  .now-slots .row { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .now-slots .row::-webkit-scrollbar { display: none; }
+  .now-slots .sl {
+    flex: none; min-width: 92px; padding: 9px 11px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+  }
+  .now-slots .sl em { display: block; font-style: normal; font-size: 10.5px; color: var(--glide-hint); }
+  .now-slots .sl b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .now-slots .sl span { display: block; font-size: 10.5px; color: var(--glide-hint); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .now-trainer {
+    display: flex; align-items: center; gap: 11px; padding: 13px;
+    border-radius: var(--r-md); border: 1px solid var(--glide-line); background: var(--glide-card);
+  }
+  .now-trainer .b { flex: 1; min-width: 0; }
+  .now-trainer .b b { display: block; font-size: 14.5px; font-weight: 700; }
+  .now-trainer .b span { display: block; font-size: 11.5px; color: var(--glide-hint); margin-top: 1px; }
+
+  .now-saved { margin-top: 2px; }
+  .now-saved .row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .now-saved .row::-webkit-scrollbar { display: none; }
+  .now-saved .chip {
+    flex: none; display: flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px;
+    border-radius: var(--r-pill); border: 1px solid var(--glide-line); background: var(--glide-surface);
+    font-size: 12.5px; font-weight: 600;
+  }
+  .now-pills { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+  .now-pills .p {
+    padding: 9px 14px; border-radius: var(--r-pill);
+    background: var(--app-cta-fill); color: var(--app-cta-text); font-size: 12.5px; font-weight: 700;
+  }
+  .now-pills .p.sec { background: var(--glide-surface); color: var(--glide-text); border: 1px solid var(--glide-line); }
+  .now-fab {
+    position: absolute; right: 15px; bottom: 72px; z-index: 11;
+    display: flex; align-items: center; gap: 7px; padding: 11px 17px; border-radius: var(--r-pill);
+    background: var(--app-cta-fill); color: var(--app-cta-text); font-size: 13.5px; font-weight: 700;
+    box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.7);
+  }
+
+  /* ── Маркеры проблем ──────────────────────────────────────────────── */
+  .mark { position: relative; }
+  .mark::after {
+    content: attr(data-m);
+    position: absolute; top: -8px; right: -6px; z-index: 6;
+    width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--warn); color: #1c1203; font-size: 11px; font-weight: 700;
+    box-shadow: 0 0 0 3px var(--glide-paper);
+  }
+  .mark--in::after { top: -9px; right: 4px; }
+
+  /* ── «Предлагаю»: карточка me-card ────────────────────────────────── */
+  .me {
+    border-radius: var(--r-lg); border: 1px solid var(--glide-line);
+    background: var(--glide-card); overflow: hidden;
+  }
+  .me--accent { border-color: rgba(69, 185, 187, 0.42); }
+  .me--warn { border-color: rgba(240, 162, 75, 0.42); }
+  .me__pad { padding: 14px 15px; }
+
+  .me__status { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .me__status .k { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; }
+
+  .me__when { display: flex; align-items: baseline; gap: 10px; margin-top: 9px; }
+  .me__when b { font-size: 38px; font-weight: 700; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .me__when span { font-size: 13px; color: var(--glide-hint); }
+
+  .me__who { display: flex; align-items: center; gap: 11px; margin-top: 12px; }
+  .me__who--hero { margin-top: 10px; }
+  .me__who-t { flex: 1; min-width: 0; }
+  .me__who-t b { display: block; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .me__who--hero .me__who-t b { font-size: 17px; }
+  .me__who-t span { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--glide-hint); margin-top: 2px; }
+  .me__dm {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    display: grid; place-items: center; font-size: 14px; color: var(--glide-ink-teal);
+  }
+
+  .me__line { margin-top: 10px; font-size: 12.5px; line-height: 1.45; color: var(--glide-hint); }
+  .me__line b { color: var(--glide-text); font-weight: 600; }
+
+  .me__do { margin-top: 13px; }
+  .me__do--pair { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+
+  /* Полоса выбора времени: вот она — точка входа во ВСЕ окна тренера */
+  .me__pick { margin-top: 11px; }
+  .me__pick-h {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px;
+  }
+  .me__pick-h .k { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; }
+  .me__chips {
+    display: flex; gap: 7px; overflow-x: auto; scroll-snap-type: x proximity;
+    scrollbar-width: none; padding-bottom: 2px;
+    /* Край-фейд вместо scroll-state queries: Telegram WebView на iOS — WebKit,
+       container scroll-state там не поддержан (только Chromium 133+). */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%);
+  }
+  .me__chips::-webkit-scrollbar { display: none; }
+  .me__chip {
+    flex: none; scroll-snap-align: start; padding: 8px 12px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line-strong); background: var(--glide-surface);
+    text-align: left; min-width: 84px;
+  }
+  .me__chip em { display: block; font-style: normal; font-size: 10.5px; color: var(--glide-hint); }
+  .me__chip b { display: block; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .me__chip--all {
+    display: grid; place-items: center; min-width: 74px; padding: 8px 12px;
+    border-style: dashed; color: var(--glide-ink-teal); font-size: 12.5px; font-weight: 700;
+  }
+
+  /* Кошелёк: абонемент и сертификат — ВНУТРИ карточки, одной полосой */
+  .me__wallet {
+    display: flex; gap: 1px; background: var(--glide-line);
+    border-top: 1px solid var(--glide-line);
+  }
+  .me__w {
+    flex: 1; min-width: 0; display: block; text-align: left; border: 0;
+    padding: 11px 14px 12px; background: var(--glide-surface);
+  }
+  .me__w-k { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--glide-hint); font-weight: 700; }
+  .me__w-v { display: flex; align-items: baseline; gap: 5px; margin-top: 3px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .me__w-v i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--glide-hint); }
+  .me__w-s { display: block; font-size: 11px; color: var(--glide-hint); margin-top: 3px; }
+  .me__w--warn .me__w-v { color: var(--warn); }
+  .me__w--warn .me__w-s { color: var(--warn); }
+  .me__w-bar { display: block; height: 3px; border-radius: 2px; background: var(--glide-line); margin-top: 7px; overflow: hidden; }
+  .me__w-bar i { display: block; height: 100%; background: var(--app-cta-fill); }
+  .me__w--warn .me__w-bar i { background: var(--warn); }
+
+  .me__foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 15px; border-top: 1px solid var(--glide-line); background: var(--glide-surface);
+    font-size: 12.5px; color: var(--glide-hint);
+  }
+
+  /* Список «остальные записи» — отдельный от карточки блок */
+  .rest {
+    margin-top: 9px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface); overflow: hidden;
+  }
+  .rest__h { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 13px 7px; }
+  .rest__row { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-top: 1px solid var(--glide-line); font-size: 12.5px; }
+  .rest__row b { font-variant-numeric: tabular-nums; min-width: 42px; font-weight: 700; }
+  .rest__row span { flex: 1; min-width: 0; color: var(--glide-hint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .saved-rows { display: grid; gap: 1px; background: var(--glide-line); }
+  .saved-row { display: flex; align-items: center; gap: 11px; padding: 11px 15px; background: var(--glide-card); }
+  .saved-row .t { flex: 1; min-width: 0; }
+  .saved-row .t b { display: block; font-size: 14px; font-weight: 600; }
+  .saved-row .t span { display: block; font-size: 11.5px; color: var(--glide-hint); margin-top: 1px; }
+  .saved-row .ch { color: var(--glide-hint); font-size: 17px; }
+
+  /* Первый вход: города — первым классом, геолокация — тихой строкой */
+  .me__cities { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 13px; }
+  .me__city {
+    padding: 12px 10px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line-strong); background: var(--glide-surface);
+    font-size: 14px; font-weight: 600;
+  }
+  .me__geo {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    width: 100%; margin-top: 11px; padding: 10px; border: 0; background: transparent;
+    color: var(--glide-ink-teal); font-size: 13px; font-weight: 700;
+  }
+  .me__geo span { font-size: 15px; }
+
+  /* Шапка вкладки «Поиск» — только чтобы экран геолокации был узнаваем */
+  .cat-top { padding: 8px 0 2px; }
+  .cat-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .cat-chips { display: flex; gap: 6px; margin-top: 11px; overflow-x: auto; scrollbar-width: none; }
+  .cat-chips::-webkit-scrollbar { display: none; }
+  .cc {
+    flex: none; padding: 7px 13px; border-radius: var(--r-pill);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    font-size: 12.5px; font-weight: 600; color: var(--glide-hint);
+  }
+  .cc.on { background: var(--app-cta-fill); color: var(--app-cta-text); border-color: transparent; }
+  .cc--geo { border-style: dashed; border-color: rgba(69,185,187,.5); color: var(--glide-ink-teal); }
+
+  /* Макет системного диалога — то, что мы вызываем сегодня молча */
+  .sysdlg {
+    position: absolute; inset: 0; z-index: 12; display: grid; place-items: center;
+    padding: 24px; background: rgba(0, 0, 0, 0.5);
+  }
+  .sysdlg__box {
+    width: 100%; max-width: 262px; border-radius: 14px; overflow: hidden;
+    background: #2b2d30; color: #fff; text-align: center;
+    box-shadow: 0 20px 50px -14px rgba(0, 0, 0, 0.8);
+  }
+  html[data-theme="light"] .sysdlg__box { background: #f2f2f4; color: #111; }
+  .sysdlg__box b { display: block; padding: 18px 16px 6px; font-size: 14px; line-height: 1.35; }
+  .sysdlg__box span { display: block; padding: 0 16px 16px; font-size: 12.5px; opacity: 0.68; }
+  .sysdlg__btns { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(128,128,128,.35); }
+  .sysdlg__btns span {
+    padding: 12px 6px; font-size: 14px; opacity: 1;
+    color: #0a84ff; border-right: 1px solid rgba(128,128,128,.35);
+  }
+  .sysdlg__btns span.pri { font-weight: 700; border-right: 0; }
+
+  /* Наша шторка-прайминг: своя, по тапу, с честным отказом */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 58px; z-index: 12;
+    padding: 10px 18px 20px; text-align: center;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border: 1px solid var(--glide-line); border-bottom: 0;
+    background: var(--glide-card);
+    box-shadow: 0 -16px 40px -18px rgba(0, 0, 0, 0.7);
+  }
+  .sheet::before {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 780px;
+    background: rgba(0, 0, 0, 0.42); pointer-events: none;
+  }
+  .sheet__grip { width: 36px; height: 4px; border-radius: 2px; background: var(--glide-line-strong); margin: 0 auto 14px; }
+  .sheet__ic {
+    width: 44px; height: 44px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--glide-brand-wash); color: var(--glide-ink-teal); font-size: 20px;
+  }
+  .sheet__t { display: block; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+  .sheet__p { margin: 7px 0 15px; font-size: 12.5px; line-height: 1.5; color: var(--glide-hint); }
+  .sheet__no { display: block; width: 100%; margin-top: 11px; }
+
+  /* Режим охвата: «По всей Беларуси» вместо подставленного города */
+  .scope-row { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
+  .scope-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px;
+    border-radius: var(--r-pill); border: 1px dashed var(--glide-line-strong);
+    background: var(--glide-surface); font-size: 13px; font-weight: 600;
+  }
+
+  /* Мост лёд → тренер */
+  .me__coach {
+    display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 12px;
+    padding: 9px 11px; border-radius: var(--r-sm);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    text-align: left; font-size: 13px; color: var(--glide-hint);
+  }
+  .me__coach-av {
+    width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: var(--glide-brand-wash); color: var(--glide-ink-teal); font-size: 10px; font-weight: 700;
+  }
+  .me__coach-t { flex: 1; min-width: 0; }
+  .me__coach-t b { color: var(--glide-text); font-weight: 700; }
+  .ice-rows .coach-n, .ice-rows .fav-n {
+    font-style: normal; font-size: 11px; font-weight: 600;
+    color: var(--glide-ink-teal); white-space: nowrap;
+  }
+  .ice-rows .fav-n { font-size: 13px; }
+
+  .nudge {
+    display: flex; align-items: center; gap: 9px; margin-top: 12px;
+    padding: 11px 12px; border-radius: var(--r-md);
+    border: 1px dashed rgba(69, 185, 187, 0.45); background: var(--glide-brand-wash);
+  }
+  .nudge__t { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.4; }
+  .nudge__go { border: 0; background: transparent; color: var(--glide-ink-teal); font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+  .nudge__x { border: 0; background: transparent; color: var(--glide-hint); font-size: 17px; line-height: 1; padding: 0 2px; }
+
+  /* Подписка на каток */
+  .me__fav {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    display: grid; place-items: center; font-size: 15px; color: var(--glide-hint);
+  }
+  .me__fav.is-on { color: var(--app-cta-fill); border-color: rgba(69, 185, 187, 0.5); }
+
+  .ghost-note {
+    margin-top: 12px; padding: 11px 13px; border-radius: var(--r-md);
+    border: 1px dashed var(--glide-line-strong); background: transparent;
+    font-size: 11.5px; line-height: 1.45; color: var(--glide-hint);
+  }
+  .me__head { margin-top: 9px; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+  .me__chip--city { display: grid; place-items: center; min-width: auto; font-size: 13.5px; font-weight: 600; }
+  .psw--compact { max-width: none; padding: 6px 9px 6px 6px; }
+
+  .tcards { display: flex; gap: 9px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .tcards::-webkit-scrollbar { display: none; }
+  .tcard {
+    flex: none; width: 118px; padding-bottom: 9px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface); overflow: hidden;
+  }
+  .tcard__m {
+    height: 112px; display: grid; place-items: center; font-size: 26px; font-weight: 700;
+    background: linear-gradient(135deg, rgba(69,185,187,.22), rgba(69,185,187,.05));
+    color: var(--glide-ink-teal); margin-bottom: 8px;
+  }
+  .tcard b { display: block; padding: 0 10px; font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+  .tcard small { display: block; padding: 2px 10px 0; font-size: 10.5px; color: var(--glide-hint); }
+
+  .ann {
+    position: relative; margin-left: 76px; padding-left: 14px;
+    border-left: 2px solid rgba(69, 185, 187, 0.4);
+  }
+  .ann > * { position: relative; }
+  .ann-tag {
+    position: absolute; left: -76px; width: 62px; text-align: right;
+    font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; font-weight: 700;
+    color: var(--glide-ink-teal); line-height: 1.3;
+  }
+  .ann-tag small { display: block; color: var(--glide-hint); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 9px; }
+  .ann-blk { padding: 9px 0; }
+
+  @media (max-width: 1000px) {
+    .thesis { width: min(760px, 100%); }
+  }
+</style>
+</head>
+<body>
+
+<aside class="thesis">
+  <h1>У хаба нет одного героя — <em>«Моя карточка»</em> его даёт</h1>
+  <p class="lede">
+    Сейчас верх хаба в пяти состояниях Intent Engine собирают <b>четыре разных компонента</b>:
+    <code>.hub-next-card</code> (запись), <code>.hub-next-card--open</code> (окно тренера),
+    <code>#myTrainerBlock</code> (карточка тренера), <code>.hub-saved-strip</code> (сохранённые).
+    Между ними вклинивается строка поиска, а абонемент приезжает отдельной панелью снизу.
+    Клиент каждый раз учит новый экран. Предложение: <b>одна карточка, фиксированная анатомия,
+    одна заливка на намерение</b> — и всё, что относится к «моему», живёт внутри неё.
+  </p>
+
+  <div class="block">
+    <h2>Что я нашёл</h2>
+    <ol class="probs">
+      <li class="is-hot">
+        <span class="n">1</span>
+        <div>
+          <b>Чужое время выглядит как моя запись</b>
+          «12:15» в состоянии «у тренера есть окно» набрано ровно так же, как «12:15» подтверждённой
+          записи. Первый взгляд читает «у меня запись» — и это неправда. Самая дорогая ошибка экрана:
+          она врёт в первую секунду.
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">2</span>
+        <div>
+          <b>Один случайный слот вместо выбора</b>
+          Герой-кнопка «Записаться на 12:15» — это догадка, поданная как решение. Если 12:15 не подходит,
+          выход один: крошечная ссылка «завтра в 13:15» или тап по карточке в каталог.
+          Все окна тренера лежат за карточкой тренера.
+          <span class="said">названо владельцем</span>
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">3</span>
+        <div>
+          <b>Абонемент стоит отдельной панелью</b>
+          И в двух разных видах: внутри карточки записи — тонкий метр «1 из 4», отдельной панелью —
+          крупная цифра с шевроном. Одни данные, два визуальных языка, разные места на экране.
+          <span class="said">названо владельцем</span>
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">4</span>
+        <div>
+          <b>Сертификатов на хабе нет вообще</b>
+          <code>/client/hub/bootstrap</code> отдаёт <code>passes</code>, но не сертификаты. Клиент с
+          активированным сертификатом на 50 BYN не видит его, пока не дойдёт до «Ещё → Абонементы
+          и сертификаты». Остаток, которым можно оплатить занятие, обязан стоять рядом с кнопкой,
+          которая его тратит.
+        </div>
+      </li>
+      <li>
+        <span class="n">5</span>
+        <div>
+          <b>Поиск разрезает личную зону</b>
+          Строка поиска живёт внутри <code>#hubIceZone</code> и ездит вместе с ней
+          (<code>placeIceZone</code>). В состоянии «есть окно» лёд скрыт, а строка остаётся — и встаёт
+          между моей записью и моим абонементом. Поиск при этом дублирует вкладку «Поиск» в один палец ниже.
+        </div>
+      </li>
+      <li>
+        <span class="n">6</span>
+        <div>
+          <b>До трёх точек «записаться» на одном экране</b>
+          Кнопка в карточке, FAB снизу справа, полоска «Ещё занятие». Экран с тремя главными
+          действиями — экран без главного действия.
+        </div>
+      </li>
+      <li>
+        <span class="n">7</span>
+        <div>
+          <b>Приветствие и профиль спорят</b>
+          «Вечер, Саша», а переключатель показывает «Петя Гаевский». Ниже весь хаб — про Петю.
+          Экран здоровается с одним человеком, а показывает данные другого.
+        </div>
+      </li>
+      <li>
+        <span class="n">8</span>
+        <div>
+          <b>«ТЦ Замок» и «ваш тренер» в одном поле</b>
+          В карточке окна поле места подставляет <code>'ваш тренер'</code>, когда арены нет.
+          Поле «где» заполняется не-местом. Честнее — строки нет.
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">11</span>
+        <div>
+          <b>Определённый город применяется молча, и отменить его негде</b>
+          <code>applyAutoDetectedCity</code> записывает город в состояние каталога и сохраняет
+          фильтры, не сказав об этом ни слова. Если GPS ошибся — а на то он и ближайшая арена
+          в радиусе 150 км, что ошибиться может, — человек об этом не узнает и будет смотреть
+          расписание чужого города, не понимая почему.
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">10</span>
+        <div>
+          <b>Системный диалог геолокации — молча, на холодном старте</b>
+          <code>attemptCatalogAutoGeoDetect</code> вызывает <code>getCurrentPosition</code> сразу
+          при открытии каталога. Человек ещё не понял, что это за приложение, а у него уже просят
+          геопозицию. Отказ пишется в <code>glide_geo_declined_v1</code> — и мы <b>не спрашиваем
+          больше никогда</b>; на iOS системный отказ чинится только через Настройки.
+          Единственный выстрел потрачен в худший момент. Плюс мы используем web-геолокацию,
+          а не <code>LocationManager</code> (Bot API 8.0) — у него есть
+          <code>openSettings()</code>, то есть путь восстановления.
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">9</span>
+        <div>
+          <b>Первый экран противоречит сам себе</b>
+          У нового клиента города нет. <code>greetingSub</code> это честно учитывает и подпись не пишет
+          (<code>isCountryFallback</code> → пустая строка). А <code>formatIceCard</code> тут же ставит
+          кикер «На льду · <b>Минск</b>» — потому что берёт <code>city_name</code> сеанса, найденного
+          по всей стране. Один экран в одном месте признаёт, что города не знает, и в соседнем его
+          утверждает. Человеку из Кобрина мы показываем минский каток как «его лёд».
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="block">
+    <h2>Анатомия «Моей карточки»</h2>
+    <div class="anat">
+      <div><code>__status</code><span>Что это. Кикер + штамп. Всегда.</span></div>
+      <div><code>__when</code><span>Крупное время — <b>только когда оно моё</b>. Чужое окно крупным временем не набирается.</span></div>
+      <div><code>__who</code><span>Лицо, имя, место, тихое «написать». В состоянии без записи — герой карточки.</span></div>
+      <div><code>__do</code><span>Ровно одно главное действие. Ноль или один — не два.</span></div>
+      <div><code>__pick</code><span>Чипы времён + «Все окна →». Вход во всё расписание тренера.</span></div>
+      <div><code>__wallet</code><span>Абонемент и сертификат одной полосой в подвале карточки.</span></div>
+    </div>
+  </div>
+
+  <div class="block">
+    <h2>Правила</h2>
+    <ul class="rules">
+      <li><strong>Один герой.</strong> На хабе ровно одна карточка сверху — всегда. Нечем заполнить
+        «моим» — её заполняет лёд города. Пустого хаба не существует.</li>
+      <li><strong>Крупное время = моё время.</strong> Чужие окна — только чипами.</li>
+      <li><strong>Одно действие.</strong> FAB исчезает, когда у карточки есть своя кнопка.</li>
+      <li><strong>Кошелёк внутри.</strong> Абонемент и сертификат — подвал карточки, не отдельные блоки.
+        Ноль остатка — строки нет. Абонемент чужого тренера под чужим лицом не стоит.</li>
+      <li><strong>Поиск по состоянию.</strong> Строка поиска видна только там, где работа клиента —
+        «кого-то найти» (гость, сохранённые, далёкий город). У клиента с тренером её нет.</li>
+      <li><strong>Рынок ниже.</strong> «Куда катимся» никогда не поднимается выше личного.</li>
+      <li><strong>Здороваемся с действующим профилем.</strong> Открыт профиль ребёнка — имя в приветствии
+        его, а переключатель ужимается до аватара: имя на экране звучит один раз, не два.</li>
+      <li><strong>Заливка — это смысл.</strong> Залитая кнопка значит ровно два акта: «написать тренеру»
+        и «выбрать город». Остальное — чипы и серые кнопки.</li>
+      <li><strong>Карточка целиком не кликабельна.</strong> Кликабельны её элементы. Невидимая зона
+        тапа на весь блок — то, из-за чего в текущем коде <code>stopHubCardControl</code> стоит
+        под каждым вложенным контролом.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h2>Ревью: что я поправил в себе</h2>
+    <ol class="probs">
+      <li class="is-hot">
+        <span class="n">!</span>
+        <div>
+          <b>«Чистый старт» был нарисован неправильно</b>
+          Я дал новичку город («Минск · 1 каток вечером») и плитки «Куда катимся». В реальности у него
+          нет <code>city_id</code>, плитки <b>скрыты по коду</b>, а кикер врёт про чужой город.
+          Экран расщеплён на два: <b>8 — первый вход</b> (героя занимает вопрос о городе,
+          под ним — карусель тренеров, единственный честный контент без города) и
+          <b>9 — город есть, личного нет</b>.
+        </div>
+      </li>
+      <li class="is-hot">
+        <span class="n">!</span>
+        <div>
+          <b>Я выдумал данные дважды</b>
+          «Александр обычно отвечает в течение часа» — такой метрики у нас нет. «Мы напишем, когда там
+          появятся тренеры» — такой рассылки не существует. Обе строки убраны. Осталась
+          «Время держится за вами» — она <b>проверена</b>: <code>_count_occupying_bookings</code>
+          считает <code>pending</code> занявшим место в слоте.
+        </div>
+      </li>
+      <li>
+        <span class="n">!</span>
+        <div>
+          <b>Залитая кнопка значила шесть разных вещей</b>
+          Она стояла в шести экранах из девяти. Теперь заливка — ровно два акта:
+          <b>«написать тренеру»</b>, когда это единственный рычаг, и <b>«выбрать город»</b>.
+          Всё остальное — чипы и серые кнопки. В состоянии «есть окна» залитой кнопки нет вообще:
+          чипы и <i>есть</i> действие, а «Все окна» — переполнение.
+        </div>
+      </li>
+      <li>
+        <span class="n">!</span>
+        <div>
+          <b>Дубли внутри моей же карточки</b>
+          Строка «ближайшее свободное время — завтра в 12:15» повторяла первый чип. Срок сгорания
+          абонемента был назван трижды (штамп, строка, кошелёк). Конверт «написать» рисовался дважды
+          в состоянии «скоро». Сертификат чужого тренера стоял под лицом Александра —
+          это нарушало правило, которое я сам же и написал. Всё убрано.
+        </div>
+      </li>
+      <li>
+        <span class="n">!</span>
+        <div>
+          <b>«Сохранённые» не заслуживают героя</b>
+          «Сохранил, но не выбрал» — слабое намерение, и показать в строках нечего: ближайшего окна
+          по списку тренеров у нас нет. Рекомендую свернуть: герой — лёд города,
+          сохранённые уходят обычной секцией ниже.
+        </div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="block">
+    <h2>Что ещё надо нарисовать</h2>
+    <ul class="rules">
+      <li><strong>Тренер без контакта.</strong> Окон нет и username/telegram_id нет — залитая кнопка
+        исчезает, остаётся серая «Все тренеры в Минске». Больше предложить нечего.</li>
+      <li><strong>Возврат без абонемента.</strong> Тот же каркас, статус «Вы тренировались 7 раз»,
+        кошелька нет.</li>
+      <li><strong>Занятие идёт сейчас</strong> (<code>hub_in_session</code>): штамп «сейчас»,
+        действия нет вообще.</li>
+      <li><strong>Скелетон.</strong> Сейчас <code>hub-initial-skel</code> обещает лёд + поиск + плитки.
+        Если героем становится карточка — скелетон обязан обещать <b>её</b> форму,
+        иначе ломается CLS, за который бился TASK-095.</li>
+      <li><strong>Поздние слоты.</strong> Абонемент приходит из <code>bootstrap</code> синхронно,
+        а окна — из <code>/client/slots</code> асинхронно: полоса чипов появится на ~300 мс позже
+        карточки. Нужна зарезервированная высота, иначе это новый источник CLS.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h2>Открытые вопросы — на вас</h2>
+    <div class="open-q">
+      <b>Решить до реализации</b>
+      <p><b>1.</b> Сертификаты в <code>bootstrap</code>. Нужен <code>certificates</code> в ответе
+        <code>/client/hub/bootstrap</code> (данные уже есть в <code>list_client_certificate_instances</code>,
+        поле <code>amount_remaining_cents</code>). Без этого строка сертификата в кошельке не появится.</p>
+      <p><b>2.</b> Состояние «Сохранённые тренеры». Чтобы показать ближайшее окно у каждого
+        сохранённого, нужен батч-эндпоинт слотов по списку тренеров. Сейчас <code>/client/slots</code>
+        принимает одного. Пока его нет — рисуем честный список без времён (состояние 6).</p>
+      <p><b>3.</b> Строка поиска на хабе. Предлагаю убрать её в состояниях 1–5 и 7.
+        Если вы хотите её везде — она встаёт <i>под</i> карточкой и больше никогда не ездит.</p>
+      <p><b>4.</b> <b>Город нельзя определить молча — это проверено.</b> <code>geoip2fast</code>
+        отдаёт только страну («this DB has no city granularity»), Telegram города не даёт,
+        таймзона различает страну, но не город внутри неё. Остаётся GPS — но это тоже вопрос,
+        просто его задаёт ОС. Поэтому справа: список городов первым, геолокация тихой строкой,
+        системный диалог — только по тапу (экран 9).</p>
+      <p><b>5.</b> <b>Вопрос нужен реже, чем кажется.</b> У клиента по ссылке тренера город
+        ставится сам: <code>bind_client_invite_trainer_context</code> →
+        <code>get_trainer_default_city_and_service</code> → <code>save_catalog_filters</code>.
+        То же для диплинка <code>client_&lt;city&gt;_&lt;service&gt;_&lt;trainer&gt;</code>.
+        Экран 8 нужен только холодному органическому входу — и чинить надо именно его,
+        а не «первый экран вообще».</p>
+    </div>
+  </div>
+
+  <p class="navhint">
+    <kbd>←</kbd> <kbd>→</kbd> — состояния хаба · <kbd>T</kbd> — светлая / тёмная тема<br>
+    Слева — реконструкция текущего кода, цифры на маркерах = проблемы из списка выше.
+  </p>
+</aside>
+
+<div class="stand">
+  <div class="states" id="states"></div>
+  <p class="state-note" id="stateNote"></p>
+  <div class="phones">
+    <div class="phone-wrap">
+      <div class="phone-label bad">Сейчас</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll" id="nowScroll"></div></div>
+        <div id="nowFab"></div>
+        <div class="tabbar">
+          <span class="on"><em>⌂</em>Главная</span><span><em>⌕</em>Поиск</span>
+          <span><em>▤</em>Записи</span><span><em>⋯</em>Ещё</span>
+        </div>
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-label good">Предлагаю</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll" id="nextScroll"></div></div>
+        <div class="tabbar">
+          <span class="on"><em>⌂</em>Главная</span><span><em>⌕</em>Поиск</span>
+          <span><em>▤</em>Записи</span><span><em>⋯</em>Ещё</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────────────
+   Общие куски обоих телефонов
+   ────────────────────────────────────────────────────────────────────── */
+
+/** Шапка. mism=true — приветствие не совпадает с действующим профилем (проблема 7). */
+function hero(opts) {
+  opts = opts || {};
+  var name = opts.name || 'Саша';
+  var sub = opts.sub == null ? 'Минск · 1 каток вечером' : opts.sub;
+  var sw = opts.switcher;
+  return '' +
+    '<div class="hero-row">' +
+      '<div class="greet' + (opts.mark ? ' mark' : '') + '"' + (opts.mark ? ' data-m="' + opts.mark + '"' : '') + '>' +
+        '<b>Вечер, ' + name + '</b>' +
+        (sub ? '<span class="' + (opts.mism ? 'mism' : '') + '">' + sub + '</span>' : '') +
+      '</div>' +
+      (sw
+        ? (opts.avatarOnly
+            ? '<div class="psw psw--compact" aria-label="Сменить профиль"><i>' + sw.charAt(0) + '</i> ⌄</div>'
+            : '<div class="psw"><i>' + sw.charAt(0) + '</i><u>' + sw + '</u> ⌄</div>')
+        : '') +
+    '</div>';
+}
+
+function searchRow(mark) {
+  return '<button class="search' + (mark ? ' mark' : '') + '"' + (mark ? ' data-m="' + mark + '"' : '') + '>Найти тренера или каток</button>';
+}
+
+function explore(opts) {
+  opts = opts || {};
+  return '' +
+    '<div class="sec-head"><span class="sec-title">Куда катимся</span><span class="sec-link">Все места</span></div>' +
+    '<div class="tiles">' +
+      '<div class="tile tile--wide"><em>✳</em><div><b>Катки <i>9</i></b><small>' + (opts.ice || '1 каток вечером') + '</small></div></div>' +
+      '<div class="tile"><em>☗</em><div><b>Тренеры <i>2</i></b><small>в Минске</small></div></div>' +
+      '<div class="tile shop"><em>▣</em><div><b>Магазины <i>13</i></b><small>коньки, заточка</small></div></div>' +
+    '</div>';
+}
+
+function iceSection(opts) {
+  opts = opts || {};
+  return '' +
+    '<div class="sec-head"><span class="kicker">' + (opts.kicker || 'На льду · Минск') + '</span><span class="sec-link">Весь лёд</span></div>' +
+    '<div class="ice-card">' +
+      '<div class="ice-card__ph">❄</div>' +
+      '<div class="ice-card__b">' +
+        '<div class="ice-card__t">19:00</div>' +
+        '<div class="ice-card__n">Чижовка-Арена</div>' +
+        '<div class="ice-card__f">Массовое катание · 12 BYN</div>' +
+      '</div>' +
+    '</div>' +
+    (opts.rows !== false
+      ? '<div class="ice-rows">' +
+          '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span></div>' +
+          '<div><b>21:15</b><span>Чижовка-Арена · 12 BYN</span></div>' +
+        '</div>'
+      : '');
+}
+
+/** Карусель лиц — то, что код реально рисует без города (loadAndRenderDiscovery). */
+function trainerCarousel() {
+  var people = [['АГ', 'Александр Гаевский', 'Индивидуальное'],
+                ['МК', 'Марина Ковалёва', 'Фигурное катание'],
+                ['ИЛ', 'Игорь Лученок', 'Хоккей, дети']];
+  return '' +
+    '<div class="sec-head"><span class="kicker">Тренеры на платформе</span><span class="sec-link">Все</span></div>' +
+    '<div class="tcards">' + people.map(function (p) {
+      return '<div class="tcard"><div class="tcard__m">' + p[0] + '</div>' +
+        '<b>' + p[1] + '</b><small>' + p[2] + '</small></div>';
+    }).join('') + '</div>';
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Кусочки «Предлагаю»
+   ────────────────────────────────────────────────────────────────────── */
+
+function meWho(opts) {
+  opts = opts || {};
+  return '' +
+    '<div class="me__who' + (opts.hero ? ' me__who--hero' : '') + '">' +
+      '<div class="avatar' + (opts.hero ? ' avatar--lg' : '') + '">' + (opts.initials || 'АГ') + '</div>' +
+      '<div class="me__who-t">' +
+        '<b>' + (opts.name || 'Александр Гаевский') + '</b>' +
+        (opts.place ? '<span>' + (opts.icon === '' ? '' : (opts.icon || '⌖') + ' ') + opts.place + '</span>' : '') +
+      '</div>' +
+      (opts.dm === false ? '' : '<button class="me__dm" aria-label="Написать тренеру">✉</button>') +
+    '</div>';
+}
+
+/** Полоса выбора времени — вход во все окна тренера. */
+function mePick(opts) {
+  opts = opts || {};
+  var chips = (opts.slots || []).map(function (s) {
+    return '<button class="me__chip"><em>' + s[0] + '</em><b>' + s[1] + '</b></button>';
+  }).join('');
+  return '' +
+    '<div class="me__pick">' +
+      '<div class="me__pick-h"><span class="k">' + (opts.head || 'Ближайшие окна') + '</span></div>' +
+      '<div class="me__chips">' + chips +
+        '<button class="me__chip me__chip--all">Все окна →</button>' +
+      '</div>' +
+    '</div>';
+}
+
+/** Кошелёк. Пустой массив → полосы нет (правило честности). */
+function meWallet(cells) {
+  if (!cells || !cells.length) return '';
+  return '<div class="me__wallet">' + cells.map(function (c) {
+    return '' +
+      '<button class="me__w' + (c.warn ? ' me__w--warn' : '') + '">' +
+        '<span class="me__w-k">' + c.k + '</span>' +
+        '<span class="me__w-v">' + c.v + (c.unit ? '<i>' + c.unit + '</i>' : '') + '</span>' +
+        (c.s ? '<span class="me__w-s">' + c.s + '</span>' : '') +
+        (c.bar != null ? '<span class="me__w-bar"><i style="width:' + c.bar + '%"></i></span>' : '') +
+      '</button>';
+  }).join('') + '</div>';
+}
+
+function meCard(inner, mod) {
+  return '<div class="me' + (mod ? ' me--' + mod : '') + '">' + inner + '</div>';
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Состояния
+   ────────────────────────────────────────────────────────────────────── */
+
+var STATES = [
+
+/* ── 1. Тренер есть, записи нет, окна есть — состояние со скриншота ── */
+{
+  id: 'open',
+  tab: 'Окно у тренера',
+  note: '<b>Состояние со скриншота.</b> Чужое окно больше не набирается как моя запись, выбор времени стал самим ' +
+        'действием, а «Все окна» — первым классом. Залитой кнопки тут нет намеренно: чипы и есть действие, ' +
+        'а заливка приберегается для состояний с одним однозначным актом.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', switcher: 'Петя Гаевский', mism: true, mark: 7 }) +
+      '<div class="now-card now-card--open mark" data-m="1">' +
+        '<div class="now-time">12:15</div>' +
+        '<div class="now-when">Завтра · 45 мин</div>' +
+        '<div class="now-who">' +
+          '<div class="avatar">АГ</div>' +
+          '<div class="now-who-t"><b>Александр Гаевский</b><span>⌖ ТЦ Замок</span></div>' +
+          '<button class="btn-quiet">написать</button>' +
+        '</div>' +
+        '<div class="now-cta mark mark--in" data-m="2"><button class="btn-fill">Записаться на 12:15</button></div>' +
+        '<button class="btn-quiet now-alt">завтра в 13:15</button>' +
+      '</div>' +
+      searchRow(5) +
+      '<div class="now-pass mark" data-m="3">' +
+        '<span class="num">1</span>' +
+        '<span class="body"><span class="k">осталось</span><span class="t">из 4 занятий</span>' +
+        '<span class="s">Абонемент «Взрослый 4 занятия»</span></span>' +
+        '<span class="ch">›</span>' +
+      '</div>' +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Петя', sub: 'Минск · 1 каток вечером', switcher: 'П', avatarOnly: true }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Ваш тренер</span></div>' +
+          meWho({ hero: true, place: 'ТЦ Замок · Минск' }) +
+          mePick({ head: 'Когда вам удобно', slots: [['Завтра', '12:15'], ['Завтра', '13:15'], ['Сб, 7', '10:00'], ['Сб, 7', '11:00']] }) +
+          '<div class="me__do"><button class="btn-ghost">Все окна Александра</button></div>' +
+        '</div>' +
+        meWallet([
+          { k: 'Абонемент', v: '1', unit: 'из 4', s: 'до 30 ноя', bar: 25 }
+        ]),
+        'accent'
+      ) +
+      iceSection({ rows: false }) +
+      explore();
+  }
+},
+
+/* ── 2. Запись подтверждена ──────────────────────────────────────────── */
+{
+  id: 'booked',
+  tab: 'Запись подтверждена',
+  note: 'Крупное время здесь законно — оно моё. Карточка не предлагает второе время, пока есть первое. ' +
+        'Абонемент переезжает в подвал той же карточки и говорит, <b>что именно спишется</b>. ' +
+        'Вся карточка целиком не кликабельна: открывает запись явная строка внизу.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', switcher: 'Петя Гаевский', mism: true }) +
+      '<div class="now-card">' +
+        '<div class="now-time">12:15</div>' +
+        '<div class="now-when">Завтра · 45 мин <span class="pill pill--ok"><i></i>подтверждена</span></div>' +
+        '<div class="now-who">' +
+          '<div class="avatar">АГ</div>' +
+          '<div class="now-who-t"><b>Александр Гаевский</b><span>⌖ ТЦ Замок</span></div>' +
+        '</div>' +
+        '<div class="now-meter mark mark--in" data-m="3"><b>1</b> из 4 <span class="now-bar"><i style="width:25%"></i></span> до 30 ноя</div>' +
+        '<div class="now-rest">' +
+          '<div class="now-rest-day">Суббота, 7 июня</div>' +
+          '<div class="now-line"><b>10:00</b><span>Александр Гаевский · ТЦ Замок</span><span class="pill pill--ok"><i></i>подтв.</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="now-pills"><span class="p sec">Ещё занятие</span></div>' +
+      searchRow(5) +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Петя', switcher: 'П', avatarOnly: true }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Ваша запись</span>' +
+            '<span class="pill pill--ok"><i></i>подтверждена</span></div>' +
+          '<div class="me__when"><b>12:15</b><span>Завтра · 45 мин</span></div>' +
+          meWho({ place: 'ТЦ Замок · Минск' }) +
+        '</div>' +
+        meWallet([
+          { k: 'Спишется с абонемента', v: '1', unit: 'из 4', s: 'это последнее занятие', bar: 25, warn: true }
+        ]) +
+        '<div class="me__foot"><span>Детали, перенос, отмена</span><span>›</span></div>',
+        'accent'
+      ) +
+      '<div class="rest">' +
+        '<div class="rest__h"><span class="kicker">Дальше</span><span class="sec-link">Все записи</span></div>' +
+        '<div class="rest__row"><b>10:00</b><span>Сб, 7 июня · Александр Гаевский</span>' +
+          '<span class="pill pill--ok"><i></i>подтв.</span></div>' +
+      '</div>' +
+      '<div style="margin-top:10px"><button class="btn-ghost">Ещё занятие с Александром</button></div>' +
+      iceSection({ rows: false }) +
+      explore();
+  }
+},
+
+/* ── 3. Запись ждёт подтверждения ────────────────────────────────────── */
+{
+  id: 'pending',
+  tab: 'Ждёт подтверждения',
+  note: 'Единственное состояние, где главный глагол — «написать тренеру»: другого рычага у клиента нет, ' +
+        'и залитая кнопка его заслуживает. «Время держится за вами» — <b>проверенный факт</b>: ' +
+        '<code>_count_occupying_bookings</code> считает <code>pending</code> занявшим место в слоте.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', switcher: 'Петя Гаевский', mism: true }) +
+      '<div class="now-card">' +
+        '<div class="now-time">12:15</div>' +
+        '<div class="now-when">Завтра · 45 мин <span class="pill pill--wait"><i></i>ждёт подтверждения</span></div>' +
+        '<div class="now-who">' +
+          '<div class="avatar">АГ</div>' +
+          '<div class="now-who-t"><b>Александр Гаевский</b><span>⌖ ТЦ Замок</span></div>' +
+        '</div>' +
+        '<div class="now-cta"><button class="btn-fill">Написать тренеру</button></div>' +
+        '<div class="now-meter mark mark--in" data-m="3"><b>1</b> из 4 <span class="now-bar"><i style="width:25%"></i></span> до 30 ноя</div>' +
+      '</div>' +
+      searchRow(5) +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Петя', switcher: 'П', avatarOnly: true }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Ваша запись</span>' +
+            '<span class="pill pill--wait"><i></i>ждёт тренера</span></div>' +
+          '<div class="me__when"><b>12:15</b><span>Завтра · 45 мин</span></div>' +
+          meWho({ place: 'ТЦ Замок · Минск', dm: false }) +
+          '<div class="me__line">Время держится за вами, пока Александр не ответит.</div>' +
+          '<div class="me__do"><button class="btn-fill">Написать Александру</button></div>' +
+        '</div>' +
+        meWallet([
+          { k: 'Абонемент', v: '1', unit: 'из 4', s: 'спишется после занятия', bar: 25 }
+        ]),
+        'warn'
+      ) +
+      iceSection({ rows: false }) +
+      explore();
+  }
+},
+
+/* ── 4. Занятие сегодня / скоро ──────────────────────────────────────── */
+{
+  id: 'soon',
+  tab: 'Сегодня / скоро',
+  note: 'За несколько часов до занятия вопрос меняется: не «когда», а «как доехать». Карточка это знает. ' +
+        'Конверт один на карточку — дубля контакта в шапке и в действии нет. ' +
+        'Подсостояние «идёт сейчас» (<code>hub_in_session</code>) — тот же каркас, штамп «сейчас», действия нет.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', switcher: 'Петя Гаевский', mism: true }) +
+      '<div class="now-card">' +
+        '<div class="now-time">12:15</div>' +
+        '<div class="now-when">Сегодня · 45 мин <span class="pill pill--soon"><i></i>через 2 ч</span></div>' +
+        '<div class="now-who">' +
+          '<div class="avatar">АГ</div>' +
+          '<div class="now-who-t"><b>Александр Гаевский</b><span>⌖ ТЦ Замок</span></div>' +
+        '</div>' +
+        '<div class="now-meter"><b>1</b> из 4 <span class="now-bar"><i style="width:25%"></i></span> до 30 ноя</div>' +
+      '</div>' +
+      '<div class="now-pills"><span class="p sec">Ещё занятие</span></div>' +
+      searchRow(5) +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Петя', switcher: 'П', avatarOnly: true }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Сегодня</span>' +
+            '<span class="pill pill--soon"><i></i>через 2 ч</span></div>' +
+          '<div class="me__when"><b>12:15</b><span>45 мин · до 13:00</span></div>' +
+          meWho({ place: 'ТЦ Замок · ул. Победителей, 65' }) +
+          '<div class="me__do"><button class="btn-ghost">Каток на карте</button></div>' +
+        '</div>' +
+        meWallet([
+          { k: 'Спишется с абонемента', v: '1', unit: 'из 4', s: 'это последнее занятие', bar: 25, warn: true }
+        ]),
+        'accent'
+      ) +
+      iceSection({ rows: false }) +
+      explore();
+  }
+},
+
+/* ── 5. Тренер есть, окон нет / онлайн-записи нет ────────────────────── */
+{
+  id: 'noslots',
+  tab: 'Окон нет',
+  note: 'Сейчас этот клиент видит карточку тренера, под ней лёд города, под ним пустую панель — и ни одного ответа ' +
+        'на «а когда?». Честный ответ короткий. Если контакта у тренера нет вообще, залитая кнопка исчезает, ' +
+        'и остаётся только серая «Все тренеры в Минске» — больше предложить нечего, и врать об этом нельзя.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', switcher: 'Петя Гаевский', mism: true }) +
+      '<div class="now-trainer">' +
+        '<div class="avatar">АГ</div>' +
+        '<div class="b"><b>Александр Гаевский</b><span>Ваш тренер</span></div>' +
+        '<span class="ch" style="color:var(--glide-hint);font-size:17px">›</span>' +
+      '</div>' +
+      iceSection() +
+      searchRow(5) +
+      '<div class="now-pass mark" data-m="3">' +
+        '<span class="num">1</span>' +
+        '<span class="body"><span class="k">осталось</span><span class="t">из 4 занятий</span>' +
+        '<span class="s">Абонемент «Взрослый 4 занятия»</span></span>' +
+        '<span class="ch">›</span>' +
+      '</div>' +
+      explore();
+  },
+  nowFab: true,
+  next: function () {
+    return '' +
+      hero({ name: 'Петя', switcher: 'П', avatarOnly: true }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Ваш тренер</span></div>' +
+          meWho({ hero: true, place: 'ТЦ Замок · Минск', dm: false }) +
+          '<div class="me__line">Свободных окон в расписании нет. Александр ставит время сам — ' +
+            'напишите, и он предложит ближайшее.</div>' +
+          '<div class="me__do"><button class="btn-fill">Написать Александру</button></div>' +
+        '</div>' +
+        meWallet([
+          { k: 'Абонемент', v: '1', unit: 'из 4', s: 'до 30 ноя', bar: 25 }
+        ])
+      ) +
+      iceSection() +
+      explore();
+  }
+},
+
+/* ── 6. Сохранённые тренеры, основного нет ───────────────────────────── */
+{
+  id: 'saved',
+  tab: 'Сохранённые',
+  note: '<b>Рекомендую убрать это состояние из героя.</b> «Сохранил, но не выбрал» — намерение слишком слабое, ' +
+        'чтобы владеть верхом экрана, и показать в строках всё равно нечего: ближайшего окна по списку ' +
+        'тренеров у нас нет (нужен батч-эндпоинт). Справа — компромисс: героем остаётся лёд города, ' +
+        'а сохранённые становятся обычной секцией под ним, с честными фактами вместо выдуманных времён.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      '<div class="now-saved">' +
+        '<div class="sec-head"><span class="kicker">Сохранённые тренеры</span><span class="sec-link">Все</span></div>' +
+        '<div class="row">' +
+          '<div class="chip"><span class="avatar" style="width:26px;height:26px;font-size:10px">АГ</span>Александр</div>' +
+          '<div class="chip"><span class="avatar" style="width:26px;height:26px;font-size:10px">МК</span>Марина</div>' +
+          '<div class="chip"><span class="avatar" style="width:26px;height:26px;font-size:10px">ИЛ</span>Игорь</div>' +
+        '</div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="now-pass mark" data-m="3">' +
+        '<span class="num">2</span>' +
+        '<span class="body"><span class="k">осталось</span><span class="t">из 8 занятий</span>' +
+        '<span class="s">Абонемент «Взрослый 8 занятий»</span></span>' +
+        '<span class="ch">›</span>' +
+      '</div>' +
+      iceSection() +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">На льду сегодня · Минск</span>' +
+            '<span class="pill pill--soon"><i></i>через 1 ч</span></div>' +
+          '<div class="me__when"><b>19:00</b><span>Массовое катание · 12 BYN</span></div>' +
+          meWho({ initials: '❄', name: 'Чижовка-Арена', place: 'ул. Ташкентская, 19', dm: false }) +
+          mePick({ head: 'Дальше на льду', slots: [['Сегодня', '20:30'], ['Сегодня', '21:15'], ['Завтра', '10:00']] }) +
+        '</div>' +
+        meWallet([
+          { k: 'Абонемент у Марины', v: '2', unit: 'из 8', s: 'до 12 дек', bar: 25 }
+        ])
+      ) +
+      searchRow() +
+      '<div class="sec-head"><span class="kicker">Вы сохранили 3 тренеров</span><span class="sec-link">Все</span></div>' +
+      '<div class="rest" style="margin-top:0">' +
+        '<div class="saved-rows">' +
+          '<div class="saved-row"><div class="avatar">АГ</div>' +
+            '<div class="t"><b>Александр Гаевский</b><span>Индивидуальное · ТЦ Замок</span></div>' +
+            '<span class="ch">›</span></div>' +
+          '<div class="saved-row"><div class="avatar">МК</div>' +
+            '<div class="t"><b>Марина Ковалёва</b><span>Фигурное катание · Чижовка-Арена</span></div>' +
+            '<span class="ch">›</span></div>' +
+          '<div class="saved-row"><div class="avatar">ИЛ</div>' +
+            '<div class="t"><b>Игорь Лученок</b><span>Хоккей, дети · Ледовый дворец</span></div>' +
+            '<span class="ch">›</span></div>' +
+        '</div>' +
+      '</div>' +
+      explore();
+  }
+},
+
+/* ── 7. Были занятия, тренера нет (возврат) ──────────────────────────── */
+{
+  id: 'dormant',
+  tab: 'Возврат',
+  note: 'Самое недооценённое состояние: <b>не сгоревший остаток абонемента</b> — лучший аргумент вернуться. ' +
+        'Сейчас остаток лежит панелью под строкой поиска. Срок назван <b>один раз</b> — в кошельке; ' +
+        'штамп и строка его не повторяют. У клиента без остатка карточка та же, но статус — ' +
+        '«Вы тренировались 7 раз», и кошелька нет.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      '<div class="now-pills"><span class="p">↻ Снова к Александру</span><span class="p sec">↻ Снова к Марине</span></div>' +
+      searchRow(5) +
+      '<div class="now-pass mark" data-m="3">' +
+        '<span class="num">1</span>' +
+        '<span class="body"><span class="k">осталось</span><span class="t">из 4 занятий</span>' +
+        '<span class="s">Абонемент «Взрослый 4 занятия» · до 12 окт</span></span>' +
+        '<span class="ch">›</span>' +
+      '</div>' +
+      iceSection() +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">У вас остался абонемент</span></div>' +
+          meWho({ hero: true, icon: '', place: 'последнее занятие — 18 мая', dm: false }) +
+          mePick({ head: 'Окна Александра', slots: [['Завтра', '12:15'], ['Сб, 7', '10:00'], ['Вс, 8', '18:30']] }) +
+          '<div class="me__do"><button class="btn-ghost">Все окна Александра</button></div>' +
+        '</div>' +
+        meWallet([
+          { k: 'Абонемент', v: '1', unit: 'из 4', s: 'сгорит 12 окт · через 8 дней', bar: 25, warn: true }
+        ]),
+        'warn'
+      ) +
+      '<div style="margin-top:10px"><button class="btn-ghost">Снова к Марине</button></div>' +
+      iceSection() +
+      explore();
+  }
+},
+
+/* ── 8. ПЕРВЫЙ ВХОД: города нет, тренера нет, ничего нет ─────────────── */
+{
+  id: 'first',
+  tab: 'Первый вход',
+  note: '<b>Проверено по коду — это реальный первый экран холодного входа.</b> У такого клиента ' +
+        '<code>city_id</code> пуст, <code>get_hub_ice_teaser</code> отдаёт ближайший сеанс ' +
+        '<i>по всей стране</i>, и хаб слева уверенно пишет «На льду · Минск» человеку из Кобрина. ' +
+        'Справа список городов идёт <b>первым</b>, а геолокация — тихой строкой: тап по «Минск» ' +
+        'быстрее и надёжнее, чем диалог разрешения плюс GPS-фикс (до 6 с по нашему таймауту), ' +
+        'и не жжёт единственный выстрел системного запроса.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: '' }) +
+      '<div class="sec-head"><span class="kicker">На льду · Минск</span><span class="sec-link">Весь лёд</span></div>' +
+      '<div class="ice-card mark" data-m="9">' +
+        '<div class="ice-card__ph">❄</div>' +
+        '<div class="ice-card__b">' +
+          '<div class="ice-card__t">19:00</div>' +
+          '<div class="ice-card__n">Чижовка-Арена</div>' +
+          '<div class="ice-card__f">Массовое катание · 12 BYN</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ice-rows">' +
+        '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span></div>' +
+        '<div><b>21:15</b><span>Чижовка-Арена · 12 BYN</span></div>' +
+      '</div>' +
+      searchRow() +
+      trainerCarousel() +
+      '<div class="ghost-note">Секция «Куда катимся» скрыта: города нет.</div>';
+  },
+  next: function () {
+    var cities = ['Минск', 'Брест', 'Гродно', 'Гомель', 'Витебск', 'Могилёв'];
+    return '' +
+      hero({ name: 'Саша', sub: '' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">С чего начнём</span></div>' +
+          '<div class="me__head">Где вы катаетесь?</div>' +
+          '<div class="me__line">Покажем лёд, тренеров и магазины вашего города. ' +
+            'Сменить можно в любой момент.</div>' +
+          '<div class="me__cities">' +
+            cities.map(function (c) { return '<button class="me__city">' + c + '</button>'; }).join('') +
+          '</div>' +
+          '<button class="me__geo"><span>⌖</span>Определить по геопозиции</button>' +
+        '</div>' +
+        '<div class="me__foot"><span>Показать всю Беларусь</span><span>›</span></div>',
+        'accent'
+      ) +
+      trainerCarousel() +
+      '<div class="ghost-note">Ни льда, ни плиток: пока нет города — показывать нечего, ' +
+        'а тренеры на платформе от города не зависят. Когда городов станет больше (Москва), ' +
+        'сетка ужимается до четырёх крупнейших плюс «Другой город» → поиск.</div>';
+  }
+},
+
+/* ── 9. Поиск: запрос геолокации ─────────────────────────────────────── */
+{
+  id: 'geo',
+  tab: 'Запрос геолокации',
+  note: 'Это не состояние хаба — это <b>вторая точка, где мы трогаем тему места</b>, и сегодня она ' +
+        'работает хуже всего. <code>attemptCatalogAutoGeoDetect</code> дёргает ' +
+        '<code>getCurrentPosition</code> <b>молча на холодном старте</b>: системный диалог прилетает ' +
+        'человеку, который ещё не понял, что это за приложение. Цена необратима — отказ пишется в ' +
+        '<code>glide_geo_declined_v1</code>, и мы не спрашиваем больше никогда. ' +
+        'Справа — тот же запрос, но по тапу и в момент пользы.',
+  now: function () {
+    return '' +
+      '<div class="cat-top">' +
+        '<div class="cat-title">Поиск</div>' +
+        '<div class="cat-chips"><span class="cc on">Катки</span><span class="cc">Тренеры</span>' +
+          '<span class="cc">Магазины</span></div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ice-rows" style="margin-top:12px">' +
+        '<div><b>19:00</b><span>Чижовка-Арена · 12 BYN</span></div>' +
+        '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span></div>' +
+        '<div><b>21:15</b><span>Чижовка-Арена · 12 BYN</span></div>' +
+      '</div>' +
+      '<div class="sysdlg mark" data-m="10">' +
+        '<div class="sysdlg__box">' +
+          '<b>«Glide» запрашивает доступ<br>к вашей геопозиции</b>' +
+          '<span>Разрешить доступ к геопозиции?</span>' +
+          '<div class="sysdlg__btns"><span>Запретить</span><span class="pri">Разрешить</span></div>' +
+        '</div>' +
+      '</div>';
+  },
+  next: function () {
+    return '' +
+      '<div class="cat-top">' +
+        '<div class="cat-title">Поиск</div>' +
+        '<div class="cat-chips"><span class="cc on">Катки</span>' +
+          '<span class="cc cc--geo">⌖ Рядом со мной</span>' +
+          '<span class="cc">Тренеры</span><span class="cc">Магазины</span></div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ice-rows" style="margin-top:12px">' +
+        '<div><b>19:00</b><span>Чижовка-Арена · 12 BYN</span></div>' +
+        '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span></div>' +
+      '</div>' +
+      '<div class="sheet">' +
+        '<div class="sheet__grip"></div>' +
+        '<div class="sheet__ic">⌖</div>' +
+        '<b class="sheet__t">Показать катки рядом?</b>' +
+        '<p class="sheet__p">Возьмём геопозицию один раз, чтобы отсортировать катки по расстоянию ' +
+          'и подставить ваш город. Мы её не храним и не передаём.</p>' +
+        '<button class="btn-fill">Разрешить геопозицию</button>' +
+        '<button class="btn-quiet sheet__no">Не сейчас</button>' +
+      '</div>' +
+      '<div class="ghost-note">Запрос — только по тапу на «Рядом со мной». Внутри Телеграма — ' +
+        '<code>LocationManager</code> (Bot API 8.0), а не <code>navigator.geolocation</code>: ' +
+        'нативный диалог и <b>путь восстановления</b> через <code>openSettings()</code> после ' +
+        'отказа, которого у веб-геолокации нет. «Не сейчас» не пишет вечный флаг отказа — ' +
+        'спросим снова, когда польза снова очевидна.</div>';
+  }
+},
+
+/* ── 10. Город есть, личного ещё нет ──────────────────────────────────── */
+{
+  id: 'city',
+  tab: 'Город есть, личного нет',
+  note: 'Второй экран новичка — сразу после выбора города, и он же состояние «давно пользуюсь, но ничего ' +
+        'личного нет». Нечем заполнить «моим» — карточку заполняет лёд города. <b>Та же рамка, тот же ритм:</b> ' +
+        'клиент, который завтра запишется, не увидит новый экран. Здесь же единственное место, ' +
+        'где поиск действительно главный.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      iceSection() +
+      searchRow() +
+      explore();
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">На льду сегодня · Минск</span>' +
+            '<span class="pill pill--soon"><i></i>через 1 ч</span></div>' +
+          '<div class="me__when"><b>19:00</b><span>Массовое катание · 12 BYN</span></div>' +
+          meWho({ initials: '❄', name: 'Чижовка-Арена', place: 'ул. Ташкентская, 19', dm: false }) +
+          mePick({ head: 'Дальше на льду', slots: [['Сегодня', '20:30'], ['Сегодня', '21:15'], ['Завтра', '10:00']] }) +
+          '<div class="me__do"><button class="btn-ghost">Все сеансы в Минске</button></div>' +
+        '</div>'
+      ) +
+      searchRow() +
+      explore();
+  }
+},
+
+/* ── 11. Город не определён / мы далеко ──────────────────────────────── */
+{
+  id: 'far',
+  tab: 'Мы не в вашем городе',
+  note: 'Ни льда, ни тренеров, ни плиток — и это правильно. Два действия здесь не нарушают правило «одно ' +
+        'действие»: это не дубли, а развилка. Обещания «напишем, когда появимся» в тексте нет — ' +
+        '<b>такой рассылки у нас не существует</b>, и обещать её нельзя.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Ближайший лёд — 180 км', mism: true }) +
+      '<div class="ice-card" style="border-color:rgba(240,162,75,.4)">' +
+        '<div class="ice-card__ph">❄</div>' +
+        '<div class="ice-card__b">' +
+          '<div class="ice-card__n">Скоро и у вас</div>' +
+          '<div class="ice-card__f">Ближе всего — «Брест-Арена», Брест</div>' +
+        '</div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ghost-note">Секция «Куда катимся» скрыта: в городе нет данных.</div>';
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Город не выбран' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Мы пока не в вашем городе</span></div>' +
+          '<div class="me__head">Ближайший лёд — 180 км</div>' +
+          '<div class="me__line">«Брест-Арена», Брест. Выберите город, где катаетесь, — ' +
+            'покажем, что в нём есть.</div>' +
+          '<div class="me__do"><button class="btn-fill">Выбрать свой город</button></div>' +
+          '<div style="margin-top:9px"><button class="btn-ghost">Смотреть всю Беларусь</button></div>' +
+        '</div>',
+        'warn'
+      );
+  }
+},
+
+/* ── 12. Подтверждение города после геолокации (DEC-003) ─────────────── */
+{
+  id: 'confirm-city',
+  tab: 'Подтверждение города',
+  note: 'Геопозиция вернула координаты — и дальше начинается то, что сегодня делается молча. ' +
+        '<code>applyAutoDetectedCity</code> ставит город без слова и без отмены (слева — шапка ' +
+        '«Поиска», где город просто появился). Справа догадка показана <b>как догадка</b>: ' +
+        'лёд Кобрина уже виден, счастливый путь бесплатный, а исправление — один тап. ' +
+        'Решение DEC-003 в TASK-162, взято из прототипа «Честный Мой город».',
+  now: function () {
+    return '' +
+      '<div class="cat-top">' +
+        '<div class="cat-title">Поиск</div>' +
+        '<div class="cat-chips"><span class="cc on mark" data-m="11">Минск ⌄</span>' +
+          '<span class="cc">Катки</span><span class="cc">Тренеры</span></div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ice-rows" style="margin-top:12px">' +
+        '<div><b>16:15</b><span>ТЦ «Замок» · Минск · 11 BYN</span></div>' +
+        '<div><b>19:00</b><span>Чижовка-Арена · Минск · 12 BYN</span></div>' +
+        '<div><b>20:30</b><span>Ледовый дворец · Минск · 10 BYN</span></div>' +
+      '</div>' +
+      '<div class="ghost-note">Город определён по GPS и сохранён в сессию. Пользователю не сказали ' +
+        'ни что это произошло, ни как это отменить. Если он не в Минске — он об этом не узнает.</div>';
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Кобрин · 1 каток сегодня' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Мы угадали?</span>' +
+            '<span class="pill pill--soon"><i></i>⌖ ~2 км</span></div>' +
+          '<div class="me__when"><b>18:00</b><span>Сегодня · массовое · 8 BYN</span></div>' +
+          meWho({ initials: '❄', name: 'Ледовая арена', place: 'Кобрин', dm: false }) +
+          '<div class="me__line">Показываем лёд <b>Кобрина</b>. Это ваш город?</div>' +
+          '<div class="me__do"><button class="btn-fill">Да, мой город</button></div>' +
+          '<div style="margin-top:9px"><button class="btn-ghost">Другой город</button></div>' +
+        '</div>',
+        'accent'
+      ) +
+      '<div class="sec-head"><span class="kicker">Куда катимся · Кобрин</span></div>' +
+      '<div class="tiles">' +
+        '<div class="tile tile--wide"><em>✳</em><div><b>Катки <i>1</i></b><small>сегодня в 18:00</small></div></div>' +
+        '<div class="tile"><em>☗</em><div><b>Тренеры <i>3</i></b><small>в Кобрине</small></div></div>' +
+      '</div>' +
+      '<div class="ghost-note">Плитки «Магазины» нет: в Кобрине их ноль, а счётчик 0 не рендерится ' +
+        '(DEC-006). Координаты не сохраняются — в сессию уйдёт только <code>city_id</code> после ' +
+        '«Да» (DEC-004).</div>';
+  }
+},
+
+/* ── 13. Режим «По всей Беларуси» (DEC-005 / DEC-007) ────────────────── */
+{
+  id: 'national',
+  tab: 'По всей Беларуси',
+  note: 'Человек сознательно выбрал «показать всю Беларусь». Наказывать его за честный выбор пустым ' +
+        'экраном нельзя — врала подпись, а не данные. Поэтому карточка остаётся, но подписана ' +
+        '<b>«Лёд в Беларуси»</b>, город стоит фактом сеанса, а не «вашим городом», и контрол выбора ' +
+        'города виден постоянно. Во вкладке «Поиск» тот же режим даёт чип «По всей Беларуси» вместо ' +
+        'подставленного города — тот же резолвер, те же тексты (DEC-001).',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: '' }) +
+      '<div class="sec-head"><span class="kicker mark" data-m="9">На льду · Минск</span>' +
+        '<span class="sec-link">Весь лёд</span></div>' +
+      '<div class="ice-card">' +
+        '<div class="ice-card__ph">❄</div>' +
+        '<div class="ice-card__b">' +
+          '<div class="ice-card__t">16:15</div>' +
+          '<div class="ice-card__n">ТЦ «Замок»</div>' +
+          '<div class="ice-card__f">Массовое катание · 11 BYN</div>' +
+        '</div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ghost-note">Режима «по всей стране» как осознанного выбора не существует: ' +
+        'страна-wide выдача просто притворяется городом.</div>';
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: '' }) +
+      '<div class="scope-row">' +
+        '<button class="scope-chip">По всей Беларуси ⌄</button>' +
+        '<button class="btn-quiet">Выбрать город</button>' +
+      '</div>' +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Лёд в Беларуси</span>' +
+            '<span class="pill pill--soon"><i></i>ближайший</span></div>' +
+          '<div class="me__when"><b>16:15</b><span>Сегодня · массовое · 11 BYN</span></div>' +
+          meWho({ initials: '❄', name: 'ТЦ «Замок»', place: 'Минск', dm: false }) +
+          mePick({ head: 'Дальше по стране', slots: [['Кобрин', '18:00'], ['Минск', '19:00'], ['Брест', '11:00']] }) +
+          '<div class="me__do"><button class="btn-ghost">Все сеансы страны</button></div>' +
+        '</div>'
+      ) +
+      searchRow() +
+      '<div class="ghost-note">«Куда катимся» скрыта: плитки считаются по городу, города нет. ' +
+        'Город в карточке — факт сеанса, а не «ваш город»: разница между честным и нечестным ' +
+        'здесь целиком в подписи.</div>';
+  }
+},
+
+/* ── 14. Мост «лёд → тренер» (TASK-164) ──────────────────────────────── */
+{
+  id: 'bridge',
+  tab: 'Мост лёд → тренер',
+  note: '<b>Стратегический экран, а не косметика.</b> Мы строим каталог, ценный без тренеров, ' +
+        'чтобы потом продавать подписки — но человек, пришедший за расписанием, сегодня с тренером ' +
+        'не встречается <b>никогда</b>. «КатОК» прожил шесть лет ровно в этой конфигурации и ' +
+        'отдавал пользователя на сайт арены. Справа два касания: счётчик тренеров <b>из данных</b> ' +
+        'на строке катка и одна тихая закрываемая строка. Ноль тренеров на катке — строки нет.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      iceSection() +
+      searchRow() +
+      explore() +
+      '<div class="ghost-note">Ни одного места, где лёд встречается с тренером. Плитка «Тренеры 2» ' +
+        '— это навигация по рынку, а не предложение в момент интереса ко льду.</div>';
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">На льду сегодня · Минск</span>' +
+            '<span class="pill pill--soon"><i></i>через 1 ч</span></div>' +
+          '<div class="me__when"><b>19:00</b><span>Массовое катание · 12 BYN</span></div>' +
+          meWho({ initials: '❄', name: 'Чижовка-Арена', place: 'ул. Ташкентская, 19', dm: false }) +
+          '<button class="me__coach"><span class="me__coach-av">АГ</span>' +
+            '<span class="me__coach-t">Здесь тренируют <b>2 тренера</b></span><span>›</span></button>' +
+          '<div class="me__do"><button class="btn-ghost">Все сеансы в Минске</button></div>' +
+        '</div>'
+      ) +
+      '<div class="ice-rows">' +
+        '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span><em class="coach-n">2 тренера</em></div>' +
+        '<div><b>21:15</b><span>Чижовка-Арена · 12 BYN</span><em class="coach-n">2 тренера</em></div>' +
+      '</div>' +
+      '<div class="nudge">' +
+        '<span class="nudge__t">Катаетесь сами? С тренером выходит быстрее — в Минске их двое.</span>' +
+        '<button class="nudge__go">Посмотреть</button>' +
+        '<button class="nudge__x" aria-label="Скрыть">×</button>' +
+      '</div>' +
+      explore() +
+      '<div class="ghost-note">Счётчик — из связи тренер ↔ арена, не из обещаний: ноль тренеров ' +
+        'на катке — строки нет. Тихая строка показывается после повторных визитов за расписанием, ' +
+        'закрывается навсегда одним тапом и ничего не перекрывает. Переход засчитывается тренеру ' +
+        'как лид — это то, что однажды можно будет показать в подписке.</div>';
+  }
+},
+
+/* ── 15. Подписка на каток (TASK-165) ────────────────────────────────── */
+{
+  id: 'follow',
+  tab: 'Подписка на каток',
+  note: 'Расписание смотрят пятнадцать секунд и закрывают — причин вернуться нет, и бесплатный ' +
+        'трафик протекает. «Мой каток» даёт и привычку, и — что важнее для стратегии — ' +
+        '<b>известного пользователя</b>, до которого можно достучаться. Напоминание не уходит, ' +
+        'если по арене нет достоверного расписания: правило свежести из ' +
+        '<code>ingestion-system.md</code> § 6 распространяется и на пуши.',
+  now: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      iceSection() +
+      searchRow() +
+      explore() +
+      '<div class="ghost-note">Отметить каток нельзя, вернуться незачем. Следующий визит ' +
+        'зависит только от того, вспомнит ли человек про приложение сам.</div>';
+  },
+  next: function () {
+    return '' +
+      hero({ name: 'Саша', sub: 'Минск · 1 каток вечером' }) +
+      meCard(
+        '<div class="me__pad">' +
+          '<div class="me__status"><span class="k">Ваш каток · сегодня</span>' +
+            '<span class="pill pill--soon"><i></i>через 1 ч</span></div>' +
+          '<div class="me__when"><b>19:00</b><span>Массовое катание · 12 BYN</span></div>' +
+          '<div class="me__who">' +
+            '<div class="avatar">❄</div>' +
+            '<div class="me__who-t"><b>Чижовка-Арена</b><span>⌖ ул. Ташкентская, 19</span></div>' +
+            '<button class="me__fav is-on" aria-label="Убрать из моих катков">★</button>' +
+          '</div>' +
+          mePick({ head: 'Дальше на этом катке', slots: [['Сегодня', '20:30'], ['Завтра', '10:00'], ['Завтра', '19:00']] }) +
+        '</div>' +
+        '<div class="me__foot"><span>Напомним вечером накануне</span><span>вкл ›</span></div>'
+      ) +
+      '<div class="sec-head"><span class="kicker">Мои катки · 2</span><span class="sec-link">Все</span></div>' +
+      '<div class="ice-rows">' +
+        '<div><b>20:30</b><span>Ледовый дворец · 10 BYN</span><em class="fav-n">★</em></div>' +
+        '<div><b>—</b><span>Арена «Юность» · сегодня нет сеансов</span><em class="fav-n">★</em></div>' +
+      '</div>' +
+      searchRow() +
+      '<div class="ghost-note">«Сегодня нет сеансов» — честнее, чем прятать подписанный каток: ' +
+        'человек сам его выбрал и должен видеть его состояние. Но напоминание по нему не уйдёт — ' +
+        'напомнить про сеанс, которого нет, хуже, чем промолчать.</div>';
+  }
+},
+
+];
+
+/* ──────────────────────────────────────────────────────────────────────
+   Стенд
+   ────────────────────────────────────────────────────────────────────── */
+var cur = 0;
+var statesEl = document.getElementById('states');
+var noteEl = document.getElementById('stateNote');
+var nowEl = document.getElementById('nowScroll');
+var nextEl = document.getElementById('nextScroll');
+var fabEl = document.getElementById('nowFab');
+
+statesEl.innerHTML = STATES.map(function (s, i) {
+  return '<button data-i="' + i + '"><span class="idx">' + (i + 1) + '</span>' + s.tab + '</button>';
+}).join('');
+
+function paint() {
+  var s = STATES[cur];
+  noteEl.innerHTML = s.note;
+  nowEl.innerHTML = s.now();
+  nextEl.innerHTML = s.next();
+  nowEl.scrollTop = 0;
+  nextEl.scrollTop = 0;
+  // Оверлеи рендерятся внутри .scroll, но принадлежат всему экрану: поднимаем их.
+  [nowEl, nextEl].forEach(function (mount) {
+    var screen = mount.parentNode;
+    Array.prototype.forEach.call(screen.querySelectorAll(':scope > .sysdlg, :scope > .sheet'), function (n) {
+      n.remove();
+    });
+    Array.prototype.forEach.call(mount.querySelectorAll('.sysdlg, .sheet'), function (n) {
+      screen.appendChild(n);
+    });
+  });
+  fabEl.innerHTML = s.nowFab ? '<div class="now-fab mark" data-m="6">▦ Записаться</div>' : '';
+  Array.prototype.forEach.call(statesEl.children, function (b, i) {
+    b.classList.toggle('is-on', i === cur);
+  });
+}
+
+statesEl.addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-i]');
+  if (!b) return;
+  cur = Number(b.getAttribute('data-i'));
+  paint();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'ArrowRight') { cur = (cur + 1) % STATES.length; paint(); }
+  else if (e.key === 'ArrowLeft') { cur = (cur - 1 + STATES.length) % STATES.length; paint(); }
+  else if (e.key === 't' || e.key === 'T' || e.key === 'е' || e.key === 'Е') {
+    var root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  }
+});
+
+paint();
+</script>
+</body>
+</html>

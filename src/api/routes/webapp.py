@@ -2734,7 +2734,10 @@ async def get_client_hub_bootstrap(
     ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
     ``ice_teaser`` is the soonest future public_skate/open_ice slot in the session city, or null.
 
-    ``bookings`` / ``requests`` / ``activity`` / ``passes`` resolve through the selected profile
+    ``certificates`` lists only balances the client can actually pay with (activated, non-zero
+    remainder) and never carries the certificate code.
+
+    ``bookings`` / ``requests`` / ``activity`` / ``passes`` / ``certificates`` resolve through the selected profile
     (``X-Profile-Id``). ``_hub_session`` edges/saved trainers and rebook/primary hints use the
     same acting profile.
     """
@@ -2836,15 +2839,29 @@ async def get_client_hub_bootstrap(
                 }
                 for e in saved_edges
             ]
+            # TASK-160: карточке возврата нужно лицо и «последний раз …», иначе самое
+            # ценное состояние (не сгоревший абонемент) выглядит безликой строкой.
+            # Фото уже лежит в `hints`, а история — в тех же `edges`, из которых
+            # собирается `primary_history`: новых запросов не нужно.
+            edge_by_trainer = {int(e.get("trainer_id") or 0): e for e in edges}
             rebook_targets: list[dict[str, Any]] = []
             for rt_tid, rt_svc in rebook_raw:
                 h = hints.get(int(rt_tid)) or {}
                 rt_name = ((h.get("trainer_display_name") or "Тренер").strip() or "Тренер")
+                rt_edge = edge_by_trainer.get(int(rt_tid)) or {}
+                rt_last = rt_edge.get("last_completed_at")
                 rebook_targets.append(
                     {
                         "trainer_id": int(rt_tid),
                         "service_id": int(rt_svc) if rt_svc is not None else None,
                         "trainer_display_name": rt_name,
+                        "trainer_list_photo_key": h.get("trainer_list_photo_key"),
+                        "completed_count": int(rt_edge.get("completed_count") or 0),
+                        "last_completed_at": (
+                            rt_last.isoformat()
+                            if rt_last is not None and hasattr(rt_last, "isoformat")
+                            else (str(rt_last) if rt_last is not None else None)
+                        ),
                     }
                 )
             primary_history: dict[str, Any] | None = None
@@ -2909,8 +2926,42 @@ async def get_client_hub_bootstrap(
                 return []
             return await list_client_pass_instances(s, cid)
 
-    bookings, requests, client_session, activity, passes = await asyncio.gather(
-        _bookings(), _requests(), _hub_session(), _activity(), _passes()
+    async def _certificates() -> list[dict]:
+        """Certificate balances the client can pay with — bundled here to avoid a round-trip."""
+        try:
+            async with async_session_factory() as s:
+                cid = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+                if not cid:
+                    return []
+                rows = await list_client_certificate_instances(s, cid)
+            # Показываем только то, чем реально можно заплатить: 'issued' значит, что
+            # сертификат выдан, но этот клиент его ещё не активировал — это пока не его
+            # баланс; нулевой остаток уже израсходован. Код сертификата хабу не нужен,
+            # а это секрет — наружу его не отдаём.
+            #
+            # Проекция живёт ВНУТРИ try вместе с чтением: иначе неожиданная форма строки
+            # убивала бы весь bootstrap, то есть ровно то, от чего этот except и защищает.
+            return [
+                {
+                    "id": row["id"],
+                    "trainer_id": row["trainer_id"],
+                    "trainer_name": row["trainer_name"],
+                    "amount_remaining_cents": int(row.get("amount_remaining_cents") or 0),
+                    "amount_cents": row.get("amount_cents"),
+                    "status": row.get("status"),
+                }
+                for row in rows
+                if row.get("status") == "activated"
+                and int(row.get("amount_remaining_cents") or 0) > 0
+            ]
+        except Exception:
+            # Сертификаты — полка на Главной, а не её каркас: сбой их чтения обязан
+            # стоить клиенту только этой полки, а не всего хаба.
+            logger.exception("client hub certificates failed")
+            return []
+
+    bookings, requests, client_session, activity, passes, certificates = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates()
     )
     ice_teaser = None
     try:
@@ -2938,6 +2989,7 @@ async def get_client_hub_bootstrap(
         "client_session": client_session,
         "activity": activity,
         "passes": passes,
+        "certificates": certificates,
         "ice_teaser": ice_teaser,
         "pending_referral": await _pending_referral_payload(telegram_id, session),
         "platform": {

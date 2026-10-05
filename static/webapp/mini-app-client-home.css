@@ -93,14 +93,31 @@ body.hub-body {
 }
 
 /*
- * Сценарий booking-led. Приветствие больше не раздувается в заголовок: строка
- * одинаковая во всех сценариях, а сценарий называет кикер над карточкой.
- * Класс сохранён — на него завязан отступ карточки записи.
+ * TASK-160 (S4). Приветствие называет действующий профиль — значит имя уже
+ * прозвучало, и переключатель рядом повторял бы его вторым. Ужимаем до аватара
+ * с шевроном: идентичность на экране одна, а смена профиля остаётся на месте.
+ * Имени в приветствии нет (нет профилей) — переключатель остаётся полным.
  */
-.hub-body--booking-led .hub-next-card {
-  margin-top: 0;
+.hub-hero-profile-switcher--compact {
+  max-width: none;
 }
 
+.hub-hero-profile-switcher--compact .cps-chip__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Сценарий booking-led. Приветствие больше не раздувается в заголовок: строка
+ * одинаковая во всех сценариях, а сценарий называет кикер над карточкой.
+ * Класс сохранён — на нём держится отступ зоны льда под своим временем.
+ */
 /* Своё уже сказано: поиск (зона льда без фото) отступает от тихой строки «Ещё занятие». */
 .hub-body--booking-led .hub-ice-zone {
   margin-top: 22px;
@@ -140,108 +157,9 @@ body.hub-body {
   color: var(--tg-theme-button-color);
 }
 
-/* ─── Next booking hero card (Scenario 3) ──────────────────────────────── */
-
-.hub-next-card {
-  margin: 0 16px 20px;
-  border-radius: var(--app-radius-xl);
-  overflow: hidden;
-  position: relative;
-  color: var(--tg-theme-text-color);
-  background: var(--glide-surface);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.06),
-    0 2px 8px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(69, 185, 187, 0.12);
-  cursor: pointer;
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-
-.hub-next-card--confirmed {
-  background: var(--glide-surface);
-  border-color: rgba(69, 185, 187, 0.22);
-}
-
-.hub-next-card--pending {
-  background: var(--glide-surface);
-  border-color: rgba(69, 185, 187, 0.14);
-}
-
-.hub-is-dark .hub-next-card {
-  color: rgba(255, 255, 255, 0.96);
-  background: var(--glide-card);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.hub-is-dark .hub-next-card--confirmed {
-  background: var(--glide-card);
-  border-color: rgba(69, 185, 187, 0.28);
-}
-
-.hub-is-dark .hub-next-card--pending {
-  background: var(--glide-card);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.hub-is-dark .hub-next-card-date {
-  color: rgba(255, 252, 245, 0.72);
-}
-
-.hub-is-dark .hub-next-card-trainer-avatar {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.hub-is-dark .hub-next-card-place-line {
-  color: rgba(255, 252, 245, 0.72);
-}
-
-.hub-next-card::before,
-.hub-next-card::after {
-  display: none;
-}
-
-.hub-next-card:active {
-  transform: scale(0.99);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
-}
-
-.hub-next-card-inner {
-  padding: var(--app-space-4);
-  position: relative;
-  z-index: 1;
-}
-
-.hub-next-card-time {
-  font-size: var(--app-text-display);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: -0.045em;
-  line-height: 0.95;
-  margin: 0;
-}
-
-.hub-next-card-time--offer {
-  color: var(--glide-ink-teal);
-}
-
-.hub-next-card-when {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--app-space-2);
-  margin-top: var(--app-space-2);
-}
-
-.hub-next-card-date {
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-medium);
-  margin: 0;
-  color: var(--tg-theme-hint-color);
-}
+/* ─── Штамп и строки «остальных записей» (TASK-160: рамку рисует .me) ──── */
+/* Рамка, крупное время и строка тренера уехали в «мою карточку»; здесь    */
+/* остались только штамп статуса и строки списка записей под карточкой.    */
 
 .hub-next-card-pill {
   display: inline-flex;
@@ -282,201 +200,7 @@ body.hub-body {
   animation: hub-pulse 2.8s ease-in-out infinite;
 }
 
-.hub-next-card-who {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  margin-top: var(--app-space-4);
-  padding-top: var(--app-space-3);
-  border-top: 1px solid var(--app-card-line);
-}
-
-.hub-next-card-trainer-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--app-icon-xs);
-  font-weight: var(--app-weight-bold);
-  flex-shrink: 0;
-  text-shadow: none;
-  box-shadow: 0 2px 8px rgba(200, 160, 80, 0.08);
-}
-
-.hub-next-card-who-link {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-button.hub-next-card-who-link:active {
-  opacity: 0.72;
-}
-
-.hub-next-card-who-text {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
-
-.hub-next-card-trainer-avatar--photo {
-  padding: 0;
-  overflow: hidden;
-}
-
-.hub-next-card-trainer-avatar--photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.hub-next-card-trainer-name {
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-semibold);
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin-bottom: 3px;
-}
-
-.hub-next-card-place-line {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-  line-height: 1.35;
-}
-
-.hub-next-card-place-line svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--glide-hint);
-}
-
-.hub-next-card-place-line span {
-  min-width: 0;
-}
-
-.hub-next-card-quiet {
-  border: none;
-  background: none;
-  color: var(--glide-ink-teal);
-  font: inherit;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  padding: var(--app-space-2) 0 var(--app-space-2) var(--app-space-2);
-  flex: none;
-  cursor: pointer;
-}
-
-.hub-next-card-fill {
-  display: block;
-  width: 100%;
-  margin-top: var(--app-space-4);
-  padding: 14px var(--app-space-4);
-  border: none;
-  border-radius: var(--app-radius-md);
-  background: var(--app-cta-fill);
-  color: var(--app-cta-text);
-  font: inherit;
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-semibold);
-  cursor: pointer;
-}
-
-.hub-next-card-fill:active {
-  transform: translateY(1px);
-}
-
-.hub-next-card-alt {
-  display: block;
-  width: 100%;
-  margin-top: var(--app-space-1);
-  padding: var(--app-space-2);
-  border: none;
-  background: none;
-  color: var(--glide-ink-teal);
-  font: inherit;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  cursor: pointer;
-}
-
-.hub-next-card-meter {
-  display: block;
-  width: 100%;
-  margin-top: var(--app-space-4);
-  padding: var(--app-space-3) 0 0;
-  border: none;
-  border-top: 1px solid var(--app-card-line);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.hub-next-card-meter-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-2);
-}
-
-.hub-next-card-meter-num {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: var(--glide-ink-teal);
-}
-
-.hub-next-card-meter-meta {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  text-align: right;
-}
-
-.hub-next-card-meter-bar {
-  display: block;
-  height: 4px;
-  margin-top: var(--app-space-2);
-  border-radius: 999px;
-  background: var(--app-card-line);
-  overflow: hidden;
-}
-
-.hub-next-card-meter-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--app-cta-fill);
-}
-
-/* Следующие записи — та же карточка, тот же штамп. Отдельной карточки списка нет. */
-.hub-next-card-rest {
-  border-top: 1px solid var(--app-card-line);
-  padding: 4px 8px 8px;
-}
-
+/* Следующие записи — строки списка под карточкой (контейнер — .rest, TASK-160). */
 .hub-next-card-day {
   margin: 10px 8px 0;
   font-size: var(--app-text-kicker);
@@ -556,216 +280,6 @@ button.hub-next-card-who-link:active {
 @keyframes hub-pulse {
   0%, 100% { opacity: 0.8; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.3); }
-}
-
-/* ─── My Trainer card (Scenario 1) ─────────────────────────────────────── */
-
-.hub-trainer-card {
-  margin: 0 16px 20px;
-  border-radius: var(--app-radius-xl);
-  background: var(--tg-theme-secondary-bg-color);
-  border: 1.5px solid rgba(var(--accent-rgb), 0.25);
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  cursor: pointer;
-  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, border-color 0.22s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-trainer-card-main {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.hub-trainer-contact-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 11px 14px;
-  border-radius: var(--app-radius-md);
-  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-rgb), 0.12);
-  color: var(--app-cta-fill);
-  font: inherit;
-  font-size: var(--app-text-body);
-  font-weight: var(--app-weight-bold);
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-trainer-contact-btn:hover {
-  background: rgba(var(--accent-rgb), 0.2);
-  border-color: rgba(var(--accent-rgb), 0.55);
-}
-
-.hub-trainer-contact-btn:active {
-  transform: scale(0.98);
-}
-
-.hub-trainer-contact-btn svg {
-  width: 17px;
-  height: 17px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-}
-
-.hub-is-dark .hub-trainer-card {
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
-  border-color: rgba(var(--accent-rgb), 0.3);
-}
-
-.hub-trainer-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(var(--accent-rgb), 0.5);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
-}
-
-.hub-trainer-card:active {
-  transform: scale(0.985);
-}
-
-.hub-trainer-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: none;
-  border: 2px solid rgba(var(--accent-rgb), 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--app-icon-md);
-  font-weight: var(--app-weight-bold);
-  color: var(--app-cta-fill);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.hub-trainer-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.hub-trainer-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.hub-trainer-label {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  margin-bottom: 3px;
-}
-
-.hub-trainer-name {
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-bold);
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hub-trainer-sub {
-  font-size: var(--app-text-caption);
-  color: var(--tg-theme-hint-color);
-  margin-top: 2px;
-}
-
-.hub-trainer-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.hub-trainer-msg-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--app-radius-md);
-  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-rgb), 0.1);
-  color: var(--app-cta-fill);
-  cursor: pointer;
-  font-family: inherit;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-trainer-msg-btn:hover {
-  background: rgba(var(--accent-rgb), 0.2);
-  border-color: rgba(var(--accent-rgb), 0.6);
-}
-
-.hub-trainer-msg-btn:active {
-  transform: scale(0.92);
-}
-
-.hub-trainer-msg-btn svg {
-  width: 17px;
-  height: 17px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.hub-trainer-share-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--app-radius-md);
-  border: 1.5px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-rgb), 0.1);
-  color: var(--app-cta-fill);
-  cursor: pointer;
-  font-family: inherit;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.hub-trainer-share-btn:hover {
-  background: rgba(var(--accent-rgb), 0.2);
-  border-color: rgba(var(--accent-rgb), 0.6);
-}
-
-.hub-trainer-share-btn:active {
-  transform: scale(0.92);
-}
-
-.hub-trainer-share-btn svg {
-  width: 17px;
-  height: 17px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 /* ─── Section headings ───────────────────────────────────────────────────── */
@@ -1095,28 +609,6 @@ button.hub-next-card-who-link:active {
   padding: 0 2px;
 }
 
-.hub-primary-panel__row--slots {
-  display: flex;
-  flex-direction: column;
-}
-
-.hub-primary-panel__row--slots .hub-primary-panel__row-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: color-mix(in srgb, var(--app-cta-fill) 52%, var(--tg-theme-hint-color));
-}
-
-.hub-primary-panel__row--slots .hub-primary-panel__row-head::before {
-  content: '';
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--app-cta-fill);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-cta-fill) 22%, transparent);
-}
-
 .hub-primary-panel__row--pass {
   display: flex;
   flex-direction: column;
@@ -1125,129 +617,6 @@ button.hub-next-card-who-link:active {
 
 .hub-primary-panel__row--pass .hub-primary-panel__row-head {
   margin-bottom: 10px;
-}
-
-.hub-primary-panel__slots-scroller {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  scroll-snap-type: x mandatory;
-  padding: 2px;
-  margin: -2px;
-}
-
-.hub-primary-panel__slots-scroller::-webkit-scrollbar { display: none; }
-
-.hub-primary-panel__slot {
-  position: relative;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 12px 14px 12px 16px;
-  min-width: 132px;
-  border-radius: var(--app-radius-lg);
-  background: color-mix(in srgb, var(--app-cta-fill) 11%, var(--tg-theme-secondary-bg-color));
-  border: 1.5px solid color-mix(in srgb, var(--app-cta-fill) 24%, rgba(128, 128, 128, 0.14));
-  box-shadow: var(--app-btn-shadow-surface);
-  font: inherit;
-  color: var(--tg-theme-text-color);
-  cursor: pointer;
-  text-align: left;
-  scroll-snap-align: start;
-  transition: border-color 0.2s ease, transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-}
-
-.hub-primary-panel__slot::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 var(--app-radius-xs) var(--app-radius-xs) 0;
-  background: var(--app-cta-fill);
-  opacity: 0.92;
-}
-
-.hub-primary-panel__slot:hover {
-  border-color: color-mix(in srgb, var(--app-cta-fill) 42%, transparent);
-  box-shadow: var(--app-btn-shadow-surface);
-}
-
-.hub-primary-panel__slot:active {
-  transform: scale(0.97);
-  background: color-mix(in srgb, var(--app-cta-fill) 16%, var(--tg-theme-secondary-bg-color));
-}
-
-.hub-primary-panel__slot-day {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-semibold);
-  color: color-mix(in srgb, var(--tg-theme-text-color) 48%, var(--tg-theme-hint-color));
-  letter-spacing: 0.02em;
-}
-
-.hub-primary-panel__slot-time {
-  font-size: var(--app-text-lead);
-  font-weight: var(--app-weight-bold);
-  letter-spacing: -0.02em;
-  color: color-mix(in srgb, var(--app-cta-fill) 88%, var(--tg-theme-text-color));
-}
-
-.hub-primary-panel__slot-place {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: color-mix(in srgb, var(--tg-theme-text-color) 38%, var(--tg-theme-hint-color));
-  max-width: 160px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.hub-primary-panel__slot-place svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  color: color-mix(in srgb, var(--app-cta-fill) 72%, var(--tg-theme-hint-color));
-}
-
-.hub-is-dark .hub-primary-panel__row--slots .hub-primary-panel__row-head {
-  color: var(--glide-ink-teal);
-}
-
-.hub-is-dark .hub-primary-panel__slot {
-  background: var(--glide-brand-wash);
-  border-color: color-mix(in srgb, var(--app-cta-fill) 32%, rgba(255, 255, 255, 0.08));
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
-}
-
-.hub-is-dark .hub-primary-panel__slot:hover {
-  border-color: color-mix(in srgb, var(--app-cta-fill) 48%, transparent);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
-}
-
-.hub-is-dark .hub-primary-panel__slot-time {
-  color: var(--glide-ink-teal);
-}
-
-.hub-is-dark .hub-primary-panel__slot-day {
-  color: var(--glide-hint);
-}
-
-.hub-is-dark .hub-primary-panel__slot-place {
-  color: var(--glide-hint);
-}
-
-.hub-is-dark .hub-primary-panel__slot-place svg {
-  color: var(--glide-ink-teal);
 }
 
 /* Pass pill — single CTA card. Ice-blue numeric accent. */
@@ -1335,15 +704,6 @@ button.hub-next-card-who-link:active {
   color: var(--tg-theme-hint-color);
   font-size: var(--app-icon-lg);
   line-height: 1;
-}
-
-/* History line — identity signal, not a CTA. Muted, no card. */
-.hub-primary-panel__history {
-  font-size: var(--app-text-caption);
-  font-weight: var(--app-weight-medium);
-  color: var(--tg-theme-hint-color);
-  padding: 2px 4px;
-  line-height: 1.4;
 }
 
 /* ─── Discovery: trainers carousel for new clients ──────────────────────── */
@@ -1919,26 +1279,56 @@ button.hub-next-card-who-link:active {
 .hub-skel-line--kicker { width: 132px; height: 10px; opacity: 0.55; margin: 4px 0; }
 
 /* Коробка карточки льда: та же, что у a.hub-ice-card. */
-.hub-skel-icecard {
+/*
+ * TASK-160 (S5). Скелетон обещает форму «Моей карточки» — той самой, что
+ * приедет. Геометрия списана с `.me`, а не придумана: тот же радиус, те же
+ * отступы 14px/15px, тот же gap 11px в строке лица, та же высота чипа.
+ * Разойдутся эти числа — вернётся CLS, против которого писался TASK-095.
+ */
+.hub-skel-me {
   border: 1px solid var(--app-card-line);
   border-radius: var(--app-radius-lg);
   background: var(--app-card-bg);
   overflow: hidden;
 }
 
-.hub-skel-band {
-  aspect-ratio: 4 / 1;
-  border-radius: 0;
+.hub-skel-me__pad {
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
 }
 
-.hub-skel-icerow {
-  display: grid;
-  grid-template-columns: 78px 1fr;
+.hub-skel-me__who {
+  display: flex;
   align-items: center;
-  gap: var(--app-space-3);
-  padding: var(--app-space-3) var(--app-space-4);
-  min-height: 70px;
-  box-sizing: border-box;
+  gap: 11px;
+  min-width: 0;
+}
+
+.hub-skel-me__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/*
+ * Резерв под полосу окон. Абонемент приходит из bootstrap синхронно, а окна —
+ * из /client/slots асинхронно: без этой коробки карточка подпрыгивала бы на
+ * величину полосы через ~300 мс после первой отрисовки.
+ */
+.hub-skel-me__chips {
+  display: flex;
+  gap: var(--app-space-2);
+  overflow: hidden;
+}
+
+.hub-skel-me__chip {
+  flex: none;
+  width: 84px;
+  height: 46px;
+  border-radius: var(--app-radius-sm);
 }
 
 .hub-skel-icelines {
@@ -1946,12 +1336,6 @@ button.hub-next-card-who-link:active {
   flex-direction: column;
   gap: var(--app-space-2);
   min-width: 0;
-}
-
-/* Коробка строки поиска: те же 39px, что у .hub-search. */
-.hub-skel-search {
-  height: 39px;
-  border-radius: var(--app-radius-md);
 }
 
 /* TASK-149: вместо карусели тренеров — сетка плиток «Куда катимся» (та же геометрия, что .hub-cg). */
@@ -2628,3 +2012,468 @@ a.hub-ice-card {
 }
 
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TASK-160 — «Моя карточка»: одна рамка хаба на шесть заливок.
+
+   Разметку и классы даёт hub-me-card.js (менять их здесь нельзя); стили
+   перенесены из design/prototypes/2026-10-04-client-hub-me-card.html и
+   переведены на токены theme.css — локальных цветов и размеров у прототипа
+   в продакшене не существует.
+
+   Весь набор классов лежит здесь сразу, хотя S2 подключает только заливку
+   «моя запись»: S3/S4 добавляют вызовы модели, а не правят палитру второй раз.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.me {
+  border-radius: var(--app-radius-lg);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-card);
+  overflow: hidden;
+}
+
+/* Акцент — моё обязательство или живые окна; внимание — ожидание и сгорающий срок. */
+.me--accent {
+  border-color: rgba(var(--accent-rgb), 0.42);
+}
+
+.me--warn {
+  border-color: color-mix(in srgb, var(--app-attention) 42%, transparent);
+}
+
+.me__pad {
+  padding: 14px 15px;
+}
+
+/* Кнопки внутри карточки: шрифт и цвет наследуются, глобального reset тут нет. */
+.me__who-link,
+.me__dm,
+.me__chip,
+.me__city,
+.me__geo,
+.me__w,
+.me__foot,
+.me .btn-fill,
+.me .btn-ghost {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.me__status {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  justify-content: space-between;
+}
+
+.me__status .k {
+  font-size: var(--app-text-kicker);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-bold);
+}
+
+/* Крупное время — только у моей записи и у сеанса площадки (правило модели). */
+.me__when {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.me__when b {
+  font-size: var(--app-text-display);
+  font-weight: var(--app-weight-bold);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.me__when span {
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+}
+
+.me__head {
+  margin-top: 9px;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.me__who {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: var(--app-space-3);
+}
+
+.me__who--hero {
+  margin-top: 10px;
+}
+
+/* Аватар и имя — кнопка-сестра конверта: button в button невалиден. */
+.me__who-link {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.me__who-t {
+  flex: 1;
+  min-width: 0;
+}
+
+.me__who-t b {
+  display: block;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.me__who--hero .me__who-t b {
+  font-size: var(--app-text-lead);
+}
+
+.me__who-t span {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  margin-top: 2px;
+}
+
+.me__dm {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  display: grid;
+  place-items: center;
+  font-size: var(--app-icon-sm);
+  color: var(--glide-ink-teal);
+}
+
+.me__line {
+  margin-top: 10px;
+  font-size: var(--app-text-caption);
+  line-height: 1.45;
+  color: var(--glide-hint);
+}
+
+.me__line b {
+  color: var(--glide-text);
+  font-weight: var(--app-weight-semibold);
+}
+
+.me__do {
+  margin-top: 13px;
+}
+
+/* Полоса выбора времени: она и есть точка входа во ВСЕ окна тренера. */
+.me__pick {
+  margin-top: 11px;
+}
+
+.me__pick-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+
+.me__pick-h .k {
+  font-size: var(--app-text-kicker);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-bold);
+}
+
+.me__chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  /* Край-фейд вместо scroll-state queries: Telegram WebView на iOS — WebKit,
+     container scroll-state там не поддержан (только Chromium 133+). */
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 26px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 26px), transparent 100%);
+}
+
+.me__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.me__chip {
+  flex: none;
+  scroll-snap-align: start;
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--glide-line-strong);
+  background: var(--glide-surface);
+  text-align: left;
+  min-width: 84px;
+}
+
+.me__chip em {
+  display: block;
+  font-style: normal;
+  font-size: var(--app-text-kicker);
+  color: var(--glide-hint);
+}
+
+.me__chip b {
+  display: block;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+
+.me__chip--all {
+  display: grid;
+  place-items: center;
+  min-width: 74px;
+  border-style: dashed;
+  color: var(--glide-ink-teal);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+}
+
+/* Кошелёк: абонемент и сертификат — внутри карточки, одной полосой.
+   Ячейка есть только при положительном остатке — это держит модель. */
+.me__wallet {
+  display: flex;
+  gap: 1px;
+  background: var(--glide-line);
+  border-top: 1px solid var(--glide-line);
+}
+
+.me__w {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  text-align: left;
+  border: 0;
+  padding: 11px 14px 12px;
+  background: var(--glide-surface);
+}
+
+.me__w-k {
+  display: block;
+  font-size: var(--app-text-kicker);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glide-hint);
+  font-weight: var(--app-weight-bold);
+}
+
+.me__w-v {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: var(--app-text-lead);
+  font-weight: var(--app-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.me__w-v i {
+  font-style: normal;
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  color: var(--glide-hint);
+}
+
+.me__w-s {
+  display: block;
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  margin-top: 3px;
+}
+
+.me__w--warn .me__w-v,
+.me__w--warn .me__w-s {
+  color: var(--app-attention-ink);
+}
+
+.me__w-bar {
+  display: block;
+  height: 3px;
+  border-radius: var(--app-radius-pill);
+  background: var(--glide-line);
+  margin-top: 7px;
+  overflow: hidden;
+}
+
+.me__w-bar i {
+  display: block;
+  height: 100%;
+  background: var(--app-cta-fill);
+}
+
+.me__w--warn .me__w-bar i {
+  background: var(--app-attention);
+}
+
+.me__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 15px;
+  border: 0;
+  border-top: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  font-size: var(--app-text-caption);
+  color: var(--glide-hint);
+  text-align: left;
+}
+
+/* Первый вход: города — первым классом, геолокация — тихой строкой. */
+.me__cities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.me__city {
+  padding: var(--app-space-3) 10px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--glide-line-strong);
+  background: var(--glide-surface);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+
+.me__geo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 11px;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--glide-ink-teal);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+}
+
+.me__geo span {
+  font-size: var(--app-icon-sm);
+}
+
+/* Монограмма / фото лица карточки. */
+.me .avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  overflow: hidden;
+}
+
+.me .avatar--lg {
+  width: 46px;
+  height: 46px;
+  font-size: var(--app-text-body);
+}
+
+.me .avatar--photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Штамп статуса. Семантика состояний — из theme.css, своих цветов у хаба нет. */
+.me .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--app-radius-pill);
+  font-size: var(--app-text-kicker);
+  font-weight: var(--app-weight-bold);
+  letter-spacing: 0.02em;
+}
+
+.me .pill i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.me .pill--ok {
+  background: var(--app-ok-wash);
+  color: var(--app-ok-ink);
+}
+
+.me .pill--wait {
+  background: var(--app-attention-wash);
+  color: var(--app-attention-ink);
+}
+
+.me .pill--soon {
+  background: var(--glide-brand-wash);
+  color: var(--glide-ink-teal);
+}
+
+.me .btn-fill {
+  display: block;
+  width: 100%;
+  height: 46px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-bold);
+}
+
+.me .btn-ghost {
+  display: block;
+  width: 100%;
+  height: 44px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--glide-line-strong);
+  background: transparent;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-semibold);
+}
+
+/* Остальные записи — отдельный блок ПОД карточкой: рамка карточки их не держит
+   (у неё теперь кошелёк и подвал), и вкладывать список внутрь больше некуда. */
+.rest {
+  margin-top: 9px;
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  overflow: hidden;
+}

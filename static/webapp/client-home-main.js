@@ -64,6 +64,17 @@
       var hubPersonalSlot = false;
       /** Контакт основного тренера — чтобы окно собралось, когда придут слоты. */
       var hubPrimaryTrainer = null;
+      /**
+       * TASK-160 (S4). Лёд города уже стоит заливкой «моей карточки» — зона
+       * #hubIceZone в этом состоянии показала бы тот же сеанс второй раз.
+       */
+      var hubIceInCard = false;
+      /**
+       * У карточки есть своё главное действие (залитая кнопка или полоса чипов).
+       * Правило прототипа: на экране ровно одна главная кнопка, поэтому нижний
+       * FAB с тем же смыслом при этом не показывается.
+       */
+      var hubMeCardHasAction = false;
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -244,26 +255,37 @@
       }
 
       /**
-       * Прячет фото льда и строки сеансов, когда слот занят своим временем.
-       * Поиск в той же зоне остаётся. Снятие флага возвращает героя, если он есть в DOM.
+       * Зона льда: фото сеанса и строки «дальше на льду».
+       *
+       * TASK-160 (S4): строка поиска из этой зоны уехала (DEC-001 — она живёт под
+       * карточкой и больше не ездит), поэтому прятать внутренности и оставлять
+       * зону на экране больше нечего ради: без героя в зоне не остаётся ничего,
+       * и она скрывается целиком, а не превращается в пустую коробку с отступами.
+       *
+       * Два повода спрятать героя:
+       *   hubPersonalSlot — слот первого экрана занят своим временем (запись, окно);
+       *   hubIceInCard    — тот же сеанс уже стоит заливкой «моей карточки».
        */
       function applyIceHeroVisibility() {
         var zone = document.getElementById('hubIceZone');
         if (!zone) return;
-        zone.classList.toggle('hub-ice-zone--personal', hubPersonalSlot);
+        var suppressed = hubPersonalSlot || hubIceInCard;
+        zone.classList.toggle('hub-ice-zone--personal', suppressed);
         var head = zone.querySelector('.hub-sec-head');
         var teaser = document.getElementById('hubIceTeaser');
         var sessions = document.getElementById('hubIceSessions');
-        if (hubPersonalSlot) {
+        if (suppressed) {
           if (head) head.hidden = true;
           if (teaser) teaser.hidden = true;
           if (sessions) sessions.hidden = true;
+          zone.hidden = true;
           return;
         }
         var hasCard = !!(teaser && teaser.querySelector('a.hub-ice-card'));
         if (head) head.hidden = !hasCard;
         if (teaser) teaser.hidden = !hasCard;
         if (sessions) sessions.hidden = !sessions.querySelector('.hub-ice-today__row');
+        zone.hidden = !hasCard && !(sessions && sessions.querySelector('.hub-ice-today__row'));
       }
 
       /**
@@ -583,13 +605,53 @@
       }
 
       /**
+       * TASK-160 (S4). Имя действующего профиля, а не владельца аккаунта.
+       * Ниже весь хаб про выбранный профиль: его записи, его абонемент, его
+       * карточка. У родителя с открытым профилем ребёнка это разные люди, и
+       * здороваться именем из Telegram значило бы назвать не того человека.
+       *
+       * Повторяет выбор лица, который делает сам переключатель (`activeProfile`):
+       * активный профиль, иначе дефолтный, иначе первый — иначе приветствие и
+       * чип назвали бы двух разных людей. Профилей ещё нет — имени нет.
+       */
+      function actingProfileFirstName() {
+        var sw = window.ClientProfileSwitcher;
+        if (!sw || typeof sw.getProfiles !== 'function' || typeof sw.getActiveProfileId !== 'function') {
+          return null;
+        }
+        var list = sw.getProfiles() || [];
+        if (!list.length) return null;
+        var id = sw.getActiveProfileId();
+        var found = null;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i] && id != null && list[i].client_id === id) { found = list[i]; break; }
+        }
+        if (!found) found = list[0];
+        var name = ((found && found.first_name) || '') + '';
+        name = name.trim();
+        return name || null;
+      }
+
+      /**
+       * Приветствие назвало действующий профиль — переключатель ужимается до
+       * аватара (класс --compact прототипа): имя на экране звучит один раз, не
+       * два. Имя пришло из Telegram (профилей ещё нет) — чип остаётся с именем,
+       * иначе действующий профиль на экране вообще никем не назван.
+       */
+      function syncProfileSwitcherCompact() {
+        var mount = document.getElementById('clientProfileSwitcherMount');
+        if (!mount) return;
+        mount.classList.toggle('hub-hero-profile-switcher--compact', !!actingProfileFirstName());
+      }
+
+      /**
        * TASK-149 (S1). «{Утро|День|Вечер|Ночь}, {Имя}» по часу УСТРОЙСТВА; нет имени —
        * «Добрый вечер» и т.п. Логика — в чистой HubCollectionsModel.greetingText
        * (тесты в tests/js/hub-collections-model.test.js). Фолбэк на старый текст —
        * только если модель по какой-то причине не загрузилась.
        */
       function defaultHubGreeting() {
-        var name = getTelegramFirstName();
+        var name = actingProfileFirstName() || getTelegramFirstName();
         var model = window.HubCollectionsModel;
         if (model && typeof model.greetingText === 'function') {
           return model.greetingText(new Date().getHours(), name);
@@ -600,6 +662,7 @@
       function setHubGreeting(text) {
         var el = document.getElementById('hubGreetingHello');
         if (el) el.textContent = text;
+        syncProfileSwitcherCompact();
       }
 
       function setHeroLayout(mode) {
@@ -628,15 +691,6 @@
 
       var HUB_SOON_MS = 3 * 60 * 60 * 1000;
 
-      function soonWhenPrefix(ms) {
-        var mins = Math.max(1, Math.round(ms / 60000));
-        if (mins < 60) {
-          return 'через ' + mins + ' ' + pluralRuHub(mins, 'минуту', 'минуты', 'минут');
-        }
-        var h = Math.round(mins / 60);
-        if (h <= 1) return 'через час';
-        return 'через ' + h + ' ' + pluralRuHub(h, 'час', 'часа', 'часов');
-      }
 
       /** Штамп справа от даты. Ожидание важнее «скоро»: ответ тренера — действие. */
       function nextCardStamp(b, start) {
@@ -650,81 +704,6 @@
         return { kind: 'ok', label: 'подтверждено' };
       }
 
-      function nextCardWhenText(dateLabel, dur, stamp, start) {
-        var tail = dur ? (' · ' + dur + ' мин') : '';
-        if (stamp.kind === 'soon' && stamp.label === 'скоро' && start) {
-          return soonWhenPrefix(start.getTime() - Date.now()) + tail;
-        }
-        return dateLabel + tail;
-      }
-
-      function slotDurationMin(slot) {
-        if (!slot) return 0;
-        var given = Number(slot.duration_minutes || 0);
-        if (given > 0) return given;
-        var a = String(slot.start_time || '');
-        var b = String(slot.end_time || '');
-        if (a.length < 5 || b.length < 5) return 0;
-        var am = parseInt(a.slice(0, 2), 10) * 60 + parseInt(a.slice(3, 5), 10);
-        var bm = parseInt(b.slice(0, 2), 10) * 60 + parseInt(b.slice(3, 5), 10);
-        return bm > am ? bm - am : 0;
-      }
-
-      function trainerAvatarHtml(name, photoKey) {
-        var src = trainerHubThumb(photoKey || '');
-        if (src) {
-          return '<span class="hub-next-card-trainer-avatar hub-next-card-trainer-avatar--photo"><img src="' + esc(src) + '" alt=""/></span>';
-        }
-        return '<span class="hub-next-card-trainer-avatar" aria-hidden="true">' + esc(initials(name)) + '</span>';
-      }
-
-      /** Аватар и имя. Тап открывает полную карточку тренера, не запись. */
-      function trainerWhoLinkHtml(name, photoKey, placeHtml, trainerId) {
-        var inner =
-          trainerAvatarHtml(name, photoKey) +
-          '<span class="hub-next-card-who-text">' +
-            '<span class="hub-next-card-trainer-name">' + esc(name) + '</span>' +
-            placeHtml +
-          '</span>';
-        var tid = trainerId != null && String(trainerId).trim() !== '' ? String(trainerId) : '';
-        if (!tid) return '<div class="hub-next-card-who-link">' + inner + '</div>';
-        return (
-          '<button type="button" class="hub-next-card-who-link" data-hub-action="open-trainer"' +
-          ' data-trainer-id="' + esc(tid) + '"' +
-          ' aria-label="Карточка тренера, ' + esc(name) + '">' +
-          inner +
-          '</button>'
-        );
-      }
-
-      /** Строка абонемента внутри карточки. Нет остатка — строки нет. */
-      function buildNextCardMeterHtml(passInfo) {
-        if (!passInfo) return '';
-        var remaining = Number(passInfo.sessions_remaining || 0);
-        if (!remaining || remaining <= 0) return '';
-        var total = Number(passInfo.sessions_total || 0);
-        var expiry = passInfo.expires_at ? formatHistoryDate(passInfo.expires_at) : '';
-        var num = total > 0 ? (remaining + ' из ' + total) : String(remaining);
-        var meta = expiry ? ('до ' + expiry) : '';
-        var bar = '';
-        if (total > 0) {
-          var pct = Math.max(4, Math.min(100, Math.round((remaining / total) * 100)));
-          bar = '<span class="hub-next-card-meter-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>';
-        }
-        var aria = total > 0
-          ? ('Осталось ' + remaining + ' из ' + total)
-          : ('Осталось ' + remaining);
-        return (
-          '<button type="button" class="hub-next-card-meter" data-hub-action="open-pass" aria-label="' + esc(aria) + '">' +
-            '<span class="hub-next-card-meter-top">' +
-              '<span class="hub-next-card-meter-num">' + esc(num) + '</span>' +
-              (meta ? '<span class="hub-next-card-meter-meta">' + esc(meta) + '</span>' : '') +
-            '</span>' +
-            bar +
-          '</button>'
-        );
-      }
-
       function stopHubCardControl(ev) {
         ev.stopPropagation();
         if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
@@ -732,182 +711,567 @@
         }
       }
 
-      /**
-       * Ближайшая запись. Время первое, штамп у даты.
-       * Глагол один и только в ожидании: «Написать тренеру».
-       * Подтверждённая запись открывается тапом по карточке.
+      /* ── TASK-160 (S2): «Моя карточка» вместо карточки записи ─────────── */
+
+      /*
+       * Карточку собирает и рисует hub-me-card.js — чистая модель без DOM.
+       * Хаб отвечает за три вещи, которых у модели быть не может: данные входа,
+       * текущее время и переходы. Разметку и классы хаб не трогает: контракт
+       * карточки заморожен, иначе прототип и продакшен разъедутся.
        */
-      function renderNextBookingCard(item, passInfo) {
-        var b = item.b;
-        var day = item.day;
-        var time = (b.start_time || '').slice(0, 5);
-        var dateLabel = relativeDate(day.date, day.day_label);
-        var trainerName = b.trainer_name || 'Тренер';
-        var place = ((b.arena_name || b.place_display || '') + '').trim();
-        var dur = b.duration_minutes || 45;
-        var stamp = nextCardStamp(b, item.start);
-        var when = nextCardWhenText(dateLabel, dur, stamp, item.start);
-        var isPending = stamp.kind === 'wait';
 
-        var placeHtml = place
-          ? '<span class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></span>'
-          : '';
+      /**
+       * Контекст нарисованной карточки. Кнопки внутри неё id записи не несут
+       * (модель их не выдаёт), поэтому «Детали, перенос, отмена» открывает ту
+       * запись, под которую карточку и собрали.
+       */
+      var hubMeCardBookingId = null;
+      var hubMeCardTrainerId = null;
+      var hubMeCardWired = false;
+      /**
+       * TASK-160 (S4). Переходы чипов «дальше на льду»: у сеанса площадки нет
+       * тренера, и форма записи ему не подходит — чип ведёт на карточку катка с
+       * этим сеансом. Ссылку (`arena?ref=…&day=…&s=…`) строит HubIceTodayModel,
+       * той же конвенцией, что строки сеансов; в разметке чипа дня нет, поэтому
+       * готовые ссылки держим картой «id сеанса → href».
+       */
+      var hubMeCardSessionHrefs = {};
 
-        var verbHtml = '';
-        if (isPending && canWriteTrainer(b)) {
-          verbHtml =
-            '<button type="button" class="hub-next-card-fill" data-hub-dm="next"' +
-            ' data-dm-un="' + esc((b.trainer_telegram_username || '').replace(/^@/, '')) + '"' +
-            ' data-dm-tid="' + esc(b.trainer_telegram_id != null ? String(b.trainer_telegram_id) : '') + '">' +
-            'Написать тренеру</button>';
+      /**
+       * Склонённые формы имени для подписей карточки. Падежи живут в
+       * ru-person-name.js, а модель чистая — поэтому готовые формы кладёт хаб.
+       * Имя приходит одной строкой: `formatPersonName` внутри `inflectPersonName`
+       * сам разбирает её на имя и фамилию, как это делает catalog-main.js.
+       * Модуля нет — полей нет, и модель переходит на безпадежные формы
+       * («Написать тренеру»), а не на кривой падеж.
+       */
+      function hubMeDeclinedForms(fullName) {
+        var ru = window.RuPersonName;
+        var name = ((fullName || '') + '').trim();
+        if (!name || !ru || typeof ru.inflectPersonName !== 'function') return null;
+        var out = {};
+        var dat = ru.inflectPersonName(name, '', 'dat');
+        var gen = ru.inflectPersonName(name, '', 'gen');
+        if (dat) out.nameDative = dat;
+        if (gen) out.nameGenitive = gen;
+        return (out.nameDative || out.nameGenitive) ? out : null;
+      }
+
+      /** Сертификаты из bootstrap (TASK-161). Поля нет — кошелёк просто без ячейки. */
+      function hubBootstrapCertificates(hubMeta) {
+        return Array.isArray(hubMeta && hubMeta.certificates) ? hubMeta.certificates : [];
+      }
+
+      function buildMeCardBookingInput(item, hubMeta) {
+        var b = (item && item.b) || {};
+        var day = (item && item.day) || {};
+        var booking = {};
+        for (var key in b) {
+          if (Object.prototype.hasOwnProperty.call(b, key)) booking[key] = b[key];
         }
+        // `start` уже Date (flattenBookings), `date_label` — та же подпись даты,
+        // что была у старой карточки: относительные формы считает хаб, не модель.
+        booking.start = item && item.start;
+        booking.date_label = relativeDate(day.date, day.day_label);
+        if (!booking.arena_name) booking.arena_name = b.place_display || '';
+        var input = {
+          kind: 'booking',
+          booking: booking,
+          passes: hubBootstrapPasses(hubMeta),
+          certificates: hubBootstrapCertificates(hubMeta),
+        };
+        var forms = hubMeDeclinedForms(b.trainer_name);
+        if (forms) input.trainer = forms;
+        return input;
+      }
 
-        var cardMod = isPending ? 'hub-next-card--pending' : (stamp.kind === 'soon' ? 'hub-next-card--soon' : 'hub-next-card--confirmed');
-        var html =
-          '<div class="hub-next-card ' + cardMod + '" id="nextCard" data-bid="' + esc(String(b.id)) + '" tabindex="0" role="button"' +
-          ' aria-label="Ближайшая запись, ' + esc(when) + '">' +
-            '<div class="hub-next-card-inner">' +
-              '<div class="hub-next-card-time">' + esc(time) + '</div>' +
-              '<div class="hub-next-card-when">' +
-                '<span class="hub-next-card-date">' + esc(when) + '</span>' +
-                '<span class="hub-next-card-pill hub-next-card-pill--' + stamp.kind + '">' +
-                  '<i class="hub-next-card-status-dot" aria-hidden="true"></i>' +
-                  esc(stamp.label) +
-                '</span>' +
-              '</div>' +
-              '<div class="hub-next-card-who">' +
-                trainerWhoLinkHtml(trainerName, b.trainer_list_photo_key, placeHtml, b.trainer_id) +
-              '</div>' +
-              verbHtml +
-              buildNextCardMeterHtml(passInfo) +
-            '</div>' +
-          '</div>';
-
+      /**
+       * Единственный painter карточки: один контейнер (#nextBookingBlock), один
+       * делегирующий слушатель и одно «сейчас» на все заливки. Заливка решает,
+       * ЧТО показать; куда рисовать и чем кликать — решение одно и общее,
+       * иначе состояния разъедутся по мелочам обвязки.
+       *
+       * Возвращает view (или null): вызывающему нужно знать, нарисовалась ли
+       * карточка и есть ли в ней полоса окон, — от этого зависят лёд и FAB.
+       */
+      function renderMeCard(input, bookingId) {
         var block = document.getElementById('nextBookingBlock');
-        block.innerHTML = html;
+        if (!block) return null;
+        var model = window.HubMeCard;
+        if (!model || typeof model.buildView !== 'function') return null;
+        var view = model.buildView(input, new Date());
+        if (!view) {
+          block.innerHTML = '';
+          hubMeCardHasAction = false;
+          hubMeCardSessionHrefs = {};
+          return null;
+        }
+        hubMeCardBookingId = bookingId != null && bookingId !== '' ? String(bookingId) : null;
+        hubMeCardTrainerId = view.trainerId;
+        // Залитая кнопка или полоса чипов — это и есть главное действие экрана.
+        hubMeCardHasAction = !!view.pick || !!(view.actions && view.actions.length);
+        hubMeCardSessionHrefs = {};
+        block.innerHTML = model.renderHtml(view);
+        wireMeCardBlock(block);
+        return view;
+      }
 
-        var card = document.getElementById('nextCard');
-        if (!card) return;
-        card.addEventListener('click', function(ev) {
-          var line = ev.target && ev.target.closest && ev.target.closest('.hub-next-card-line[data-bid]');
+      /** Рисует «мою запись» в существующий #nextBookingBlock. */
+      function renderMeCardForBooking(item, hubMeta) {
+        var bid = item && item.b && item.b.id != null ? item.b.id : null;
+        return !!renderMeCard(buildMeCardBookingInput(item, hubMeta), bid);
+      }
+
+      /**
+       * Один делегирующий обработчик на весь блок: карточка перерисовывается
+       * целиком, и слушатели на самих кнопках пришлось бы навешивать заново.
+       * Список «остальных записей» лежит в том же блоке, поэтому его строки
+       * обслуживает этот же обработчик.
+       *
+       * Неизвестное действие — тишина, а не исключение: S4 добавит заливки
+       * города и рынка, и до тех пор карточка не должна падать на чужом
+       * data-me-action.
+       */
+      function wireMeCardBlock(block) {
+        if (hubMeCardWired) return;
+        hubMeCardWired = true;
+        block.addEventListener('click', function (ev) {
+          var t = ev.target;
+          if (!t || !t.closest) return;
+
+          var line = t.closest('.hub-next-card-line[data-bid]');
           if (line) {
             stopHubCardControl(ev);
             var lineBid = line.getAttribute('data-bid');
             if (lineBid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(lineBid) + '&from=hub');
             return;
           }
-          var moreBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="all-bookings"]');
-          if (moreBtn) {
+          if (t.closest('[data-hub-action="all-bookings"]')) {
             stopHubCardControl(ev);
             navigateTo('client-bookings');
             return;
           }
-          var passBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-pass"]');
-          if (passBtn) {
+
+          var btn = t.closest('[data-me-action]');
+          if (!btn) return;
+          var action = btn.getAttribute('data-me-action');
+          var tid = btn.getAttribute('data-me-trainer-id') || hubMeCardTrainerId;
+
+          if (action === 'dm') {
+            stopHubCardControl(ev);
+            openTelegramDm(
+              btn.getAttribute('data-me-dm-un'),
+              btn.getAttribute('data-me-dm-tid'),
+              tid
+            );
+            return;
+          }
+          if (action === 'open-booking') {
+            stopHubCardControl(ev);
+            if (hubMeCardBookingId) {
+              navigateTo('client-bookings?open_booking=' + encodeURIComponent(hubMeCardBookingId) + '&from=hub');
+            }
+            return;
+          }
+          // Абонемент и сертификат живут на одном экране — ячейка кошелька
+          // ведёт туда, а не в две разные истории баланса.
+          if (action === 'open-pass' || action === 'open-cert') {
             stopHubCardControl(ev);
             navigateTo('client-passes-certificates');
             return;
           }
-          var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="next"]');
-          if (dmBtn) {
+          if (action === 'open-trainer') {
             stopHubCardControl(ev);
-            openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), b.trainer_id);
-            return;
-          }
-          var trainerBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-trainer"]');
-          if (trainerBtn) {
-            stopHubCardControl(ev);
-            var openTid = trainerBtn.getAttribute('data-trainer-id');
-            if (openTid) {
-              navigateTo('catalog?trainer_id=' + encodeURIComponent(openTid) + catalogPrimaryServiceQuery() + '&from=hub');
+            if (tid) {
+              navigateTo('catalog?trainer_id=' + encodeURIComponent(tid) + catalogPrimaryServiceQuery() + '&from=hub');
             }
             return;
           }
-          var bid = card.getAttribute('data-bid');
-          if (bid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(bid) + '&from=hub');
+          /*
+           * Вход «во все окна» ведёт сразу в слот-пикер тренера (action=book),
+           * а НЕ на его карточку: тренер уже выбран, второй выбор — лишний шаг
+           * между «хочу» и «записан».
+           */
+          if (action === 'all-slots') {
+            stopHubCardControl(ev);
+            if (tid) {
+              navigateTo(buildBookPathFromHubContext(tid, {
+                fallbackServiceQuery: catalogPrimaryServiceQuery(),
+              }));
+            }
+            return;
+          }
+          // Чип окна — форма записи на этот самый слот, без промежуточных экранов.
+          if (action === 'book-slot') {
+            stopHubCardControl(ev);
+            /*
+             * Тот же чип в заливке «лёд города» — не окно тренера, а сеанс
+             * площадки: записывать на него некого, и чип ведёт на карточку
+             * катка с этим сеансом (ссылка та же, что у строк «на льду»).
+             */
+            var chipSlotId = btn.getAttribute('data-me-slot-id');
+            var sessionHref = chipSlotId ? hubMeCardSessionHrefs[chipSlotId] : '';
+            if (sessionHref) {
+              navigateTo(sessionHref);
+              return;
+            }
+            if (tid) {
+              navigateTo(buildBookPathFromHubContext(tid, {
+                slotId: btn.getAttribute('data-me-slot-id'),
+                serviceId: btn.getAttribute('data-me-service-id'),
+                arenaId: btn.getAttribute('data-me-arena-id'),
+                fallbackServiceQuery: catalogPrimaryServiceQuery(),
+              }));
+            }
+            return;
+          }
+          // Окон у тренера нет (или тренера для возврата нет вовсе) — единственный
+          // честный выход из карточки это каталог, а не выдуманное время.
+          if (action === 'all-trainers') {
+            stopHubCardControl(ev);
+            navigateTo('catalog');
+            return;
+          }
+          /*
+           * «Все сеансы» заливки «лёд города» — вкладка «Лёд» этого города:
+           * карточка показывает один сеанс, а весь лёд живёт там и всегда жил.
+           */
+          if (action === 'all-sessions') {
+            stopHubCardControl(ev);
+            navigateTo(
+              discoveryCityId
+                ? 'ice?city_id=' + encodeURIComponent(String(discoveryCityId))
+                : 'ice'
+            );
+            return;
+          }
+          /*
+           * pick-city / geo / all-country / more-cities — заливки «города нет»
+           * и «мы далеко» (TASK-162). Молчим: неизвестное действие не должно
+           * ни падать, ни уводить клиента куда попало.
+           */
+        });
+      }
+
+      /* ── TASK-160 (S3): тренер и возврат — та же рамка, без крупного времени ─ */
+
+      /**
+       * Окна тренера приходят из /client/slots тем же запросом, что и раньше.
+       * Он отменяемый: уход со страницы не должен держать соединение.
+       */
+      var _meCardSlotsAbort = null;
+
+      /** Promise<массив слотов | null>; null значит «запрос отменён, рисовать нечего». */
+      function fetchTrainerSlots(trainerId) {
+        if (_meCardSlotsAbort) { _meCardSlotsAbort.abort(); }
+        var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        _meCardSlotsAbort = ctl;
+        var url = apiUrl('/client/slots?trainer_id=' + encodeURIComponent(String(trainerId)));
+        return fetch(url, { headers: headersJson(), signal: ctl ? ctl.signal : undefined })
+          .then(function (r) { return r.ok ? r.json() : { slots: [] }; })
+          .catch(function (e) { return (e && e.name === 'AbortError') ? null : { slots: [] }; })
+          .then(function (data) {
+            if (!data) return null;
+            _meCardSlotsAbort = null;
+            var slots = (data.slots || []).filter(function (s) {
+              return s && String(s.start_time || '').trim();
+            });
+            slots.sort(function (a, b) {
+              return parseDateTime(a.slot_date, a.start_time) - parseDateTime(b.slot_date, b.start_time);
+            });
+            return slots;
+          });
+      }
+
+      /**
+       * Готовые склонённые формы в поля модели. Падежи живут в ru-person-name.js,
+       * а модель чистая и в глобалы не лезет — поэтому их кладёт хаб.
+       */
+      function withDeclinedForms(trainer, fullName) {
+        var forms = hubMeDeclinedForms(fullName);
+        if (!forms) return trainer;
+        if (forms.nameDative) trainer.nameDative = forms.nameDative;
+        if (forms.nameGenitive) trainer.nameGenitive = forms.nameGenitive;
+        return trainer;
+      }
+
+      /**
+       * Вход заливки «мой тренер». Место под именем — арена ближайшего окна:
+       * своей арены у тренера в bootstrap нет, а выдумывать её нельзя. Нет окон
+       * — нет и строки места, как и было у старой карточки тренера.
+       */
+      function buildMeCardTrainerInput(trainer, slots, hubMeta) {
+        var list = Array.isArray(slots) ? slots : [];
+        var first = list.length ? list[0] : null;
+        return {
+          kind: 'trainer',
+          trainer: withDeclinedForms({
+            id: trainer.id,
+            name: ((trainer.name || '') + '').trim(),
+            photo: trainer.photo || '',
+            canBook: trainer.canBook !== false,
+            username: trainer.username || '',
+            telegramId: trainer.telegramId != null ? trainer.telegramId : '',
+            arena_name: first ? (first.arena_name || '') : '',
+            city_name: first ? (first.arena_city_name || '') : '',
+          }, trainer.name),
+          slots: list,
+          passes: hubBootstrapPasses(hubMeta),
+          certificates: hubBootstrapCertificates(hubMeta),
+        };
+      }
+
+      /**
+       * «Мой тренер» одной рамкой. Крупного времени здесь нет намеренно: чужое
+       * окно — ещё не моя запись, поэтому время живёт только чипами. Полоса
+       * чипов и есть действие, а когда окон нет — глагол один, «написать».
+       */
+      function paintMeCardForTrainer(trainer, slots, hubMeta) {
+        var view = renderMeCard(buildMeCardTrainerInput(trainer, slots, hubMeta), null);
+        if (!view) {
+          // Имени нет — лица нет, и карточку собирать нечем (модель не подставит
+          // «ваш тренер» вместо человека). Хаб при этом живой: остаётся остаток,
+          // карусель и нижний FAB записи.
+          hubPersonalSlot = false;
+          applyIceHeroVisibility();
+          placeIceZone('below-trainer');
+          return renderHubSecondaryFill(hubMeta, {
+            trainerId: trainer.id,
+            showDiscovery: true,
+            passRowHead: 'Абонемент',
+          });
+        }
+        // Полоса окон — это и есть запись: нижний FAB с тем же смыслом убираем,
+        // а фото льда уступает место своему времени.
+        hubOpenWindowShown = !!view.pick;
+        hubPersonalSlot = !!view.pick;
+        applyIceHeroVisibility();
+        if (view.pick) {
+          placeIceZone('top');
+        } else {
+          // Окон нет — лёд города снова интересен, но ниже персональной зоны.
+          placeIceZone('below-trainer');
+        }
+        syncClientHubBookFab();
+        return Promise.resolve();
+      }
+
+      /**
+       * Окна спрашиваем только у тренера с онлайн-записью: без неё ответ заранее
+       * известен («окон нет»), и лишний запрос ничего не добавит.
+       */
+      function loadAndRenderMeCardForTrainer(trainer, hubMeta) {
+        if (!trainer || trainer.id == null || String(trainer.id) === '') return Promise.resolve();
+        if (trainer.canBook === false || !initData) {
+          return Promise.resolve(paintMeCardForTrainer(trainer, [], hubMeta));
+        }
+        return fetchTrainerSlots(trainer.id).then(function (slots) {
+          if (slots === null) return;
+          return paintMeCardForTrainer(trainer, slots, hubMeta);
         });
       }
 
       /**
-       * Нет записи, есть окно. Ближайшее время — герой, второе — текстовая ссылка.
-       * Карточка тренера в этом состоянии не рисуется: человек — строка внутри.
+       * Тренер для возврата. Предпочитаем того, у кого остался абонемент: не
+       * сгоревший остаток — самый сильный повод вернуться, а показать его
+       * карточка может только под лицом владельца (правило модели).
        */
-      function renderOpenWindowCard(trainer, slots) {
-        var hero = slots[0];
-        var alt = slots.length > 1 ? slots[1] : null;
-        var time = String(hero.start_time || '').slice(0, 5);
-        var dur = slotDurationMin(hero);
-        var dateLabel = relativeDate(hero.slot_date, '');
-        var when = dur ? (dateLabel + ' · ' + dur + ' мин') : dateLabel;
-        var name = ((trainer.name || '') + '').trim() || 'Тренер';
-        var place = ((hero.arena_name || hero.arena_city_name || '') + '').trim() || 'ваш тренер';
-        var un = (trainer.username || '').replace(/^@/, '').trim();
-        var tid = trainer.telegramId != null ? String(trainer.telegramId) : '';
-        var quiet = (un || tid)
-          ? '<button type="button" class="hub-next-card-quiet" data-hub-dm="window"' +
-            ' data-dm-un="' + esc(un) + '" data-dm-tid="' + esc(tid) + '">написать</button>'
-          : '';
-        var altHtml = '';
-        if (alt) {
-          var altTime = String(alt.start_time || '').slice(0, 5);
-          var altDay = relativeDate(alt.slot_date, '').toLowerCase();
-          altHtml =
-            '<button type="button" class="hub-next-card-alt" data-slot-id="' + esc(String(alt.id || '')) + '"' +
-            (alt.service_id != null ? ' data-service-id="' + esc(String(alt.service_id)) + '"' : '') +
-            (alt.arena_id != null ? ' data-arena-id="' + esc(String(alt.arena_id)) + '"' : '') + '>' +
-            esc(altDay + ' в ' + altTime) + '</button>';
-        }
-        var block = document.getElementById('nextBookingBlock');
-        if (!block) return;
-        hubOpenWindowShown = true;
-        syncClientHubBookFab();
-        block.innerHTML =
-          '<div class="hub-next-card hub-next-card--open" id="nextCard" tabindex="0"' +
-          ' aria-label="Ближайшее окно, ' + esc(when) + '">' +
-            '<div class="hub-next-card-inner">' +
-              '<div class="hub-next-card-time hub-next-card-time--offer">' + esc(time) + '</div>' +
-              '<div class="hub-next-card-when"><span class="hub-next-card-date">' + esc(when) + '</span></div>' +
-              '<div class="hub-next-card-who">' +
-                trainerWhoLinkHtml(
-                  name,
-                  trainer.photo,
-                  '<span class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></span>',
-                  trainer.id
-                ) +
-                quiet +
-              '</div>' +
-              '<button type="button" class="hub-next-card-fill" data-slot-id="' + esc(String(hero.id || '')) + '"' +
-              (hero.service_id != null ? ' data-service-id="' + esc(String(hero.service_id)) + '"' : '') +
-              (hero.arena_id != null ? ' data-arena-id="' + esc(String(hero.arena_id)) + '"' : '') + '>' +
-              'Записаться на ' + esc(time) + '</button>' +
-              altHtml +
-            '</div>' +
-          '</div>';
-        hideMyTrainerBlock();
-        var card = document.getElementById('nextCard');
-        if (!card) return;
-        card.addEventListener('click', function(ev) {
-          var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="window"]');
-          if (dmBtn) {
-            stopHubCardControl(ev);
-            openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), trainer.id);
-            return;
-          }
-          var slotBtn = ev.target && ev.target.closest && ev.target.closest('[data-slot-id]');
-          if (slotBtn) {
-            stopHubCardControl(ev);
-            navigateTo(buildBookPathFromHubContext(trainer.id, {
-              serviceId: slotBtn.getAttribute('data-service-id'),
-              slotId: slotBtn.getAttribute('data-slot-id'),
-              arenaId: slotBtn.getAttribute('data-arena-id'),
-              fallbackServiceQuery: catalogPrimaryServiceQuery(),
-            }));
-            return;
-          }
-          navigateTo(
-            'catalog?trainer_id=' + encodeURIComponent(String(trainer.id)) + catalogPrimaryServiceQuery() + '&from=hub'
-          );
+      function dormantReturnTrainer(hubMeta) {
+        var targets = (rebookTargets || []).filter(function (t) {
+          return t && t.trainer_id != null && Number(t.trainer_id) > 0;
         });
+        if (!targets.length) return null;
+        var passes = hubBootstrapPasses(hubMeta);
+        for (var i = 0; i < targets.length; i++) {
+          if (selectPrimaryPassForTrainer(passes, targets[i].trainer_id)) return targets[i];
+        }
+        return targets[0];
+      }
+
+      /**
+       * Вход заливки возврата.
+       *
+       * «Вы тренировались N раз» — про клиента, поэтому число берём из activity
+       * bootstrap (общая история), а не из счётчика по этому тренеру. Нет
+       * activity — падаем на `completed_count` самого таргета: иначе состояние с
+       * живой историей осталось бы без карточки вовсе.
+       *
+       * TASK-160 (S4): bootstrap теперь отдаёт в `rebook_targets` фото тренера и
+       * дату последнего занятия — лицо карточки становится фотографией вместо
+       * монограммы, а под именем встаёт «последнее занятие — …». Пока этих полей
+       * не было, S3 честно оставлял состояние безликим: выдумывать их было нельзя.
+       */
+      function buildMeCardDormantInput(target, slots, hubMeta) {
+        var total = Number((hubMeta && hubMeta.activity && hubMeta.activity.completed_total) || 0);
+        var own = Number((target && target.completed_count) || 0);
+        var done = total > 0 ? total : own;
+        var name = target ? ((target.trainer_display_name || '') + '').trim() : '';
+        var last = target && target.last_completed_at ? target.last_completed_at : null;
+        var input = {
+          kind: 'dormant',
+          slots: Array.isArray(slots) ? slots : [],
+          passes: hubBootstrapPasses(hubMeta),
+          certificates: hubBootstrapCertificates(hubMeta),
+        };
+        if (done > 0 || last) {
+          input.history = {};
+          if (done > 0) input.history.completed_count = done;
+          if (last) input.history.last_completed_at = last;
+        }
+        if (name) {
+          input.trainer = withDeclinedForms({
+            id: target.trainer_id,
+            name: name,
+            photo: target.trainer_list_photo_key || '',
+          }, name);
+        }
+        return input;
+      }
+
+      /**
+       * Остальные тренеры, к которым человек уже ходил, остаются тихой строкой
+       * под карточкой: лицо в карточке одно, и второй повод вернуться из-за
+       * этого терять нельзя (состояние 7 прототипа).
+       */
+      function dormantRebookPills(cardTrainerId) {
+        return (rebookTargets || []).filter(function (t) {
+          return t && t.trainer_id != null && Number(t.trainer_id) > 0 &&
+            String(t.trainer_id) !== String(cardTrainerId);
+        }).slice(0, 2).map(function (t) {
+          return {
+            label: 'Снова к ' + trainerFirstNameForPill(t.trainer_display_name),
+            quiet: true,
+            action: function () { navigateToRebookTarget(t); },
+          };
+        });
+      }
+
+      /**
+       * Возврат: статус об остатке или об истории занятий, чипы окон тренера —
+       * чтобы вернуться одним тапом. Сказать нечего (ни остатка, ни занятий) —
+       * карточки нет, и хаб честно остаётся на прежнем наполнении.
+       */
+      function loadAndRenderMeCardForDormant(hubMeta) {
+        var target = dormantReturnTrainer(hubMeta);
+        var paint = function (slots) {
+          var view = renderMeCard(buildMeCardDormantInput(target, slots, hubMeta), null);
+          if (!view) {
+            renderQuickStrip('has-past', null);
+            return renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' });
+          }
+          mountQuickStripPills(dormantRebookPills(view.trainerId));
+          return loadDiscoveryUnlessMarket();
+        };
+        if (!target || !initData) return paint([]);
+        return fetchTrainerSlots(target.trainer_id).then(function (slots) {
+          if (slots === null) return;
+          return paint(slots);
+        });
+      }
+
+      /* ── TASK-160 (S4): лёд города — заливка «моей карточки» ──────────── */
+
+      /**
+       * Карточка льда по данным тизера или null. Тот же гейт, что у строк
+       * сеансов (`renderIceTodaySessions`): нет сеанса / он уже начался / это
+       * «далёкая» карточка — героем лёд не становится.
+       *
+       * Плюс город обязателен. `is_country_fallback` значит «города у клиента
+       * нет, показываем ближайший сеанс по стране» — назвать такой сеанс «льдом
+       * сегодня в вашем городе» нельзя, это состояния «города нет» и «мы далеко»
+       * (TASK-162), а не «город есть, личного нет».
+       */
+      function iceTeaserHeroView(teaser) {
+        var model = window.IceTeaserModel;
+        if (!teaser || !model || typeof model.formatIceCard !== 'function') return null;
+        if (teaser.is_country_fallback) return null;
+        var view = model.formatIceCard(teaser, new Date());
+        if (!view || view.hidden || view.isFar) return null;
+        return view;
+      }
+
+      /**
+       * Сеансы для чипов «дальше на льду» — те же `ice_teaser.sessions`, из
+       * которых HubIceTodayModel строит строки: новых запросов состояние не
+       * вводит. Готовые строки взять нельзя (в них нет ни даты, ни id сеанса,
+       * а чипу нужно и то и другое), поэтому здесь тот же фильтр — без
+       * тизерного сеанса и без начавшихся — но в полях окна, которые ждёт модель.
+       */
+      function cityIceSlots(teaser, now) {
+        var model = window.HubIceTodayModel;
+        var sessions = Array.isArray(teaser && teaser.sessions) ? teaser.sessions : [];
+        var ownId = teaser && teaser.session_id != null ? String(teaser.session_id) : '';
+        var out = [];
+        sessions.forEach(function (raw) {
+          var ses = raw || {};
+          if (ses.session_id == null) return;
+          if (ownId && String(ses.session_id) === ownId) return;
+          var startMs = Date.parse(ses.starts_at_utc || '');
+          if (!isNaN(startMs) && startMs <= now.getTime()) return;
+          var href = model && typeof model.rowHref === 'function' ? model.rowHref(ses) : '';
+          if (!href) return;
+          out.push({
+            id: ses.session_id,
+            slot_date: ses.local_date,
+            start_time: ses.starts_at_local,
+            arena_id: ses.arena_id,
+            arena_name: ses.arena_name,
+            href: href,
+          });
+        });
+        return out;
+      }
+
+      /**
+       * Вход заливки «лёд города». Крупное время здесь — сеанс площадки, факт
+       * мира: в строке `who` арена, а не человек, и штампа «подтверждена» нет,
+       * поэтому спутать его с моей записью нечем (правило модели).
+       */
+      function buildMeCardCityIceInput(teaser, view, hubMeta) {
+        return {
+          kind: 'city-ice',
+          arena: {
+            id: teaser.arena_id,
+            name: view.name,
+            city_name: view.city,
+            start_time: view.time,
+            // Район вместо адреса: адреса арены в тизере нет, а выдумывать его
+            // нельзя. Нет и района — модель поставит в строку город.
+            address: view.where,
+            // Условия сеанса — готовая строка IceTeaserModel (вид катания + цена).
+            // Собирать её второй раз в хабе значит развести два источника одной
+            // подписи: на «Льду» и на Главной она обязана читаться одинаково.
+            kind_label: view.facts,
+          },
+          slots: cityIceSlots(teaser, new Date()),
+          passes: hubBootstrapPasses(hubMeta),
+          certificates: hubBootstrapCertificates(hubMeta),
+        };
+      }
+
+      /**
+       * Герой рынка: личного нет — карточку заполняет лёд города. Пустого хаба
+       * не существует, поэтому это та же рамка и тот же ритм, что у записи и у
+       * тренера: клиент, который завтра запишется, нового экрана не увидит.
+       *
+       * Возвращает true, когда карточка нарисована. Лёд рисоваться не обязан
+       * (нет города, нет сеансов, мы далеко) — тогда хаб остаётся на прежнем
+       * наполнении: зона льда со своим тизером и секции рынка под ней.
+       */
+      function paintMarketHero(teaser, hubMeta) {
+        var view = iceTeaserHeroView(teaser);
+        if (!view) return false;
+        var input = buildMeCardCityIceInput(teaser, view, hubMeta);
+        if (!renderMeCard(input, null)) return false;
+        var hrefs = {};
+        input.slots.forEach(function (slot) {
+          if (slot.id != null && slot.href) hrefs[String(slot.id)] = slot.href;
+        });
+        hubMeCardSessionHrefs = hrefs;
+        // Тот же сеанс уже в карточке — зона льда показала бы его второй раз.
+        hubIceInCard = true;
+        applyIceHeroVisibility();
+        return true;
       }
 
       function catalogPrimaryServiceQuery() {
@@ -996,6 +1360,14 @@
       /** Sticky FAB: primary trainer + online booking; hidden when «Записаться снова» strip is shown. */
       function shouldShowClientHubBookFab() {
         if (!initData) return false;
+        /*
+         * TASK-160 (S4). На экране ровно одна главная кнопка. У карточки есть
+         * своё действие — залитая кнопка или полоса чипов — значит нижний FAB
+         * повторяет уже сказанный глагол, и его нет. Раньше это ловилось только
+         * для полосы окон (hubOpenWindowShown); теперь правило общее для всех
+         * заливок, включая «окон нет» с залитым «Написать».
+         */
+        if (hubMeCardHasAction) return false;
         if (hubHasUpcomingBooking || hubOpenWindowShown) return false;
         if (selectedTrainerId == null || String(selectedTrainerId).trim() === '') return false;
         return hubPrimaryTrainerCanBook === true;
@@ -1115,136 +1487,6 @@
         if (block) block.innerHTML = '';
       }
 
-      /* ── My trainer card ─────────────────────────────────────────────── */
-
-      /**
-       * Full recommendation text (opener → имя → услуги → город · арена → CTA → ссылка) — не голый URL.
-       */
-      function shareTrainer(trainerId, shareCtx) {
-        var ctx = shareCtx || 'catalog';
-        var path =
-          '/client/share-trainer/' +
-          encodeURIComponent(String(trainerId)) +
-          '?share_context=' +
-          encodeURIComponent(ctx);
-        fetch(apiUrl(path))
-          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
-          .then(function(data) {
-            var shareUrl = (data.share_url || '').trim();
-            var shareBody = (data.share_body || '').trim();
-            var shareText = (data.share_text || '').trim();
-            if (!shareUrl && !shareText) return;
-            if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
-              window.openTelegramShareUrlFromMiniApp({
-                shareUrl: shareUrl,
-                shareBody: shareBody,
-                fullMessage: shareText,
-              });
-              return;
-            }
-            var href;
-            if (shareUrl) {
-              href = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl);
-              if (shareBody) href += '&text=' + encodeURIComponent(shareBody);
-            } else {
-              href = 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
-            }
-            if (tg && typeof tg.openTelegramLink === 'function') {
-              tg.openTelegramLink(href);
-            }
-          })
-          .catch(function() {});
-      }
-
-      /**
-       * Primary-relationship card: uppercase label «ОСНОВНОЙ», main line — trainer name from hub.
-       * Opens catalog deep-linked to this trainer_id so we never reuse stale session.trainer_id from browsing.
-       * Share action added: 1-tap trainer recommendation via Telegram native share dialog.
-       */
-      function renderMyTrainerCard(trainerId, trainerName, trainerUsername, trainerTelegramId, listPhotoKey, canBook) {
-        var block = document.getElementById('myTrainerBlock');
-        if (!block) return;
-        var un = (trainerUsername || '').replace(/^@/, '').trim();
-        var tid = trainerTelegramId != null ? String(trainerTelegramId) : '';
-        var hasDm = !!(un || tid);
-        var displayName = ((trainerName || '').trim()) || 'Тренер';
-        var onlineBook = canBook !== false;
-
-        var actionBtns = '';
-        if (trainerId != null) {
-          actionBtns +=
-            '<button type="button" class="hub-trainer-share-btn" data-hub-action="share-trainer"' +
-            ' data-share-tid="' + esc(String(trainerId)) + '"' +
-            ' data-share-context="my_trainer"' +
-            ' aria-label="Поделиться тренером">' + ICONS.share + '</button>';
-        }
-        var actionsHtml = actionBtns
-          ? '<div class="hub-trainer-actions">' + actionBtns + '</div>'
-          : '';
-
-        var subText = onlineBook
-          ? 'Нажмите, чтобы выбрать время'
-          : (hasDm ? 'Онлайн-запись недоступна — напишите тренеру' : 'Открыть профиль в каталоге');
-
-        var contactRowHtml = '';
-        if (hasDm) {
-          contactRowHtml =
-            '<button type="button" class="hub-trainer-contact-btn" data-hub-dm="trainer"' +
-            ' data-dm-un="' + esc(un) + '" data-dm-tid="' + esc(tid) + '">' +
-            ICONS.msg + '<span>Написать тренеру</span>' +
-            '</button>';
-        }
-
-        var src = trainerHubThumb(listPhotoKey || '');
-        var avatarHtml = src
-          ? '<div class="hub-trainer-avatar hub-trainer-avatar--photo"><img src="' + esc(src) + '" alt="" loading="lazy"/></div>'
-          : '<div class="hub-trainer-avatar">' + esc(initials(displayName)) + '</div>';
-
-        block.innerHTML =
-          '<div class="hub-trainer-card" id="trainerCard">' +
-            '<div class="hub-trainer-card-main">' +
-              avatarHtml +
-              '<div class="hub-trainer-info">' +
-                '<div class="hub-trainer-label">Основной</div>' +
-                '<div class="hub-trainer-name">' + esc(displayName) + '</div>' +
-                '<div class="hub-trainer-sub">' + esc(subText) + '</div>' +
-              '</div>' +
-              actionsHtml +
-            '</div>' +
-            contactRowHtml +
-          '</div>';
-        block.style.display = '';
-
-        var card = document.getElementById('trainerCard');
-        if (!card) return;
-        card.addEventListener('click', function(ev) {
-          var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="trainer"]');
-          if (dmBtn) {
-            ev.stopPropagation();
-            openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), trainerId);
-            return;
-          }
-          var shareBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="share-trainer"]');
-          if (shareBtn) {
-            ev.stopPropagation();
-            shareTrainer(
-              shareBtn.getAttribute('data-share-tid'),
-              shareBtn.getAttribute('data-share-context') || 'my_trainer'
-            );
-            return;
-          }
-          if (!onlineBook && hasDm) {
-            openTelegramDm(un, tid, trainerId);
-            return;
-          }
-          navigateTo(
-            trainerId != null && String(trainerId).trim() !== ''
-              ? 'catalog?trainer_id=' + encodeURIComponent(String(trainerId)) + catalogPrimaryServiceQuery()
-              : 'catalog'
-          );
-        });
-      }
-
       /* ── Hero primary actions + contextual pills (no tab duplicates) ─── */
 
       /**
@@ -1252,6 +1494,24 @@
        * экрана в состоянии нового клиента. Теперь поиск — постоянная строка в
        * зоне льда: доступен всегда и во всех сценариях, но ничего не заслоняет.
        */
+      /**
+       * DEC-001 (TASK-160 S4). Строка поиска — инструмент рынка, а не постоянный
+       * элемент хаба. Она видна там, где работа клиента и есть «кого-то найти»:
+       * личного героя нет (гость, далёкий город), либо герой — лёд города, либо
+       * сохранённые тренеры, которые героем не владеют. В состояниях с личным
+       * контекстом (запись, ожидание, скоро, тренер с окнами, тренер без окон,
+       * возврат) её нет: работа клиента уже названа карточкой.
+       *
+       * Строка больше не живёт внутри #hubIceZone и не ездит вместе с ней через
+       * placeIceZone: она стоит один раз под карточкой и не мигрирует.
+       */
+      function setHubSearchVisible(on) {
+        var search = document.getElementById('hubSearchRow');
+        if (!search) return;
+        if (on) search.removeAttribute('hidden');
+        else search.setAttribute('hidden', 'hidden');
+      }
+
       function wireHubIceZoneLinks() {
         var search = document.getElementById('hubSearchRow');
         if (search && !search.dataset.wired) {
@@ -1420,15 +1680,6 @@
         return new Date(y, m - 1, d);
       }
 
-      /** Compact slot-chip caption: «Сб, 7 июн». */
-      function formatSlotDayLabel(dateStr) {
-        var d = parseIsoDateLocal(dateStr);
-        if (!d) return '';
-        var wd = RU_WEEKDAYS_SHORT[d.getDay()] || '';
-        var mn = RU_MONTHS_SHORT[d.getMonth()] || '';
-        return (wd ? wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' : '') + d.getDate() + ' ' + mn;
-      }
-
       /** Compact long date for history/expiry: «18 мая 2026» or «18 мая» when current year. */
       function formatHistoryDate(dateStr) {
         var d = parseIsoDateLocal(dateStr);
@@ -1437,33 +1688,6 @@
         var now = new Date();
         if (d.getFullYear() === now.getFullYear()) return d.getDate() + ' ' + mn;
         return d.getDate() + ' ' + mn + ' ' + d.getFullYear();
-      }
-
-      function buildPrimarySlotsHtml(slots) {
-        if (!slots || !slots.length) return '';
-        var items = slots.slice(0, 4).map(function(s) {
-          var t = (s && s.start_time ? String(s.start_time) : '').slice(0, 5);
-          var dayLabel = formatSlotDayLabel(s && s.slot_date);
-          var place = ((s && (s.arena_name || s.arena_city_name)) || '').toString().trim();
-          var placeHtml = place
-            ? '<span class="hub-primary-panel__slot-place">' + ICONS.pin + esc(place) + '</span>'
-            : '';
-          return (
-            '<button type="button" class="hub-primary-panel__slot" data-slot-id="' + esc(String(s.id || '')) + '"' +
-            (s && s.arena_id != null ? ' data-arena-id="' + esc(String(s.arena_id)) + '"' : '') +
-            (s && s.service_id != null ? ' data-service-id="' + esc(String(s.service_id)) + '"' : '') + '>' +
-              '<span class="hub-primary-panel__slot-day">' + esc(dayLabel) + '</span>' +
-              '<span class="hub-primary-panel__slot-time">' + esc(t) + '</span>' +
-              placeHtml +
-            '</button>'
-          );
-        }).join('');
-        return (
-          '<div class="hub-primary-panel__row hub-primary-panel__row--slots">' +
-            '<div class="hub-primary-panel__row-head">Ближайшие окна</div>' +
-            '<div class="hub-primary-panel__slots-scroller">' + items + '</div>' +
-          '</div>'
-        );
       }
 
       function passProductNameForHubSubline(passInfo, total) {
@@ -1520,17 +1744,6 @@
             '<span class="hub-primary-panel__pass-chevron" aria-hidden="true">›</span>' +
           '</button>'
         );
-      }
-
-      function buildPrimaryHistoryHtml(history) {
-        if (!history) return '';
-        var count = Number(history.completed_count || 0);
-        if (count <= 0) return '';
-        var word = pluralRuHub(count, 'раз', 'раза', 'раз');
-        var lastStr = history.last_completed_at ? formatHistoryDate(history.last_completed_at) : '';
-        var line = 'Вы тренировались ' + count + ' ' + word;
-        if (lastStr) line += ' · последний раз ' + lastStr;
-        return '<div class="hub-primary-panel__history">' + esc(line) + '</div>';
       }
 
       function selectPrimaryPassForTrainer(items, trainerId) {
@@ -1609,101 +1822,13 @@
         return Promise.resolve();
       }
 
-      /* Cancels any in-flight /client/slots request when user navigates away */
-      var _primaryPanelAbort = null;
-
-      function loadAndRenderPrimaryPanel(trainerId, history, bootstrapPasses) {
-        var el = document.getElementById('hubPrimaryPanel');
-        if (!el) return Promise.resolve();
-        if (trainerId == null || trainerId === '') {
-          hidePrimaryPanel();
-          return Promise.resolve();
-        }
-        if (!initData) {
-          hidePrimaryPanel();
-          return Promise.resolve();
-        }
-
-        // Cancel any previous in-flight slots request to free server resources immediately
-        if (_primaryPanelAbort) { _primaryPanelAbort.abort(); }
-        var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-        _primaryPanelAbort = ctl;
-
-        var tidStr = encodeURIComponent(String(trainerId));
-        var slotsUrl = apiUrl('/client/slots?trainer_id=' + tidStr);
-        var slotsPromise = fetch(slotsUrl, { headers: headersJson(), signal: ctl ? ctl.signal : undefined })
-          .then(function(r) { return r.ok ? r.json() : { slots: [] }; })
-          .catch(function(e) { return (e && e.name === 'AbortError') ? null : { slots: [] }; });
-
-        // Passes come from bootstrap — no extra round-trip needed
-        var passes = Array.isArray(bootstrapPasses) ? bootstrapPasses : [];
-
-        return slotsPromise.then(function(slotsData) {
-          if (!slotsData) return; // aborted navigation
-          _primaryPanelAbort = null;
-          var slots = (slotsData.slots || []).filter(function(s) {
-            return s && String(s.start_time || '').trim();
-          });
-          slots.sort(function(a, b) {
-            return parseDateTime(a.slot_date, a.start_time) - parseDateTime(b.slot_date, b.start_time);
-          });
-          var passInfo = selectPrimaryPassForTrainer(passes, trainerId);
-          var passHtml = buildPrimaryPassHtml(passInfo, {});
-          var histHtml = buildPrimaryHistoryHtml(history);
-          var trainer = hubPrimaryTrainer;
-          var canBook = !!(trainer && trainer.canBook && String(trainer.id) === String(trainerId));
-          if (canBook && slots.length) {
-            renderOpenWindowCard(trainer, slots);
-            hubPersonalSlot = true;
-            applyIceHeroVisibility();
-            placeIceZone('top');
-            var windowInner = passHtml + histHtml;
-            if (!windowInner) {
-              hidePrimaryPanel();
-              return;
-            }
-            el.innerHTML = windowInner;
-            el.removeAttribute('hidden');
-            wirePrimaryPanelClicks(el, trainerId);
-            return;
-          }
-          if (canBook && trainer && !document.getElementById('trainerCard')) {
-            renderMyTrainerCard(
-              trainer.id, trainer.name, trainer.username, trainer.telegramId, trainer.photo, true
-            );
-          }
-          if (canBook) {
-            hubPersonalSlot = false;
-            applyIceHeroVisibility();
-            placeIceZone('below-trainer');
-          }
-          var slotsHtml = buildPrimarySlotsHtml(slots);
-          var inner = slotsHtml + passHtml + histHtml;
-          if (!inner) {
-            hidePrimaryPanel();
-            return;
-          }
-          el.innerHTML = inner;
-          el.removeAttribute('hidden');
-          wirePrimaryPanelClicks(el, trainerId);
-        });
-      }
-
+      /**
+       * TASK-160 (S3): чипы окон уехали в «мою карточку», поэтому у полки
+       * остатка остался единственный переход — экран абонементов. Параметр
+       * trainerId сохранён: его по-прежнему передают вызывающие (S4).
+       */
       function wirePrimaryPanelClicks(el, trainerId) {
-        var serviceQuery = catalogPrimaryServiceQuery();
-        var trainerBookPath = 'catalog?trainer_id=' + encodeURIComponent(String(trainerId)) + serviceQuery;
         el.addEventListener('click', function(ev) {
-          var slotBtn = ev.target && ev.target.closest && ev.target.closest('.hub-primary-panel__slot');
-          if (slotBtn) {
-            ev.stopPropagation();
-            navigateTo(buildBookPathFromHubContext(trainerId, {
-              serviceId: slotBtn.getAttribute('data-service-id'),
-              slotId: slotBtn.getAttribute('data-slot-id'),
-              arenaId: slotBtn.getAttribute('data-arena-id'),
-              fallbackServiceQuery: serviceQuery,
-            }));
-            return;
-          }
           var passBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-pass"]');
           if (passBtn) {
             ev.stopPropagation();
@@ -1977,23 +2102,24 @@
       }
 
       /**
-       * Следующие записи — продолжение той же карточки, что и герой.
-       * Тот же штамп, без кнопки сообщения и без отдельной секции.
-       * Строка открывает свою запись. Больше HUB_REST_MAX на хаб не выносится.
+       * Следующие записи — отдельный блок ПОД «моей карточкой» (TASK-160 S2).
+       * Вкладывать их внутрь карточки больше некуда: её рамка занята кошельком
+       * и подвалом. Поведение строк то же: штамп тот же, кнопки сообщения нет,
+       * строка открывает свою запись, больше HUB_REST_MAX на хаб не выносится.
        */
       function renderUpcomingList(days, heroBookingId) {
         var section = document.getElementById('upcomingSection');
         if (section) section.style.display = 'none';
-        var card = document.getElementById('nextCard');
-        if (card) {
-          var prev = card.querySelector('.hub-next-card-rest');
+        var block = document.getElementById('nextBookingBlock');
+        if (block) {
+          var prev = block.querySelector('.rest');
           if (prev) prev.remove();
         }
         var rest = flattenBookings(days).filter(function(item) {
           return String(item.b.id) !== String(heroBookingId);
         });
         var items = rest.slice(0, HUB_REST_MAX);
-        if (!items.length || !card) return;
+        if (!items.length || !block) return;
 
         var byDate = {};
         var dateOrder = [];
@@ -2003,7 +2129,7 @@
           byDate[ds].rows.push(item);
         });
 
-        var parts = ['<div class="hub-next-card-rest">'];
+        var parts = ['<div class="rest">'];
         dateOrder.forEach(function(ds) {
           var group = byDate[ds];
           parts.push('<div class="hub-next-card-day">' + esc(relativeDate(ds, group.day.day_label)) + '</div>');
@@ -2035,7 +2161,7 @@
           parts.push('<button type="button" class="hub-next-card-more" data-hub-action="all-bookings">Смотреть все</button>');
         }
         parts.push('</div>');
-        card.insertAdjacentHTML('beforeend', parts.join(''));
+        block.insertAdjacentHTML('beforeend', parts.join(''));
       }
 
 
@@ -2047,53 +2173,73 @@
       }
 
       /**
-       * Renders a horizontal scroll strip of saved (bookmarked) trainers.
-       * Uses `client_session.saved_trainers` from hub bootstrap when present (names + photo keys).
+       * DEC-002 (TASK-160 S4). «Сохранил, но не выбрал» — слабое намерение, и
+       * героем хаба оно больше не владеет: верх экрана занимает лёд города, а
+       * сохранённые идут обычной секцией ПОД карточкой. Полоска-кружки
+       * (renderSavedTrainersStrip) этим и заменена — кружок с именем не отвечал
+       * ни на один вопрос, с которым человек открывает хаб.
+       *
+       * Строки честные: имя, лицо и то, что про тренера реально знает bootstrap.
+       * Ближайшего окна по списку тренеров у нас нет (`/client/slots` принимает
+       * одного тренера, батч-эндпоинта не существует) — поэтому времени в
+       * строках нет, а не выдуманного «ближайшее окно завтра».
        */
-      function renderSavedTrainersStrip(cs) {
+      function savedRowSubline(row) {
+        // Проекция того, что есть: сегодня `saved_trainers` отдаёт только id,
+        // имя и фото (webapp.py, saved_preview), поэтому подписи обычно нет.
+        // Появятся услуга и место — строка наполнится сама, без правки хаба.
+        var parts = [];
+        [row.trainer_service_name, row.trainer_primary_arena_name].forEach(function (v) {
+          var t = ((v || '') + '').trim();
+          if (t) parts.push(t);
+        });
+        return parts.join(' · ');
+      }
+
+      function renderSavedTrainersSection(cs) {
         var block = document.getElementById('myTrainerBlock');
-        if (!block) return;
+        if (!block) return false;
         var list = [];
         if (cs && Array.isArray(cs.saved_trainers) && cs.saved_trainers.length) {
           list = cs.saved_trainers;
         } else if (cs && Array.isArray(cs.saved_trainer_ids) && cs.saved_trainer_ids.length) {
           cs.saved_trainer_ids.forEach(function (id) {
-            list.push({
-              trainer_id: id,
-              trainer_display_name: 'Тренер',
-              trainer_list_photo_key: null
-            });
+            list.push({ trainer_id: id, trainer_display_name: 'Тренер', trainer_list_photo_key: null });
           });
         }
-        if (!list.length) return;
-        var chips = list.map(function (row) {
+        if (!list.length) return false;
+        var rows = list.map(function (row) {
           var tid = row.trainer_id;
-          var label = (row.trainer_display_name || 'Тренер').trim() || 'Тренер';
+          var label = ((row.trainer_display_name || 'Тренер') + '').trim() || 'Тренер';
           var src = thumbForHubPhoto(row.trainer_list_photo_key || null);
-          var photoPart = src
-            ? '<span class="hub-saved-chip-avatar"><img src="' + esc(src) + '" alt=""/></span>'
-            : '<span class="hub-saved-chip-icon" aria-hidden="true">🤍</span>';
-          return '<button type="button" class="hub-saved-chip" data-tid="' + esc(String(tid)) + '">' +
-            photoPart +
-            '<span class="hub-saved-chip-label">' + esc(label) + '</span>' +
+          var face = src
+            ? '<span class="avatar avatar--photo"><img src="' + esc(src) + '" alt=""></span>'
+            : '<span class="avatar" aria-hidden="true">' + esc(initials(label)) + '</span>';
+          var sub = savedRowSubline(row);
+          return '<button type="button" class="hub-saved-row" data-tid="' + esc(String(tid)) + '">' +
+            face +
+            '<span class="hub-saved-row__t"><b>' + esc(label) + '</b>' +
+            (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>' +
+            '<span class="hub-saved-row__ch" aria-hidden="true">\u203a</span>' +
             '</button>';
         }).join('');
+        var count = list.length;
         block.innerHTML =
-          '<div class="hub-saved-section">' +
-            '<div class="hub-saved-section-head">' +
-              '<span class="hub-saved-section-title">Сохранённые тренеры</span>' +
-              '<button type="button" class="hub-saved-section-link" id="btnViewSaved">Все</button>' +
-            '</div>' +
-            '<div class="hub-saved-strip">' + chips + '</div>' +
-          '</div>';
+          '<div class="hub-sec-head">' +
+            '<p class="hub-kicker">Вы сохранили ' + count + ' ' +
+              pluralRuHub(count, 'тренера', 'тренеров', 'тренеров') + '</p>' +
+            '<button type="button" class="hub-sec-link" id="btnViewSaved">Все</button>' +
+          '</div>' +
+          '<div class="hub-saved-rows">' + rows + '</div>';
         block.style.display = '';
         var viewBtn = document.getElementById('btnViewSaved');
-        if (viewBtn) viewBtn.addEventListener('click', function() { navigateTo('client-saved-trainers'); });
-        block.querySelectorAll('.hub-saved-chip').forEach(function(btn) {
-          btn.addEventListener('click', function() {
+        if (viewBtn) viewBtn.addEventListener('click', function () { navigateTo('client-saved-trainers'); });
+        block.querySelectorAll('.hub-saved-row').forEach(function (btn) {
+          btn.addEventListener('click', function () {
             navigateTo('catalog?trainer_id=' + encodeURIComponent(btn.getAttribute('data-tid')));
           });
         });
+        return true;
       }
 
       /* ── Main state machine — Intent Engine ─────────────────────────── */
@@ -2228,13 +2374,15 @@
         /* ── Priority 1: Has upcoming booking ── */
         if (nextItem) {
           resetHubChromeForState({ keepHeroLayout: true });
+          setHubSearchVisible(false);  // DEC-001: у записи работа клиента уже названа карточкой
           configureHeroForUpcomingBooking();
           placeIceZone('top');
           hubPersonalSlot = true;
           applyIceHeroVisibility();
-          var bookingTrainerId = nextItem.b && nextItem.b.trainer_id;
-          var passInfo = selectPrimaryPassForTrainer(hubBootstrapPasses(hubMeta), bookingTrainerId);
-          renderNextBookingCard(nextItem, passInfo);
+          /* TASK-160 (S2): герой записи — «моя карточка» (hub-me-card.js).
+             Остаток выбирает сама модель: под лицом в карточке показывается
+             только остаток этого тренера, поэтому отбора абонемента здесь нет. */
+          renderMeCardForBooking(nextItem, hubMeta);
           hideMyTrainerBlock();
           renderQuickStrip('has-booking', nextItem);
           renderUpcomingList(bookingDays, nextItem.b.id);
@@ -2263,24 +2411,24 @@
             photo: pphoto,
             canBook: pCanBook,
           };
-          if (pCanBook) {
-            hideMyTrainerBlock();
-            placeIceZone('top');
-            hubPersonalSlot = true;
-            applyIceHeroVisibility();
-          } else {
-            renderMyTrainerCard(primaryTrainerId, pname || null, ptgUn, ptgId, pphoto, pCanBook);
-            placeIceZone('below-trainer');
-          }
-          return finishHubApply(
-            loadAndRenderPrimaryPanel(primaryTrainerId, cs.primary_history || null, hubBootstrapPasses(hubMeta))
-          );
+          /* TASK-160 (S3): и «окна есть», и «окон нет» (включая тренера без
+             онлайн-записи) — одна рамка «моей карточки». Старая карточка
+             тренера с панелью под ней убрана: остаток переехал в кошелёк
+             карточки, а время — в полосу чипов. Лёд и FAB решаются после
+             рендера: их судьба зависит от того, есть ли окна. */
+          hideMyTrainerBlock();
+          setHubSearchVisible(false);  // DEC-001: личный контекст — поиска нет
+          return finishHubApply(loadAndRenderMeCardForTrainer(hubPrimaryTrainer, hubMeta));
         }
 
         /* ── Priority 3: Has saved trainers (no primary yet) ── */
         if (hasSavedBookmarks && primaryTrainerId == null) {
           resetHubHeroLayout();
-          renderSavedTrainersStrip(cs);
+          /* DEC-002: героем владеет лёд города, сохранённые — секцией под ним. */
+          var savedHero = paintMarketHero(iceTeaser, hubMeta);
+          renderSavedTrainersSection(cs);
+          setHubSearchVisible(true);
+          if (savedHero) return finishHubApply(Promise.resolve());
           return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
         }
 
@@ -2288,14 +2436,21 @@
         if (hasPastSessions) {
           resetHubHeroLayout();
           hideMyTrainerBlock();
-          renderQuickStrip('has-past', null);
-          return finishHubApply(renderHubSecondaryFill(hubMeta, { showDiscovery: true, passRowHead: 'Абонемент' }));
+          /* TASK-160 (S3): повод вернуться — не выдуманный, а остаток абонемента
+             или число прошедших занятий; окна тренера идут чипами в той же
+             рамке. Полоска «снова» остаётся только для остальных тренеров. */
+          setHubSearchVisible(false);  // DEC-001: личный контекст — поиска нет
+          return finishHubApply(loadAndRenderMeCardForDormant(hubMeta));
         }
 
         /* ── Priority 5: Clean state — find trainer and book ── */
         resetHubHeroLayout();
         clearNextBookingBlock();
         hideMyTrainerBlock();
+        /* Нечем заполнить «моим» — карточку заполняет лёд города. Пустого хаба
+           не существует: тот, кто завтра запишется, нового экрана не увидит. */
+        paintMarketHero(iceTeaser, hubMeta);
+        setHubSearchVisible(true);
         return finishHubApply(loadDiscoveryUnlessMarket());
       }
 
@@ -2329,6 +2484,7 @@
           // Без initData данных нет, но поиск обязан остаться доступным.
           renderIceTeaser(null);
           renderIceTodaySessions(null);
+          setHubSearchVisible(true);  // DEC-001: без данных работа клиента — «найти», строка остаётся
           hubMarketPromise = renderHubExplore(null);
           renderStreakRibbon(null);
           return loadDiscoveryUnlessMarket().then(finishHubInitialLoading, finishHubInitialLoading);

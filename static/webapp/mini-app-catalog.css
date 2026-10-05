@@ -3781,3 +3781,155 @@
       overflow: hidden;
       touch-action: none;
     }
+
+    /* ─── Геолокация по тапу (TASK-163) ──────────────────────────────────────
+     * Чип «Рядом со мной» — пунктирный, чтобы читался как действие, а не как
+     * выбранный фильтр. Шторка-прайминг устроена как шит «Поделиться»
+     * (mini-app-share-sheet.css): скрим + карточка снизу, те же токены темы.
+     */
+    .catalog-geo-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 1 calc(50% - 6px);
+      flex-shrink: 0;
+      min-width: 0;
+      padding: 10px 14px;
+      border-radius: var(--app-radius-pill);
+      border: 1px dashed var(--glide-line-strong);
+      background: var(--glide-brand-wash);
+      color: var(--glide-ink-teal);
+      font-family: inherit;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      line-height: 1.2;
+      white-space: nowrap;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s ease, border-color 0.15s ease;
+    }
+    .catalog-geo-chip:active {
+      transform: scale(0.97);
+      border-color: var(--glide-ink-teal);
+    }
+
+    .catalog-geo-sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 9500; /* как у шита «Поделиться»: выше таб-бара */
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: transparent;
+      transition: background 0.18s ease;
+    }
+    .catalog-geo-sheet[hidden] { display: none; }
+    .catalog-geo-sheet.is-open { background: var(--app-scrim, rgba(4, 18, 26, 0.42)); }
+    .catalog-geo-sheet__card {
+      width: 100%;
+      max-width: 560px;
+      padding: 10px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+      border-radius: var(--app-radius-xl) var(--app-radius-xl) 0 0;
+      background: var(--glide-card);
+      color: var(--glide-text);
+      text-align: center;
+      transform: translateY(24px);
+      opacity: 0;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+    }
+    .catalog-geo-sheet.is-open .catalog-geo-sheet__card { transform: none; opacity: 1; }
+    .catalog-geo-sheet__grip {
+      width: 36px;
+      height: 4px;
+      margin: 0 auto 14px;
+      border-radius: var(--app-radius-pill);
+      background: var(--glide-line-strong);
+    }
+    .catalog-geo-sheet__icon {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 10px;
+      border-radius: var(--app-radius-pill);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--glide-brand-wash);
+      color: var(--glide-ink-teal);
+      font-size: var(--app-text-lead);
+    }
+    .catalog-geo-sheet__title {
+      display: block;
+      font-size: var(--app-text-lead);
+      font-weight: var(--app-weight-bold, 700);
+      letter-spacing: -0.01em;
+    }
+    .catalog-geo-sheet__text {
+      margin: 7px 0 15px;
+      font-size: var(--app-text-caption);
+      line-height: 1.5;
+      color: var(--glide-hint);
+    }
+    .catalog-geo-sheet__allow { min-height: 48px; }
+    .catalog-geo-sheet__allow[hidden] { display: none; }
+    .catalog-geo-sheet__quiet {
+      display: block;
+      width: 100%;
+      margin-top: 11px;
+      padding: 10px;
+      border: 0;
+      background: transparent;
+      color: var(--glide-ink-teal);
+      font-family: inherit;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
+      cursor: pointer;
+    }
+
+    /* Подтверждение угаданного города — DEC-003: оптимистично, но не молча. */
+    .catalog-geo-confirm {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: var(--app-radius-lg);
+      border: 1px solid var(--glide-line);
+      background: var(--glide-brand-wash);
+    }
+    .catalog-geo-confirm[hidden] { display: none; }
+    .catalog-geo-confirm__title {
+      margin: 0;
+      font-size: var(--app-text-body);
+      font-weight: var(--app-weight-semibold);
+      color: var(--glide-text);
+    }
+    .catalog-geo-confirm__meta {
+      margin: 4px 0 0;
+      font-size: var(--app-text-caption);
+      line-height: 1.4;
+      color: var(--glide-hint);
+    }
+    .catalog-geo-confirm__meta[hidden] { display: none; }
+    .catalog-geo-confirm__actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .catalog-geo-confirm__yes,
+    .catalog-geo-confirm__other {
+      flex: 1 1 auto;
+      min-height: 36px;
+      padding: 8px 12px;
+      border-radius: var(--app-radius-pill);
+      font-family: inherit;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      cursor: pointer;
+    }
+    .catalog-geo-confirm__yes {
+      border: 1px solid transparent;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+    }
+    .catalog-geo-confirm__other {
+      border: 1px solid var(--glide-line-strong);
+      background: var(--glide-card);
+      color: var(--glide-text);
+    }
