@@ -14,6 +14,7 @@ def test_notification_service_creates_ingest_scheduler_task() -> None:
     source = inspect.getsource(notification_service.main)
     assert "run_ice_ingest_scheduler_loop" in source
     assert "run_ice_scrape_ttl_loop" in source
+    assert "run_ice_scheduler_watchdog_loop" in source
     assert "asyncio.create_task" in source
 
 

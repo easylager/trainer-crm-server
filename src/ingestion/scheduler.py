@@ -64,12 +64,15 @@ class IceIngestScheduler:
         # Коммит после каждого задания: новое расписание видно пользователю сразу после
         # своего прогона, а не в конце тика, где до него может быть ещё 20 сайтов.
         self._checkpoint = checkpoint
+        # TASK-176: сколько заданий было просрочено на последнем тике (до потолка) — для heartbeat.
+        self.last_due_count = 0
 
     async def run_due(self, now: datetime) -> list[ScrapeRunRecord]:
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
         outcomes: list[ScrapeRunRecord] = []
         due_jobs = await self._store.list_due(now)
+        self.last_due_count = len(due_jobs)
         if self._max_jobs_per_tick is not None:
             due_jobs = due_jobs[: self._max_jobs_per_tick]
         for job in due_jobs:

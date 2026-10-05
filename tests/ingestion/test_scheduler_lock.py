@@ -117,3 +117,56 @@ async def test_ingest_runner_unlocks_if_commit_fails_after_lock_acquisition() ->
 
     assert engine.unlock_calls == 1
     assert engine.locked is False
+
+
+# ── TASK-176: соединение с локом умерло посреди операции ─────────────────
+
+
+class _DeadOnUnlockConnection(_Connection):
+    async def execute(self, statement, params):
+        if "pg_advisory_unlock" in str(statement):
+            raise ConnectionError("connection is closed")
+        return await super().execute(statement, params)
+
+    async def invalidate(self) -> None:
+        self._engine.invalidated += 1
+        # Postgres снимает session-лок вместе с закрытым соединением.
+        self._engine.locked = False
+
+
+class _DeadOnUnlockEngine(_Engine):
+    def __init__(self) -> None:
+        super().__init__()
+        self.invalidated = 0
+
+    def connect(self) -> _Connection:
+        return _DeadOnUnlockConnection(self)
+
+
+@pytest.mark.asyncio
+async def test_dead_lock_connection_at_unlock_keeps_outcomes(caplog) -> None:
+    engine = _DeadOnUnlockEngine()
+
+    async def work() -> list[str]:
+        return ["run-1", "run-2"]
+
+    with caplog.at_level("WARNING", logger="src.ingestion.scheduler_lock"):
+        acquired, outcomes = await run_with_ice_ingest_lock(engine, work)
+
+    assert acquired is True
+    assert outcomes == ["run-1", "run-2"]
+    assert engine.invalidated == 1
+    assert engine.locked is False
+    assert any("unlock failed" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_dead_lock_connection_does_not_mask_operation_error() -> None:
+    engine = _DeadOnUnlockEngine()
+
+    async def fail() -> None:
+        raise RuntimeError("ingest failed")
+
+    with pytest.raises(RuntimeError, match="ingest failed"):
+        await run_with_ice_ingest_lock(engine, fail)
+    assert engine.invalidated == 1
