@@ -5584,7 +5584,8 @@
 
         var html = filtered.map(function(a) {
           var isSel = !!selectedSet[a.id];
-          var name = (a.name || '').replace(/"/g, '&quot;');
+          // Имя арены может задать тренер (самостоятельное создание площадки) — только текстом.
+          var name = escapeHtml(a.name || '');
           var addr = a.address ? ('<div class="arena-card__addr">' + escapeHtml(a.address) + '</div>') : '';
           var count = a.trainer_count != null ? a.trainer_count | 0 : null;
           var showCount = state.cityId && state.serviceId && count !== null;
@@ -5593,14 +5594,14 @@
             : '';
           var noOffers = showCount && count === 0;
           return (
-            '<label class="arena-card' + (isSel ? ' selected' : '') + (noOffers ? ' arena-card--no-offers' : '') + '" data-id="' + a.id + '" data-name="' + name + '">' +
+            '<label class="arena-card' + (isSel ? ' selected' : '') + (noOffers ? ' arena-card--no-offers' : '') + '" data-id="' + escapeHtml(a.id) + '" data-name="' + name + '">' +
               '<span class="arena-card__check" aria-hidden="true">' +
                 (isSel
                   ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.8 11.8 12.5 5.2"/></svg>'
                   : '') +
               '</span>' +
               '<span class="arena-card__main">' +
-                '<span class="arena-card__name">' + (a.name || '') + '</span>' +
+                '<span class="arena-card__name">' + name + '</span>' +
                 addr +
                 offerLine +
               '</span>' +
@@ -6111,14 +6112,15 @@
             var services = t.services || [];
             if (services.length) {
               var s0 = services[0];
-              metaBottom.push((s0.service_name || 'Услуга') + ': ' + formatCatalogServicePrice(s0));
+              // formatCatalogServicePrice уже отдаёт экранированный HTML.
+              metaBottom.push(escapeHtml(s0.service_name || 'Услуга') + ': ' + formatCatalogServicePrice(s0));
             }
             if (t.arena_names && t.arena_names.length) {
-              metaBottom.push(t.arena_names.slice(0, 2).join(', '));
+              metaBottom.push(escapeHtml(t.arena_names.slice(0, 2).join(', ')));
             }
             // List cards: skip education preview; full block stays on trainer detail.
 
-            var infoHtml = '<div class="info"><div class="name">' + trainerName(t) + '</div>';
+            var infoHtml = '<div class="info"><div class="name">' + escapeHtml(trainerName(t)) + '</div>';
             if (metaTop.length) {
               infoHtml += '<div class="meta">' + metaTop.join(' · ') + '</div>';
             }
@@ -6669,7 +6671,7 @@
           html += '</div>';
         }
         html += '<div class="trainer-detail-header">';
-        html += '<div class="trainer-detail-name">' + name + '</div>';
+        html += '<div class="trainer-detail-name">' + escapeHtml(name) + '</div>';
         if (ratingStr !== '—') {
           html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">⭐ ' + ratingStr + '</div>';
         }
