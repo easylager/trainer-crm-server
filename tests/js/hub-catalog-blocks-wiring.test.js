@@ -348,6 +348,14 @@ describe('своё одним куском: слот, остальные зап�
     const place = fnBody('placeQuickStrip');
     assert.match(place, /mode === 'after-slot'/);
     assert.match(place, /getElementById\('hubIceZone'\)/);
-    assert.match(place, /insertBefore\(strip, zone\)/);
+    assert.match(place, /insertBefore\(strip, explore\)/);
+    const quietRule = homeCss.match(/\.hub-quick-strip--quiet\s*\{[^}]*\}/);
+    assert.ok(quietRule, 'тихая полоска rebook без своих отступов уедет от «Куда катимся»');
+    assert.match(quietRule[0], /margin:\s*0\s+16px/);
+    assert.doesNotMatch(quietRule[0], /margin:\s*-4px\s+20px/);
+    assert.match(
+      homeCss,
+      /#quickStrip\.hub-quick-strip--quiet:not\(\[hidden\]\)\s*\+\s*#hubExplore:not\(\[hidden\]\)/
+    );
   });
 });

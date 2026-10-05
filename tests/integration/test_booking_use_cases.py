@@ -20,6 +20,8 @@ from src.application.booking_use_cases import (
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     claim_client_trainer_booked_notification,
+    claim_trainer_pending_booking_notification,
+    release_trainer_pending_booking_notification_claim,
     get_pending_booking_confirmed_notifications,
     get_pending_trainer_booked_notifications,
     list_bookings_to_complete,
@@ -476,6 +478,29 @@ async def test_trainer_created_booking_not_in_trainer_pending_notification_queue
     ids = [b["id"] for b in pending]
     assert bid_trainer not in ids
     assert bid_client in ids
+
+
+@pytest.mark.asyncio
+async def test_claim_trainer_pending_booking_notification_is_exclusive(db_session: AsyncSession) -> None:
+    """Parallel notification_service workers must not both deliver the same pending push."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(14, 0), time(15, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=False,
+    )
+    assert booking_id is not None
+    assert await claim_trainer_pending_booking_notification(db_session, int(booking_id)) is True
+    assert await claim_trainer_pending_booking_notification(db_session, int(booking_id)) is False
+    await release_trainer_pending_booking_notification_claim(db_session, int(booking_id))
+    assert await claim_trainer_pending_booking_notification(db_session, int(booking_id)) is True
 
 
 @pytest.mark.asyncio

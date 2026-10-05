@@ -4601,9 +4601,54 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
     return out
 
 
-async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
+async def claim_trainer_pending_booking_notification(
+    session: AsyncSession,
+    booking_id: int,
+) -> bool:
+    """
+    Reserve trainer «новая запись» push so parallel notification_service workers cannot both send it.
+    """
+    r = await session.execute(
+        text("""
+            UPDATE bookings
+            SET notified_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+              AND notified_at IS NULL
+              AND status = 'pending'
+            RETURNING id
+        """),
+        {"id": int(booking_id)},
+    )
+    claimed = r.fetchone() is not None
+    if claimed:
+        await session.commit()
+    return claimed
+
+
+async def release_trainer_pending_booking_notification_claim(
+    session: AsyncSession,
+    booking_id: int,
+) -> None:
+    """Undo claim when Telegram send failed so the notifier loop can retry."""
     await session.execute(
-        text("UPDATE bookings SET notified_at = CURRENT_TIMESTAMP WHERE id = :id"),
+        text("""
+            UPDATE bookings
+            SET notified_at = NULL
+            WHERE id = :id
+              AND status = 'pending'
+        """),
+        {"id": int(booking_id)},
+    )
+    await session.commit()
+
+
+async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
+    """Mark trainer pending push delivered (idempotent). Prefer claim_trainer_pending_booking_notification before send."""
+    await session.execute(
+        text(
+            "UPDATE bookings SET notified_at = CURRENT_TIMESTAMP "
+            "WHERE id = :id AND notified_at IS NULL"
+        ),
         {"id": booking_id},
     )
     await session.commit()

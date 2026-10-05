@@ -836,7 +836,7 @@ body.hub-body {
   align-items: flex-start;
   gap: 6px;
   overflow: visible;
-  margin: -4px 20px 0;
+  margin: 0 16px;
   padding: 0;
 }
 
@@ -853,6 +853,21 @@ body.hub-body {
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Не второй заголовок секции — тихое действие под карточкой (прототип .again / .quiet). */
+.hub-quick-strip--quiet .hub-quick-link {
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.35;
+}
+
+/*
+ * Личное (карточка + «Ещё занятие») от рынка: placeQuickStrip ставит полоску
+ * вплотную перед #hubExplore — пауза только здесь, не margin collapse с карточкой.
+ */
+#quickStrip.hub-quick-strip--quiet:not([hidden]) + #hubExplore:not([hidden]) {
+  padding-top: 24px;
 }
 
 .hub-quick-link:active {

@@ -463,6 +463,13 @@
         var strip = document.getElementById('quickStrip');
         if (!shell || !strip) return;
         if (mode === 'after-slot') {
+          /* Сразу перед рынком: иначе между тихой строкой и «Куда катимся»
+             в потоке только скрытые якоря — визуально два заголовка слипаются. */
+          var explore = document.getElementById('hubExplore');
+          if (explore && explore.parentNode === shell) {
+            shell.insertBefore(strip, explore);
+            return;
+          }
           var zone = document.getElementById('hubIceZone');
           if (zone && zone.parentNode === shell) shell.insertBefore(strip, zone);
           return;
