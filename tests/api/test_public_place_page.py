@@ -111,7 +111,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     assert "завтра" not in _meta(html, "og:description").lower()
     assert f"startapp=arena_{place['arena_id']}_s_{sid}" in html
     assert _meta(html, "robots") == "noindex, follow"
-    assert f"og.png?s={sid}" in _meta(html, "og:image")
+    assert f"/session/{sid}/og.png" in _meta(html, "og:image")
     assert f"?s={sid}" in _meta(html, "og:url")
     # Канонический адрес — без параметров: в поиске одна страница на место.
     assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', html)
@@ -119,7 +119,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     ihtml = invite.text
     assert _meta(ihtml, "og:title").startswith("Погнали кататься?")
     assert "Тебя зовут кататься" in ihtml
-    assert "i=1" in _meta(ihtml, "og:image")
+    assert f"/session/{sid}/og.png?i=1" in _meta(ihtml, "og:image")
 
 
 @pytest.mark.asyncio
