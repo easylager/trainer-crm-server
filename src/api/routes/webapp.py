@@ -2839,15 +2839,29 @@ async def get_client_hub_bootstrap(
                 }
                 for e in saved_edges
             ]
+            # TASK-160: карточке возврата нужно лицо и «последний раз …», иначе самое
+            # ценное состояние (не сгоревший абонемент) выглядит безликой строкой.
+            # Фото уже лежит в `hints`, а история — в тех же `edges`, из которых
+            # собирается `primary_history`: новых запросов не нужно.
+            edge_by_trainer = {int(e.get("trainer_id") or 0): e for e in edges}
             rebook_targets: list[dict[str, Any]] = []
             for rt_tid, rt_svc in rebook_raw:
                 h = hints.get(int(rt_tid)) or {}
                 rt_name = ((h.get("trainer_display_name") or "Тренер").strip() or "Тренер")
+                rt_edge = edge_by_trainer.get(int(rt_tid)) or {}
+                rt_last = rt_edge.get("last_completed_at")
                 rebook_targets.append(
                     {
                         "trainer_id": int(rt_tid),
                         "service_id": int(rt_svc) if rt_svc is not None else None,
                         "trainer_display_name": rt_name,
+                        "trainer_list_photo_key": h.get("trainer_list_photo_key"),
+                        "completed_count": int(rt_edge.get("completed_count") or 0),
+                        "last_completed_at": (
+                            rt_last.isoformat()
+                            if rt_last is not None and hasattr(rt_last, "isoformat")
+                            else (str(rt_last) if rt_last is not None else None)
+                        ),
                     }
                 )
             primary_history: dict[str, Any] | None = None

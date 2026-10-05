@@ -9,21 +9,21 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202609287"></script>
-<link rel="stylesheet" href="theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610051" />
-  <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <link rel="preload" href="client-home-main.js?v=202610058" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-card.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202610058" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202610051" />
-<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <script src="mini-app-empty-state.js?v=202609287"></script>
-  <script src="mini-app-more-icons.js?v=202610051"></script>
-  <script src="mini-app-client-shell.js?v=202610051"></script>
-  <script src="client-profile-switcher.js?v=202609287"></script>
-  <script defer src="mini-app-client-home.js?v=202609287"></script>
+  <script src="client-mini-app-theme.js?v=2026100522"></script>
+<link rel="stylesheet" href="theme.css?v=2026100522" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=2026100522" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026100522" />
+  <script src="mini-app-telegram-chrome.js?v=2026100522"></script>
+  <link rel="preload" href="client-home-main.js?v=2026100522" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-card.css?v=2026100522" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=2026100522" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=2026100522" />
+<link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100522" />
+  <script src="mini-app-empty-state.js?v=2026100522"></script>
+  <script src="mini-app-more-icons.js?v=2026100522"></script>
+  <script src="mini-app-client-shell.js?v=2026100522"></script>
+  <script src="client-profile-switcher.js?v=2026100522"></script>
+  <script defer src="mini-app-client-home.js?v=2026100522"></script>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#hubShell" blocking="render" />
 </head>
@@ -64,26 +64,37 @@
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
     <!--
-      TASK-095 (AC-001). Скелетон — это обещание конкретной формы. Прежний
-      обещал аватар, полосу чипов и строку истории: раскладку, которой на
-      первом экране больше нет. Теперь он повторяет то, что реально приходит —
-      карточка льда, строка поиска, лента тренеров, — и в тех же коробках:
-      те же радиусы, те же aspect-ratio, та же ширина карточки карусели.
+      TASK-095 (AC-001). Скелетон — это обещание конкретной формы.
+
+      TASK-160 (S5). Форма сменилась: верх хаба — одна карточка во всех
+      состояниях, и скелетон обязан обещать ЕЁ, а не прежние «карточка льда +
+      поиск + плитки». Скелетон, обещающий не ту форму, и есть источник CLS,
+      против которого писался TASK-095.
+
+      Коробки повторяют `.me`: тот же радиус (--app-radius-lg), те же отступы
+      (14px 15px), та же высота строки статуса, крупного времени и лица.
+      Полоса чипов зарезервирована здесь же: окна приезжают из /client/slots
+      асинхронно, позже bootstrap, и без резерва карточка прыгала бы.
     -->
     <div id="hubInitialSkel" class="hub-initial-skel" role="status" aria-busy="true" aria-label="Загрузка главной">
-      <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
-      <div class="hub-skel-icecard">
-        <div class="hub-skel-band hub-skel-shimmer"></div>
-        <div class="hub-skel-icerow">
+      <div class="hub-skel-me">
+        <div class="hub-skel-me__pad">
+          <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
           <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer"></div>
-          <div class="hub-skel-icelines">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+          <div class="hub-skel-me__who">
+            <div class="hub-skel-me__avatar hub-skel-shimmer"></div>
+            <div class="hub-skel-icelines">
+              <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer"></div>
+            </div>
+          </div>
+          <div class="hub-skel-me__chips">
+            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
+            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
+            <div class="hub-skel-me__chip hub-skel-shimmer"></div>
           </div>
         </div>
       </div>
-      <div class="hub-skel-search hub-skel-shimmer"></div>
-      <!-- TASK-149: вместо карусели тренеров — сетка плиток «Куда катимся». -->
       <div class="hub-skel-line hub-skel-line--kicker hub-skel-shimmer"></div>
       <div class="hub-skel-tiles">
         <div class="hub-skel-tile hub-skel-shimmer"></div>
@@ -124,10 +135,19 @@
       </button>
     </div>
 
-    <!-- ── SCENARIO 1: MY TRAINER CARD ────────────────────────────────── -->
+    <!-- ── SCENARIO 1: точка вставки зоны льда ───────────────────────── -->
+    <!--
+      TASK-160 (S3): карточка тренера стала заливкой «моей карточки» и рисуется
+      в #nextBookingBlock. Пустой блок остался анкером для placeIceZone —
+      ничего, кроме порядка секций, он больше не держит.
+    -->
     <div id="myTrainerBlock" style="display:none;"></div>
 
-    <!-- Living panel under primary trainer: nearest slots + pass remainder + history line -->
+    <!--
+      Полка остатка. Окна и строка истории уехали в «мою карточку» (TASK-160 S3);
+      здесь остался только остаток абонемента для состояний, которые ещё не
+      переведены на карточку (сохранённые тренеры).
+    -->
     <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
 
     <!--
@@ -237,15 +257,15 @@
     <span class="hub-book-fab__label">Записаться</span>
   </button>
 
-  <script src="ru-text.js?v=202609287"></script>
-  <script src="ice-teaser-model.js?v=202610023"></script>
-  <script src="hub-collections-model.js?v=202610031"></script>
-  <script src="hub-ice-today-model.js?v=202610028"></script>
+  <script src="ru-text.js?v=2026100522"></script>
+  <script src="ice-teaser-model.js?v=2026100522"></script>
+  <script src="hub-collections-model.js?v=2026100522"></script>
+  <script src="hub-ice-today-model.js?v=2026100522"></script>
   <!-- TASK-160: «моя карточка» хаба — чистая модель + рендер, без DOM. -->
-  <script src="hub-me-card.js?v=202610028"></script>
+  <script src="hub-me-card.js?v=2026100522"></script>
   <!-- Падежи имени для подписей карточки; модуля нет — формы безпадежные. -->
-  <script src="ru-person-name.js?v=202610028"></script>
-  <script src="catalog-geo-model.js?v=202609287"></script>
-  <script defer src="client-home-main.js?v=202610058"></script>
+  <script src="ru-person-name.js?v=2026100522"></script>
+  <script src="catalog-geo-model.js?v=2026100522"></script>
+  <script defer src="client-home-main.js?v=2026100522"></script>
 </body>
 </html>

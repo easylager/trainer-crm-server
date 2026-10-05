@@ -11,22 +11,22 @@
   <!-- telegram.org грузится async: блокирующий запрос на плохой сети оставлял Mini App на сплеше.
        mini-app-full-height.js дожидается SDK и сам вызывает ready() + раскрытие на всю высоту —
        без него ready()/expand() уходили в никуда и приложение открывалось полушторкой. -->
-  <script src="mini-app-full-height.js?v=202609287"></script>
+  <script src="mini-app-full-height.js?v=2026100518"></script>
   <script src="https://telegram.org/js/telegram-web-app.js" async></script>
-  <script src="mini-app-trainer-theme.js?v=202609287"></script>
-  <script src="mini-app-telegram-chrome.js?v=202609287"></script>
-  <script src="mini-app-phone-field.js?v=202609287"></script>
-  <link rel="stylesheet" href="theme.css?v=202610024" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202610051" />
-  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=202610024" />
+  <script src="mini-app-trainer-theme.js?v=2026100518"></script>
+  <script src="mini-app-telegram-chrome.js?v=2026100518"></script>
+  <script src="mini-app-phone-field.js?v=2026100518"></script>
+  <link rel="stylesheet" href="theme.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-components.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-trainer-theme.css?v=2026100518" />
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202610053" />
-  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202610051" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=2026100518" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=202609287" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202609287" />
-  <link rel="preload" href="trainer-home-main.js?v=202610053" as="script" />
-  <link rel="preload" href="mini-app-trainer-shell.js?v=202610051" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pending-inbox.css?v=2026100518" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=2026100518" />
+  <link rel="preload" href="trainer-home-main.js?v=2026100518" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=2026100518" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -909,15 +909,15 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=202609287"></script>
-  <script src="mini-app-trainer-celebration.js?v=202609287"></script>
-  <script src="trainer-client-relay-ui.js?v=202609287"></script>
-  <script src="trainer-relay-helpers.js?v=202609287"></script>
+  <script src="mini-app-trainer-gate.js?v=2026100518"></script>
+  <script src="mini-app-trainer-celebration.js?v=2026100518"></script>
+  <script src="trainer-client-relay-ui.js?v=2026100518"></script>
+  <script src="trainer-relay-helpers.js?v=2026100518"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script src="mini-app-trainer-pending-inbox.js?v=202609287"></script>
-  <script src="trainer-booking-context.js?v=202609287"></script>
-  <script defer src="trainer-home-main.js?v=202610053"></script>
-  <script src="mini-app-more-icons.js?v=202610051"></script>
-  <script defer src="mini-app-trainer-shell.js?v=202610051"></script>
+  <script src="mini-app-trainer-pending-inbox.js?v=2026100518"></script>
+  <script src="trainer-booking-context.js?v=2026100518"></script>
+  <script defer src="trainer-home-main.js?v=2026100518"></script>
+  <script src="mini-app-more-icons.js?v=2026100518"></script>
+  <script defer src="mini-app-trainer-shell.js?v=2026100518"></script>
 </body>
 </html>

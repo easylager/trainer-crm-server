@@ -943,8 +943,22 @@ describe('happy path: city-ice', () => {
     assert.ok(out.includes('Чижовка-Арена'));
     assert.ok(out.includes('⌖ ул. Ташкентская, 19'));
     assert.ok(out.includes('class="k">Дальше на льду<'));
+    // Вход во все сеансы ровно один — последним элементом полосы чипов.
+    // Отдельная серая кнопка под ней дублировала и надпись, и адрес.
     assert.ok(out.includes('Все сеансы →'));
-    assert.ok(out.includes('data-me-arena-id="5"'));
+    assert.equal((out.match(/Все сеансы/g) || []).length, 1, out);
+    assert.ok(out.includes("data-me-action=\"all-sessions\""));
+  });
+
+  it('нет сеансов для чипов — вход во все сеансы остаётся кнопкой, а не исчезает', () => {
+    const out = html({
+      kind: 'city-ice',
+      arena: { id: 5, name: 'Чижовка-Арена', city_name: 'Минск', start_time: '19:00:00' },
+      slots: [],
+    });
+    assert.ok(!out.includes('me__chips'));
+    assert.equal((out.match(/Все сеансы/g) || []).length, 1, out);
+    assert.ok(out.includes("data-me-action=\"all-sessions\""));
   });
 
   it('нет ни имени, ни времени — карточки лёда нет', () => {

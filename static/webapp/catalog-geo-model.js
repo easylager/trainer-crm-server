@@ -116,6 +116,77 @@
     };
   }
 
+  /**
+   * Предложный падеж («вы в <Городе>») для городов, где мы работаем, —
+   * см. scripts/seed_cities.py и scripts/seed_regional_arenas.py.
+   */
+  var CITY_LOCATIVE = {
+    'Минск': 'Минске',
+    'Гомель': 'Гомеле',
+    'Могилёв': 'Могилёве',
+    'Могилев': 'Могилеве',
+    'Витебск': 'Витебске',
+    'Гродно': 'Гродно',
+    'Брест': 'Бресте',
+    'Барановичи': 'Барановичах',
+    'Берёза': 'Берёзе',
+    'Береза': 'Березе',
+    'Бобруйск': 'Бобруйске',
+    'Горки': 'Горках',
+    'Жодино': 'Жодино',
+    'Ивацевичи': 'Ивацевичах',
+    'Кобрин': 'Кобрине',
+    'Лида': 'Лиде',
+    'Лунинец': 'Лунинце',
+    'Молодечно': 'Молодечно',
+    'Новополоцк': 'Новополоцке',
+    'Орша': 'Орше',
+    'Островец': 'Островце',
+    'Пинск': 'Пинске',
+    'Пружаны': 'Пружанах',
+    'Раубичи': 'Раубичах',
+    'Силичи': 'Силичах',
+    'Солигорск': 'Солигорске',
+    'Шклов': 'Шклове',
+    'Москва': 'Москве',
+    'Санкт-Петербург': 'Санкт-Петербурге',
+  };
+
+  /**
+   * Предложный падеж города. Сначала словарь наших рынков, дальше — только те
+   * правила, которые не врут: «-а» → «-е», «-о» не склоняется, «-ск/-цк/-ов/
+   * -ев/-ёв/-ин/-ын/-бург/-град» + «е».
+   *
+   * Остальное не угадываем. Русские топонимы склоняются слишком по-разному:
+   * «Лунинец» → «Лунинце» (беглая гласная), «Тверь» → «Твери», но «Гомель» →
+   * «Гомеле» — род по написанию не определить. null означает «падеж неизвестен»,
+   * и заголовок переходит на формулировку без падежа.
+   *
+   * @returns {string|null}
+   */
+  function cityLocative(cityName) {
+    var name = String(cityName == null ? '' : cityName).trim();
+    if (!name) return null;
+    if (Object.prototype.hasOwnProperty.call(CITY_LOCATIVE, name)) return CITY_LOCATIVE[name];
+    if (/ия$/.test(name)) return name.slice(0, -1) + 'и';
+    if (/[бвгджзклмнпрстфхцчшщ]а$/.test(name)) return name.slice(0, -1) + 'е';
+    if (/о$/.test(name)) return name;
+    if (/(ск|цк|ов|ёв|ев|ин|ын|бург|град)$/.test(name)) return name + 'е';
+    return null;
+  }
+
+  /**
+   * Заголовок подтверждения города. Падеж знаем — «Похоже, вы в Минске?»;
+   * не знаем — «Похоже, ваш город — Тверь?»: переформулировать честнее, чем
+   * переврать падеж. Имени города нет вовсе — нейтральное, без выдумок.
+   */
+  function formatCityGuessTitle(cityName) {
+    var name = String(cityName == null ? '' : cityName).trim();
+    if (!name) return 'Похоже, мы нашли ваш город';
+    var locative = cityLocative(name);
+    return locative ? 'Похоже, вы в ' + locative + '?' : 'Похоже, ваш город — ' + name + '?';
+  }
+
   /** Та же запись расстояния, что в ленте льда (ice-tab-model.js / ice-teaser-model.js). */
   function formatDistanceKm(km) {
     if (km == null || km === '' || isNaN(Number(km))) return '';
@@ -146,6 +217,103 @@
     if (!lm || typeof lm.getLocation !== 'function') return null;
     if (lm.isLocationAvailable === false) return null;
     return lm;
+  }
+
+  /** Состояние разрешения ДО системного вызова. */
+  var GEO_PERMISSION = {
+    GRANTED: 'granted',
+    DENIED: 'denied',
+    PROMPT: 'prompt',
+    UNKNOWN: 'unknown', // спросить нельзя — считаем, что прайминг нужен
+  };
+
+  /** Что показать по тапу на чип «Рядом со мной». */
+  var GEO_ENTRY = {
+    PRIMING: 'priming',   // шторка-прайминг, системный запрос — вторым шагом
+    REQUEST: 'request',   // разрешение уже есть: шторку не показываем (TASK-163 AC-6)
+    RECOVERY: 'recovery', // системный отказ: путь восстановления
+  };
+
+  /**
+   * Разрешение по флагам LocationManager — синхронно, без системного диалога.
+   * null — LocationManager нам не подходит (нет его, старый клиент, устройство
+   * без геолокации), спрашивать надо веб-API.
+   */
+  function telegramAccessState(telegram) {
+    var lm = telegramLocationManager(telegram);
+    if (!lm) return null;
+    // До init() клиент флагов ещё не прислал — это не «отказано», это «неизвестно».
+    if (!lm.isInited) return GEO_PERMISSION.UNKNOWN;
+    if (lm.isAccessGranted === true) return GEO_PERMISSION.GRANTED;
+    if (lm.isAccessRequested === true) return GEO_PERMISSION.DENIED;
+    return GEO_PERMISSION.PROMPT;
+  }
+
+  /**
+   * Читает состояние разрешения, НЕ вызывая системный диалог. Нужно ровно для
+   * одного решения — показывать ли шторку-прайминг: объяснять второй раз то,
+   * на что человек уже согласился, невежливо.
+   *
+   * Внутри Телеграма ответ синхронный (флаги LocationManager), иначе —
+   * navigator.permissions, который есть не везде (Safari до 16); нет его или он
+   * бросил — UNKNOWN, то есть прайминг покажем. Permissions API сам диалога
+   * не поднимает.
+   *
+   * @param {object} deps — { telegram, navigator }
+   * @param {function} done — done(oneOf(GEO_PERMISSION))
+   */
+  function readLocationPermission(deps, done) {
+    deps = deps || {};
+    var cb = typeof done === 'function' ? done : function () {};
+    var fromTelegram = telegramAccessState(deps.telegram);
+    if (fromTelegram) {
+      cb(fromTelegram);
+      return;
+    }
+    var nav = deps.navigator;
+    var perms = nav && nav.permissions;
+    if (!perms || typeof perms.query !== 'function') {
+      cb(GEO_PERMISSION.UNKNOWN);
+      return;
+    }
+    var pending;
+    try {
+      pending = perms.query({ name: 'geolocation' });
+    } catch (e) {
+      cb(GEO_PERMISSION.UNKNOWN);
+      return;
+    }
+    if (!pending || typeof pending.then !== 'function') {
+      cb(GEO_PERMISSION.UNKNOWN);
+      return;
+    }
+    pending.then(
+      function (status) {
+        var state = status && status.state;
+        if (state === GEO_PERMISSION.GRANTED) cb(GEO_PERMISSION.GRANTED);
+        else if (state === GEO_PERMISSION.DENIED) cb(GEO_PERMISSION.DENIED);
+        else if (state === GEO_PERMISSION.PROMPT) cb(GEO_PERMISSION.PROMPT);
+        else cb(GEO_PERMISSION.UNKNOWN);
+      },
+      function () {
+        cb(GEO_PERMISSION.UNKNOWN);
+      }
+    );
+  }
+
+  /**
+   * Какой вид показать по тапу на чип. Выданное разрешение бьёт вечный флаг:
+   * человек мог запретить, а потом разрешить в настройках — тогда наш флаг
+   * устарел, и держать его перед живым разрешением было бы враньём.
+   *
+   * @param {object} ctx — { permission, declinedForever }
+   */
+  function pickGeoEntryView(ctx) {
+    ctx = ctx || {};
+    if (ctx.permission === GEO_PERMISSION.GRANTED) return GEO_ENTRY.REQUEST;
+    if (ctx.declinedForever) return GEO_ENTRY.RECOVERY;
+    if (ctx.permission === GEO_PERMISSION.DENIED) return GEO_ENTRY.RECOVERY;
+    return GEO_ENTRY.PRIMING;
   }
 
   function canOpenLocationSettings(telegram) {
@@ -346,14 +514,21 @@
     DECLINED_STORAGE_KEY: DECLINED_STORAGE_KEY,
     MAX_MATCH_DISTANCE_KM: MAX_MATCH_DISTANCE_KM,
     GEO_STATUS: GEO_STATUS,
+    GEO_PERMISSION: GEO_PERMISSION,
+    GEO_ENTRY: GEO_ENTRY,
     shouldAutoGeolocate: shouldAutoGeolocate,
     pickCityFromNearResponse: pickCityFromNearResponse,
     pickNearestPlaceFromNearResponse: pickNearestPlaceFromNearResponse,
     formatDistanceKm: formatDistanceKm,
+    cityLocative: cityLocative,
+    formatCityGuessTitle: formatCityGuessTitle,
     buildNearUrl: buildNearUrl,
     readDeclinedFlag: readDeclinedFlag,
     writeDeclinedFlag: writeDeclinedFlag,
     telegramLocationManager: telegramLocationManager,
+    telegramAccessState: telegramAccessState,
+    readLocationPermission: readLocationPermission,
+    pickGeoEntryView: pickGeoEntryView,
     canOpenLocationSettings: canOpenLocationSettings,
     openLocationSettings: openLocationSettings,
     requestLocation: requestLocation,

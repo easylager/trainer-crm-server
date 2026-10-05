@@ -21,6 +21,7 @@ from src.application.demand_signals_use_cases import (
     record_catalog_favorite,
     record_contact_click,
     record_profile_view,
+    record_profile_view_commit,
 )
 from src.infrastructure.db.models import (
     DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED,
@@ -329,3 +330,35 @@ async def test_lifetime_totals_sum_all_rows(db_session: AsyncSession) -> None:
     assert tot["profile_views"] == 2
     assert tot["contact_clicks"] == 1
     assert tot["catalog_favorites_events"] == 2
+
+
+@pytest.mark.asyncio
+async def test_profile_view_commit_survives_unknown_trainer(db_session: AsyncSession) -> None:
+    """
+    Битая/устаревшая пригласительная ссылка приносит trainer_id тренера, которого нет.
+    FK на `trainers` такую вставку отвергает, но аналитика не имеет права уронить
+    сценарий `/start` — вызов возвращает False, сессия остаётся рабочей.
+    """
+    r = await db_session.execute(text("SELECT COALESCE(MAX(id), 0) + 100000 FROM trainers"))
+    (missing_trainer_id,) = r.fetchone()
+
+    inserted = await record_profile_view_commit(
+        db_session,
+        trainer_id=int(missing_trainer_id),
+        source=DEMAND_SOURCE_CLIENT_APP,
+    )
+
+    assert inserted is False
+    assert await _count_events(db_session, int(missing_trainer_id)) == 0
+
+    # Сессия не осталась в aborted-транзакции: следующая запись по живому тренеру проходит.
+    live_trainer_id = await _create_trainer(db_session)
+    assert (
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=live_trainer_id,
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
+        is True
+    )
+    assert await _count_events(db_session, live_trainer_id) == 1
