@@ -41,6 +41,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
+from src.ingestion.dates import parser_reference_date
 from src.ingestion.parsers import IceParser
 from src.ingestion.source_io import load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
@@ -155,7 +156,7 @@ class ShuvalovskyLedHtmlParser(IceParser):
         if mobile_marker != -1:
             section = html[:mobile_marker]
 
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         rental = job.config.get("price_rental_minor")
         tiers = {
             (60, False): job.config.get("price_60min_weekday_minor"),

@@ -87,7 +87,7 @@ def test_gomel_find_latest_post_parses_four_digit_year_dates() -> None:
 
 def test_bobruisk_modern_schedule_page_extracts_public_skate_slots() -> None:
     html = (_FIXTURES / "bobruisk-arena/ice-rink-schedule.html").read_text(encoding="utf-8")
-    slots = _bobruisk_schedule_slots(html, year=2026)
+    slots = _bobruisk_schedule_slots(html, reference=date(2026, 7, 1))
     assert slots
     assert all("массовое катание" not in start for _, start, _ in slots)
     sun27 = [s for s in slots if s[0] == date(2026, 9, 27)]
