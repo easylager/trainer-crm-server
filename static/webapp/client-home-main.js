@@ -75,6 +75,8 @@
        * FAB с тем же смыслом при этом не показывается.
        */
       var hubMeCardHasAction = false;
+      /* Резолвнулись ли профили: до этого имя в приветствии — догадка. */
+      var hubProfilesResolved = false;
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -650,8 +652,23 @@
        * (тесты в tests/js/hub-collections-model.test.js). Фолбэк на старый текст —
        * только если модель по какой-то причине не загрузилась.
        */
+      /**
+       * Имя для приветствия. Пока профили не резолвнуты, имя владельца аккаунта —
+       * это ДОГАДКА, и у клиента с детским профилем она чужая: экран здоровается
+       * с Максимом, когда открыт профиль Анны. Лучше поздороваться без имени и
+       * дописать его через мгновение, чем назвать не того. Высота строки
+       * зарезервирована (TASK-095), поэтому дозапись имени макет не двигает.
+       */
+      function hubGreetingName() {
+        var acting = actingProfileFirstName();
+        if (acting) return acting;
+        var sw = window.ClientProfileSwitcher;
+        if (sw && typeof sw.init === 'function' && !hubProfilesResolved) return null;
+        return getTelegramFirstName();
+      }
+
       function defaultHubGreeting() {
-        var name = actingProfileFirstName() || getTelegramFirstName();
+        var name = hubGreetingName();
         var model = window.HubCollectionsModel;
         if (model && typeof model.greetingText === 'function') {
           return model.greetingText(new Date().getHours(), name);
@@ -2498,6 +2515,11 @@
 
         return profilesReady
           .then(function () {
+            // Профили известны — имя перестало быть догадкой. Перерисовываем
+            // здесь, а не в applyHubState: ждать bootstrap незачем.
+            hubProfilesResolved = true;
+            setHubGreeting(defaultHubGreeting());
+            syncProfileSwitcherCompact();
             return fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson(), cache: 'no-store' });
           })
           .then(jsonOrThrow)

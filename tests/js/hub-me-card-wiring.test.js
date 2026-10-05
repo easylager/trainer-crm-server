@@ -470,4 +470,21 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     assert.match(homeCss, /\.hub-next-card-line\s*\{/);
     assert.match(homeCss, /\.hub-primary-panel__pass\s*\{/);
   });
+
+  it('приветствие не называет владельца аккаунта, пока профили не резолвнуты', () => {
+    const name = fnBody('hubGreetingName');
+    // Имя действующего профиля — единственный источник правды, когда он известен.
+    assert.match(name, /actingProfileFirstName\(\)/);
+    // Пока не известен и переключатель профилей есть — имени нет вовсе.
+    assert.match(name, /hubProfilesResolved/);
+    assert.match(name, /return null/);
+    // Флаг поднимается только после profilesReady, и там же перерисовка.
+    assert.match(
+      homeMain,
+      /hubProfilesResolved = true;\s*\n\s*setHubGreeting\(defaultHubGreeting\(\)\);\s*\n\s*syncProfileSwitcherCompact\(\);/
+    );
+    // Первая отрисовка в loadAll идёт ДО profilesReady — значит она обязана быть безымянной.
+    const load = fnBody('loadAll');
+    assert.ok(load.indexOf('setHubGreeting') < load.indexOf('profilesReady'));
+  });
 });

@@ -261,7 +261,11 @@ describe('приветствие (S1): факты, без погоды, без �
   it('текст приветствия собирает чистая модель; имя — из Telegram', () => {
     const body = fnBody('defaultHubGreeting');
     assert.match(body, /model\.greetingText\(new Date\(\)\.getHours\(\), name\)/);
-    assert.match(body, /getTelegramFirstName\(\)/);
+    // Было: имя бралось прямо здесь. Стало (TASK-160): выбор имени вынесен в
+    // hubGreetingName — до резолва профилей имя владельца аккаунта было бы
+    // чужим. Инвариант тот же: источник имени — Telegram, а не поле сервера.
+    assert.match(body, /hubGreetingName\(\)/);
+    assert.match(fnBody('hubGreetingName'), /getTelegramFirstName\(\)/);
   });
 
   it('подпись собирает чистая модель из фактов тизера; в коде хаба нет погоды', () => {
