@@ -3966,72 +3966,275 @@
         persistCatalogFilters(trainerId);
       }
 
-      /**
-       * Cold-open city auto-detect (catalog-geo-model.js). With no city context anywhere,
-       * the trainer list query omits city_id and returns an unfiltered, rating-sorted list
-       * across ALL cities — which today reads as "Minsk" to a visitor elsewhere simply
-       * because that's where most of the trainer base already is. Silent and non-blocking:
-       * the catalog has already rendered with that unfiltered list by the time this resolves
-       * (geolocation can take seconds or prompt for permission); this only refreshes it in
-       * the background if a real location comes back. Never touches state.cityId if
-       * something else (a manual pick, another tab) has already set it in the meantime.
+      /* ─── Геолокация каталога: только по тапу (TASK-163) ──────────────────────
+       * Было: `attemptCatalogAutoGeoDetect` дёргал getCurrentPosition молча на
+       * холодном старте. Системный диалог прилетал человеку, который ещё не понял,
+       * что это за приложение, а любой отказ писал вечный `glide_geo_declined_v1` —
+       * и больше мы не спрашивали никогда (на iOS отказ снимается только через
+       * Настройки). Единственный выстрел тратился в худший момент.
+       *
+       * Стало: вход — чип «⌖ Рядом со мной», дальше наша шторка-прайминг, и только
+       * по тапу «Разрешить геопозицию» идёт системный запрос. Сам системный вызов
+       * живёт в CatalogGeoModel.requestLocation (LocationManager внутри Телеграма,
+       * navigator.geolocation — тихий фолбэк); в этом файле его нет вовсе.
        */
-      function attemptCatalogAutoGeoDetect(ctx) {
-        var G = window.CatalogGeoModel;
-        if (!G) return;
-        var declined = G.readDeclinedFlag(window.localStorage);
-        var go = G.shouldAutoGeolocate({
-          cityId: state.cityId,
-          hasExplicitQueryCityId: !!(ctx && ctx.hasExplicitQueryCityId),
-          hasCollectiveContext: !!(ctx && ctx.hasCollectiveContext),
-          hasDeepLinkTrainer: !!(ctx && ctx.hasDeepLinkTrainer),
-          hasPrimaryTrainer: !!(ctx && ctx.hasPrimaryTrainer),
-          geolocationSupported: !!(window.navigator && window.navigator.geolocation),
-          previouslyDeclined: declined,
-        });
-        if (!go) return;
 
-        window.navigator.geolocation.getCurrentPosition(
-          function(pos) {
-            var url = G.buildNearUrl(pos.coords.latitude, pos.coords.longitude);
-            fetch(url, { cache: 'no-store' })
-              .then(function(r) { return r.json(); })
-              .then(function(data) {
-                var detectedCityId = G.pickCityFromNearResponse(data);
-                if (!detectedCityId || state.cityId) {
-                  G.writeDeclinedFlag(window.localStorage);
-                  return;
-                }
-                return getJson('/cities').then(function(cd) {
-                  var match = (cd.items || []).filter(function(c) {
-                    return Number(c.id) === detectedCityId;
-                  })[0];
-                  applyAutoDetectedCity(detectedCityId, match ? match.name : '');
-                });
-              })
-              .catch(function() {
-                G.writeDeclinedFlag(window.localStorage);
-              });
-          },
-          function() {
-            G.writeDeclinedFlag(window.localStorage);
-          },
-          { timeout: 6000, maximumAge: 60000 }
+      var CATALOG_GEO_SHEET_PRIMING = {
+        title: 'Показать катки рядом?',
+        text: 'Возьмём геопозицию один раз, чтобы отсортировать катки по расстоянию ' +
+          'и подставить ваш город. Мы её не храним и не передаём.',
+        allow: 'Разрешить геопозицию',
+        quiet: 'Не сейчас',
+      };
+
+      var catalogGeoRequestBusy = false;
+
+      function catalogTelegramApp() {
+        return (window.Telegram && window.Telegram.WebApp) || null;
+      }
+
+      function catalogGeoDeclinedForever() {
+        var G = window.CatalogGeoModel;
+        return !!(G && G.readDeclinedFlag(window.localStorage));
+      }
+
+      function catalogGeoHaptic() {
+        var t = catalogTelegramApp();
+        try {
+          if (t && t.HapticFeedback && t.HapticFeedback.selectionChanged) t.HapticFeedback.selectionChanged();
+        } catch (e) { /* noop */ }
+      }
+
+      /**
+       * Шторка в одном из трёх видов: прайминг (до системного вызова),
+       * «определяем» и путь восстановления после системного отказа.
+       */
+      function renderCatalogGeoSheet(view) {
+        var titleEl = document.getElementById('catalogGeoSheetTitle');
+        var textEl = document.getElementById('catalogGeoSheetText');
+        var allowEl = document.getElementById('catalogGeoAllow');
+        var quietEl = document.getElementById('catalogGeoDismiss');
+        if (!titleEl || !textEl || !allowEl || !quietEl) return;
+        titleEl.textContent = view.title;
+        textEl.textContent = view.text;
+        if (view.allow) {
+          allowEl.hidden = false;
+          allowEl.disabled = !!view.busy;
+          allowEl.textContent = view.allow;
+        } else {
+          allowEl.hidden = true;
+        }
+        quietEl.textContent = view.quiet || 'Не сейчас';
+        allowEl.setAttribute('data-geo-action', view.allowAction || 'request');
+      }
+
+      function openCatalogGeoSheet() {
+        var sheet = document.getElementById('catalogGeoSheet');
+        if (!sheet) return;
+        if (catalogGeoDeclinedForever()) renderCatalogGeoSheetRecovery();
+        else renderCatalogGeoSheet(CATALOG_GEO_SHEET_PRIMING);
+        sheet.hidden = false;
+        window.requestAnimationFrame(function() { sheet.classList.add('is-open'); });
+      }
+
+      function closeCatalogGeoSheet() {
+        var sheet = document.getElementById('catalogGeoSheet');
+        if (!sheet) return;
+        sheet.classList.remove('is-open');
+        window.setTimeout(function() { if (sheet) sheet.hidden = true; }, 180);
+      }
+
+      /**
+       * Системный отказ уже случился. Внутри Телеграма у нас есть путь обратно —
+       * LocationManager.openSettings(); он требует пользовательского жеста, поэтому
+       * висит на кнопке. У веб-геолокации такого пути нет — тогда честный текст
+       * без кнопки, а город человек выберет руками.
+       */
+      function renderCatalogGeoSheetRecovery() {
+        var G = window.CatalogGeoModel;
+        var canSettings = !!(G && G.canOpenLocationSettings(catalogTelegramApp()));
+        renderCatalogGeoSheet({
+          title: 'Доступ к геопозиции закрыт',
+          text: canSettings
+            ? 'Вы запретили доступ, и спросить повторно мы не можем. Откройте настройки ' +
+              'и разрешите геопозицию — или выберите город вручную.'
+            : 'Вы запретили доступ в настройках браузера, и повторно спросить оттуда нельзя. ' +
+              'Выберите город вручную — это так же быстро.',
+          allow: canSettings ? 'Открыть настройки' : '',
+          allowAction: 'settings',
+          quiet: 'Понятно',
+        });
+      }
+
+      /** Тап по «Разрешить геопозицию» — единственный путь к системному запросу. */
+      function requestCatalogGeoFromUserGesture() {
+        var G = window.CatalogGeoModel;
+        if (!G || typeof G.requestLocation !== 'function') {
+          closeCatalogGeoSheet();
+          showToast('Геолокация недоступна. Выберите город вручную.');
+          return;
+        }
+        if (catalogGeoRequestBusy) return;
+        catalogGeoRequestBusy = true;
+        renderCatalogGeoSheet(Object.assign({}, CATALOG_GEO_SHEET_PRIMING, {
+          allow: 'Определяем…',
+          busy: true,
+        }));
+        G.requestLocation(
+          { telegram: catalogTelegramApp(), navigator: window.navigator },
+          function(res) {
+            catalogGeoRequestBusy = false;
+            handleCatalogGeoResult(res || {});
+          }
         );
       }
 
-      function applyAutoDetectedCity(cityId, cityName) {
-        if (state.cityId) return; // context changed while geolocation/network was in flight
+      function handleCatalogGeoResult(res) {
+        var G = window.CatalogGeoModel;
+        if (G && G.isPermanentDecline(res)) {
+          // Вечный флаг — только здесь, на настоящем системном отказе.
+          G.writeDeclinedFlag(window.localStorage);
+          renderCatalogGeoSheetRecovery();
+          return;
+        }
+        if (res.status !== (G ? G.GEO_STATUS.GRANTED : 'granted')) {
+          // Таймаут, «геолокации нет», клиент не ответил — не отказ: флага нет,
+          // чип остаётся живым, шторку можно вызвать снова.
+          closeCatalogGeoSheet();
+          showToast(
+            res.status === (G ? G.GEO_STATUS.UNAVAILABLE : 'unavailable')
+              ? 'Это устройство не отдаёт геопозицию. Выберите город вручную.'
+              : 'Не удалось определить геопозицию. Попробуйте ещё раз или выберите город.'
+          );
+          return;
+        }
+        closeCatalogGeoSheet();
+        resolveCatalogCityFromCoords(res.lat, res.lon);
+      }
+
+      /** GPS → ближайшая арена → её город. Координаты никуда не сохраняем (DEC-004). */
+      function resolveCatalogCityFromCoords(lat, lon) {
+        var G = window.CatalogGeoModel;
+        if (!G) return;
+        fetch(G.buildNearUrl(lat, lon), { cache: 'no-store' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var detectedCityId = G.pickCityFromNearResponse(data);
+            if (!detectedCityId) {
+              showToast('Рядом с вами пока нет наших катков. Выберите город вручную.');
+              return;
+            }
+            var nearest = G.pickNearestPlaceFromNearResponse(data);
+            return getJson('/cities').then(function(cd) {
+              var match = (cd.items || []).filter(function(c) {
+                return Number(c.id) === detectedCityId;
+              })[0];
+              var cityName = match ? match.name : '';
+              applyAutoDetectedCity(detectedCityId, cityName, { persist: false });
+              showCatalogGeoConfirm(detectedCityId, cityName, nearest);
+            });
+          })
+          .catch(function() {
+            // Сеть — не отказ: вечного флага не ставим.
+            showToast('Не удалось определить город. Попробуйте ещё раз.');
+          });
+      }
+
+      /**
+       * Город применяем оптимистично (контент перестраивается сразу), но не молча:
+       * сверху висит подтверждение с основанием догадки. В сессию город уходит
+       * только по «Да, мой город» (DEC-003); координаты не сохраняются нигде (DEC-004).
+       */
+      function applyAutoDetectedCity(cityId, cityName, opts) {
+        opts = opts || {};
+        if (!cityId) return;
+        if (state.cityId === cityId) {
+          if (opts.persist) persistCatalogFilters();
+          return;
+        }
         state.cityId = cityId;
         state.cityName = cityName || '';
         invalidateCatalogServicesCache();
         invalidateCatalogArenasCache();
         clearCatalogSessionStorageCache();
         loadCatalogScenariosFromApi(cityId);
-        persistCatalogFilters();
+        if (opts.persist) persistCatalogFilters();
         renderSummary();
         syncScenarioChipSelection();
         loadTrainers({ silent: true });
+      }
+
+      function hideCatalogGeoConfirm() {
+        var box = document.getElementById('catalogGeoConfirm');
+        if (box) box.hidden = true;
+      }
+
+      function showCatalogGeoConfirm(cityId, cityName, nearest) {
+        var G = window.CatalogGeoModel;
+        var box = document.getElementById('catalogGeoConfirm');
+        var titleEl = document.getElementById('catalogGeoConfirmTitle');
+        var metaEl = document.getElementById('catalogGeoConfirmMeta');
+        if (!box || !titleEl || !metaEl) return;
+        box.setAttribute('data-city-id', String(cityId));
+        titleEl.textContent = cityName ? 'Похоже, вы в ' + cityName + '?' : 'Похоже, мы нашли ваш город';
+        var meta = '';
+        if (nearest && nearest.name) {
+          var dist = G ? G.formatDistanceKm(nearest.distanceKm) : '';
+          meta = 'Ближайшая площадка — ' + nearest.name + (dist ? ' · ' + dist : '');
+        }
+        metaEl.textContent = meta;
+        metaEl.hidden = !meta;
+        box.hidden = false;
+      }
+
+      function wireCatalogGeoEntry() {
+        var chip = document.getElementById('catalogGeoChip');
+        if (chip) {
+          chip.addEventListener('click', function() {
+            catalogGeoHaptic();
+            openCatalogGeoSheet();
+          });
+        }
+        var sheet = document.getElementById('catalogGeoSheet');
+        if (sheet) {
+          sheet.addEventListener('click', function(ev) {
+            var t = ev.target;
+            if (t === sheet) { closeCatalogGeoSheet(); return; }
+            if (t.closest('#catalogGeoDismiss')) {
+              // «Не сейчас» — не отказ. Вечный флаг не пишем (TASK-163).
+              closeCatalogGeoSheet();
+              return;
+            }
+            var allow = t.closest('#catalogGeoAllow');
+            if (!allow) return;
+            if (allow.getAttribute('data-geo-action') === 'settings') {
+              var G = window.CatalogGeoModel;
+              // openSettings() требует пользовательского жеста — вот он.
+              if (!G || !G.openLocationSettings(catalogTelegramApp())) {
+                showToast('Откройте настройки приложения и разрешите геопозицию.');
+              }
+              closeCatalogGeoSheet();
+              return;
+            }
+            requestCatalogGeoFromUserGesture();
+          });
+        }
+        var yes = document.getElementById('catalogGeoConfirmYes');
+        if (yes) {
+          yes.addEventListener('click', function() {
+            catalogGeoHaptic();
+            persistCatalogFilters();
+            hideCatalogGeoConfirm();
+          });
+        }
+        var other = document.getElementById('catalogGeoConfirmOther');
+        if (other) {
+          other.addEventListener('click', function() {
+            hideCatalogGeoConfirm();
+            loadCities();
+            showScreen('screenCity');
+          });
+        }
       }
 
       /** Drop service/scenario chip when the service has no trainers in the new city. */
@@ -7173,6 +7376,7 @@
       })();
 
       wireCatalogScenarioChips();
+      wireCatalogGeoEntry();
 
       /** Paint catalog shell immediately — do not wait for session/edges network round-trip. */
       (function bootstrapCatalogUiFast() {
@@ -7378,13 +7582,8 @@
             });
             return;
           }
-          attemptCatalogAutoGeoDetect({
-            hasExplicitQueryCityId: !!qp.get('city_id'),
-            hasCollectiveContext: !!state.collectiveBrand,
-            hasDeepLinkTrainer: deepTrainerFromUrl != null,
-            hasPrimaryTrainer: primaryTid != null,
-            ipSaysUnserved: !!(session && session.ip_country_served === false),
-          });
+          /* TASK-163: геолокацию на загрузке больше не просим. Вход — чип
+             «⌖ Рядом со мной» и шторка-прайминг (см. wireCatalogGeoEntry). */
           showInitialScreen();
           });
         })

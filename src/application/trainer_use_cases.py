@@ -557,6 +557,17 @@ def _pending_trainer_patch_has_real_change(
     return False
 
 
+def _sync_specialist_role_columns(profile: dict[str, Any]) -> None:
+    """``specialist_roles`` (канон) и ``specialist_role`` (подпись в каталоге) держим вместе."""
+    if "specialist_roles" not in profile:
+        return
+    from src.shared.specialist_roles import normalize_specialist_roles, specialist_roles_join
+
+    roles = normalize_specialist_roles(profile["specialist_roles"])
+    profile["specialist_roles"] = roles
+    profile["specialist_role"] = specialist_roles_join(roles)
+
+
 async def update_trainer_profile(
     session: AsyncSession,
     trainer_id: int,
@@ -582,9 +593,15 @@ async def update_trainer_profile(
     repo = TrainerRepository(session)
     if not await repo.exists(trainer_id):
         return False
+    profile = dict(profile or {})
+    _sync_specialist_role_columns(profile)
     trainer = await get_trainer(session, trainer_id)
     st = (trainer.get("status") or "").strip()
-    updates = {k: v for k, v in profile.items() if v is not None or k == "birth_date"}
+    updates = {
+        k: v
+        for k, v in profile.items()
+        if v is not None or k in ("birth_date", "specialist_roles", "specialist_role")
+    }
     revision_patch, direct_patch = split_active_trainer_profile_patch(updates)
     services_dirty = services is not None or service_ids is not None or arena_ids is not None
 

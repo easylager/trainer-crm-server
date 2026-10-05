@@ -1579,6 +1579,19 @@ def webapp_mini_app_client_shell_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-more-icons.js")
+def webapp_mini_app_more_icons_js(request: Request):
+    """Shared monochrome «Ещё» icons (client + trainer shells). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-more-icons.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-empty-state.js")
 def webapp_mini_app_empty_state_js(request: Request):
     """Shared client empty-state renderer (TASK-096). Use ``?v=…`` for long cache."""

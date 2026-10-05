@@ -1285,7 +1285,11 @@
     /* Роль впереди места: «Спортивный психолог» отвечает на «кто это», а название
        арены — только на «где». Для старых анкет без роли сервер подставляет «Тренер»,
        но его не показываем: это подпись по умолчанию, а не факт о человеке. */
-    var role = String(p.specialist_role || '').trim();
+    var role = '';
+    if (p.specialist_roles && p.specialist_roles.length) {
+      role = p.specialist_roles.map(function (r) { return String(r || '').trim(); }).filter(Boolean).join(' · ');
+    }
+    if (!role) role = String(p.specialist_role || '').trim();
     if (role && role !== 'Тренер') parts.push(role);
 
     if (item.primary_arena_name) {

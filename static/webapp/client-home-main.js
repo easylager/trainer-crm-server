@@ -697,34 +697,6 @@
         );
       }
 
-      /** Строка абонемента внутри карточки. Нет остатка — строки нет. */
-      function buildNextCardMeterHtml(passInfo) {
-        if (!passInfo) return '';
-        var remaining = Number(passInfo.sessions_remaining || 0);
-        if (!remaining || remaining <= 0) return '';
-        var total = Number(passInfo.sessions_total || 0);
-        var expiry = passInfo.expires_at ? formatHistoryDate(passInfo.expires_at) : '';
-        var num = total > 0 ? (remaining + ' из ' + total) : String(remaining);
-        var meta = expiry ? ('до ' + expiry) : '';
-        var bar = '';
-        if (total > 0) {
-          var pct = Math.max(4, Math.min(100, Math.round((remaining / total) * 100)));
-          bar = '<span class="hub-next-card-meter-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>';
-        }
-        var aria = total > 0
-          ? ('Осталось ' + remaining + ' из ' + total)
-          : ('Осталось ' + remaining);
-        return (
-          '<button type="button" class="hub-next-card-meter" data-hub-action="open-pass" aria-label="' + esc(aria) + '">' +
-            '<span class="hub-next-card-meter-top">' +
-              '<span class="hub-next-card-meter-num">' + esc(num) + '</span>' +
-              (meta ? '<span class="hub-next-card-meter-meta">' + esc(meta) + '</span>' : '') +
-            '</span>' +
-            bar +
-          '</button>'
-        );
-      }
-
       function stopHubCardControl(ev) {
         ev.stopPropagation();
         if (window.ClientShell && typeof window.ClientShell.hapticSelection === 'function') {
@@ -732,99 +704,159 @@
         }
       }
 
-      /**
-       * Ближайшая запись. Время первое, штамп у даты.
-       * Глагол один и только в ожидании: «Написать тренеру».
-       * Подтверждённая запись открывается тапом по карточке.
+      /* ── TASK-160 (S2): «Моя карточка» вместо карточки записи ─────────── */
+
+      /*
+       * Карточку собирает и рисует hub-me-card.js — чистая модель без DOM.
+       * Хаб отвечает за три вещи, которых у модели быть не может: данные входа,
+       * текущее время и переходы. Разметку и классы хаб не трогает: контракт
+       * карточки заморожен, иначе прототип и продакшен разъедутся.
        */
-      function renderNextBookingCard(item, passInfo) {
-        var b = item.b;
-        var day = item.day;
-        var time = (b.start_time || '').slice(0, 5);
-        var dateLabel = relativeDate(day.date, day.day_label);
-        var trainerName = b.trainer_name || 'Тренер';
-        var place = ((b.arena_name || b.place_display || '') + '').trim();
-        var dur = b.duration_minutes || 45;
-        var stamp = nextCardStamp(b, item.start);
-        var when = nextCardWhenText(dateLabel, dur, stamp, item.start);
-        var isPending = stamp.kind === 'wait';
 
-        var placeHtml = place
-          ? '<span class="hub-next-card-place-line">' + ICONS.pin + '<span>' + esc(place) + '</span></span>'
-          : '';
+      /**
+       * Контекст нарисованной карточки. Кнопки внутри неё id записи не несут
+       * (модель их не выдаёт), поэтому «Детали, перенос, отмена» открывает ту
+       * запись, под которую карточку и собрали.
+       */
+      var hubMeCardBookingId = null;
+      var hubMeCardTrainerId = null;
+      var hubMeCardWired = false;
 
-        var verbHtml = '';
-        if (isPending && canWriteTrainer(b)) {
-          verbHtml =
-            '<button type="button" class="hub-next-card-fill" data-hub-dm="next"' +
-            ' data-dm-un="' + esc((b.trainer_telegram_username || '').replace(/^@/, '')) + '"' +
-            ' data-dm-tid="' + esc(b.trainer_telegram_id != null ? String(b.trainer_telegram_id) : '') + '">' +
-            'Написать тренеру</button>';
+      /**
+       * Склонённые формы имени для подписей карточки. Падежи живут в
+       * ru-person-name.js, а модель чистая — поэтому готовые формы кладёт хаб.
+       * Имя приходит одной строкой: `formatPersonName` внутри `inflectPersonName`
+       * сам разбирает её на имя и фамилию, как это делает catalog-main.js.
+       * Модуля нет — полей нет, и модель переходит на безпадежные формы
+       * («Написать тренеру»), а не на кривой падеж.
+       */
+      function hubMeDeclinedForms(fullName) {
+        var ru = window.RuPersonName;
+        var name = ((fullName || '') + '').trim();
+        if (!name || !ru || typeof ru.inflectPersonName !== 'function') return null;
+        var out = {};
+        var dat = ru.inflectPersonName(name, '', 'dat');
+        var gen = ru.inflectPersonName(name, '', 'gen');
+        if (dat) out.nameDative = dat;
+        if (gen) out.nameGenitive = gen;
+        return (out.nameDative || out.nameGenitive) ? out : null;
+      }
+
+      /** Сертификаты из bootstrap (TASK-161). Поля нет — кошелёк просто без ячейки. */
+      function hubBootstrapCertificates(hubMeta) {
+        return Array.isArray(hubMeta && hubMeta.certificates) ? hubMeta.certificates : [];
+      }
+
+      function buildMeCardBookingInput(item, hubMeta) {
+        var b = (item && item.b) || {};
+        var day = (item && item.day) || {};
+        var booking = {};
+        for (var key in b) {
+          if (Object.prototype.hasOwnProperty.call(b, key)) booking[key] = b[key];
         }
+        // `start` уже Date (flattenBookings), `date_label` — та же подпись даты,
+        // что была у старой карточки: относительные формы считает хаб, не модель.
+        booking.start = item && item.start;
+        booking.date_label = relativeDate(day.date, day.day_label);
+        if (!booking.arena_name) booking.arena_name = b.place_display || '';
+        var input = {
+          kind: 'booking',
+          booking: booking,
+          passes: hubBootstrapPasses(hubMeta),
+          certificates: hubBootstrapCertificates(hubMeta),
+        };
+        var forms = hubMeDeclinedForms(b.trainer_name);
+        if (forms) input.trainer = forms;
+        return input;
+      }
 
-        var cardMod = isPending ? 'hub-next-card--pending' : (stamp.kind === 'soon' ? 'hub-next-card--soon' : 'hub-next-card--confirmed');
-        var html =
-          '<div class="hub-next-card ' + cardMod + '" id="nextCard" data-bid="' + esc(String(b.id)) + '" tabindex="0" role="button"' +
-          ' aria-label="Ближайшая запись, ' + esc(when) + '">' +
-            '<div class="hub-next-card-inner">' +
-              '<div class="hub-next-card-time">' + esc(time) + '</div>' +
-              '<div class="hub-next-card-when">' +
-                '<span class="hub-next-card-date">' + esc(when) + '</span>' +
-                '<span class="hub-next-card-pill hub-next-card-pill--' + stamp.kind + '">' +
-                  '<i class="hub-next-card-status-dot" aria-hidden="true"></i>' +
-                  esc(stamp.label) +
-                '</span>' +
-              '</div>' +
-              '<div class="hub-next-card-who">' +
-                trainerWhoLinkHtml(trainerName, b.trainer_list_photo_key, placeHtml, b.trainer_id) +
-              '</div>' +
-              verbHtml +
-              buildNextCardMeterHtml(passInfo) +
-            '</div>' +
-          '</div>';
-
+      /** Рисует «мою запись» в существующий #nextBookingBlock. */
+      function renderMeCardForBooking(item, hubMeta) {
         var block = document.getElementById('nextBookingBlock');
-        block.innerHTML = html;
+        if (!block) return false;
+        var model = window.HubMeCard;
+        if (!model || typeof model.buildView !== 'function') return false;
+        var view = model.buildView(buildMeCardBookingInput(item, hubMeta), new Date());
+        if (!view) {
+          block.innerHTML = '';
+          return false;
+        }
+        hubMeCardBookingId = item && item.b && item.b.id != null ? String(item.b.id) : null;
+        hubMeCardTrainerId = view.trainerId;
+        block.innerHTML = model.renderHtml(view);
+        wireMeCardBlock(block);
+        return true;
+      }
 
-        var card = document.getElementById('nextCard');
-        if (!card) return;
-        card.addEventListener('click', function(ev) {
-          var line = ev.target && ev.target.closest && ev.target.closest('.hub-next-card-line[data-bid]');
+      /**
+       * Один делегирующий обработчик на весь блок: карточка перерисовывается
+       * целиком, и слушатели на самих кнопках пришлось бы навешивать заново.
+       * Список «остальных записей» лежит в том же блоке, поэтому его строки
+       * обслуживает этот же обработчик.
+       *
+       * Неизвестное действие — тишина, а не исключение: S3/S4 добавят заливки
+       * тренера, возврата и выбора города, и до тех пор карточка не должна
+       * падать на чужом data-me-action.
+       */
+      function wireMeCardBlock(block) {
+        if (hubMeCardWired) return;
+        hubMeCardWired = true;
+        block.addEventListener('click', function (ev) {
+          var t = ev.target;
+          if (!t || !t.closest) return;
+
+          var line = t.closest('.hub-next-card-line[data-bid]');
           if (line) {
             stopHubCardControl(ev);
             var lineBid = line.getAttribute('data-bid');
             if (lineBid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(lineBid) + '&from=hub');
             return;
           }
-          var moreBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="all-bookings"]');
-          if (moreBtn) {
+          if (t.closest('[data-hub-action="all-bookings"]')) {
             stopHubCardControl(ev);
             navigateTo('client-bookings');
             return;
           }
-          var passBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-pass"]');
-          if (passBtn) {
+
+          var btn = t.closest('[data-me-action]');
+          if (!btn) return;
+          var action = btn.getAttribute('data-me-action');
+          var tid = btn.getAttribute('data-me-trainer-id') || hubMeCardTrainerId;
+
+          if (action === 'dm') {
+            stopHubCardControl(ev);
+            openTelegramDm(
+              btn.getAttribute('data-me-dm-un'),
+              btn.getAttribute('data-me-dm-tid'),
+              tid
+            );
+            return;
+          }
+          if (action === 'open-booking') {
+            stopHubCardControl(ev);
+            if (hubMeCardBookingId) {
+              navigateTo('client-bookings?open_booking=' + encodeURIComponent(hubMeCardBookingId) + '&from=hub');
+            }
+            return;
+          }
+          // Абонемент и сертификат живут на одном экране — ячейка кошелька
+          // ведёт туда, а не в две разные истории баланса.
+          if (action === 'open-pass' || action === 'open-cert') {
             stopHubCardControl(ev);
             navigateTo('client-passes-certificates');
             return;
           }
-          var dmBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-dm="next"]');
-          if (dmBtn) {
+          if (action === 'open-trainer') {
             stopHubCardControl(ev);
-            openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'), b.trainer_id);
-            return;
-          }
-          var trainerBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-trainer"]');
-          if (trainerBtn) {
-            stopHubCardControl(ev);
-            var openTid = trainerBtn.getAttribute('data-trainer-id');
-            if (openTid) {
-              navigateTo('catalog?trainer_id=' + encodeURIComponent(openTid) + catalogPrimaryServiceQuery() + '&from=hub');
+            if (tid) {
+              navigateTo('catalog?trainer_id=' + encodeURIComponent(tid) + catalogPrimaryServiceQuery() + '&from=hub');
             }
             return;
           }
-          var bid = card.getAttribute('data-bid');
-          if (bid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(bid) + '&from=hub');
+          /*
+           * book-slot / all-slots / all-sessions / all-trainers / pick-city /
+           * geo / all-country / more-cities — действия заливок S3/S4. Молчим.
+           */
         });
       }
 
@@ -1977,23 +2009,24 @@
       }
 
       /**
-       * Следующие записи — продолжение той же карточки, что и герой.
-       * Тот же штамп, без кнопки сообщения и без отдельной секции.
-       * Строка открывает свою запись. Больше HUB_REST_MAX на хаб не выносится.
+       * Следующие записи — отдельный блок ПОД «моей карточкой» (TASK-160 S2).
+       * Вкладывать их внутрь карточки больше некуда: её рамка занята кошельком
+       * и подвалом. Поведение строк то же: штамп тот же, кнопки сообщения нет,
+       * строка открывает свою запись, больше HUB_REST_MAX на хаб не выносится.
        */
       function renderUpcomingList(days, heroBookingId) {
         var section = document.getElementById('upcomingSection');
         if (section) section.style.display = 'none';
-        var card = document.getElementById('nextCard');
-        if (card) {
-          var prev = card.querySelector('.hub-next-card-rest');
+        var block = document.getElementById('nextBookingBlock');
+        if (block) {
+          var prev = block.querySelector('.rest');
           if (prev) prev.remove();
         }
         var rest = flattenBookings(days).filter(function(item) {
           return String(item.b.id) !== String(heroBookingId);
         });
         var items = rest.slice(0, HUB_REST_MAX);
-        if (!items.length || !card) return;
+        if (!items.length || !block) return;
 
         var byDate = {};
         var dateOrder = [];
@@ -2003,7 +2036,7 @@
           byDate[ds].rows.push(item);
         });
 
-        var parts = ['<div class="hub-next-card-rest">'];
+        var parts = ['<div class="rest">'];
         dateOrder.forEach(function(ds) {
           var group = byDate[ds];
           parts.push('<div class="hub-next-card-day">' + esc(relativeDate(ds, group.day.day_label)) + '</div>');
@@ -2035,7 +2068,7 @@
           parts.push('<button type="button" class="hub-next-card-more" data-hub-action="all-bookings">Смотреть все</button>');
         }
         parts.push('</div>');
-        card.insertAdjacentHTML('beforeend', parts.join(''));
+        block.insertAdjacentHTML('beforeend', parts.join(''));
       }
 
 
@@ -2232,9 +2265,10 @@
           placeIceZone('top');
           hubPersonalSlot = true;
           applyIceHeroVisibility();
-          var bookingTrainerId = nextItem.b && nextItem.b.trainer_id;
-          var passInfo = selectPrimaryPassForTrainer(hubBootstrapPasses(hubMeta), bookingTrainerId);
-          renderNextBookingCard(nextItem, passInfo);
+          /* TASK-160 (S2): герой записи — «моя карточка» (hub-me-card.js).
+             Остаток выбирает сама модель: под лицом в карточке показывается
+             только остаток этого тренера, поэтому отбора абонемента здесь нет. */
+          renderMeCardForBooking(nextItem, hubMeta);
           hideMyTrainerBlock();
           renderQuickStrip('has-booking', nextItem);
           renderUpcomingList(bookingDays, nextItem.b.id);

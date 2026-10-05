@@ -11,8 +11,11 @@ from src.application.trainer_custom_service_use_cases import (
 from src.shared.specialist_roles import (
     DEFAULT_SPECIALIST_ROLE,
     InvalidSpecialistRoleError,
+    TooManySpecialistRolesError,
     normalize_specialist_role,
+    normalize_specialist_roles,
     specialist_role_display,
+    specialist_roles_join,
 )
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
@@ -107,6 +110,19 @@ class TestSpecialistRole:
     def test_display_never_raises_on_bad_stored_value(self):
         """Карточка каталога не должна падать из-за мусора в старой строке."""
         assert specialist_role_display("а" * 200) == DEFAULT_SPECIALIST_ROLE
+
+    def test_multiple_roles_join_for_catalog(self):
+        roles = normalize_specialist_roles(["Тренер", "ОФП-тренер"])
+        assert specialist_roles_join(roles) == "Тренер · ОФП-тренер"
+        assert specialist_role_display(None, roles) == "Тренер · ОФП-тренер"
+
+    def test_roles_dedupe_case_insensitive(self):
+        roles = normalize_specialist_roles(["Тренер", "тренер", "ОФП-тренер"])
+        assert roles == ["Тренер", "ОФП-тренер"]
+
+    def test_too_many_roles_rejected(self):
+        with pytest.raises(TooManySpecialistRolesError):
+            normalize_specialist_roles(["a", "b", "c", "d", "e", "f"])
 
 
 class TestArenaNameQuotes:

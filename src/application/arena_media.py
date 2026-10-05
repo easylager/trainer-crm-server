@@ -119,6 +119,20 @@ def _publicize_item(row: Mapping[str, Any], cdn_base: str | None) -> dict[str, A
     }
 
 
+def public_arena_thumb_url(hero: Mapping[str, Any] | None) -> str | None:
+    """List/card preview: prefer ``card``, then ``thumb``, then ``hero`` variant."""
+    if not isinstance(hero, Mapping):
+        return None
+    variants = hero.get("variants")
+    if not isinstance(variants, Mapping):
+        return None
+    for key in ("card", "thumb", "hero"):
+        raw = variants.get(key)
+        if raw and isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
 def publicize_arena_media_payload(
     payload: Mapping[str, Any],
     *,

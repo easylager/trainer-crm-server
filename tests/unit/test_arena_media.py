@@ -10,6 +10,7 @@ from src.application.arena_media import (
     MEDIA_LICENSES,
     assert_can_add_arena_media,
     pick_hero_media,
+    public_arena_thumb_url,
     publicize_arena_media_payload,
     serialize_arena_media_payload,
     validate_media_license,
@@ -64,6 +65,18 @@ def test_seventh_photo_rejected() -> None:
     assert_can_add_arena_media(ARENA_MEDIA_MAX - 1)
     with pytest.raises(ArenaMediaLimitError):
         assert_can_add_arena_media(ARENA_MEDIA_MAX)
+
+
+def test_public_arena_thumb_url_prefers_card_variant() -> None:
+    hero = {
+        "variants": {
+            "thumb": "/api/public/photos/arenas/1/t.jpg",
+            "card": "/api/public/photos/arenas/1/c.jpg",
+            "hero": "/api/public/photos/arenas/1/h.jpg",
+        }
+    }
+    assert public_arena_thumb_url(hero) == "/api/public/photos/arenas/1/c.jpg"
+    assert public_arena_thumb_url(None) is None
 
 
 def test_publicize_maps_variant_keys_to_urls() -> None:

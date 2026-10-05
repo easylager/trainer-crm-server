@@ -495,7 +495,7 @@ class TrainerRepository:
         }
         rp = await self._session.execute(
             text(
-                "SELECT first_name, last_name, birth_date, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking, COALESCE(group_classes_enabled, false), specialist_role, COALESCE(online_enabled, false) FROM trainer_profiles WHERE trainer_id = :id"
+                "SELECT first_name, last_name, birth_date, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking, COALESCE(group_classes_enabled, false), specialist_role, specialist_roles, COALESCE(online_enabled, false) FROM trainer_profiles WHERE trainer_id = :id"
             ),
             {"id": trainer_id},
         )
@@ -516,7 +516,8 @@ class TrainerRepository:
                 # Сырое значение, без подстановки «Тренер»: онбордингу надо отличать
                 # «не спрашивали» от «выбрал Тренера». Подпись делает specialist_role_display.
                 "specialist_role": prof[14] if len(prof) > 14 else None,
-                "online_enabled": bool(prof[15]) if len(prof) > 15 and prof[15] is not None else False,
+                "specialist_roles": prof[15] if len(prof) > 15 else None,
+                "online_enabled": bool(prof[16]) if len(prof) > 16 and prof[16] is not None else False,
             }
             if prof
             else None
@@ -722,6 +723,7 @@ class TrainerRepository:
         min_hours_before_booking: int | None = None,
         group_classes_enabled: bool | None = None,
         specialist_role: str | None = None,
+        specialist_roles: list[str] | None = None,
         online_enabled: bool | None = None,
     ) -> None:
         """Partial update of profile; only sent fields are set. `birth_date=None` clears the optional date."""
@@ -744,7 +746,14 @@ class TrainerRepository:
         if group_classes_enabled is not None:
             updates.append("group_classes_enabled = :gce")
             params["gce"] = bool(group_classes_enabled)
-        if specialist_role is not None: updates.append("specialist_role = :srole"); params["srole"] = specialist_role
+        if specialist_roles is not None:
+            updates.append("specialist_roles = CAST(:sroles AS jsonb)")
+            params["sroles"] = json.dumps(specialist_roles)
+            updates.append("specialist_role = :srole")
+            params["srole"] = specialist_role
+        elif specialist_role is not None:
+            updates.append("specialist_role = :srole")
+            params["srole"] = specialist_role
         if online_enabled is not None:
             updates.append("online_enabled = :online")
             params["online"] = bool(online_enabled)
@@ -1447,7 +1456,8 @@ class TrainerRepository:
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
                    t.primary_arena_id, t.arena_work_format,
-                   p.specialist_role, COALESCE(p.online_enabled, false) AS online_enabled
+                   p.specialist_role, p.specialist_roles,
+                   COALESCE(p.online_enabled, false) AS online_enabled
         """
         if order_by == "rating":
             # Bayesian: (v/(v+m))*R + (m/(v+m))*C. Must be in SELECT when using DISTINCT (PG rule).
@@ -1466,7 +1476,8 @@ class TrainerRepository:
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
                    t.primary_arena_id, t.arena_work_format,
-                   p.specialist_role, COALESCE(p.online_enabled, false) AS online_enabled,
+                   p.specialist_role, p.specialist_roles,
+                   COALESCE(p.online_enabled, false) AS online_enabled,
                    ({has_rating_expr}) AS _has_rating,
                    ({score_expr}) AS _score
         """
@@ -1652,15 +1663,18 @@ class TrainerRepository:
             arena_ids = arenas_by_id.get(tid, [])
             arena_names = [arena_names_by_id.get(aid, "—") for aid in arena_ids]
             # session_duration_minutes=13, min_hours_before_booking=14, primary_arena_id=15,
-            # arena_work_format=16, specialist_role=17, online_enabled=18;
-            # rating: _has_rating=19, _score=20
+            # arena_work_format=16, specialist_role=17, specialist_roles=18, online_enabled=19;
+            # rating: _has_rating=20, _score=21
             duration = row[13] if len(row) > 13 and row[13] is not None else 45
             min_hours = int(row[14]) if len(row) > 14 and row[14] is not None else 3
             primary_arena_id = row[15] if len(row) > 15 else None
             arena_work_format = (str(row[16]).strip() or None) if len(row) > 16 and row[16] is not None else None
-            specialist_role = specialist_role_display(row[17] if len(row) > 17 else None)
+            specialist_role = specialist_role_display(
+                row[17] if len(row) > 17 else None,
+                row[18] if len(row) > 18 else None,
+            )
             # Онлайн — либо явный флаг анкеты, либо исторический fallback «площадки нет».
-            online_enabled = bool(row[18]) if len(row) > 18 and row[18] is not None else False
+            online_enabled = bool(row[19]) if len(row) > 19 and row[19] is not None else False
             online_enabled = online_enabled or arena_work_format == "online"
             primary_arena_name = (
                 (arena_names_by_id.get(primary_arena_id) or "").strip() or None

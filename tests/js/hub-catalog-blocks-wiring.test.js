@@ -227,17 +227,21 @@ describe('порядок для своего клиента: placeIceZone и Int
     for (const id of ['nextBookingBlock', 'myTrainerBlock', 'hubPrimaryPanel', 'quickStrip', 'upcomingSection']) {
       at(id);
     }
-    for (const fn of ['renderNextBookingCard', 'renderMyTrainerCard', 'renderSavedTrainersStrip', 'renderUpcomingList', 'buildPrimaryPassHtml']) {
+    // Было: renderNextBookingCard. Стало (TASK-160 S2): renderMeCardForBooking —
+    // карточку записи рисует hub-me-card.js, старый рендер удалён вместе с метром.
+    for (const fn of ['renderMeCardForBooking', 'renderMyTrainerCard', 'renderSavedTrainersStrip', 'renderUpcomingList', 'buildPrimaryPassHtml']) {
       assert.match(homeMain, new RegExp('function ' + fn + '\\('));
     }
   });
 
-  it('карточка ближайшей записи: время — герой, шеринга на ней нет, абонемент строкой', () => {
-    const body = fnBody('renderNextBookingCard');
-    assert.match(body, /hub-next-card-time/);
-    assert.match(body, /hub-next-card-pill/);
-    assert.match(body, /Написать тренеру/);
-    assert.match(body, /buildNextCardMeterHtml/);
+  // Было: «время — герой, абонемент строкой-метром внутри .hub-next-card».
+  // Стало (TASK-160 S2): герой записи — «моя карточка» hub-me-card.js, остаток
+  // показывает кошелёк карточки. Инвариант не снят, а переехал: на карточке
+  // записи нет шеринга и нет тулбара, а хаб по-прежнему занимает личный слот.
+  it('карточка ближайшей записи: рендер отдан модели, шеринга и тулбара на ней нет', () => {
+    const body = fnBody('renderMeCardForBooking');
+    assert.match(body, /HubMeCard/);
+    assert.match(body, /renderHtml\(view\)/);
     assert.ok(!body.includes('share-trainer'), 'шеринг ушёл с карточки записи');
     assert.ok(!body.includes('hub-next-card-toolbar'));
     assert.match(fnBody('applyHubState'), /hubPersonalSlot = true/);

@@ -212,6 +212,10 @@ class City(Base):
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     country: Mapped[str] = mapped_column(String(2), server_default="BY", nullable=False)
     price_group: Mapped[str] = mapped_column(String(16), server_default="BY_BASE", nullable=False)
+    #: TASK-170: тренер предложил город на онбординге; ``is_active=false`` до модерации.
+    created_by_trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
 
 class Arena(Base):
@@ -474,7 +478,9 @@ class TrainerProfile(Base):
     #: Кто этот специалист своими словами: «Тренер», «Спортивный психолог», «Хореограф».
     #: Свободный текст с подсказками, не enum — см. src/shared/specialist_roles.py.
     #: NULL = анкета заполнялась до появления поля; читается как «Тренер».
-    specialist_role: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Кэш ``specialist_roles_join`` для каталога; канон — ``specialist_roles``.
+    specialist_role: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    specialist_roles: Mapped[Optional[list]] = mapped_column(JSONB(), nullable=True)
     #: Работает ли онлайн. Независимо от trainers.arena_work_format='online': тот —
     #: fallback «физической площадки нет вообще», здесь — «есть зал И есть онлайн».
     online_enabled: Mapped[bool] = mapped_column(nullable=False, server_default="false")

@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606200';
+  var SHELL_VERSION = '202610051';
 
   /** Prod default: off until TRAINER_COLLECTIVE_ENABLED=1 on API + hub bootstrap / access flag. */
   function isCollectiveFeatureEnabled() {
@@ -50,30 +50,18 @@
 
   var CENTER_TAB_PATH = 'trainer-collective?tab=brand';
 
-  /** Lucide-style stroke icons — same language as tab bar and booking detail (.bd-icon). */
-  function moreIconSvg(inner) {
-    return (
-      '<svg class="trainer-more-sheet__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      inner +
-      '</svg>'
-    );
+  function moreItemPlate(iconId) {
+    var icons = global.GlideMoreIcons;
+    if (icons && typeof icons.plateHtml === 'function') {
+      return icons.plateHtml(iconId);
+    }
+    return '<span class="glide-more-plate" aria-hidden="true"></span>';
   }
-
-  var MORE_ICONS = {
-    profile: moreIconSvg('<circle cx="12" cy="8" r="4"/><path d="M6 20v-1a6 6 0 0 1 12 0v1"/>'),
-    passes: moreIconSvg('<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>'),
-    subscription: moreIconSvg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>'),
-    requests: moreIconSvg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
-    stats: moreIconSvg('<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>'),
-    groups: moreIconSvg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
-    referral: moreIconSvg('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>'),
-    collective: moreIconSvg('<path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 21v-6h4v6"/>'),
-  };
 
   var COLLECTIVE_MORE_ITEM = {
     path: 'trainer-collective',
     label: 'Студия',
-    icon: MORE_ICONS.collective,
+    iconId: 'trainer-collective',
     hint: 'Бренд, команда и ссылка для клиентов',
   };
 
@@ -81,44 +69,44 @@
     {
       path: 'trainer-profile',
       label: 'Профиль',
-      icon: MORE_ICONS.profile,
+      iconId: 'trainer-profile',
       /* Модерация и публикация переехали во вкладку «Каталог» (TASK-140). */
       hint: 'Анкета, услуги и настройки',
     },
     {
       path: 'trainer-pass-products',
       label: 'Абонементы',
-      icon: MORE_ICONS.passes,
+      iconId: 'trainer-pass',
       hint: 'Настройка и выдача клиентам',
     },
     {
       path: 'trainer-subscription',
       label: 'Подписка',
-      icon: MORE_ICONS.subscription,
+      iconId: 'trainer-subscription',
       hint: 'Тариф и способ оплаты',
     },
     {
       path: 'trainer-requests',
       label: 'Заявки',
-      icon: MORE_ICONS.requests,
+      iconId: 'trainer-requests',
       hint: 'Отклики клиентов и входящие запросы',
     },
     {
       path: 'trainer-stats',
       label: 'Статистика',
-      icon: MORE_ICONS.stats,
+      iconId: 'trainer-stats',
       hint: 'Выручка, посещаемость, активность',
     },
     {
       path: 'trainer-groups',
       label: 'Группы',
-      icon: MORE_ICONS.groups,
+      iconId: 'trainer-groups',
       hint: 'Групповые занятия и расписание',
     },
     {
       path: 'trainer-referral',
       label: 'Рефералы',
-      icon: MORE_ICONS.referral,
+      iconId: 'trainer-referral',
       hint: 'Пригласи коллегу — получи бонус',
     },
   ];
@@ -1159,9 +1147,8 @@
     btn.setAttribute('data-shell-path', item.path);
     btn.setAttribute('data-default-hint', item.hint || '');
     btn.innerHTML =
-      '<span class="trainer-more-sheet__icon-wrap" aria-hidden="true">' +
-      item.icon +
-      '</span><span class="trainer-more-sheet__body"><span class="trainer-more-sheet__label">' +
+      moreItemPlate(item.iconId) +
+      '<span class="trainer-more-sheet__body"><span class="trainer-more-sheet__label">' +
       item.label +
       '</span><span class="trainer-more-sheet__hint">' +
       item.hint +

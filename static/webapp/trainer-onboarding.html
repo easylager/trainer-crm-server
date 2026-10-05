@@ -217,31 +217,105 @@
     }
     .ob-arena-locked-note[hidden] { display: none; }
 
-    /* ── Поиск и список площадок ── */
+    /* ── Площадка: комбобокс (поиск + видимый список) ── */
     .ob-arena-pick[hidden] { display: none; }
     .ob-arena-pick { margin-top: 14px; }
-    .ob-arena-search {
-      appearance: none;
-      width: 100%;
-      box-sizing: border-box;
+    .ob-arena-combo__label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--app-muted);
+      margin-bottom: 6px;
+    }
+    .ob-arena-combo {
       border: 1px solid var(--app-chip-line);
+      border-radius: 12px;
       background: var(--app-chip-bg);
-      /* Светлый чип + тёмный Telegram: --app-text белый, WebKit заливает буквы им. */
+      overflow: hidden;
+    }
+    .ob-arena-combo__trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px 0 12px;
+      border-bottom: 1px solid var(--app-chip-line);
+    }
+    .ob-arena-combo__input {
+      appearance: none;
+      flex: 1;
+      min-width: 0;
+      box-sizing: border-box;
+      border: 0;
+      background: transparent;
       color: var(--app-chip-text);
       -webkit-text-fill-color: var(--app-chip-text);
       caret-color: var(--app-cta-fill);
-      border-radius: 10px;
-      padding: 10px 12px;
+      padding: 10px 0;
       font: inherit;
       font-size: 15px;
-      margin-bottom: 10px;
     }
-    .ob-arena-search::placeholder {
+    .ob-arena-combo__input::placeholder {
       color: var(--glide-ink, #0B6E70);
       -webkit-text-fill-color: var(--glide-ink, #0B6E70);
       opacity: .55;
     }
-    .ob-arena-search:focus-visible { outline: 2px solid var(--app-cta-fill); outline-offset: 1px; }
+    .ob-arena-combo__input:focus { outline: none; }
+    .ob-arena-combo:focus-within {
+      outline: 2px solid var(--app-cta-fill);
+      outline-offset: 1px;
+    }
+    .ob-arena-combo__chev {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      opacity: 0.5;
+      background: currentColor;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%23000' d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      pointer-events: none;
+    }
+    .ob-arena-combo__done {
+      flex-shrink: 0;
+      appearance: none;
+      border: 0;
+      background: none;
+      padding: 6px 2px 6px 8px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 650;
+      color: var(--app-cta-fill);
+      cursor: pointer;
+    }
+    .ob-arena-combo__done[hidden] { display: none; }
+    .ob-arena-combo--focused {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+    }
+    .ob-arena-combo--focused .ob-arena-combo__trigger {
+      background: var(--app-chip-bg);
+    }
+    .ob-arena-combo--focused .ob-arena-list {
+      max-height: min(
+        240px,
+        calc(100dvh - var(--ob-keyboard-inset, 0px) - 148px)
+      );
+    }
+    #obShell.ob-keyboard-open .ob-foot {
+      position: relative;
+      z-index: 1;
+    }
+    .ob-arena-combo__panel {
+      padding: 8px;
+    }
+    .ob-arena-combo__browse-hint {
+      margin: 0 2px 8px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--app-muted);
+    }
+    .ob-arena-combo__browse-hint[hidden] { display: none; }
     .ob-arena-list {
       display: flex;
       flex-direction: column;
@@ -249,32 +323,101 @@
       max-height: 260px;
       overflow-y: auto;
     }
-    .ob-arena-option {
+    .ob-arena-row {
       appearance: none;
       width: 100%;
       text-align: left;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 11px;
+      align-items: start;
       border: 1px solid var(--app-chip-line);
       background: var(--app-chip-bg);
       color: var(--app-chip-text);
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 12px;
+      padding: 7px 10px 7px 7px;
+      min-height: 86px;
+      box-sizing: border-box;
+      line-height: 1.25;
       font: inherit;
       cursor: pointer;
     }
-    .ob-arena-option[aria-pressed="true"] {
-      background: var(--app-cta-fill);
+    .ob-arena-row.is-on {
       border-color: var(--app-cta-fill);
-      color: var(--app-cta-text);
+      box-shadow: 0 0 0 1px var(--app-cta-fill);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
     }
-    .ob-arena-option__name { font-size: 15px; font-weight: 600; }
+    .ob-arena-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--app-muted) 18%, var(--app-chip-bg));
+      flex-shrink: 0;
+      margin: 0;
+    }
+    .ob-arena-thumb img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+    .ob-arena-thumb::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.22) 100%);
+      pointer-events: none;
+    }
+    .ob-arena-thumb--ph {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      line-height: 1;
+    }
+    .ob-arena-thumb--ph::after { display: none; }
+    .ob-arena-thumb__check {
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      z-index: 2;
+    }
+    .ob-arena-row.is-on .ob-arena-thumb__check { display: flex; }
+    .ob-arena-row__body {
+      min-width: 0;
+      min-height: 72px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 1px 0;
+    }
+    .ob-arena-option__name { font-size: 15px; font-weight: 600; line-height: 1.25; }
     .ob-arena-option__meta {
       font-size: 12.5px;
       color: var(--app-muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .ob-arena-option[aria-pressed="true"] .ob-arena-option__meta { color: inherit; opacity: .85; }
     .ob-arena-unconfirmed-badge {
       display: inline-block;
       font-size: 11px;
@@ -286,8 +429,8 @@
       color: #c0392b;
       vertical-align: middle;
     }
-    .ob-arena-option[aria-pressed="true"] .ob-arena-unconfirmed-badge {
-      background: color-mix(in srgb, #fff 82%, transparent);
+    .ob-arena-row.is-on .ob-arena-unconfirmed-badge {
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
     }
     .ob-arena-empty {
       font-size: 14px;
@@ -313,7 +456,9 @@
     .ob-city-select,
     .ob-arena-create input,
     #obRoleCustom,
-    #obServiceAddInput {
+    #obServiceAddInput,
+    #obCityCreateName,
+    .ob-addbox input[type="text"] {
       appearance: none;
       width: 100%;
       box-sizing: border-box;
@@ -330,7 +475,9 @@
     .ob-city-select:focus-visible,
     .ob-arena-create input:focus-visible,
     #obRoleCustom:focus-visible,
-    #obServiceAddInput:focus-visible {
+    #obServiceAddInput:focus-visible,
+    #obCityCreateName:focus-visible,
+    .ob-addbox input[type="text"]:focus-visible {
       outline: 2px solid var(--app-cta-fill);
       outline-offset: 1px;
     }
@@ -351,6 +498,17 @@
       font-weight: 600;
       color: var(--app-muted);
       margin: 10px 0 6px;
+    }
+    .ob-addbox-lead {
+      margin: 0 0 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--app-muted);
+    }
+    .ob-city .ob-addcta { margin-top: 8px; }
+    .ob-city-select--picked {
+      border-color: var(--app-cta-fill);
+      box-shadow: 0 0 0 1px var(--app-cta-fill);
     }
     .ob-arena-create-actions,
     .ob-addbox__actions {
@@ -437,9 +595,9 @@
       appearance: none;
       flex: 0 0 auto;
       display: grid;
-      grid-template-columns: 22px auto;
+      grid-template-columns: 36px auto;
       grid-template-rows: auto auto;
-      column-gap: 8px;
+      column-gap: 10px;
       align-items: center;
       border: 1px solid var(--app-chip-line);
       background: var(--app-chip-bg);
@@ -457,14 +615,36 @@
     }
     .ob-arena-tab__swatch {
       grid-row: 1 / 3;
-      display: inline-flex;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      padding: 0;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .ob-arena-brush-thumb {
+      position: relative;
+      display: block;
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--app-muted) 16%, var(--app-chip-bg));
+    }
+    .ob-arena-brush-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .ob-arena-brush-thumb--ph {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
       line-height: 1;
     }
     .ob-arena-tab__label { font-size: 14px; }
@@ -475,42 +655,49 @@
     }
     .ob-arena-tab__meta:empty { display: none; }
 
-    /* Различитель площадки на клетке/чипе — НЕ цвет (нейтрали и тил в этом продукте
-       не кодируют домен, см. theme.css: «ЦВЕТ НАЗЫВАЕТ ТОЛЬКО ДЕЙСТВИЕ И СОСТОЯНИЕ»),
-       а буква + заливка тем же тилом трёх разных плотностей: сплошная / контур / штрих.
-       Так до трёх площадок различимы и в тёмной теме, и для дальтоника (AC-005).
-       Селектор с [aria-pressed="true"] нужен, чтобы перебить .ob-cell[aria-pressed="true"]
-       выше — та же специфичность (класс+атрибут), без него побеждала бы сплошная заливка
-       для всех трёх площадок одинаково. */
+    /* TASK-172 / AC-005: в multi-arena клетка кодирует площадку паттерном (сплошная /
+       контур / штрих), не буквой и не «своим» hue арены — theme.css: цвет = действие.
+       Кто это — имя + thumb на кисти. Только онбординг. */
     .ob-cell--taken.ob-cell--arena-0,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-0,
-    .ob-arena-tab--arena-0 .ob-arena-tab__swatch {
+    .ob-cell[aria-pressed="true"].ob-cell--arena-0 {
       background: var(--app-cta-fill);
       border-color: var(--app-cta-fill);
-      color: var(--app-cta-text);
     }
     .ob-cell--taken.ob-cell--arena-1,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-1,
-    .ob-arena-tab--arena-1 .ob-arena-tab__swatch {
+    .ob-cell[aria-pressed="true"].ob-cell--arena-1 {
       background: transparent;
       border: 2px solid var(--app-cta-fill);
-      color: var(--app-cta-fill);
     }
     .ob-cell--taken.ob-cell--arena-2,
-    .ob-cell[aria-pressed="true"].ob-cell--arena-2,
-    .ob-arena-tab--arena-2 .ob-arena-tab__swatch {
+    .ob-cell[aria-pressed="true"].ob-cell--arena-2 {
       background: repeating-linear-gradient(
         135deg, var(--app-cta-fill) 0 3px, transparent 3px 7px
       );
       border-color: var(--app-cta-fill);
-      color: var(--app-cta-text);
     }
-    .ob-cell.ob-cell--arena-0, .ob-cell.ob-cell--arena-1, .ob-cell.ob-cell--arena-2 {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
+    .ob-arena-tab--arena-0 .ob-arena-brush-thumb {
+      box-shadow: inset 0 0 0 3px var(--app-cta-fill);
+    }
+    .ob-arena-tab--arena-1 .ob-arena-brush-thumb {
+      box-shadow: inset 0 0 0 2px var(--app-cta-fill);
+      background: transparent;
+    }
+    .ob-arena-tab--arena-2 .ob-arena-brush-thumb::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        135deg, var(--app-cta-fill) 0 2px, transparent 2px 6px
+      );
+      opacity: 0.55;
+    }
+    .ob-cell[aria-pressed="true"].ob-cell--arena-0,
+    .ob-cell[aria-pressed="true"].ob-cell--arena-1,
+    .ob-cell[aria-pressed="true"].ob-cell--arena-2 {
+      /* Перебиваем сплошной .ob-cell[aria-pressed] одной специфичностью (класс+атрибут). */
+      color: inherit;
     }
 
     /* Ячейка часа, занятого другой площадкой в режиме «нескольких». */
@@ -654,7 +841,7 @@
 
     <section class="ob-step" aria-labelledby="obRoleTitle">
       <h2 class="ob-step-title" id="obRoleTitle">Кто вы?</h2>
-      <p class="ob-step-hint">Это увидит ученик в вашей карточке. Не нашли себя — впишите.</p>
+      <p class="ob-step-hint">Это увидит ученик в карточке. Можно несколько — не нашли себя, впишите.</p>
       <div class="ob-chips" id="obRole" role="group" aria-labelledby="obRoleTitle"></div>
       <button type="button" class="ob-addcta" id="obRoleAddBtn">Меня нет в списке</button>
       <div class="ob-addbox" id="obRoleCustomWrap" hidden>
@@ -704,6 +891,17 @@
         <select id="obCity" class="ob-city-select">
           <option value="">Выберите город</option>
         </select>
+        <button type="button" class="ob-addcta" id="obCityAddBtn">Моего города нет в списке</button>
+        <div class="ob-addbox" id="obCityCreateWrap" hidden>
+          <label for="obCityCreateName">Название города</label>
+          <input id="obCityCreateName" type="text" maxlength="128" autocomplete="address-level2"
+                 placeholder="Кобрин">
+          <div class="ob-addbox__actions">
+            <button type="button" class="ob-chip" id="obCityCreateSubmit">Добавить</button>
+            <button type="button" class="ob-chip" id="obCityCreateCancel">Отмена</button>
+          </div>
+          <p id="obCityCreateStatus" class="ob-arena-create-status" hidden></p>
+        </div>
       </div>
       <div class="ob-chips" id="obArenaMode" role="group" aria-labelledby="obArenaModeTitle">
         <button type="button" class="ob-chip" data-arena-mode="none">Пока не указывать</button>
@@ -721,16 +919,42 @@
         <span>Также провожу занятия онлайн</span>
       </label>
 
-      <!-- Одна площадка: выбор одной из списка. -->
+      <!-- Одна площадка: комбобокс — список виден сразу, поиск сужает. -->
       <div id="obArenaSingleWrap" class="ob-arena-pick" hidden>
-        <input type="text" class="ob-arena-search" id="obArenaSingleSearch" placeholder="Название или адрес" autocomplete="off">
-        <div class="ob-arena-list" id="obArenaSingleList" role="listbox" aria-label="Площадки"></div>
+        <label class="ob-arena-combo__label" for="obArenaSingleSearch">Площадка из списка</label>
+        <div class="ob-arena-combo">
+          <div class="ob-arena-combo__trigger">
+            <input type="text" class="ob-arena-combo__input" id="obArenaSingleSearch"
+                   placeholder="Поиск по названию или адресу" autocomplete="off" enterkeyhint="done"
+                   role="combobox" aria-autocomplete="list" aria-expanded="true"
+                   aria-controls="obArenaSingleList">
+            <button type="button" class="ob-arena-combo__done" hidden>Готово</button>
+            <span class="ob-arena-combo__chev" aria-hidden="true"></span>
+          </div>
+          <div class="ob-arena-combo__panel">
+            <p class="ob-arena-combo__browse-hint" id="obArenaSingleBrowseHint" hidden></p>
+            <div class="ob-arena-list" id="obArenaSingleList" role="listbox" aria-label="Площадки"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- Несколько площадок: сначала отмечаем, где работаем. -->
+      <!-- Несколько площадок: тот же комбобокс, можно отметить несколько. -->
       <div id="obArenaMultiPickWrap" class="ob-arena-pick" hidden>
-        <input type="text" class="ob-arena-search" id="obArenaMultiSearch" placeholder="Название или адрес" autocomplete="off">
-        <div class="ob-arena-list" id="obArenaMultiList" role="group" aria-label="Площадки, где вы работаете"></div>
+        <label class="ob-arena-combo__label" for="obArenaMultiSearch">Площадки из списка</label>
+        <div class="ob-arena-combo">
+          <div class="ob-arena-combo__trigger">
+            <input type="text" class="ob-arena-combo__input" id="obArenaMultiSearch"
+                   placeholder="Поиск по названию или адресу" autocomplete="off" enterkeyhint="done"
+                   role="combobox" aria-autocomplete="list" aria-expanded="true"
+                   aria-controls="obArenaMultiList">
+            <button type="button" class="ob-arena-combo__done" hidden>Готово</button>
+            <span class="ob-arena-combo__chev" aria-hidden="true"></span>
+          </div>
+          <div class="ob-arena-combo__panel">
+            <p class="ob-arena-combo__browse-hint" id="obArenaMultiBrowseHint" hidden></p>
+            <div class="ob-arena-list" id="obArenaMultiList" role="listbox" aria-label="Площадки, где вы работаете" aria-multiselectable="true"></div>
+          </div>
+        </div>
       </div>
 
       <div id="obArenaCreateWrap" class="ob-arena-create" hidden>
@@ -752,7 +976,7 @@
 
     <section class="ob-step" aria-labelledby="obWeekTitle">
       <h2 class="ob-step-title" id="obWeekTitle">Когда обычно? <span class="ob-optional">необязательно</span></h2>
-      <p class="ob-step-hint" id="obWeekHint">Мы отметили типичное. Шаг необязательный — если время назвать пока не готовы, пропустите.</p>
+      <p class="ob-step-hint" id="obWeekHint">Показали популярные часы. Шаг необязательный — если время назвать пока не готовы, пропустите.</p>
       <div class="ob-arena-tabs" id="obArenaTabs" role="group" aria-label="Чем красить" hidden></div>
       <div class="ob-grid-wrap">
         <div class="ob-grid" id="obGrid" role="group" aria-labelledby="obWeekTitle"></div>
@@ -789,6 +1013,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202609287"></script>
+<script src="trainer-onboarding-main.js?v=202610066"></script>
 </body>
 </html>

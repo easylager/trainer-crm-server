@@ -36,6 +36,8 @@ PROFILE_KEYS_FOR_PUBLISHED_UPDATE: frozenset[str] = frozenset(
         "session_duration_minutes",
         "min_hours_before_booking",
         "group_classes_enabled",
+        "specialist_role",
+        "specialist_roles",
     }
 )
 
@@ -53,6 +55,8 @@ _TRAINER_PROFILE_REPO_KEYS: frozenset[str] = frozenset(
         "session_duration_minutes",
         "min_hours_before_booking",
         "group_classes_enabled",
+        "specialist_role",
+        "specialist_roles",
     }
 )
 
