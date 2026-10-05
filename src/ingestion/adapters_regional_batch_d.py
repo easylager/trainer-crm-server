@@ -4,7 +4,6 @@ Follows the style of ``src/ingestion/adapters.py``. Sources and gotchas: ``.ai/p
 """
 from __future__ import annotations
 
-import asyncio
 import re
 import subprocess
 from datetime import date, timedelta
@@ -21,6 +20,7 @@ from src.ingestion.seed_config_regional_batch_d import (
     PARSER_KEY_SHKLOV_ARENA,
     PARSER_KEY_SOLIGORSK_SZK,
 )
+from src.ingestion.cpu_work import run_cpu_bound
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -387,7 +387,7 @@ def _run_tesseract_tsv(image_bytes: bytes) -> str:
 
 
 async def _ocr_tsv(image_bytes: bytes) -> str:
-    return await asyncio.to_thread(_run_tesseract_tsv, image_bytes)
+    return await run_cpu_bound(_run_tesseract_tsv, image_bytes)
 
 
 def _shklov_parse_grid(tsv_text: str) -> list[tuple[int, str, str]]:
