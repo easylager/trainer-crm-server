@@ -27,6 +27,9 @@ describe('mini-app-share-sheet story channel (TASK-168)', () => {
     assert.match(src, /story_os/);
     assert.match(src, /story_fallback/);
     assert.match(src, />Сторис</);
+    assert.match(src, />В галерею</);
+    assert.match(src, /openImageSave/);
+    assert.match(src, /image_tg/);
   });
 
   it('подборка города показывает превью чат + сторис', () => {
@@ -73,5 +76,47 @@ describe('mini-app-share-sheet story channel (TASK-168)', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, 'https://cdn.test/p/minsk/x/story.png');
     assert.equal(calls[0].params.widget_link.url, 'https://cdn.test/p/minsk/x');
+  });
+
+  it('openImageSave вызывает downloadFile в Telegram', async () => {
+    const downloads = [];
+    const context = {
+      window: {},
+      document: {
+        createElement: () => ({
+          hidden: true,
+          className: '',
+          innerHTML: '',
+          addEventListener: () => {},
+          querySelector: () => null,
+        }),
+        body: { appendChild: () => {} },
+      },
+      fetch: () => Promise.reject(new Error('no fetch')),
+      location: { href: 'https://app.test/webapp/catalog' },
+      navigator: {},
+      Telegram: {
+        WebApp: {
+          isVersionAtLeast: () => true,
+          downloadFile: (opts) => {
+            downloads.push(opts);
+          },
+        },
+      },
+      requestAnimationFrame: (fn) => fn(),
+      setTimeout: (fn) => fn(),
+      clearTimeout: () => {},
+    };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const channel = await context.GlideShareSheet._openImageSave({
+      story_image_url: 'https://cdn.test/p/minsk/x/story.png',
+      og_image_url: 'https://cdn.test/p/minsk/x/og.png',
+      share_url: 'https://cdn.test/p/minsk/x',
+    });
+    assert.equal(channel, 'image_tg');
+    assert.equal(downloads.length, 1);
+    assert.equal(downloads[0].file_name, 'glide-story.png');
+    assert.equal(downloads[0].url, 'https://cdn.test/p/minsk/x/story.png');
   });
 });

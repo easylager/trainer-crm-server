@@ -111,7 +111,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     assert "завтра" not in _meta(html, "og:description").lower()
     assert f"startapp=arena_{place['arena_id']}_s_{sid}" in html
     assert _meta(html, "robots") == "noindex, follow"
-    assert f"og.png?s={sid}" in _meta(html, "og:image")
+    assert f"/session/{sid}/og.png" in _meta(html, "og:image")
     assert f"?s={sid}" in _meta(html, "og:url")
     # Канонический адрес — без параметров: в поиске одна страница на место.
     assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', html)
@@ -119,7 +119,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
     ihtml = invite.text
     assert _meta(ihtml, "og:title").startswith("Погнали кататься?")
     assert "Тебя зовут кататься" in ihtml
-    assert "i=1" in _meta(ihtml, "og:image")
+    assert f"/session/{sid}/og.png?i=1" in _meta(ihtml, "og:image")
 
 
 @pytest.mark.asyncio
@@ -172,10 +172,31 @@ async def test_og_and_story_images_are_real_pngs(app_use_test_db, db_session) ->
     await db_session.commit()
     async with _client() as client:
         og = await client.get(place["path"] + "/og.png", params={"s": sid})
-        story = await client.get(place["path"] + "/story.png", params={"i": "1"})
+        story = await client.get(place["path"] + f"/session/{sid}/story.png", params={"i": "1"})
     assert og.status_code == 200 and og.headers["content-type"] == "image/png"
     assert Image.open(io.BytesIO(og.content)).size == (1200, 630)
     assert Image.open(io.BytesIO(story.content)).size == (1080, 1920)
+    assert "no-store" in og.headers.get("cache-control", "")
+
+
+@pytest.mark.asyncio
+async def test_story_image_changes_with_session_not_next_slot(app_use_test_db, db_session) -> None:
+    """Telegram кэшировал /story.png без учёта ?s= — на картинке был next_slot, в тексте focus."""
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=0, starts_at_local="10:15")
+    sid_late = await _add_future_session(db_session, place["arena_id"], days_ahead=3, starts_at_local="17:15")
+    await db_session.commit()
+    async with _client() as client:
+        generic = await client.get(place["path"] + "/story.png", params={"i": "1"})
+        focused = await client.get(place["path"] + f"/session/{sid_late}/story.png", params={"i": "1"})
+        share = await client.get(
+            f"/api/public/arenas/{place['arena_id']}/share",
+            params={"session_id": sid_late, "invite": "true", "record": "false"},
+        )
+    assert generic.status_code == 200 and focused.status_code == 200
+    assert generic.content != focused.content
+    assert share.json()["story_image_url"].endswith(f"/session/{sid_late}/story.png?i=1")
+    assert "17:15" in share.json()["share_body"]
 
 
 @pytest.mark.asyncio
@@ -301,7 +322,7 @@ async def test_share_api_points_at_the_page_and_counts_the_click(app_use_test_db
     assert body["share_body"].startswith("Погнали кататься?")
     assert re.search(r", 20:30 — " + re.escape(place["name"]) + r", 8\.50 BYN", body["share_body"])
     assert body["place_share_body"].startswith(place["name"] + " — массовое катание")
-    assert body["story_image_url"].endswith(f"/story.png?s={sid}&i=1")
+    assert body["story_image_url"].endswith(f"/session/{sid}/story.png?i=1")
     assert missing.status_code == 404
 
     row = (

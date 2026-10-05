@@ -11,8 +11,7 @@
  *  - выбор сеанса — делятся конкретным временем, а не «приходи как-нибудь»;
  *  - превью — та самая картинка, которую увидит друг. Человек видит результат до
  *    отправки — и охотнее отправляет;
- *  - четыре канала: Telegram · Ссылка · Сторис (TG shareToStory / IG через Web Share)
- *    · Другое (системное меню).
+ *  - каналы: Telegram · Ссылка · Сторис · В галерею (картинка для сторис/поста) · Другое.
  *
  * Счётчик честный: переключатели и превью идут с record=false, событие пишется только
  * по нажатию канала (с каналом) — см. GET /api/public/arenas/{ref}/share.
@@ -177,18 +176,92 @@
     });
   }
 
+  function cardImagePayload(p) {
+    var raw = (p && (p.story_image_url || p.og_image_url)) || '';
+    return {
+      fetchPath: raw ? sameOriginPath(raw) : '',
+      absolute: raw ? absoluteMediaUrl(raw) : '',
+      fileName: p && p.story_image_url ? 'glide-story.png' : 'glide-share.png',
+    };
+  }
+
   /** @returns {boolean} */
-  function tryDownloadStoryFile(p) {
+  function tryTelegramDownloadFile(absoluteUrl, fileName) {
     var t = tg();
-    var media = absoluteMediaUrl(p.story_image_url);
+    var media = String(absoluteUrl || '');
     if (!t || typeof t.downloadFile !== 'function') return false;
     if (t.isVersionAtLeast && !t.isVersionAtLeast('8.0')) return false;
+    if (!/^https:\/\//i.test(media)) return false;
     try {
-      t.downloadFile({ url: media, file_name: 'glide-story.png' });
+      t.downloadFile({ url: media, file_name: fileName || 'glide-share.png' });
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  /** @returns {Promise<boolean>} */
+  function tryBlobDownload(fetchPath, fileName) {
+    return fetch(fetchPath, { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('http');
+        return r.blob();
+      })
+      .then(function (blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = fileName || 'glide-share.png';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        global.setTimeout(function () {
+          URL.revokeObjectURL(objectUrl);
+        }, 2000);
+        return true;
+      })
+      .catch(function () {
+        return false;
+      });
+  }
+
+  /**
+   * Сохранить картинку карточки (вертикаль для сторис, если есть) в файлы / галерею.
+   * @returns {Promise<string>} image_tg | image_os | image_fallback | image_empty
+   */
+  function openImageSave(p) {
+    return new Promise(function (resolve) {
+      var img = cardImagePayload(p);
+      if (!img.fetchPath) {
+        toast('Картинка ещё не готова');
+        resolve('image_empty');
+        return;
+      }
+      if (tryTelegramDownloadFile(img.absolute, img.fileName)) {
+        toast('Сохраняем в «Загрузки» — оттуда в сторис или галерею');
+        resolve('image_tg');
+        return;
+      }
+      tryBlobDownload(img.fetchPath, img.fileName).then(function (ok) {
+        if (ok) {
+          toast('Сохранено — проверьте «Файлы» или папку загрузок');
+          resolve('image_os');
+          return;
+        }
+        copyText(p.share_url, function () {
+          openUrl(img.absolute);
+          toast('Ссылка в буфере — удержите картинку и «Сохранить в Фото»');
+          resolve('image_fallback');
+        });
+      });
+    });
+  }
+
+  /** @returns {boolean} */
+  function tryDownloadStoryFile(p) {
+    var img = cardImagePayload(p);
+    return tryTelegramDownloadFile(img.absolute, img.fileName);
   }
 
   /**
@@ -249,6 +322,11 @@
         track(channel);
       });
     },
+    image: function (p) {
+      openImageSave(p).then(function (channel) {
+        if (channel !== 'image_empty') track(channel);
+      });
+    },
     system: function (p) {
       if (global.navigator && typeof navigator.share === 'function') {
         navigator.share({ text: p.share_body, url: p.share_url }).catch(function () {});
@@ -271,37 +349,201 @@
     }
   }
 
-  function slotList() {
+  function normalizedSections() {
     var sections = state.slotSections;
     var slots = state.slots || [];
-    if (!sections || !sections.length) {
-      if (!slots.length) return '';
-      sections = [{ dayLabel: '', rows: slots.map(function (s) {
-        var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
-        return { id: s.id, time: m ? m[1] : s.label, meta: '' };
-      }) }];
+    if (sections && sections.length) return sections;
+    if (!slots.length) return [];
+    return [
+      {
+        dayLabel: '',
+        localDate: '',
+        dayNum: '',
+        rows: slots.map(function (s) {
+          var m = String(s.label || '').match(/(\d{1,2}:\d{2})\s*$/);
+          return { id: s.id, time: m ? m[1] : s.label, meta: '' };
+        }),
+      },
+    ];
+  }
+
+  function ensureSlotDay() {
+    var sections = normalizedSections();
+    if (!sections.length) {
+      state.slotDay = null;
+      return;
     }
-    var html =
-      '<p class="gss-slot-q">На какое время зовём?</p>' +
-      '<div class="gss-slot-list" role="listbox" aria-label="Сеанс">';
-    sections.forEach(function (sec) {
-      if (sec.dayLabel) html += '<p class="gss-slot-day">' + esc(sec.dayLabel) + '</p>';
-      (sec.rows || []).forEach(function (row) {
-        var on = String(row.id) === String(state.sessionId);
-        var meta = row.meta || '';
-        if (on) meta = meta ? meta + ' · выбрано' : 'Выбрано';
-        html +=
-          '<button type="button" class="gss-slot-row' + (on ? ' is-on' : '') + '" data-slot="' + esc(row.id) + '"' +
-          ' aria-pressed="' + (on ? 'true' : 'false') + '">' +
-          '<span>' + esc(row.time) + '</span><em>' + esc(meta) + '</em></button>';
-      });
+    if (state.slotDay && sections.some(function (s) { return s.localDate === state.slotDay; })) return;
+    if (state.sessionId) {
+      for (var i = 0; i < sections.length; i++) {
+        var sec = sections[i];
+        if ((sec.rows || []).some(function (r) { return String(r.id) === String(state.sessionId); })) {
+          state.slotDay = sec.localDate || null;
+          return;
+        }
+      }
+    }
+    state.slotDay = sections[0].localDate || null;
+  }
+
+  function activeSlotSection() {
+    var sections = normalizedSections();
+    if (!sections.length) return null;
+    if (state.slotDay) {
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].localDate === state.slotDay) return sections[i];
+      }
+    }
+    return sections[0];
+  }
+
+  function slotDayStripHtml(sections) {
+    if (!sections.length || !sections[0].localDate) return '';
+    return (
+      '<div class="gss-day-strip" role="tablist" aria-label="День">' +
+      sections
+        .map(function (sec) {
+          var on = sec.localDate === state.slotDay;
+          var count = (sec.rows || []).length;
+          return (
+            '<button type="button" role="tab" class="gss-day-strip__day' +
+            (on ? ' is-on' : '') +
+            '" data-gss-day="' +
+            esc(sec.localDate) +
+            '" aria-pressed="' +
+            (on ? 'true' : 'false') +
+            '">' +
+            '<span>' +
+            esc(sec.dayLabel) +
+            '</span><b>' +
+            esc(sec.dayNum) +
+            '</b><i>' +
+            esc(String(count)) +
+            '</i></button>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function slotRowMeta(row) {
+    var meta = row.meta || '';
+    if (String(row.id) === String(state.sessionId)) meta = meta ? meta + ' · выбрано' : 'Выбрано';
+    return meta;
+  }
+
+  function slotRowButtonHtml(row) {
+    var on = String(row.id) === String(state.sessionId);
+    return (
+      '<button type="button" class="gss-slot-row' +
+      (on ? ' is-on' : '') +
+      '" data-slot="' +
+      esc(row.id) +
+      '"' +
+      ' aria-pressed="' +
+      (on ? 'true' : 'false') +
+      '">' +
+      '<span>' +
+      esc(row.time) +
+      '</span><em>' +
+      esc(slotRowMeta(row)) +
+      '</em></button>'
+    );
+  }
+
+  function slotRowsInnerHtml(sec) {
+    if (!sec) return '';
+    return (sec.rows || []).map(slotRowButtonHtml).join('');
+  }
+
+  function slotRowsHtml(sec) {
+    if (!sec) return '';
+    return (
+      '<div class="gss-slot-list" role="listbox" aria-label="Сеанс">' + slotRowsInnerHtml(sec) + '</div>'
+    );
+  }
+
+  function sheetEl() {
+    return root && root.querySelector('.gss-sheet');
+  }
+
+  /** Превью перерисовывается без сдвига списка слотов и позиции шита. */
+  function preserveSheetScroll(run) {
+    var sheet = sheetEl();
+    var top = sheet ? sheet.scrollTop : 0;
+    run();
+    if (sheet) sheet.scrollTop = top;
+  }
+
+  function syncDayStrip() {
+    var strip = root.querySelector('.gss-day-strip');
+    if (!strip) return false;
+    var scroll = strip.scrollLeft;
+    [].forEach.call(strip.querySelectorAll('[data-gss-day]'), function (btn) {
+      var on = btn.getAttribute('data-gss-day') === state.slotDay;
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    html += '</div>';
-    if (state.ref && !state.endpoint && slots.length <= 1 && typeof state.loadSlots === 'function') {
-      html +=
-        '<button type="button" class="gss-more-slots" data-gss-load-slots>Загрузить расписание</button>';
+    strip.scrollLeft = scroll;
+    return true;
+  }
+
+  function syncSlotRows() {
+    var list = root.querySelector('.gss-slot-list');
+    var sec = activeSlotSection();
+    if (!list || !sec) return false;
+    var scroll = list.scrollTop;
+    var byId = {};
+    (sec.rows || []).forEach(function (row) {
+      byId[String(row.id)] = row;
+    });
+    [].forEach.call(list.querySelectorAll('[data-slot]'), function (btn) {
+      var id = btn.getAttribute('data-slot');
+      var row = byId[id];
+      var on = String(id) === String(state.sessionId);
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      var em = btn.querySelector('em');
+      if (em && row) em.textContent = slotRowMeta(row);
+    });
+    list.scrollTop = scroll;
+    return true;
+  }
+
+  function paintSlotListForDay() {
+    var list = root.querySelector('.gss-slot-list');
+    var sec = activeSlotSection();
+    if (!list || !sec) return false;
+    list.scrollTop = 0;
+    list.innerHTML = slotRowsInnerHtml(sec);
+    return true;
+  }
+
+  function syncSlotPickerUi(mode) {
+    ensureSlotDay();
+    if (mode === 'day') {
+      if (!syncDayStrip()) return paintSlotPicker();
+      if (!paintSlotListForDay()) return paintSlotPicker();
+      return;
     }
-    return html;
+    if (mode === 'slot') {
+      if (!syncDayStrip() || !syncSlotRows()) paintSlotPicker();
+      return;
+    }
+    paintSlotPicker();
+  }
+
+  function slotList() {
+    var sections = normalizedSections();
+    var slots = state.slots || [];
+    if (!sections.length) return '';
+    ensureSlotDay();
+    var html = '<p class="gss-slot-q">На какое время зовём?</p>' + slotDayStripHtml(sections) + slotRowsHtml(activeSlotSection());
+    if (state.ref && !state.endpoint && slots.length <= 1 && typeof state.loadSlots === 'function') {
+      html += '<button type="button" class="gss-more-slots" data-gss-load-slots>Загрузить расписание</button>';
+    }
+    return '<div class="gss-slot-picker">' + html + '</div>';
   }
 
   function sessionPicker() {
@@ -315,7 +557,10 @@
       return '<div class="gss-preview__img gss-preview__img--wait"></div>';
     }
     var og =
-      '<img class="gss-preview__img" src="' + esc(sameOriginPath(p.og_image_url)) + '" alt="Так ссылку увидят в чате" loading="eager" />';
+      '<button type="button" class="gss-preview-save" data-gss-save-image aria-label="Сохранить картинку в галерею">' +
+      '<img class="gss-preview__img" src="' +
+      esc(sameOriginPath(p.og_image_url)) +
+      '" alt="Так ссылку увидят в чате" loading="eager" /></button>';
     if (state.endpoint && p.story_image_url) {
       var story =
         '<img class="gss-preview__img gss-preview__img--story" src="' +
@@ -334,48 +579,117 @@
     return og;
   }
 
-  function render() {
-    var p = state.payload;
+  function renderTabsHtml() {
     var isIce = (state.venueType || 'ice') === 'ice';
-    var preview = renderPreview(p);
-    var tabs = state.endpoint
-      ? ''
-      : '<div class="gss-tabs" role="group" aria-label="Тон">' +
-        '<button type="button" class="gss-tab' + (!state.invite ? ' is-on' : '') + '" data-invite="0">' +
-        (isIce ? 'Расписание' : 'Место') + '</button>' +
-        '<button type="button" class="gss-tab' + (state.invite ? ' is-on' : '') + '" data-invite="1">Позвать с собой</button>' +
-        '</div>';
-    root.querySelector('.gss-body').innerHTML =
-      tabs +
-      sessionPicker() +
-      '<figure class="gss-preview">' + preview +
-      '<figcaption>' + esc(p ? p.share_body : 'Готовим карточку…') + '</figcaption></figure>' +
-      '<div class="gss-channels">' +
-      '<button type="button" class="gss-ch gss-ch--tg" data-ch="telegram"' + (p ? '' : ' disabled') + '>Telegram</button>' +
-      '<button type="button" class="gss-ch" data-ch="copy"' + (p ? '' : ' disabled') + '>Ссылка</button>' +
-      '<button type="button" class="gss-ch' + (state.endpoint ? ' gss-ch--story' : '') + '" data-ch="story"' +
-      (p ? '' : ' disabled') +
-      '>Сторис</button>' +
-      '<button type="button" class="gss-ch" data-ch="system"' + (p ? '' : ' disabled') + '>Другое</button>' +
-      '</div>' +
-      '<p class="gss-note">В чат — Telegram или Ссылка. В сторис — QR на карточке; ссылку для стикера копируем сами.</p>';
+    if (state.endpoint) return '';
+    return (
+      '<div class="gss-tabs" role="group" aria-label="Тон">' +
+      '<button type="button" class="gss-tab' +
+      (!state.invite ? ' is-on' : '') +
+      '" data-invite="0">' +
+      (isIce ? 'Расписание' : 'Место') +
+      '</button>' +
+      '<button type="button" class="gss-tab' +
+      (state.invite ? ' is-on' : '') +
+      '" data-invite="1">Позвать с собой</button>' +
+      '</div>'
+    );
   }
 
-  function reload() {
+  function renderChannelsHtml(p) {
+    return (
+      '<div class="gss-channels">' +
+      '<button type="button" class="gss-ch gss-ch--tg" data-ch="telegram"' +
+      (p ? '' : ' disabled') +
+      '>Telegram</button>' +
+      '<button type="button" class="gss-ch" data-ch="copy"' +
+      (p ? '' : ' disabled') +
+      '>Ссылка</button>' +
+      '<button type="button" class="gss-ch' +
+      (state.endpoint ? ' gss-ch--story' : '') +
+      '" data-ch="story"' +
+      (p ? '' : ' disabled') +
+      '>Сторис</button>' +
+      '<button type="button" class="gss-ch gss-ch--image" data-ch="image"' +
+      (p ? '' : ' disabled') +
+      '>В галерею</button>' +
+      '<button type="button" class="gss-ch" data-ch="system"' +
+      (p ? '' : ' disabled') +
+      '>Другое</button>' +
+      '</div>'
+    );
+  }
+
+  function renderPreviewFigureHtml(p) {
+    return (
+      '<figure class="gss-preview">' +
+      renderPreview(p) +
+      '<figcaption>' +
+      esc(p ? p.share_body : 'Готовим карточку…') +
+      '</figcaption></figure>'
+    );
+  }
+
+  function paintBody() {
+    root.querySelector('.gss-body').innerHTML =
+      renderTabsHtml() +
+      sessionPicker() +
+      '<div class="gss-preview-host">' +
+      renderPreviewFigureHtml(state.payload) +
+      '</div>' +
+      '<div class="gss-channels-host">' +
+      renderChannelsHtml(state.payload) +
+      '</div>' +
+      '<p class="gss-note">В чат — Telegram или Ссылка. «В галерею» — картинка для сторис (вертикаль, если есть). Ссылку для стикера копируем сами.</p>';
+  }
+
+  function paintSlotPicker() {
+    ensureSlotDay();
+    var html = sessionPicker();
+    var host = root.querySelector('.gss-slot-picker');
+    if (!host) {
+      if (html) paintBody();
+      return;
+    }
+    if (!html) {
+      host.remove();
+      return;
+    }
+    host.outerHTML = html;
+  }
+
+  function paintPreviewBlock() {
+    var previewHost = root.querySelector('.gss-preview-host');
+    var channelsHost = root.querySelector('.gss-channels-host');
+    if (!previewHost || !channelsHost) {
+      paintBody();
+      return;
+    }
+    previewHost.innerHTML = renderPreviewFigureHtml(state.payload);
+    channelsHost.innerHTML = renderChannelsHtml(state.payload);
+  }
+
+  function reloadPreview() {
     state.payload = null;
-    render();
+    preserveSheetScroll(paintPreviewBlock);
     var token = (state.token = (state.token || 0) + 1);
     fetchPayload({ record: 'false' })
       .then(function (data) {
         if (token !== state.token) return;
         state.payload = data;
-        render();
+        preserveSheetScroll(paintPreviewBlock);
       })
       .catch(function () {
         if (token !== state.token) return;
         root.querySelector('.gss-body').innerHTML =
           '<p class="gss-note">Не получилось подготовить ссылку. Проверьте связь и попробуйте ещё раз.</p>';
       });
+  }
+
+  function reload() {
+    state.payload = null;
+    paintBody();
+    reloadPreview();
   }
 
   function onClick(ev) {
@@ -394,11 +708,23 @@
       }
       return;
     }
+    var dayBtn = ev.target.closest('[data-gss-day]');
+    if (dayBtn) {
+      var iso = dayBtn.getAttribute('data-gss-day');
+      if (iso && iso !== state.slotDay) {
+        haptic();
+        state.slotDay = iso;
+        syncSlotPickerUi('day');
+      }
+      return;
+    }
     var slot = ev.target.closest('[data-slot]');
     if (slot) {
       haptic();
       state.sessionId = slot.getAttribute('data-slot');
-      reload();
+      syncSlotPickerUi('slot');
+      if (slot.blur) slot.blur();
+      reloadPreview();
       return;
     }
     if (ev.target.closest('[data-gss-load-slots]') && typeof state.loadSlots === 'function') {
@@ -412,15 +738,21 @@
           state.slotSections = more.slotSections || null;
         }
         if (!state.sessionId && state.slots[0]) state.sessionId = state.slots[0].id;
+        state.slotDay = null;
         reload();
       });
+      return;
+    }
+    if (ev.target.closest('[data-gss-save-image]') && state.payload) {
+      haptic();
+      CHANNELS.image(state.payload);
       return;
     }
     var ch = ev.target.closest('[data-ch]');
     if (ch && state.payload) {
       var name = ch.getAttribute('data-ch');
-      if (name === 'story') {
-        CHANNELS.story(state.payload);
+      if (name === 'story' || name === 'image') {
+        CHANNELS[name](state.payload);
         return;
       }
       track(name);
@@ -455,12 +787,14 @@
       slots: opts.slots || [],
       slotSections: opts.slotSections || null,
       sessionId: opts.sessionId || (opts.slots && opts.slots[0] && opts.slots[0].id) || null,
+      slotDay: null,
       invite: !!opts.invite,
       context: opts.context || 'arena_card',
       venueType: opts.venueType || 'ice',
       loadSlots: opts.loadSlots || null,
       payload: null,
     };
+    ensureSlotDay();
     root.hidden = false;
     global.requestAnimationFrame(function () { root.classList.add('is-open'); });
     reload();
@@ -472,5 +806,10 @@
     global.setTimeout(function () { if (root) root.hidden = true; }, 180);
   }
 
-  global.GlideShareSheet = { open: open, close: close, _openStoryShare: openStoryShare };
+  global.GlideShareSheet = {
+    open: open,
+    close: close,
+    _openStoryShare: openStoryShare,
+    _openImageSave: openImageSave,
+  };
 })(window);

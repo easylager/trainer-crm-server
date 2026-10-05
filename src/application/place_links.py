@@ -73,6 +73,21 @@ def place_page_url(
     return base + place_path(city_name=city_name, slug=slug) + place_query(session_id=session_id, invite=invite)
 
 
+def place_image_path(
+    *,
+    city_name: str,
+    slug: str,
+    session_id: int | None = None,
+    story: bool = False,
+) -> str:
+    """Путь к og.png / story.png. Сеанс в path, не только в ?s= — иначе CDN/Telegram кэшируют одну картинку."""
+    name = "story.png" if story else "og.png"
+    path = place_path(city_name=city_name, slug=slug)
+    if session_id is not None and int(session_id) > 0:
+        return f"{path}/session/{int(session_id)}/{name}"
+    return f"{path}/{name}"
+
+
 def place_image_url(
     *,
     base_url: str,
@@ -84,12 +99,11 @@ def place_image_url(
 ) -> str:
     """og.png (1200×630) или story.png (1080×1920) — тот же рисунок в двух форматах."""
     base = (base_url or "").strip().rstrip("/")
-    name = "story.png" if story else "og.png"
+    in_path = session_id is not None and int(session_id) > 0
     return (
         base
-        + place_path(city_name=city_name, slug=slug)
-        + f"/{name}"
-        + place_query(session_id=session_id, invite=invite)
+        + place_image_path(city_name=city_name, slug=slug, session_id=session_id, story=story)
+        + place_query(session_id=None if in_path else session_id, invite=invite)
     )
 
 

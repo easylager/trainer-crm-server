@@ -1053,7 +1053,14 @@
           meta: price ? price.withCurrency : '',
         });
       }
-      if (rows.length) sections.push({ dayLabel: dayLabel, rows: rows });
+      if (rows.length) {
+        sections.push({
+          dayLabel: dayLabel,
+          localDate: iso,
+          dayNum: String(parseLocalDate(iso).getDate()),
+          rows: rows,
+        });
+      }
     }
     return sections;
   }
