@@ -1124,6 +1124,24 @@
     return whenBootFromSearch(search);
   }
 
+  function normalizeSavedWhen(saved) {
+    if (!saved || typeof saved !== 'object') return null;
+    var when = String(saved.when || '').trim().toLowerCase();
+    var whenDay = String(saved.whenDay || '').trim();
+    if (when === 'day') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(whenDay)) return null;
+      return { when: 'day', whenDay: whenDay };
+    }
+    if (WHEN_KEYS.indexOf(when) >= 0) return { when: when, whenDay: '' };
+    return null;
+  }
+
+  /** Восстановление окна после возврата с карточки арены (sessionStorage). URL сильнее. */
+  function hydrateWhenFromSaved(saved, intent, venueTypes) {
+    if (!whenSkateFilterContext(intent, venueTypes)) return null;
+    return normalizeSavedWhen(saved);
+  }
+
   function whenChipsVisible(intent, venueTypes, facets) {
     return whenPickerVisible(intent, venueTypes, facets);
   }
@@ -1267,7 +1285,11 @@
     /* Роль впереди места: «Спортивный психолог» отвечает на «кто это», а название
        арены — только на «где». Для старых анкет без роли сервер подставляет «Тренер»,
        но его не показываем: это подпись по умолчанию, а не факт о человеке. */
-    var role = String(p.specialist_role || '').trim();
+    var role = '';
+    if (p.specialist_roles && p.specialist_roles.length) {
+      role = p.specialist_roles.map(function (r) { return String(r || '').trim(); }).filter(Boolean).join(' · ');
+    }
+    if (!role) role = String(p.specialist_role || '').trim();
     if (role && role !== 'Тренер') parts.push(role);
 
     if (item.primary_arena_name) {
@@ -1811,6 +1833,8 @@
           shopDiscipline: String(state.shopDiscipline || ''),
           shopOpenNow: !!state.shopOpenNow,
           shopWhen: String(state.shopWhen || 'any'),
+          when: String(state.when || 'auto'),
+          whenDay: String(state.whenDay || ''),
           scrollY: state.scrollY || 0,
           view: state.view || 'list',
         })
@@ -1875,6 +1899,7 @@
     applyWhenMenuPick: applyWhenMenuPick,
     whenBootFromSearch: whenBootFromSearch,
     hydrateWhenFromUrl: hydrateWhenFromUrl,
+    hydrateWhenFromSaved: hydrateWhenFromSaved,
     whenSkateFilterContext: whenSkateFilterContext,
     dayFromSearch: dayFromSearch,
     formatWhenDayLabel: formatWhenDayLabel,

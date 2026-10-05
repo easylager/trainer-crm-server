@@ -238,6 +238,27 @@ class ProfilePatch(BaseModel):
         default=None,
         description="Разрешить слоты с несколькими участниками (ёмкость > 1) в расписании.",
     )
+    specialist_roles: list[str] | None = Field(
+        default=None,
+        max_length=5,
+        description="Кто я — до 5 ролей; пустой список сбрасывает поле.",
+    )
+
+    @field_validator("specialist_roles", mode="before")
+    @classmethod
+    def _specialist_roles_patch(cls, v: object) -> list[str] | None:
+        if v is None:
+            return None
+        from src.shared.specialist_roles import (
+            InvalidSpecialistRoleError,
+            TooManySpecialistRolesError,
+            normalize_specialist_roles,
+        )
+
+        try:
+            return normalize_specialist_roles(v)
+        except (InvalidSpecialistRoleError, TooManySpecialistRolesError) as e:
+            raise ValueError(str(e)) from e
 
     @field_validator("phone", mode="before")
     @classmethod

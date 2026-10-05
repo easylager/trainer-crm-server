@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202609062';
+  var SHELL_VERSION = '202610051';
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
   var CATALOG_WARM_TTL_MS = 90000;
@@ -24,34 +24,42 @@
     {
       path: 'client-saved-trainers',
       label: 'Сохранённые',
-      emoji: '🔖',
+      iconId: 'client-saved',
       hint: 'Тренеры из каталога — вернуться к записи в один тап',
     },
     {
       path: 'client-stats',
       label: 'Ваша активность',
-      emoji: '🔥',
+      iconId: 'client-activity',
       hint: 'Серия тренировок и статистика сезона',
     },
     {
       path: 'client-passes-certificates',
       label: 'Абонементы',
-      emoji: '🎫',
+      iconId: 'client-pass',
       hint: 'Сколько занятий осталось и подарочные сертификаты',
     },
     {
       path: 'client-family-access',
       label: 'Семейный доступ',
-      emoji: '👨‍👩‍👧',
+      iconId: 'client-family',
       hint: 'Близкие в одном аккаунте — записи и абонементы вместе',
     },
     {
       path: 'client-requests',
       label: 'Мои заявки',
-      emoji: '💬',
+      iconId: 'client-requests',
       hint: 'Запрос на подбор тренера и ответы специалистов',
     },
   ];
+
+  function moreItemPlate(iconId) {
+    var icons = global.GlideMoreIcons;
+    if (icons && typeof icons.plateHtml === 'function') {
+      return icons.plateHtml(iconId);
+    }
+    return '<span class="glide-more-plate" aria-hidden="true"></span>';
+  }
 
   var MORE_CHEVRON =
     '<svg class="client-more-sheet__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -267,9 +275,8 @@
       btn.type = 'button';
       btn.className = 'client-more-sheet__link';
       btn.innerHTML =
-        '<span class="client-more-sheet__emoji" aria-hidden="true">' +
-        item.emoji +
-        '</span><span class="client-more-sheet__body"><span class="client-more-sheet__label">' +
+        moreItemPlate(item.iconId) +
+        '<span class="client-more-sheet__body"><span class="client-more-sheet__label">' +
         item.label +
         '</span><span class="client-more-sheet__hint">' +
         item.hint +

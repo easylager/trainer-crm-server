@@ -124,8 +124,12 @@
      значит показать 112 клеток. Открываем ходовой диапазон, остальное — по кнопке.
      Это только для режима «Пока не указывать»: у выбранной площадки уже есть свой явный
      рабочий диапазон, и подбирать его эвристикой незачем — берём как есть. */
-  var HOURS_CORE = [7, 8, 9, 17, 18, 19, 20];
+  var HOURS_COMPACT_FIRST = 7;
+  var HOURS_COMPACT_LAST = 10;
   var HOURS_ALL = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+  var MAX_SPECIALIST_ROLES = 5;
+  /** Сколько площадок показываем в комбобоксе до сужения поиском (весь город не листаем). */
+  var ARENA_BROWSE_CAP = 15;
   /* Реальные длительности ледового занятия. Не поле ввода — три варианта, один тап. */
   var DURATIONS = [45, 60, 90];
 
@@ -136,7 +140,7 @@
        не только тренеры по конькам, и угадать список ролей заранее нельзя.
        null = ещё не спрашивали — чип не подсвечиваем, а не подставляем «Тренер». */
     roleSuggestions: [],
-    specialistRole: null,
+    selectedRoles: [],
     roleIsCustom: false,
     /* Услуги, вписанные вручную на этом экране. Уходят отдельным полем: id у них
        появится только на сервере, после дедупа. */
@@ -190,12 +194,15 @@
       'obLoading', 'obFatal', 'obSetup', 'obDone', 'obFoot', 'obCta', 'obNote', 'obSkip',
       'obTitle', 'obServices', 'obDuration', 'obDurationLockedNote',
       'obArenaMode', 'obCity', 'obArenaNeedCity',
-      'obArenaSingleWrap', 'obArenaSingleSearch', 'obArenaSingleList',
-      'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaTabs',
+      'obCityAddBtn', 'obCityCreateWrap', 'obCityCreateName', 'obCityCreateStatus',
+      'obCityCreateSubmit', 'obCityCreateCancel',
+      'obArenaSingleWrap', 'obArenaSingleSearch', 'obArenaSingleList', 'obArenaSingleBrowseHint',
+      'obArenaMultiPickWrap', 'obArenaMultiSearch', 'obArenaMultiList', 'obArenaMultiBrowseHint',
+      'obArenaTabs',
       'obArenaCreateWrap', 'obArenaCreateName', 'obArenaCreateAddress',
       'obArenaCreateStatus', 'obArenaCreateDup', 'obArenaCreateSubmit', 'obArenaCreateCancel',
       'obArenaCreateLead',
-      'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
+      'obShell', 'obGrid', 'obGridCount', 'obGridMore', 'obWeekHint', 'obCarried',
       'obDoneTitle', 'obDoneLead', 'obDoneScheduleLink', 'obDonePricesBtn',
       'obRole', 'obRoleCustomWrap', 'obRoleCustom',
       'obRoleAddBtn', 'obRoleAddSubmit', 'obRoleAddCancel', 'obRoleAddStatus',
@@ -257,12 +264,38 @@
     suggestions.forEach(function (label) {
       el.obRole.appendChild(roleChip(label, false));
     });
-    /* Своя роль показывается таким же чипом — выбранным, с крестиком: тап
-       снимает не выбор, а саму формулировку, как у вписанной услуги. */
-    if (state.roleIsCustom && state.specialistRole) {
-      el.obRole.appendChild(roleChip(state.specialistRole, true));
+    /* Свои роли вне подсказок — отдельные чипы с ✕. */
+    (state.selectedRoles || []).forEach(function (label) {
+      if (suggestions.indexOf(label) < 0) {
+        el.obRole.appendChild(roleChip(label, true));
+      }
+    });
+    if (el.obRoleAddBtn) {
+      var rolePanelOpen = el.obRoleCustomWrap && !el.obRoleCustomWrap.hidden;
+      el.obRoleAddBtn.hidden = rolePanelOpen || !canAddMoreRoles();
     }
-    if (el.obRoleAddBtn) el.obRoleAddBtn.hidden = state.roleIsCustom;
+  }
+
+  function canAddMoreRoles() {
+    return (state.selectedRoles || []).length < MAX_SPECIALIST_ROLES;
+  }
+
+  function rolesLimitMessage() {
+    return 'Не больше ' + MAX_SPECIALIST_ROLES + ' специальностей.';
+  }
+
+  /** Добавить роль в выбор; false, если упёрлись в лимит. */
+  function trySelectRole(label) {
+    if (state.selectedRoles.indexOf(label) >= 0) return true;
+    if (!canAddMoreRoles()) {
+      roleAddNote(rolesLimitMessage(), true);
+      if (el.obRoleCustomWrap && el.obRoleCustomWrap.hidden) {
+        note(rolesLimitMessage(), true);
+      }
+      return false;
+    }
+    state.selectedRoles.push(label);
+    return true;
   }
 
   function roleChip(label, isCustom) {
@@ -270,16 +303,21 @@
     b.type = 'button';
     b.className = 'ob-chip';
     b.textContent = isCustom ? label + ' ✕' : label;
-    var on = state.specialistRole === label;
+    var on = state.selectedRoles.indexOf(label) >= 0;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
     if (isCustom) b.title = 'Убрать «' + label + '»';
     b.onclick = function () {
       if (isCustom) {
-        state.roleIsCustom = false;
-        state.specialistRole = null;
+        state.selectedRoles = state.selectedRoles.filter(function (r) { return r !== label; });
+        syncRoleIsCustomFlag();
       } else {
-        state.roleIsCustom = false;
-        state.specialistRole = state.specialistRole === label ? null : label;
+        var i = state.selectedRoles.indexOf(label);
+        if (i >= 0) {
+          state.selectedRoles.splice(i, 1);
+          roleAddNote('');
+        } else if (trySelectRole(label)) {
+          roleAddNote('');
+        }
       }
       renderRole();
       haptic('light');
@@ -287,7 +325,18 @@
     return b;
   }
 
+  function syncRoleIsCustomFlag() {
+    var suggestions = state.roleSuggestions || [];
+    state.roleIsCustom = (state.selectedRoles || []).some(function (r) {
+      return suggestions.indexOf(r) < 0;
+    });
+  }
+
   function openRoleAdd() {
+    if (!canAddMoreRoles()) {
+      note(rolesLimitMessage(), true);
+      return;
+    }
     if (el.obRoleCustomWrap) el.obRoleCustomWrap.hidden = false;
     if (el.obRoleAddBtn) el.obRoleAddBtn.hidden = true;
     if (el.obRoleCustom) el.obRoleCustom.focus();
@@ -321,16 +370,20 @@
     var match = (state.roleSuggestions || []).filter(function (r) {
       return r.toLowerCase() === raw.toLowerCase();
     })[0];
-    state.roleIsCustom = !match;
-    state.specialistRole = match || raw;
+    if (match) {
+      if (!trySelectRole(match)) return;
+    } else if (state.selectedRoles.indexOf(raw) < 0) {
+      if (!trySelectRole(raw)) return;
+    }
+    syncRoleIsCustomFlag();
     closeRoleAdd();
+    renderRole();
     syncCta();
     haptic('light');
   }
 
-  /* Что уходит на сервер: выбранный чип либо вписанная роль. */
-  function currentRoleValue() {
-    return state.specialistRole || null;
+  function currentRolesPayload() {
+    return state.selectedRoles.length ? state.selectedRoles.slice() : [];
   }
 
   /* ── Свои услуги ── */
@@ -557,26 +610,11 @@
     return i >= 0 ? i : 0;
   }
 
-  /* Нецветовой различитель клетки (AC-005): 1–2 буквы названия площадки. Цвет один не считается
-     ответом — в тёмной теме Telegram на 7×N клетках он теряется, буква — нет.
-     Short first tokens (ТЦ, ТРЦ, ФОК) are shared acronyms — use the distinctive next word
-     («Замок» → «З»), not a duplicate «ТЦ» or glued «ТЗТЦ Замок». */
-  function arenaInitial(arena) {
-    if (!arena || !arena.name) return '';
-    var parts = arena.name.trim().split(/\s+/).filter(Boolean);
-    if (!parts.length) return '';
-    if (parts[0].length <= 3 && parts.length >= 2) {
-      return parts[1].charAt(0).toUpperCase();
-    }
-    if (parts[0].length <= 3) return parts[0].slice(0, 2).toUpperCase();
-    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    return parts[0].charAt(0).toUpperCase();
-  }
-
+  /** Multi-arena: паттерн клетки по индексу 0/1/2 (TASK-172) — без букв на клетке. */
   function applyArenaColor(cellEl, arena) {
     if (!arena) return;
     cellEl.classList.add('ob-cell--arena-' + arenaColorIndex(arena.id));
-    cellEl.textContent = arenaInitial(arena);
+    cellEl.textContent = '';
   }
 
   function arenaMetaLabel(arena) {
@@ -610,6 +648,121 @@
     });
   }
 
+  function sortArenasByName(list) {
+    return list.slice().sort(function (a, b) {
+      return (a.name || '').localeCompare(b.name || '', 'ru');
+    });
+  }
+
+  function arenasForPicker(query, isSelected) {
+    var pool = sortArenasByName(arenasInSelectedCity());
+    var q = (query || '').trim();
+    if (q) {
+      var filtered = filteredArenas(q);
+      return {
+        items: filtered,
+        total: pool.length,
+        shown: filtered.length,
+        truncated: false,
+      };
+    }
+    var picked = [];
+    var rest = [];
+    pool.forEach(function (a) {
+      if (isSelected(a.id)) picked.push(a);
+      else rest.push(a);
+    });
+    var seen = {};
+    var items = [];
+    picked.forEach(function (a) {
+      if (seen[a.id]) return;
+      seen[a.id] = true;
+      items.push(a);
+    });
+    rest.forEach(function (a) {
+      if (items.length >= ARENA_BROWSE_CAP) return;
+      if (seen[a.id]) return;
+      seen[a.id] = true;
+      items.push(a);
+    });
+    return {
+      items: items,
+      total: pool.length,
+      shown: items.length,
+      truncated: pool.length > items.length,
+    };
+  }
+
+  function syncArenaBrowseHint(hintEl, meta, q) {
+    if (!hintEl) return;
+    if (q) {
+      hintEl.hidden = true;
+      hintEl.textContent = '';
+      return;
+    }
+    if (!meta.total) {
+      hintEl.textContent = 'В каталоге этого города пока нет площадок.';
+      hintEl.hidden = false;
+      return;
+    }
+    hintEl.textContent = meta.truncated
+      ? ('Показано ' + meta.shown + ' из ' + meta.total +
+        '. Введите название или адрес, чтобы найти остальные.')
+      : 'Выберите из списка ниже.';
+    hintEl.hidden = false;
+  }
+
+  function arenaThumbUrl(arena) {
+    var u = arena && arena.thumb_url;
+    return u && String(u).trim() ? String(u).trim() : '';
+  }
+
+  function buildArenaBrushSwatch(arena) {
+    var swatch = document.createElement('span');
+    swatch.className = 'ob-arena-tab__swatch';
+    swatch.setAttribute('aria-hidden', 'true');
+    var inner = document.createElement('span');
+    inner.className = 'ob-arena-brush-thumb';
+    var url = arenaThumbUrl(arena);
+    if (url) {
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      inner.appendChild(img);
+    } else {
+      inner.classList.add('ob-arena-brush-thumb--ph');
+      inner.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+    }
+    swatch.appendChild(inner);
+    return swatch;
+  }
+
+  function buildArenaThumbEl(arena) {
+    var wrap = document.createElement('div');
+    wrap.className = 'ob-arena-thumb';
+    var url = arenaThumbUrl(arena);
+    if (url) {
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      wrap.appendChild(img);
+    } else {
+      wrap.classList.add('ob-arena-thumb--ph');
+      wrap.setAttribute('aria-hidden', 'true');
+      wrap.textContent = (arena && arena.venue_chip) ? arena.venue_chip : '🏟';
+    }
+    var check = document.createElement('span');
+    check.className = 'ob-arena-thumb__check';
+    check.setAttribute('aria-hidden', 'true');
+    check.textContent = '✓';
+    wrap.appendChild(check);
+    return wrap;
+  }
+
   function appendArenaCreateCta(host, query) {
     var b = document.createElement('button');
     b.type = 'button';
@@ -620,35 +773,34 @@
     host.appendChild(b);
   }
 
-  function renderArenaOptionsInto(host, query, isSelected, onPick) {
+  function renderArenaOptionsInto(host, query, isSelected, onPick, browseHintEl) {
     if (!host) return;
     var q = (query || '').trim();
-    var list = filteredArenas(query);
-    if (!q) {
-      list = arenasInSelectedCity().filter(function (a) { return isSelected(a.id); });
-    }
+    var meta = arenasForPicker(query, isSelected);
+    var list = meta.items;
+    syncArenaBrowseHint(browseHintEl, meta, q);
     host.innerHTML = '';
-    if (!q && !list.length) {
-      var hint = document.createElement('div');
-      hint.className = 'ob-arena-empty';
-      hint.textContent = 'Начните вводить название или адрес — не прокручиваем весь город.';
-      host.appendChild(hint);
-      appendArenaCreateCta(host, '');
-      return;
-    }
-    if (q && !list.length) {
+    if (!list.length) {
       var empty = document.createElement('div');
       empty.className = 'ob-arena-empty';
-      empty.textContent = 'Площадок не найдено.';
+      empty.textContent = q
+        ? 'Площадок не найдено.'
+        : 'В каталоге этого города пока нет площадок.';
       host.appendChild(empty);
       appendArenaCreateCta(host, q);
       return;
     }
     list.forEach(function (a) {
+      var selected = isSelected(a.id);
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'ob-arena-option';
-      b.setAttribute('aria-pressed', isSelected(a.id) ? 'true' : 'false');
+      b.className = 'ob-arena-row' + (selected ? ' is-on' : '');
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', selected ? 'true' : 'false');
+      b.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      b.appendChild(buildArenaThumbEl(a));
+      var body = document.createElement('div');
+      body.className = 'ob-arena-row__body';
       var nameEl = document.createElement('span');
       nameEl.className = 'ob-arena-option__name';
       nameEl.textContent = a.name;
@@ -659,18 +811,19 @@
         badge.textContent = 'на проверке';
         nameEl.appendChild(badge);
       }
-      b.appendChild(nameEl);
+      body.appendChild(nameEl);
       var meta = arenaMetaLabel(a);
       if (meta) {
         var metaEl = document.createElement('span');
         metaEl.className = 'ob-arena-option__meta';
         metaEl.textContent = meta;
-        b.appendChild(metaEl);
+        body.appendChild(metaEl);
       }
+      b.appendChild(body);
       b.onclick = function () { onPick(a.id); };
       host.appendChild(b);
     });
-    if (q) appendArenaCreateCta(host, q);
+    appendArenaCreateCta(host, q);
   }
 
   function renderArenaSingleList() {
@@ -679,7 +832,8 @@
       el.obArenaSingleList,
       q,
       function (id) { return state.singleArenaId === id; },
-      selectSingleArena
+      selectSingleArena,
+      el.obArenaSingleBrowseHint
     );
   }
 
@@ -689,7 +843,105 @@
       el.obArenaMultiList,
       q,
       function (id) { return state.multiArenaIds.indexOf(id) >= 0; },
-      toggleMultiArena
+      toggleMultiArena,
+      el.obArenaMultiBrowseHint
+    );
+  }
+
+  var obArenaFocusScrollT = null;
+
+  function setArenaSearchFocused(inp, on) {
+    var combo = inp && inp.closest ? inp.closest('.ob-arena-combo') : null;
+    if (combo) combo.classList.toggle('ob-arena-combo--focused', on);
+    if (combo) {
+      var doneBtn = combo.querySelector('.ob-arena-combo__done');
+      if (doneBtn) doneBtn.hidden = !on;
+    }
+  }
+
+  /** Один раз после открытия клавиатуры — без polling и без vv.scroll (они гоняли scrollIntoView по кругу). */
+  function scheduleArenaSearchScrollOnce(inp) {
+    if (!inp) return;
+    if (obArenaFocusScrollT) clearTimeout(obArenaFocusScrollT);
+    obArenaFocusScrollT = setTimeout(function () {
+      obArenaFocusScrollT = null;
+      if (document.activeElement !== inp) return;
+      var wrap = inp.closest('.ob-arena-pick');
+      if (!wrap) return;
+      try {
+        wrap.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
+      } catch (eS) { /* */ }
+    }, 420);
+  }
+
+  function dismissArenaSearchKeyboard() {
+    if (obArenaFocusScrollT) {
+      clearTimeout(obArenaFocusScrollT);
+      obArenaFocusScrollT = null;
+    }
+    var ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('ob-arena-combo__input')) {
+      setArenaSearchFocused(ae, false);
+    }
+    if (el.obArenaSingleSearch) {
+      try { el.obArenaSingleSearch.blur(); } catch (eB) { /* */ }
+    }
+    if (el.obArenaMultiSearch) {
+      try { el.obArenaMultiSearch.blur(); } catch (eB2) { /* */ }
+    }
+    try {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && typeof tg.hideKeyboard === 'function') tg.hideKeyboard();
+    } catch (eTg) { /* */ }
+  }
+
+  function bindArenaSearchMobile() {
+    function wireInput(inp) {
+      if (!inp || inp._obArenaMobileBound) return;
+      inp._obArenaMobileBound = true;
+      inp.addEventListener('focus', function () {
+        setArenaSearchFocused(inp, true);
+        scheduleArenaSearchScrollOnce(inp);
+      });
+      inp.addEventListener('blur', function () {
+        if (obArenaFocusScrollT) {
+          clearTimeout(obArenaFocusScrollT);
+          obArenaFocusScrollT = null;
+        }
+        window.setTimeout(function () {
+          if (document.activeElement === inp) return;
+          setArenaSearchFocused(inp, false);
+        }, 100);
+      });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          dismissArenaSearchKeyboard();
+        }
+      });
+    }
+    wireInput(el.obArenaSingleSearch);
+    wireInput(el.obArenaMultiSearch);
+
+    document.querySelectorAll('.ob-arena-combo__done').forEach(function (btn) {
+      if (btn._obArenaDoneBound) return;
+      btn._obArenaDoneBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        dismissArenaSearchKeyboard();
+      });
+    });
+
+    if (document._obArenaSearchDismissBound) return;
+    document._obArenaSearchDismissBound = true;
+    document.addEventListener(
+      'touchstart',
+      function (e) {
+        var t = e.target;
+        if (t && t.closest && t.closest('.ob-arena-pick')) return;
+        dismissArenaSearchKeyboard();
+      },
+      { passive: true, capture: true }
     );
   }
 
@@ -715,6 +967,7 @@
       d.arenaByHour = next;
     });
     haptic('light');
+    dismissArenaSearchKeyboard();
     renderArenaSingleList();
     syncDurationLock();
     renderGrid();
@@ -752,6 +1005,7 @@
       if (state.activeArenaTab == null) state.activeArenaTab = arenaId;
     }
     haptic('light');
+    dismissArenaSearchKeyboard();
     renderArenaMultiList();
     renderArenaTabs();
     syncDurationLock();
@@ -777,11 +1031,7 @@
       b.type = 'button';
       b.className = 'ob-arena-tab ob-arena-tab--arena-' + idx;
       b.setAttribute('aria-pressed', state.activeArenaTab === aid ? 'true' : 'false');
-      var swatch = document.createElement('span');
-      swatch.className = 'ob-arena-tab__swatch';
-      swatch.textContent = arenaInitial(arena);
-      swatch.setAttribute('aria-hidden', 'true');
-      b.appendChild(swatch);
+      b.appendChild(buildArenaBrushSwatch(arena));
       var label = document.createElement('span');
       label.className = 'ob-arena-tab__label';
       label.textContent = arena ? arena.name : ('Площадка #' + aid);
@@ -821,7 +1071,7 @@
     (state.cities || []).forEach(function (c) {
       var o = document.createElement('option');
       o.value = String(c.id);
-      o.textContent = c.name;
+      o.textContent = c.name || '';
       sel.appendChild(o);
     });
     sel.value = state.cityId != null ? String(state.cityId) : '';
@@ -860,15 +1110,139 @@
     });
   }
 
-  function setCity(raw) {
+  function setCityCreateStatus(text, isError) {
+    if (!el.obCityCreateStatus) return;
+    el.obCityCreateStatus.textContent = text || '';
+    el.obCityCreateStatus.hidden = !text;
+    el.obCityCreateStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function closeCityCreate() {
+    if (el.obCityCreateWrap) el.obCityCreateWrap.hidden = true;
+    if (el.obCityCreateName) el.obCityCreateName.value = '';
+    setCityCreateStatus('');
+    if (el.obCityAddBtn) el.obCityAddBtn.hidden = false;
+  }
+
+  function openCityCreate() {
+    closeArenaCreate();
+    if (el.obCityCreateWrap) el.obCityCreateWrap.hidden = false;
+    if (el.obCityAddBtn) el.obCityAddBtn.hidden = true;
+    setCityCreateStatus('');
+    if (el.obCityCreateName) {
+      try { el.obCityCreateName.focus(); } catch (eF) { /* */ }
+    }
+  }
+
+  function normalizeCityNameForMatch(name) {
+    return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  function findCityInListByName(name) {
+    var key = normalizeCityNameForMatch(name);
+    if (!key) return null;
+    for (var i = 0; i < (state.cities || []).length; i++) {
+      var c = state.cities[i];
+      if (normalizeCityNameForMatch(c.name) === key) return c;
+    }
+    return null;
+  }
+
+  function cityPickedFeedback(name) {
+    note('«' + (name || 'Город') + '» выбран', false);
+    if (el.obCity) {
+      el.obCity.classList.add('ob-city-select--picked');
+      window.setTimeout(function () {
+        if (el.obCity) el.obCity.classList.remove('ob-city-select--picked');
+      }, 1600);
+    }
+    if (el.obCityWrap && typeof el.obCityWrap.scrollIntoView === 'function') {
+      try { el.obCityWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (eS) { /* */ }
+    }
+  }
+
+  function afterCreatedCity(payload) {
+    var cid = Number(payload.city_id);
+    var name = payload.name || '';
+    var exists = false;
+    for (var i = 0; i < (state.cities || []).length; i++) {
+      if (Number(state.cities[i].id) === cid) {
+        exists = true;
+        state.cities[i].name = name;
+        state.cities[i].is_active = payload.is_active === true;
+        break;
+      }
+    }
+    if (!exists) {
+      state.cities.push({
+        id: cid,
+        name: name,
+        is_active: payload.is_active === true,
+      });
+    }
+    closeCityCreate();
+    cityPickedFeedback(name);
+    setCity(String(cid), true);
+  }
+
+  function submitCityCreate() {
+    var nm = el.obCityCreateName ? String(el.obCityCreateName.value || '').trim() : '';
+    if (!nm) {
+      setCityCreateStatus('Укажите название города.', true);
+      return;
+    }
+    var dup = findCityInListByName(nm);
+    if (dup) {
+      haptic('light');
+      afterCreatedCity({
+        city_id: dup.id,
+        name: dup.name,
+        is_active: dup.is_active === true,
+        status: dup.is_active === false ? 'existing_inactive' : 'existing_active',
+      });
+      return;
+    }
+    if (el.obCityCreateSubmit) el.obCityCreateSubmit.disabled = true;
+    setCityCreateStatus('Добавляем…', false);
+    fetch(apiUrl('/trainer/onboarding/city'), {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ name: nm }),
+    })
+      .then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) {
+            throw new Error(body && body.detail ? body.detail : 'Не удалось добавить город.');
+          }
+          return body;
+        });
+      })
+      .then(function (body) {
+        haptic('medium');
+        afterCreatedCity(body);
+      })
+      .catch(function (err) {
+        setCityCreateStatus((err && err.message) || 'Не удалось добавить город.', true);
+      })
+      .finally(function () {
+        if (el.obCityCreateSubmit) el.obCityCreateSubmit.disabled = false;
+      });
+  }
+
+  function setCity(raw, force) {
     var next = raw === '' || raw == null ? null : Number(raw);
     if (next != null && isNaN(next)) next = null;
-    if (next === state.cityId) return;
+    if (!force && next === state.cityId) {
+      renderCitySelect();
+      return;
+    }
     state.cityId = next;
     state.arenaRefreshToken++;
     dropArenasOutsideCity();
     closeArenaCreate();
+    closeCityCreate();
     haptic('light');
+    renderCitySelect();
     renderArenaMode();
     renderArenaSingleList();
     renderArenaMultiList();
@@ -922,6 +1296,8 @@
       note('Сначала выберите город.', true);
       return;
     }
+    dismissArenaSearchKeyboard();
+    closeCityCreate();
     state.arenaCreateIdemKey = 'arn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
     if (el.obArenaCreateWrap) el.obArenaCreateWrap.hidden = false;
     if (el.obArenaCreateName) {
@@ -966,6 +1342,9 @@
       hour_end: 23,
       fixed_duration_minutes: null,
       is_confirmed: false,
+      venue_type: (payload && payload.venue_type) || 'ice_rink',
+      venue_chip: (payload && payload.venue_chip) || '🏒',
+      thumb_url: (payload && payload.thumb_url) || null,
     };
     var exists = false;
     for (var i = 0; i < state.arenas.length; i++) {
@@ -1167,16 +1546,11 @@
       return out;
     }
     if (state.hoursExpanded) return HOURS_ALL;
-    /* Часы, которые тренер уже отметил, должны быть видны даже если они вне ходового диапазона —
-       иначе он «потеряет» свою же отметку и решит, что она не сохранилась. */
-    var used = {};
-    Object.keys(state.week).forEach(function (d) {
-      dayHours(d).forEach(function (hh) { used[hh] = true; });
-    });
-    var core = HOURS_ALL.filter(function (hh) {
-      return HOURS_CORE.indexOf(hh) >= 0 || used[hh];
-    });
-    return core.length ? core : HOURS_CORE;
+    var out = [];
+    for (var h = HOURS_COMPACT_FIRST; h <= HOURS_COMPACT_LAST; h++) {
+      if (HOURS_ALL.indexOf(h) >= 0) out.push(h);
+    }
+    return out;
   }
 
   /* ── Аксессоры по клетке: (день, час) → площадка. Единая модель для всех трёх режимов —
@@ -1288,8 +1662,15 @@
       el.obWeekHint.textContent = bits.join('; ') + '. Красьте той площадкой, что выбрана вверху.';
     } else if (state.alreadyDone) {
       el.obWeekHint.textContent = 'Можно поправить, если что-то изменилось.';
+    } else if (
+      state.cityId != null &&
+      (state.arenaMode === 'single' || state.arenaMode === 'multi')
+    ) {
+      el.obWeekHint.textContent =
+        'Сначала выберите площадку выше — часы подстроятся под её график. ' + later;
     } else {
-      el.obWeekHint.textContent = 'Мы отметили типичное. ' + later;
+      el.obWeekHint.textContent =
+        'С 7:00 до 10:00. Остальные часы — по кнопке «Показать больше часов» ниже. ' + later;
     }
   }
 
@@ -1632,12 +2013,14 @@
         state.roleSuggestions = data.specialist_role_suggestions || [];
         /* NULL от сервера = роль ещё не спрашивали. Тогда не подсвечиваем ни один
            чип: подставленный «Тренер» выглядел бы как уже сделанный выбор. */
-        state.specialistRole = data.specialist_role || null;
-        /* Сохранённая роль вне подсказок — своя: показываем её чипом, панель
-           добавления при этом остаётся закрытой. */
-        state.roleIsCustom = !!(
-          state.specialistRole && state.roleSuggestions.indexOf(state.specialistRole) < 0
-        );
+        if (data.specialist_roles && data.specialist_roles.length) {
+          state.selectedRoles = data.specialist_roles.slice();
+        } else if (data.specialist_role) {
+          state.selectedRoles = [data.specialist_role];
+        } else {
+          state.selectedRoles = [];
+        }
+        syncRoleIsCustomFlag();
         state.onlineEnabled = !!data.online_enabled;
         state.venueTypes = data.venue_types || [];
         if (el.obOnlineEnabled) el.obOnlineEnabled.checked = state.onlineEnabled;
@@ -1707,7 +2090,8 @@
       body: JSON.stringify({
         service_ids: state.selectedServices,
         custom_service_names: state.customServiceNames,
-        specialist_role: currentRoleValue(),
+        /* Пустой список не шлём — иначе каждое сохранение сбрасывало бы роли в БД. */
+        specialist_roles: state.selectedRoles.length ? currentRolesPayload() : undefined,
         online_enabled: state.onlineEnabled,
         days: days,
         duration_minutes: state.durationMinutes,
@@ -1923,11 +2307,23 @@
     if (el.obCity) {
       el.obCity.onchange = function () { setCity(el.obCity.value); };
     }
+    if (el.obCityAddBtn) el.obCityAddBtn.onclick = openCityCreate;
+    if (el.obCityCreateSubmit) el.obCityCreateSubmit.onclick = submitCityCreate;
+    if (el.obCityCreateCancel) el.obCityCreateCancel.onclick = closeCityCreate;
+    if (el.obCityCreateName) {
+      el.obCityCreateName.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitCityCreate();
+        }
+      });
+    }
     if (el.obArenaMode) {
       Array.prototype.forEach.call(el.obArenaMode.querySelectorAll('[data-arena-mode]'), function (btn) {
         btn.onclick = function () { setArenaMode(btn.getAttribute('data-arena-mode')); };
       });
     }
+    bindArenaSearchMobile();
     if (el.obArenaSingleSearch) el.obArenaSingleSearch.oninput = renderArenaSingleList;
     if (el.obArenaMultiSearch) el.obArenaMultiSearch.oninput = renderArenaMultiList;
     if (el.obArenaCreateSubmit) {

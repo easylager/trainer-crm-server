@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from src.api.deps import get_session
 from src.application.ice_city_day import city_slug, ice_city_day_page_url, resolve_city_by_ref
-from src.application.place_card_image import render_place_card
+from src.application.place_card_image import render_place_card, share_display_path
 from src.application.catalog_consumer_events import record_public_page_view
 from src.application.place_links import (
     place_image_url,
@@ -191,8 +191,11 @@ async def _image(
     page = place_page_url(
         base_url=_base(), city_name=str(card.get("city_name") or ""), slug=str(card.get("slug") or "")
     )
-    display_url = page.split("://", 1)[-1]
-    png = await run_in_threadpool(render_place_card, view, invite=_flag(i), story=story, display_url=display_url)
+    kwargs = {"invite": _flag(i), "story": story}
+    if story:
+        kwargs["share_url"] = page
+        kwargs["display_path"] = share_display_path(page)
+    png = await run_in_threadpool(render_place_card, view, **kwargs)
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 
 
@@ -355,7 +358,8 @@ async def _selection_image(session: AsyncSession, city_ref: str, t: str | None, 
     venue, when = clean_venue(t), clean_when(w)
     view = await load_selection_view(session, city=city, venue=venue, when=when)
     page = _base() + selection_path(city_name=str(city["name"]), venue=venue, when=when)
-    view["display_url"] = page.split("://", 1)[-1]
+    view["share_url"] = page
+    view["display_path"] = share_display_path(page)
     png = await run_in_threadpool(render_selection_card, view, story=story)
     return Response(content=png, media_type="image/png", headers=_IMAGE_CACHE)
 

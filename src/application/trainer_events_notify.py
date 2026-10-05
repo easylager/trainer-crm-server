@@ -91,7 +91,10 @@ async def notify_admins_trainer_intro_completed(
     phone = (profile.get("phone") or "").strip()
     phone_str = html.escape(phone) if phone else "не указан"
     city_str = html.escape((city_name or "").strip()) or "не указан"
-    role = specialist_role_display(profile.get("specialist_role"))
+    role = specialist_role_display(
+        profile.get("specialist_role"),
+        profile.get("specialist_roles"),
+    )
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
 
     text = (

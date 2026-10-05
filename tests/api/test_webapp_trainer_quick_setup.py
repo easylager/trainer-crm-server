@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -330,6 +330,88 @@ async def test_empty_week_is_saved_not_rejected(app_use_test_db, db_session) -> 
 
 
 @pytest.mark.asyncio
+async def test_multiple_specialist_roles_saved(app_use_test_db, db_session) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "service_ids": [service_id],
+                    "days": [],
+                    "duration_minutes": 60,
+                    "specialist_roles": ["Тренер", "ОФП-тренер"],
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT specialist_role, specialist_roles FROM trainer_profiles "
+                "WHERE trainer_id = :t"
+            ),
+            {"t": trainer_id},
+        )
+    ).fetchone()
+    assert row[0] == "Тренер · ОФП-тренер"
+    assert list(row[1]) == ["Тренер", "ОФП-тренер"]
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            got = await client.get(
+                QUICK_SETUP_URL,
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert got.status_code == 200
+    assert got.json()["specialist_roles"] == ["Тренер", "ОФП-тренер"]
+
+
+@pytest.mark.asyncio
+async def test_custom_specialist_role_saved_and_notifies_admin(
+    app_use_test_db, db_session
+) -> None:
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _bare_linked_trainer(db_session, tg)
+    service_id = await _any_service_id(db_session)
+
+    with patch_trainer_webapp_init(tg):
+        with patch(
+            "src.application.admin_custom_specialist_role_notify.notify_admins_new_custom_specialist_role",
+            new_callable=AsyncMock,
+        ) as notify:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    QUICK_SETUP_URL,
+                    headers={"X-Telegram-Init-Data": "mock"},
+                    json={
+                        "service_ids": [service_id],
+                        "days": [],
+                        "duration_minutes": 60,
+                        "specialist_roles": ["Инструктор по плаванию"],
+                    },
+                )
+    assert resp.status_code == 200, resp.text
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT specialist_role, specialist_roles FROM trainer_profiles "
+                "WHERE trainer_id = :t"
+            ),
+            {"t": trainer_id},
+        )
+    ).fetchone()
+    assert row[0] == "Инструктор по плаванию"
+    assert list(row[1]) == ["Инструктор по плаванию"]
+    notify.assert_called_once()
+    assert notify.call_args.kwargs["role"] == "Инструктор по плаванию"
+
+
+@pytest.mark.asyncio
 async def test_deactivated_trainer_is_refused(app_use_test_db, db_session) -> None:
     tg = _fresh_trainer_telegram_id()
     r = await db_session.execute(
@@ -504,6 +586,9 @@ async def test_get_lists_arenas_with_their_real_grid(app_use_test_db, db_session
     assert zamok_row["hour_end"] == 22
     assert zamok_row["city_id"] == city_id
     assert "address" in zamok_row
+    assert "thumb_url" in zamok_row
+    assert zamok_row["thumb_url"] is None or isinstance(zamok_row["thumb_url"], str)
+    assert "hero" not in zamok_row
     assert any(int(c["id"]) == city_id for c in data["cities"])
     assert data["city_id"] is None
     assert data["linked_arena_ids"] == []
@@ -772,3 +857,32 @@ def test_onboarding_city_and_inline_create_contract() -> None:
     assert "goAddMissingArena" not in js
     assert "arena-setup" in js
     assert "city_id: state.cityId" in js
+    assert "ob-arena-combo" in html
+    assert "arenasForPicker" in js
+    assert "ARENA_BROWSE_CAP" in js
+    assert "Начните вводить название или адрес" not in js
+
+
+def test_onboarding_week_grid_compact_split_contract() -> None:
+    """TASK-171: compact core hours + «Показать больше часов»; no mid-grid gap strip."""
+    webapp = Path(__file__).resolve().parents[2] / "static" / "webapp"
+    html = (webapp / "trainer-onboarding.html").read_text(encoding="utf-8")
+    js = (webapp / "trainer-onboarding-main.js").read_text(encoding="utf-8")
+    assert "ob-grid-gap" not in html
+    assert "gridHourSegments" not in js
+    assert "Днём обычно не отмечаем" not in js
+    assert "HOURS_COMPACT_FIRST" in js
+    assert "HOURS_COMPACT_LAST = 10" in js
+    assert "[7, 8, 9, 17" not in js
+    assert 'id="obGridMore"' in html
+    assert "Показать больше часов" in html
+    assert "MAX_SPECIALIST_ROLES = 5" in js
+    assert "trySelectRole" in js
+    assert "ob-arena-row" in html
+    assert "buildArenaThumbEl" in js
+    assert "buildArenaBrushSwatch" in js
+    assert "findCityInListByName" in js
+    assert "#obCityCreateName" in html
+    assert "ob-city-select--picked" in html
+    assert "arenaInitial" not in js
+    assert "TASK-172" in html

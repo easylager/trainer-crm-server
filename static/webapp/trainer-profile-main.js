@@ -3701,6 +3701,16 @@
         }
       })();
 
+      function specialistRolesLabel(profile) {
+        var p = profile || {};
+        var roles = p.specialist_roles;
+        if (roles && roles.length) {
+          return roles.map(function (r) { return String(r || '').trim(); }).filter(Boolean).join(' · ');
+        }
+        var single = p.specialist_role != null ? String(p.specialist_role).trim() : '';
+        return single || '';
+      }
+
       function fillFormFromTrainer() {
         var t = state.trainer;
         if (!t) return Promise.resolve();
@@ -3732,6 +3742,13 @@
         setv('contacts', p.contacts);
         setv('description', p.description);
         updateDescriptionMeta();
+        var rolesEl = document.getElementById('specialistRolesDisplay');
+        var rolesField = document.getElementById('specialistRolesField');
+        if (rolesEl) {
+          var rolesText = specialistRolesLabel(p);
+          rolesEl.textContent = rolesText || 'Не указано — задаётся при первом запуске';
+        }
+        if (rolesField) rolesField.hidden = false;
         setv('experience_years', p.experience_years);
         setv(
           'session_duration_minutes',

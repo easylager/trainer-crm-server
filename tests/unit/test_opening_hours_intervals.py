@@ -12,26 +12,23 @@ from src.application.arena_public_use_cases import _place_line
 from src.application.place_page import open_now_label
 
 LYZHEROLLER_HOURS = {
-    "weekly": {
-        "mon": [["11:00", "15:00"], ["19:00", "22:00"]],
-        "sat": [["11:00", "22:00"]],
-        "sun": [["08:00", "22:00"]],
-    },
+    "daily": {"open": "09:00", "close": "23:00"},
     "rental_close": "21:00",
+    "track_close": "23:00",
     "free_entry": True,
 }
 
 
-def test_intervals_for_weekday_split_day() -> None:
-    assert intervals_for_weekday(LYZHEROLLER_HOURS, 0) == [("11:00", "15:00"), ("19:00", "22:00")]
-    assert format_intervals_ru(intervals_for_weekday(LYZHEROLLER_HOURS, 0)) == "11:00–15:00 и 19:00–22:00"
+def test_intervals_for_weekday_daily_uniform() -> None:
+    assert intervals_for_weekday(LYZHEROLLER_HOURS, 0) == [("09:00", "23:00")]
+    assert format_intervals_ru(intervals_for_weekday(LYZHEROLLER_HOURS, 0)) == "09:00–23:00"
 
 
-def test_open_now_between_split_windows() -> None:
+def test_open_now_during_evening_track_window() -> None:
     card = {"opening_hours": LYZHEROLLER_HOURS, "timezone": "Europe/Minsk"}
-    # Monday 2026-10-05 16:00 Minsk — between school block and evening window
-    now = datetime(2026, 10, 5, 13, 0, tzinfo=ZoneInfo("UTC"))  # 16:00 Minsk
-    assert open_now_label(card, now=now) == "Откроется в 19:00"
+    # Monday 2026-10-05 22:00 Minsk — after rental close, track still open until 23:00
+    now = datetime(2026, 10, 5, 19, 0, tzinfo=ZoneInfo("UTC"))  # 22:00 Minsk
+    assert open_now_label(card, now=now) == "Открыто до 23:00"
 
 
 def test_place_line_mass_access() -> None:

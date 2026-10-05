@@ -673,7 +673,8 @@
           var timeCls = 'arena-slot-time';
           if (t.picked) timeCls += ' arena-time--picked';
           else if (t.next) timeCls += ' arena-time--next';
-          var tag = t.picked ? 'В приглашении' : t.next ? 'Ближайший' : t.capacity;
+          /* Вместимость важнее «Ближайший»; выбор для приглашения — рамка, цвет и CTA сверху. */
+          var tag = t.capacity || (t.next ? 'Ближайший' : '');
           var body = '<b>' + esc(t.time) + '</b>' + (tag ? '<small>' + esc(tag) + '</small>' : '');
           var buy =
             t.ticketHref

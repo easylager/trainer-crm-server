@@ -318,7 +318,7 @@
               <button type="button" class="slot-buy" data-buy title="Билеты на сайте">↗</button>
             </div>
             <div class="slot is-picked" data-id="s2">
-              <button type="button" class="slot-time" data-pick><b>18:15</b><small>в приглашении</small></button>
+              <button type="button" class="slot-time" data-pick><b>18:15</b><small>110 мест</small></button>
               <button type="button" class="slot-buy" data-buy title="Билеты на сайте">↗</button>
             </div>
             <div class="slot" data-id="s3">
@@ -358,7 +358,7 @@
               <button type="button" class="slot-time is-nearest" data-pick><b>16:00</b><small>ближайший</small></button>
             </div>
             <div class="slot no-buy is-picked" data-id="b2">
-              <button type="button" class="slot-time" data-pick><b>18:15</b><small>в приглашении</small></button>
+              <button type="button" class="slot-time" data-pick><b>18:15</b><small>110 мест</small></button>
             </div>
           </div>
           <p class="density-note">Без ↗ плитка проще — те же правила выбора, меньше элементов.</p>
@@ -440,15 +440,8 @@
       btn.addEventListener('click', function () {
         var slot = btn.closest('.slot');
         if (!slot) return;
-        root.querySelectorAll('.slot').forEach(function (s) {
-          s.classList.remove('is-picked');
-          var sm = s.querySelector('.slot-time small');
-          if (sm && !s.querySelector('.is-nearest')) sm.textContent = '';
-          if (sm && s.querySelector('.is-nearest') && !s.classList.contains('is-picked')) sm.textContent = 'ближайший';
-        });
+        root.querySelectorAll('.slot').forEach(function (s) { s.classList.remove('is-picked'); });
         slot.classList.add('is-picked');
-        var small = btn.querySelector('small');
-        if (small) small.textContent = 'в приглашении';
         currentPick = slot.getAttribute('data-id');
         var pri = root.closest('.screen').querySelector('.btn-pri');
         if (pri && pickedLabel[currentPick]) pri.textContent = 'Позвать на ' + pickedLabel[currentPick];

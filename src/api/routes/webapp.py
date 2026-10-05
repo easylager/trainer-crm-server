@@ -8577,6 +8577,17 @@ def _serialize_trainer_request(req: dict) -> dict:
     }
 
 
+def _quick_setup_specialist_roles(profile: dict[str, Any] | None) -> list[str]:
+    from src.shared.specialist_roles import specialist_roles_from_storage
+
+    if not profile:
+        return []
+    return specialist_roles_from_storage(
+        profile.get("specialist_roles"),
+        profile.get("specialist_role"),
+    )
+
+
 @router.get("/trainer/onboarding/quick-setup")
 async def get_trainer_onboarding_quick_setup(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
@@ -8671,9 +8682,20 @@ async def get_trainer_onboarding_quick_setup(
     # Candidate arenas for the picker, each with city_id + grid so the Mini App can scope by
     # the city the trainer just picked (DEC-009) and still lock hour labels / duration.
     r_cities = await session.execute(
-        text("SELECT id, name FROM cities WHERE is_active = true ORDER BY sort_order, name, id")
+        text(
+            """
+            SELECT id, name, is_active
+            FROM cities
+            WHERE is_active = true OR created_by_trainer_id = :tid
+            ORDER BY sort_order, name, id
+            """
+        ),
+        {"tid": trainer_id},
     )
-    cities = [{"id": int(row[0]), "name": row[1]} for row in r_cities.fetchall()]
+    cities = [
+        {"id": int(row[0]), "name": row[1], "is_active": bool(row[2])}
+        for row in r_cities.fetchall()
+    ]
 
     r_arenas = await session.execute(
         text(
@@ -8686,14 +8708,16 @@ async def get_trainer_onboarding_quick_setup(
                    p.slot_duration_minutes,
                    a.is_confirmed, a.venue_type
             FROM arenas a
-            JOIN cities c ON c.id = a.city_id AND c.is_active = true
+            JOIN cities c ON c.id = a.city_id
+              AND (c.is_active = true OR c.created_by_trainer_id = :tid)
             LEFT JOIN arena_schedule_presets p ON p.arena_id = a.id
             WHERE a.is_active = true
               -- Магазин — не место работы тренера (TASK-146).
               AND a.venue_type <> 'shop'
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
-        )
+        ),
+        {"tid": trainer_id},
     )
     arenas = [
         {
@@ -8713,6 +8737,13 @@ async def get_trainer_onboarding_quick_setup(
         }
         for row in r_arenas.fetchall()
     ]
+    from src.application.arena_media import attach_arena_media_payloads, public_arena_thumb_url
+
+    await attach_arena_media_payloads(session, arenas)
+    for arena_row in arenas:
+        arena_row["thumb_url"] = public_arena_thumb_url(arena_row.get("hero"))
+        arena_row.pop("hero", None)
+        arena_row.pop("gallery", None)
 
     r_linked = await session.execute(
         text("SELECT arena_id FROM trainer_arenas WHERE trainer_id = :tid"),
@@ -8765,10 +8796,37 @@ async def get_trainer_onboarding_quick_setup(
         # Кем себя называет специалист. NULL (ещё не спрашивали) отдаём как есть,
         # чтобы экран мог не подсвечивать ни один чип вместо ложного «Тренер».
         "specialist_role": profile.get("specialist_role"),
+        "specialist_roles": _quick_setup_specialist_roles(profile),
         "specialist_role_suggestions": list(SUGGESTED_ROLES),
         "online_enabled": bool(profile.get("online_enabled")),
         "venue_types": venue_type_options(),
     }
+
+
+class TrainerOnboardingCityBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+
+
+@router.post("/trainer/onboarding/city")
+async def post_trainer_onboarding_city(
+    body: TrainerOnboardingCityBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Предложить город, которого нет в каталоге (TASK-170). ``is_active=false`` до модерации."""
+    from src.application.trainer_city_create_use_cases import create_trainer_city
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    await ensure_trainer_welcome_trial(session, trainer_id)
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    try:
+        result = await create_trainer_city(session, trainer_id, name=body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result
 
 
 class TrainerQuickSetupBody(BaseModel):
@@ -8780,7 +8838,11 @@ class TrainerQuickSetupBody(BaseModel):
     city_id: int | None = Field(default=None, ge=1)
     specialist_role: str | None = Field(
         default=None,
-        description="Кто этот специалист своими словами. Пусто — не меняем сохранённое.",
+        description="Legacy: одна роль. Используйте specialist_roles.",
+    )
+    specialist_roles: list[str] | None = Field(
+        default=None,
+        description="Кем специалист себя называет (несколько чипов). Пустой список — сброс.",
     )
     online_enabled: bool | None = Field(
         default=None, description="Работает ли онлайн. Пусто — не меняем сохранённое."
@@ -8819,7 +8881,11 @@ async def post_trainer_onboarding_quick_setup(
     from src.infrastructure.repositories.trainer_repository import TrainerRepository
     from src.shared.specialist_roles import (
         InvalidSpecialistRoleError,
+        SUGGESTED_ROLES,
+        TooManySpecialistRolesError,
         normalize_specialist_role,
+        normalize_specialist_roles,
+        specialist_roles_join,
     )
 
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
@@ -8845,21 +8911,45 @@ async def post_trainer_onboarding_quick_setup(
     service_ids.extend(int(cs["service_id"]) for cs in custom_services)
 
     try:
-        if body.specialist_role is not None or body.online_enabled is not None:
-            role = (
-                normalize_specialist_role(body.specialist_role)
-                if body.specialist_role is not None
-                else None
-            )
+        if (
+            body.specialist_roles is not None
+            or body.specialist_role is not None
+            or body.online_enabled is not None
+        ):
+            roles: list[str] | None = None
+            role_display: str | None = None
+            if body.specialist_roles is not None:
+                roles = normalize_specialist_roles(body.specialist_roles)
+                role_display = specialist_roles_join(roles)
+            elif body.specialist_role is not None:
+                single = normalize_specialist_role(body.specialist_role)
+                roles = [single] if single else []
+                role_display = specialist_roles_join(roles)
             repo = TrainerRepository(session)
             await repo.ensure_trainer_profile_row(trainer_id)
             await repo.update_profile(
                 trainer_id,
-                specialist_role=role,
+                specialist_roles=roles if roles is not None else None,
+                specialist_role=role_display,
                 online_enabled=body.online_enabled,
             )
             await session.commit()
-    except InvalidSpecialistRoleError as e:
+            if roles:
+                from src.application.admin_custom_specialist_role_notify import (
+                    notify_admins_new_custom_specialist_role,
+                )
+
+                suggested_cf = {r.casefold() for r in SUGGESTED_ROLES}
+                for role_label in roles:
+                    if role_label.casefold() in suggested_cf:
+                        continue
+                    try:
+                        await notify_admins_new_custom_specialist_role(
+                            role=role_label, trainer_id=int(trainer_id)
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+    except (InvalidSpecialistRoleError, TooManySpecialistRolesError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
@@ -8934,6 +9024,52 @@ async def webapp_trainer_onboarding_checklist(
 
     data["active_hint_snoozes"] = list((await get_active_snoozes(session, trainer_id)).keys())
     return data
+
+
+class TrainerHubFirstHoursBody(BaseModel):
+    preset: str = Field(..., min_length=1, max_length=64)
+
+
+@router.post("/trainer/hub/first-hours")
+async def post_trainer_hub_first_hours(
+    body: TrainerHubFirstHoursBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Первые часы одним тапом с главной — экран дня ноль (TASK-173).
+
+    Отдельная ручка, а не повторный вызов quick-setup: онбординг переписывает услуги, роли
+    и город из своего состояния, а здесь тренер отвечает только про время — всё остальное
+    у него уже сохранено и трогать его нечем.
+
+    Как и quick-setup, не одна транзакция: шаблон и недели пишутся заменой по дню и по
+    неделе, поэтому повтор того же запроса после 400 безопасен и ничего не задваивает.
+    """
+    from src.application.trainer_hub_first_hours import (
+        apply_trainer_first_hours_preset,
+    )
+    from src.application.trainer_quick_setup_use_cases import QuickSetupError
+
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+
+    try:
+        result = await apply_trainer_first_hours_preset(session, trainer_id, body.preset)
+    except QuickSetupError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {
+        "ok": True,
+        "open_slots_ahead": result.open_slots_ahead,
+        "days_with_slots": result.days_with_slots,
+        "horizon_date": result.horizon_date.isoformat(),
+    }
 
 
 class TrainerNextStepDismissBody(BaseModel):

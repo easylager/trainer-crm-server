@@ -354,11 +354,9 @@ async def _apply_profile_settings(
     slots. That is exactly the bug this split avoids.
     """
     if city_id is not None:
-        r = await session.execute(
-            text("SELECT id FROM cities WHERE id = :cid AND is_active = true"),
-            {"cid": int(city_id)},
-        )
-        if r.scalar() is None:
+        from src.application.trainer_city_create_use_cases import trainer_may_use_city_id
+
+        if not await trainer_may_use_city_id(session, trainer_id, int(city_id)):
             raise QuickSetupError("Выберите город из списка.")
     await session.execute(
         text(

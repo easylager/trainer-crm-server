@@ -667,6 +667,7 @@
       function shouldShowHubDayCanvas() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
+        if (shouldShowHubDayZero()) return false;
         if (hubGuidanceHintActive()) return false;
         if (hubLastUpcomingListCount > 0) return false;
         if (hubHasUpcomingSessions()) return false;
@@ -990,7 +991,12 @@
         var wrap = document.getElementById('hubStatusMarkers');
         if (!wrap) return;
 
-        if (!getInitData() || hubOnboardingStripVisible() || shouldShowHubDayCanvas()) {
+        if (
+          !getInitData() ||
+          hubOnboardingStripVisible() ||
+          shouldShowHubDayZero() ||
+          shouldShowHubDayCanvas()
+        ) {
           wrap.setAttribute('hidden', '');
           wrap.innerHTML = '';
           return;
@@ -1203,10 +1209,199 @@
         }
       }
 
+      /* ─── День ноль: онбординг пройден, ни одного слота не создано (TASK-173) ───
+       *
+       * Пока слотов нет, ссылка тренера приводит ученика на «Нет свободных слотов на эту
+       * неделю» — то есть единственное действие, которое хаб ему предлагал, било по нему же.
+       * Поэтому в этом состоянии экран задаёт один вопрос и принимает ответ на месте.
+       *
+       * Состояние намеренно узкое: только отсутствие расписания. Тренер, который слоты уже
+       * заводил, сюда не попадает ни при каких обстоятельствах — даже если сейчас все его
+       * окна в прошлом.
+       */
+      var HUB_DAY_ZERO_PRESETS = [
+        { preset: 'weekday_evening', label: 'Будни по вечерам', hint: 'пн, ср, пт · 18:00–21:00' },
+        { preset: 'weekend_morning', label: 'Выходные с утра', hint: 'сб, вс · 10:00–14:00' },
+        { preset: '', label: 'Своё время', hint: 'Откроется расписание' },
+      ];
+      var hubDayZeroResult = null;
+      var hubDayZeroBusy = false;
+      var hubDayZeroWired = false;
+
+      function shouldShowHubDayZero() {
+        if (!getInitData()) return false;
+        /* Ответ уже дан в этом сеансе — показываем его, не перепроверяя чеклист,
+           который к этому моменту ещё не перечитан. */
+        if (hubDayZeroResult) return true;
+        var d = hubOnboardingData;
+        if (!d) return false;
+        if (!d.onboarding_completed) return false;
+        if (d.schedule_unlocked === false) return false;
+        if (d.studio_access_mode === 'admin_only') return false;
+        /* Ни шаблона, ни будущих окон — и ни одной настоящей записи за всё время.
+           Последнее отсекает работающего тренера, который просто вычистил расписание. */
+        if (parseNonNegativeInt(d.weekly_template_count) > 0) return false;
+        if (d.has_future_slots || d.has_future_available_slots) return false;
+        if (d.has_real_booking || d.has_any_booking) return false;
+        var snap = trainerAccessSnapshot;
+        if (snap && window.TrainerMiniAppGate && !window.TrainerMiniAppGate.isActive(snap)) return false;
+        return true;
+      }
+
+      function hubDayZeroPresetHtml(item, index) {
+        return (
+          '<button type="button" class="hub-day-zero__preset' +
+          (item.preset ? '' : ' hub-day-zero__preset--own') +
+          '" data-hub-day-zero-preset="' +
+          escapeHtml(item.preset) +
+          '" data-hub-day-zero-index="' +
+          index +
+          '">' +
+          '<span class="hub-day-zero__preset-copy">' +
+          '<span class="hub-day-zero__preset-label">' + escapeHtml(item.label) + '</span>' +
+          '<span class="hub-day-zero__preset-hint">' + escapeHtml(item.hint) + '</span>' +
+          '</span>' +
+          '<svg class="hub-day-zero__preset-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>' +
+          '</button>'
+        );
+      }
+
+      function hubDayZeroHorizonRu(isoDate) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || ''));
+        if (!m) return '';
+        var months = [
+          'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+          'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+        ];
+        var month = months[Number(m[2]) - 1];
+        if (!month) return '';
+        return Number(m[3]) + ' ' + month;
+      }
+
+      function syncHubDayZero() {
+        var el = document.getElementById('hubDayZero');
+        if (!el) return;
+        var show = shouldShowHubDayZero();
+        document.body.classList.toggle('hub-day-zero-active', show);
+        if (!show) {
+          el.setAttribute('hidden', '');
+          return;
+        }
+        el.removeAttribute('hidden');
+
+        var ask = document.getElementById('hubDayZeroAsk');
+        var done = document.getElementById('hubDayZeroDone');
+        if (hubDayZeroResult) {
+          if (ask) ask.setAttribute('hidden', '');
+          if (done) done.removeAttribute('hidden');
+          var titleEl = document.getElementById('hubDayZeroDoneTitle');
+          var subEl = document.getElementById('hubDayZeroDoneSub');
+          var open = parseNonNegativeInt(hubDayZeroResult.open_slots_ahead);
+          var horizon = hubDayZeroHorizonRu(hubDayZeroResult.horizon_date);
+          if (titleEl) {
+            titleEl.textContent =
+              open > 0
+                ? open + ' ' + pluralRu(open, 'окно', 'окна', 'окон') + (horizon ? ' до ' + horizon : '')
+                : 'Расписание сохранено';
+          }
+          if (subEl) {
+            subEl.textContent =
+              open > 0
+                ? hubDayZeroResult.hint || 'Теперь ученику есть что выбрать.'
+                : 'Ближайшие свободные окна появятся со следующей недели.';
+          }
+        } else {
+          if (done) done.setAttribute('hidden', '');
+          if (ask) ask.removeAttribute('hidden');
+          var host = document.getElementById('hubDayZeroPresets');
+          if (host && !host.dataset.rendered) {
+            host.dataset.rendered = '1';
+            host.innerHTML = HUB_DAY_ZERO_PRESETS.map(hubDayZeroPresetHtml).join('');
+          }
+        }
+        wireHubDayZero();
+      }
+
+      function setHubDayZeroBusy(busy) {
+        hubDayZeroBusy = !!busy;
+        var host = document.getElementById('hubDayZeroPresets');
+        if (!host) return;
+        host.querySelectorAll('[data-hub-day-zero-preset]').forEach(function(btn) {
+          if (busy) btn.setAttribute('disabled', 'disabled');
+          else btn.removeAttribute('disabled');
+        });
+      }
+
+      function applyHubDayZeroPreset(presetKey, index) {
+        if (hubDayZeroBusy) return;
+        if (!presetKey) {
+          /* «Своё время» — не ответ в один тап, а переход в расписание. */
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('schedule-editor');
+          });
+          return;
+        }
+        setHubDayZeroBusy(true);
+        postJsonTrainer('/trainer/hub/first-hours', { preset: presetKey })
+          .then(function(data) {
+            var item = HUB_DAY_ZERO_PRESETS[index] || null;
+            hubDayZeroResult = {
+              open_slots_ahead: data && data.open_slots_ahead,
+              horizon_date: data && data.horizon_date,
+              hint: item ? item.hint : '',
+            };
+            setHubDayZeroBusy(false);
+            syncHubDayZero();
+            /* Чеклист устарел в ту же секунду: слоты уже есть, и остальной хаб должен
+               узнать об этом сам, а не на следующем открытии. */
+            loadOnboardingChecklist();
+          })
+          .catch(function(err) {
+            /* Часы пресета не легли на площадку (закрыта в это время, своя сетка,
+               фиксированная длительность) — это не сбой тренера, поэтому ведём его туда,
+               где он отметит время сам, вместо того чтобы повторять ту же кнопку. */
+            setHubDayZeroBusy(false);
+            var msg = (err && err.message) || '';
+            hubToast(msg || 'Не получилось открыть эти часы. Отметьте время в расписании.');
+            ensureTrainerSectionsAccess(function() {
+              navigateTo('schedule-editor');
+            });
+          });
+      }
+
+      function wireHubDayZero() {
+        if (hubDayZeroWired) return;
+        var el = document.getElementById('hubDayZero');
+        if (!el) return;
+        hubDayZeroWired = true;
+        el.addEventListener('click', function(ev) {
+          var preset = ev.target.closest('[data-hub-day-zero-preset]');
+          if (preset && el.contains(preset)) {
+            applyHubDayZeroPreset(
+              preset.getAttribute('data-hub-day-zero-preset'),
+              Number(preset.getAttribute('data-hub-day-zero-index'))
+            );
+            return;
+          }
+          var share = ev.target.closest('#hubDayZeroShareBtn');
+          if (share) {
+            runHubHintAction('__share_link__');
+            return;
+          }
+          var edit = ev.target.closest('#hubDayZeroEditBtn');
+          if (edit) {
+            ensureTrainerSectionsAccess(function() {
+              navigateTo('schedule-editor');
+            });
+          }
+        });
+      }
+
       /** Intentional empty-day surface: factual headline, one focal action, quiet secondary row. */
       function syncHubDayCanvas() {
         syncHubWeekPulse();
         syncHubGhostBooking();
+        syncHubDayZero();
         var canvas = document.getElementById('hubDayCanvas');
         if (!canvas) return;
         var show = shouldShowHubDayCanvas();
@@ -2574,6 +2769,14 @@
         if (!getInitData()) {
           host.setAttribute('hidden', '');
           host.innerHTML = '';
+          syncHubInboxShellBadges();
+          return;
+        }
+
+        if (shouldShowHubDayZero()) {
+          host.setAttribute('hidden', '');
+          host.innerHTML = '';
+          hubActiveRhythmHintIds = [];
           syncHubInboxShellBadges();
           return;
         }
@@ -8138,6 +8341,7 @@
       function shouldShowHubBookFab() {
         if (!getInitData()) return false;
         if (hubOnboardingStripVisible()) return false;
+        if (shouldShowHubDayZero()) return false;
         var d = hubOnboardingData;
         if (d && !d.schedule_unlocked) return false;
         if (

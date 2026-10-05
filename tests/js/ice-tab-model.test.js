@@ -244,6 +244,21 @@ describe('shop catalog filters', () => {
     assert.equal(loaded.shopOpenNow, true);
     assert.equal(loaded.shopWhen, 'evening');
   });
+
+  it('persists ice when filter in session state', () => {
+    const { saveIceState, loadIceState } = loadModel();
+    const mem = {};
+    const storage = {
+      getItem: (k) => (k in mem ? mem[k] : null),
+      setItem: (k, v) => {
+        mem[k] = String(v);
+      },
+    };
+    saveIceState({ intent: 'skate', when: 'tomorrow', whenDay: '' }, storage);
+    const loaded = loadIceState(storage);
+    assert.equal(loaded.when, 'tomorrow');
+    assert.equal(loaded.whenDay, '');
+  });
 });
 
 describe('«Ближе» без геолокации', () => {
@@ -1198,6 +1213,16 @@ describe('TASK-146 (Q-006): окно времени', () => {
     const { whenBootFromSearch } = loadModel();
     assert.deepEqual(whenBootFromSearch('?day=2026-10-08'), { when: 'day', whenDay: '2026-10-08' });
     assert.deepEqual(whenBootFromSearch('?when=weekend'), { when: 'weekend', whenDay: '' });
+  });
+
+  it('hydrateWhenFromSaved — только лёд, валидные ключи', () => {
+    const { hydrateWhenFromSaved } = loadModel();
+    assert.deepEqual(hydrateWhenFromSaved({ when: 'tomorrow' }, 'skate', []), {
+      when: 'tomorrow',
+      whenDay: '',
+    });
+    assert.equal(hydrateWhenFromSaved({ when: 'tomorrow' }, 'coach', []), null);
+    assert.equal(hydrateWhenFromSaved({ when: 'nope' }, 'skate', []), null);
   });
 });
 

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Честный «Мой город» — хаб и Поиск (прототип)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap">
+<style>
+  /*
+    2026-10-04 — продуктовый план: один city_id, без минского фолбэка «как свой город».
+    Экраны:
+      0 — Сейчас (боль): гость из Кобрина, хаб врёт про Минск
+      1 — Хаб: город не выбран → «Откуда вы?»
+      2 — Хаб: город Кобрин подтверждён
+      3 — Поиск: тот же onboarding + честная шапка
+      4 — Режим «По всей Беларуси» (без подмены города)
+    ← → между экранами.
+  */
+  :root {
+    --glide-brand: #45b9bb;
+    --glide-on-fill: #04262a;
+    --glide-paper: #0b0c0e;
+    --glide-surface: #141618;
+    --glide-card: #1a1d20;
+    --glide-line: #262a2e;
+    --glide-text: #e6e9ea;
+    --glide-hint: #868d93;
+    --glide-ink-teal: #57d0d2;
+    --glide-brand-wash: rgba(69, 185, 187, 0.13);
+    --warn: #f0a24b;
+    --bad-bg: rgba(240, 162, 75, 0.08);
+    --app-cta-fill: var(--glide-brand);
+    --app-cta-text: var(--glide-on-fill);
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --font: 'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: #050607;
+    color: var(--glide-text);
+    min-height: 100vh;
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 28px 16px 96px;
+    flex-wrap: wrap;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--glide-ink-teal); outline-offset: 2px; }
+
+  .thesis { width: min(440px, 100%); padding-top: 4px; }
+  .thesis h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  .thesis h1 em { font-style: normal; color: var(--glide-ink-teal); }
+  .lede { margin: 10px 0 0; font-size: 14px; line-height: 1.55; color: var(--glide-hint); }
+  .compare {
+    margin-top: 18px;
+    display: grid;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .compare .box {
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--glide-line);
+    background: var(--glide-card);
+  }
+  .compare .box.good { border-color: rgba(69, 185, 187, 0.45); }
+  .compare .box.bad { border-color: rgba(240, 162, 75, 0.35); }
+  .compare b { display: block; margin-bottom: 6px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--glide-hint); }
+  .rule-list { margin: 14px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--glide-hint); }
+  .rule-list li { margin-bottom: 6px; }
+  .rule-list strong { color: var(--glide-text); font-weight: 600; }
+  .navhint { margin-top: 16px; font-size: 12px; color: var(--glide-hint); }
+  .navhint kbd {
+    display: inline-block; padding: 2px 7px; border-radius: 6px;
+    border: 1px solid var(--glide-line); background: var(--glide-surface); font-size: 11px;
+  }
+
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .phone-label { font-size: 12px; font-weight: 600; color: var(--glide-hint); text-align: center; max-width: 390px; line-height: 1.4; }
+  .phone-label b { color: var(--glide-text); }
+  .phone {
+    width: 390px; max-width: 100%; height: 844px; position: relative; overflow: hidden;
+    border-radius: 44px; background: var(--glide-paper);
+    box-shadow: 0 0 0 1px #1d2124, 0 40px 80px -30px rgba(0, 0, 0, 0.9);
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 30px; background: #000; border-radius: 16px; z-index: 20; pointer-events: none;
+  }
+  .screen {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    padding-top: 44px; padding-bottom: 72px; overflow: hidden;
+  }
+  .screen.is-on { display: flex; }
+  .scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+
+  .tabbar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
+    display: grid; grid-template-columns: repeat(4, 1fr); align-items: center;
+    border-top: 1px solid var(--glide-line); background: var(--glide-card);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    font-size: 10px; color: var(--glide-hint);
+  }
+  .tabbar span { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tabbar .on { color: var(--glide-ink-teal); font-weight: 600; }
+
+  .hub-hero { padding: 8px 0 12px; }
+  .hub-greet { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .hub-greet-sub { margin-top: 4px; font-size: 13px; color: var(--glide-hint); min-height: 18px; }
+  .hub-greet-sub.warn { color: var(--warn); }
+
+  .hub-search {
+    width: 100%; margin-top: 12px; padding: 12px 14px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    text-align: left; font-size: 14px; color: var(--glide-hint);
+  }
+
+  .sec-head { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px; }
+  .sec-kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--glide-hint); font-weight: 600; }
+
+  .ice-card {
+    display: flex; gap: 12px; padding: 12px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-card); text-decoration: none; color: inherit;
+  }
+  .ice-card--bad { border-color: rgba(240, 162, 75, 0.4); background: var(--bad-bg); }
+  .ice-card__ph {
+    width: 72px; height: 72px; border-radius: var(--r-sm); flex-shrink: 0;
+    background: linear-gradient(135deg, #2a4a4c, #152022);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .ice-card__row { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; }
+  .ice-card__when { text-align: center; min-width: 52px; }
+  .ice-card__time { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ice-card__day { font-size: 10px; color: var(--glide-hint); text-transform: uppercase; }
+  .ice-card__name { font-size: 14px; font-weight: 600; }
+  .ice-card__facts { font-size: 12px; color: var(--glide-hint); margin-top: 2px; }
+  .ice-card__chev { color: var(--glide-hint); font-size: 18px; margin-left: auto; }
+
+  .city-onboard {
+    margin-top: 8px; padding: 16px; border-radius: var(--r-md);
+    border: 1px dashed rgba(69, 185, 187, 0.45); background: var(--glide-brand-wash);
+  }
+  .city-onboard h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
+  .city-onboard p { margin: 0 0 14px; font-size: 13px; line-height: 1.45; color: var(--glide-hint); }
+  .city-onboard .btns { display: flex; flex-direction: column; gap: 8px; }
+  .btn-pri {
+    height: 44px; border-radius: var(--r-sm); border: 0;
+    background: var(--app-cta-fill); color: var(--app-cta-text); font-weight: 600; font-size: 14px;
+  }
+  .btn-sec {
+    height: 44px; border-radius: var(--r-sm); border: 1px solid var(--glide-line);
+    background: var(--glide-surface); font-weight: 600; font-size: 14px;
+  }
+  .btn-link {
+    height: 36px; border: 0; background: transparent; color: var(--glide-ink-teal);
+    font-size: 13px; font-weight: 600; text-align: center;
+  }
+
+  .confirm-sheet {
+    margin-top: 12px; padding: 14px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-brand); background: var(--glide-card);
+  }
+  .confirm-sheet b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .confirm-sheet span { font-size: 13px; color: var(--glide-hint); }
+  .confirm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+
+  .explore { margin-top: 16px; }
+  .explore h2 { font-size: 15px; margin: 0 0 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tile {
+    padding: 12px 8px; border-radius: var(--r-sm); border: 1px solid var(--glide-line);
+    background: var(--glide-surface); text-align: center; font-size: 11px; font-weight: 600;
+  }
+  .tile em { display: block; font-size: 18px; font-style: normal; margin-bottom: 4px; }
+  .tile small { display: block; color: var(--glide-hint); font-weight: 400; margin-top: 2px; }
+
+  .muted-block {
+    margin-top: 12px; padding: 14px; border-radius: var(--r-md);
+    border: 1px solid var(--glide-line); background: var(--glide-surface);
+    font-size: 13px; color: var(--glide-hint); line-height: 1.45;
+  }
+  .muted-block.hidden-label::before {
+    content: 'Секция скрыта';
+    display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--warn); margin-bottom: 6px;
+  }
+
+  /* Ice tab header */
+  .ice-top {
+    position: sticky; top: 0; z-index: 5; padding: 8px 0 10px;
+    background: linear-gradient(var(--glide-paper) 70%, transparent);
+  }
+  .ice-city-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
+    border-radius: var(--r-pill); border: 1px solid var(--glide-line); background: var(--glide-card);
+    font-size: 14px; font-weight: 600;
+  }
+  .ice-city-btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--glide-brand); }
+  .ice-banner {
+    margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm);
+    background: var(--glide-brand-wash); border: 1px solid rgba(69, 185, 187, 0.35);
+    font-size: 12px; line-height: 1.4;
+  }
+  .ice-banner--national {
+    background: var(--glide-surface); border-style: dashed; color: var(--glide-hint);
+  }
+  .ice-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .ice-row {
+    padding: 12px; border-radius: var(--r-md); border: 1px solid var(--glide-line);
+    background: var(--glide-card);
+  }
+  .ice-row b { font-size: 14px; }
+  .ice-row span { display: block; font-size: 12px; color: var(--glide-hint); margin-top: 2px; }
+
+  .pill-tag {
+    display: inline-block; margin-top: 8px; padding: 4px 8px; border-radius: var(--r-pill);
+    font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .pill-tag--bad { background: rgba(240, 162, 75, 0.2); color: var(--warn); }
+  .pill-tag--ok { background: var(--glide-brand-wash); color: var(--glide-ink-teal); }
+
+  .toast {
+    position: absolute; left: 50%; bottom: 80px; transform: translateX(-50%);
+    padding: 8px 14px; border-radius: var(--r-pill); background: var(--glide-card);
+    border: 1px solid var(--glide-line); font-size: 12px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s; z-index: 25; white-space: nowrap;
+  }
+  .toast.is-on { opacity: 1; }
+</style>
+</head>
+<body>
+
+<aside class="thesis">
+  <h1>Один <em>«Мой город»</em> — без минского фолбэка</h1>
+  <p class="lede">
+    Прототип плана для гостя из <strong>Кобрина</strong> без сохранённого города.
+    Слева — что меняется в хабе и во вкладке «Поиск». GPS только по кнопке и с подтверждением;
+    координаты не храним — в профиль попадает только выбранный <code>city_id</code>.
+  </p>
+  <div class="compare">
+    <div class="box bad">
+      <b>Сейчас</b>
+      Хаб показывает ближайший сеанс по стране (часто Минск) как «свой» лёд.
+      «Куда катимся» пусто, карусель тренеров без города. Поиск молча ставит fallback-город в шапке.
+    </div>
+    <div class="box good">
+      <b>После</b>
+      Без города — блок «Откуда вы?», не карточка чужого катка.
+      После «Кобрин?» — один город на хабе и в Поиске. Режим «По всей Беларуси» — с явной подписью.
+    </div>
+  </div>
+  <ul class="rule-list">
+    <li><strong>IP</strong> — только страна (РБ / вне рынка), не город.</li>
+    <li><strong>GPS</strong> — предлагает город ≤ 150 км, сохраняем после «Да».</li>
+    <li><strong>Хаб и Поиск</strong> — один резолвер, одни тексты.</li>
+  </ul>
+  <p class="navhint"><kbd>←</kbd> <kbd>→</kbd> — экраны 0…4</p>
+</aside>
+
+<div class="phone-wrap">
+  <p class="phone-label" id="phoneLabel"><b>Экран 0.</b> Сейчас — обманчивый хаб (гость, Кобрин)</p>
+  <div class="phone" id="phone">
+    <div class="notch" aria-hidden="true"></div>
+    <div class="toast" id="toast" role="status"></div>
+
+    <!-- 0: Today bad -->
+    <div class="screen is-on" data-screen="0">
+      <div class="scroll">
+        <div class="hub-hero">
+          <div class="hub-greet">Добрый день</div>
+          <div class="hub-greet-sub warn">подпись города пустая (country fallback)</div>
+        </div>
+        <div class="sec-head">
+          <span class="sec-kicker">На льду · Минск</span>
+        </div>
+        <a class="ice-card ice-card--bad" href="#">
+          <span class="ice-card__ph">⛸️</span>
+          <span class="ice-card__row">
+            <span class="ice-card__when">
+              <span class="ice-card__time">16:15</span>
+              <span class="ice-card__day">Сегодня</span>
+            </span>
+            <span>
+              <span class="ice-card__name">ТЦ «Замок»</span>
+              <span class="ice-card__facts">массовое · взр. 11 BYN</span>
+              <span class="pill-tag pill-tag--bad">выглядит как «мой» лёд</span>
+            </span>
+            <span class="ice-card__chev">→</span>
+          </span>
+        </a>
+        <button type="button" class="hub-search">Поиск катков и тренеров</button>
+        <div class="muted-block hidden-label">«Куда катимся» — нет city_id</div>
+        <div class="muted-block">Карусель: тренеры без города — «как будто локально»</div>
+      </div>
+      <nav class="tabbar" aria-hidden="true">
+        <span class="on">Главная</span><span>Поиск</span><span>Записи</span><span>Профиль</span>
+      </nav>
+    </div>
+
+    <!-- 1: Hub needs city -->
+    <div class="screen" data-screen="1">
+      <div class="scroll">
+        <div class="hub-hero">
+          <div class="hub-greet">Добрый день</div>
+          <div class="hub-greet-sub">Сначала город — потом лёд и тренеры</div>
+        </div>
+        <div class="city-onboard">
+          <h3>Откуда вы?</h3>
+          <p>Покажем катки и тренеров в вашем городе. Геолокацию не сохраняем — только город, если вы согласитесь.</p>
+          <div class="btns">
+            <button type="button" class="btn-pri" data-toast="Запрос GPS (один раз)">Определить рядом</button>
+            <button type="button" class="btn-sec" data-toast="Список городов с данными">Выбрать город</button>
+            <button type="button" class="btn-link" data-goto="4">Смотреть по всей Беларуси</button>
+          </div>
+        </div>
+        <button type="button" class="hub-search">Поиск катков и тренеров</button>
+        <div class="muted-block hidden-label">Лёд и «Куда катимся» — после выбора города</div>
+      </div>
+      <nav class="tabbar" aria-hidden="true">
+        <span class="on">Главная</span><span>Поиск</span><span>Записи</span><span>Профиль</span>
+      </nav>
+    </div>
+
+    <!-- 2: Hub Kobrin confirmed -->
+    <div class="screen" data-screen="2">
+      <div class="scroll">
+        <div class="hub-hero">
+          <div class="hub-greet">Добрый день</div>
+          <div class="hub-greet-sub">Кобрин · 1 каток вечером</div>
+        </div>
+        <div class="confirm-sheet">
+          <b>Похоже, вы в Кобрине?</b>
+          <span>Ближайшая арена — «Ледовая арена», ~2 км</span>
+          <div class="confirm-row">
+            <button type="button" class="btn-pri" data-goto="2" data-toast="city_id → Кобрин, PATCH session">Да, мой город</button>
+            <button type="button" class="btn-sec" data-toast="Открыть пикер">Другой город</button>
+          </div>
+        </div>
+        <div class="sec-head"><span class="sec-kicker">На льду · Кобрин</span></div>
+        <a class="ice-card" href="#">
+          <span class="ice-card__ph">⛸️</span>
+          <span class="ice-card__row">
+            <span class="ice-card__when">
+              <span class="ice-card__time">18:00</span>
+              <span class="ice-card__day">Сегодня</span>
+            </span>
+            <span>
+              <span class="ice-card__name">Ледовая арена</span>
+              <span class="ice-card__facts">массовое · взр. 8 BYN</span>
+              <span class="pill-tag pill-tag--ok">только сеансы города</span>
+            </span>
+            <span class="ice-card__chev">→</span>
+          </span>
+        </a>
+        <button type="button" class="hub-search">Поиск катков и тренеров</button>
+        <div class="explore">
+          <h2>Куда катимся</h2>
+          <div class="tiles">
+            <div class="tile"><em>⛸️</em>Катки<small>1</small></div>
+            <div class="tile"><em>🧑‍🏫</em>Тренеры<small>3</small></div>
+            <div class="tile"><em>🛍️</em>Магазины<small>0</small></div>
+          </div>
+        </div>
+      </div>
+      <nav class="tabbar" aria-hidden="true">
+        <span class="on">Главная</span><span>Поиск</span><span>Записи</span><span>Профиль</span>
+      </nav>
+    </div>
+
+    <!-- 3: Search same onboarding -->
+    <div class="screen" data-screen="3">
+      <div class="scroll">
+        <div class="ice-top">
+          <button type="button" class="ice-city-btn" data-toast="Город не выбран — не «Минск»">
+            <span class="dot" style="background: var(--warn)"></span>
+            Город не выбран
+          </button>
+          <div class="ice-banner">
+            Тот же блок, что на Главной: определить рядом или выбрать город. Без silent fallback в ленте.
+          </div>
+        </div>
+        <div class="city-onboard" style="margin-top: 4px;">
+          <h3>Откуда вы?</h3>
+          <div class="btns">
+            <button type="button" class="btn-pri" data-toast="Тот же GPS + confirm">Определить рядом</button>
+            <button type="button" class="btn-sec">Выбрать город</button>
+          </div>
+        </div>
+        <div class="ice-list">
+          <div class="ice-row" style="opacity: 0.45">
+            <b>Лента пустая</b>
+            <span>до выбора города или режима «По Беларуси»</span>
+          </div>
+        </div>
+      </div>
+      <nav class="tabbar" aria-hidden="true">
+        <span>Главная</span><span class="on">Поиск</span><span>Записи</span><span>Профиль</span>
+      </nav>
+    </div>
+
+    <!-- 4: National browse -->
+    <div class="screen" data-screen="4">
+      <div class="scroll">
+        <div class="ice-top">
+          <button type="button" class="ice-city-btn">
+            <span class="dot"></span>
+            По всей Беларуси
+          </button>
+          <div class="ice-banner ice-banner--national">
+            Осознанный режим: не подставляем Минск в шапку. Список — все города с данными; подпись честная.
+          </div>
+        </div>
+        <div class="ice-list">
+          <div class="ice-row"><b>ТЦ «Замок»</b><span>Минск · сегодня 16:15</span></div>
+          <div class="ice-row"><b>Ледовая арена</b><span>Кобрин · сегодня 18:00</span></div>
+          <div class="ice-row"><b>Брестский ЛДС</b><span>Брест · завтра 11:00</span></div>
+        </div>
+        <p style="font-size: 12px; color: var(--glide-hint); margin-top: 16px; line-height: 1.45;">
+          На Главной в этом режиме — нет карточки «ваш лёд»; только поиск и призыв выбрать город.
+        </p>
+      </div>
+      <nav class="tabbar" aria-hidden="true">
+        <span>Главная</span><span class="on">Поиск</span><span>Записи</span><span>Профиль</span>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var labels = [
+    '<b>Экран 0.</b> Сейчас — обманчивый хаб (гость, Кобрин)',
+    '<b>Экран 1.</b> Хаб — город не выбран, блок «Откуда вы?»',
+    '<b>Экран 2.</b> Хаб — Кобрин подтверждён, лёд + «Куда катимся»',
+    '<b>Экран 3.</b> Поиск — тот же onboarding, без fake-города',
+    '<b>Экран 4.</b> Режим «По всей Беларуси» (честная шапка)',
+  ];
+  var screens = document.querySelectorAll('.screen');
+  var idx = 0;
+  var phoneLabel = document.getElementById('phoneLabel');
+  var toast = document.getElementById('toast');
+  var toastTimer;
+
+  function show(i) {
+    idx = (i + screens.length) % screens.length;
+    screens.forEach(function (s, j) { s.classList.toggle('is-on', j === idx); });
+    if (phoneLabel) phoneLabel.innerHTML = labels[idx];
+  }
+
+  function flash(msg) {
+    if (!toast || !msg) return;
+    toast.textContent = msg;
+    toast.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('is-on'); }, 2200);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') show(idx + 1);
+    if (e.key === 'ArrowLeft') show(idx - 1);
+  });
+
+  document.querySelectorAll('[data-goto]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      show(parseInt(btn.getAttribute('data-goto'), 10));
+    });
+  });
+  document.querySelectorAll('[data-toast]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      flash(btn.getAttribute('data-toast'));
+    });
+  });
+
+  show(0);
+})();
+</script>
+</body>
+</html>

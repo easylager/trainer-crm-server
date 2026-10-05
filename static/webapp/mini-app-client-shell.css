@@ -293,21 +293,24 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   flex: 1;
+  background: var(--tg-theme-secondary-bg-color);
+  border-radius: var(--app-radius-lg);
 }
 
 .client-more-sheet__item {
-  margin: 0 0 6px;
+  margin: 0;
 }
 
 .client-more-sheet__link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   padding: 12px 14px;
   border: none;
-  border-radius: var(--app-radius-md);
-  background: var(--tg-theme-secondary-bg-color);
+  border-radius: 0;
+  background: transparent;
   color: var(--tg-theme-text-color);
   font-family: inherit;
   text-align: left;
@@ -318,14 +321,14 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   box-sizing: border-box;
 }
 
-.client-more-sheet__emoji {
-  display: block;
-  flex-shrink: 0;
-  width: 1.6em;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font-size: var(--app-icon-lg);
-  line-height: 1;
-  text-align: center;
+.client-more-sheet__item + .client-more-sheet__item .client-more-sheet__link::before {
+  content: "";
+  position: absolute;
+  left: 68px;
+  right: 14px;
+  top: 0;
+  height: 1px;
+  background: var(--glide-line, color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent));
 }
 
 .client-more-sheet__body {

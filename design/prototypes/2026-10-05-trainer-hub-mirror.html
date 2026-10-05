@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хаб тренера — «Зеркало» после онбординга</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /*
+    2026-10-05 · TASK-173 · концепт «Зеркало» (DEC-001, DEC-002).
+    Первый экран главной после «Готово»: карточка, как её видит ученик.
+    Слева — как сейчас. Справа — цель, три заполнения одной анатомии.
+    T — тема. 1 / 2 / 3 — состояние цели.
+  */
+  :root {
+    --brand: #45b9bb;
+    --on-fill: #04262a;
+    --paper: #0b0c0e;
+    --surface: #141618;
+    --card: #1a1d20;
+    --line: #2a2e32;
+    --text: #e7eaeb;
+    --hint: #8b9398;
+    --ink: #7ee0e1;
+    --wash: rgba(69, 185, 187, 0.14);
+    --page: #070809;
+    --font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --r: 14px;
+    color-scheme: dark;
+  }
+  html[data-theme="light"] {
+    --paper: #f1f3f2;
+    --surface: #ffffff;
+    --card: #ffffff;
+    --line: #e2e6e5;
+    --text: #101617;
+    --hint: #5c6768;
+    --ink: #0b6e70;
+    --wash: rgba(69, 185, 187, 0.12);
+    --page: #e4e9e8;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--page);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 36px;
+    padding: 28px 20px 80px;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .thesis { width: min(380px, 100%); padding-top: 8px; }
+  h1 { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.03em; font-weight: 700; }
+  h1 em { font-style: normal; color: var(--ink); }
+  .lede { margin: 12px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--hint); }
+  .lede b { color: var(--text); font-weight: 600; }
+  .minute {
+    margin-top: 22px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface);
+  }
+  .minute b {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hint);
+  }
+  .minute p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+  .cuts { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .cuts li {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 10px;
+    align-items: baseline;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--hint);
+  }
+  .cuts strong { color: var(--text); font-weight: 650; font-size: 12px; letter-spacing: 0.04em; }
+  .keys { margin-top: 18px; font-size: 12px; color: var(--hint); line-height: 1.7; }
+  kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--surface);
+    font-family: inherit;
+    font-size: 11px;
+  }
+
+  .stand { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .phones { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .tag.now { background: rgba(240, 162, 75, 0.16); color: #e0a15a; }
+  html[data-theme="light"] .tag.now { color: #9a5b10; background: rgba(200, 122, 21, 0.14); }
+  .tag.goal { background: var(--wash); color: var(--ink); }
+
+  .states { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 390px; }
+  .states button {
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--hint);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .states button.is-on { background: var(--brand); color: var(--on-fill); border-color: transparent; }
+
+  .phone {
+    width: 390px;
+    max-width: 100%;
+    height: 780px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 40px;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px rgba(128, 140, 145, 0.28), 0 28px 60px -28px rgba(0, 0, 0, 0.65);
+  }
+  .notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 108px; height: 26px; border-radius: 14px; background: #000; z-index: 5;
+  }
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 44px 0 0;
+  }
+
+  .head {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 6px 16px 0;
+  }
+  .greet {
+    margin: 0; flex: 1; min-width: 0;
+    font-size: 26px; line-height: 1.12; letter-spacing: -0.035em; font-weight: 700;
+  }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; place-items: center;
+    background: var(--wash); color: var(--ink); flex: none;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .week {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 4px; padding: 14px 12px 12px;
+  }
+  .day {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 0 8px; border-radius: 12px; color: var(--hint); font-size: 11px; font-weight: 600;
+  }
+  .day b { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+  .day.on { background: var(--brand); color: var(--on-fill); }
+  .day.on b { color: var(--on-fill); }
+
+  .void { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  .banner {
+    margin: 4px 16px 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 12px 12px 14px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+  }
+  .banner p { margin: 0; flex: 1; font-size: 14px; line-height: 1.3; font-weight: 600; }
+  .banner .go {
+    flex: none; padding: 8px 12px; border-radius: 10px;
+    background: var(--brand); color: var(--on-fill); font-size: 13px; font-weight: 700;
+  }
+  .banner .x { color: var(--hint); font-size: 18px; padding: 4px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 0; }
+  .chip {
+    padding: 6px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--hint); font-size: 12.5px;
+  }
+  .chip i {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--brand); margin-right: 6px; vertical-align: 1px;
+  }
+
+  .community {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: auto;
+    padding: 12px 16px 14px;
+    color: var(--hint); font-size: 13px;
+  }
+  .community b { display: block; color: var(--text); font-weight: 600; font-size: 14px; }
+  .community svg { width: 16px; height: 16px; color: var(--ink); flex: none; }
+  .chev { margin-left: auto; color: var(--hint); }
+
+  .fab {
+    position: absolute; right: 16px; bottom: 74px; z-index: 3;
+    display: flex; align-items: center; gap: 6px;
+    padding: 12px 16px; border-radius: 999px;
+    background: var(--brand); color: var(--on-fill);
+    font-weight: 700; font-size: 15px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  }
+
+  .tabbar {
+    height: 62px; flex: none;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    border-top: 1px solid var(--line);
+    background: var(--paper);
+    padding-bottom: 6px;
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    color: var(--hint); font-size: 10px; font-weight: 600;
+  }
+  .tab svg { width: 20px; height: 20px; }
+  .tab.on { color: var(--ink); }
+
+  /* —— цель —— */
+  .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .view.is-on { display: flex; }
+
+  .kicker {
+    margin: 0; padding: 2px 16px 10px;
+    font-size: 13px; color: var(--hint);
+  }
+
+  .sheet {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  .photo {
+    flex: 1 1 auto;
+    min-height: 168px;
+    position: relative;
+    background: #1c2428;
+    overflow: hidden;
+  }
+  .photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .photo-type {
+    flex: 1 1 auto; min-height: 168px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 20px 16px 16px;
+    background: var(--card);
+  }
+  .photo-type strong {
+    font-size: 40px; line-height: 0.95; letter-spacing: -0.04em; font-weight: 700;
+  }
+  .photo-type span { margin-top: 8px; color: var(--hint); font-size: 14px; }
+
+  .meta { padding: 14px 16px 0; }
+  .meta .who { margin: 0; font-size: 20px; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
+  .meta .sub { margin: 4px 0 0; color: var(--hint); font-size: 14px; line-height: 1.35; }
+  .meta .place { margin: 8px 0 0; font-size: 15px; font-weight: 650; }
+  .price { margin: 8px 16px 0; color: var(--hint); font-size: 13px; }
+
+  .cta {
+    margin: 14px 16px 0;
+    height: 48px; border-radius: 12px;
+    background: var(--brand); color: var(--on-fill);
+    font-size: 16px; font-weight: 700;
+  }
+  .cta:active { transform: scale(0.985); }
+
+  .residue {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 16px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px; font-weight: 650;
+    text-align: left;
+  }
+  .residue span { color: var(--hint); font-weight: 500; }
+
+  .day-title {
+    margin: 18px 16px 0;
+    font-size: 28px; line-height: 1.1; letter-spacing: -0.035em; font-weight: 700;
+  }
+  .day-lead {
+    margin: 8px 16px 0;
+    font-size: 15px; line-height: 1.45; color: var(--hint);
+  }
+  .later {
+    margin: 12px 16px 0;
+    font-size: 13px; color: var(--hint);
+    text-align: left;
+  }
+
+  .toast {
+    position: absolute; left: 16px; right: 16px; bottom: 76px; z-index: 4;
+    padding: 12px 14px; border-radius: 12px;
+    background: var(--text); color: var(--paper);
+    font-size: 14px; font-weight: 600;
+    opacity: 0; transform: translateY(6px); pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: none; transition: opacity 0.18s ease, transform 0.18s ease; }
+</style>
+</head>
+<body>
+  <aside class="thesis">
+    <h1>После «Готово» главная — <em>зеркало</em></h1>
+    <p class="lede">Тренер только что выбрал роль, услугу и арену. Экран показывает карточку так, как её увидит ученик, и одну кнопку — отправить ссылку тому, кто и так собирался на этой неделе.</p>
+    <div class="minute">
+      <b>Первая минута</b>
+      <p>Видит себя на Чижовке. Нажимает «Отправить ссылку». Цену и часы можно не трогать.</p>
+    </div>
+    <ul class="cuts">
+      <li><strong>Must</strong><span>Карточка на всю ширину, одна кнопка, светлая и тёмная тема.</span></li>
+      <li><strong>Should</strong><span>Фото арены. Строка «цена по запросу», если тариф пуст.</span></li>
+      <li><strong>Later</strong><span>Счётчик нажатий. Сверка полей с живым каталогом.</span></li>
+    </ul>
+    <p class="keys"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> состояния цели · <kbd>T</kbd> тема</p>
+  </aside>
+
+  <div class="stand">
+    <div class="phones">
+      <div class="col">
+        <div class="tag now">Сейчас</div>
+        <div class="phone" aria-label="Как выглядит главная сейчас">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="head">
+              <h2 class="greet">Доброй ночи, Саша Гаевский</h2>
+              <button class="icon-btn" type="button" aria-label="Ссылка" data-toast="nowToast">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93"/><path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41"/></svg>
+              </button>
+            </div>
+            <div class="week" aria-hidden="true">
+              <div class="day on"><span>пн</span><b>5</b></div>
+              <div class="day"><span>вт</span><b>6</b></div>
+              <div class="day"><span>ср</span><b>7</b></div>
+              <div class="day"><span>чт</span><b>8</b></div>
+              <div class="day"><span>пт</span><b>9</b></div>
+              <div class="day"><span>сб</span><b>10</b></div>
+              <div class="day"><span>вс</span><b>11</b></div>
+            </div>
+            <div class="void">
+              <div class="banner">
+                <p>Отправьте ссылку ученику</p>
+                <button class="go" type="button" data-toast="nowToast">Отправить ссылку</button>
+                <button class="x" type="button" aria-label="Скрыть">×</button>
+              </div>
+              <div class="chips">
+                <span class="chip"><i></i>Сегодня · свободно</span>
+                <span class="chip"><i></i>Слоты · добавьте в расписании</span>
+              </div>
+              <div class="community">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                <div><b>Наше комьюнити</b>Справка · идеи и отзывы</div>
+                <span class="chev">›</span>
+              </div>
+            </div>
+            <button class="fab" type="button" data-toast="nowToast">＋ Записать</button>
+            <div class="toast" id="nowToast">В прототипе действие не уходит</div>
+            <nav class="tabbar" aria-label="Разделы"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="tag goal">Зеркало</div>
+        <div class="states" role="tablist">
+          <button type="button" class="is-on" data-view="photo" role="tab" aria-selected="true">Первый заход</button>
+          <button type="button" data-view="type" role="tab">Без фото</button>
+          <button type="button" data-view="next" role="tab">Следующий день</button>
+        </div>
+        <div class="phone" id="goal" aria-label="Предлагаемая главная">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="head">
+              <h2 class="greet">Доброй ночи, Саша Гаевский</h2>
+            </div>
+            <div class="week" aria-hidden="true">
+              <div class="day on"><span>пн</span><b>5</b></div>
+              <div class="day"><span>вт</span><b>6</b></div>
+              <div class="day"><span>ср</span><b>7</b></div>
+              <div class="day"><span>чт</span><b>8</b></div>
+              <div class="day"><span>пт</span><b>9</b></div>
+              <div class="day"><span>сб</span><b>10</b></div>
+              <div class="day"><span>вс</span><b>11</b></div>
+            </div>
+
+            <section class="view is-on" data-view="photo">
+              <p class="kicker">Так вас увидит ученик</p>
+              <div class="sheet">
+                <div class="photo">
+                  <img src="https://images.unsplash.com/photo-1515703407324-5f753afd8be8?auto=format&fit=crop&w=800&h=640&q=70" alt="Лёд Чижовка-Арены">
+                </div>
+                <div class="meta">
+                  <p class="who">Саша Гаевский</p>
+                  <p class="sub">Тренер · Минск</p>
+                  <p class="place">Чижовка-Арена</p>
+                  <p class="sub">Индивидуальные · 60 мин</p>
+                </div>
+                <p class="price">Цена по запросу</p>
+                <button class="cta" type="button" data-toast="goalToast">Отправить ссылку</button>
+                <div class="community">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                  <div><b>Наше комьюнити</b>Справка · идеи и отзывы</div>
+                  <span class="chev">›</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="view" data-view="type">
+              <p class="kicker">Так вас увидит ученик</p>
+              <div class="sheet">
+                <div class="photo-type">
+                  <strong>Чижовка</strong>
+                  <span>ул. Ташкентская, 49 · Минск</span>
+                </div>
+                <div class="meta">
+                  <p class="who">Саша Гаевский</p>
+                  <p class="sub">Тренер</p>
+                  <p class="place">Индивидуальные · 60 мин</p>
+                </div>
+                <p class="price">Цена по запросу</p>
+                <button class="cta" type="button" data-toast="goalToast">Отправить ссылку</button>
+                <div class="community">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                  <div><b>Наше комьюнити</b>Справка · идеи и отзывы</div>
+                  <span class="chev">›</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="view" data-view="next">
+              <button class="residue" type="button" data-toast="goalToast">В каталоге <span>· Чижовка-Арена</span></button>
+              <div class="void">
+                <h2 class="day-title">Сегодня свободно</h2>
+                <p class="day-lead">Отправьте ссылку одному ученику — тому, кто и так собирался к вам на этой неделе. Он выберет время сам.</p>
+                <button class="cta" type="button" data-toast="goalToast">Отправить ссылку</button>
+                <button class="later" type="button" data-toast="goalToast">Часы можно назвать позже</button>
+                <div class="community">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+                  <div><b>Наше комьюнити</b>Справка · идеи и отзывы</div>
+                  <span class="chev">›</span>
+                </div>
+              </div>
+            </section>
+
+            <div class="toast" id="goalToast">В прототипе действие не уходит</div>
+            <nav class="tabbar" aria-label="Разделы"></nav>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var tabs = '<button class="tab on" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>Главная</button>'
+    + '<button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Расписание</button>'
+    + '<button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.2"/><path d="M16.2 19a4.2 4.2 0 0 1 4.3-3.2"/></svg>Клиенты</button>'
+    + '<button class="tab" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>Каталог</button>'
+    + '<button class="tab" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/></svg>Ещё</button>';
+  document.querySelectorAll('.tabbar').forEach(function (nav) { nav.innerHTML = tabs; });
+
+  var buttons = [].slice.call(document.querySelectorAll('.states button'));
+  function show(id) {
+    document.querySelectorAll('#goal .view').forEach(function (view) {
+      var on = view.getAttribute('data-view') === id;
+      view.classList.toggle('is-on', on);
+    });
+    buttons.forEach(function (btn) {
+      var on = btn.getAttribute('data-view') === id;
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+  var order = ['photo', 'type', 'next'];
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () { show(btn.getAttribute('data-view')); });
+  });
+  var fromHash = (location.hash || '').replace('#', '');
+  if (order.indexOf(fromHash) !== -1) show(fromHash);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 't' || e.key === 'T' || e.key === 'е' || e.key === 'Е') {
+      var root = document.documentElement;
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+    }
+    var n = { '1': 0, '2': 1, '3': 2 }[e.key];
+    if (n != null) show(order[n]);
+  });
+
+  document.body.addEventListener('click', function (e) {
+    var hit = e.target.closest('[data-toast]');
+    if (!hit) return;
+    var toast = document.getElementById(hit.getAttribute('data-toast'));
+    if (!toast) return;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { toast.classList.remove('show'); }, 1400);
+  });
+})();
+</script>
+</body>
+</html>

@@ -63,7 +63,9 @@ async def test_shop_selection_and_share_api(app_use_test_db, db_session) -> None
     assert body["share_url"].endswith(f"/c/{city_slug(name)}?t=shop")
     assert body["share_body"].startswith(f"{name} · магазины и заточка")
     assert body["og_image_url"].endswith("/og.png?t=shop")
+    assert body["story_image_url"].endswith("/story.png?t=shop")
     assert preview.json()["when"] in ("today_evening", "tomorrow", "weekend")
+    assert "/story.png" in preview.json()["story_image_url"]
     rows = (
         (
             await db_session.execute(

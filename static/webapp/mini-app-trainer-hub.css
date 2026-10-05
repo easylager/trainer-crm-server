@@ -4656,3 +4656,142 @@
       }
     }
 
+
+    /* ═══ День ноль — один вопрос вместо пустого экрана (TASK-173) ═══
+       Видно, только когда после онбординга не создано ни одного слота. Пока это так,
+       остальные носители смысла молчат: экран несёт ровно один вопрос и ровно один
+       способ на него ответить. */
+    body.hub-day-zero-active #hubStatusMarkers,
+    body.hub-day-zero-active #hubSummaryHints,
+    body.hub-day-zero-active #hubActionInbox,
+    body.hub-day-zero-active #hubDayCanvas,
+    /* Записывать некого и некуда: FAB спорит с единственным вопросом экрана. */
+    body.hub-day-zero-active .hub-book-fab,
+    body.hub-day-zero-active #hubShareBookingLinkBtn {
+      display: none !important;
+    }
+
+    .hub-day-zero {
+      margin: 8px 0 20px;
+      padding: 0 2px;
+    }
+
+    .hub-day-zero__title {
+      margin: 0 0 8px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.12;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-day-zero__lead {
+      margin: 0 0 18px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      max-width: 34em;
+    }
+
+    .hub-day-zero__presets {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hub-day-zero__preset {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 14px 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--app-hairline, rgba(128, 128, 128, 0.22));
+      background: var(--tg-theme-secondary-bg-color);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: transform 0.14s ease, opacity 0.2s ease;
+    }
+    .hub-day-zero__preset:active {
+      transform: scale(0.99);
+    }
+    .hub-day-zero__preset[disabled] {
+      opacity: 0.5;
+      cursor: default;
+    }
+    /* «Своё время» уводит в расписание — это не ответ в один тап, и выглядит тише. */
+    .hub-day-zero__preset--own {
+      background: transparent;
+    }
+
+    .hub-day-zero__preset-copy {
+      flex: 1;
+      min-width: 0;
+    }
+    .hub-day-zero__preset-label {
+      display: block;
+      font-size: 15.5px;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-day-zero__preset-hint {
+      display: block;
+      margin-top: 2px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-day-zero__preset-chevron {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .hub-day-zero__done {
+      text-align: center;
+      padding: 8px 0 0;
+    }
+    .hub-day-zero__mark {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--app-cta-fill) 16%, transparent);
+      color: var(--app-cta-fill);
+    }
+    .hub-day-zero__mark svg {
+      width: 24px;
+      height: 24px;
+    }
+    .hub-day-zero__done-title {
+      margin: 0;
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-day-zero__done-sub {
+      margin: 8px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-day-zero__cta {
+      margin-top: 12px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hub-day-zero__preset {
+        transition: none;
+      }
+    }
