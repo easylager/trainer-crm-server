@@ -48,6 +48,12 @@ class IceSessionValidator:
             validated.append(draft)
         dropped = len(drop_reasons)
         total = len(drafts)
+        if total == 0:
+            return IceSessionValidationOutcome(
+                validated=validated,
+                slots_dropped=0,
+                drop_reasons=drop_reasons,
+            )
         if not validated:
             raise IceSessionValidationError("no valid slots after validation")
         if total and dropped / total > max_drop_ratio:

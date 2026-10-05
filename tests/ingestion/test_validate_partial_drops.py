@@ -46,3 +46,10 @@ def test_three_valid_one_150_min_drops_one() -> None:
 def test_all_invalid_raises() -> None:
     with pytest.raises(IceSessionValidationError):
         IceSessionValidator().validate_outcome([_slot(150), _slot(200)])
+
+
+def test_empty_drafts_is_ok() -> None:
+    """Parser returned no rows — scheduler treats this as RUN_STATUS_EMPTY, not validation_error."""
+    outcome = IceSessionValidator().validate_outcome([])
+    assert outcome.validated == []
+    assert outcome.slots_dropped == 0
