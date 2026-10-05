@@ -21,8 +21,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.arena_profile import ARENA_PROFILE_STATUS_PUBLISHED
 from src.application.ice_session_use_cases import STATUS_ACTIVE
+from src.shared.ice_discovery_scope import (
+    PUBLIC_ARENA_VISIBLE_SQL,
+    public_city_scope_sql,
+    public_scope_params,
+)
 
 DEFAULT_TIMEZONE = "Europe/Minsk"
 
@@ -62,12 +66,20 @@ def city_slug(name: str) -> str:
 
 
 async def resolve_city_by_ref(session: AsyncSession, city_ref: str) -> dict[str, Any] | None:
-    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет."""
+    """Город по slug (``minsk``) или по числовому id. ``None`` — если такого города нет.
+
+    Только публичные города (TASK-177): активный и в странах витрины. Город вне витрины
+    (RU при ``ICE_DISCOVERY_COUNTRIES=BY``) для ``/c/``, ``/ice/…`` и ``/p/`` не существует — 404.
+    """
     ref = (city_ref or "").strip()
     if not ref:
         return None
     result = await session.execute(
-        text("SELECT id, name, country FROM cities WHERE is_active ORDER BY sort_order, id")
+        text(
+            f"SELECT id, name, country FROM cities WHERE {public_city_scope_sql('cities')} "
+            "ORDER BY sort_order, id"
+        ),
+        public_scope_params(),
     )
     rows = result.mappings().all()
     if ref.isdigit():
@@ -111,7 +123,7 @@ def _local_today(tz_name: str) -> date:
     return datetime.now(tz).date()
 
 
-_DAY_SQL = """
+_DAY_SQL = f"""
 SELECT
     a.id            AS arena_id,
     a.name          AS arena_name,
@@ -132,9 +144,9 @@ SELECT
 FROM ice_sessions s
 JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
+JOIN cities c ON c.id = a.city_id
 WHERE a.city_id = :cid
-  AND a.is_active AND a.is_confirmed
-  AND (p.status IS NULL OR p.status = :published)
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
   AND s.status = :st
   AND s.kind IN ('public_skate', 'open_ice')
   AND s.local_date = :day
@@ -198,7 +210,7 @@ async def _load_day(
             "day": day,
             "now": now,
             "st": STATUS_ACTIVE,
-            "published": ARENA_PROFILE_STATUS_PUBLISHED,
+            **public_scope_params(),
         },
     )
     return list(result.mappings().all())

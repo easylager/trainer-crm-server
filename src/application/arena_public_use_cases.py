@@ -44,7 +44,13 @@ from src.application.training_group_use_cases import (
 from src.application.trainer_use_cases import list_active_trainers_for_client
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.currency import currency_for_country
-from src.shared.ice_discovery_scope import ice_discovery_countries
+from src.shared.ice_discovery_scope import (
+    PUBLIC_ARENA_VISIBLE_SQL,
+    PUBLIC_CITY_SCOPE_SQL,
+    ice_discovery_countries,
+    public_city_scope_sql,
+    public_scope_params,
+)
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.venue_types import (
     DEFAULT_HIDDEN_VENUE_TYPES,
@@ -565,19 +571,10 @@ LEFT JOIN (
       ) < tg.max_members
     GROUP BY tg.arena_id
 ) og ON og.arena_id = a.id
-WHERE a.is_active AND a.is_confirmed
-  AND c.country = ANY(:ice_countries)
-  AND (p.status IS NULL OR p.status = :published)
-  -- A bare name with no photo reads as an admin task-in-progress, not a place to
-  -- book: a trainer's new arena exists (and works in their own schedule) the moment
-  -- they create it, but stays out of client search until someone adds a photo.
-  -- Scoped to trainer-created arenas only — the seeded/imported catalog (Moscow
-  -- expansion and the like) went through its own curation and has no `media` rows
-  -- yet either; hiding it would be a much bigger regression than the bug being fixed.
-  AND (a.created_by_trainer_id IS NULL OR EXISTS (
-      SELECT 1 FROM media m
-      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-  ))
+-- TASK-177: the one public visibility rule (active+confirmed arena, active city in
+-- the discovery countries, published profile, trainer-created arenas need a photo).
+-- Before, this list ignored cities.is_active: a deactivated city kept its cards.
+WHERE {PUBLIC_ARENA_VISIBLE_SQL}
 """
 
 
@@ -969,10 +966,8 @@ async def find_nearest_ice_now(
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 JOIN cities c ON c.id = a.city_id
                 WHERE {_CURRENT_SESSION_SQL}
-                  AND a.is_active AND a.is_confirmed
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
                   AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-                  AND (p.status IS NULL OR p.status = :published)
-                  AND c.country = ANY(:ice_countries)
                   AND s.local_date <= :horizon
                 ORDER BY s.starts_at_utc
                 """
@@ -1115,14 +1110,8 @@ JOIN arenas a ON a.id = s.arena_id
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE {_CURRENT_SESSION_SQL}
-  AND a.is_active AND a.is_confirmed
-  AND c.country = ANY(:ice_countries)
-{city_filter}  AND (p.status IS NULL OR p.status = :published)
-  AND (a.created_by_trainer_id IS NULL OR EXISTS (
-      SELECT 1 FROM media m
-      WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-  ))
-ORDER BY s.starts_at_utc, a.id
+  AND {PUBLIC_ARENA_VISIBLE_SQL}
+{city_filter}ORDER BY s.starts_at_utc, a.id
 LIMIT 4
 """
     rows = (await session.execute(text(sql), params)).mappings().all()
@@ -1200,6 +1189,30 @@ LIMIT 4
         # bar, without needing (or asking for) real coordinates.
         "far_confirmed": bool(force_far),
     }
+
+
+_MERGE_CHAIN_MAX_HOPS = 5
+
+
+async def resolve_merged_arena_id(session: AsyncSession, arena_id: int) -> int | None:
+    """Canonical arena a retired duplicate was merged into (TASK-177), or ``None``.
+
+    Follows ``arenas.merged_into_arena_id`` (a chain if a canonical was itself merged
+    later), bounded so a bad cycle in data can never hang a public request.
+    """
+    current = int(arena_id)
+    seen = {current}
+    for _ in range(_MERGE_CHAIN_MAX_HOPS):
+        nxt = (
+            await session.execute(
+                text("SELECT merged_into_arena_id FROM arenas WHERE id = :id"), {"id": current}
+            )
+        ).scalar()
+        if nxt is None or int(nxt) in seen:
+            break
+        current = int(nxt)
+        seen.add(current)
+    return current if current != int(arena_id) else None
 
 
 async def _load_arena_by_ref(session: AsyncSession, arena_ref: str) -> dict[str, Any] | None:
@@ -1497,25 +1510,19 @@ async def search_public_ice(
     cap = max(1, min(int(limit or SEARCH_LIMIT), 20))
     like = f"%{query}%"
     use_trgm = await _pg_trgm_enabled(session)
-    arena_sql = """
+    arena_sql = f"""
         SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
         FROM arenas a
         LEFT JOIN arena_profiles p ON p.arena_id = a.id
         JOIN cities c ON c.id = a.city_id
-        WHERE a.is_active AND a.is_confirmed
-          AND c.country = ANY(:ice_countries)
-          AND (p.status IS NULL OR p.status = :published)
-          AND (a.created_by_trainer_id IS NULL OR EXISTS (
-              SELECT 1 FROM media m
-              WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-          ))
+        WHERE {PUBLIC_ARENA_VISIBLE_SQL}
           AND (
             to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
               @@ plainto_tsquery('simple', :q)
             OR a.name ILIKE :like
             OR coalesce(p.district, '') ILIKE :like
             OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
                 WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
             )
           )
@@ -1523,18 +1530,12 @@ async def search_public_ice(
         LIMIT :lim
     """
     if use_trgm:
-        arena_sql = """
+        arena_sql = f"""
             SELECT a.id, p.slug, a.name, a.city_id, p.district, c.name AS city_name, a.venue_type
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
             JOIN cities c ON c.id = a.city_id
-            WHERE a.is_active AND a.is_confirmed
-              AND c.country = ANY(:ice_countries)
-              AND (p.status IS NULL OR p.status = :published)
-              AND (a.created_by_trainer_id IS NULL OR EXISTS (
-                  SELECT 1 FROM media m
-                  WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-              ))
+            WHERE {PUBLIC_ARENA_VISIBLE_SQL}
               AND (
                 to_tsvector('simple', coalesce(a.name, '') || ' ' || coalesce(p.district, ''))
                   @@ plainto_tsquery('simple', :q)
@@ -1542,7 +1543,7 @@ async def search_public_ice(
                 OR coalesce(p.district, '') ILIKE :like
                 OR similarity(a.name, :q) > 0.2
                 OR EXISTS (
-                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{}'::jsonb)) am
+                SELECT 1 FROM jsonb_each(coalesce(p.amenities, '{{}}'::jsonb)) am
                 WHERE am.key = ANY(CAST(:svc_keys AS text[])) AND am.value = 'true'::jsonb
             )
               )
@@ -1581,10 +1582,10 @@ async def search_public_ice(
     )
     cities = await session.execute(
         text(
-            """
+            f"""
             SELECT id, name
             FROM cities
-            WHERE is_active AND country = ANY(:ice_countries)
+            WHERE {public_city_scope_sql("cities")}
               AND (
                 to_tsvector('simple', coalesce(name, '')) @@ plainto_tsquery('simple', :q)
                 OR name ILIKE :like
@@ -1644,13 +1645,9 @@ LEFT JOIN (
   SELECT a.city_id, a.id, a.latitude, a.longitude
   FROM arenas a
   LEFT JOIN arena_profiles p ON p.arena_id = a.id
-  WHERE a.is_active AND a.is_confirmed
+  JOIN cities c ON c.id = a.city_id
+  WHERE {PUBLIC_ARENA_VISIBLE_SQL}
     AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
-    AND (p.status IS NULL OR p.status = :published)
-    AND (a.created_by_trainer_id IS NULL OR EXISTS (
-        SELECT 1 FROM media m
-        WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
-    ))
 ) rink ON rink.city_id = c.id
 LEFT JOIN (
   SELECT tc.city_id, tc.trainer_id
@@ -1664,7 +1661,7 @@ LEFT JOIN (
     AND {CATALOG_LISTED_SQL}
   WHERE p.city_id IS NOT NULL
 ) coach ON coach.city_id = c.id
-WHERE c.is_active
+WHERE {PUBLIC_CITY_SCOPE_SQL}
 GROUP BY c.id, c.name, c.sort_order, c.country
 HAVING COUNT(DISTINCT rink.id) > 0 OR COUNT(DISTINCT coach.trainer_id) > 0
 ORDER BY c.sort_order, c.id
@@ -1674,7 +1671,7 @@ ORDER BY c.sort_order, c.id
 async def list_ice_cities(session: AsyncSession) -> dict[str, Any]:
     """Cities that belong on the Ice tab picker: a map rink and/or a catalog trainer."""
     result = await session.execute(
-        text(_ICE_CITIES_SQL), {"published": ARENA_PROFILE_STATUS_PUBLISHED}
+        text(_ICE_CITIES_SQL), public_scope_params()
     )
     items: list[dict[str, Any]] = []
     for row in result.mappings():

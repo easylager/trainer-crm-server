@@ -244,6 +244,11 @@ class Arena(Base):
     is_confirmed: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     confirmed_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    # TASK-177: a retired duplicate points at its canonical arena; the public /p/ URLs of
+    # the duplicate answer 301 to the canonical page instead of 404.
+    merged_into_arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True
+    )
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
@@ -375,7 +380,7 @@ class IceSession(Base):
             name="ck_ice_sessions_kind",
         ),
         CheckConstraint(
-            "status IN ('active', 'cancelled', 'superseded')",
+            "status IN ('active', 'cancelled', 'superseded', 'expired')",
             name="ck_ice_sessions_status",
         ),
         CheckConstraint(
