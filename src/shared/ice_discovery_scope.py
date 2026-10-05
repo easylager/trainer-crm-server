@@ -7,6 +7,7 @@ for local/staging widening without touching the prod default.
 from __future__ import annotations
 
 import os
+from typing import Any, Mapping
 
 
 def _parse_countries(raw: str) -> tuple[str, ...]:
@@ -64,3 +65,25 @@ def public_city_scope_sql(alias: str = "c") -> str:
 def public_scope_params() -> dict[str, list[str]]:
     """Bind params the predicates above need."""
     return {"ice_countries": list(ice_discovery_countries())}
+
+
+def arena_publicly_visible_row(
+    row: Mapping[str, Any],
+    *,
+    ice_countries: tuple[str, ...] | None = None,
+) -> bool:
+    """Python mirror of ``PUBLIC_ARENA_VISIBLE_SQL`` for audit/report code paths."""
+    countries = ice_countries or ice_discovery_countries()
+    if not row.get("is_active") or not row.get("is_confirmed"):
+        return False
+    if not row.get("city_is_active", True):
+        return False
+    country = str(row.get("city_country") or row.get("country") or "").strip().upper()
+    if country not in countries:
+        return False
+    status = row.get("profile_status")
+    if status is not None and status != "published":
+        return False
+    if row.get("created_by_trainer_id") is not None and not row.get("has_photo"):
+        return False
+    return True

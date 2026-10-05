@@ -268,6 +268,67 @@ def test_shop_without_hours_rejects_the_file(tmp_path: Path) -> None:
         parse_shops_file(path)
 
 
+@pytest.mark.asyncio
+async def test_reimport_skips_archived_shop_and_preserves_admin_contacts(
+    db_session, tmp_path: Path
+) -> None:
+    """AC-1: архивный магазин не матчится — статус, is_active и контакты админа не трогаются."""
+    city_name = f"Архивград-{uuid.uuid4().hex[:6]}"
+    city_id = await _insert_city(db_session, name=city_name)
+    ins = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (city_id, name, address, is_active, is_confirmed, venue_type)
+            VALUES (:c, 'Старая точилка', 'ул. Архивная, 1', false, true, 'shop')
+            RETURNING id
+            """
+        ),
+        {"c": city_id},
+    )
+    shop_id = int(ins.scalar_one())
+    from src.application.arena_profile import ARENA_PROFILE_STATUS_ARCHIVED, ensure_arena_profile
+
+    await ensure_arena_profile(db_session, shop_id, city_id=city_id, name="Старая точилка")
+    await db_session.execute(
+        text(
+            "UPDATE arena_profiles SET phone = :p, status = :st WHERE arena_id = :id"
+        ),
+        {"p": "+375 17 111-11-11", "st": ARENA_PROFILE_STATUS_ARCHIVED, "id": shop_id},
+    )
+    await db_session.commit()
+
+    payload = {
+        "city": city_name,
+        "shops": [
+            {
+                "name": "Старая точилка",
+                "address": "ул. Архивная, 1",
+                "services": ["skate_sharpening"],
+                "hours": {"mon": ["10:00", "19:00"]},
+            }
+        ],
+    }
+    path = tmp_path / "shops.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    city, records, rules = parse_shops_file(path)
+    plan = await build_plan(db_session, city_name=city, records=records, rink_rules=rules)
+    assert plan.updates == [] and plan.creates == []
+    assert any("архивная" in p for p in plan.rink_problems)
+
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT a.is_active, p.phone, p.status FROM arenas a "
+                "JOIN arena_profiles p ON p.arena_id = a.id WHERE a.id = :id"
+            ),
+            {"id": shop_id},
+        )
+    ).one()
+    assert row[0] is False
+    assert row[1] == "+375 17 111-11-11"
+    assert row[2] == ARENA_PROFILE_STATUS_ARCHIVED
+
+
 def test_address_variants_drop_what_nominatim_cannot_read() -> None:
     assert address_variants("ул. Карла Либкнехта, 127, офис 69")[-1] == "улица Карла Либкнехта, 127"
     assert "улица Цнянская, 2" in address_variants("ул. Цнянская, 2-1-39")

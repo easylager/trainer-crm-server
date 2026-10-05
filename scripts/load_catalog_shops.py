@@ -96,6 +96,11 @@ async def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Записать в БД (иначе — только план).")
     parser.add_argument("--geocode", action="store_true", help="Координаты по адресу через Nominatim.")
     parser.add_argument(
+        "--revive",
+        action="store_true",
+        help="Сопоставлять и обновлять архивные (is_active=false) записи вместо пропуска.",
+    )
+    parser.add_argument(
         "--allow-local-dev-db",
         action="store_true",
         help="Разрешить --apply в локальную базу trainer_crm (облако по-прежнему запрещено).",
@@ -132,6 +137,7 @@ async def main() -> int:
                     records=records,
                     rink_rules=rink_rules,
                     speed_oval_arena_id=SPEED_OVAL_ARENA_ID,
+                    revive=args.revive,
                 )
             except ShopImportError as exc:
                 print(f"Не получится загрузить: {exc}", file=sys.stderr)
