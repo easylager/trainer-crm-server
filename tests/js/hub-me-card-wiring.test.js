@@ -487,4 +487,14 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     const load = fnBody('loadAll');
     assert.ok(load.indexOf('setHubGreeting') < load.indexOf('profilesReady'));
   });
+
+  it('карточка держит ритм хаба и не прилипает к секции под ней', () => {
+    // Отступ на контейнере, а не на .me: .rest обязан остаться продолжением
+    // карточки (9px), а не отъехать на общий межсекционный интервал.
+    const rule = homeCss.match(/#nextBookingBlock:not\(:empty\)\s*\{[^}]*\}/);
+    assert.ok(rule, 'у блока карточки нет собственного отступа — он прилипнет к «Куда катимся»');
+    assert.match(rule[0], /margin:\s*0\s+16px\s+20px/);
+    // Тот же ритм, что у соседей по хабу.
+    assert.match(homeCss, /\.hub-explore\s*\{[^}]*margin:\s*0\s+16px\s+20px/);
+  });
 });

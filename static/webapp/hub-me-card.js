@@ -615,7 +615,15 @@
     if (time) view.when = { time: time, meta: joinDot([a.kind_label, a.price_label]) };
     view.who = buildWho(name, '', str(a.address) || city, null, { initials: '❄' });
     view.pick = buildPick(input.slots, 'Дальше на льду', 'Все сеансы →', 'all-sessions', now);
-    view.actions.push({ style: 'ghost', label: 'Все сеансы', action: 'all-sessions', arenaId: idOrNull(a.id) });
+    /*
+     * Полный список сеансов — ОДИН вход, и он уже последним элементом полосы
+     * чипов. Отдельная кнопка под ней дублировала и надпись, и адрес: два
+     * контрола «Все сеансы» в двадцати пикселях друг от друга. Серая кнопка
+     * остаётся только там, где чипов нет вовсе, — иначе выхода не будет.
+     */
+    if (!view.pick) {
+      view.actions.push({ style: 'ghost', label: 'Все сеансы', action: 'all-sessions', arenaId: idOrNull(a.id) });
+    }
     return view;
   }
 
