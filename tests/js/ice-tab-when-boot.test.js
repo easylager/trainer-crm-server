@@ -73,10 +73,13 @@ async function bootWith(search, savedState) {
     },
     localStorage: { getItem: () => null, setItem() {} },
     addEventListener() {},
-    setTimeout: (fn) => {
-      fn();
+    // Fire only zero-delay callbacks synchronously; real timers (e.g. the
+    // 20 s fetchJson timeout) never fire inside the test.
+    setTimeout: (fn, delay) => {
+      if (!delay) fn();
       return 0;
     },
+    clearTimeout() {},
     scrollTo() {},
     scrollY: 0,
   };
