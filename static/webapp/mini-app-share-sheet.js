@@ -427,30 +427,111 @@
     );
   }
 
+  function slotRowMeta(row) {
+    var meta = row.meta || '';
+    if (String(row.id) === String(state.sessionId)) meta = meta ? meta + ' · выбрано' : 'Выбрано';
+    return meta;
+  }
+
+  function slotRowButtonHtml(row) {
+    var on = String(row.id) === String(state.sessionId);
+    return (
+      '<button type="button" class="gss-slot-row' +
+      (on ? ' is-on' : '') +
+      '" data-slot="' +
+      esc(row.id) +
+      '"' +
+      ' aria-pressed="' +
+      (on ? 'true' : 'false') +
+      '">' +
+      '<span>' +
+      esc(row.time) +
+      '</span><em>' +
+      esc(slotRowMeta(row)) +
+      '</em></button>'
+    );
+  }
+
+  function slotRowsInnerHtml(sec) {
+    if (!sec) return '';
+    return (sec.rows || []).map(slotRowButtonHtml).join('');
+  }
+
   function slotRowsHtml(sec) {
     if (!sec) return '';
-    var html = '<div class="gss-slot-list" role="listbox" aria-label="Сеанс">';
-    (sec.rows || []).forEach(function (row) {
-      var on = String(row.id) === String(state.sessionId);
-      var meta = row.meta || '';
-      if (on) meta = meta ? meta + ' · выбрано' : 'Выбрано';
-      html +=
-        '<button type="button" class="gss-slot-row' +
-        (on ? ' is-on' : '') +
-        '" data-slot="' +
-        esc(row.id) +
-        '"' +
-        ' aria-pressed="' +
-        (on ? 'true' : 'false') +
-        '">' +
-        '<span>' +
-        esc(row.time) +
-        '</span><em>' +
-        esc(meta) +
-        '</em></button>';
+    return (
+      '<div class="gss-slot-list" role="listbox" aria-label="Сеанс">' + slotRowsInnerHtml(sec) + '</div>'
+    );
+  }
+
+  function sheetEl() {
+    return root && root.querySelector('.gss-sheet');
+  }
+
+  /** Превью перерисовывается без сдвига списка слотов и позиции шита. */
+  function preserveSheetScroll(run) {
+    var sheet = sheetEl();
+    var top = sheet ? sheet.scrollTop : 0;
+    run();
+    if (sheet) sheet.scrollTop = top;
+  }
+
+  function syncDayStrip() {
+    var strip = root.querySelector('.gss-day-strip');
+    if (!strip) return false;
+    var scroll = strip.scrollLeft;
+    [].forEach.call(strip.querySelectorAll('[data-gss-day]'), function (btn) {
+      var on = btn.getAttribute('data-gss-day') === state.slotDay;
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    html += '</div>';
-    return html;
+    strip.scrollLeft = scroll;
+    return true;
+  }
+
+  function syncSlotRows() {
+    var list = root.querySelector('.gss-slot-list');
+    var sec = activeSlotSection();
+    if (!list || !sec) return false;
+    var scroll = list.scrollTop;
+    var byId = {};
+    (sec.rows || []).forEach(function (row) {
+      byId[String(row.id)] = row;
+    });
+    [].forEach.call(list.querySelectorAll('[data-slot]'), function (btn) {
+      var id = btn.getAttribute('data-slot');
+      var row = byId[id];
+      var on = String(id) === String(state.sessionId);
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      var em = btn.querySelector('em');
+      if (em && row) em.textContent = slotRowMeta(row);
+    });
+    list.scrollTop = scroll;
+    return true;
+  }
+
+  function paintSlotListForDay() {
+    var list = root.querySelector('.gss-slot-list');
+    var sec = activeSlotSection();
+    if (!list || !sec) return false;
+    list.scrollTop = 0;
+    list.innerHTML = slotRowsInnerHtml(sec);
+    return true;
+  }
+
+  function syncSlotPickerUi(mode) {
+    ensureSlotDay();
+    if (mode === 'day') {
+      if (!syncDayStrip()) return paintSlotPicker();
+      if (!paintSlotListForDay()) return paintSlotPicker();
+      return;
+    }
+    if (mode === 'slot') {
+      if (!syncDayStrip() || !syncSlotRows()) paintSlotPicker();
+      return;
+    }
+    paintSlotPicker();
   }
 
   function slotList() {
@@ -590,13 +671,13 @@
 
   function reloadPreview() {
     state.payload = null;
-    paintPreviewBlock();
+    preserveSheetScroll(paintPreviewBlock);
     var token = (state.token = (state.token || 0) + 1);
     fetchPayload({ record: 'false' })
       .then(function (data) {
         if (token !== state.token) return;
         state.payload = data;
-        paintPreviewBlock();
+        preserveSheetScroll(paintPreviewBlock);
       })
       .catch(function () {
         if (token !== state.token) return;
@@ -633,7 +714,7 @@
       if (iso && iso !== state.slotDay) {
         haptic();
         state.slotDay = iso;
-        paintSlotPicker();
+        syncSlotPickerUi('day');
       }
       return;
     }
@@ -641,7 +722,8 @@
     if (slot) {
       haptic();
       state.sessionId = slot.getAttribute('data-slot');
-      paintSlotPicker();
+      syncSlotPickerUi('slot');
+      if (slot.blur) slot.blur();
       reloadPreview();
       return;
     }

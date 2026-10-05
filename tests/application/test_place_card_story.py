@@ -24,6 +24,35 @@ def test_story_qr_roundtrip_payload() -> None:
     assert qr.size == (120, 120)
 
 
+def test_story_stub_uses_brand_block_not_url_path() -> None:
+    view = {
+        "card": {
+            "venue_type": "ice",
+            "name": "ТЦ Замок",
+            "city_name": "Минск",
+            "district": "Центральный район",
+        },
+        "today": date(2026, 10, 6),
+        "now": datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc),
+        "focus": {
+            "id": 1,
+            "local_date": "2026-10-06",
+            "starts_at_local": "21:15:00",
+            "price_adult_minor": 1000,
+            "currency_code": "BYN",
+        },
+        "session_count": 1,
+    }
+    png = render_place_card(
+        view,
+        story=True,
+        invite=True,
+        share_url="https://glide.example/p/minsk/zamok?s=1&i=1",
+        display_path="/p/minsk/zamok?s=1&i=1",
+    )
+    assert len(png) > 5000
+
+
 def test_story_png_renders_with_qr_region() -> None:
     view = {
         "card": {

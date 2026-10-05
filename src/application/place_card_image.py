@@ -242,8 +242,8 @@ def _render_story(
     display_path: str = "",
 ) -> Image.Image:
     """
-    Сторис — постер-билет. В историях ссылка в пикселях не кликается — QR на share_url
-    и короткий путь (/c/…, /p/…) на корешке; кликабельная ссылка уходит в чат отдельно.
+    Сторис — постер-билет. В историях URL в пикселях не кликается — только QR на share_url
+    и крупный бренд GLIDE на корешке; ссылку человек кладёт в чат/стикер отдельно.
     """
     w, h = STORY_SIZE
     img = _gradient(STORY_SIZE)
@@ -255,8 +255,9 @@ def _render_story(
     f_time = _font("Inter-Bold.ttf", 210)
     f_big = _font("Inter-Bold.ttf", 76)
     f_sub = _font("Inter-Regular.ttf", 42)
-    f_url = _font("Inter-SemiBold.ttf", 38)
-    f_brand = _font("Inter-Regular.ttf", 34)
+    f_brand_lg = _font("Inter-Bold.ttf", 88)
+    f_brand_tag = _font("Inter-SemiBold.ttf", 40)
+    f_brand_hint = _font("Inter-Regular.ttf", 34)
 
     draw.text((pad, 220), lines["kicker"], font=f_kicker, fill=_ACCENT)
 
@@ -326,23 +327,22 @@ def _render_story(
             draw.text((x, y), line, font=f_sub, fill=_MUTED)
             y += 56
 
-    path = (display_path or "").strip()
     qr = _story_qr_image(share_url, _STORY_QR_SIZE)
-    qr_pad = 48
-    text_w = inner - (_STORY_QR_SIZE + qr_pad if qr else 0)
-    uy = stub_y + 56
-    if path:
-        path_lines = _wrap(draw, path.replace("/", " /").replace(": /", ":/"), f_url, text_w, 2)
-        path_lines = [line.replace(" /", "/") for line in path_lines]
-        for line in path_lines:
-            draw.text((x, uy), line, font=f_url, fill=_INK)
-            uy += 52
-    draw.text((x, uy + 8), "Сканируй QR · карта льда", font=f_brand, fill=_MUTED)
+    stub_h = bottom - stub_y
     if qr is not None:
         qx = x + inner - _STORY_QR_SIZE
-        qy = stub_y + 44
+        qy = stub_y + (stub_h - _STORY_QR_SIZE) // 2
         img.paste(qr, (qx, qy))
-    draw.text((x, bottom - 70), "Glide · карта льда", font=f_brand, fill=_ACCENT)
+    # Корешок: крупный GLIDE + QR. Путь /p/… не рисуем — в сторис не кликается и ломает верстку.
+    brand_lines = ("GLIDE", "карта льда", "Сканируй QR")
+    line_heights = (96, 50, 44)
+    block_h = sum(line_heights) + 12
+    by = stub_y + max(36, (stub_h - block_h) // 2)
+    draw.text((x, by), brand_lines[0], font=f_brand_lg, fill=_ACCENT)
+    by += line_heights[0]
+    draw.text((x, by), brand_lines[1], font=f_brand_tag, fill=_INK)
+    by += line_heights[1]
+    draw.text((x, by), brand_lines[2], font=f_brand_hint, fill=_MUTED)
     return img
 
 
