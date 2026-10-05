@@ -16,11 +16,11 @@ function loadModel() {
 }
 
 describe('catalog contact attribution', () => {
-  it('hint is short and mentions Glide', () => {
+  it('hint only says the chat opens in Telegram', () => {
     const { hintText } = loadModel();
     const t = hintText();
-    assert.match(t, /Glide/i);
-    assert.match(t, /из каталога Glide/);
+    assert.match(t, /Telegram/);
+    assert.match(t, /Личный чат/);
     assert.ok(t.length < 120);
   });
 });

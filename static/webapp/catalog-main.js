@@ -3690,7 +3690,7 @@
       function catalogContactHintText() {
         var M = window.CatalogContactAttribution;
         if (M && typeof M.hintText === 'function') return M.hintText();
-        return 'Многие пишут тренеру: «из каталога Glide».';
+        return 'Личный чат тренера в Telegram.';
       }
 
       /** После innerHTML += на #trainerDetailActions подсказку нужно вставить заново. */

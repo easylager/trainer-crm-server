@@ -14,7 +14,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var HINT = 'Многие пишут тренеру: «из каталога Glide».';
+  var HINT = 'Личный чат тренера в Telegram.';
 
   return {
     hintText: function () {
