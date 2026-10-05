@@ -28,6 +28,7 @@ from src.infrastructure.db.models import (
     DEMAND_SOURCE_SEARCH,
     DEMAND_SOURCES,
 )
+from src.shared.catalog_contact_attribution import CATALOG_TELEGRAM_DM_PREFILL
 
 logger = logging.getLogger(__name__)
 
@@ -124,12 +125,16 @@ async def telegram_contact_redirect(
             exc,
         )
 
-    # Build the deep link. We use the t.me HTTPS form (works on web and triggers tg:// on mobile).
-    # urlencode keeps the query string safe even if `src` is None.
-    target_qs = urlencode({"src": source}) if source else ""
+    # Build the deep link. Catalog / Mini App: prefill first message so the trainer knows the lead
+    # came from Glide (t.me ?text= — user can edit before send).
     target = f"https://t.me/{quote(username, safe='')}"
-    if target_qs:
-        target = f"{target}?{target_qs}"
+    qs: dict[str, str] = {}
+    if source:
+        qs["src"] = source
+    if source in (DEMAND_SOURCE_CATALOG, DEMAND_SOURCE_CLIENT_APP):
+        qs["text"] = CATALOG_TELEGRAM_DM_PREFILL
+    if qs:
+        target = f"{target}?{urlencode(qs)}"
     # 302 (not 301): we want this URL to remain "live" so the next click also records a signal.
     return RedirectResponse(url=target, status_code=302)
 

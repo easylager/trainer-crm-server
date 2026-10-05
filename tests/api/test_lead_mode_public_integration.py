@@ -284,8 +284,10 @@ async def test_redirect_to_telegram_explicit_source_query_passes_through(
         await _set_telegram_username(db_session, tid, "src_test_user")
         resp = await client.get(f"/r/tg/{tid}", params={"src": "catalog"})
     assert resp.status_code == 302
-    # Source is forwarded into Telegram's start parameter so the trainer knows the inbound channel.
-    assert "src=catalog" in resp.headers["location"]
+    location = resp.headers["location"]
+    assert "src=catalog" in location
+    assert "text=" in location
+    assert "Glide" in location
     # And the demand row should have source='catalog'.
     r = await db_session.execute(
         text(

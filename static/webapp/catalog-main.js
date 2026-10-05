@@ -3677,7 +3677,33 @@
         if (!raw) return '';
         if (/^https?:\/\//i.test(raw)) return raw;
         var origin = window.location.origin || '';
-        return origin + (raw.charAt(0) === '/' ? raw : '/' + raw);
+        var path = raw.charAt(0) === '/' ? raw : '/' + raw;
+        if (/^\/r\/tg\/\d+/.test(path.split('?')[0])) {
+          var bits = path.split('?');
+          var params = new URLSearchParams(bits[1] || '');
+          if (!params.has('src')) params.set('src', 'catalog');
+          path = bits[0] + '?' + params.toString();
+        }
+        return origin + path;
+      }
+
+      function catalogContactPrefillText() {
+        var M = window.CatalogContactAttribution;
+        return M && typeof M.prefillText === 'function' ? M.prefillText() : '';
+      }
+
+      function appendCatalogContactHint(container, afterNode) {
+        var M = window.CatalogContactAttribution;
+        if (!container || !M || typeof M.hintText !== 'function') return;
+        var hint = document.createElement('p');
+        hint.className = 'trainer-contact-hint';
+        hint.textContent = M.hintText();
+        if (afterNode && afterNode.parentNode === container) {
+          if (afterNode.nextSibling) container.insertBefore(hint, afterNode.nextSibling);
+          else container.appendChild(hint);
+        } else {
+          container.appendChild(hint);
+        }
       }
 
       function openTrainerTelegramContact(trainer) {
@@ -3712,6 +3738,7 @@
           return window.openTelegramChatFromMiniApp({
             username: un,
             telegramId: trainer && trainer.telegram_id != null ? trainer.telegram_id : null,
+            prefillText: catalogContactPrefillText(),
           });
         }
         return false;
@@ -3736,6 +3763,7 @@
         } else {
           container.appendChild(btn);
         }
+        if (!opts.skipAttributionHint) appendCatalogContactHint(container, btn);
         return true;
       }
 
