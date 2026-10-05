@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.htmlutil import html_unescape_cell, parse_tables, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -226,7 +227,7 @@ def _neman_slots_from_html(html: str, config: dict[str, Any]) -> list[ExtractedS
     if not _neman_title_matches(html, needle):
         return []
 
-    pub = _neman_publication_date(html) or date.today()
+    pub = _neman_publication_date(html) or minsk_today()
     duration = int(config.get("default_duration_minutes") or 60)
     default_label = str(config.get("session_label") or "лёд Пышки")
     text = _neman_article_text(html)
@@ -380,7 +381,7 @@ def _lida_ocr_schedule(image_bytes: bytes) -> list[tuple[date, str]]:
 
     img = Image.open(io.BytesIO(image_bytes))
     text = pytesseract.image_to_string(img, lang="rus", config="--psm 6")
-    ref = date.today()
+    ref = minsk_today()
     slots: list[tuple[date, str]] = []
     for match in _LIDA_OCR_DATE_LINE.finditer(text):
         month = _MONTHS_GENITIVE.get(match.group(2).lower())
@@ -417,7 +418,7 @@ def _lida_slots_from_weekday_config(
     if week_start_raw:
         week_start = date.fromisoformat(str(week_start_raw))
     else:
-        week_start = _lida_monday_on_or_before(date.today())
+        week_start = _lida_monday_on_or_before(minsk_today())
     horizon = int(job.config.get("horizon_days") or 7)
     raw_schedule = job.config.get("weekday_schedule")
     schedule: dict[int, list[str]] = (
