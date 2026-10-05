@@ -165,6 +165,8 @@ def _bobruisk_schedule_slots(html: str, *, reference: date) -> list[tuple[date, 
         if date_match and not _TIME_RANGE_DOT.search(first):
             month = _MONTHS[date_match.group(2).lower()]
             current_date = infer_date_from_day_month(int(date_match.group(1)), month, reference)
+            if current_date is None:
+                continue  # header outside the inference window — skip the day, never emit date=None
             lines = block[1:]
         else:
             # No header paragraph: closed day rolled into the next calendar day (SPEC gotcha).

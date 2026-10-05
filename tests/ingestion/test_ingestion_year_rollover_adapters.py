@@ -258,3 +258,34 @@ async def test_soligorsk_year_rollover_january_maps_december_to_prior_year(
     extraction = await SoligorskSzkParser().extract(_minimal_job("soligorsk_szk_v1"))
     assert "2026-12-29" in {s.local_date for s in extraction.slots}
     assert "2027-12-29" not in {s.local_date for s in extraction.slots}
+
+
+@pytest.mark.asyncio
+async def test_gorki_next_year_token_on_page_does_not_shift_dates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression (batch review): «…на январь 2027» on 29.12.2026 must not push dates to 2027-12/2028-01."""
+    _patch_reference(monkeypatch, _REF_DEC_29)
+
+    async def load(job, *, filename: str, url_keys=()):
+        if "home" in filename:
+            return "<p>Расписание на новогодние праздники 2027</p>" + _GORKI_NY_HTML
+        return "<html></html>"
+
+    monkeypatch.setattr("src.ingestion.adapters_regional_batch_c.load_source_text", load)
+    job = _minimal_job("gorki_lds_v1", {"mk_heading": "МАССОВОЕ КАТАНИЕ"})
+    extraction = await GorkiLdsParser().extract(job)
+    assert {s.local_date for s in extraction.slots} == {"2026-12-29", "2027-01-01", "2027-01-04"}
+
+
+def test_bobruisk_legacy_header_outside_window_is_skipped_not_none() -> None:
+    """Regression (batch review): a legacy header date the window rejects must not yield date=None."""
+    html = (
+        '<div class="post__raspisanie">'
+        "<p>1 сентября</p><p>Массовое катание 18.00-19.00</p><p></p>"
+        "<p>2 октября</p><p>Массовое катание 18.00-19.00</p><p></p>"
+        "<p>Массовое катание 19.00-20.00</p>"
+        "</div>"
+    )
+    # 1 Sep is 34 days before 5 Oct — outside the −30 / +330 inference window.
+    slots = _bobruisk_schedule_slots(html, reference=date(2026, 10, 5))
+    assert all(isinstance(d, date) for d, _, _ in slots)
+    assert [(d.isoformat(), s) for d, s, _ in slots] == [("2026-10-02", "18:00"), ("2026-10-03", "19:00")]
