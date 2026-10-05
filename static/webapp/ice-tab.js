@@ -45,6 +45,15 @@
     cursor: null,
     loading: false,
     loadedIntent: null,
+    /* TASK-182: «Показать ещё» и все места города для карты. listQuery — параметры
+       текущей ленты (для следующей страницы), mapItems — все страницы для пинов. */
+    listQuery: null,
+    loadingMore: false,
+    mapItems: null,
+    mapLoading: false,
+    /* TASK-182 (F1): «Тренеры» включились сами (в городе нет льда), а не по выбору
+       человека. В sessionStorage такой переход не пишется. */
+    autoCoach: false,
     /* Открытое выпадающее меню шапки: place | when | false */
     uiPicker: false,
   };
@@ -52,6 +61,8 @@
   var fetchGen = 0;
   var searchGen = 0;
   var lastSearchQuery = '';
+  /* TASK-182 (F4): запрос ленты в полёте — boot не дублирует его вторым loadList. */
+  var pendingGen = 0;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -105,7 +116,7 @@
   function persist() {
     M.saveIceState(
       {
-        intent: state.intent,
+        intent: state.autoCoach && state.intent === 'coach' ? 'skate' : state.intent,
         cityId: state.cityId,
         cityName: state.cityName,
         serviceIds: state.serviceIds,
@@ -299,10 +310,17 @@
     persist();
   }
 
+  /** Пины карты: все места города (mapItems), пока их нет — то, что в ленте. */
+  function mapSourceItems() {
+    if (M.catalogScope(state.intent, state.venueTypes) === 'shop') return state.items;
+    if (state.mapItems && state.mapItems.length >= state.items.length) return state.mapItems;
+    return state.items;
+  }
+
   function syncMapListItems() {
     if (!mapCtl || state.intent === 'coach') return;
     if (!mapViewActive()) return;
-    mapCtl.setListItems(state.items);
+    mapCtl.setListItems(mapSourceItems());
   }
 
   function syncShopListFromFilters() {
@@ -788,7 +806,8 @@
         },
       });
     }
-    mapCtl.setListItems(state.intent === 'coach' ? [] : state.items);
+    mapCtl.setListItems(state.intent === 'coach' ? [] : mapSourceItems());
+    ensureMapItems();
     mapCtl.start().then(function () {
       mapCtl.resize();
     });
@@ -992,7 +1011,7 @@
       return;
     }
     if (state.intent === 'coach') {
-      list.innerHTML = state.items.map(renderTrainerCard).join('');
+      list.innerHTML = state.items.map(renderTrainerCard).join('') + loadMoreHtml();
       showActiveList();
       return;
     }
@@ -1008,7 +1027,8 @@
           '<span class="ice-window-break__pill"><b>' + esc(brk.title) + '</b> · ' + esc(brk.sub) + '</span>' +
           '</div>'
         : '') +
-      parts.rest.map(renderArenaCard).join('');
+      parts.rest.map(renderArenaCard).join('') +
+      loadMoreHtml();
     /* Делимся найденным, а не всем списком: кнопка стоит сразу под блоком «в окне»,
        а приглушённые места без нужных сеансов идут уже после неё. */
     var brkEl = brk && list.querySelector('.ice-window-break');
@@ -1188,6 +1208,7 @@
       var next = kind.slice('intent:'.length);
       return function () {
         state.intent = M.coerceIntent(next);
+        state.autoCoach = false;
         renderList();
         setChips();
         setViewToggle();
@@ -1409,8 +1430,11 @@
       if (state.view === 'map') mapCtl.start();
       return;
     }
-    mapCtl.setListItems(state.items);
-    if (state.view === 'map') mapCtl.refresh();
+    mapCtl.setListItems(mapSourceItems());
+    if (state.view === 'map') {
+      mapCtl.refresh();
+      ensureMapItems();
+    }
   }
 
   function loadFailed() {
@@ -1429,7 +1453,12 @@
   function beginListFetch(lens) {
     fetchGen += 1;
     var gen = fetchGen;
+    pendingGen = gen;
     state.loading = true;
+    state.loadingMore = false;
+    state.mapItems = null;
+    state.mapLoading = false;
+    state.cursor = null;
     if (state.loadedIntent !== lens) {
       state.items = [];
       state.total = 0;
@@ -1440,6 +1469,7 @@
   }
 
   function isCurrentFetch(gen, lens) {
+    if (pendingGen === gen) pendingGen = 0;
     if (gen !== fetchGen) return false;
     if (lens === 'coach') return state.intent === 'coach';
     return state.intent !== 'coach';
@@ -1460,17 +1490,27 @@
     }
     var gen = beginListFetch('skate');
     var timeQ = whenQueryForApi();
-    var url = M.buildListUrl({
+    var query = {
       cityId: state.cityId,
       intent: state.intent,
       venueTypes: state.venueTypes,
-      limit: 50,
       when: timeQ.when,
       whenDay: timeQ.whenDay,
       // Знаем, где человек, — ближние места выше (сервер считает distance_km).
       near: state.near || '',
-    });
+    };
+    state.listQuery = query;
+    /* Магазины фильтруются на клиенте (услуга, «Открыто сейчас») — фильтру нужен
+       весь набор города, иначе подпись и пустое состояние врут про хвост за 50. */
+    var shopScope = M.catalogScope(state.intent, state.venueTypes) === 'shop';
+    var url = M.buildListUrl(
+      Object.assign({}, query, { limit: shopScope ? M.MAP_PAGE_LIMIT : M.LIST_PAGE_LIMIT })
+    );
     return fetchJson(url)
+      .then(function (data) {
+        if (!shopScope || !data || !data.next_cursor) return data;
+        return fetchRestPages(query, data, gen);
+      })
       .then(function (data) {
         if (!isCurrentFetch(gen, 'skate')) {
           if (state.loading && state.intent === 'coach') {
@@ -1482,8 +1522,10 @@
         state.loading = false;
         applyArenaPayload(data);
         state.loadedIntent = 'skate';
-        if (state.intent === 'skate' && !state.items.length) {
-          return maybeOpenTrainersWhenNoSkate();
+        /* TASK-182 (F1): только честное «в городе нет льда» от сервера. Не магазины
+           и не пустота после клиентских фильтров. */
+        if (M.noIceInCity(state.intent, state.venueTypes, data)) {
+          return maybeOpenTrainersWhenNoSkate(gen);
         }
         onListLoaded();
       })
@@ -1506,7 +1548,7 @@
     var url = M.buildTrainersUrl({
       cityId: state.cityId,
       serviceIds: state.serviceIds,
-      limit: 50,
+      limit: M.LIST_PAGE_LIMIT,
     });
     return fetchJson(url)
       .then(function (data) {
@@ -1521,6 +1563,118 @@
         state.loading = false;
         loadFailed();
       });
+  }
+
+  /**
+   * TASK-182 (F3): догрузить остальные страницы ленты (offset = next_cursor сервера,
+   * по MAP_PAGE_LIMIT — серверный максимум). Возвращает ответ с полным items и без
+   * next_cursor. Устаревший запрос (сменили город/вкладку) останавливается.
+   */
+  function fetchRestPages(query, first, gen) {
+    var items = ((first && first.items) || []).slice();
+    var cursor = first && first.next_cursor;
+    var pages = 0;
+    function step() {
+      if (!cursor || pages >= M.MAX_PAGES || gen !== fetchGen) {
+        return Promise.resolve(Object.assign({}, first, { items: items, next_cursor: cursor || null }));
+      }
+      pages += 1;
+      var url = M.buildListUrl(Object.assign({}, query, { limit: M.MAP_PAGE_LIMIT, cursor: cursor }));
+      return fetchJson(url).then(function (data) {
+        if (!data) {
+          cursor = null;
+          return step();
+        }
+        items = M.appendPage(items, data.items);
+        cursor = data.next_cursor || null;
+        return step();
+      });
+    }
+    return step();
+  }
+
+  /** Карта показывает все места города, а не первую страницу ленты. */
+  function ensureMapItems() {
+    if (state.intent === 'coach' || state.loading) return;
+    if (M.catalogScope(state.intent, state.venueTypes) === 'shop') return;
+    if (!state.cursor || !state.listQuery || state.mapItems || state.mapLoading) return;
+    var gen = fetchGen;
+    state.mapLoading = true;
+    fetchRestPages(state.listQuery, { items: state.items, next_cursor: state.cursor }, gen)
+      .then(function (data) {
+        if (gen !== fetchGen) return;
+        state.mapLoading = false;
+        state.mapItems = data.items;
+        if (mapCtl && mapViewActive()) {
+          mapCtl.setListItems(mapSourceItems());
+          mapCtl.refresh();
+        }
+      })
+      .catch(function () {
+        if (gen !== fetchGen) return;
+        state.mapLoading = false;
+      });
+  }
+
+  /** «Показать ещё»: следующая страница ленты дописывается в конец. */
+  function loadMore() {
+    if (state.loading || state.loadingMore || !state.cityId) return Promise.resolve();
+    var coach = state.intent === 'coach';
+    var view = M.loadMoreView({
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      items: state.items,
+      total: state.total,
+      cursor: state.cursor,
+    });
+    if (!view) return Promise.resolve();
+    var gen = fetchGen;
+    var url = coach
+      ? M.buildTrainersUrl({
+          cityId: state.cityId,
+          serviceIds: state.serviceIds,
+          limit: M.LIST_PAGE_LIMIT,
+          offset: state.items.length,
+        })
+      : M.buildListUrl(
+          Object.assign({}, state.listQuery, { limit: M.LIST_PAGE_LIMIT, cursor: state.cursor })
+        );
+    state.loadingMore = true;
+    renderList();
+    return fetchJson(url)
+      .then(function (data) {
+        if (gen !== fetchGen) return;
+        state.loadingMore = false;
+        var incoming = (data && data.items) || [];
+        state.items = M.appendPage(state.items, incoming);
+        if (!coach) state.cursor = (data && data.next_cursor) || null;
+        if (data && data.total != null) state.total = data.total;
+        if (coach && !incoming.length) state.total = state.items.length;
+        onListLoaded();
+      })
+      .catch(function () {
+        if (gen !== fetchGen) return;
+        state.loadingMore = false;
+        renderList();
+      });
+  }
+
+  function loadMoreHtml() {
+    var view = M.loadMoreView({
+      intent: state.intent,
+      venueTypes: state.venueTypes,
+      items: state.items,
+      total: state.total,
+      cursor: state.cursor,
+      loading: state.loading,
+      loadingMore: state.loadingMore,
+    });
+    if (!view) return '';
+    return (
+      '<button type="button" class="btn-neutral btn-block ice-more" data-ice-more="1"' +
+      (view.busy ? ' disabled aria-busy="true"' : '') +
+      '>' + esc(view.label) + '</button>'
+    );
   }
 
   function loadList() {
@@ -1623,6 +1777,8 @@
 
   function switchToCoach() {
     state.intent = 'coach';
+    /* Автопереход, а не выбор: persist запишет прежнюю вкладку (TASK-182). */
+    state.autoCoach = true;
     state.view = 'list';
     renderList();
     setChips();
@@ -1631,7 +1787,7 @@
     return loadTrainers();
   }
 
-  function maybeOpenTrainersWhenNoSkate() {
+  function maybeOpenTrainersWhenNoSkate(gen) {
     var city = cityFromState(state.cityId);
     if (city && (Number(city.trainer_count) || 0) > 0) {
       return switchToCoach();
@@ -1640,11 +1796,20 @@
       onListLoaded();
       return Promise.resolve();
     }
-    return fetchJson(M.buildTrainersUrl({ cityId: state.cityId, limit: 1 })).then(function (data) {
-      var n = data && (data.total != null ? data.total : ((data.items || []).length));
-      if (n > 0) return switchToCoach();
-      onListLoaded();
-    });
+    return fetchJson(M.buildTrainersUrl({ cityId: state.cityId, limit: 1 })).then(
+      function (data) {
+        if (gen != null && gen !== fetchGen) return;
+        var n = data && (data.total != null ? data.total : ((data.items || []).length));
+        if (n > 0) return switchToCoach();
+        onListLoaded();
+      },
+      function () {
+        /* TASK-182 (F5): лента уже загружена — сбой подсчёта тренеров не превращает
+           её в «Не удалось загрузить список». */
+        if (gen != null && gen !== fetchGen) return;
+        onListLoaded();
+      }
+    );
   }
 
   function failCatalogBoot() {
@@ -1685,6 +1850,10 @@
 
     if (cityChanged) {
       var cityCatalog = M.catalogStateAfterCityChange(city, state);
+      if (cityCatalog.intent !== state.intent) {
+        /* Город сам выбрал вкладку — это не выбор человека (TASK-182). */
+        state.autoCoach = cityCatalog.intent === 'coach';
+      }
       state.intent = cityCatalog.intent;
       state.venueTypes = cityCatalog.venueTypes.slice();
       state.shopService = cityCatalog.shopService;
@@ -1703,7 +1872,10 @@
         state.venueTypes && state.venueTypes.length
           ? state.intent
           : M.pickCityIntent(city, state.intent);
-      if (nextIntent !== state.intent) state.intent = nextIntent;
+      if (nextIntent !== state.intent) {
+        state.autoCoach = nextIntent === 'coach';
+        state.intent = nextIntent;
+      }
     }
     if (state.intent === 'coach') state.view = 'list';
     setCityLabel();
@@ -2092,6 +2264,11 @@
   }
 
   function onRootClick(ev) {
+    if (ev.target.closest('[data-ice-more]')) {
+      ev.preventDefault();
+      loadMore();
+      return;
+    }
     var invite = ev.target.closest('[data-invite-arena]');
     if (invite && global.GlideShareSheet) {
       ev.preventDefault();
@@ -2155,6 +2332,7 @@
         var mode = btn.getAttribute('data-catalog-mode') || 'places';
         var patch = M.applyCatalogMode(mode);
         state.intent = M.coerceIntent(patch.intent);
+        state.autoCoach = false;
         state.venueTypes = patch.venueTypes.slice();
         closeUiPicker();
         if (mode === 'coach') state.view = 'list';
@@ -2476,7 +2654,7 @@
       if (!state.cityId) {
         ensureProvisionalCity();
         if (!state.cityId && state.loading) failCatalogBoot();
-      } else if (state.loading && state.loadedIntent === null) {
+      } else if (state.loading && state.loadedIntent === null && !pendingGen) {
         loadList();
       }
     }, 3500);
@@ -2485,7 +2663,7 @@
         var fb = M.pickFallbackCity(state.cities);
         if (fb) applyCity(fb);
         else failCatalogBoot();
-      } else if (state.loading && state.loadedIntent === null) {
+      } else if (state.loading && state.loadedIntent === null && !pendingGen) {
         loadList();
       }
       if (saved && saved.scrollY) {

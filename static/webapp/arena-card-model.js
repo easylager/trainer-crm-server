@@ -15,6 +15,13 @@
   'use strict';
 
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;
+  /* TASK-182: часы работы — общий модуль со вкладкой «Лёд» (opening-hours.js). */
+  var OH =
+    typeof module === 'object' && module.exports && typeof require === 'function'
+      ? require('./opening-hours.js')
+      : typeof globalThis !== 'undefined'
+        ? globalThis.OpeningHours
+        : null;
   var ruText = RuText;
 
   var AMENITY_ORDER = [
@@ -661,46 +668,10 @@
 
   /* TASK-146: часы бывают daily (каждый день) и weekly (по дням). Ключи — как на сервере
      (src/application/arena_profile.py: WEEKDAY_KEYS), неделя с понедельника. */
-  var WEEK_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   var WEEK_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-  function normHhmm(raw) {
-    var t = String(raw == null ? '' : raw).trim().replace('.', ':');
-    var m = /^(\d{1,2})(?::(\d{1,2}))?$/.exec(t);
-    if (!m) return '';
-    var h = Number(m[1]);
-    var mi = Number(m[2] || 0);
-    if (h > 24 || mi > 59) return '';
-    return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
-  }
-
-  function parseDayIntervals(raw) {
-    if (!raw) return [];
-    if (raw.length && Array.isArray(raw[0])) {
-      var out = [];
-      raw.forEach(function (seg) {
-        if (seg && seg.length === 2 && normHhmm(seg[0]) && normHhmm(seg[1])) {
-          out.push([normHhmm(seg[0]), normHhmm(seg[1])]);
-        }
-      });
-      return out;
-    }
-    if (raw.length === 2 && normHhmm(raw[0]) && normHhmm(raw[1])) {
-      return [[normHhmm(raw[0]), normHhmm(raw[1])]];
-    }
-    return [];
-  }
-
   function intervalsForWeekday(hours, weekday) {
-    hours = hours || {};
-    if (hours.weekly && typeof hours.weekly === 'object') {
-      return parseDayIntervals(hours.weekly[WEEK_KEYS[((weekday % 7) + 7) % 7]]);
-    }
-    var daily = hours.daily;
-    if (daily && normHhmm(daily.open) && normHhmm(daily.close)) {
-      return [[normHhmm(daily.open), normHhmm(daily.close)]];
-    }
-    return [];
+    return OH.intervalsForWeekday(hours, weekday);
   }
 
   function formatIntervalsRu(intervals) {
@@ -740,24 +711,15 @@
   }
 
   /** «открыт до 20:00» — только если открыто сейчас; до открытия — «откроется в 10:00». */
-  function hhmmInInterval(hm, open, close) {
-    if (close > open) return hm >= open && hm < close;
-    return hm >= open || hm < close;
-  }
-
   function openUntilLabel(hours, now) {
     now = now || new Date();
     var weekday = (now.getDay() + 6) % 7;
+    /* Вчерашний ночной хвост (пт 18:00–02:00 → сб 01:00) тоже «открыт». */
+    var open = OH.openIntervalAt(hours, weekday, now.getHours() * 60 + now.getMinutes());
+    if (open) return 'открыт до ' + open[1];
     var intervals = intervalsForWeekday(hours, weekday);
-    if (!intervals.length) return '';
     var hm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
-    var i;
-    for (i = 0; i < intervals.length; i++) {
-      if (hhmmInInterval(hm, intervals[i][0], intervals[i][1])) {
-        return 'открыт до ' + intervals[i][1];
-      }
-    }
-    for (i = 0; i < intervals.length; i++) {
+    for (var i = 0; i < intervals.length; i++) {
       if (hm < intervals[i][0]) return 'откроется в ' + intervals[i][0];
     }
     return '';
