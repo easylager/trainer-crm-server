@@ -14,7 +14,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var HINT = 'Напишите, что нашли тренера в Glide — так ему проще ответить.';
+  var HINT = 'По желанию — можно упомянуть, что вы из каталога Glide.';
 
   return {
     hintText: function () {

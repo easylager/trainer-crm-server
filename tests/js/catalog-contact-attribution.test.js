@@ -20,7 +20,7 @@ describe('catalog contact attribution', () => {
     const { hintText } = loadModel();
     const t = hintText();
     assert.match(t, /Glide/i);
-    assert.match(t, /нашли тренера/i);
+    assert.match(t, /по желанию/i);
     assert.ok(t.length < 120);
   });
 });

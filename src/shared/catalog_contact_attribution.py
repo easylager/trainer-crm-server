@@ -3,6 +3,6 @@
 Keep in sync with ``static/webapp/catalog-contact-attribution.js``.
 """
 
-CATALOG_CONTACT_HINT = "Напишите, что нашли тренера в Glide — так ему проще ответить."
+CATALOG_CONTACT_HINT = "По желанию — можно упомянуть, что вы из каталога Glide."
 
 __all__ = ["CATALOG_CONTACT_HINT"]
