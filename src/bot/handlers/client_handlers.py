@@ -1042,6 +1042,19 @@ async def cmd_start(message: Message) -> None:
         base_is_https = base.lower().startswith("https://")
         async with async_session_factory() as db_session:
             trainer = await get_trainer(db_session, trainer_id_ref)
+        if trainer is None:
+            # Продуктовое решение: ссылка ведёт на тренера, которого нет — профиль удалён
+            # либо ссылку скопировали в другом окружении. Дальше по сценарию идти нельзя:
+            # и запись сигнала спроса, и привязка к ростеру нарушат FK на `trainers`.
+            # Клиент должен увидеть внятный ответ с путём в каталог, а не молчание бота.
+            logger.warning(
+                "welcome_ref points at a missing trainer telegram_id=%s trainer_id=%s",
+                telegram_id,
+                trainer_id_ref,
+            )
+            await message.answer(msg.CLIENT_ERROR_TRAINER_NOT_FOUND)
+            return
+        async with async_session_factory() as db_session:
             await record_profile_view_commit(
                 db_session,
                 trainer_id=int(trainer_id_ref),
