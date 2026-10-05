@@ -8,8 +8,7 @@
   14-day window (recent-history/demand reads), only their status changes.
 
 Revision ID: 0217_catalog_prod_hygiene
-Revises: 0215_catalog_listed_invite_push
-NOTE: rebase onto 0216_ice_ops_alerts once PR #120 (TASK-176) lands on master.
+Revises: 0216_ice_ops_alerts
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0217_catalog_prod_hygiene"
-down_revision = "0215_catalog_listed_invite_push"
+down_revision = "0216_ice_ops_alerts"
 branch_labels = None
 depends_on = None
 
