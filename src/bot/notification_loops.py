@@ -2726,6 +2726,55 @@ async def run_profile_enrichment_loop(trainer_bot: Bot) -> None:
         await asyncio.sleep(_onboarding_reactivation_loop_interval_sec())
 
 
+async def run_catalog_listed_invite_push_loop(trainer_bot: Bot) -> None:
+    """
+    Once per tick: trainers newly listed in the catalog with no real bookings yet get the
+    invite-link + support push (after a short delay from ``catalog_state_changed_at``).
+
+    Idempotency: ``trainer_profiles.catalog_listed_invite_push_sent_at``.
+    """
+    from src.application.trainer_catalog_listed_invite_push_use_cases import (
+        list_due_catalog_listed_invite_pushes,
+        mark_catalog_listed_invite_push_sent,
+    )
+    from src.bot.trainer_catalog_listed_invite_delivery import send_trainer_catalog_listed_invite_push
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                due_list = await list_due_catalog_listed_invite_pushes(session)
+                if due_list:
+                    logger.info("Catalog listed invite push: %d due", len(due_list))
+                for item in due_list:
+                    try:
+                        if not await is_trainer_push_allowed_now(session, item.trainer_id):
+                            continue
+                        err = await send_trainer_catalog_listed_invite_push(
+                            trainer_bot,
+                            chat_id=item.trainer_telegram_id,
+                            trainer_id=item.trainer_id,
+                        )
+                        if err:
+                            logger.warning(
+                                "Catalog listed invite push skipped trainer_id=%s err=%s",
+                                item.trainer_id,
+                                err,
+                            )
+                            continue
+                        await mark_catalog_listed_invite_push_sent(session, item.trainer_id)
+                    except Exception as e:
+                        logger.warning(
+                            "Catalog listed invite push failed trainer_id=%s: %s",
+                            item.trainer_id,
+                            e,
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Catalog listed invite push loop: %s", e)
+        await asyncio.sleep(_onboarding_reactivation_loop_interval_sec())
+
+
 async def run_recurring_materialization_loop() -> None:
     """
     Periodically prune over-materialized futures and fill gaps inside

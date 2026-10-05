@@ -29,6 +29,7 @@ from src.bot.notification_loops import (
     run_lead_mode_recovery_loop,
     run_no_response_reminder_loop,
     run_onboarding_reactivation_loop,
+    run_catalog_listed_invite_push_loop,
     run_profile_enrichment_loop,
     run_recurring_materialization_loop,
     run_reminder_loop,
@@ -114,6 +115,7 @@ async def main() -> None:
         asyncio.create_task(run_subscription_expire_and_reminder_loop(trainer_bot), name="subscription_expire_reminder"),
         asyncio.create_task(run_lead_mode_recovery_loop(trainer_bot), name="lead_mode_recovery"),
         asyncio.create_task(run_onboarding_reactivation_loop(trainer_bot), name="onboarding_reactivation"),
+        asyncio.create_task(run_catalog_listed_invite_push_loop(trainer_bot), name="catalog_listed_invite"),
         asyncio.create_task(run_profile_enrichment_loop(trainer_bot), name="profile_enrichment"),
         asyncio.create_task(run_care_pulse_loop(trainer_bot, client_bot), name="care_pulse"),
     ]
