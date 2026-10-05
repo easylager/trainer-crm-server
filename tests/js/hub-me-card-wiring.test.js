@@ -497,4 +497,46 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     // Тот же ритм, что у соседей по хабу.
     assert.match(homeCss, /\.hub-explore\s*\{[^}]*margin:\s*0\s+16px\s+20px/);
   });
+
+  it('эмодзи из имени не протекает в подпись действия, но остаётся в заголовке', () => {
+    const body = fnBody('hubNameForLabel');
+    assert.match(body, /replace\(/);
+    // Чистится имя ТОЛЬКО для склонения; сам заголовок карточки имя не трогает.
+    assert.match(fnBody('hubMeDeclinedForms'), /hubNameForLabel\(fullName\)/);
+    const who = fnBody('buildMeCardTrainerInput');
+    assert.ok(!/hubNameForLabel/.test(who), 'имя в строке лица обязано остаться таким, как человек себя назвал');
+  });
+
+  it('сломанное фото откатывается на инициалы, а не остаётся битой картинкой', () => {
+    const body = fnBody('wireMeCardPhoto');
+    assert.match(body, /\.avatar--photo img/);
+    assert.match(body, /onerror/);
+    assert.match(body, /data-me-initials/);
+    // Картинка могла отвалиться до навешивания обработчика.
+    assert.match(body, /img\.complete && img\.naturalWidth === 0/);
+    assert.match(fnBody('wireMeCardBlock'), /wireMeCardPhoto\(block\)/);
+  });
+
+  it('кнопка «написать» — подписанный контрол, а не голая иконка', () => {
+    // Проверяем разметку, а не имя класса в CSS: класс можно переименовать,
+    // и гвард бы этого не заметил — на мутационной проверке так и вышло.
+    const card = require(path.join(webapp, 'hub-me-card.js'));
+    const out = card.renderHtml(
+      card.buildView(
+        {
+          kind: 'trainer',
+          trainer: { id: 7, name: 'Максим', canBook: true, username: 'maksim' },
+          // Конверт живёт рядом с полосой окон: без окон «написать» становится
+          // главной залитой кнопкой, и отдельного кружка нет по замыслу.
+          slots: [{ id: 1, start_time: '08:00', slot_date: '2026-10-06' }],
+        },
+        new Date('2026-10-05T12:00:00')
+      )
+    );
+    assert.match(out, /data-me-action="dm"/);
+    assert.match(out, />Написать</, 'у кнопки нет видимой подписи — голая иконка не читается как контрол');
+    // И она остаётся пилюлей, а не кружком: у кружка нет горизонтального padding.
+    const rule = homeCss.match(/\.me__dm \{[^}]*\}/);
+    assert.ok(rule && /padding:\s*0\s+\d+px/.test(rule[0]), rule && rule[0]);
+  });
 });

@@ -762,9 +762,22 @@
        * Модуля нет — полей нет, и модель переходит на безпадежные формы
        * («Написать тренеру»), а не на кривой падеж.
        */
+      /**
+       * Эмодзи и прочие символы из телеграмного имени остаются в карточке как
+       * есть — человек сам так себя назвал. Но в подпись действия они лезть не
+       * должны: «Все окна Максима 🪴» читается так, будто растение входит в
+       * предложение. В заголовке имя живое, в глаголе — чистое.
+       */
+      function hubNameForLabel(raw) {
+        return ((raw || '') + '')
+          .replace(/[^0-9A-Za-zА-Яа-яЁё\s'’-]+/gu, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       function hubMeDeclinedForms(fullName) {
         var ru = window.RuPersonName;
-        var name = ((fullName || '') + '').trim();
+        var name = hubNameForLabel(fullName);
         if (!name || !ru || typeof ru.inflectPersonName !== 'function') return null;
         var out = {};
         var dat = ru.inflectPersonName(name, '', 'dat');
@@ -849,7 +862,27 @@
        * города и рынка, и до тех пор карточка не должна падать на чужом
        * data-me-action.
        */
+      /**
+       * Сбой загрузки фото обязан выглядеть как его отсутствие, а не как
+       * поломка: сломанная картинка в кружке читается хуже, чем инициалы.
+       * Тот же приём, что у карусели тренеров (wireDiscoveryCardPhotos).
+       */
+      function wireMeCardPhoto(block) {
+        var nodes = block.querySelectorAll('.avatar--photo img');
+        Array.prototype.forEach.call(nodes, function (img) {
+          img.onerror = function () {
+            var box = img.parentNode;
+            if (!box) return;
+            box.classList.remove('avatar--photo');
+            box.textContent = box.getAttribute('data-me-initials') || '';
+          };
+          // Картинка могла отвалиться до навешивания обработчика.
+          if (img.complete && img.naturalWidth === 0) img.onerror();
+        });
+      }
+
       function wireMeCardBlock(block) {
+        wireMeCardPhoto(block);
         if (hubMeCardWired) return;
         hubMeCardWired = true;
         block.addEventListener('click', function (ev) {

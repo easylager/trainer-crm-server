@@ -753,7 +753,14 @@
   function avatarHtml(who) {
     var cls = 'avatar' + (who.hero ? ' avatar--lg' : '');
     if (who.photo) {
-      return '<div class="' + cls + ' avatar--photo"><img src="' + esc(who.photo) + '" alt=""></div>';
+      /*
+       * Инициалы едут рядом с фото в data-: фото может не загрузиться (файла
+       * нет, CDN отдал 404 в Telegram WebView), и тогда хабу надо чем-то
+       * заменить картинку, не угадывая имя заново. Сам откат делает хаб —
+       * модель чистая и в DOM не ходит.
+       */
+      return '<div class="' + cls + ' avatar--photo" data-me-initials="' + esc(who.initials) +
+        '"><img src="' + esc(who.photo) + '" alt="" loading="eager" decoding="async"></div>';
     }
     return '<div class="' + cls + '" aria-hidden="true">' + esc(who.initials) + '</div>';
   }
@@ -776,8 +783,9 @@
         ' aria-label="Карточка тренера, ' + esc(who.name) + '">' + body + '</button>'
       : body;
     var dm = who.dm
-      ? '<button type="button" class="me__dm" data-me-action="dm"' + dmAttrs(who.dm) +
-        ' aria-label="Написать тренеру">✉</button>'
+      ? '<button type="button" class="me__dm" data-me-action="dm"' + dmAttrs(who.dm) + '>' +
+        '<span class="me__dm-ic" aria-hidden="true">✉</span>' +
+        '<span class="me__dm-label">Написать</span></button>'
       : '';
     return '<div class="me__who' + (who.hero ? ' me__who--hero' : '') + '">' + main + dm + '</div>';
   }

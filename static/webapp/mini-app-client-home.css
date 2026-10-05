@@ -2168,17 +2168,50 @@ a.hub-ice-card {
   margin-top: 2px;
 }
 
+/*
+ * Было: голый кружок с конвертом. На живом экране он читался как украшение —
+ * иконка без подписи у правого края не говорит, что она делает и что нажимаема.
+ * Стало: пилюля с иконкой И словом. Места хватает, потому что у строки лица
+ * справа ничего больше нет.
+ */
 .me__dm {
   flex: none;
-  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--glide-line);
+  padding: 0 12px;
+  border-radius: var(--app-radius-pill);
+  border: 1px solid var(--glide-line-strong);
   background: var(--glide-surface);
-  display: grid;
-  place-items: center;
-  font-size: var(--app-icon-sm);
+  font-size: var(--app-text-sm);
+  font-weight: var(--app-weight-semibold);
   color: var(--glide-ink-teal);
+  white-space: nowrap;
+}
+
+.me__dm-ic {
+  font-size: var(--app-icon-sm);
+  line-height: 1;
+}
+
+/* Узкий экран: слово уходит, остаётся кружок — но уже после того, как
+   на нормальной ширине человек один раз увидел, что это «Написать». */
+@media (max-width: 340px) {
+  .me__dm-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .me__dm {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
 }
 
 .me__line {
