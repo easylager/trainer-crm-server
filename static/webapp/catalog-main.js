@@ -3689,21 +3689,34 @@
 
       function catalogContactPrefillText() {
         var M = window.CatalogContactAttribution;
-        return M && typeof M.prefillText === 'function' ? M.prefillText() : '';
+        if (M && typeof M.prefillText === 'function') return M.prefillText();
+        return (
+          'Здравствуйте! Пишу из каталога Glide. ' +
+          'Хочу заниматься — подскажите, как удобнее записаться?'
+        );
       }
 
-      function appendCatalogContactHint(container, afterNode) {
+      function catalogContactHintText() {
         var M = window.CatalogContactAttribution;
-        if (!container || !M || typeof M.hintText !== 'function') return;
-        var hint = document.createElement('p');
-        hint.className = 'trainer-contact-hint';
-        hint.textContent = M.hintText();
-        if (afterNode && afterNode.parentNode === container) {
-          if (afterNode.nextSibling) container.insertBefore(hint, afterNode.nextSibling);
-          else container.appendChild(hint);
-        } else {
-          container.appendChild(hint);
+        if (M && typeof M.hintText === 'function') return M.hintText();
+        return (
+          'Откроется чат в Telegram — в поле сообщения подставим короткий текст про Glide, ' +
+          'его можно отредактировать перед отправкой.'
+        );
+      }
+
+      /** После innerHTML += на #trainerDetailActions подсказку нужно вставить заново. */
+      function ensureCatalogContactHint(container) {
+        if (!container) return;
+        var btn = container.querySelector('[data-action="contact-trainer"]');
+        if (!btn) return;
+        var hint = container.querySelector('.trainer-contact-hint');
+        if (!hint) {
+          hint = document.createElement('p');
+          hint.className = 'trainer-contact-hint';
+          btn.insertAdjacentElement('afterend', hint);
         }
+        hint.textContent = catalogContactHintText();
       }
 
       function openTrainerTelegramContact(trainer) {
@@ -3763,7 +3776,6 @@
         } else {
           container.appendChild(btn);
         }
-        if (!opts.skipAttributionHint) appendCatalogContactHint(container, btn);
         return true;
       }
 
@@ -6469,6 +6481,7 @@
             errActions.innerHTML = '';
             appendContactTrainerButton(errActions, tt, { primary: true, label: 'Написать тренеру' });
             errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            ensureCatalogContactHint(errActions);
             appendTrainerActionChips(errActions, tt, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
@@ -6535,6 +6548,7 @@
         if (t.has_pass_products || t.has_certificate_products) {
           actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
         }
+        ensureCatalogContactHint(actionsEl);
         appendTrainerActionChips(actionsEl, t, slots.length === 0);
         var btnBook = document.getElementById('btnBookFromDetail');
         if (btnBook)
@@ -6839,6 +6853,7 @@
             });
           }
           actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          ensureCatalogContactHint(actionsLeadEl);
           appendTrainerActionChips(actionsLeadEl, t, true);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
           wirePhoneCallLinks(document.getElementById('trainerDetailSlots'));
@@ -6857,6 +6872,7 @@
             errActions.innerHTML = '';
             appendContactTrainerButton(errActions, t, { primary: true, label: 'Написать тренеру' });
             errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            ensureCatalogContactHint(errActions);
             appendTrainerActionChips(errActions, t, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
