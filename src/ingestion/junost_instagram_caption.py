@@ -5,6 +5,7 @@ import re
 from datetime import date
 from pathlib import Path
 
+from src.ingestion.dates import minsk_today
 from src.ingestion.adapters_minsk_by_egress import (
     _JUNOST_MONTHS,
     _JUNOST_TIME_RANGE,
@@ -57,7 +58,7 @@ def parse_junost_instagram_caption(
     pivot_year: int | None = None,
 ) -> list[ExtractedSlot]:
     """Parse @junost.by post caption (copy-paste). Returns slots without prices set."""
-    anchor = pivot_year or date.today().year
+    anchor = pivot_year or minsk_today().year
     plain = re.sub(r"\s+", " ", text.replace("\u00a0", " ")).strip()
     day_match = _CAPTION_DATE.search(plain)
     if not day_match:

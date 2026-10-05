@@ -18,6 +18,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
+from src.ingestion.dates import infer_date_from_day_month, parser_reference_date
 from src.ingestion.htmlutil import parse_tables, price_from_label, strip_tags
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
@@ -144,7 +145,7 @@ class VitebskDsParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="massovoe-katanie.html", url_keys=("url",))
         text = strip_tags(html)
-        anchor_year = int(job.config.get("run_year") or date.today().year)
+        anchor_year = parser_reference_date(job.config).year
         duration = int(job.config.get("default_duration_minutes") or 60)
         typo_map = dict(job.config.get("typo_times") or {})
         adult_marker = str(job.config.get("adult_price_marker") or "Стоимость билета")
@@ -419,20 +420,16 @@ def _orsha_extract_from_image(image_bytes: bytes, config: dict[str, Any]) -> tup
     columns = _orsha_header_columns(img)
     if not columns:
         return None, []
-    year = int(config.get("run_year") or date.today().year)
+    reference = parser_reference_date(config)
     col_dates: list[tuple[int, date]] = []
     for x_center, token in columns:
         day_str, month_str = token.split(".")
         month = int(month_str)
         day = int(day_str)
-        # Month can roll backwards at a month boundary (e.g. "31.08" before "01.09").
-        col_year = year
-        if col_dates and month < col_dates[-1][1].month and col_dates[-1][1].month == 12:
-            col_year = year + 1
-        try:
-            col_dates.append((x_center, date(col_year, month, day)))
-        except ValueError:
+        local = infer_date_from_day_month(day, month, reference)
+        if local is None:
             continue
+        col_dates.append((x_center, local))
     if not col_dates:
         return None, []
     week_start = min(d for _, d in col_dates)
@@ -550,9 +547,10 @@ class GorkiLdsParser(IceParser):
         age_note = job.config.get("age_note")
         adult, child, rental = _gorki_prices(prices_html)
 
-        anchor_year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         year_match = _YEAR_TOKEN.search(strip_tags(home_html))
-        year = int(year_match.group(1)) if year_match else anchor_year
+        if year_match:
+            reference = reference.replace(year=int(year_match.group(1)))
 
         slots: list[ExtractedSlot] = []
         paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", home_html, re.S | re.IGNORECASE)
@@ -576,9 +574,8 @@ class GorkiLdsParser(IceParser):
                     continue
                 start = _fmt(int(hh), int(mm))
                 for day_num in (int(d1), int(d2)):
-                    try:
-                        local_date = date(year, month, day_num)
-                    except ValueError:
+                    local_date = infer_date_from_day_month(day_num, month, reference)
+                    if local_date is None:
                         continue
                     slots.append(_gorki_slot(local_date, start, duration, adult, child, rental, age_note))
                 continue
@@ -589,9 +586,8 @@ class GorkiLdsParser(IceParser):
                 if not month:
                     continue
                 start = _fmt(int(hh), int(mm))
-                try:
-                    local_date = date(year, month, int(d1))
-                except ValueError:
+                local_date = infer_date_from_day_month(int(d1), month, reference)
+                if local_date is None:
                     continue
                 slots.append(_gorki_slot(local_date, start, duration, adult, child, rental, age_note))
         return Extraction(
@@ -648,14 +644,11 @@ def _gorki_prices(html: str) -> tuple[int | None, int | None, int | None]:
 _HEADER_DATE_PAIR = re.compile(r"(\d{1,2})\s*([А-Яа-яЁё]+)")
 
 
-def _ostrovets_header_date(cell: str, year: int) -> date | None:
+def _ostrovets_header_date(cell: str, reference: date) -> date | None:
     for num, word in _HEADER_DATE_PAIR.findall(cell):
         month = _MONTHS.get(word.lower())
         if month:
-            try:
-                return date(year, month, int(num))
-            except ValueError:
-                return None
+            return infer_date_from_day_month(int(num), month, reference)
     return None
 
 
@@ -665,7 +658,7 @@ class OstrovetsLdsParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="katanie-na-konkah.html", url_keys=("url",))
         prices_html = await load_source_text(job, filename="prejskurant-cen.html", url_keys=("prices_url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        reference = parser_reference_date(job.config)
         duration = int(job.config.get("default_duration_minutes") or 45)
         empty_marker = str(job.config.get("empty_cell_marker") or "нет катаний").lower()
         age_note = job.config.get("age_note")
@@ -676,7 +669,7 @@ class OstrovetsLdsParser(IceParser):
             if not table or len(table[0]) != 7:
                 continue  # skip the redundant 3-column responsive duplicate
             header = table[0]
-            col_dates = [_ostrovets_header_date(cell, year) for cell in header]
+            col_dates = [_ostrovets_header_date(cell, reference) for cell in header]
             for row in table[1:]:
                 for idx, cell in enumerate(row):
                     if idx >= len(col_dates) or col_dates[idx] is None:

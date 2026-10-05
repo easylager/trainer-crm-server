@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.ingestion.dates import parser_reference_date
 from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.source_io import fetch_http_json, fetch_http_text, load_source_json, load_source_text
@@ -139,7 +140,7 @@ class LedovyyDvoretsHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         text = await load_source_text(job, filename="rink-page.md", url_keys=("url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         cutoff = str(job.config.get("day_rate_cutoff") or "17:30")
         adult_before = job.config.get("adult_price_before_cutoff_minor")
         adult_from = job.config.get("adult_price_from_cutoff_minor")
@@ -289,7 +290,7 @@ class BalticArenaHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         text = await load_source_text(job, filename="mass-skating.html", url_keys=("url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         duration_prices = {
             int(k): int(v)
             for k, v in (job.config.get("duration_price_minor") or _BALTIC_DURATION_PRICE_MINOR).items()
@@ -629,7 +630,7 @@ class MagnitArenaHtmlParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         page_html = await load_source_text(job, filename="index.html", url_keys=("url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         base_price = job.config.get("base_price_adult_minor")
         rental = job.config.get("rental_price_flat_minor")
 
@@ -769,7 +770,7 @@ class ParnasArenaTextParser(IceParser):
 
     async def extract(self, job: ParserJob) -> Extraction:
         text = await load_source_text(job, filename="schedule.md", url_keys=("url",))
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         base_price = job.config.get("base_price_adult_minor")
         rental = job.config.get("rental_price_flat_minor")
         slots: list[ExtractedSlot] = []
@@ -827,7 +828,7 @@ class BugryArenaHtmlParser(IceParser):
     async def extract(self, job: ParserJob) -> Extraction:
         html = await load_source_text(job, filename="index.html", url_keys=("url",))
         rinks = job.config.get("rinks") or {}
-        year = int(job.config.get("run_year") or date.today().year)
+        year = parser_reference_date(job.config).year
         slots: list[ExtractedSlot] = []
         for day, month, big_cell, small_cell in _BUGRY_ROW.findall(html):
             local_date = date(year, int(month), int(day)).isoformat()
