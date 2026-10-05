@@ -11,7 +11,9 @@ from sqlalchemy import text
 from src.ingestion.freshness import (
     BLOCKED_RETRY_MINUTES,
     DAY_POLL_MINUTES,
+    ERROR_CODE_EMPTY_AFTER_FILTER,
     ERROR_CODE_EMPTY_AFTER_SLOTS,
+    ERROR_CODE_EMPTY_SOURCE,
     MINSK_TZ,
     NIGHT_POLL_MINUTES,
     failure_retry_interval,
@@ -168,10 +170,44 @@ def test_empty_is_failure_only_while_old_sessions_are_shown() -> None:
     assert st.failure_streak == 1
     assert st.last_error_code == ERROR_CODE_EMPTY_AFTER_SLOTS
     assert "8" in (st.last_error_summary or "")
-    # Межсезонье: источник пуст и показывать нечего — это честно, не сбой.
+    # Витрина опустела (старые сеансы истекли): пустой прогон — не новый сбой, но и не
+    # выздоровление (TASK-178). Серия остаётся, last_ok_at не двигается.
     st2 = next_source_state(st, _record(RUN_STATUS_EMPTY), shown_sessions=0)
-    assert st2.failure_streak == 0
+    assert st2.failure_streak == 1
+    assert st2.failing_since == st.failing_since
     assert st2.last_ok_at == prev.last_ok_at
+    assert st2.last_error_code == ERROR_CODE_EMPTY_SOURCE
+
+
+def test_empty_on_empty_storefront_never_resets_an_error_series() -> None:
+    """TASK-178 п.1: error, error → потом пусто при пустой витрине — серия не обнуляется."""
+    st = SourceState(last_ok_at=_NOW - timedelta(days=2))
+    for _ in range(3):
+        st = next_source_state(st, _record(RUN_STATUS_ERROR, code="extract_error"), shown_sessions=4)
+    assert st.failure_streak == 3
+    for _ in range(5):
+        st = next_source_state(st, _record(RUN_STATUS_EMPTY), shown_sessions=0)
+    assert st.failure_streak == 3
+    assert st.failing_since is not None
+    assert st.last_ok_at == _NOW - timedelta(days=2)
+
+
+def test_empty_reason_code_is_kept_from_the_run() -> None:
+    rec = replace(
+        _record(RUN_STATUS_EMPTY),
+        error_code=ERROR_CODE_EMPTY_AFTER_FILTER,
+        slots_dropped=16,
+        error_message="извлечено 16, опубликовано 0: в прошлом 16",
+    )
+    st = next_source_state(SourceState(), rec, shown_sessions=0)
+    assert st.failure_streak == 0
+    assert st.last_error_code == ERROR_CODE_EMPTY_AFTER_FILTER
+    assert "в прошлом 16" in (st.last_error_summary or "")
+    # Если же у нас ещё висят сеансы, это сбой «источник перестал их подтверждать».
+    st = next_source_state(SourceState(), rec, shown_sessions=3)
+    assert st.failure_streak == 1
+    assert st.last_error_code == ERROR_CODE_EMPTY_AFTER_SLOTS
+    assert "в прошлом 16" in (st.last_error_summary or "")
 
 
 # ── Флаг устаревания для публичного API ──────────────────────────────────
@@ -240,6 +276,18 @@ class _ScriptedParser(IceParser):
         if step == "raise":
             raise RuntimeError("site layout changed")
         slots = []
+        if step == "past":
+            slots = [
+                ExtractedSlot(
+                    local_date="2026-09-29",
+                    starts_at_local=f"{10 + i}:00",
+                    ends_at_local=f"{10 + i}:45",
+                    kind_raw="Массовое катание",
+                )
+                for i in range(3)
+            ] + [
+                ExtractedSlot(local_date="2026-10-03", starts_at_local="12:00", kind_raw="хоккей"),
+            ]
         if step == "ok":
             slots = [
                 ExtractedSlot(
@@ -313,6 +361,50 @@ async def test_scheduler_flags_zero_slots_when_old_sessions_still_shown() -> Non
     st = store.get(1).state
     assert st.failure_streak == 1
     assert st.last_error_code == ERROR_CODE_EMPTY_AFTER_SLOTS
+
+
+@pytest.mark.asyncio
+async def test_scheduler_says_where_slots_were_lost() -> None:
+    """TASK-178 п.4: empty отличает «источник пуст» от «мы всё отбросили»."""
+    store = InMemoryParserJobStore([_job()])
+    recorder = InMemoryScrapeRunRecorder()
+    registry = ParserRegistry()
+    registry.register(_ScriptedParser(["past", "empty"]))
+    sched = IceIngestScheduler(store=store, recorder=recorder, registry=registry, rng=_NoJitter())
+
+    await _run_at(sched, store, _NOW)
+    await _run_at(sched, store, _NOW + timedelta(minutes=45))
+
+    filtered, empty = recorder.runs
+    assert filtered.status == RUN_STATUS_EMPTY
+    assert filtered.error_code == ERROR_CODE_EMPTY_AFTER_FILTER
+    assert (filtered.slot_count, filtered.slots_dropped) == (0, 4)
+    assert filtered.error_message == "извлечено 4, опубликовано 0: в прошлом 3, неизвестный вид 1"
+    assert empty.status == RUN_STATUS_EMPTY
+    assert empty.error_code == ERROR_CODE_EMPTY_SOURCE
+    assert (empty.slot_count, empty.slots_dropped) == (0, 0)
+    assert store.get(1).state.last_error_code == ERROR_CODE_EMPTY_SOURCE
+
+
+def test_normalize_report_counts_every_dropped_slot() -> None:
+    from src.ingestion.normalize import IceSessionNormalizer
+
+    extraction = Extraction(
+        arena_id=100,
+        parser_key="p_v1",
+        snapshot=None,
+        slots=[
+            ExtractedSlot(local_date="2026-09-30", starts_at_local="18:00", kind_raw="Массовое катание"),
+            ExtractedSlot(local_date="2026-10-02", starts_at_local="18:00", kind_raw="Массовое катание"),
+            ExtractedSlot(local_date="2026-10-02", starts_at_local="18:00", kind_raw="Массовое катание"),
+            ExtractedSlot(local_date="2026-10-02", starts_at_local="20:00", kind_raw="тренировка"),
+        ],
+    )
+    drafts, report = IceSessionNormalizer().normalize_with_report(extraction, _job(), now=_NOW)
+    assert len(drafts) == 1
+    assert (report.extracted, report.published, report.dropped) == (4, 1, 3)
+    assert (report.past, report.merged_duplicates, report.unknown_kind) == (1, 1, 1)
+    assert IceSessionNormalizer().normalize(extraction, _job(), now=_NOW) == drafts
 
 
 @pytest.mark.asyncio

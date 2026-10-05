@@ -55,6 +55,10 @@ CONFIG_STALE_AFTER_HOURS = "stale_after_hours"
 CONFIG_ALERTS_MUTED = "alerts_muted"
 
 ERROR_CODE_EMPTY_AFTER_SLOTS = "empty_after_slots"
+# TASK-178: почему прогон пустой. Источник не дал ни одного слота (вёрстка? межсезонье?)
+# или дал, но все отброшены нормализацией (обычно — все сеансы уже прошли).
+ERROR_CODE_EMPTY_SOURCE = "empty_source"
+ERROR_CODE_EMPTY_AFTER_FILTER = "empty_after_filter"
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -82,12 +86,16 @@ def config_flag(config: dict[str, Any] | None, key: str) -> bool:
 
 
 def is_run_failure(record: ScrapeRunRecord, *, shown_sessions: int) -> bool:
-    """Сбой — это когда пользователь может видеть неправду.
+    """Прогон, который удлиняет серию сбоев (и даёт быстрый 🔴 со второго подряд).
 
     error/blocked — всегда. empty — только если у арены ещё висят будущие сеансы
     из прошлых прогонов: empty их не удаляет (защита от сломанного парсера), значит
-    мы показываем то, чего источник больше не подтверждает. Пустой источник при
-    пустой витрине (межсезонье) — честное «нечего показывать», не сбой.
+    мы показываем то, чего источник больше не подтверждает.
+
+    Пустой прогон при пустой витрине — не сбой, но и **не выздоровление** (TASK-178):
+    серию он не обнуляет и ``last_ok_at`` не двигает. Иначе «вёрстка сломалась →
+    старые сеансы истекли» давало ложное ✅. Долгую пустоту ловит порог устаревания
+    в алертах (от последнего ok, независимо от витрины).
     """
     if record.status in (RUN_STATUS_ERROR, RUN_STATUS_BLOCKED):
         return True
@@ -96,13 +104,22 @@ def is_run_failure(record: ScrapeRunRecord, *, shown_sessions: int) -> bool:
     return False
 
 
+def _empty_code(record: ScrapeRunRecord) -> str:
+    if record.error_code in (ERROR_CODE_EMPTY_SOURCE, ERROR_CODE_EMPTY_AFTER_FILTER):
+        return record.error_code
+    return ERROR_CODE_EMPTY_AFTER_FILTER if record.slots_dropped > 0 else ERROR_CODE_EMPTY_SOURCE
+
+
 def next_source_state(
     prev: SourceState,
     record: ScrapeRunRecord,
     *,
     shown_sessions: int,
 ) -> SourceState:
-    """Новое состояние после прогона. Алертные поля не трогаем — их ведёт alerts."""
+    """Новое состояние после прогона. Алертные поля не трогаем — их ведёт alerts.
+
+    Серию сбоев обнуляет только ``ok`` — прогон, который реально опубликовал сеансы.
+    """
     finished = _as_utc(record.finished_at)
     if record.status == RUN_STATUS_OK:
         return replace(
@@ -115,18 +132,18 @@ def next_source_state(
             last_error_summary=None,
         )
     if not is_run_failure(record, shown_sessions=shown_sessions):
-        # empty при пустой витрине: источник прочитан, показывать нечего — серия сбоев
-        # закончилась, но last_ok_at не двигаем (расписания-то не было).
+        # empty при пустой витрине: показывать нечего. Серию не трогаем (ни +1, ни сброс),
+        # last_ok_at не двигаем, но запоминаем причину — её покажет алерт устаревания.
         return replace(
             prev,
-            failing_since=None,
-            failure_streak=0,
-            last_error_code=None,
-            last_error_summary=None,
+            last_error_code=_empty_code(record),
+            last_error_summary=(record.error_message or "")[:500] or None,
         )
     if record.status == RUN_STATUS_EMPTY:
         code = ERROR_CODE_EMPTY_AFTER_SLOTS
         summary = f"источник вернул 0 сеансов, а у нас показано {shown_sessions}"
+        if record.error_message:
+            summary = f"{summary} ({record.error_message})"
     else:
         code = record.error_code or record.status
         summary = record.error_message
@@ -137,6 +154,23 @@ def next_source_state(
         last_error_code=(code or "")[:64] or None,
         last_error_summary=(summary or "")[:500] or None,
     )
+
+
+def replay_source_state(
+    runs: list[ScrapeRunRecord],
+    *,
+    shown_sessions: int,
+    start: SourceState | None = None,
+) -> SourceState:
+    """Состояние источника, пересчитанное по истории прогонов (старые → новые).
+
+    Историческое число видимых сеансов не хранится, поэтому для empty берётся
+    ``shown_sessions`` — текущая витрина (то же приближение, что в backfill 0211).
+    """
+    state = start or SourceState()
+    for record in sorted(runs, key=lambda r: _as_utc(r.finished_at)):
+        state = next_source_state(state, record, shown_sessions=shown_sessions)
+    return state
 
 
 def _is_daytime(local: datetime) -> bool:
@@ -284,7 +318,9 @@ __all__ = [
     "CONFIG_STALE_AFTER_HOURS",
     "DAY_POLL_MINUTES",
     "DEFAULT_STALE_AFTER_HOURS",
+    "ERROR_CODE_EMPTY_AFTER_FILTER",
     "ERROR_CODE_EMPTY_AFTER_SLOTS",
+    "ERROR_CODE_EMPTY_SOURCE",
     "MINSK_TZ",
     "NIGHT_POLL_MINUTES",
     "SourceState",
@@ -295,6 +331,7 @@ __all__ = [
     "is_schedule_stale",
     "next_poll_at",
     "next_source_state",
+    "replay_source_state",
     "schedule_freshness_fields",
     "stale_after",
 ]
