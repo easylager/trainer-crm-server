@@ -28,6 +28,7 @@ from src.infrastructure.db.models import (
     DEMAND_SOURCE_SEARCH,
     DEMAND_SOURCES,
 )
+from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +89,10 @@ async def telegram_contact_redirect(
     Fail-safe contract: any failure to write the demand signal is swallowed — the user's click
     must always reach Telegram. We only block the redirect if the trainer has no usable username.
     """
+    # Only catalog-listed trainers: otherwise the redirect is an oracle mapping any trainer id to
+    # its @username (TASK-181). Unlisted trainers get the same 404 as a missing id.
     r = await session.execute(
-        text("SELECT telegram_username FROM trainers WHERE id = :tid"),
+        text(f"SELECT t.telegram_username FROM trainers t WHERE t.id = :tid AND {CATALOG_LISTED_SQL}"),
         {"tid": trainer_id},
     )
     row = r.fetchone()

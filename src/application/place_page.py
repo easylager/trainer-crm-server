@@ -25,7 +25,6 @@ tier A/B/C в ``arena_public_use_cases``).
 from __future__ import annotations
 
 import html as html_lib
-import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -50,6 +49,7 @@ from src.application.arena_profile import (
     opening_hours_schema_org,
 )
 from src.application.place_links import place_query
+from src.shared.html_template import fill_placeholders, json_for_script, safe_external_url
 from src.shared.venue_types import has_public_skating
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
@@ -715,8 +715,8 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     if phone:
         tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
         rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel)}">{_esc(phone)}</a></b></p>')
-    site = str(card.get("website_url") or "").strip()
-    if site.lower().startswith(("https://", "http://")):
+    site = safe_external_url(card.get("website_url"))
+    if site:
         label = str(card.get("venue_site_label") or "Сайт")
         rows.append(
             f'<p class="row"><span>{_esc(label)}</span><b><a href="{_esc(site)}" rel="noopener nofollow" target="_blank">'
@@ -729,7 +729,7 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
             f'<p class="row"><span>Instagram</span><b><a href="{_esc(instagram)}" rel="noopener nofollow" '
             f'target="_blank">@{_esc(handle)}</a></b></p>'
         )
-    tickets = str(card.get("tickets_url") or "").strip()
+    tickets = safe_external_url(card.get("tickets_url"))
     if tickets:
         rows.append(
             f'<p class="row"><span>Билеты</span><b><a href="{_esc(tickets)}" rel="noopener nofollow" target="_blank">Купить онлайн</a></b></p>'
@@ -844,8 +844,8 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
             break
     if events:
         place["event"] = events
-    # </script> внутри JSON закрыл бы тег раньше времени — экранируем «</».
-    return json.dumps(place, ensure_ascii=False).replace("</", "<\\/")
+    # </script> или <!-- внутри JSON закрыли бы тег раньше времени — экранируем < > &.
+    return json_for_script(place)
 
 
 def render_place_page(
@@ -938,6 +938,4 @@ def render_place_page(
         "__TRUST__": _trust_html(view),
         "__BODY__": body,
     }
-    for key, value in replacements.items():
-        html = html.replace(key, value)
-    return html
+    return fill_placeholders(html, replacements)

@@ -377,6 +377,16 @@ def _welcome_pass_invite_body(trainer: dict | None) -> str:
 _CLIENT_TG_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,64}$")
 
 
+def _client_trainer_tme_href(*, base: str, trainer_id: int, username: str, listed: bool) -> str:
+    """
+    /r/tg/{id} (records contact_click) answers only for catalog-listed trainers (TASK-181);
+    a client's own unlisted trainer gets a plain t.me link so «Написать» never lands on a 404.
+    """
+    if listed:
+        return f"{base}/r/tg/{int(trainer_id)}?src={DEMAND_SOURCE_CLIENT_APP}"
+    return f"https://t.me/{username}"
+
+
 def _client_trainer_write_url(*, base: str, trainer: dict) -> str | None:
     """
     Prefer HTTPS /r/tg/{id} (records contact_click) when public base and @username exist;
@@ -390,7 +400,9 @@ def _client_trainer_write_url(*, base: str, trainer: dict) -> str | None:
     if b.startswith("https://"):
         raw_u = (trainer.get("telegram_username") or "").strip().lstrip("@")
         if raw_u and _CLIENT_TG_USERNAME_RE.fullmatch(raw_u):
-            return f"{b}/r/tg/{int(trainer_id)}?src={DEMAND_SOURCE_CLIENT_APP}"
+            return _client_trainer_tme_href(
+                base=b, trainer_id=int(trainer_id), username=raw_u, listed=trainer_is_listed(trainer)
+            )
     if telegram_id:
         return f"tg://user?id={int(telegram_id)}"
     return None
@@ -1314,7 +1326,13 @@ def _trainer_display_for_booking(b: dict, client_telegram_id: int, *, base: str 
             and uname
             and _CLIENT_TG_USERNAME_RE.fullmatch(uname)
         ):
-            href = f"{mini}/r/tg/{int(trainer_id)}?src={DEMAND_SOURCE_CLIENT_APP}"
+            # Booking rows carry no catalog_state — the direct t.me link always works.
+            href = _client_trainer_tme_href(
+                base=mini,
+                trainer_id=int(trainer_id),
+                username=uname,
+                listed=trainer_is_listed({"catalog_state": b.get("trainer_catalog_state")}),
+            )
             return f'<a href="{html.escape(href, quote=True)}">{safe_name}</a>'
         return f'<a href="tg://user?id={int(tid)}">{safe_name}</a>'
     # Trainer not linked to bot yet — show hint so user knows why there's no link
