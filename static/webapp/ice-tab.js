@@ -538,6 +538,7 @@
 
     renderShopFilters(scope === 'shop');
     setSearchPlaceholder();
+    setNearButton();
   }
 
   function setChips() {
@@ -1249,6 +1250,13 @@
   function setNearButton() {
     var btn = $('iceNearestBtn');
     if (!btn) return;
+    /* У тренеров нет distance_km в GET /trainers — «Ближе» только для ленты площадок. */
+    var showNear = state.intent !== 'coach';
+    btn.hidden = !showNear;
+    if (!showNear) {
+      btn.disabled = false;
+      return;
+    }
     btn.setAttribute('aria-pressed', state.nearOn ? 'true' : 'false');
     btn.setAttribute(
       'aria-label',
@@ -1333,7 +1341,7 @@
         state.nearOn = true;
         setNearButton();
         // Сервер считает distance_km только по near — перезапрашиваем ту же ленту с ним.
-        loadArenas();
+        loadList();
       },
       function () {
         if (btn) btn.disabled = false;
@@ -1457,7 +1465,13 @@
     });
     return fetchJson(url)
       .then(function (data) {
-        if (!isCurrentFetch(gen, 'skate')) return;
+        if (!isCurrentFetch(gen, 'skate')) {
+          if (state.loading && state.intent === 'coach') {
+            state.loading = false;
+            loadTrainers();
+          }
+          return;
+        }
         state.loading = false;
         applyArenaPayload(data);
         state.loadedIntent = 'skate';
@@ -1467,7 +1481,13 @@
         onListLoaded();
       })
       .catch(function () {
-        if (!isCurrentFetch(gen, 'skate')) return;
+        if (!isCurrentFetch(gen, 'skate')) {
+          if (state.loading && state.intent === 'coach') {
+            state.loading = false;
+            loadTrainers();
+          }
+          return;
+        }
         state.loading = false;
         loadFailed();
       });
