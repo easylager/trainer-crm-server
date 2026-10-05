@@ -29,6 +29,8 @@ from src.ingestion.seed_config_regional_batch_c import (
     PARSER_KEY_OSTROVETS_LDS,
     PARSER_KEY_VITEBSK_DS,
 )
+from src.ingestion.cpu_work import run_cpu_bound
+from src.ingestion.image_io import open_image_bytes
 from src.ingestion.source_io import fetch_http_bytes, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -416,7 +418,7 @@ def _orsha_extract_from_image(image_bytes: bytes, config: dict[str, Any]) -> tup
     """Returns (week_start_date, raw_cell_dicts) for one Ld-*.jpg schedule photo."""
     from PIL import Image
 
-    img = Image.open(__import__("io").BytesIO(image_bytes)).convert("RGB")
+    img = open_image_bytes(image_bytes).convert("RGB")
     columns = _orsha_header_columns(img)
     if not columns:
         return None, []
@@ -495,7 +497,7 @@ class OrshaArenaParser(IceParser):
         best_cells: list[dict[str, Any]] = []
         for basename, url in candidates:
             image_bytes = await _load_bytes(job, filename=basename, url=url)
-            week_start, cells = _orsha_extract_from_image(image_bytes, job.config)
+            week_start, cells = await run_cpu_bound(_orsha_extract_from_image, image_bytes, job.config)
             if week_start is None:
                 continue
             if best_week is None or week_start > best_week:
