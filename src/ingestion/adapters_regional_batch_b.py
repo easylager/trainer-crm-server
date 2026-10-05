@@ -7,7 +7,6 @@ src/ingestion/adapters.py — new file, that module is untouched.
 """
 from __future__ import annotations
 
-import io
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -23,6 +22,8 @@ from src.ingestion.seed_config_regional_batch_b import (
     PARSER_KEY_LIDA_LDS,
     PARSER_KEY_NOVOPOLOTSK_LDS,
 )
+from src.ingestion.cpu_work import run_cpu_bound
+from src.ingestion.image_io import open_image_bytes
 from src.ingestion.source_io import fetch_http_bytes, fetch_http_text, load_source_json, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
 
@@ -378,7 +379,7 @@ def _lida_ocr_schedule(image_bytes: bytes) -> list[tuple[date, str]]:
     except ImportError:
         return []
 
-    img = Image.open(io.BytesIO(image_bytes))
+    img = open_image_bytes(image_bytes)
     text = pytesseract.image_to_string(img, lang="rus", config="--psm 6")
     ref = date.today()
     slots: list[tuple[date, str]] = []
@@ -464,7 +465,7 @@ class LidaLdsParser(IceParser):
             basename = urlparse(url).path.rsplit("/", 1)[-1]
             try:
                 image_bytes = await _lida_load_image_bytes(job, url, basename)
-                parsed = _lida_ocr_schedule(image_bytes)
+                parsed = await run_cpu_bound(_lida_ocr_schedule, image_bytes)
             except Exception:
                 continue
             if len(parsed) > len(best):
