@@ -322,7 +322,17 @@ def render_selection_page(
         "</header>"
     )
     dock = f'<div class="dock"><a class="cta" href="{_esc(cta_url)}">Открыть в Telegram</a></div>' if cta_url else ""
-    body = hero + note + places + _share_html(share, venue_type="ice" if view.get("skating") else "shop") + dock
+    body = (
+        hero
+        + note
+        + places
+        + _share_html(
+            share,
+            venue_type="ice" if view.get("skating") else "shop",
+            story_image_url=story_image_url or og_image_url,
+        )
+        + dock
+    )
     ld = json.dumps(
         {
             "@context": "https://schema.org",
@@ -349,6 +359,8 @@ def render_selection_page(
         "__CITY_LINK__": city_link,
         "__TRUST__": "<p>Расписание — с сайтов катков и от администраций; время и цену уточняйте на месте.</p>",
         "__BODY__": body,
+        "__HEAD_SHORTCUT__": "",
+        "__HOME_SHORTCUT_OVERLAY__": "",
     }.items():
         page = page.replace(key, value)
     return page

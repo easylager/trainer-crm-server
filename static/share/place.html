@@ -18,6 +18,7 @@
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
+  __HEAD_SHORTCUT__
 
   <script type="application/ld+json">__JSONLD__</script>
 
@@ -186,6 +187,14 @@
     .row:first-of-type { border-top: 0; padding-top: 0; }
     .row span { color: var(--muted); }
     .row b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+    .contact-phones {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    }
+    .contact-phone { display: block; }
+    .contact-phone a {
+      color: var(--ink); text-decoration: none; border-bottom: 1px solid rgba(15, 143, 138, 0.35);
+    }
+    .contact-phone a:active { color: var(--accent); }
 
     .share { margin: 18px 0 0; }
     .share__title { margin: 0 0 8px; font-weight: 700; }
@@ -194,9 +203,15 @@
       flex: 1 1 auto; min-width: 96px; padding: 11px 14px; border-radius: 12px;
       background: var(--surface); border: 1px solid var(--line); color: var(--ink);
       font: inherit; font-size: 15px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent;
     }
     .share__btn--tg { background: #229ed9; border-color: #229ed9; color: #fff; }
-    .share__story { display: inline-block; margin-top: 10px; font-size: 14px; }
+    .share__btn--story { border-color: rgba(15, 143, 138, 0.45); background: var(--accent-wash); color: var(--accent); }
+    .share__story {
+      display: inline-block; margin-top: 10px; padding: 0; border: 0; background: none;
+      font: inherit; font-size: 14px; color: var(--accent); cursor: pointer; text-decoration: underline;
+      text-underline-offset: 3px;
+    }
     .trust { margin: 22px 0 0; color: var(--muted); font-size: 13px; }
     .trust p { margin: 0 0 4px; }
     footer { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
@@ -216,10 +231,13 @@
       <span>__CITY__</span>
     </nav>
     __BODY__
-    <a class="share__story" href="__STORY_IMAGE__" download>Картинка для истории (Instagram, VK)</a>
+    <a class="share__story" href="__STORY_IMAGE__" download="glide-story.png" data-story-save="__STORY_IMAGE__">
+      Сохранить картинку для сторис (Instagram, VK)
+    </a>
     <div class="trust">__TRUST__</div>
     <footer>__CITY_LINK__</footer>
   </main>
+  __HOME_SHORTCUT_OVERLAY__
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script>
     /*
@@ -281,6 +299,82 @@
           row.appendChild(more);
         }
       }
+
+      function absoluteUrl(url) {
+        try {
+          return new URL(String(url || ''), window.location.href).href;
+        } catch (e) {
+          return String(url || '');
+        }
+      }
+      function tryTelegramDownload(url) {
+        var t = window.Telegram && window.Telegram.WebApp;
+        if (!t || typeof t.downloadFile !== 'function') return false;
+        try {
+          if (t.isVersionAtLeast && !t.isVersionAtLeast('8.0')) return false;
+          t.downloadFile({ url: absoluteUrl(url), file_name: 'glide-story.png' });
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      function blobDownload(blob) {
+        var a = document.createElement('a');
+        var objectUrl = URL.createObjectURL(blob);
+        a.href = objectUrl;
+        a.download = 'glide-story.png';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 2000);
+      }
+      function saveStory(url) {
+        var media = absoluteUrl(url);
+        if (!media) return;
+        if (tryTelegramDownload(media)) {
+          say('Сохраните картинку — затем выложите в сторис');
+          return;
+        }
+        fetch(media, { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('http');
+            return r.blob();
+          })
+          .then(function (blob) {
+            var nav = window.navigator;
+            if (nav && typeof nav.share === 'function' && typeof File !== 'undefined') {
+              var file = new File([blob], 'glide-story.png', { type: 'image/png' });
+              var payload = { files: [file] };
+              if (!nav.canShare || nav.canShare(payload)) {
+                return nav.share(payload).then(
+                  function () { say('Выберите «Сохранить в Фото» или Instagram'); },
+                  function () {
+                    blobDownload(blob);
+                    say('Если файл скачался — добавьте из галереи в сторис');
+                  }
+                );
+              }
+            }
+            blobDownload(blob);
+            say('На iPhone: удержите превью → «Сохранить в Фото»');
+          })
+          .catch(function () {
+            window.open(media, '_blank', 'noopener');
+            say('Откройте картинку и сохраните вручную');
+          });
+      }
+      document.addEventListener('click', function (e) {
+        var el = e.target && e.target.closest ? e.target.closest('[data-story-save]') : null;
+        if (!el) return;
+        var url = el.getAttribute('data-story-save') || el.getAttribute('href') || '';
+        if (!url) return;
+        e.preventDefault();
+        saveStory(url);
+      }, false);
+      document.querySelectorAll('.share__story').forEach(function (el) {
+        if (!el.getAttribute('href')) el.style.display = 'none';
+      });
     })();
   </script>
 </body>

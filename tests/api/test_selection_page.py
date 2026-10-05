@@ -37,6 +37,7 @@ async def test_selection_page_shows_places_sessions_and_keeps_filters(app_use_te
         missing = await client.get("/c/nowhere-at-all")
     assert page.status_code == 200
     assert "18:45" in page.text and "где покататься" in page.text
+    assert "data-story-save" in page.text and "/story.png" in page.text
     assert f'href="/p/{slug}/' in page.text, "место в подборке ведёт на свою страницу"
     assert by_id.status_code == 301 and by_id.headers["location"] == f"/c/{slug}"
     assert Image.open(io.BytesIO(img.content)).size == (1200, 630)

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -702,6 +703,49 @@ def _display_host(url: str) -> str:
         return host
 
 
+def split_contact_phones(raw: str | None) -> list[str]:
+    """Несколько номеров в одном поле профиля — отдельные кликабельные ``tel:``."""
+    text = (raw or "").strip()
+    if not text:
+        return []
+    parts = [p.strip() for p in re.split(r"[,;|\n]+|(?:\s*/\s*)", text) if p.strip()]
+    if len(parts) == 1:
+        parts = [p.strip() for p in re.split(r"\s+(?=(?:\+|00)\d)", text) if p.strip()]
+    if len(parts) == 1:
+        parts = [text]
+    out: list[str] = []
+    for p in parts:
+        if sum(ch.isdigit() for ch in p) >= 7:
+            out.append(p)
+    return out or [text]
+
+
+def _tel_href(display: str) -> str:
+    digits = "".join(ch for ch in display if ch.isdigit())
+    if not digits:
+        return ""
+    stripped = display.lstrip()
+    if stripped.startswith("+") or stripped.startswith("00"):
+        return "+" + digits
+    return digits
+
+
+def _phones_row_html(phones: list[str]) -> str:
+    if not phones:
+        return ""
+    if len(phones) == 1:
+        p = phones[0]
+        return (
+            f'<p class="row"><span>Телефон</span><b>'
+            f'<a href="tel:{_esc(_tel_href(p))}">{_esc(p)}</a></b></p>'
+        )
+    links = "".join(
+        f'<span class="contact-phone"><a href="tel:{_esc(_tel_href(p))}">{_esc(p)}</a></span>'
+        for p in phones
+    )
+    return f'<p class="row row--phones"><span>Телефон</span><b class="contact-phones">{links}</b></p>'
+
+
 def _contacts_html(card: Mapping[str, Any]) -> str:
     rows: list[str] = []
     address = str(card.get("address") or "").strip()
@@ -711,10 +755,9 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
             f'<a href="{_esc(maps)}" rel="noopener" target="_blank">{_esc(address)}</a>' if maps else _esc(address)
         )
         rows.append(f'<p class="row"><span>Адрес</span><b>{addr_html}</b></p>')
-    phone = str(card.get("phone") or "").strip()
-    if phone:
-        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-        rows.append(f'<p class="row"><span>Телефон</span><b><a href="tel:{_esc(tel)}">{_esc(phone)}</a></b></p>')
+    phones = split_contact_phones(str(card.get("phone") or ""))
+    if phones:
+        rows.append(_phones_row_html(phones))
     site = str(card.get("website_url") or "").strip()
     if site.lower().startswith(("https://", "http://")):
         label = str(card.get("venue_site_label") or "Сайт")
@@ -739,7 +782,9 @@ def _contacts_html(card: Mapping[str, Any]) -> str:
     return '<section class="sec"><h2 class="sec__title">Контакты</h2>' + "".join(rows) + "</section>"
 
 
-def _share_html(share: Mapping[str, str], *, venue_type: str = "ice") -> str:
+def _share_html(
+    share: Mapping[str, str], *, venue_type: str = "ice", story_image_url: str | None = None
+) -> str:
     url = share["share_url"]
     body = share["share_body"]
     full = f"{body}\n{url}" if body else url
@@ -747,6 +792,12 @@ def _share_html(share: Mapping[str, str], *, venue_type: str = "ice") -> str:
     wa = f"https://wa.me/?text={quote(full, safe='')}"
     viber = f"viber://forward?text={quote(full, safe='')}"
     vk = f"https://vk.com/share.php?url={quote(url, safe='')}"
+    story_btn = ""
+    if story_image_url:
+        story_btn = (
+            f'<a class="share__btn share__btn--story" href="{_esc(story_image_url)}" '
+            f'download="glide-story.png" data-story-save="{_esc(story_image_url)}">Сторис</a>'
+        )
     return (
         '<section class="share" aria-label="Поделиться">'
         f'<p class="share__title">{"Позвать друзей" if venue_type == "ice" else "Поделиться"}</p>'
@@ -755,7 +806,8 @@ def _share_html(share: Mapping[str, str], *, venue_type: str = "ice") -> str:
         f'<a class="share__btn" href="{_esc(viber)}">Viber</a>'
         f'<a class="share__btn" href="{_esc(wa)}" rel="noopener" target="_blank">WhatsApp</a>'
         f'<a class="share__btn" href="{_esc(vk)}" rel="noopener" target="_blank">VK</a>'
-        f'<button class="share__btn" type="button" data-copy="{_esc(full)}">Скопировать</button>'
+        + story_btn
+        + f'<button class="share__btn" type="button" data-copy="{_esc(full)}">Скопировать</button>'
         "</div></section>"
     )
 
@@ -812,8 +864,11 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
             "latitude": card["latitude"],
             "longitude": card["longitude"],
         }
-    if card.get("phone"):
-        place["telephone"] = card["phone"]
+    phones = split_contact_phones(str(card.get("phone") or ""))
+    if len(phones) == 1:
+        place["telephone"] = phones[0]
+    elif phones:
+        place["telephone"] = phones
     schema_hours = opening_hours_schema_org(card.get("opening_hours"))
     if schema_hours:
         place["openingHours"] = schema_hours[0] if len(schema_hours) == 1 else schema_hours
@@ -914,7 +969,7 @@ def render_place_page(
             _amenities_html(card),
             _trainers_html(card, cta_url=cta_url),
             _contacts_html(card),
-            _share_html(share, venue_type=vt),
+            _share_html(share, venue_type=vt, story_image_url=story_image_url),
             sticky,
         ]
     )
@@ -937,6 +992,8 @@ def render_place_page(
         "__CITY_LINK__": city_link,
         "__TRUST__": _trust_html(view),
         "__BODY__": body,
+        "__HEAD_SHORTCUT__": "",
+        "__HOME_SHORTCUT_OVERLAY__": "",
     }
     for key, value in replacements.items():
         html = html.replace(key, value)

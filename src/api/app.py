@@ -128,6 +128,7 @@ async def _db_unavailable_exception_handler(_request: Request, exc: Exception):
 _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "webapp"
 _LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
 _LOGOS_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "logos"
+_SHARE_STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "share"
 
 # SEC-G2: discourage MIME sniffing on all Mini App responses using these header sets (HTML + JS/CSS).
 _WEBAPP_SNIFFING = {"X-Content-Type-Options": "nosniff"}
@@ -1906,3 +1907,5 @@ async def _static_webapp_cache_align(request: Request, call_next):
 app.mount("/static/webapp", StaticFiles(directory=str(_WEBAPP_DIR)), name="static_webapp")
 if _LOGOS_DIR.is_dir():
     app.mount("/logos", StaticFiles(directory=str(_LOGOS_DIR)), name="logos")
+if _SHARE_STATIC_DIR.is_dir():
+    app.mount("/static/share", StaticFiles(directory=str(_SHARE_STATIC_DIR)), name="static_share")
