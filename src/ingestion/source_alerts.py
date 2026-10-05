@@ -26,7 +26,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.freshness import (
     CONFIG_ALERTS_MUTED,
+    ERROR_CODE_EMPTY_AFTER_FILTER,
     ERROR_CODE_EMPTY_AFTER_SLOTS,
+    ERROR_CODE_EMPTY_SOURCE,
     MINSK_TZ,
     config_flag,
     is_schedule_stale,
@@ -40,6 +42,9 @@ logger = logging.getLogger(__name__)
 # Алертим со второго подряд: это ~15 минут от первого сбоя.
 ALERT_AFTER_FAILURES = 2
 REMINDER_EVERY = timedelta(hours=4)
+# Сайт отвечает, но все сеансы на нём уже прошли (неделя закончилась, новую ещё не
+# выложили) — даём сутки с запасом от последнего ok, прежде чем считать источник сломанным.
+EMPTY_AFTER_FILTER_GRACE = timedelta(hours=36)
 # Напоминания — только днём по Минску; первый алерт и «восстановлено» — в любое время.
 REMINDER_DAY_START_HOUR = 9
 REMINDER_DAY_END_HOUR = 22
@@ -56,6 +61,8 @@ _ERROR_LABELS = {
     "unknown_parser_key": "в коде нет парсера с таким ключом",
     "requires_by_egress": "нужен выход в сеть из BY, на воркере его нет",
     ERROR_CODE_EMPTY_AFTER_SLOTS: "источник вернул 0 сеансов",
+    ERROR_CODE_EMPTY_SOURCE: "источник не отдал ни одного сеанса (вёрстка? межсезонье?)",
+    ERROR_CODE_EMPTY_AFTER_FILTER: "на сайте только прошедшие сеансы — новое расписание не выложено",
     "blocked": "источник заблокирован",
     "error": "ошибка прогона",
 }
@@ -129,24 +136,33 @@ def _sessions_word(n: int) -> str:
 
 
 def _is_stale(row: SourceHealthRow, now: datetime) -> bool:
-    return is_schedule_stale(
+    if not is_schedule_stale(
         has_enabled_job=row.is_enabled,
         last_ok_at=row.last_ok_at,
         config=row.config,
         now=now,
         created_at=row.created_at,
-    )
+    ):
+        return False
+    if row.last_error_code == ERROR_CODE_EMPTY_AFTER_FILTER and row.shown_sessions <= 0:
+        anchor = _as_utc(row.last_ok_at or row.created_at)
+        return anchor is None or now - anchor > max(stale_after(row.config), EMPTY_AFTER_FILTER_GRACE)
+    return True
 
 
 def is_alerting(row: SourceHealthRow, now: datetime) -> bool:
-    """Должен ли источник сейчас считаться «сломанным» для админа."""
+    """Должен ли источник сейчас считаться «сломанным» для админа.
+
+    TASK-178: устаревание считается от последнего *удачного* прогона независимо от
+    витрины. Раньше оно требовало видимых сеансов — и когда у сломанного источника
+    истекали старые сеансы, алерт сам «выздоравливал». Пустая витрина при автоматическом
+    источнике — это и есть то, что админ должен знать (межсезонье — ``alerts_muted``).
+    """
     if not row.is_enabled or config_flag(row.config, CONFIG_ALERTS_MUTED):
         return False
     if row.failure_streak >= ALERT_AFTER_FAILURES:
         return True
-    # Ошибок нет, а расписание давно не подтверждалось при непустой витрине —
-    # например, планировщик не доходит до источника. Пользователь видит старое.
-    return row.shown_sessions > 0 and _is_stale(row, now)
+    return _is_stale(row, now)
 
 
 def _what_failed(row: SourceHealthRow, now: datetime) -> str:
@@ -192,14 +208,23 @@ def _title(row: SourceHealthRow) -> str:
     return f"<b>{where}</b> · <code>{html.escape(row.parser_key)}</code>"
 
 
+def _recovered_by_ok_run(row: SourceHealthRow) -> bool:
+    """«Восстановлен» — только если после открытого алерта был реальный ok-прогон."""
+    last_ok = _as_utc(row.last_ok_at)
+    sent = _as_utc(row.alert_sent_at)
+    return last_ok is not None and (sent is None or last_ok >= sent)
+
+
 def format_source_alert(row: SourceHealthRow, *, kind: str, now: datetime) -> str:
     if kind == KIND_RECOVERED:
         if not row.is_enabled:
             head = "✅ Лёд: источник выключен, алерт снят"
         elif config_flag(row.config, CONFIG_ALERTS_MUTED):
             head = "✅ Лёд: алерты источника заглушены (alerts_muted)"
-        else:
+        elif _recovered_by_ok_run(row):
             head = "✅ Лёд: источник восстановлен"
+        else:
+            head = "☑️ Лёд: алерт снят без удачного прогона (изменились пороги в config?)"
         return "\n".join(
             [
                 head,
@@ -378,6 +403,7 @@ async def tick_source_failure_alerts(
 
 __all__ = [
     "ALERT_AFTER_FAILURES",
+    "EMPTY_AFTER_FILTER_GRACE",
     "KIND_FAILING",
     "KIND_RECOVERED",
     "KIND_REMINDER",
