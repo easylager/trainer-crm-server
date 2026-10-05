@@ -535,7 +535,6 @@ _GORKI_RANGE = re.compile(
     r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\s+([А-ЯЁа-яё]+)\s*:?\s*(\d{1,2})[.:](\d{2})"
 )
 _GORKI_SINGLE = re.compile(r"(\d{1,2})\s+([А-ЯЁа-яё]+)\s*:?\s*(\d{1,2})[.:](\d{2})")
-_YEAR_TOKEN = re.compile(r"\b(20\d{2})\b")
 
 
 class GorkiLdsParser(IceParser):
@@ -549,10 +548,9 @@ class GorkiLdsParser(IceParser):
         age_note = job.config.get("age_note")
         adult, child, rental = _gorki_prices(prices_html)
 
+        # No page-year override: the first "20xx" on the page may be next year's
+        # holiday heading or a footer year; nearest-date inference needs neither.
         reference = parser_reference_date(job.config)
-        year_match = _YEAR_TOKEN.search(strip_tags(home_html))
-        if year_match:
-            reference = reference.replace(year=int(year_match.group(1)))
 
         slots: list[ExtractedSlot] = []
         paragraphs = re.findall(r"<p[^>]*>(.*?)</p>", home_html, re.S | re.IGNORECASE)
