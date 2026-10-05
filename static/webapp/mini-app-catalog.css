@@ -3185,12 +3185,8 @@
     }
 
     .trainer-contact-hint {
-      margin: 8px 2px 4px;
-      font-size: var(--app-text-caption);
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
-      opacity: 0.85;
-      text-align: left;
+      margin-top: 4px;
+      margin-bottom: 10px;
     }
 
     /* ── In-app toast ────────────────────────────────────────────────────────── */

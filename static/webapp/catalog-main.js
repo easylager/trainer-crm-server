@@ -3687,22 +3687,10 @@
         return origin + path;
       }
 
-      function catalogContactPrefillText() {
-        var M = window.CatalogContactAttribution;
-        if (M && typeof M.prefillText === 'function') return M.prefillText();
-        return (
-          'Здравствуйте! Пишу из каталога Glide. ' +
-          'Хочу заниматься — подскажите, как удобнее записаться?'
-        );
-      }
-
       function catalogContactHintText() {
         var M = window.CatalogContactAttribution;
         if (M && typeof M.hintText === 'function') return M.hintText();
-        return (
-          'Откроется чат в Telegram — в поле сообщения подставим короткий текст про Glide, ' +
-          'его можно отредактировать перед отправкой.'
-        );
+        return 'Напишите, что нашли тренера в Glide — так ему проще ответить.';
       }
 
       /** После innerHTML += на #trainerDetailActions подсказку нужно вставить заново. */
@@ -3713,7 +3701,7 @@
         var hint = container.querySelector('.trainer-contact-hint');
         if (!hint) {
           hint = document.createElement('p');
-          hint.className = 'trainer-contact-hint';
+          hint.className = 'chips-hint trainer-contact-hint';
           btn.insertAdjacentElement('afterend', hint);
         }
         hint.textContent = catalogContactHintText();
@@ -3751,7 +3739,6 @@
           return window.openTelegramChatFromMiniApp({
             username: un,
             telegramId: trainer && trainer.telegram_id != null ? trainer.telegram_id : null,
-            prefillText: catalogContactPrefillText(),
           });
         }
         return false;

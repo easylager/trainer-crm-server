@@ -16,17 +16,11 @@ function loadModel() {
 }
 
 describe('catalog contact attribution', () => {
-  it('prefill mentions Glide and is gender-neutral', () => {
-    const { prefillText } = loadModel();
-    const t = prefillText();
-    assert.match(t, /Glide/i);
-    assert.match(t, /Здравствуйте/);
-    assert.ok(!/\(а\)/.test(t));
-  });
-
-  it('hint explains editable prefill', () => {
+  it('hint is short and mentions Glide', () => {
     const { hintText } = loadModel();
-    assert.match(hintText(), /Telegram/);
-    assert.match(hintText(), /отредактировать/);
+    const t = hintText();
+    assert.match(t, /Glide/i);
+    assert.match(t, /нашли тренера/i);
+    assert.ok(t.length < 120);
   });
 });

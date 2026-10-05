@@ -375,10 +375,6 @@ window.openTelegramChatFromMiniApp = function (opts) {
   var url;
   if (un) {
     url = 'https://t.me/' + encodeURIComponent(un);
-    var prefill = String(opts.prefillText || '').trim();
-    if (prefill) {
-      url += (url.indexOf('?') >= 0 ? '&' : '?') + 'text=' + encodeURIComponent(prefill);
-    }
   } else if (tid != null && tid !== '') {
     url = 'tg://user?id=' + encodeURIComponent(String(tid));
   } else {

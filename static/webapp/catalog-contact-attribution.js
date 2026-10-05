@@ -1,6 +1,6 @@
 /**
- * Каталог → «Написать тренеру»: подсказка и текст для автоподстановки в Telegram.
- * Сервер: src/shared/catalog_contact_attribution.py (редирект /r/tg/).
+ * Каталог → «Написать тренеру»: короткая подсказка про Glide (без автотекста в чате).
+ * Сервер: src/shared/catalog_contact_attribution.py
  */
 (function (root, factory) {
   'use strict';
@@ -14,18 +14,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var PREFILL =
-    'Здравствуйте! Пишу из каталога Glide. ' +
-    'Хочу заниматься — подскажите, как удобнее записаться?';
-
-  var HINT =
-    'Откроется чат в Telegram — в поле сообщения подставим короткий текст про Glide, ' +
-    'его можно отредактировать перед отправкой.';
+  var HINT = 'Напишите, что нашли тренера в Glide — так ему проще ответить.';
 
   return {
-    prefillText: function () {
-      return PREFILL;
-    },
     hintText: function () {
       return HINT;
     },
