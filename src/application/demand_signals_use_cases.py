@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models import (
@@ -168,15 +169,33 @@ async def record_profile_view_commit(
     - ``async with async_session_factory()`` only closes (rolls back uncommitted work).
     - FastAPI ``Depends(get_session)`` yields the same pattern unless the route commits.
     """
-    inserted = await record_profile_view(
-        session,
-        trainer_id=trainer_id,
-        source=source,
-        client_ip=client_ip,
-        user_agent=user_agent,
-        payload=payload,
-    )
-    await session.commit()
+    try:
+        inserted = await record_profile_view(
+            session,
+            trainer_id=trainer_id,
+            source=source,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            payload=payload,
+        )
+        await session.commit()
+    except IntegrityError as exc:
+        # Продуктовое решение: сигнал спроса — это аналитика, она никогда не имеет права
+        # уронить пользовательский сценарий. Единственный реальный источник IntegrityError
+        # здесь — FK на `trainers`: deep-link принёс trainer_id тренера, которого уже нет
+        # (профиль удалён) или которого нет в этом окружении (ссылка скопирована из другой
+        # БД). Клиент в такой ситуации должен получить ответ бота, а не тишину от
+        # необработанного исключения в `/start`.
+        # Откат обязателен: без него сессия остаётся в aborted-транзакции и следующий
+        # запрос того же вызывающего кода упадёт уже на постороннем SQL.
+        await session.rollback()
+        logger.warning(
+            "demand_signals profile_view skipped: unknown trainer_id=%s source=%s (%s)",
+            trainer_id,
+            source,
+            exc.__class__.__name__,
+        )
+        return False
     logger.debug(
         "demand_signals profile_view committed trainer_id=%s inserted=%s",
         trainer_id,

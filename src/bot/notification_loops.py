@@ -29,7 +29,9 @@ from src.application.booking_use_cases import (
     claim_trainer_completed_sent,
     clear_client_booking_completion_push_sent,
     clear_trainer_completed_sent,
+    claim_trainer_pending_booking_notification,
     get_bookings_pending_notification,
+    release_trainer_pending_booking_notification_claim,
     get_clients_for_inactive_notification,
     get_pending_booking_cancel_notifications,
     get_pending_booking_confirmed_notifications,
@@ -2094,6 +2096,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             ],
                         ]
                     )
+                    if not await claim_trainer_pending_booking_notification(session, int(b["id"])):
+                        continue
                     delivered = await _deliver_trainer_booking_pending_notification(
                         trainer_bot,
                         chat_id=int(trainer_tid),
@@ -2104,8 +2108,10 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                         trainer_db_id=int(b["trainer_id"]),
                         client_tid=b.get("client_telegram_id"),
                     )
-                    if delivered:
-                        await mark_booking_notified(session, b["id"])
+                    if not delivered:
+                        await release_trainer_pending_booking_notification_claim(
+                            session, int(b["id"])
+                        )
 
                 remind_candidates = await list_bookings_pending_confirm_reminder(session)
                 for r in remind_candidates:

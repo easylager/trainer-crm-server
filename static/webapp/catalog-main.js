@@ -3987,6 +3987,7 @@
         quiet: 'Не сейчас',
       };
 
+      var CATALOG_GEO_CHIP_LABEL = '⌖ Рядом со мной';
       var catalogGeoRequestBusy = false;
 
       function catalogTelegramApp() {
@@ -4028,13 +4029,19 @@
         allowEl.setAttribute('data-geo-action', view.allowAction || 'request');
       }
 
-      function openCatalogGeoSheet() {
+      function catalogGeoSheetIsOpen() {
+        var sheet = document.getElementById('catalogGeoSheet');
+        return !!sheet && sheet.hidden === false;
+      }
+
+      function showCatalogGeoSheet(view) {
         var sheet = document.getElementById('catalogGeoSheet');
         if (!sheet) return;
-        if (catalogGeoDeclinedForever()) renderCatalogGeoSheetRecovery();
-        else renderCatalogGeoSheet(CATALOG_GEO_SHEET_PRIMING);
+        renderCatalogGeoSheet(view);
         sheet.hidden = false;
-        window.requestAnimationFrame(function() { sheet.classList.add('is-open'); });
+        var raf = window.requestAnimationFrame;
+        if (typeof raf === 'function') raf(function() { sheet.classList.add('is-open'); });
+        else sheet.classList.add('is-open');
       }
 
       function closeCatalogGeoSheet() {
@@ -4044,16 +4051,60 @@
         window.setTimeout(function() { if (sheet) sheet.hidden = true; }, 180);
       }
 
+      /** Пока разрешение уже есть, шторки нет — «определяем» показывает сам чип. */
+      function setCatalogGeoChipBusy(busy) {
+        var chip = document.getElementById('catalogGeoChip');
+        if (!chip) return;
+        chip.disabled = !!busy;
+        chip.textContent = busy ? '⌖ Определяем…' : CATALOG_GEO_CHIP_LABEL;
+      }
+
+      /**
+       * Тап по чипу «Рядом со мной» — первый из двух шагов. Сам по себе он
+       * системного диалога не поднимает: сначала читаем уже известное состояние
+       * разрешения (без диалога) и решаем, что показать.
+       *
+       * Разрешение уже выдано — шторку-прайминг не показываем вовсе (AC-6):
+       * второй раз объяснять то, на что человек согласился, незачем.
+       * Системный отказ (вечный флаг или состояние denied) — путь восстановления.
+       * Всё остальное — прайминг, и только его кнопка идёт к системному запросу.
+       */
+      function openCatalogGeoSheet() {
+        var G = window.CatalogGeoModel;
+        if (!G || typeof G.readLocationPermission !== 'function') {
+          showCatalogGeoSheet(CATALOG_GEO_SHEET_PRIMING);
+          return;
+        }
+        G.readLocationPermission(
+          { telegram: catalogTelegramApp(), navigator: window.navigator },
+          function(permission) {
+            var view = G.pickGeoEntryView({
+              permission: permission,
+              declinedForever: catalogGeoDeclinedForever(),
+            });
+            if (view === G.GEO_ENTRY.REQUEST) {
+              requestCatalogGeoFromUserGesture();
+              return;
+            }
+            if (view === G.GEO_ENTRY.RECOVERY) {
+              openCatalogGeoSheetRecovery();
+              return;
+            }
+            showCatalogGeoSheet(CATALOG_GEO_SHEET_PRIMING);
+          }
+        );
+      }
+
       /**
        * Системный отказ уже случился. Внутри Телеграма у нас есть путь обратно —
        * LocationManager.openSettings(); он требует пользовательского жеста, поэтому
        * висит на кнопке. У веб-геолокации такого пути нет — тогда честный текст
        * без кнопки, а город человек выберет руками.
        */
-      function renderCatalogGeoSheetRecovery() {
+      function catalogGeoRecoveryView() {
         var G = window.CatalogGeoModel;
         var canSettings = !!(G && G.canOpenLocationSettings(catalogTelegramApp()));
-        renderCatalogGeoSheet({
+        return {
           title: 'Доступ к геопозиции закрыт',
           text: canSettings
             ? 'Вы запретили доступ, и спросить повторно мы не можем. Откройте настройки ' +
@@ -4063,7 +4114,13 @@
           allow: canSettings ? 'Открыть настройки' : '',
           allowAction: 'settings',
           quiet: 'Понятно',
-        });
+        };
+      }
+
+      /** Шторки могло не быть вовсе (разрешение было выдано, а потом снято). */
+      function openCatalogGeoSheetRecovery() {
+        if (catalogGeoSheetIsOpen()) renderCatalogGeoSheet(catalogGeoRecoveryView());
+        else showCatalogGeoSheet(catalogGeoRecoveryView());
       }
 
       /** Тап по «Разрешить геопозицию» — единственный путь к системному запросу. */
@@ -4076,10 +4133,16 @@
         }
         if (catalogGeoRequestBusy) return;
         catalogGeoRequestBusy = true;
-        renderCatalogGeoSheet(Object.assign({}, CATALOG_GEO_SHEET_PRIMING, {
-          allow: 'Определяем…',
-          busy: true,
-        }));
+        // Шторки может не быть вовсе — когда разрешение уже выдано (AC-6);
+        // тогда «определяем» показывает чип, а не кнопка шторки.
+        if (catalogGeoSheetIsOpen()) {
+          renderCatalogGeoSheet(Object.assign({}, CATALOG_GEO_SHEET_PRIMING, {
+            allow: 'Определяем…',
+            busy: true,
+          }));
+        } else {
+          setCatalogGeoChipBusy(true);
+        }
         G.requestLocation(
           { telegram: catalogTelegramApp(), navigator: window.navigator },
           function(res) {
@@ -4091,10 +4154,11 @@
 
       function handleCatalogGeoResult(res) {
         var G = window.CatalogGeoModel;
+        setCatalogGeoChipBusy(false);
         if (G && G.isPermanentDecline(res)) {
           // Вечный флаг — только здесь, на настоящем системном отказе.
           G.writeDeclinedFlag(window.localStorage);
-          renderCatalogGeoSheetRecovery();
+          openCatalogGeoSheetRecovery();
           return;
         }
         if (res.status !== (G ? G.GEO_STATUS.GRANTED : 'granted')) {
@@ -4176,7 +4240,10 @@
         var metaEl = document.getElementById('catalogGeoConfirmMeta');
         if (!box || !titleEl || !metaEl) return;
         box.setAttribute('data-city-id', String(cityId));
-        titleEl.textContent = cityName ? 'Похоже, вы в ' + cityName + '?' : 'Похоже, мы нашли ваш город';
+        // Падеж города — забота модели: где он неизвестен, она переформулирует.
+        titleEl.textContent = G
+          ? G.formatCityGuessTitle(cityName)
+          : (cityName || 'Похоже, мы нашли ваш город');
         var meta = '';
         if (nearest && nearest.name) {
           var dist = G ? G.formatDistanceKm(nearest.distanceKm) : '';

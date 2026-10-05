@@ -1,5 +1,5 @@
 /**
- * TASK-160 (S2): обвязка «моей карточки» в хабе.
+ * TASK-160 (S2 + S3): обвязка «моей карточки» в хабе.
  *
  * Модель карточки (hub-me-card.js) закрыта своими тестами
  * (tests/js/hub-me-card-model.test.js). Здесь проверяется ровно то, чего
@@ -7,6 +7,11 @@
  * applyHubState зовёт именно её, что вход карточки собирают из bootstrap
  * (включая сертификаты), что переходы разведены по data-me-action и что
  * список «остальных записей» больше не вкладывается в рамку карточки.
+ *
+ * S3 добавил к этому три заливки, завязанные на тренера: «окна есть»,
+ * «окон нет» и возврат. Проверяется, что старые рендеры этих состояний
+ * удалены (а не остались висеть без вызовов), что «все окна» ведут в
+ * слот-пикер, а не на карточку тренера, и что чип ведёт на свой слот.
  *
  * Гварды статические, по исходникам — как в hub-catalog-blocks-wiring.test.js:
  * DOM здесь не поднимается, проверяется обвязка, а не поведение браузера.
@@ -83,27 +88,29 @@ describe('applyHubState: ветка записи рисует «мою карт�
       !homeMain.includes('function renderNextBookingCard('),
       'renderNextBookingCard остался без вызовов — его место заняла карточка'
     );
-    const body = fnBody('renderMeCardForBooking');
+    // S3: модель зовёт общий painter — контейнер, слушатель и «сейчас» одни
+    // на все заливки, иначе состояния разъедутся по мелочам обвязки.
+    const body = fnBody('renderMeCard');
     assert.match(body, /window\.HubMeCard/);
     assert.match(body, /model\.buildView\(/);
     assert.match(body, /model\.renderHtml\(view\)/);
+    assert.match(fnBody('renderMeCardForBooking'), /renderMeCard\(buildMeCardBookingInput\(item, hubMeta\)/);
   });
 
   it('рендер идёт в существующий #nextBookingBlock, нового контейнера нет', () => {
-    assert.match(fnBody('renderMeCardForBooking'), /getElementById\('nextBookingBlock'\)/);
+    assert.match(fnBody('renderMeCard'), /getElementById\('nextBookingBlock'\)/);
     assert.equal(homeHtml.split('id="nextBookingBlock"').length - 1, 1);
     assert.ok(!homeHtml.includes('id="meCard"'), 'новый контейнер карточке не нужен');
   });
 
-  it('остальные состояния в S2 не тронуты: окно, тренер, сохранённые, возврат', () => {
+  it('состояния S4 не тронуты: сохранённые и чистый старт', () => {
     const apply = fnBody('applyHubState');
-    assert.match(apply, /loadAndRenderPrimaryPanel\(primaryTrainerId/);
-    assert.match(apply, /renderSavedTrainersStrip\(cs\)/);
+    // DEC-002: полоска-кружки заменена секцией строк под карточкой-героем.
+    assert.match(apply, /renderSavedTrainersSection\(cs\)/);
+    assert.ok(!/renderSavedTrainersStrip/.test(apply));
     assert.match(apply, /renderHubSecondaryFill\(hubMeta/);
     assert.match(apply, /loadDiscoveryUnlessMarket\(\)/);
-    assert.match(homeMain, /function renderOpenWindowCard\(/);
-    assert.match(homeMain, /function renderMyTrainerCard\(/);
-    // HubMeCard зовут ровно из одного места: заливки S3/S4 ещё не подключены.
+    // Ветка записи по-прежнему одна.
     assert.equal(apply.split('renderMeCardForBooking').length - 1, 1);
   });
 
@@ -153,7 +160,7 @@ describe('один делегирующий обработчик на #nextBooki
   const wire = fnBody('wireMeCardBlock');
 
   it('слушатель один и висит на блоке, а не на кнопках карточки', () => {
-    assert.match(fnBody('renderMeCardForBooking'), /wireMeCardBlock\(block\)/);
+    assert.match(fnBody('renderMeCard'), /wireMeCardBlock\(block\)/);
     assert.match(wire, /if \(hubMeCardWired\) return/);
     assert.equal(wire.split('addEventListener').length - 1, 1);
     assert.match(wire, /block\.addEventListener\('click'/);
@@ -173,14 +180,14 @@ describe('один делегирующий обработчик на #nextBooki
     assert.match(wire, /catalogPrimaryServiceQuery\(\)/);
   });
 
-  it('действия заливок S3/S4 молчат, а не падают', () => {
-    for (const action of [
-      'book-slot', 'all-slots', 'all-sessions', 'all-trainers',
-      'pick-city', 'geo', 'all-country', 'more-cities',
-    ]) {
+  it('S4: действия заливок рынка обработаны; неизвестное молчит, а не падает', () => {
+    // Было (S3): этих действий ещё не существовало, и гвард требовал их отсутствия.
+    // Стало (S4): заливка «лёд города» их рисует, значит они обязаны работать.
+    assert.match(wire, /action === 'all-sessions'/);
+    for (const action of ['pick-city', 'geo', 'all-country', 'more-cities']) {
       assert.ok(
         !new RegExp("action === '" + action + "'").test(wire),
-        action + ' обработан в S2 — это заливки S3/S4'
+        action + ' принадлежит карточке выбора города — это TASK-162, не TASK-160'
       );
     }
     // Неизвестное действие уходит в ничто: ни throw, ni navigateTo по умолчанию.
@@ -189,7 +196,8 @@ describe('один делегирующий обработчик на #nextBooki
   });
 
   it('id записи берётся из контекста карточки: модель его в разметку не кладёт', () => {
-    assert.match(fnBody('renderMeCardForBooking'), /hubMeCardBookingId =/);
+    assert.match(fnBody('renderMeCard'), /hubMeCardBookingId =/);
+    assert.match(fnBody('renderMeCardForBooking'), /item\.b\.id/);
     assert.match(wire, /hubMeCardBookingId/);
   });
 });
@@ -249,5 +257,286 @@ describe('стили карточки: прототип перенесён на 
   it('ни одного сырого hex: цвет берётся из theme.css', () => {
     const hex = meCss().match(/#[0-9a-fA-F]{3,8}\b/g);
     assert.equal(hex, null, 'сырые hex в CSS карточки: ' + hex);
+  });
+});
+
+/* ── S3: три заливки, завязанные на тренера ───────────────────────────── */
+
+describe('S3: старые рендеры состояний тренера удалены, а не оставлены без вызовов', () => {
+  it('в исходнике нет ни определений, ни вызовов', () => {
+    for (const fn of [
+      'renderOpenWindowCard', 'renderMyTrainerCard', 'buildPrimarySlotsHtml',
+      'buildPrimaryHistoryHtml', 'loadAndRenderPrimaryPanel',
+      // Умерли вместе с ними: это были их единственные вызывающие.
+      'trainerWhoLinkHtml', 'trainerAvatarHtml', 'slotDurationMin',
+      'formatSlotDayLabel', 'shareTrainer',
+    ]) {
+      assert.ok(!homeMain.includes(fn), fn + ' остался в client-home-main.js');
+    }
+  });
+
+  it('то, что нужно S4, оставлено живым и с вызовами', () => {
+    // Полка остатка для «сохранённых» (приоритет 3) ещё не переведена на карточку:
+    // её панель, её рендер и её контейнер обязаны остаться рабочими.
+    for (const fn of ['renderHubSecondaryFill', 'renderPrimaryPassPanel', 'buildPrimaryPassHtml']) {
+      assert.match(homeMain, new RegExp('function ' + fn + '\\('), fn);
+      assert.ok(homeMain.split(fn).length - 1 >= 2, fn + ' остался без вызовов');
+    }
+    assert.ok(homeHtml.includes('id="hubPrimaryPanel"'), 'контейнер полки остатка нужен S4');
+  });
+});
+
+describe('S3: «тренер есть» — одна рамка на «окна есть» и «окон нет»', () => {
+  /** Ветка приоритета 2 в applyHubState. */
+  function trainerBranch() {
+    const apply = fnBody('applyHubState');
+    const from = apply.indexOf('Priority 2: Has primary trainer');
+    const to = apply.indexOf('Priority 3: Has saved trainers');
+    assert.ok(from > -1 && to > from);
+    return apply.slice(from, to);
+  }
+
+  it('ветка приоритета 2 зовёт карточку, а не карточку тренера с панелью', () => {
+    const branch = trainerBranch();
+    assert.match(branch, /loadAndRenderMeCardForTrainer\(hubPrimaryTrainer, hubMeta\)/);
+    assert.ok(!branch.includes('renderMyTrainerCard'));
+    assert.ok(!branch.includes('loadAndRenderPrimaryPanel'));
+    // Старый блок карточки тренера в этом состоянии скрыт, а не заполнен.
+    assert.match(branch, /hideMyTrainerBlock\(\)/);
+  });
+
+  it('вход — kind trainer, окна из /client/slots, кошелёк из bootstrap', () => {
+    const input = fnBody('buildMeCardTrainerInput');
+    assert.match(input, /kind: 'trainer'/);
+    assert.match(input, /canBook: trainer\.canBook !== false/);
+    assert.match(input, /slots: list/);
+    assert.match(input, /passes: hubBootstrapPasses\(hubMeta\)/);
+    assert.match(input, /certificates: hubBootstrapCertificates\(hubMeta\)/);
+    const fetchSlots = fnBody('fetchTrainerSlots');
+    assert.match(fetchSlots, /\/client\/slots\?trainer_id=/);
+    assert.match(fetchSlots, /AbortController/, 'уход со страницы не должен держать запрос');
+  });
+
+  it('у тренера без онлайн-записи окна не спрашиваем: ответ известен заранее', () => {
+    const load = fnBody('loadAndRenderMeCardForTrainer');
+    assert.match(load, /trainer\.canBook === false \|\| !initData/);
+    assert.match(load, /paintMeCardForTrainer\(trainer, \[\], hubMeta\)/);
+    assert.match(load, /fetchTrainerSlots\(trainer\.id\)/);
+  });
+
+  it('полоса окон решает судьбу льда и нижнего FAB', () => {
+    const paint = fnBody('paintMeCardForTrainer');
+    assert.match(paint, /hubOpenWindowShown = !!view\.pick/);
+    assert.match(paint, /hubPersonalSlot = !!view\.pick/);
+    assert.match(paint, /syncClientHubBookFab\(\)/);
+    assert.match(paint, /placeIceZone\('top'\)/);
+    assert.match(paint, /placeIceZone\('below-trainer'\)/);
+  });
+
+  it('имени нет — карточки нет, но хаб остаётся живым', () => {
+    const paint = fnBody('paintMeCardForTrainer');
+    assert.match(paint, /if \(!view\)/);
+    assert.match(paint, /renderHubSecondaryFill\(hubMeta, \{/);
+  });
+
+  it('падежи готовит хаб, модель в глобалы не лезет', () => {
+    assert.match(fnBody('buildMeCardTrainerInput'), /withDeclinedForms\(/);
+    const forms = fnBody('withDeclinedForms');
+    assert.match(forms, /hubMeDeclinedForms\(fullName\)/);
+    assert.match(forms, /nameDative/);
+    assert.match(forms, /nameGenitive/);
+    assert.match(forms, /if \(!forms\) return trainer/, 'нет модуля — нет полей, а не кривой падеж');
+  });
+});
+
+describe('S3: возврат — остаток или история, окна тренера чипами', () => {
+  function dormantBranch() {
+    const apply = fnBody('applyHubState');
+    const from = apply.indexOf('Priority 4: Has past sessions');
+    const to = apply.indexOf('Priority 5: Clean state');
+    assert.ok(from > -1 && to > from);
+    return apply.slice(from, to);
+  }
+
+  it('ветка приоритета 4 зовёт карточку вместо полоски и полки остатка', () => {
+    const branch = dormantBranch();
+    assert.match(branch, /loadAndRenderMeCardForDormant\(hubMeta\)/);
+    assert.ok(!branch.includes("renderQuickStrip('has-past'"));
+    assert.ok(!branch.includes('renderHubSecondaryFill'));
+  });
+
+  it('вход — kind dormant; число занятий из activity, дата последнего из rebook_targets', () => {
+    const input = fnBody('buildMeCardDormantInput');
+    assert.match(input, /kind: 'dormant'/);
+    assert.match(input, /hubMeta\.activity && hubMeta\.activity\.completed_total/);
+    assert.match(input, /if \(done > 0\) input\.history/);
+    // Было: поля не существовало в bootstrap, и выдумывать дату запрещалось.
+    // Стало: `rebook_targets` несут `last_completed_at` — дата настоящая, из edges.
+    assert.match(input, /last_completed_at/);
+    assert.match(input, /passes: hubBootstrapPasses\(hubMeta\)/);
+  });
+
+  it('лицо карточки — тот, у кого остался абонемент', () => {
+    const pick = fnBody('dormantReturnTrainer');
+    assert.match(pick, /rebookTargets/);
+    assert.match(pick, /selectPrimaryPassForTrainer\(passes, targets\[i\]\.trainer_id\)/);
+    assert.match(pick, /return targets\[0\]/);
+  });
+
+  it('остальные тренеры — тихая строка под карточкой, а не вторая рамка', () => {
+    const pills = fnBody('dormantRebookPills');
+    assert.match(pills, /String\(t\.trainer_id\) !== String\(cardTrainerId\)/);
+    assert.match(pills, /quiet: true/);
+    assert.match(pills, /navigateToRebookTarget\(t\)/);
+    assert.match(fnBody('loadAndRenderMeCardForDormant'), /mountQuickStripPills\(dormantRebookPills\(view\.trainerId\)\)/);
+  });
+
+  it('сказать нечего — карточки нет, хаб остаётся на прежнем наполнении', () => {
+    const load = fnBody('loadAndRenderMeCardForDormant');
+    assert.match(load, /if \(!view\)/);
+    assert.match(load, /renderQuickStrip\('has-past', null\)/);
+    assert.match(load, /renderHubSecondaryFill\(hubMeta/);
+  });
+});
+
+describe('S3: переходы окон', () => {
+  const wire = fnBody('wireMeCardBlock');
+
+  it('«все окна» ведут в слот-пикер (action=book), а не на карточку тренера', () => {
+    const from = wire.indexOf("action === 'all-slots'");
+    const to = wire.indexOf("action === 'book-slot'");
+    assert.ok(from > -1 && to > from, 'нет обработчика all-slots');
+    const branch = wire.slice(from, to);
+    assert.match(branch, /buildBookPathFromHubContext\(tid, \{/);
+    assert.match(branch, /fallbackServiceQuery: catalogPrimaryServiceQuery\(\)/);
+    // Карточка тренера здесь была бы лишним шагом между «хочу» и «записан».
+    assert.ok(!branch.includes("'catalog?trainer_id='"), 'ведёт на карточку тренера');
+    assert.ok(!/slotId/.test(branch), 'без slot_id путь и обязан быть action=book');
+    // Ровно этот путь buildBookPathFromHubContext и строит без слота.
+    const build = fnBody('buildBookPathFromHubContext');
+    assert.match(build, /'action=book'/);
+    assert.match(build, /'from=hub'/);
+  });
+
+  it('чип окна ведёт в форму записи на этот слот', () => {
+    const from = wire.indexOf("action === 'book-slot'");
+    const to = wire.indexOf("action === 'all-trainers'");
+    assert.ok(from > -1 && to > from, 'нет обработчика book-slot');
+    const branch = wire.slice(from, to);
+    assert.match(branch, /buildBookPathFromHubContext\(tid, \{/);
+    assert.match(branch, /data-me-slot-id/);
+    assert.match(branch, /data-me-service-id/);
+    assert.match(branch, /data-me-arena-id/);
+  });
+
+  it('«все тренеры» (окон нет) ведут в каталог, а не в никуда', () => {
+    assert.match(wire, /action === 'all-trainers'/);
+    const from = wire.indexOf("action === 'all-trainers'");
+    assert.match(wire.slice(from, from + 220), /navigateTo\('catalog'\)/);
+  });
+
+  it('id тренера для чипов берётся из контекста карточки', () => {
+    assert.match(wire, /btn\.getAttribute\('data-me-trainer-id'\) \|\| hubMeCardTrainerId/);
+    assert.match(fnBody('renderMeCard'), /hubMeCardTrainerId = view\.trainerId/);
+  });
+});
+
+describe('S3: CSS — долг S1 закрыт, мёртвые стили убраны', () => {
+  it('.me__who-link и .avatar--photo описаны так, как требует разметка модели', () => {
+    const link = homeCss.match(/\.me__who-link \{[^}]*\}/);
+    assert.ok(link, 'нет правила .me__who-link');
+    for (const decl of ['display: flex', 'align-items: center', 'gap: 11px', 'flex: 1',
+      'min-width: 0', 'border: 0', 'background: transparent', 'padding: 0', 'text-align: left']) {
+      assert.ok(link[0].includes(decl), '.me__who-link без ' + decl);
+    }
+    const photo = homeCss.match(/\.me \.avatar--photo img \{[^}]*\}/);
+    assert.ok(photo, 'нет правила .me .avatar--photo img');
+    for (const decl of ['width: 100%', 'height: 100%', 'object-fit: cover']) {
+      assert.ok(photo[0].includes(decl), '.avatar--photo img без ' + decl);
+    }
+  });
+
+  it('стили удалённых состояний удалены вместе с ними', () => {
+    for (const cls of [
+      '.hub-trainer-card', '.hub-trainer-avatar', '.hub-trainer-share-btn',
+      '.hub-next-card-who', '.hub-next-card-fill', '.hub-next-card-alt',
+      '.hub-next-card-quiet', '.hub-next-card-time', '.hub-next-card-trainer-avatar',
+      '.hub-primary-panel__slot', '.hub-primary-panel__history',
+    ]) {
+      assert.ok(!homeCss.includes(cls), 'мёртвый CSS остался: ' + cls);
+    }
+    // Живое рядом не задето: штамп и строки списка записей, полка остатка.
+    assert.match(homeCss, /\.hub-next-card-pill--ok\s*\{/);
+    assert.match(homeCss, /\.hub-next-card-line\s*\{/);
+    assert.match(homeCss, /\.hub-primary-panel__pass\s*\{/);
+  });
+
+  it('приветствие не называет владельца аккаунта, пока профили не резолвнуты', () => {
+    const name = fnBody('hubGreetingName');
+    // Имя действующего профиля — единственный источник правды, когда он известен.
+    assert.match(name, /actingProfileFirstName\(\)/);
+    // Пока не известен и переключатель профилей есть — имени нет вовсе.
+    assert.match(name, /hubProfilesResolved/);
+    assert.match(name, /return null/);
+    // Флаг поднимается только после profilesReady, и там же перерисовка.
+    assert.match(
+      homeMain,
+      /hubProfilesResolved = true;\s*\n\s*setHubGreeting\(defaultHubGreeting\(\)\);\s*\n\s*syncProfileSwitcherCompact\(\);/
+    );
+    // Первая отрисовка в loadAll идёт ДО profilesReady — значит она обязана быть безымянной.
+    const load = fnBody('loadAll');
+    assert.ok(load.indexOf('setHubGreeting') < load.indexOf('profilesReady'));
+  });
+
+  it('карточка держит ритм хаба и не прилипает к секции под ней', () => {
+    // Отступ на контейнере, а не на .me: .rest обязан остаться продолжением
+    // карточки (9px), а не отъехать на общий межсекционный интервал.
+    const rule = homeCss.match(/#nextBookingBlock:not\(:empty\)\s*\{[^}]*\}/);
+    assert.ok(rule, 'у блока карточки нет собственного отступа — он прилипнет к «Куда катимся»');
+    assert.match(rule[0], /margin:\s*0\s+16px\s+20px/);
+    // Тот же ритм, что у соседей по хабу.
+    assert.match(homeCss, /\.hub-explore\s*\{[^}]*margin:\s*0\s+16px\s+20px/);
+  });
+
+  it('эмодзи из имени не протекает в подпись действия, но остаётся в заголовке', () => {
+    const body = fnBody('hubNameForLabel');
+    assert.match(body, /replace\(/);
+    // Чистится имя ТОЛЬКО для склонения; сам заголовок карточки имя не трогает.
+    assert.match(fnBody('hubMeDeclinedForms'), /hubNameForLabel\(fullName\)/);
+    const who = fnBody('buildMeCardTrainerInput');
+    assert.ok(!/hubNameForLabel/.test(who), 'имя в строке лица обязано остаться таким, как человек себя назвал');
+  });
+
+  it('сломанное фото откатывается на инициалы, а не остаётся битой картинкой', () => {
+    const body = fnBody('wireMeCardPhoto');
+    assert.match(body, /\.avatar--photo img/);
+    assert.match(body, /onerror/);
+    assert.match(body, /data-me-initials/);
+    // Картинка могла отвалиться до навешивания обработчика.
+    assert.match(body, /img\.complete && img\.naturalWidth === 0/);
+    assert.match(fnBody('wireMeCardBlock'), /wireMeCardPhoto\(block\)/);
+  });
+
+  it('кнопка «написать» — подписанный контрол, а не голая иконка', () => {
+    // Проверяем разметку, а не имя класса в CSS: класс можно переименовать,
+    // и гвард бы этого не заметил — на мутационной проверке так и вышло.
+    const card = require(path.join(webapp, 'hub-me-card.js'));
+    const out = card.renderHtml(
+      card.buildView(
+        {
+          kind: 'trainer',
+          trainer: { id: 7, name: 'Максим', canBook: true, username: 'maksim' },
+          // Конверт живёт рядом с полосой окон: без окон «написать» становится
+          // главной залитой кнопкой, и отдельного кружка нет по замыслу.
+          slots: [{ id: 1, start_time: '08:00', slot_date: '2026-10-06' }],
+        },
+        new Date('2026-10-05T12:00:00')
+      )
+    );
+    assert.match(out, /data-me-action="dm"/);
+    assert.match(out, />Написать</, 'у кнопки нет видимой подписи — голая иконка не читается как контрол');
+    // И она остаётся пилюлей, а не кружком: у кружка нет горизонтального padding.
+    const rule = homeCss.match(/\.me__dm \{[^}]*\}/);
+    assert.ok(rule && /padding:\s*0\s+\d+px/.test(rule[0]), rule && rule[0]);
   });
 });

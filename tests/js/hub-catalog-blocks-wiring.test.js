@@ -143,8 +143,14 @@ describe('вызовы рендеров в client-home-main.js', () => {
 
   // Было: аварийные ветки скрывали renderHubCollections(null).
   it('аварийные ветки (без initData и при ошибке) скрывают новые блоки', () => {
-    // Без initData.
-    assert.match(homeMain, /renderIceTeaser\(null\);\s*\n\s*renderIceTodaySessions\(null\);\s*\n\s*hubMarketPromise = renderHubExplore\(null\);/);
+    // Без initData. Порядок тот же, но между вызовами теперь живёт правило
+    // видимости поиска (DEC-001), поэтому соседство больше не построчное.
+    assert.match(
+      homeMain,
+      /renderIceTeaser\(null\);[\s\S]{0,240}?renderIceTodaySessions\(null\);[\s\S]{0,240}?hubMarketPromise = renderHubExplore\(null\);/
+    );
+    // DEC-001: данных нет — работа клиента и есть «найти», строка поиска обязана остаться.
+    assert.match(homeMain, /renderIceTodaySessions\(null\);\s*\n\s*setHubSearchVisible\(true\);/);
     // Ошибка загрузки.
     assert.match(homeMain, /hideUpcomingSection\(\);\s*\n\s*renderIceTodaySessions\(null\);\s*\n\s*renderHubExplore\(null\);/);
   });
@@ -229,7 +235,9 @@ describe('порядок для своего клиента: placeIceZone и Int
     }
     // Было: renderNextBookingCard. Стало (TASK-160 S2): renderMeCardForBooking —
     // карточку записи рисует hub-me-card.js, старый рендер удалён вместе с метром.
-    for (const fn of ['renderMeCardForBooking', 'renderMyTrainerCard', 'renderSavedTrainersStrip', 'renderUpcomingList', 'buildPrimaryPassHtml']) {
+    // Стало (S3): карточка тренера — тоже заливка «моей карточки», поэтому
+    // renderMyTrainerCard удалён; его место в списке занял общий painter.
+    for (const fn of ['renderMeCard', 'renderMeCardForBooking', 'renderSavedTrainersSection', 'renderUpcomingList', 'buildPrimaryPassHtml']) {
       assert.match(homeMain, new RegExp('function ' + fn + '\\('));
     }
   });
@@ -239,7 +247,8 @@ describe('порядок для своего клиента: placeIceZone и Int
   // показывает кошелёк карточки. Инвариант не снят, а переехал: на карточке
   // записи нет шеринга и нет тулбара, а хаб по-прежнему занимает личный слот.
   it('карточка ближайшей записи: рендер отдан модели, шеринга и тулбара на ней нет', () => {
-    const body = fnBody('renderMeCardForBooking');
+    // S3: рисует общий painter renderMeCard, ветка записи только собирает вход.
+    const body = fnBody('renderMeCard') + fnBody('renderMeCardForBooking');
     assert.match(body, /HubMeCard/);
     assert.match(body, /renderHtml\(view\)/);
     assert.ok(!body.includes('share-trainer'), 'шеринг ушёл с карточки записи');
@@ -252,7 +261,11 @@ describe('приветствие (S1): факты, без погоды, без �
   it('текст приветствия собирает чистая модель; имя — из Telegram', () => {
     const body = fnBody('defaultHubGreeting');
     assert.match(body, /model\.greetingText\(new Date\(\)\.getHours\(\), name\)/);
-    assert.match(body, /getTelegramFirstName\(\)/);
+    // Было: имя бралось прямо здесь. Стало (TASK-160): выбор имени вынесен в
+    // hubGreetingName — до резолва профилей имя владельца аккаунта было бы
+    // чужим. Инвариант тот же: источник имени — Telegram, а не поле сервера.
+    assert.match(body, /hubGreetingName\(\)/);
+    assert.match(fnBody('hubGreetingName'), /getTelegramFirstName\(\)/);
   });
 
   it('подпись собирает чистая модель из фактов тизера; в коде хаба нет погоды', () => {
@@ -335,6 +348,14 @@ describe('своё одним куском: слот, остальные зап�
     const place = fnBody('placeQuickStrip');
     assert.match(place, /mode === 'after-slot'/);
     assert.match(place, /getElementById\('hubIceZone'\)/);
-    assert.match(place, /insertBefore\(strip, zone\)/);
+    assert.match(place, /insertBefore\(strip, explore\)/);
+    const quietRule = homeCss.match(/\.hub-quick-strip--quiet\s*\{[^}]*\}/);
+    assert.ok(quietRule, 'тихая полоска rebook без своих отступов уедет от «Куда катимся»');
+    assert.match(quietRule[0], /margin:\s*0\s+16px/);
+    assert.doesNotMatch(quietRule[0], /margin:\s*-4px\s+20px/);
+    assert.match(
+      homeCss,
+      /#quickStrip\.hub-quick-strip--quiet:not\(\[hidden\]\)\s*\+\s*#hubExplore:not\(\[hidden\]\)/
+    );
   });
 });
