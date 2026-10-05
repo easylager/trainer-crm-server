@@ -848,48 +848,36 @@
     );
   }
 
-  var obArenaVvPoll = null;
-
-  function arenaKeyboardInsetPx() {
-    var vv = window.visualViewport;
-    if (!vv) return 0;
-    return Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
-  }
+  var obArenaFocusScrollT = null;
 
   function setArenaSearchFocused(inp, on) {
     var combo = inp && inp.closest ? inp.closest('.ob-arena-combo') : null;
     if (combo) combo.classList.toggle('ob-arena-combo--focused', on);
-    if (el.obShell) el.obShell.classList.toggle('ob-keyboard-open', on);
     if (combo) {
       var doneBtn = combo.querySelector('.ob-arena-combo__done');
       if (doneBtn) doneBtn.hidden = !on;
     }
-    if (!on) {
-      document.documentElement.style.removeProperty('--ob-keyboard-inset');
-      return;
-    }
-    syncArenaSearchViewport(inp);
   }
 
-  function syncArenaSearchViewport(inp) {
-    var inset = arenaKeyboardInsetPx();
-    document.documentElement.style.setProperty('--ob-keyboard-inset', inset + 'px');
+  /** Один раз после открытия клавиатуры — без polling и без vv.scroll (они гоняли scrollIntoView по кругу). */
+  function scheduleArenaSearchScrollOnce(inp) {
     if (!inp) return;
-    var target = inp.closest('.ob-arena-combo') || inp;
-    try {
-      target.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
-    } catch (eS) { /* */ }
-    setTimeout(function () {
+    if (obArenaFocusScrollT) clearTimeout(obArenaFocusScrollT);
+    obArenaFocusScrollT = setTimeout(function () {
+      obArenaFocusScrollT = null;
+      if (document.activeElement !== inp) return;
+      var wrap = inp.closest('.ob-arena-pick');
+      if (!wrap) return;
       try {
-        inp.scrollIntoView({ block: 'center', behavior: 'auto', inline: 'nearest' });
-      } catch (eS2) { /* */ }
-    }, 280);
+        wrap.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
+      } catch (eS) { /* */ }
+    }, 420);
   }
 
   function dismissArenaSearchKeyboard() {
-    if (obArenaVvPoll) {
-      clearInterval(obArenaVvPoll);
-      obArenaVvPoll = null;
+    if (obArenaFocusScrollT) {
+      clearTimeout(obArenaFocusScrollT);
+      obArenaFocusScrollT = null;
     }
     var ae = document.activeElement;
     if (ae && ae.classList && ae.classList.contains('ob-arena-combo__input')) {
@@ -913,21 +901,12 @@
       inp._obArenaMobileBound = true;
       inp.addEventListener('focus', function () {
         setArenaSearchFocused(inp, true);
-        syncArenaSearchViewport(inp);
-        if (obArenaVvPoll) clearInterval(obArenaVvPoll);
-        obArenaVvPoll = setInterval(function () {
-          if (document.activeElement !== inp) {
-            clearInterval(obArenaVvPoll);
-            obArenaVvPoll = null;
-            return;
-          }
-          syncArenaSearchViewport(inp);
-        }, 150);
+        scheduleArenaSearchScrollOnce(inp);
       });
       inp.addEventListener('blur', function () {
-        if (obArenaVvPoll) {
-          clearInterval(obArenaVvPoll);
-          obArenaVvPoll = null;
+        if (obArenaFocusScrollT) {
+          clearTimeout(obArenaFocusScrollT);
+          obArenaFocusScrollT = null;
         }
         window.setTimeout(function () {
           if (document.activeElement === inp) return;
@@ -952,19 +931,6 @@
         dismissArenaSearchKeyboard();
       });
     });
-
-    var vv = window.visualViewport;
-    if (vv && !vv._obArenaInsetBound) {
-      vv._obArenaInsetBound = true;
-      function onVvChange() {
-        var ae = document.activeElement;
-        if (ae && ae.classList && ae.classList.contains('ob-arena-combo__input')) {
-          syncArenaSearchViewport(ae);
-        }
-      }
-      vv.addEventListener('resize', onVvChange);
-      vv.addEventListener('scroll', onVvChange);
-    }
 
     if (document._obArenaSearchDismissBound) return;
     document._obArenaSearchDismissBound = true;

@@ -287,24 +287,11 @@
       cursor: pointer;
     }
     .ob-arena-combo__done[hidden] { display: none; }
-    .ob-arena-combo--focused {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
-    }
-    .ob-arena-combo--focused .ob-arena-combo__trigger {
-      background: var(--app-chip-bg);
-    }
     .ob-arena-combo--focused .ob-arena-list {
-      max-height: min(
-        240px,
-        calc(100dvh - var(--ob-keyboard-inset, 0px) - 148px)
-      );
+      max-height: 168px;
     }
-    #obShell.ob-keyboard-open .ob-foot {
-      position: relative;
-      z-index: 1;
+    .ob-arena-pick {
+      scroll-margin-top: 12px;
     }
     .ob-arena-combo__panel {
       padding: 8px;
@@ -1013,6 +1000,6 @@
   </div>
 </div>
 
-<script src="trainer-onboarding-main.js?v=202610066"></script>
+<script src="trainer-onboarding-main.js?v=202610067"></script>
 </body>
 </html>
