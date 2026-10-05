@@ -758,6 +758,14 @@
         '</div>'
       );
     }
+    if (feed.mode === 'unconfirmed') {
+      return (
+        '<div class="arena-sec">' +
+        '<p class="arena-h">Расписание</p>' +
+        '<p class="arena-stale">' + esc(feed.banner || '') + '</p>' +
+        '</div>'
+      );
+    }
     var days = strip();
     if (!state.day) {
       // День из ленты — если он есть в полосе; иначе свой умный дефолт.
@@ -772,6 +780,9 @@
     var hasTicketLinks = daySessions.some(function (s) {
       return M.iceRowCta(s, state.card && state.card.tickets_url).href;
     });
+    var staleNote = M.shouldWarnScheduleStale(state.card.freshness)
+      ? M.staleScheduleNote(state.card.freshness, new Date(), state.card)
+      : '';
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">Расписание</p>' +
@@ -779,6 +790,7 @@
         ? '<a class="arena-cta arena-cta--link" href="' + esc(tickets.href) + '" data-action="external" data-href="' + esc(tickets.href) + '">Билеты онлайн</a>'
         : '') +
       '</div>' +
+      (staleNote ? '<p class="arena-stale">' + esc(staleNote) + '</p>' : '') +
       '<p class="arena-schedule-hint">' + esc(M.scheduleInviteHint(hasTicketLinks)) + '</p>' +
       renderDayStrip(days) +
       '<div id="arenaRows">' + renderShowtimes() + '</div>' +

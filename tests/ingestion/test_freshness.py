@@ -253,11 +253,41 @@ def test_schedule_freshness_fields_prefers_latest_confirmation() -> None:
         "schedule_observed_at": (_NOW - timedelta(minutes=20)).isoformat(),
         "schedule_auto": True,
         "schedule_stale": False,
+        "schedule_very_stale": False,
     }
     manual = schedule_freshness_fields(
         has_enabled_job=False, last_ok_at=None, sessions_observed_at=None, config=None, now=_NOW
     )
-    assert manual == {"schedule_observed_at": None, "schedule_auto": False, "schedule_stale": False}
+    assert manual == {
+        "schedule_observed_at": None,
+        "schedule_auto": False,
+        "schedule_stale": False,
+        "schedule_very_stale": False,
+    }
+
+
+def test_schedule_very_stale_after_72_hours() -> None:
+    """TASK-180: 7 ч — устарело, но показываем; > 72 ч — не выдаём за расписание."""
+
+    def fields(hours: float, **kw):
+        return schedule_freshness_fields(
+            has_enabled_job=kw.get("enabled", True),
+            last_ok_at=_NOW - timedelta(hours=hours),
+            sessions_observed_at=None,
+            config=kw.get("config", {}),
+            now=_NOW,
+        )
+
+    assert (fields(5)["schedule_stale"], fields(5)["schedule_very_stale"]) == (False, False)
+    assert (fields(7)["schedule_stale"], fields(7)["schedule_very_stale"]) == (True, False)
+    assert (fields(71)["schedule_stale"], fields(71)["schedule_very_stale"]) == (True, False)
+    assert (fields(73)["schedule_stale"], fields(73)["schedule_very_stale"]) == (True, True)
+    # Без парсера (ручные сеансы) — никогда не «очень устарело».
+    assert fields(500, enabled=False)["schedule_very_stale"] is False
+    # Порог источника выше 72 ч (сайт обновляют раз в неделю) — «очень» не раньше него.
+    weekly = {"stale_after_hours": 100}
+    assert fields(80, config=weekly)["schedule_very_stale"] is False
+    assert fields(101, config=weekly)["schedule_very_stale"] is True
 
 
 # ── Планировщик ──────────────────────────────────────────────────────────

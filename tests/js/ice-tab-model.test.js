@@ -8,9 +8,12 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+const stalePath = path.resolve(__dirname, '../../static/webapp/schedule-staleness-model.js');
 const modelPath = path.resolve(__dirname, '../../static/webapp/ice-tab-model.js');
 
 function loadModel() {
+  delete require.cache[require.resolve(stalePath)];
+  require(stalePath);
   const resolved = require.resolve(modelPath);
   delete require.cache[resolved];
   return require(modelPath);
@@ -1279,13 +1282,18 @@ describe('TASK-146: окно сортирует, а не фильтрует — 
   });
 });
 
-describe('TASK-146: устаревшее расписание в ленте', () => {
-  it('schedule_stale не меняет подпись карточки в ленте', () => {
+describe('TASK-180: устаревшее расписание в ленте', () => {
+  it('schedule_stale помечает карточку и подпись глубины', () => {
     const { boardCardView } = loadModel();
     const item = { id: 1, name: 'Каток', live: { kind: 'session', local_date: '2026-10-02', starts_at_local: '18:00', more_count: 5, session_id: 3 } };
     const now = new Date('2026-10-02T10:00:00Z');
-    const v = boardCardView({ ...item, freshness: { schedule_stale: true } }, now, {});
-    assert.equal(v.stale, false);
+    const v = boardCardView(
+      { ...item, freshness: { schedule_stale: true, schedule_very_stale: false } },
+      now,
+      {}
+    );
+    assert.equal(v.stale, true);
+    assert.match(v.depth, /могло измениться/);
     assert.match(v.depth, /сеанс/);
   });
 });

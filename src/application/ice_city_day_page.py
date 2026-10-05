@@ -24,6 +24,7 @@ from src.application.ice_city_day import (
     summary_line,
 )
 from src.application.place_links import place_path
+from src.application.schedule_staleness import UNCONFIRMED_HEADING
 from src.shared.html_template import fill_placeholders
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "ice-city-day.html"
@@ -68,9 +69,34 @@ def _arena_html(arena: Mapping[str, Any], *, city_name: str = "") -> str:
     ]
     if where:
         parts.append(f'<p class="arena__where">{_esc(where)}</p>')
+    note = str(arena.get("stale_note") or "").strip()
+    if note:
+        # TASK-180: парсер давно не читал сайт катка — сеансы показываем, но честно.
+        parts.append(f'<p class="arena__stale">{_esc(note)}</p>')
     parts.append(f'<ul class="slots">{slots}</ul>')
     parts.append("</article>")
     return "".join(parts)
+
+
+def _unconfirmed_html(items: list[Mapping[str, Any]], *, city_name: str) -> str:
+    """TASK-180: катки, чьё расписание > 72 ч не подтверждалось, — не в списке дня, а здесь."""
+    if not items:
+        return ""
+    rows = []
+    for item in items:
+        name = _esc(item.get("name"))
+        slug = str(item.get("slug") or "").strip()
+        if slug and city_name:
+            name = f'<a href="{_esc(place_path(city_name=city_name, slug=slug))}">{name}</a>'
+        phone = str(item.get("phone") or "").strip()
+        tel = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+        phone_html = f' · <a href="tel:{_esc(tel)}">{_esc(phone)}</a>' if phone and tel else ""
+        rows.append(f"<li><b>{name}</b> — {_esc(item.get('note'))}{phone_html}</li>")
+    return (
+        '<section class="unconfirmed">'
+        f'<p class="unconfirmed__title">{_esc(UNCONFIRMED_HEADING)}</p>'
+        f"<ul>{''.join(rows)}</ul></section>"
+    )
 
 
 def _empty_html(city_name: str, day_label: str) -> str:
@@ -111,6 +137,7 @@ def render_ice_city_day_page(
         body = "".join(_arena_html(a, city_name=city_name) for a in arenas)
     else:
         body = _empty_html(city_name, day_label)
+    body += _unconfirmed_html(list(day.get("unconfirmed") or []), city_name=city_name)
 
     session_count = int(day.get("session_count") or 0)
     if session_count:

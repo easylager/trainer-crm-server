@@ -14,6 +14,11 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
+  function staleApi() {
+    return rootRef.ScheduleStalenessModel || null;
+  }
+
   var RuText = typeof globalThis !== 'undefined' ? globalThis.RuText : null;
   /* TASK-182: часы работы — общий модуль со вкладкой «Лёд» (opening-hours.js). */
   var OH =
@@ -201,12 +206,16 @@
   function daysBetween(fromIso, now) {
     var from = new Date(fromIso);
     if (isNaN(from.getTime()) || !now) return null;
+    var S = staleApi();
+    if (S) return S.minskDaysBetween(from, now);
     var a = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
     var b = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     return Math.round((b - a) / 86400000);
   }
 
   function pluralDays(n) {
+    var S = staleApi();
+    if (S) return S.pluralDays(n);
     var abs = Math.abs(n);
     var mod10 = abs % 10;
     var mod100 = abs % 100;
@@ -230,12 +239,28 @@
     return text;
   }
 
-  /** schedule_stale — для API и алертов; в UI карточки слоты показываем как источник правды. */
-  function shouldWarnScheduleStale() {
-    return false;
+  /** TASK-180: > 6 ч без удачного прогона — баннер над слотами; сеансы всё равно видны. */
+  function shouldWarnScheduleStale(freshness) {
+    var S = staleApi();
+    if (S) return S.shouldWarnScheduleStale(freshness);
+    return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
   }
 
-  function staleScheduleNote() {
+  function staleScheduleNote(freshness, now, card) {
+    var S = staleApi();
+    now = now || new Date();
+    if (S) {
+      var level = S.stalenessLevel(freshness);
+      if (level === 'stale') return S.staleNote(freshness, now);
+      if (level === 'very_stale') {
+        card = card || {};
+        return S.veryStaleNote(freshness, now, {
+          hasPhone: !!String(card.phone || '').trim(),
+          hasSite: !!(card.tickets_url || card.website_url),
+        });
+      }
+      return null;
+    }
     return null;
   }
 
@@ -638,6 +663,12 @@
     var banner = seasonClosedBanner(card);
     if (banner) {
       return { mode: 'closed', banner: banner, showRibbon: false };
+    }
+    var S = staleApi();
+    var level = S ? S.stalenessLevel(card.freshness) : 'fresh';
+    if (level === 'very_stale') {
+      var note = staleScheduleNote(card.freshness, opts.now, card);
+      return { mode: 'unconfirmed', banner: note || 'Расписание не подтверждено', showRibbon: false };
     }
     var mode = iceSectionMode({
       tier: opts.tier || card.tier,

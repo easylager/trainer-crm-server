@@ -25,6 +25,11 @@
   var ICE_STATE_KEY = 'tcb_ice_tab_v1';
   var INTENTS = { skate: 'skate', coach: 'coach', group: 'group' };
   var MINSK_TZ = 'Europe/Minsk';
+  var rootRef = typeof globalThis !== 'undefined' ? globalThis : this;
+
+  function staleApi() {
+    return rootRef.ScheduleStalenessModel || null;
+  }
 
   function ymdInMinsk(d) {
     try {
@@ -34,8 +39,10 @@
     }
   }
 
-  function scheduleStaleWarn() {
-    return false;
+  function scheduleStaleWarn(freshness) {
+    var S = staleApi();
+    if (S) return S.shouldWarnScheduleStale(freshness);
+    return !!(freshness && freshness.schedule_stale && !freshness.schedule_very_stale);
   }
 
   function pluralRu(n, one, few, many) {
@@ -1602,7 +1609,12 @@
          площадке. Фолбэк — для ответов старого API без поля. */
       depth = String(item.venue_cta || '').trim() || 'Открыть карточку места';
     }
-    var stale = false;
+    var freshness = item.freshness || {};
+    var stale = scheduleStaleWarn(freshness);
+    var S = staleApi();
+    if (stale && isSession && S && S.STALE_SHORT) {
+      depth = 'Расписание ' + S.STALE_SHORT + ' · ' + depth;
+    }
     return {
       stale: stale,
       href: arenaHref(item),

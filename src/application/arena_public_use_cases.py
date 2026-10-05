@@ -457,6 +457,9 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         "live_line": live.get("text"),
         # TASK-146: та же свежесть расписания, что в карточке (schedule_stale и др.).
         "freshness": _schedule_freshness(item),
+        # TASK-180: у очень устаревшего расписания карточка просит «уточните по телефону» —
+        # только если телефон действительно есть (он и так публичный в карточке места).
+        "phone": item.get("phone"),
     }
     if venue_type == VENUE_TYPE_SHOP:
         payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
@@ -1083,6 +1086,23 @@ async def get_hub_ice_teaser(
     if city_id is not None:
         params["city_id"] = int(city_id)
         city_filter = "  AND a.city_id = :city_id\n"
+    # TASK-180: арены, чей парсер не читал сайт успешно > 72 ч, на Главной не продаём —
+    # их сеансы больше не выдаём за расписание. > 6 ч — показываем с пометкой.
+    from src.application.schedule_staleness import (
+        LEVEL_STALE,
+        LEVEL_VERY_STALE,
+        load_arena_freshness,
+        staleness_level,
+    )
+
+    job_arena_ids = (
+        await session.execute(text("SELECT arena_id FROM ice_parser_jobs WHERE is_enabled"))
+    ).scalars().all()
+    job_fresh = await load_arena_freshness(session, job_arena_ids, now=now)
+    params["unconfirmed_ids"] = [
+        aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_VERY_STALE
+    ]
+    stale_ids = {aid for aid, fr in job_fresh.items() if staleness_level(fr) == LEVEL_STALE}
     # TASK-148 (AC-4): «Сегодня на льду» — вместе с тизером отдаём до 4 ближайших
     # сеансов (тизер — первый), чтобы хаб рисовал блок без нового эндпоинта и без
     # второго раунд-трипа. Раньше был LATERAL LIMIT 1 по аренам + внешний LIMIT 1:
@@ -1111,6 +1131,7 @@ LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 WHERE {_CURRENT_SESSION_SQL}
   AND {PUBLIC_ARENA_VISIBLE_SQL}
+  AND NOT (a.id = ANY(:unconfirmed_ids))
 {city_filter}ORDER BY s.starts_at_utc, a.id
 LIMIT 4
 """
@@ -1157,6 +1178,8 @@ LIMIT 4
             "starts_at_local": _hhmm(r["starts_at_local"]),
             "price_adult_minor": r["price_adult_minor"],
             "currency_code": r["currency_code"],
+            # TASK-180: > 6 ч без удачного прогона — хаб помечает «могло измениться».
+            "schedule_stale": int(r["arena_id"]) in stale_ids,
         }
         for r in rows
     ]
@@ -1176,6 +1199,7 @@ LIMIT 4
         "thumb": thumb,
         "card": card,
         "distance_km": distance_km,
+        "schedule_stale": int(row["arena_id"]) in stale_ids,
         # TASK-148 (AC-4): id сеанса тизера + ближайшие сеансы (включая тизерный),
         # чтобы блок «Сегодня на льду» строил свои 2–3 строки из тех же live-данных.
         "session_id": int(row["session_id"]),
