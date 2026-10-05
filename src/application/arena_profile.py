@@ -148,6 +148,64 @@ class InvalidArenaProfileStatusError(ValueError):
     """status must be draft | published | archived."""
 
 
+# ---------------------------------------------------------------------------
+# TASK-177: publish guard. «Тестовая Арена 1/3» reached the prod catalog because
+# every create path inserted the profile as ``published`` unconditionally.
+# ---------------------------------------------------------------------------
+
+# «тест»/«test» at a word start: «Тестовая арена», «Test rink», «arena-test» — but not
+# «Протестантская» or «Contest». \w is unicode-aware, so Cyrillic counts as a word char.
+_TEST_NAME_RE = re.compile(r"(?<!\w)(?:тест|test)", re.IGNORECASE)
+
+PUBLISH_BLOCKER_TEST_NAME = "test_name"
+PUBLISH_BLOCKER_EMPTY_NAME = "empty_name"
+PUBLISH_BLOCKER_NO_COORDINATES = "no_coordinates"
+
+
+class ArenaNotPublishableError(ValueError):
+    """Explicit publish of an arena that fails ``arena_publish_blockers``."""
+
+
+def looks_like_test_arena_name(name: str | None) -> bool:
+    return bool(_TEST_NAME_RE.search(name or ""))
+
+
+def arena_publish_blockers(
+    *,
+    name: str | None,
+    venue_type: str | None,
+    latitude: float | None,
+    longitude: float | None,
+) -> list[str]:
+    """Why this arena must not be published; empty list — it may be.
+
+    Coordinates are required for rinks only: a rink off the map is a broken card on
+    every map/nearby surface. Shops without coordinates are a supported state (imported
+    before geocoding, listed but «not on map» — see catalog_shops_import). The city is
+    a NOT NULL FK on ``arenas``, so «no city» cannot happen at this layer.
+    """
+    out: list[str] = []
+    if not (name or "").strip():
+        out.append(PUBLISH_BLOCKER_EMPTY_NAME)
+    elif looks_like_test_arena_name(name):
+        out.append(PUBLISH_BLOCKER_TEST_NAME)
+    if (venue_type or "ice") == "ice" and (latitude is None or longitude is None):
+        out.append(PUBLISH_BLOCKER_NO_COORDINATES)
+    return out
+
+
+async def load_arena_publish_blockers(session: AsyncSession, arena_id: int) -> list[str]:
+    row = (
+        await session.execute(
+            text("SELECT name, venue_type, latitude, longitude FROM arenas WHERE id = :id"),
+            {"id": int(arena_id)},
+        )
+    ).fetchone()
+    if row is None:
+        return []
+    return arena_publish_blockers(name=row[0], venue_type=row[1], latitude=row[2], longitude=row[3])
+
+
 def slugify_arena_name(name: str) -> str:
     """Transliterate a venue name to a URL-safe slug. Stable for the same input."""
     raw = (name or "").strip().lower()
@@ -335,6 +393,15 @@ async def ensure_arena_profile(
     ).fetchone()
     if existing and existing[0]:
         return str(existing[0])
+    status = validate_profile_status(status)
+    if status == ARENA_PROFILE_STATUS_PUBLISHED and PUBLISH_BLOCKER_TEST_NAME in (
+        await load_arena_publish_blockers(session, arena_id)
+    ):
+        # TASK-177: a «Тестовая арена» starts as a draft; publishing it later goes through
+        # apply_admin_arena_profile_patch / approve_arena, which re-check every blocker.
+        # Missing coordinates alone do NOT draft here: a rink without coords stays in its
+        # city list by design (public list AC-001); only explicit publish refuses it.
+        status = ARENA_PROFILE_STATUS_DRAFT
     slug = await allocate_arena_slug(
         session,
         city_id=city_id,
@@ -356,7 +423,7 @@ async def ensure_arena_profile(
             "city_id": city_id,
             "slug": slug,
             "district": (district or "").strip() or None,
-            "status": validate_profile_status(status),
+            "status": status,
         },
     )
     return slug
@@ -475,8 +542,22 @@ async def apply_admin_arena_profile_patch(
         assignments.append("amenities = CAST(:amenities AS jsonb)")
         params["amenities"] = json.dumps(amenities)
     if "status" in fields and fields["status"] is not None:
+        new_status = validate_profile_status(str(fields["status"]))
+        current_status = (
+            await session.execute(
+                text("SELECT status FROM arena_profiles WHERE arena_id = :id"), {"id": _arena_id}
+            )
+        ).scalar()
+        # Only the transition into «published» is guarded: re-saving an already published
+        # card (admin form, shop re-import) must not start failing on legacy rows.
+        if new_status == ARENA_PROFILE_STATUS_PUBLISHED and current_status != new_status:
+            blockers = await load_arena_publish_blockers(session, _arena_id)
+            if blockers:
+                raise ArenaNotPublishableError(
+                    "arena cannot be published: " + ", ".join(blockers)
+                )
         assignments.append("status = :status")
-        params["status"] = validate_profile_status(str(fields["status"]))
+        params["status"] = new_status
     if "tickets_url" in fields:
         raw = fields["tickets_url"]
         if raw is None or str(raw).strip() == "":
