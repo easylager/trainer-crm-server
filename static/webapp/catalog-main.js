@@ -1938,8 +1938,12 @@
               if (window.ClientShell && typeof window.ClientShell.hapticSuccess === 'function') {
                 window.ClientShell.hapticSuccess();
               }
-              if (tg && tg.showAlert) {
-                tg.showAlert('Заявка отправлена — центр свяжется с вами для оплаты');
+              if (tg && typeof tg.showAlert === 'function') {
+                try {
+                  tg.showAlert('Заявка отправлена — центр свяжется с вами для оплаты');
+                } catch (e) {
+                  /* вне Telegram или старый клиент */
+                }
               }
               return;
             }

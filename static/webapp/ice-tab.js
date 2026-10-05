@@ -50,6 +50,8 @@
   };
   var searchTimer = null;
   var fetchGen = 0;
+  var searchGen = 0;
+  var lastSearchQuery = '';
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -1161,6 +1163,11 @@
         loadList();
       };
     }
+    if (kind === 'retry-search') {
+      return function () {
+        showSearch(lastSearchQuery);
+      };
+    }
     if (kind === 'ice-interest') {
       return function () {
         recordIceInterest();
@@ -1943,6 +1950,9 @@
     var mapSec = $('iceMapSec');
     var query = String(q || '').trim();
     if (query.length < 2) {
+      searchGen += 1;
+      var clearedBox = $('iceSearchResults');
+      if (clearedBox) clearedBox.innerHTML = '';
       if (searchSec) searchSec.hidden = true;
       if (listSec) listSec.hidden = mapViewActive();
       if (mapSec) mapSec.hidden = !mapViewActive();
@@ -1950,55 +1960,78 @@
       if (mapViewActive() && mapCtl) mapCtl.resize();
       return;
     }
-    fetchJson(M.buildSearchUrl(query, 8)).then(function (data) {
-      var grouped = M.groupSearchResults(data || { groups: [] });
-      var box = $('iceSearchResults');
-      if (!box) return;
-      if (searchSec) searchSec.hidden = false;
-      if (listSec) listSec.hidden = true;
-      if (mapSec) mapSec.hidden = true;
-      if (document.body) document.body.classList.remove('ice-view-map');
-      var html = '';
-      grouped.forEach(function (g) {
-        if (!g.items.length) return;
-        html += '<p class="ice-results__label">' + esc(g.label) + '</p>';
-        g.items.forEach(function (it) {
-          var href = '';
-          var title = it.name || '';
-          var sub = '';
-          if (g.type === 'arena') {
-            href = M.arenaHref(it);
-            // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
-            var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
-            sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
-          } else if (g.type === 'trainer') {
-            href = M.trainerHref(it);
-            title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
-          } else if (g.type === 'city') {
-            href = 'city:' + it.id;
-            title = it.name;
-          }
-          html +=
-            '<button type="button" class="ice-hit" data-href="' +
-            esc(href) +
-            '" data-city-id="' +
-            esc(it.id) +
-            '" data-city-name="' +
-            esc(it.name || '') +
-            '"><b>' +
-            esc(title) +
-            '</b><span>' +
-            esc(sub) +
-            '</span></button>';
+    searchGen += 1;
+    var gen = searchGen;
+    lastSearchQuery = query;
+    fetchJson(M.buildSearchUrl(query, 8))
+      .then(function (data) {
+        if (gen !== searchGen) return;
+        var grouped = M.groupSearchResults(data || { groups: [] });
+        var box = $('iceSearchResults');
+        if (!box) return;
+        if (searchSec) searchSec.hidden = false;
+        if (listSec) listSec.hidden = true;
+        if (mapSec) mapSec.hidden = true;
+        if (document.body) document.body.classList.remove('ice-view-map');
+        var html = '';
+        grouped.forEach(function (g) {
+          if (!g.items.length) return;
+          html += '<p class="ice-results__label">' + esc(g.label) + '</p>';
+          g.items.forEach(function (it) {
+            var href = '';
+            var title = it.name || '';
+            var sub = '';
+            if (g.type === 'arena') {
+              href = M.arenaHref(it);
+              // Тип места, кроме льда: в выдаче по «заточке» мастерская не должна выглядеть катком.
+              var chip = it.venue_type && it.venue_type !== 'ice' ? it.venue_chip : '';
+              sub = [chip, it.district, it.city_name, it.address].filter(Boolean).join(' · ');
+            } else if (g.type === 'trainer') {
+              href = M.trainerHref(it);
+              title = it.name || [it.first_name, it.last_name].filter(Boolean).join(' ');
+            } else if (g.type === 'city') {
+              href = 'city:' + it.id;
+              title = it.name;
+            }
+            html +=
+              '<button type="button" class="ice-hit" data-href="' +
+              esc(href) +
+              '" data-city-id="' +
+              esc(it.id) +
+              '" data-city-name="' +
+              esc(it.name || '') +
+              '"><b>' +
+              esc(title) +
+              '</b><span>' +
+              esc(sub) +
+              '</span></button>';
+          });
         });
+        if (html) {
+          box.innerHTML = html;
+          return;
+        }
+        // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
+        renderEmpty(box, M.formatEmptySearch(query), 'search');
+      })
+      .catch(function () {
+        if (gen !== searchGen) return;
+        var errBox = $('iceSearchResults');
+        if (!errBox) return;
+        if (searchSec) searchSec.hidden = false;
+        if (listSec) listSec.hidden = true;
+        if (mapSec) mapSec.hidden = true;
+        if (document.body) document.body.classList.remove('ice-view-map');
+        renderEmpty(
+          errBox,
+          {
+            title: 'Не удалось выполнить поиск',
+            body: 'Похоже, пропала связь. Повторите запрос по кнопке.',
+            action: { label: 'Повторить', kind: 'retry-search' },
+          },
+          'search'
+        );
       });
-      if (html) {
-        box.innerHTML = html;
-        return;
-      }
-      // TASK-096 AC-002: «Ничего не найдено» was the one state in the app with no exit at all.
-      renderEmpty(box, M.formatEmptySearch(query), 'search');
-    });
   }
 
   function catalogTodayIso() {
