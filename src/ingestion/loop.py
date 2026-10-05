@@ -10,6 +10,7 @@ from typing import Awaitable, Callable
 
 from src.ingestion.alerts import tick_ice_health_alerts, tick_ice_health_weekly_digest
 from src.ingestion.jobs import SqlAlchemyParserJobStore
+from src.ingestion.ops_alerts import try_alert_tick_lock
 from src.ingestion.parsers import default_registry
 from src.ingestion.scheduler import IceIngestScheduler
 from src.ingestion.scrape_runs import SqlAlchemyScrapeRunRecorder
@@ -26,6 +27,8 @@ ICE_HEALTH_DIGEST_INTERVAL_SEC = 3600
 ICE_SOURCE_ALERT_INTERVAL_SEC = 120
 # TASK-176: сторож «прогонов нет вообще» — тоже отдельным циклом, независимо от планировщика.
 ICE_SCHEDULER_WATCHDOG_INTERVAL_SEC = 300
+# TASK-178: каждый тик алертов — под транзакционным advisory-локом (ops_alerts): вторая
+# реплика notification_service пропускает тик, а не шлёт тот же пуш второй раз.
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,8 @@ async def run_ice_scheduler_watchdog_loop() -> None:
         await asyncio.sleep(ICE_SCHEDULER_WATCHDOG_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_scheduler_watchdog"):
+                    continue
                 kind = await tick_scheduler_watchdog(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if kind:
@@ -179,6 +184,8 @@ async def run_ice_health_alert_loop() -> None:
         await asyncio.sleep(ICE_HEALTH_ALERT_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_health_alert"):
+                    continue
                 sent = await tick_ice_health_alerts(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if sent:
@@ -198,6 +205,8 @@ async def run_ice_source_alert_loop() -> None:
         await asyncio.sleep(ICE_SOURCE_ALERT_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_source_alert"):
+                    continue
                 alerts = await tick_source_failure_alerts(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if alerts:
@@ -216,6 +225,8 @@ async def run_ice_health_weekly_digest_loop() -> None:
         await asyncio.sleep(ICE_HEALTH_DIGEST_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
+                if not await try_alert_tick_lock(session, "ice_health_weekly_digest"):
+                    continue
                 sent = await tick_ice_health_weekly_digest(session, now=datetime.now(timezone.utc))
                 await session.commit()
                 if sent:
