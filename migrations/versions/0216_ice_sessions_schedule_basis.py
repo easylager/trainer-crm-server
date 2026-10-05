@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0216_ice_sessions_schedule_basis"
-down_revision = "0215_catalog_listed_invite_push"
+down_revision = "0216_ice_ops_alerts"
 branch_labels = None
 depends_on = None
 
