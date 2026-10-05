@@ -8,10 +8,15 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from src.application.ice_session_use_cases import IceSessionValidationError
-from src.ingestion.freshness import next_poll_at, next_source_state
+from src.ingestion.freshness import (
+    ERROR_CODE_EMPTY_AFTER_FILTER,
+    ERROR_CODE_EMPTY_SOURCE,
+    next_poll_at,
+    next_source_state,
+)
 from src.ingestion.jobs import config_requires_by_egress
 from src.ingestion.source_io import egress_proxy
-from src.ingestion.normalize import IceSessionNormalizer
+from src.ingestion.normalize import IceSessionNormalizer, NormalizeReport
 from src.ingestion.parsers import ParserRegistry, default_registry
 from src.ingestion.publish import IceSessionPublisher
 from src.ingestion.scrape_runs import IceScrapeRunRecorder, LoggingScrapeRunRecorder
@@ -162,7 +167,7 @@ class IceIngestScheduler:
         try:
             with egress_proxy(proxy):
                 extraction = await parser.extract(job)
-            drafts = self._normalizer.normalize(extraction, job, now=now)
+            drafts, report = self._normalize(extraction, job, now)
             validated = self._validator.validate(drafts)
         except IceSessionValidationError as exc:
             return (
@@ -191,6 +196,15 @@ class IceIngestScheduler:
             )
         status = RUN_STATUS_OK if validated else RUN_STATUS_EMPTY
         dropped = max(0, len(extraction.slots) - len(validated))
+        # TASK-178: пустой прогон говорит, где потерялись слоты. slots_found — опубликовано,
+        # slots_dropped — отброшено; извлечено = found + dropped.
+        error_code = None
+        error_message = None
+        if status == RUN_STATUS_EMPTY:
+            error_code = (
+                ERROR_CODE_EMPTY_AFTER_FILTER if extraction.slots else ERROR_CODE_EMPTY_SOURCE
+            )
+            error_message = report.summary()
         return (
             self._record(
                 job,
@@ -200,8 +214,19 @@ class IceIngestScheduler:
                 slot_count=len(validated),
                 slots_dropped=dropped,
                 snapshot=extraction.snapshot,
+                error_code=error_code,
+                error_message=error_message,
             ),
             validated,
+        )
+
+    def _normalize(self, extraction, job: ParserJob, now: datetime):
+        with_report = getattr(self._normalizer, "normalize_with_report", None)
+        if with_report is not None:
+            return with_report(extraction, job, now=now)
+        drafts = self._normalizer.normalize(extraction, job, now=now)
+        return drafts, NormalizeReport(
+            extracted=len(extraction.slots), published=len(drafts)
         )
 
     @staticmethod

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -115,6 +116,38 @@ def _truthy_minor_flag(config: dict[str, Any]) -> bool:
     return bool(raw)
 
 
+@dataclass(frozen=True)
+class NormalizeReport:
+    """Куда делись слоты между extract() и публикацией (TASK-178).
+
+    ``extracted`` — сколько слотов вернул адаптер; ``published`` — сколько черновиков
+    дошло до валидации. Разница раскладывается по причинам: неизвестный вид сеанса,
+    дубль того же начала (слит с другим слотом) и сеанс, который уже закончился.
+    """
+
+    extracted: int = 0
+    unknown_kind: int = 0
+    merged_duplicates: int = 0
+    past: int = 0
+    published: int = 0
+
+    @property
+    def dropped(self) -> int:
+        return max(0, self.extracted - self.published)
+
+    def summary(self) -> str:
+        """«извлечено 16, опубликовано 0: в прошлом 16» — для error_summary и логов."""
+        reasons = []
+        if self.past:
+            reasons.append(f"в прошлом {self.past}")
+        if self.unknown_kind:
+            reasons.append(f"неизвестный вид {self.unknown_kind}")
+        if self.merged_duplicates:
+            reasons.append(f"дубли {self.merged_duplicates}")
+        head = f"извлечено {self.extracted}, опубликовано {self.published}"
+        return f"{head}: {', '.join(reasons)}" if reasons else head
+
+
 class IceSessionNormalizer:
     def normalize(
         self,
@@ -123,6 +156,16 @@ class IceSessionNormalizer:
         *,
         now: datetime,
     ) -> list[CanonicalSlotDraft]:
+        drafts, _report = self.normalize_with_report(extraction, job, now=now)
+        return drafts
+
+    def normalize_with_report(
+        self,
+        extraction: Extraction,
+        job: ParserJob,
+        *,
+        now: datetime,
+    ) -> tuple[list[CanonicalSlotDraft], NormalizeReport]:
         config = job.config or {}
         tz_name = str(config.get("timezone") or DEFAULT_ARENA_TZ)
         currency = str(config.get("currency_code") or "BYN")
@@ -133,13 +176,19 @@ class IceSessionNormalizer:
             observed = observed.replace(tzinfo=timezone.utc)
 
         merged: dict[tuple[date, time], dict[str, Any]] = {}
+        unknown_kind = 0
+        merged_duplicates = 0
+        past = 0
         for raw in extraction.slots:
             kind = map_parser_kind(raw.kind_raw)
             if kind is None:
+                unknown_kind += 1
                 continue
             local_date = _as_date(raw.local_date)
             starts_at_local = _as_time(raw.starts_at_local)
             key = (local_date, starts_at_local)
+            if key in merged:
+                merged_duplicates += 1
             bucket = merged.setdefault(
                 key,
                 {
@@ -192,6 +241,7 @@ class IceSessionNormalizer:
                 tz_name=tz_name,
             )
             if parts.ends_at_utc <= now:
+                past += 1
                 continue
             drafts.append(
                 CanonicalSlotDraft(
@@ -218,4 +268,11 @@ class IceSessionNormalizer:
                     scrape_run_id=None,
                 )
             )
-        return drafts
+        report = NormalizeReport(
+            extracted=len(extraction.slots),
+            unknown_kind=unknown_kind,
+            merged_duplicates=merged_duplicates,
+            past=past,
+            published=len(drafts),
+        )
+        return drafts, report

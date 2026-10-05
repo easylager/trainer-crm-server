@@ -174,12 +174,15 @@ async def _run_once() -> None:
         return
     for record in outcomes:
         published = record.slot_count if record.status == RUN_STATUS_OK else 0
+        # TASK-178: extracted — сколько вернул адаптер, published — сколько дошло до витрины.
+        extracted = record.slot_count + record.slots_dropped
         http = record.http_status if record.http_status is not None else "-"
+        code = record.error_code or ""
         error = record.error_message or ""
         print(
             f"arena_id={record.arena_id} parser_key={record.parser_key} "
-            f"status={record.status} http={http} slots_found={record.slot_count} "
-            f"slots_published={published} error={error}"
+            f"status={record.status} http={http} slots_extracted={extracted} "
+            f"slots_published={published} code={code} error={error}"
         )
 
 
