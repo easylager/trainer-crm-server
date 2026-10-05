@@ -33,10 +33,31 @@ class FirstHoursPreset:
     key: str
     #: 0=Mon .. 6=Sun
     days: tuple[int, ...]
-    #: Whole hours on the trainer's local grid; the arena's own grid shifts them if it has one.
-    hours: tuple[int, ...]
+    #: Окно, а не готовый список часов: сколько в него поместится, решает длительность
+    #: занятия, которую тренер уже выбрал. Фиксированные часы здесь давали наложение
+    #: (18:00 и 19:00 при занятии в 90 минут — это один слот поверх другого).
+    start_hour: int
+    end_hour: int
     label_ru: str
     hint_ru: str
+
+    def hours_for(self, duration_minutes: int) -> tuple[int, ...]:
+        """
+        Часы окна, которые не наложатся друг на друга и не вылезут за его край.
+
+        Шаг — целые часы, потому что дальше эти часы кладутся на сетку площадки
+        (ТЦ Замок со стартами в :15), а она умеет сдвигать только часовую запись.
+        Занятие длиннее часа поэтому просто занимает окно реже: лучше два честных
+        слота, чем четыре пересекающихся.
+        """
+        duration = max(1, int(duration_minutes))
+        step = max(1, -(-duration // 60))
+        end_minute = self.end_hour * 60
+        return tuple(
+            h
+            for h in range(self.start_hour, self.end_hour, step)
+            if h * 60 + duration <= end_minute
+        )
 
 
 #: Два ответа покрывают почти всех: вечерние будни и утро выходных. Третий ответ —
@@ -45,14 +66,16 @@ FIRST_HOURS_PRESETS: dict[str, FirstHoursPreset] = {
     "weekday_evening": FirstHoursPreset(
         key="weekday_evening",
         days=(0, 2, 4),
-        hours=(18, 19, 20),
+        start_hour=18,
+        end_hour=21,
         label_ru="Будни по вечерам",
         hint_ru="пн, ср, пт · 18:00–21:00",
     ),
     "weekend_morning": FirstHoursPreset(
         key="weekend_morning",
         days=(5, 6),
-        hours=(10, 11, 12, 13),
+        start_hour=10,
+        end_hour=14,
         label_ru="Выходные с утра",
         hint_ru="сб, вс · 10:00–14:00",
     ),
@@ -107,8 +130,13 @@ async def apply_trainer_first_hours_preset(
         raise QuickSetupError("Неизвестный вариант времени.")
 
     duration_minutes, arena_id = await _trainer_defaults(session, trainer_id)
+    hours = preset.hours_for(duration_minutes)
+    if not hours:
+        raise QuickSetupError(
+            "Занятие длиннее этого окна. Отметьте время в расписании."
+        )
     days = [
-        QuickSetupDay(day_of_week=dow, hours=preset.hours, arena_id=arena_id)
+        QuickSetupDay(day_of_week=dow, hours=hours, arena_id=arena_id)
         for dow in preset.days
     ]
 

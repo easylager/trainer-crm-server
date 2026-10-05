@@ -209,6 +209,16 @@ async def test_slots_use_the_duration_the_trainer_already_chose(app_use_test_db,
     )
     assert [int(x[0]) for x in r.fetchall()] == [90]
 
+    # Окно 18:00–21:00 вмещает одно занятие в 90 минут без наложения — именно одно,
+    # а не три часовых старта поверх друг друга.
+    r = await db_session.execute(
+        text(
+            "SELECT DISTINCT start_time FROM trainer_schedule_templates WHERE trainer_id = :t"
+        ),
+        {"t": trainer_id},
+    )
+    assert [str(x[0]) for x in r.fetchall()] == ["18:00:00"]
+
 
 @pytest.mark.asyncio
 async def test_unknown_preset_is_rejected_without_writing_anything(app_use_test_db, db_session) -> None:
