@@ -45,6 +45,7 @@ from src.ingestion.loop import (
     run_ice_source_alert_loop,
     run_ice_health_weekly_digest_loop,
     run_ice_ingest_scheduler_loop,
+    run_ice_scheduler_watchdog_loop,
     run_ice_scrape_ttl_loop,
 )
 from src.shared.config import get_settings, Settings
@@ -129,10 +130,25 @@ async def main() -> None:
         asyncio.create_task(run_ice_health_alert_loop(), name="ice_health_alert"),
         asyncio.create_task(run_ice_source_alert_loop(), name="ice_source_alert"),
         asyncio.create_task(run_ice_health_weekly_digest_loop(), name="ice_health_weekly_digest"),
+        asyncio.create_task(run_ice_scheduler_watchdog_loop(), name="ice_scheduler_watchdog"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 
     shutdown = asyncio.Event()
+
+    def _report_unexpected_exit(task: asyncio.Task) -> None:
+        # TASK-176: фоновый цикл, упавший вне своего try (например, на импорте), раньше
+        # умирал молча — исключение лежало в задаче до остановки сервиса.
+        if shutdown.is_set() or task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Background loop %s died", task.get_name(), exc_info=exc)
+        else:
+            logger.error("Background loop %s exited unexpectedly", task.get_name())
+
+    for t in all_tasks:
+        t.add_done_callback(_report_unexpected_exit)
 
     def _on_shutdown(*_args: object) -> None:
         logger.info("Received shutdown signal, stopping notification service...")
