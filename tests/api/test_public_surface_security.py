@@ -133,7 +133,7 @@ async def test_selection_page_with_repro_name_and_address_has_no_live_html(app_u
     assert "18:45" in html, "арена попала в подборку"
     _assert_no_live_markup(html)
     ld_raw = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S).group(1)
-    assert "<" not in ld_raw
+    assert "<" not in ld_raw and ">" not in ld_raw, "JSON-LD экранирует угловые скобки целиком"
     assert EVIL_NAME in [i["name"] for i in json.loads(ld_raw)["itemListElement"]]
 
 
